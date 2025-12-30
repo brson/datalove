@@ -194,12 +194,16 @@ pub fn analyze_modules_worldfile_ir3(
     // Execute the function.
     let output = match interp.call(&ir_func, Vec::new(), ret_dest) {
         Ok(()) => {
-            // Pretty-print the return value.
+            // Pretty-print the return value using the runtime pretty printer.
             let value = ir::interp::Value {
                 ptr: ret_buffer.as_mut_ptr(),
                 tydesc: ret_tydesc,
             };
-            pretty_print_value(&value)
+            let output_str = interp.pretty_print_value(&value)
+                .unwrap_or_else(|e| format!("Error: {:?}", e));
+            // Destroy the value to free any allocations (e.g., bigint limbs).
+            let _ = interp.destroy_value(&value);
+            output_str
         }
         Err(e) => format!("Error: {:?}", e),
     };
@@ -209,103 +213,4 @@ pub fn analyze_modules_worldfile_ir3(
         lowering: LoweringResult::Success { ir: ir_dump },
         output,
     })
-}
-
-/// Pretty-print a value based on its type descriptor.
-fn pretty_print_value(value: &ir::interp::Value) -> String {
-    use datalove_rt::rtdt::{self, TyTag, TyInfoTuple, TyDescRef};
-
-    let tag = unsafe { (*value.tydesc).type_tag };
-    match tag {
-        TyTag::Tuple => {
-            // Check if it's the unit type (0 fields).
-            let tuple_info: TyInfoTuple = unsafe { (*value.tydesc).type_info.tuple };
-            if tuple_info.num_fields == 0 {
-                "()".to_string()
-            } else {
-                format!("<tuple:{}>", tuple_info.num_fields)
-            }
-        }
-        TyTag::Bool => {
-            let v = unsafe { *(value.ptr as *const bool) };
-            if v { "true".to_string() } else { "false".to_string() }
-        }
-        TyTag::U8 => {
-            let v = unsafe { *(value.ptr as *const u8) };
-            format!("@{}", v)
-        }
-        TyTag::U16 => {
-            let v = unsafe { *(value.ptr as *const u16) };
-            format!("@{}", v)
-        }
-        TyTag::U32 => {
-            let v = unsafe { *(value.ptr as *const u32) };
-            format!("@{}", v)
-        }
-        TyTag::U64 => {
-            let v = unsafe { *(value.ptr as *const u64) };
-            format!("@{}", v)
-        }
-        TyTag::I8 => {
-            let v = unsafe { *(value.ptr as *const i8) };
-            format!("{}", v)
-        }
-        TyTag::I16 => {
-            let v = unsafe { *(value.ptr as *const i16) };
-            format!("{}", v)
-        }
-        TyTag::I32 => {
-            let v = unsafe { *(value.ptr as *const i32) };
-            format!("{}", v)
-        }
-        TyTag::I64 => {
-            let v = unsafe { *(value.ptr as *const i64) };
-            format!("{}", v)
-        }
-        TyTag::F32 => {
-            let v = unsafe { *(value.ptr as *const f32) };
-            format!("{}", v)
-        }
-        TyTag::F64 => {
-            let v = unsafe { *(value.ptr as *const f64) };
-            format!("{}", v)
-        }
-        TyTag::Int => {
-            // Int currently stored as i64. TODO: Support bigint.
-            let v = unsafe { *(value.ptr as *const i64) };
-            format!("@{}", v)
-        }
-        TyTag::Option => {
-            let option_tag = unsafe { *(value.ptr as *const u8) };
-            if option_tag == rtdt::OptionTag::None as u8 {
-                "@none".to_string()
-            } else {
-                // Some - extract and print the inner value.
-                let layout = unsafe {
-                    rtdt::layout::compute_option_layout(TyDescRef::from_ptr(value.tydesc))
-                };
-                let inner_tydesc = unsafe { (*value.tydesc).type_info.option.inner_tydesc };
-                let inner_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
-                let inner_value = ir::interp::Value { ptr: inner_ptr, tydesc: inner_tydesc };
-                format!("some {}", pretty_print_value(&inner_value))
-            }
-        }
-        TyTag::Result => {
-            let result_tag = unsafe { *(value.ptr as *const u8) };
-            let layout = unsafe {
-                rtdt::layout::compute_result_layout(TyDescRef::from_ptr(value.tydesc))
-            };
-            let payload_ptr = unsafe { value.ptr.add(layout.payload_offset as usize) };
-            if result_tag == rtdt::ResultTag::Ok as u8 {
-                // Ok - extract and print the inner value.
-                let ok_tydesc = unsafe { (*value.tydesc).type_info.result.ok_tydesc };
-                let inner_value = ir::interp::Value { ptr: payload_ptr, tydesc: ok_tydesc };
-                format!("ok {}", pretty_print_value(&inner_value))
-            } else {
-                // Err - just indicate error.
-                "@error".to_string()
-            }
-        }
-        _ => format!("<{:?}>", tag),
-    }
 }

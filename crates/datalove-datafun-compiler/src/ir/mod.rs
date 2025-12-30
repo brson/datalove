@@ -353,7 +353,10 @@ pub enum ConstValue {
     I16(i16),
     I32(i32),
     I64(i64),
-    // TODO: Int (bigint), Float, String, etc.
+    /// Bigint stored as limbs (little-endian base 2^32) and sign.
+    /// Empty limbs = 0.
+    Int { limbs: Vec<u32>, negative: bool },
+    // TODO: Float, String, etc.
 }
 
 /// Binary operator.

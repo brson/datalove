@@ -110,6 +110,29 @@ impl IrInterpreter {
         }
     }
 
+    /// Destroy a value, freeing any associated allocations.
+    pub fn destroy_value(&mut self, value: &Value) -> Result<(), InterpError> {
+        use datalove_rt::c::RtStatus;
+
+        let rt_handle = self.runtime.handle();
+
+        unsafe {
+            let status = datalove_rt::c::dtlv_rti_any_destroy_local(
+                rt_handle,
+                value.ptr,
+                value.tydesc,
+            );
+
+            if status != RtStatus::Ok {
+                return Err(InterpError::RuntimeError(
+                    "Failed to destroy value".to_string(),
+                ));
+            }
+
+            Ok(())
+        }
+    }
+
     /// Execute a function with arguments, writing result to destination.
     pub fn call(
         &mut self,
@@ -158,7 +181,12 @@ impl IrInterpreter {
         }
 
         // Execute blocks, writing return value directly to ret_dest.
-        self.execute_blocks(&func.blocks, &mut frame, ret_dest, ctx, registry, frames)
+        let result = self.execute_blocks(&func.blocks, &mut frame, ret_dest, ctx, registry, frames);
+
+        // Destroy frame values before returning.
+        frame.destroy_all(self.runtime.handle());
+
+        result
     }
 
     /// Execute a script unit, optionally returning the result value.
@@ -188,7 +216,12 @@ impl IrInterpreter {
         // Execute blocks with empty registry/frames (no external references).
         let registry = FunctionRegistry::new();
         let mut frames = FrameStore::new();
-        self.execute_blocks(&unit.blocks, &mut frame, ret_dest, &ctx, &registry, &mut frames)
+        let result = self.execute_blocks(&unit.blocks, &mut frame, ret_dest, &ctx, &registry, &mut frames);
+
+        // Destroy frame values before returning.
+        frame.destroy_all(self.runtime.handle());
+
+        result
     }
 
     /// Execute a script unit with access to previous units' values.
@@ -215,14 +248,20 @@ impl IrInterpreter {
         let ctx = ExecutionContext::new(&unit.functions);
 
         // Execute blocks with registry for function lookups and frames for slot access.
-        self.execute_blocks(
+        let result = self.execute_blocks(
             &unit.blocks,
             &mut frame,
             ret_dest,
             &ctx,
             &env.registry,
             &mut env.frames,
-        )?;
+        );
+
+        // On error, destroy the frame and propagate the error.
+        if let Err(e) = result {
+            frame.destroy_all(self.runtime.handle());
+            return Err(e);
+        }
 
         // Add this unit's frame and functions to the environment for future units.
         env.add_unit(frame, unit.functions.clone());
@@ -274,27 +313,49 @@ impl IrInterpreter {
                 Terminator::Return { value } => {
                     if let Some(op) = value {
                         let val = self.read_operand(op, frame, frames)?;
-                        unsafe { self.copy_value(&val, ret_dest)?; }
+                        // Use move_value (shallow copy). The frame will be
+                        // destroyed by call_in_context, so we must transfer
+                        // ownership to avoid double-free.
+                        unsafe { self.move_value(&val, ret_dest)?; }
+                        // Mark source as dropped to prevent destroy in frame.destroy_all().
+                        if let Operand::Value(id) = op {
+                            frame.mark_value_dropped(*id);
+                        }
                     }
                     return Ok(());
                 }
                 Terminator::TryReturn { value } => {
                     if let Some(op) = value {
                         let val = self.read_operand(op, frame, frames)?;
-                        unsafe { self.copy_value(&val, ret_dest)?; }
+                        // Use move_value (shallow copy).
+                        unsafe { self.move_value(&val, ret_dest)?; }
+                        // Mark source as dropped.
+                        if let Operand::Value(id) = op {
+                            frame.mark_value_dropped(*id);
+                        }
                     }
                     return Ok(());
                 }
                 Terminator::UnitEnd { result } => {
                     if let Some(op) = result {
                         let val = self.read_operand(op, frame, frames)?;
-                        unsafe { self.copy_value(&val, ret_dest)?; }
+                        // Use move_value (shallow copy) since the frame is kept
+                        // in env.frames. Marking as dropped prevents double-destroy.
+                        unsafe { self.move_value(&val, ret_dest)?; }
+                        if let Operand::Value(id) = op {
+                            frame.mark_value_dropped(*id);
+                        }
                     }
                     return Ok(());
                 }
                 Terminator::UnitEarlyReturn { value } => {
                     let val = self.read_operand(value, frame, frames)?;
-                    unsafe { self.copy_value(&val, ret_dest)?; }
+                    // Use move_value (shallow copy) since the frame is kept
+                    // in env.frames. Marking as dropped prevents double-destroy.
+                    unsafe { self.move_value(&val, ret_dest)?; }
+                    if let Operand::Value(id) = value {
+                        frame.mark_value_dropped(*id);
+                    }
                     return Ok(());
                 }
             }
@@ -352,6 +413,14 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest)?;
                 unsafe { self.move_value(&src_val, dest_slot)?; }
                 frame.mark_value_initialized(*dest);
+                // Mark source as dropped to prevent double-free.
+                match src {
+                    Operand::Value(id) => frame.mark_value_dropped(*id),
+                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
+                        // External values/slots are in other frames - handled separately.
+                    }
+                }
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
                 let lhs_val = self.read_operand(lhs, frame, frames)?;
@@ -370,12 +439,28 @@ impl IrInterpreter {
                 let src_val = self.read_operand(value, frame, frames)?;
                 match dest {
                     SlotDest::Local(slot_id) => {
+                        // Destroy old value if slot was already initialized.
+                        if frame.is_slot_initialized(*slot_id) {
+                            let old_val = frame.slot(*slot_id)?;
+                            unsafe {
+                                datalove_rt::c::dtlv_rti_any_destroy_local(
+                                    self.runtime.handle(),
+                                    old_val.ptr,
+                                    old_val.tydesc,
+                                );
+                            }
+                        }
                         let dest_slot = frame.slot_dest(*slot_id)?;
                         unsafe { self.copy_value(&src_val, dest_slot)?; }
                         frame.mark_slot_initialized(*slot_id);
                     }
                     SlotDest::External { unit, slot } => {
-                        frames.write_external_slot(*unit, *slot, &src_val)?;
+                        frames.write_external_slot(
+                            self.runtime.handle(),
+                            *unit,
+                            *slot,
+                            &src_val,
+                        )?;
                     }
                 }
             }
@@ -565,7 +650,7 @@ impl IrInterpreter {
         }
     }
 
-    fn write_const(&self, value: &ConstValue, dest: Destination) -> Result<(), InterpError> {
+    fn write_const(&mut self, value: &ConstValue, dest: Destination) -> Result<(), InterpError> {
         unsafe {
             match value {
                 ConstValue::Unit => {
@@ -598,13 +683,89 @@ impl IrInterpreter {
                 ConstValue::I64(n) => {
                     *(dest.ptr as *mut i64) = *n;
                 }
+                ConstValue::Int { limbs, negative } => {
+                    let int_ptr = dest.ptr as *mut rtdt::Int;
+                    if limbs.is_empty() {
+                        // Zero.
+                        (*int_ptr).data = std::ptr::null();
+                        (*int_ptr).size_and_sign = 0;
+                        (*int_ptr).capacity = 0;
+                    } else {
+                        // Allocate limbs in runtime memory.
+                        // Must use size=4, count=num_limbs to match the destroy code.
+                        let rt_handle = self.runtime.handle();
+                        let num_limbs = limbs.len() as u32;
+                        let limbs_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                            rt_handle,
+                            4,          // size of one limb
+                            4,          // align
+                            num_limbs,  // count
+                        ) as *mut u32;
+                        if limbs_ptr.is_null() {
+                            return Err(InterpError::RuntimeError(
+                                "Failed to allocate bigint limbs".to_string()
+                            ));
+                        }
+                        for (i, &limb) in limbs.iter().enumerate() {
+                            *limbs_ptr.add(i) = limb;
+                        }
+                        (*int_ptr).data = limbs_ptr as *const u32;
+                        (*int_ptr).size_and_sign = if *negative {
+                            -(limbs.len() as i32)
+                        } else {
+                            limbs.len() as i32
+                        };
+                        (*int_ptr).capacity = num_limbs;
+                    }
+                }
             }
         }
         Ok(())
     }
 
-    unsafe fn copy_value(&self, src: &Value, dest: Destination) -> Result<(), InterpError> {
+    unsafe fn copy_value(&mut self, src: &Value, dest: Destination) -> Result<(), InterpError> {
         unsafe {
+            let tag = (*src.tydesc).type_tag;
+
+            // Int requires deep clone (allocate new limbs).
+            if tag == rtdt::TyTag::Int {
+                let src_int = &*(src.ptr as *const rtdt::Int);
+                let dest_int = dest.ptr as *mut rtdt::Int;
+
+                if src_int.data.is_null() || src_int.size_and_sign == 0 {
+                    // Zero value - no allocation needed.
+                    (*dest_int).data = std::ptr::null();
+                    (*dest_int).size_and_sign = 0;
+                    (*dest_int).capacity = 0;
+                } else {
+                    // Clone the limbs.
+                    // Must use size=4, count=num_limbs to match the destroy code.
+                    let num_limbs = src_int.size_and_sign.unsigned_abs();
+                    let rt_handle = self.runtime.handle();
+                    let new_limbs = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                        rt_handle,
+                        4,          // size of one limb
+                        4,          // align
+                        num_limbs,  // count
+                    ) as *mut u32;
+                    if new_limbs.is_null() {
+                        return Err(InterpError::RuntimeError(
+                            "Failed to allocate Int limbs for copy".to_string()
+                        ));
+                    }
+                    std::ptr::copy_nonoverlapping(
+                        src_int.data,
+                        new_limbs,
+                        num_limbs as usize,
+                    );
+                    (*dest_int).data = new_limbs as *const u32;
+                    (*dest_int).size_and_sign = src_int.size_and_sign;
+                    (*dest_int).capacity = num_limbs;
+                }
+                return Ok(());
+            }
+
+            // Other types: shallow copy is fine.
             let size = (*src.tydesc).size as usize;
             std::ptr::copy_nonoverlapping(src.ptr, dest.ptr, size);
         }
@@ -613,6 +774,8 @@ impl IrInterpreter {
 
     unsafe fn move_value(&self, src: &Value, dest: Destination) -> Result<(), InterpError> {
         unsafe {
+            // Move is always a shallow copy - ownership transfers to dest.
+            // The source should be marked as dropped so it won't be destroyed.
             let size = (*src.tydesc).size as usize;
             std::ptr::copy_nonoverlapping(src.ptr, dest.ptr, size);
         }
@@ -620,7 +783,7 @@ impl IrInterpreter {
     }
 
     fn execute_binop(
-        &self,
+        &mut self,
         op: BinOp,
         lhs: &Value,
         rhs: &Value,
@@ -675,8 +838,57 @@ impl IrInterpreter {
             int_binop!(U16, u16, lhs, rhs, dest, op);
             int_binop!(U32, u32, lhs, rhs, dest, op);
             int_binop!(U64, u64, lhs, rhs, dest, op);
-            // Int type currently stored as i64. TODO: Support bigint.
-            int_binop!(Int, i64, lhs, rhs, dest, op);
+
+            // Bigint operations via runtime.
+            if tag == rtdt::TyTag::Int {
+                use datalove_rt::c::RtStatus;
+
+                let rt_handle = self.runtime.handle();
+                let int_tydesc = self.tydesc_table.get_or_create(&IrType::Int);
+
+                let status = match op {
+                    BinOp::Add => datalove_rt::c::dtlv_rti_int_add(
+                        rt_handle,
+                        lhs.ptr, int_tydesc,
+                        rhs.ptr, int_tydesc,
+                        dest.ptr, int_tydesc,
+                    ),
+                    BinOp::Sub => datalove_rt::c::dtlv_rti_int_sub(
+                        rt_handle,
+                        lhs.ptr, int_tydesc,
+                        rhs.ptr, int_tydesc,
+                        dest.ptr, int_tydesc,
+                    ),
+                    BinOp::Mul => datalove_rt::c::dtlv_rti_int_mul(
+                        rt_handle,
+                        lhs.ptr, int_tydesc,
+                        rhs.ptr, int_tydesc,
+                        dest.ptr, int_tydesc,
+                    ),
+                    BinOp::Div => {
+                        let status = datalove_rt::c::dtlv_rti_int_div_checked(
+                            rt_handle,
+                            lhs.ptr, int_tydesc,
+                            rhs.ptr, int_tydesc,
+                            dest.ptr, int_tydesc,
+                        );
+                        if status != RtStatus::Ok {
+                            return Err(InterpError::DivisionByZero);
+                        }
+                        return Ok(());
+                    }
+                    _ => return Err(InterpError::TypeMismatch(
+                        format!("unsupported Int binop {:?}", op)
+                    )),
+                };
+
+                if status != RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        format!("Int {:?} operation failed", op)
+                    ));
+                }
+                return Ok(());
+            }
 
             // F32 operations.
             if tag == rtdt::TyTag::F32 {
@@ -717,7 +929,7 @@ impl IrInterpreter {
     }
 
     fn execute_unaryop(
-        &self,
+        &mut self,
         op: UnaryOp,
         src: &Value,
         dest: Destination,
@@ -775,6 +987,26 @@ impl IrInterpreter {
             if tag == rtdt::TyTag::Bool && op == UnaryOp::Not {
                 let a = *(src.ptr as *const bool);
                 *(dest.ptr as *mut bool) = !a;
+                return Ok(());
+            }
+
+            // Bigint negation.
+            if tag == rtdt::TyTag::Int && op == UnaryOp::Neg {
+                use datalove_rt::c::RtStatus;
+
+                let rt_handle = self.runtime.handle();
+                let int_tydesc = self.tydesc_table.get_or_create(&IrType::Int);
+
+                let status = datalove_rt::c::dtlv_rti_int_neg(
+                    rt_handle,
+                    src.ptr, int_tydesc,
+                    dest.ptr, int_tydesc,
+                );
+                if status != RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        "Int negation failed".to_string()
+                    ));
+                }
                 return Ok(());
             }
 

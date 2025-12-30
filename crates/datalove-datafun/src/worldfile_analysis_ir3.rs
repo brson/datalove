@@ -410,7 +410,10 @@ fn process_expr<'db>(
                     ptr: ret_buffer.as_mut_ptr(),
                     tydesc: ret_tydesc,
                 };
-                interp.pretty_print_value(&value).unwrap_or_else(|e| format!("Error: {:?}", e))
+                let output_str = interp.pretty_print_value(&value).unwrap_or_else(|e| format!("Error: {:?}", e));
+                // Destroy the value to free any allocations (e.g., bigint limbs).
+                let _ = interp.destroy_value(&value);
+                output_str
             }
             Err(e) => format!("Error: {:?}", e),
         }

@@ -95,8 +95,69 @@ impl fmt::Display for ConstValue {
             ConstValue::I16(n) => write!(f, "{}i16", n),
             ConstValue::I32(n) => write!(f, "{}i32", n),
             ConstValue::I64(n) => write!(f, "{}i64", n),
+            ConstValue::Int { limbs, negative } => {
+                if limbs.is_empty() {
+                    write!(f, "0int")
+                } else {
+                    let s = limbs_to_decimal(limbs, *negative);
+                    write!(f, "{}int", s)
+                }
+            }
         }
     }
+}
+
+/// Convert limbs (little-endian base 2^32) to decimal string.
+fn limbs_to_decimal(limbs: &[u32], negative: bool) -> String {
+    if limbs.is_empty() {
+        return "0".to_string();
+    }
+
+    // Work with a copy of the limbs.
+    let mut working = limbs.to_vec();
+
+    // Convert to decimal by repeated division by 10^9.
+    const DIVISOR: u64 = 1_000_000_000;
+    let mut chunks = Vec::new();
+
+    loop {
+        // Divide working by DIVISOR, collecting remainder.
+        let mut remainder: u64 = 0;
+        let mut all_zero = true;
+
+        for i in (0..working.len()).rev() {
+            let current = (remainder << 32) | (working[i] as u64);
+            working[i] = (current / DIVISOR) as u32;
+            remainder = current % DIVISOR;
+
+            if working[i] != 0 {
+                all_zero = false;
+            }
+        }
+
+        chunks.push(remainder as u32);
+
+        if all_zero {
+            break;
+        }
+    }
+
+    // Build string from chunks in reverse order.
+    let mut result = String::new();
+
+    if negative {
+        result.push('-');
+    }
+
+    // First chunk has no leading zeros.
+    result.push_str(&chunks.last().unwrap().to_string());
+
+    // Remaining chunks are padded to 9 digits.
+    for i in (0..chunks.len() - 1).rev() {
+        result.push_str(&format!("{:09}", chunks[i]));
+    }
+
+    result
 }
 
 impl fmt::Display for BinOp {

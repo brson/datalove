@@ -102,6 +102,12 @@ impl Frame {
         }
     }
 
+    /// Check if slot is initialized.
+    pub fn is_slot_initialized(&self, id: SlotId) -> bool {
+        let idx = id.0 as usize;
+        idx < self.slot_initialized.len() && self.slot_initialized[idx]
+    }
+
     /// Mark value as dropped (uninitialized).
     ///
     /// Called after Drop instruction to prevent double-destroy.
@@ -188,13 +194,35 @@ impl FrameStore {
     }
 
     /// Write a value to a slot in a previous unit.
-    pub fn write_external_slot(&mut self, unit: u32, slot: SlotId, value: &Value) -> Result<(), InterpError> {
+    ///
+    /// If the slot already contains a value, destroys it before writing.
+    pub fn write_external_slot(
+        &mut self,
+        rt_handle: datalove_rt::c::LocalRtHandle,
+        unit: u32,
+        slot: SlotId,
+        value: &Value,
+    ) -> Result<(), InterpError> {
         let frame = self.frames.get_mut(unit as usize)
             .ok_or(InterpError::ExternalUnitNotFound(unit))?;
+
+        // Destroy old value if slot was already initialized.
+        if frame.is_slot_initialized(slot) {
+            let old_val = frame.slot(slot)?;
+            unsafe {
+                datalove_rt::c::dtlv_rti_any_destroy_local(
+                    rt_handle,
+                    old_val.ptr,
+                    old_val.tydesc,
+                );
+            }
+        }
+
         let dest = frame.slot_dest(slot)?;
         unsafe {
             std::ptr::copy_nonoverlapping(value.ptr, dest.ptr, (*value.tydesc).size as usize);
         }
+        frame.mark_slot_initialized(slot);
         Ok(())
     }
 

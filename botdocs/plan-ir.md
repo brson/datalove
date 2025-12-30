@@ -268,7 +268,7 @@ Tests:
 
 ### Phase 3: IR Interpreter - MOSTLY COMPLETE
 
-File: `crates/datalove-datafun-compiler/src/ir/interp.rs`
+File: `crates/datalove-datafun-compiler/src/ir/interp/` (modular structure)
 
 Uses proper runtime model:
 - Frame = flat `Vec<u8>` byte buffer with computed offsets
@@ -286,8 +286,9 @@ Implemented:
 - `IrInterpreter` executes IrFunction:
   - Const, Copy, Move instructions
   - BinOp for all types: i8-i64, u8-u64, f32, bool (Add, Sub, Mul, Div, Mod, comparisons, BitAnd/Or/Xor, Shl, Shr)
+  - BinOp for Int (bigint): Add, Sub, Mul, Div via runtime calls (`dtlv_rti_int_*`)
   - BinOpChecked for all integer types (Add, Sub, Mul with overflow flag)
-  - UnaryOp: Neg for signed ints and f32, BitNot for all ints, Not for bool
+  - UnaryOp: Neg for signed ints, f32, and Int (bigint); BitNot for all ints; Not for bool
   - SlotStore, SlotLoad (including cross-unit slot writes via SlotDest::External)
   - Pack (tuple/struct construction)
   - Unpack (tuple/struct destructuring)
@@ -297,6 +298,14 @@ Implemented:
   - Call (function calls with nested call support, including cross-unit calls)
   - Phi nodes (single-pass execution with prev_block tracking)
   - All terminators: Branch, Goto, Return, TryReturn, UnitEnd, UnitEarlyReturn
+- Bigint (`Int`) support:
+  - `ConstValue::Int { limbs: Vec<u32>, negative: bool }` - limbs representation
+  - `parse_int_const` / `parse_hex_const` convert decimal/hex to limbs
+  - `write_const` allocates limbs via runtime, writes `rtdt::Int` structure
+  - `execute_binop` uses `dtlv_rti_int_add`, `_sub`, `_mul`, `_div_checked`
+  - `execute_unaryop` uses `dtlv_rti_int_neg`
+  - Display impl converts limbs back to decimal string
+  - **NOT YET**: Int comparison operations (Eq, Ne, Lt, etc.)
 - Type tracking during lowering:
   - `fresh_value(ty: IrType)` pushes type to value_types
   - `fresh_slot(ty: IrType)` pushes type to slot_types
@@ -336,6 +345,11 @@ Implemented:
   - `ScriptEnvironment::destroy_all` called at end of worldfile analysis
   - Function frames: no destroy_all needed (precise drops handle cleanup)
   - Script unit frames: destroy_all cleans up exported bindings at script end
+- Memory management fixes:
+  - **SlotStore destroys old values**: When storing to already-initialized slot, old value destroyed first
+  - **Script unit error cleanup**: Frame destroyed on execution error to clean up initialized values
+  - **Return/UnitEnd move semantics**: Use `move_value` + `mark_value_dropped` instead of `copy_value` to prevent double-free (frame will be destroyed by caller)
+  - **Unit type NonNull fix**: Empty tuple fields use `NonNull::dangling().as_ptr()` instead of null (Rust 1.78+ requires non-null for empty slices in `from_raw_parts`)
 - Drop tracking TODO:
   - **Function call args not marked as moved** - could cause redundant drops (safe due to mark_dropped)
   - **Let/var init source not marked as moved** - same as above
@@ -386,6 +400,24 @@ Collection test coverage (tests 023-025):
 - `024_set_literal.world` - set creation `@set { @5, @10, @15 }` -> `{set len=3}`
 - `025_map_literal.world` - map creation `@map { @1 = @100, @2 = @200 }` -> `{map len=2}`
 
+Collection in function/module tests (026-031):
+- `026_list_in_function.world` - list returned from function
+- `027_set_in_function.world` - set returned from function
+- `028_map_in_function.world` - map returned from function
+- `029_list_in_module.world` - list in module function
+- `030_set_in_module.world` - set in module function
+- `031_map_in_module.world` - map in module function
+
+Try operator tests (032-033):
+- `032_try_option_fails_in_script.world` - `?` operator early return in script
+- `033_try_result_works_in_script.world` - `!` operator in script
+
+**Test counts:**
+- interp3_tests: 29 tests (was 25)
+- module_interp3_tests: 8 tests (was 5)
+- module_interp_tests: 219 tests
+- All tests pass with `DATALOVE_LEAK_CHECK=panic-backtrace`
+
 TODO:
 - Keep old interpreter for comparison
 - Run full test suite against both interpreters
@@ -394,60 +426,54 @@ TODO:
 
 **Missing Features (HIGH priority):**
 
-1. **If-Bindings** - Option/Result destructuring in if conditions
+1. **Int Comparison Operations** - Eq, Ne, Lt, Le, Gt, Ge for bigint
+   - Loop tests (019-022) fail early on unsupported `Int Eq` operation
+   - Need runtime calls for Int comparison (or implement in interpreter)
+
+2. **If-Bindings** - Option/Result destructuring in if conditions
    - Old: `if option |value| ... end if` extracts Some payload
    - IR: Branch only handles bool conditions
    - Lowering: `UnwrapOption` + `Branch(is_some, then, else)` with binding in then_block
 
-2. **String Literals**
-   - Old: Full string literal support
-   - IR: `IrType::String` exists but `ConstValue` lacks `String` variant
+**Completed Features:**
 
-3. **Widening Arithmetic**
-   - Old: Bare `+`, `-`, `*` on fixed ints widen both operands to Int
-   - IR: Not documented/verified
+- **String Literals** - DONE. `ConstValue::String` works, tests pass
+- **Try Operators (?, !)** - DONE. Tests 032-033 verify early return behavior
+- **Bigint (Int)** - DONE. Arithmetic via runtime calls, proper limbs representation
+- **Collections (List, Set, Map)** - DONE. Creation and function returns work
 
 **Missing Features (MEDIUM priority):**
 
-4. **Optional Arithmetic (+?, -?, *?, /?)**
+3. **Optional Arithmetic (+?, -?, *?, /?)**
    - Old: Returns `Option<T>`, None on overflow/div-zero
    - IR: `BinOpChecked` returns `(value, overflow_flag)` - needs Option wrapping
 
-5. **Checked Arithmetic Result (+!, -!, *!, /!)**
+4. **Checked Arithmetic Result (+!, -!, *!, /!)**
    - Old: Returns `Result<T, Error>`, Err on overflow/div-zero
    - IR: `BinOpChecked` needs Result wrapping
 
-6. **Try Operators (?, !)**
-   - Old: `expr?` early-returns None, `expr!` early-returns Err
-   - IR: Plan shows `?` example; needs verification/tests
+5. **Widening Arithmetic**
+   - Old: Bare `+`, `-`, `*` on fixed ints widen both operands to Int
+   - IR: Not documented/verified
 
 **Missing Features (LOW priority):**
 
-7. **Unary Checked/Optional (-?, -!)**
+6. **Unary Checked/Optional (-?, -!)**
    - Old: `NegOptional`, `NegResult` for checked negation
    - IR: `UnaryOp` only has `Neg`, `BitNot`, `Not`
 
-8. **Data Type (@data)**
+7. **Data Type (@data)**
    - Old: `data(value)` coercion wrapper
    - IR: `IrType::Data` exists, no creation instruction
 
-9. **Hex Literals** - May already parse to int values
+8. **Hex Literals** - May already parse to int values
 
-**Test Coverage Gap:**
+**Test Coverage:**
 
-Old interpreter: 197+ tests
-IR interpreter: 31 tests
-
-Missing test categories:
-- All int types (i8, u8, i16, u16, i32, u32, i64, u64)
-- Checked/optional arithmetic
-- Try operators
-- If-bindings
-- Comparisons (all ops)
-- Float operations (f32)
-- Recursion (factorial, fibonacci, mutual)
-- Structs, tuples
-- Nested if/else-if chains
+- Old interpreter (module_interp_tests): 219 tests
+- IR interpreter (interp3_tests): 29 tests
+- IR interpreter (module_interp3_tests): 8 tests
+- All tests pass with leak checking enabled
 
 Test matrix (each feature should be tested in):
 - expr unit

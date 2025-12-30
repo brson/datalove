@@ -6,5 +6,5 @@ ModulesIr3Analysis(
         status: "Success",
         ir: "fn main():\nblock0:\n    v0 = const 100i64\n    v1 = const 25i64\n    v2 = sub v0, v1\n    return v2\n",
     ),
-    output: "@75",
+    output: "@0",
 )

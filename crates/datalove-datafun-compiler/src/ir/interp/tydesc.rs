@@ -43,7 +43,8 @@ impl IrTyDescTable {
                 type_info: rtdt::TyInfo {
                     tuple: rtdt::TyInfoTuple {
                         num_fields: 0,
-                        fields: std::ptr::null(),
+                        // Use dangling pointer for empty slice (Rust requires non-null).
+                        fields: std::ptr::NonNull::dangling().as_ptr(),
                     },
                 },
             }),

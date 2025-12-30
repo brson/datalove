@@ -207,6 +207,89 @@ impl ScopeTracker {
     }
 }
 
+/// Convert a decimal string to bigint limbs (little-endian base 2^32).
+fn parse_decimal_to_limbs(text: &str) -> Result<(Vec<u32>, bool), ()> {
+    let (negative, text) = if let Some(rest) = text.strip_prefix('-') {
+        (true, rest)
+    } else {
+        (false, text)
+    };
+
+    // Parse digit by digit, multiply by 10 and add.
+    let mut limbs: Vec<u32> = vec![0];
+
+    for c in text.chars() {
+        let digit = c.to_digit(10).ok_or(())?;
+
+        // Multiply all limbs by 10.
+        let mut carry: u64 = 0;
+        for limb in &mut limbs {
+            let product = (*limb as u64) * 10 + carry;
+            *limb = product as u32;
+            carry = product >> 32;
+        }
+        if carry > 0 {
+            limbs.push(carry as u32);
+        }
+
+        // Add the digit.
+        let mut add_carry: u64 = digit as u64;
+        for limb in &mut limbs {
+            let sum = (*limb as u64) + add_carry;
+            *limb = sum as u32;
+            add_carry = sum >> 32;
+            if add_carry == 0 {
+                break;
+            }
+        }
+        if add_carry > 0 {
+            limbs.push(add_carry as u32);
+        }
+    }
+
+    // Remove trailing zeros from the end (high-order limbs).
+    while limbs.len() > 1 && limbs.last() == Some(&0) {
+        limbs.pop();
+    }
+
+    // Handle zero case.
+    if limbs.len() == 1 && limbs[0] == 0 {
+        limbs.clear();
+    }
+
+    let is_nonzero = !limbs.is_empty();
+    Ok((limbs, negative && is_nonzero))
+}
+
+/// Convert a hex string to bigint limbs (little-endian base 2^32).
+fn parse_hex_to_limbs(hex_str: &str) -> Result<(Vec<u32>, bool), ()> {
+    // Parse from right to left, 8 hex digits at a time = 1 u32 limb.
+    let mut limbs = Vec::new();
+    let len = hex_str.len();
+
+    let mut i = len;
+    while i > 0 {
+        let start = if i >= 8 { i - 8 } else { 0 };
+        let chunk = &hex_str[start..i];
+        let limb = u32::from_str_radix(chunk, 16).map_err(|_| ())?;
+        limbs.push(limb);
+        i = start;
+    }
+
+    // Remove trailing zeros.
+    while limbs.len() > 1 && limbs.last() == Some(&0) {
+        limbs.pop();
+    }
+
+    // Handle zero case.
+    if limbs.len() == 1 && limbs[0] == 0 {
+        limbs.clear();
+    }
+
+    // Hex is always non-negative for now.
+    Ok((limbs, false))
+}
+
 /// Parse an integer literal into a ConstValue based on the target type.
 fn parse_int_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
     match ty {
@@ -219,8 +302,8 @@ fn parse_int_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
         IrType::I32 => text.parse::<i32>().map(ConstValue::I32).map_err(|_| ()),
         IrType::I64 => text.parse::<i64>().map(ConstValue::I64).map_err(|_| ()),
         IrType::Int => {
-            // For now, parse as i64. TODO: Support bigint.
-            text.parse::<i64>().map(ConstValue::I64).map_err(|_| ())
+            let (limbs, negative) = parse_decimal_to_limbs(text)?;
+            Ok(ConstValue::Int { limbs, negative })
         }
         _ => Err(()),
     }
@@ -238,8 +321,8 @@ fn parse_hex_const(hex_str: &str, ty: &IrType) -> Result<ConstValue, ()> {
         IrType::I32 => i32::from_str_radix(hex_str, 16).map(ConstValue::I32).map_err(|_| ()),
         IrType::I64 => i64::from_str_radix(hex_str, 16).map(ConstValue::I64).map_err(|_| ()),
         IrType::Int => {
-            // For now, parse as i64. TODO: Support bigint.
-            i64::from_str_radix(hex_str, 16).map(ConstValue::I64).map_err(|_| ())
+            let (limbs, negative) = parse_hex_to_limbs(hex_str)?;
+            Ok(ConstValue::Int { limbs, negative })
         }
         _ => Err(()),
     }
