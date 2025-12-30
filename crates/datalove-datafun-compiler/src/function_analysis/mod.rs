@@ -161,10 +161,10 @@ pub fn analyze_function<'db>(
     let move_info = moves::compute_move_info(db, func, slot_allocation, live_ranges, tycheck_result);
 
     // Phase 5.5: Per-block move analysis for precise drop points.
-    let moved_analysis = moves::analyze_moves_per_block(db, func, control_flow, slots, move_info);
+    let moved_analysis = moves::analyze_moves_per_block(db, func, control_flow, slot_allocation, move_info);
 
     // Phase 6: Drop points (using per-block move analysis).
-    let drop_points = drops::compute_drop_points(db, func, control_flow, slots, slot_allocation, init_analysis, moved_analysis, tycheck_result);
+    let drop_points = drops::compute_drop_points(db, func, control_flow, slot_allocation, init_analysis, moved_analysis, tycheck_result);
 
     // Phase 6.5: Identify slots that need runtime tracking.
     // Include:

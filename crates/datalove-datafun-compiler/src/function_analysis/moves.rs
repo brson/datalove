@@ -5,7 +5,7 @@ use bct::text::InternedText;
 use std::collections::HashMap;
 use crate::ast::{Statement, StmtFun, ExprFun, ExprFunKind, ParamMode};
 use super::{SlotId, ExprId, StmtId, LiveRanges};
-use super::slot_allocation::{AllocatedSlot, SlotAllocation};
+use super::slot_allocation::SlotAllocation;
 
 /// Information about a read operation.
 #[derive(Clone, Debug)]
@@ -205,12 +205,13 @@ pub fn analyze_moves_per_block<'db>(
     db: &'db dyn crate::Db,
     _func: StmtFun<'db>,
     cfg: super::ControlFlowGraph<'db>,
-    slots: &'db [AllocatedSlot<'db>],
+    slot_allocation: super::slot_allocation::SlotAllocation<'db>,
     move_info: MoveInfo<'db>,
 ) -> MovedAnalysis<'db> {
     use std::collections::{HashMap, HashSet};
     use super::BlockId;
 
+    let slots = slot_allocation.slots(db);
     let slot_count = slots.len();
     let blocks = cfg.blocks(db);
 

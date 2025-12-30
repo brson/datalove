@@ -6,7 +6,7 @@ use super::{SlotId, StmtId, BlockId, SlotKind, InitState};
 use super::cfg::{ControlFlowGraph, Terminator};
 use super::liveness::InitializationAnalysis;
 use super::moves::{MovedAnalysis, MoveState};
-use super::slot_allocation::{AllocatedSlot, SlotDestruction};
+use super::slot_allocation::SlotDestruction;
 use super::copyability::{is_copy_type, get_slot_type};
 use crate::ast::StmtFun;
 
@@ -92,12 +92,12 @@ pub fn compute_drop_points<'db>(
     db: &'db dyn crate::Db,
     func: StmtFun<'db>,
     cfg: ControlFlowGraph<'db>,
-    slots: &'db [AllocatedSlot<'db>],
     slot_allocation: super::slot_allocation::SlotAllocation<'db>,
     init_analysis: InitializationAnalysis<'db>,
     moved_analysis: MovedAnalysis<'db>,
     tycheck_result: crate::tycheck::TypecheckResult<'db>,
 ) -> DropPoints<'db> {
+    let slots = slot_allocation.slots(db);
     let mut drops = Vec::new();
     let blocks = cfg.blocks(db);
     let edges = cfg.edges(db);
@@ -342,8 +342,8 @@ end fun
         let init = analyze_initialization(db, func, cfg, slot_alloc);
         let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
         let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
-        let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), slot_alloc, init, moved_analysis, tycheck_result);
+        let moved_analysis = analyze_moves_per_block(db, func, cfg, slot_alloc, move_info);
+        let drop_points = compute_drop_points(db, func, cfg, slot_alloc, init, moved_analysis, tycheck_result);
 
         // x is moved to the return, so it should NOT have a drop point.
         let drops = drop_points.drops(db);
@@ -374,8 +374,8 @@ end fun
         let init = analyze_initialization(db, func, cfg, slot_alloc);
         let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
         let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
-        let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), slot_alloc, init, moved_analysis, tycheck_result);
+        let moved_analysis = analyze_moves_per_block(db, func, cfg, slot_alloc, move_info);
+        let drop_points = compute_drop_points(db, func, cfg, slot_alloc, init, moved_analysis, tycheck_result);
 
         // Parameters (Reference slots) should never be dropped.
         let drops = drop_points.drops(db);
@@ -409,8 +409,8 @@ end fun
         let init = analyze_initialization(db, func, cfg, slot_alloc);
         let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
         let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
-        let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), slot_alloc, init, moved_analysis, tycheck_result);
+        let moved_analysis = analyze_moves_per_block(db, func, cfg, slot_alloc, move_info);
+        let drop_points = compute_drop_points(db, func, cfg, slot_alloc, init, moved_analysis, tycheck_result);
 
         // x is moved, y is not moved and is non-copy, so y should be dropped.
         let drops = drop_points.drops(db);
@@ -448,8 +448,8 @@ end fun
         let init = analyze_initialization(db, func, cfg, slot_alloc);
         let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
         let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
-        let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), slot_alloc, init, moved_analysis, tycheck_result);
+        let moved_analysis = analyze_moves_per_block(db, func, cfg, slot_alloc, move_info);
+        let drop_points = compute_drop_points(db, func, cfg, slot_alloc, init, moved_analysis, tycheck_result);
 
         // With per-block move analysis:
         // - In then branch: x is moved (ret x), y is not moved → y needs drop
@@ -490,8 +490,8 @@ end fun
         let init = analyze_initialization(db, func, cfg, slot_alloc);
         let live_ranges = compute_live_ranges(db, func, cfg, slot_alloc, init);
         let move_info = compute_move_info(db, func, slot_alloc, live_ranges, tycheck_result);
-        let moved_analysis = analyze_moves_per_block(db, func, cfg, &slot_alloc.slots(db), move_info);
-        let drop_points = compute_drop_points(db, func, cfg, &slot_alloc.slots(db), slot_alloc, init, moved_analysis, tycheck_result);
+        let moved_analysis = analyze_moves_per_block(db, func, cfg, slot_alloc, move_info);
+        let drop_points = compute_drop_points(db, func, cfg, slot_alloc, init, moved_analysis, tycheck_result);
 
         // a is moved, b and c are not moved and are non-copy, so b and c should be dropped.
         let drops = drop_points.drops(db);

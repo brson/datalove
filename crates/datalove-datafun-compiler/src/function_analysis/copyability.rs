@@ -316,16 +316,15 @@ mod tests {
     use crate::ast::Statement;
     use crate::function_analysis::slot_allocation::allocate_slots;
 
-    /// Salsa tracked function to test if a variable is copy type.
+    /// Tracked helper to test if a variable is copy type.
     ///
-    /// This must be tracked to properly create salsa tracked structs.
+    /// Takes salsa-compatible parameters (Source, InternedText).
     #[salsa::tracked]
-    fn test_var_is_copy<'db>(
+    fn test_var_is_copy_tracked<'db>(
         db: &'db dyn crate::Db,
-        source_code: &'db str,
-        var_name: &'db str,
+        source: Source,
+        var_name: InternedText<'db>,
     ) -> bool {
-        let source = Source::new(db, S(source_code));
         let script = crate::parser::parse_for_diagnostics(db, source);
         let tycheck_result = crate::tycheck::type_check(db, source, script);
 
@@ -343,15 +342,25 @@ mod tests {
         // Find the slot and get its type.
         let slot_alloc = allocate_slots(db, func);
         let slots = slot_alloc.slots(db);
-        let name = InternedText::new(db, var_name);
 
         for slot in slots {
-            if slot.name(db) == Some(name) {
+            if slot.name(db) == Some(var_name) {
                 let ty = get_slot_type(db, slot, tycheck_result, func);
                 return is_copy_type(db, ty);
             }
         }
-        panic!("Variable {} not found", var_name);
+        panic!("Variable {} not found", var_name.text(db));
+    }
+
+    /// Helper function to test if a variable is copy type.
+    fn test_var_is_copy<'db>(
+        db: &'db dyn crate::Db,
+        source_code: &str,
+        var_name: &str,
+    ) -> bool {
+        let source = Source::new(db, S(source_code));
+        let name = InternedText::new(db, var_name);
+        test_var_is_copy_tracked(db, source, name)
     }
 
     // Group A: Primitive Copy Types

@@ -223,8 +223,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
-name = "bct"
+name = "bcts"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d52c6cbc6ccccfb4b771ad4e292cb8d73c35f42fac11d02ab52747a13132f86"
 dependencies = [
  "enum-iterator",
  "memchr",
@@ -870,7 +872,7 @@ dependencies = [
 name = "datalove"
 version = "0.1.0"
 dependencies = [
- "bct",
+ "bcts",
  "datalove-datalit",
  "rustmax",
  "salsa",
@@ -880,7 +882,7 @@ dependencies = [
 name = "datalove-cli"
 version = "0.1.0"
 dependencies = [
- "bct",
+ "bcts",
  "comrak",
  "datalove",
  "datalove-datafun",
@@ -900,7 +902,7 @@ dependencies = [
 name = "datalove-datafun"
 version = "0.1.0"
 dependencies = [
- "bct",
+ "bcts",
  "datalove-datafun-compiler",
  "datalove-datafun-pkg",
  "datalove-datalit",
@@ -917,7 +919,7 @@ dependencies = [
 name = "datalove-datafun-compiler"
 version = "0.1.0"
 dependencies = [
- "bct",
+ "bcts",
  "datalove-datalit",
  "datalove-diagnostic",
  "datalove-exampletest",
@@ -934,7 +936,7 @@ dependencies = [
 name = "datalove-datafun-pkg"
 version = "0.1.0"
 dependencies = [
- "bct",
+ "bcts",
  "datalove-exampletest",
  "rustmax",
  "salsa",
@@ -944,7 +946,7 @@ dependencies = [
 name = "datalove-datalit"
 version = "0.1.0"
 dependencies = [
- "bct",
+ "bcts",
  "datalove-diagnostic",
  "datalove-exampletest",
  "datalove-rt",
@@ -961,7 +963,7 @@ dependencies = [
 name = "datalove-diagnostic"
 version = "0.1.0"
 dependencies = [
- "bct",
+ "bcts",
  "salsa",
 ]
 
@@ -977,7 +979,7 @@ dependencies = [
 name = "datalove-repl"
 version = "0.1.0"
 dependencies = [
- "bct",
+ "bcts",
  "console_error_panic_hook",
  "datalove-datafun",
  "datalove-datalit",
@@ -1037,7 +1039,7 @@ dependencies = [
 name = "datalove-rt-tests"
 version = "0.1.0"
 dependencies = [
- "bct",
+ "bcts",
  "datalove-datalit",
  "datalove-exampletest",
  "datalove-rt",
@@ -2955,7 +2957,9 @@ dependencies = [
 
 [[package]]
 name = "rustmax"
-version = "0.0.5"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fb6aa1a85ff993efc3c4a3bf648b433c274d75068845ce12494ea40904e9798"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3063,7 +3067,9 @@ checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 
 [[package]]
 name = "salsa"
-version = "0.23.0"
+version = "0.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2e2aa2fca57727371eeafc975acc8e6f4c52f8166a78035543f6ee1c74c2dcc"
 dependencies = [
  "boxcar",
  "crossbeam-queue",
@@ -3086,11 +3092,15 @@ dependencies = [
 
 [[package]]
 name = "salsa-macro-rules"
-version = "0.23.0"
+version = "0.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bfc2a1e7bf06964105515451d728f2422dedc3a112383324a00b191a5c397a3"
 
 [[package]]
 name = "salsa-macros"
-version = "0.23.0"
+version = "0.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d844c1aa34946da46af683b5c27ec1088a3d9d84a2b837a108223fd830220e1"
 dependencies = [
  "proc-macro2",
  "quote",

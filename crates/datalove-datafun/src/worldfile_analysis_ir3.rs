@@ -15,8 +15,8 @@ use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorld
 use datalove_datafun_pkg::package_load::{Package, PackageModule};
 use datalove_datafun_compiler::ir;
 use datalove_datafun_compiler::tycheck::{
-    ScriptUnitInput, ScriptUnitKind, ScriptUnitBatch, type_check_script_units,
-    UnitTypecheckResultTracked, ModuleInfo, typecheck_module_graph,
+    type_check_script_units, UnitTypecheckResultTracked, typecheck_module_graph,
+    ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, UnitKindTag,
 };
 use datalove_datafun_compiler::module_graph::ModuleGraphBuilder;
 use ir::interp::{ScriptEnvironment, UnitCompletion};
@@ -122,25 +122,19 @@ pub fn analyze_worldfile_ir3(
         }
     }
 
-    // Parse all modules for import resolution.
-    let mut module_infos: Vec<ModuleInfo> = Vec::new();
+    // Build module specs for typechecking.
+    let mut module_specs: Vec<ModuleSpec> = Vec::new();
     for section in &parsed.sections {
         if let WorldfileSection::Module { library, package, module, source } = section {
             let module_path = format!("{}/{}/{}", library, package, module);
             let src = bct::input::Source::new(db, source.to_string());
-            let parse_result = datalove_datafun_compiler::parser::parse(db, src);
-            let script = parse_result.script(db);
-            module_infos.push(ModuleInfo {
-                path: module_path,
-                script,
-                source: src,
-            });
+            module_specs.push(ModuleSpec::new(db, module_path, src));
         }
     }
 
-    // Collect and parse all script units.
+    // Collect all script units - build specs for typechecking, parse for execution.
     let mut parsed_units: Vec<ParsedUnit> = Vec::new();
-    let mut unit_inputs: Vec<ScriptUnitInput> = Vec::new();
+    let mut unit_specs: Vec<ScriptUnitSpec> = Vec::new();
 
     for section in &parsed.sections {
         match section {
@@ -155,7 +149,7 @@ pub fn analyze_worldfile_ir3(
                     source: src,
                     kind: ParsedUnitKind::Fragment(script),
                 });
-                unit_inputs.push(ScriptUnitInput::new(db, src, ScriptUnitKind::Fragment(script)));
+                unit_specs.push(ScriptUnitSpec::new(db, src, UnitKindTag::Fragment));
             }
             WorldfileSection::ScriptExpr { source } => {
                 let src = bct::input::Source::new(db, source.to_string());
@@ -164,14 +158,14 @@ pub fn analyze_worldfile_ir3(
                     source: src,
                     kind: ParsedUnitKind::Expr(expr),
                 });
-                unit_inputs.push(ScriptUnitInput::new(db, src, ScriptUnitKind::Expr(expr)));
+                unit_specs.push(ScriptUnitSpec::new(db, src, UnitKindTag::Expr));
             }
         }
     }
 
     // Typecheck all units together (bindings shared across units).
-    let batch = ScriptUnitBatch::new(db, unit_inputs, module_infos.clone());
-    let typecheck_results = type_check_script_units(db, batch);
+    let spec = ScriptBatchSpec::new(db, unit_specs, module_specs.clone());
+    let typecheck_results = type_check_script_units(db, spec);
     let unit_results = typecheck_results.results(db);
 
     // Shared state for lowering and execution.
@@ -182,8 +176,8 @@ pub fn analyze_worldfile_ir3(
     // Build ModuleGraph and typecheck all modules together.
     // This handles module-to-module imports properly.
     let mut builder = ModuleGraphBuilder::new(db);
-    for module_info in &module_infos {
-        builder.add_module(module_info.path.clone(), module_info.source);
+    for module_spec in &module_specs {
+        builder.add_module(module_spec.path(db).clone(), module_spec.source(db));
     }
     let module_graph = builder.build();
 

@@ -115,8 +115,40 @@ pub struct TypecheckResult<'db> {
     pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
 }
 
-/// Kind of script unit for batch typechecking.
-#[derive(Clone, Hash, PartialEq, Eq)]
+/// Tag for script unit kind (before parsing).
+#[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
+pub enum UnitKindTag {
+    Fragment,
+    Expr,
+}
+
+/// Spec for a single script unit (just source + kind tag).
+#[salsa::interned]
+pub struct ScriptUnitSpec<'db> {
+    pub source: bct::input::Source,
+    pub kind_tag: UnitKindTag,
+}
+
+/// Spec for a module (path + source).
+#[salsa::interned]
+pub struct ModuleSpec<'db> {
+    #[returns(ref)]
+    pub path: String,
+    pub source: bct::input::Source,
+}
+
+/// Spec for a batch of script units (the "input" to typechecking).
+#[salsa::interned]
+pub struct ScriptBatchSpec<'db> {
+    #[returns(ref)]
+    pub units: Vec<ScriptUnitSpec<'db>>,
+    #[returns(ref)]
+    pub modules: Vec<ModuleSpec<'db>>,
+}
+
+/// Kind of script unit for batch typechecking (with parsed content).
+#[derive(Clone, Hash)]
+#[derive(salsa::Update)]
 pub enum ScriptUnitKind<'db> {
     /// A fragment containing statements.
     Fragment(Script<'db>),
@@ -124,34 +156,25 @@ pub enum ScriptUnitKind<'db> {
     Expr(ExprFun<'db>),
 }
 
-/// Input for batch script unit typechecking.
-#[derive(Clone, Hash, PartialEq, Eq)]
+/// A script unit with parsed content (tracked - created inside tracked fn).
+#[salsa::tracked]
 pub struct ScriptUnitInput<'db> {
-    /// Source text for this unit.
     pub source: bct::input::Source,
-    /// Kind of unit (fragment or expression).
+    #[returns(ref)]
     pub kind: ScriptUnitKind<'db>,
 }
 
-impl<'db> ScriptUnitInput<'db> {
-    pub fn new(_db: &'db dyn crate::Db, source: bct::input::Source, kind: ScriptUnitKind<'db>) -> Self {
-        Self { source, kind }
-    }
-}
-
-/// Parsed module info for import resolution during script typechecking.
-#[derive(Clone, Hash, PartialEq, Eq)]
+/// Module info with parsed content (tracked).
+#[salsa::tracked]
 pub struct ModuleInfo<'db> {
-    /// Module path (e.g., "local/test/utils").
+    #[returns(ref)]
     pub path: String,
-    /// Parsed script containing function definitions.
     pub script: Script<'db>,
-    /// Source for the module.
     pub source: bct::input::Source,
 }
 
-/// Interned batch of script units for typechecking.
-#[salsa::interned]
+/// Batch of script units (tracked).
+#[salsa::tracked]
 pub struct ScriptUnitBatch<'db> {
     #[returns(ref)]
     pub units: Vec<ScriptUnitInput<'db>>,
@@ -547,25 +570,53 @@ pub fn type_check_expr<'db>(
 #[salsa::tracked]
 pub fn type_check_script_units<'db>(
     db: &'db dyn crate::Db,
-    batch: ScriptUnitBatch<'db>,
+    spec: ScriptBatchSpec<'db>,
 ) -> ScriptUnitsTypecheckResultTracked<'db> {
-    let units = batch.units(db);
-    let modules = batch.modules(db);
+    // Build tracked types from specs.
+    let mut units = Vec::new();
+    for unit_spec in spec.units(db) {
+        let source = unit_spec.source(db);
+        let kind = match unit_spec.kind_tag(db) {
+            UnitKindTag::Fragment => {
+                let parse_result = crate::parser::parse(db, source);
+                ScriptUnitKind::Fragment(parse_result.script(db))
+            }
+            UnitKindTag::Expr => {
+                let expr = crate::parser::parse_expr(db, source);
+                ScriptUnitKind::Expr(expr)
+            }
+        };
+        units.push(ScriptUnitInput::new(db, source, kind));
+    }
+
+    let mut modules = Vec::new();
+    for module_spec in spec.modules(db) {
+        let source = module_spec.source(db);
+        let parse_result = crate::parser::parse(db, source);
+        modules.push(ModuleInfo::new(
+            db,
+            module_spec.path(db).clone(),
+            parse_result.script(db),
+            source,
+        ));
+    }
+
+    let _batch = ScriptUnitBatch::new(db, units.clone(), modules.clone());
 
     // Build module function info for import resolution.
     // Map: module_path -> (function_name -> (signature, ast))
     let mut module_functions: HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>> = HashMap::new();
-    for module_info in modules {
+    for module_info in &modules {
         let mut funcs = HashMap::new();
         // First pass: collect function signatures.
-        let mut temp_ctx = TypeContext::new(db, module_info.source);
-        for statement in module_info.script.statements(db) {
+        let mut temp_ctx = TypeContext::new(db, module_info.source(db));
+        for statement in module_info.script(db).statements(db) {
             if let Statement::Fun(stmt) = statement {
                 collect_function_signature(&mut temp_ctx, stmt, None);
             }
         }
         // Extract function info.
-        for statement in module_info.script.statements(db) {
+        for statement in module_info.script(db).statements(db) {
             if let Statement::Fun(stmt) = statement {
                 let name = stmt.name(db);
                 if let Some(func_ty) = temp_ctx.functions.get(&name) {
@@ -573,7 +624,7 @@ pub fn type_check_script_units<'db>(
                 }
             }
         }
-        module_functions.insert(module_info.path.clone(), funcs);
+        module_functions.insert(module_info.path(db).clone(), funcs);
     }
 
     let mut accumulated_vars: HashMap<InternedText<'db>, TypeAndHeap<'db>> = HashMap::new();
@@ -581,8 +632,8 @@ pub fn type_check_script_units<'db>(
     let mut accumulated_fn_asts: HashMap<InternedText<'db>, StmtFun<'db>> = HashMap::new();
     let mut results = Vec::new();
 
-    for unit in units {
-        let source = unit.source;
+    for unit in &units {
+        let source = unit.source(db);
         let mut ctx = TypeContext::new(db, source);
 
         // Script units have Result<()> return type for try operators.
@@ -613,7 +664,7 @@ pub fn type_check_script_units<'db>(
         }
 
         // Typecheck this unit based on kind.
-        match &unit.kind {
+        match unit.kind(db) {
             ScriptUnitKind::Fragment(script) => {
                 // First pass: collect function signatures from this unit.
                 for statement in script.statements(db) {
