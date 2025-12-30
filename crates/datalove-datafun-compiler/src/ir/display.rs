@@ -103,6 +103,7 @@ impl fmt::Display for ConstValue {
                     write!(f, "{}int", s)
                 }
             }
+            ConstValue::String(s) => write!(f, "{:?}", s),
         }
     }
 }

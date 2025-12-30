@@ -7,10 +7,10 @@ Ir3Analysis(
                 status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Error",
-                message: "not implemented: String",
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const \"oops something went wrong\"\n    v1 = error_from v0\n    unit_end v1\n",
             ),
-            output: "",
+            output: "@error @\"oops something went wrong\"",
         ),
     ],
 )

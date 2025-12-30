@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+// Test if-binding with String (non-copy type).
+let opt: ?string = some "hello world"
+var result: string = ""
+if opt |val|
+    set result = val
+end if
+
+----------
+scriptunit-expr
+----------
+
+result

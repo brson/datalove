@@ -1,0 +1,19 @@
+----------
+scriptunit-fragment
+----------
+
+// Test that if-binding shadows existing variable.
+let x: u32 = @100
+let opt: ?u32 = some @42
+var result: u32 = @0
+if opt |x|
+    // This x is the inner value, not the outer x.
+    set result = x
+end if
+// Now x should still be the outer one.
+
+----------
+scriptunit-expr
+----------
+
+(result, x)

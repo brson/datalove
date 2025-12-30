@@ -1680,8 +1680,20 @@ fn lower_expression<'db>(
         ExprFunKind::Float(_) => {
             Err(LowerError::NotImplemented("Float".to_string()))
         }
-        ExprFunKind::String(_) => {
-            Err(LowerError::NotImplemented("String".to_string()))
+        ExprFunKind::String(string_expr) => {
+            let raw = string_expr.value(ctx.db).as_str(ctx.db);
+            // Strip quotes if present.
+            let content = if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
+                &raw[1..raw.len()-1]
+            } else {
+                raw
+            };
+            let dest = ctx.fresh_value(IrType::String);
+            ctx.emit(Instruction::Const {
+                dest,
+                value: ConstValue::String(content.to_string()),
+            });
+            Ok(dest)
         }
         ExprFunKind::AnonStruct(_) => {
             Err(LowerError::NotImplemented("AnonStruct".to_string()))

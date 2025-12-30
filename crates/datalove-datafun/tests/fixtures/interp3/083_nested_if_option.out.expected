@@ -8,7 +8,7 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"failed\"\n    v1 = error_from v0\n    v2 = err v1\n    v3 = const 0u32\n    store s0, v3\n    v4, v5, v6 = unwrap_result v2\n    branch v6, block1, block2\nblock1:\n    store s0, v4\n    goto block3\nblock2:\n    v7 = const 999u32\n    store s0, v7\n    drop v5\n    goto block3\nblock3:\n    unit_end\nexports:\n    res = v2\n    result = s0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = some v0\n    v2 = const 20int\n    v3 = some v2\n    v4 = const 0int\n    store s0, v4\n    v5, v6 = unwrap_option v1\n    branch v6, block1, block2\nblock1:\n    v7, v8 = unwrap_option v3\n    branch v8, block4, block5\nblock4:\n    v9 = add v5, v7\n    drop s0\n    store s0, v9\n    drop v7\n    goto block6\nblock5:\n    goto block6\nblock6:\n    drop v5\n    goto block3\nblock2:\n    goto block3\nblock3:\n    unit_end\nexports:\n    outer = v1\n    inner = v3\n    result = s0\n",
             ),
             output: "(fragment executed)",
         ),

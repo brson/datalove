@@ -381,7 +381,9 @@ pub enum ConstValue {
     /// Bigint stored as limbs (little-endian base 2^32) and sign.
     /// Empty limbs = 0.
     Int { limbs: Vec<u32>, negative: bool },
-    // TODO: Float, String, etc.
+    /// String literal.
+    String(String),
+    // TODO: Float, etc.
 }
 
 /// Binary operator.

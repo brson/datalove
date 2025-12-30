@@ -897,6 +897,33 @@ impl IrInterpreter {
                         (*int_ptr).capacity = num_limbs;
                     }
                 }
+                ConstValue::String(s) => {
+                    let rt_handle = self.runtime.handle();
+                    let status = datalove_rt::c::dtlv_rti_string_create_local(
+                        rt_handle,
+                        dest.ptr,
+                        dest.tydesc,
+                    );
+                    if status != datalove_rt::c::RtStatus::Ok {
+                        return Err(InterpError::RuntimeError(
+                            "Failed to create string".to_string()
+                        ));
+                    }
+                    if !s.is_empty() {
+                        let status = datalove_rt::c::dtlv_rti_string_push_bytes_local(
+                            rt_handle,
+                            dest.ptr,
+                            dest.tydesc,
+                            s.as_ptr(),
+                            s.len() as u32,
+                        );
+                        if status != datalove_rt::c::RtStatus::Ok {
+                            return Err(InterpError::RuntimeError(
+                                "Failed to push string bytes".to_string()
+                            ));
+                        }
+                    }
+                }
             }
         }
         Ok(())

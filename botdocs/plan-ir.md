@@ -372,7 +372,6 @@ Implemented:
   - Prevents leaks in loops where literals are created each iteration
 - Drop tracking TODO:
   - **Branch convergence** - values moved in one if branch but not other should be dropped in non-moving branch (potential memory leak)
-  - **If-bindings** - deferred until IR supports if-bindings (runtime conditional drops needed)
 
 ### Phase 4: Integration - MOSTLY COMPLETE
 
@@ -452,9 +451,20 @@ Int comparison tests (061-065):
 - `064_int_loop_compare.world` - loop with Int comparison condition
 - `065_int_compare_all_ops.world` - all comparison operators (Eq, Ne, Lt, Le, Gt, Ge)
 
+If-binding tests (066-083 in interp3, 010-016 in module_interp3):
+- `066_script_if_option_binding.world` - basic Some case
+- `067_script_if_option_none_binding.world` - None case, else branch
+- `068_script_if_result_ok_binding.world` - Ok case
+- `069_script_if_result_error_binding.world` - Error case
+- `070-079` - variable shadowing tests (let/var combinations)
+- `080_if_option_int_binding.world` - non-copy type (Int)
+- `081_if_option_string_binding.world` - non-copy type (String)
+- `082_if_option_binding_shadows.world` - if-binding shadows outer variable
+- `083_nested_if_option.world` - nested if-bindings
+
 **Test counts:**
-- interp3_tests: 57 tests
-- module_interp3_tests: 16 tests
+- interp3_tests: 71 tests
+- module_interp3_tests: 26 tests
 - module_interp_tests: 219 tests
 - All tests pass with `DATALOVE_LEAK_CHECK=panic-backtrace`
 
@@ -471,8 +481,15 @@ TODO:
   - `if result_value |ok| else |err| ... end if` extracts Ok/Err via `UnwrapResult`
   - Move semantics: inner value is moved (not cloned) to binding
   - Binding scoped to branch, dropped at scope exit
-  - Tests 010-016 (module_interp3), 066-069 (interp3)
-- **String Literals** - DONE. `ConstValue::String` works, tests pass
+  - Shadowing: if-binding can shadow outer variables, restored at scope exit
+  - Non-copy types: Int, String bindings properly dropped
+  - Nested if-bindings work correctly
+  - Tests 010-016 (module_interp3), 066-083 (interp3)
+- **String Literals** - DONE. `ConstValue::String(String)` in IR
+  - Lowering strips quotes from AST string values
+  - Interpreter creates strings via `dtlv_rti_string_create_local`/`push_bytes_local`
+  - Display uses Rust debug formatting for proper escaping
+  - Tests: 035_error_from_string, 069, 081 (string in if-binding)
 - **Try Operators (?, !)** - DONE. Tests 032-033 verify early return behavior
 - **Bigint (Int)** - DONE. Arithmetic via runtime calls, proper limbs representation
 - **Int Comparison** - DONE. Inline `int_compare()` in interpreter (no runtime call needed)
@@ -518,8 +535,8 @@ TODO:
 **Test Coverage:**
 
 - Old interpreter (module_interp_tests): 219 tests
-- IR interpreter (interp3_tests): 53 tests
-- IR interpreter (module_interp3_tests): 9 tests
+- IR interpreter (interp3_tests): 71 tests
+- IR interpreter (module_interp3_tests): 26 tests
 - All tests pass with leak checking enabled
 
 Test matrix (each feature should be tested in):
