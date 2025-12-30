@@ -137,12 +137,12 @@ block0:
 block0:
     v0 = Const(0)
     SlotStore(s0, v0)       // var sum = 0
-    v1 = SlotLoad(s0)       // read sum
-    v2 = Const(1)
-    v3 = BinOp(Add, v1, v2)
-    SlotStore(s0, v3)       // sum = sum + 1
-    v4 = SlotLoad(s0)
-    Return(v4)
+    v1 = Const(1)
+    v2 = BinOp(Add, s0, v1) // binop borrows s0 directly
+    Drop(s0)                // drop old value before store
+    SlotStore(s0, v2)       // sum = sum + 1
+    v3 = SlotLoad(s0)       // move from slot for return
+    Return(v3)
 
 // Source: let x = if cond { a } else { b }
 // Lowered (phi at join):
@@ -350,9 +350,22 @@ Implemented:
   - **Script unit error cleanup**: Frame destroyed on execution error to clean up initialized values
   - **Return/UnitEnd move semantics**: Use `move_value` + `mark_value_dropped` instead of `copy_value` to prevent double-free (frame will be destroyed by caller)
   - **Unit type NonNull fix**: Empty tuple fields use `NonNull::dangling().as_ptr()` instead of null (Rust 1.78+ requires non-null for empty slices in `from_raw_parts`)
+- Operand semantics (copy/move/borrow):
+  - **Copy types**: Unit, Bool, U8-U64, I8-I64, F32, tuples/structs of copy types
+  - **Non-copy types**: Int, String, Data, Error, List, Set, Map, Tensor
+  - **`copy_value`**: Shallow bitwise copy, only for copy types (asserted)
+  - **`move_value`**: Shallow copy with ownership transfer, source marked dropped
+  - **Borrow semantics for binop/unaryop**: Operands read by reference, not consumed
+    - `lower_operand()` returns `Operand` directly for borrowing contexts
+    - For Name->Slot: returns `Operand::Slot(s)` (no SlotLoad emitted)
+    - For Name->Value: returns `Operand::Value(v)`
+    - For compound expressions: lowers to value and wraps
+    - Interpreter's `read_operand()` reads without consuming
+  - **SlotLoad is destructive**: Moves value out of slot, marks slot as dropped
+    - Only emitted for consuming contexts (function args, return, etc.)
+    - Binop/unaryop operands DON'T use SlotLoad - they borrow via Operand::Slot
+  - **External references**: Copy types use Copy instruction, non-copy use Move
 - Drop tracking TODO:
-  - **Function call args not marked as moved** - could cause redundant drops (safe due to mark_dropped)
-  - **Let/var init source not marked as moved** - same as above
   - **Branch convergence** - values moved in one if branch but not other should be dropped in non-moving branch (potential memory leak)
   - **If-bindings** - deferred until IR supports if-bindings (runtime conditional drops needed)
 
@@ -441,6 +454,12 @@ TODO:
 - **Try Operators (?, !)** - DONE. Tests 032-033 verify early return behavior
 - **Bigint (Int)** - DONE. Arithmetic via runtime calls, proper limbs representation
 - **Collections (List, Set, Map)** - DONE. Creation and function returns work
+- **Operand Semantics** - DONE. Proper borrow/move/copy semantics:
+  - Binop/unaryop operands borrow (read by reference, not consumed)
+  - SlotLoad is destructive (move semantics for consuming contexts)
+  - `lower_operand()` returns slots directly as operands (no unnecessary loads)
+  - `IrType::is_copy()` determines copy vs non-copy types
+  - `copy_value` asserts on copy types only, `move_value` for ownership transfer
 
 **Missing Features (MEDIUM priority):**
 
@@ -453,8 +472,10 @@ TODO:
    - IR: `BinOpChecked` needs Result wrapping
 
 5. **Widening Arithmetic**
-   - Old: Bare `+`, `-`, `*` on fixed ints widen both operands to Int
-   - IR: Not documented/verified
+   - Bare `+`, `-`, `*` on fixed ints widen both operands to Int (bigint)
+   - Example: `a + @3` where a is u32 and @3 is Int results in Int type
+   - Typechecker handles widening; IR receives correct types
+   - IR interpreter handles Int arithmetic via runtime calls
 
 **Missing Features (LOW priority):**
 
