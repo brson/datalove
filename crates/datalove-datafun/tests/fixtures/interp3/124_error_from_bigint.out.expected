@@ -8,9 +8,9 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    v1 = const 200u32\n    v2 = add v0, v1\n    v3 = pack Tuple1 {v2}\n    v4 = error_from v3\n    unit_end v4\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    v1 = const 200u32\n    v2 = add v0, v1\n    v3 = error_from v2\n    unit_end v3\n",
             ),
-            output: "@error @(@300)",
+            output: "@error @300",
         ),
     ],
 )
