@@ -12,6 +12,7 @@ use std::collections::HashMap;
 pub mod lower;
 pub mod display;
 pub mod interp;
+pub mod drop_analysis;
 
 /// SSA value - defined exactly once, immutable.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]

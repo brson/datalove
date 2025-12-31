@@ -20,7 +20,7 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn add_two(v0):\nblock0:\n    v1 = call module.add_one(v0)\n    v2 = call module.add_one(v1)\n    drop v0\n    return v2\n",
+                ir: "fn add_two(v0):\nblock0:\n    v1 = call module.add_one(v0)\n    v2 = call module.add_one(v1)\n    return v2\n",
             ),
             output: "",
         ),
@@ -32,7 +32,7 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn add_four(v0):\nblock0:\n    v1 = call module.add_two(v0)\n    v2 = call module.add_two(v1)\n    drop v0\n    return v2\n",
+                ir: "fn add_four(v0):\nblock0:\n    v1 = call module.add_two(v0)\n    v2 = call module.add_two(v1)\n    return v2\n",
             ),
             output: "",
         ),

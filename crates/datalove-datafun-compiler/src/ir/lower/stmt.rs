@@ -13,10 +13,19 @@ use super::scope::{is_copy_type, ScopeKind};
 use super::expr::lower_expression;
 use super::LowerError;
 
-/// Lower a statement.
+/// Lower a statement (without index tracking, for compatibility).
 pub fn lower_statement<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &Statement<'db>,
+) -> Result<(), LowerError> {
+    lower_statement_indexed(ctx, stmt, 0)
+}
+
+/// Lower a statement with index tracking for drop schedule.
+pub fn lower_statement_indexed<'db>(
+    ctx: &mut LowerCtx<'db>,
+    stmt: &Statement<'db>,
+    stmt_idx: usize,
 ) -> Result<(), LowerError> {
     match stmt {
         Statement::Let(let_stmt) => {
@@ -24,9 +33,12 @@ pub fn lower_statement<'db>(
             let init_expr = let_stmt.value(ctx.db);
             let value_type = ctx.expr_type(init_expr);
             let value_id = lower_expression(ctx, init_expr)?;
-            ctx.bind_var(&name, Operand::Value(value_id));
-            // Record binding for drop tracking.
-            ctx.scope_tracker.record_binding(Operand::Value(value_id), value_type);
+            let operand = Operand::Value(value_id);
+            ctx.bind_var(&name, operand);
+            // Record binding operand for drop schedule.
+            ctx.record_binding_operand(operand);
+            // Also record for ScopeTracker (fallback).
+            ctx.scope_tracker.record_binding(operand, value_type);
             Ok(())
         }
         Statement::Var(var_stmt) => {
@@ -40,9 +52,12 @@ pub fn lower_statement<'db>(
                 dest: SlotDest::Local(slot),
                 value: Operand::Value(value_id),
             });
-            ctx.bind_var(&name, Operand::Slot(slot));
-            // Record slot for drop tracking.
-            ctx.scope_tracker.record_binding(Operand::Slot(slot), slot_type);
+            let operand = Operand::Slot(slot);
+            ctx.bind_var(&name, operand);
+            // Record binding operand for drop schedule.
+            ctx.record_binding_operand(operand);
+            // Also record for ScopeTracker (fallback).
+            ctx.scope_tracker.record_binding(operand, slot_type);
             Ok(())
         }
         Statement::Set(set_stmt) => {
@@ -75,8 +90,13 @@ pub fn lower_statement<'db>(
                 None
             };
             // Emit drops for all values in all scopes before return.
-            let drops = ctx.scope_tracker.bindings_to_drop_for_return();
-            ctx.emit_drops(drops);
+            // When drop schedule is active, analysis handles drops before return.
+            if ctx.has_drop_schedule() {
+                ctx.emit_before_return_drops(stmt_idx);
+            } else {
+                let drops = ctx.scope_tracker.bindings_to_drop_for_return();
+                ctx.emit_drops(drops);
+            }
             ctx.finish_block(Terminator::Return { value });
             // Start a new unreachable block (code after return).
             let new_block = ctx.fresh_block();
@@ -84,10 +104,10 @@ pub fn lower_statement<'db>(
             Ok(())
         }
         Statement::If(if_stmt) => {
-            lower_if(ctx, *if_stmt)
+            lower_if(ctx, *if_stmt, stmt_idx)
         }
         Statement::Loop(loop_stmt) => {
-            lower_loop(ctx, *loop_stmt)
+            lower_loop(ctx, *loop_stmt, stmt_idx)
         }
         Statement::Break(_) => {
             let (_, break_target) = ctx.loop_stack.last()
@@ -138,6 +158,7 @@ pub fn lower_statement<'db>(
 pub fn lower_if<'db>(
     ctx: &mut LowerCtx<'db>,
     if_stmt: ast::StmtIf<'db>,
+    stmt_idx: usize,
 ) -> Result<(), LowerError> {
     let condition = if_stmt.condition(ctx.db);
     let then_binding = if_stmt.then_binding(ctx.db);
@@ -147,7 +168,7 @@ pub fn lower_if<'db>(
     match (&cond_type, then_binding) {
         // Option destructuring: if opt_value |x| ... end if
         (IrType::Option(inner_type), Some(binding_name)) => {
-            lower_if_option(ctx, if_stmt, condition, inner_type, binding_name)
+            lower_if_option(ctx, if_stmt, condition, inner_type, binding_name, stmt_idx)
         }
 
         // Result destructuring: if result_value |ok_val| else |err_val| ... end if
@@ -157,12 +178,12 @@ pub fn lower_if<'db>(
                 .ok_or_else(|| LowerError::NotImplemented(
                     "Result if-binding without else binding".to_string()
                 ))?;
-            lower_if_result(ctx, if_stmt, condition, ok_type, binding_name, err_binding)
+            lower_if_result(ctx, if_stmt, condition, ok_type, binding_name, err_binding, stmt_idx)
         }
 
         // Boolean condition (no binding).
         (IrType::Bool, None) => {
-            lower_if_bool(ctx, if_stmt, condition)
+            lower_if_bool(ctx, if_stmt, condition, stmt_idx)
         }
 
         // Invalid combinations.
@@ -188,6 +209,7 @@ fn lower_if_bool<'db>(
     ctx: &mut LowerCtx<'db>,
     if_stmt: ast::StmtIf<'db>,
     condition: ExprFun<'db>,
+    stmt_idx: usize,
 ) -> Result<(), LowerError> {
     let cond_id = lower_expression(ctx, condition)?;
 
@@ -205,25 +227,38 @@ fn lower_if_bool<'db>(
     // Lower then branch.
     ctx.start_block(then_block);
     ctx.scope_tracker.enter_scope(ScopeKind::IfThen);
-    for stmt in if_stmt.then_body(ctx.db) {
-        lower_statement(ctx, stmt)?;
+    let then_body = if_stmt.then_body(ctx.db);
+    for (idx, stmt) in then_body.iter().enumerate() {
+        lower_statement_indexed(ctx, stmt, idx)?;
     }
     // Exit scope and emit drops before Goto.
+    // Use scheduled drops if available, otherwise fall back to ScopeTracker.
+    if ctx.has_drop_schedule() {
+        ctx.emit_then_branch_drops(stmt_idx);
+    }
     let drops = ctx.scope_tracker.exit_scope();
-    ctx.emit_drops(drops);
+    if !ctx.has_drop_schedule() {
+        ctx.emit_drops(drops);
+    }
     ctx.finish_block(Terminator::Goto(merge_block));
 
     // Lower else branch.
     ctx.start_block(else_block);
     ctx.scope_tracker.enter_scope(ScopeKind::IfElse);
     if let Some(else_body) = if_stmt.else_body(ctx.db) {
-        for stmt in else_body {
-            lower_statement(ctx, stmt)?;
+        for (idx, stmt) in else_body.iter().enumerate() {
+            lower_statement_indexed(ctx, stmt, idx)?;
         }
     }
     // Exit scope and emit drops before Goto.
+    // Use scheduled drops if available.
+    if ctx.has_drop_schedule() {
+        ctx.emit_else_branch_drops(stmt_idx);
+    }
     let drops = ctx.scope_tracker.exit_scope();
-    ctx.emit_drops(drops);
+    if !ctx.has_drop_schedule() {
+        ctx.emit_drops(drops);
+    }
     ctx.finish_block(Terminator::Goto(merge_block));
 
     // Continue in merge block.
@@ -240,6 +275,7 @@ fn lower_if_option<'db>(
     condition: ExprFun<'db>,
     inner_type: &IrType,
     binding_name: InternedText<'db>,
+    _stmt_idx: usize,
 ) -> Result<(), LowerError> {
     // Lower the Option expression.
     let opt_id = lower_expression(ctx, condition)?;
@@ -323,6 +359,7 @@ fn lower_if_result<'db>(
     ok_type: &IrType,
     ok_binding: InternedText<'db>,
     err_binding: InternedText<'db>,
+    _stmt_idx: usize,
 ) -> Result<(), LowerError> {
     // Lower the Result expression.
     let result_id = lower_expression(ctx, condition)?;
@@ -416,6 +453,7 @@ fn lower_if_result<'db>(
 pub fn lower_loop<'db>(
     ctx: &mut LowerCtx<'db>,
     loop_stmt: ast::StmtLoop<'db>,
+    _stmt_idx: usize,
 ) -> Result<(), LowerError> {
     let loop_header = ctx.fresh_block();
     let loop_exit = ctx.fresh_block();

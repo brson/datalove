@@ -1,5 +1,36 @@
 # Precise Drops via Pre-Lowering Analysis
 
+## Status
+
+**IMPLEMENTED** - Core phases (1, 2, 6) complete. All tests pass.
+
+- Phase 1: Analysis module - DONE
+- Phase 2: Lowering integration - DONE
+- Phase 3: ScopeTracker cleanup - PENDING (disabled when schedule present)
+- Phase 4: Worldfile analysis - DONE (automatic via func.rs)
+- Phase 5: Runtime tracking removal - PENDING (optional)
+- Phase 6: Testing - DONE (all tests pass)
+
+### Implementation Notes
+
+**Key design change from plan**: Schedule keyed by statement index (`usize`) rather than AST node references. Simpler and avoids lifetime issues.
+
+**Consuming vs non-consuming uses**: Added `is_consumed: bool` to `analyze_expr_moves()`. Binary/unary ops don't consume (just read), while let bindings, function args, and returns do consume.
+
+**Backwards compatibility**: `has_drop_schedule()` check allows ScopeTracker fallback for script units.
+
+### Files Changed
+
+- `ir/drop_analysis.rs` - NEW (~845 lines)
+- `ir/mod.rs` - Added module export
+- `ir/lower/context.rs` - Added drop_schedule fields, emit helpers
+- `ir/lower/func.rs` - Runs analysis, sets schedule
+- `ir/lower/stmt.rs` - Uses scheduled drops
+- `ir/lower/script.rs` - Fixed function call args
+- `tests/fixtures/interp3/120_conditional_move_convergence.world` - NEW test
+
+---
+
 ## Goal
 
 Design a new analysis system that runs before lowering to:

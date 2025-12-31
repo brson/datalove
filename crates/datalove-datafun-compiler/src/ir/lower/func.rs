@@ -6,9 +6,10 @@ use crate::ast;
 use crate::tycheck::TypecheckResult;
 use crate::Db;
 use super::super::{IrType, IrFunction, Operand, FuncId, Terminator};
+use super::super::drop_analysis;
 use super::context::LowerCtx;
 use super::scope::ScopeKind;
-use super::stmt::lower_statement;
+use super::stmt::lower_statement_indexed;
 use super::LowerError;
 
 /// Lower a function to IR.
@@ -62,6 +63,20 @@ pub fn lower_function_body<'db>(
 ) -> Result<IrFunction, LowerError> {
     let name = func.name(ctx.db).text(ctx.db).to_string();
 
+    // Run drop analysis to compute precise drop points.
+    let analysis = drop_analysis::analyze_function(ctx.db, func, ctx.expr_types);
+
+    // For now, just log errors but don't fail (analysis errors are informational).
+    // TODO: Return errors instead of continuing.
+    if !analysis.errors.is_empty() {
+        for err in &analysis.errors {
+            eprintln!("Drop analysis error: {:?}", err);
+        }
+    }
+
+    // Set drop schedule for this function.
+    ctx.set_drop_schedule(analysis.schedule, analysis.bindings);
+
     // Save and set function context for try operators.
     let saved_return_type = ctx.return_type.take();
     let saved_is_script_unit = ctx.is_script_unit;
@@ -70,27 +85,34 @@ pub fn lower_function_body<'db>(
     // Set return type from function signature.
     ctx.return_type = func.return_type(ctx.db).map(|ty| IrType::from_type_hint(ctx.db, &ty));
 
-    // Enter function scope for drop tracking.
+    // Enter function scope for drop tracking (still used for ScopeTracker fallback).
     ctx.scope_tracker.enter_scope(ScopeKind::Function);
 
     // Allocate ValueIds for parameters with correct types.
+    // Record binding operands to match analysis order.
     let params: Vec<_> = func.params(ctx.db)
         .iter()
         .map(|p| {
             let param_name = p.name(ctx.db).text(ctx.db).to_string();
             let param_type = IrType::from_type_hint(ctx.db, &p.type_hint(ctx.db));
             let id = ctx.fresh_value(param_type.clone());
-            ctx.bind_var(&param_name, Operand::Value(id));
-            // Record parameter for drop tracking.
-            ctx.scope_tracker.record_binding(Operand::Value(id), param_type);
+            let operand = Operand::Value(id);
+            ctx.bind_var(&param_name, operand);
+            // Record binding operand for drop schedule.
+            ctx.record_binding_operand(operand);
+            // Also record for ScopeTracker (fallback).
+            ctx.scope_tracker.record_binding(operand, param_type);
             id
         })
         .collect();
 
-    // Lower the function body.
-    for stmt in func.body(ctx.db) {
-        lower_statement(ctx, stmt)?;
+    // Lower the function body with statement indices.
+    let body = func.body(ctx.db);
+    for (idx, stmt) in body.iter().enumerate() {
+        ctx.current_stmt_idx = Some(idx);
+        lower_statement_indexed(ctx, stmt, idx)?;
     }
+    ctx.current_stmt_idx = None;
 
     // If no explicit return, add implicit return unit.
     // Emit drops before the implicit return.
@@ -102,8 +124,12 @@ pub fn lower_function_body<'db>(
             || !matches!(ctx.blocks.last().unwrap().terminator, Terminator::Return { .. });
         if needs_return {
             // Emit drops before implicit return.
+            // When drop schedule is active, analysis handles all drops.
+            // Otherwise, fall back to ScopeTracker.
             let drops = ctx.scope_tracker.exit_scope();
-            ctx.emit_drops(drops);
+            if !ctx.has_drop_schedule() {
+                ctx.emit_drops(drops);
+            }
             ctx.finish_block(Terminator::Return { value: None });
         }
     } else {

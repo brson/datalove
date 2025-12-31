@@ -32,7 +32,7 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn add_three(v0):\nblock0:\n    v1 = call module.add_one(v0)\n    v2 = call module.add_one(v1)\n    v3 = call module.add_one(v2)\n    drop v0\n    return v3\nexports:\n    add_three = f0\n",
+                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn add_three(v0):\nblock0:\n    v1 = call module.add_one(v0)\n    v2 = call module.add_one(v1)\n    v3 = call module.add_one(v2)\n    return v3\nexports:\n    add_three = f0\n",
             ),
             output: "(fragment executed)",
         ),

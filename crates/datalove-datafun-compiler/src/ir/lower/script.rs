@@ -275,10 +275,12 @@ pub fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::If(if_stmt) => {
-            super::stmt::lower_if(ctx, *if_stmt)
+            // Script units don't use drop schedule, so stmt_idx=0.
+            super::stmt::lower_if(ctx, *if_stmt, 0)
         }
         Statement::Loop(loop_stmt) => {
-            super::stmt::lower_loop(ctx, *loop_stmt)
+            // Script units don't use drop schedule, so stmt_idx=0.
+            super::stmt::lower_loop(ctx, *loop_stmt, 0)
         }
         Statement::Break(_) => {
             let (_, break_target) = ctx.loop_stack.last()

@@ -8,7 +8,7 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn shadow(v0):\nblock0:\n    v1 = const 10int\n    v2 = add v0, v1\n    drop v1\n    store s0, v2\n    v3 = load s0\n    drop v0\n    return v3\nexports:\n    shadow = f0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const true\n    v1 = call f0(v0)\n    unit_end\n\nfn test(v0):\nblock0:\n    v1 = const 1u32\n    v2 = const 2u32\n    v3 = list [v1, v2]\n    branch v0, block1, block2\nblock1:\n    drop v3\n    goto block3\nblock2:\n    drop v3\n    goto block3\nblock3:\n    v4 = const 0u32\n    return v4\nexports:\n    test = f0\n    output = v1\n",
             ),
             output: "(fragment executed)",
         ),
@@ -20,9 +20,9 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call unit0.f0(v0)\n    unit_end v1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = copy unit0.v1\n    unit_end v0\n",
             ),
-            output: "@15",
+            output: "@0",
         ),
     ],
 )
