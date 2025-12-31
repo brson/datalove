@@ -130,8 +130,8 @@ pub struct LowerCtx<'db> {
     /// Temporary values to drop after the current expression is evaluated.
     /// These are created during operand lowering for compound expressions.
     pub(super) expr_temps: Vec<(ValueId, IrType)>,
-    /// Drop schedule from analysis (None for script units).
-    pub(super) drop_schedule: Option<DropSchedule>,
+    /// Drop schedule from analysis.
+    pub(super) drop_schedule: DropSchedule,
     /// Binding info from analysis (for looking up names).
     pub(super) binding_info: Vec<BindingInfo>,
     /// Mapping from BindingId to Operand (built during lowering).
@@ -164,7 +164,7 @@ impl<'db> LowerCtx<'db> {
             return_type: None,
             is_script_unit: false,
             expr_temps: Vec::new(),
-            drop_schedule: None,
+            drop_schedule: DropSchedule::default(),
             binding_info: Vec::new(),
             binding_to_operand: HashMap::new(),
             next_binding_id: 0,
@@ -204,7 +204,7 @@ impl<'db> LowerCtx<'db> {
             return_type: None,
             is_script_unit: false,
             expr_temps: Vec::new(),
-            drop_schedule: None,
+            drop_schedule: DropSchedule::default(),
             binding_info: Vec::new(),
             binding_to_operand: HashMap::new(),
             next_binding_id: 0,
@@ -283,8 +283,7 @@ impl<'db> LowerCtx<'db> {
             return_type: Some(IrType::Result(Box::new(IrType::Unit))),
             is_script_unit: true,
             expr_temps: Vec::new(),
-            // Drop schedule is set by caller after analyzing script statements.
-            drop_schedule: None,
+            drop_schedule: DropSchedule::default(),
             binding_info: Vec::new(),
             binding_to_operand: HashMap::new(),
             next_binding_id: 0,
@@ -388,7 +387,7 @@ impl<'db> LowerCtx<'db> {
 
     /// Set the drop schedule for this context.
     pub fn set_drop_schedule(&mut self, schedule: DropSchedule, bindings: Vec<BindingInfo>) {
-        self.drop_schedule = Some(schedule);
+        self.drop_schedule = schedule;
         self.binding_info = bindings;
     }
 
@@ -430,12 +429,10 @@ impl<'db> LowerCtx<'db> {
     /// Get operands to drop for then-branch exit.
     fn get_scheduled_drops_then(&self, stmt_idx: usize) -> Vec<Operand> {
         let mut result = Vec::new();
-        if let Some(schedule) = &self.drop_schedule {
-            if let Some(binding_ids) = schedule.then_branch_exit.get(&stmt_idx) {
-                for &id in binding_ids {
-                    if let Some(&operand) = self.binding_to_operand.get(&id) {
-                        result.push(operand);
-                    }
+        if let Some(binding_ids) = self.drop_schedule.then_branch_exit.get(&stmt_idx) {
+            for &id in binding_ids {
+                if let Some(&operand) = self.binding_to_operand.get(&id) {
+                    result.push(operand);
                 }
             }
         }
@@ -445,12 +442,10 @@ impl<'db> LowerCtx<'db> {
     /// Get operands to drop for else-branch exit.
     fn get_scheduled_drops_else(&self, stmt_idx: usize) -> Vec<Operand> {
         let mut result = Vec::new();
-        if let Some(schedule) = &self.drop_schedule {
-            if let Some(binding_ids) = schedule.else_branch_exit.get(&stmt_idx) {
-                for &id in binding_ids {
-                    if let Some(&operand) = self.binding_to_operand.get(&id) {
-                        result.push(operand);
-                    }
+        if let Some(binding_ids) = self.drop_schedule.else_branch_exit.get(&stmt_idx) {
+            for &id in binding_ids {
+                if let Some(&operand) = self.binding_to_operand.get(&id) {
+                    result.push(operand);
                 }
             }
         }
@@ -460,21 +455,14 @@ impl<'db> LowerCtx<'db> {
     /// Get operands to drop before return.
     fn get_scheduled_drops_return(&self, stmt_idx: usize) -> Vec<Operand> {
         let mut result = Vec::new();
-        if let Some(schedule) = &self.drop_schedule {
-            if let Some(binding_ids) = schedule.before_return.get(&stmt_idx) {
-                for &id in binding_ids {
-                    if let Some(&operand) = self.binding_to_operand.get(&id) {
-                        result.push(operand);
-                    }
+        if let Some(binding_ids) = self.drop_schedule.before_return.get(&stmt_idx) {
+            for &id in binding_ids {
+                if let Some(&operand) = self.binding_to_operand.get(&id) {
+                    result.push(operand);
                 }
             }
         }
         result
-    }
-
-    /// Check if drop schedule is active (function mode vs script mode).
-    pub fn has_drop_schedule(&self) -> bool {
-        self.drop_schedule.is_some()
     }
 
     /// Emit drops scheduled for loop body end.
@@ -504,12 +492,10 @@ impl<'db> LowerCtx<'db> {
     /// Get operands to drop at loop body end.
     fn get_scheduled_drops_loop(&self, stmt_idx: usize) -> Vec<Operand> {
         let mut result = Vec::new();
-        if let Some(schedule) = &self.drop_schedule {
-            if let Some(binding_ids) = schedule.loop_body_end.get(&stmt_idx) {
-                for &id in binding_ids {
-                    if let Some(&operand) = self.binding_to_operand.get(&id) {
-                        result.push(operand);
-                    }
+        if let Some(binding_ids) = self.drop_schedule.loop_body_end.get(&stmt_idx) {
+            for &id in binding_ids {
+                if let Some(&operand) = self.binding_to_operand.get(&id) {
+                    result.push(operand);
                 }
             }
         }
@@ -519,12 +505,10 @@ impl<'db> LowerCtx<'db> {
     /// Get operands to drop before break.
     fn get_scheduled_drops_break(&self, stmt_idx: usize) -> Vec<Operand> {
         let mut result = Vec::new();
-        if let Some(schedule) = &self.drop_schedule {
-            if let Some(binding_ids) = schedule.before_break.get(&stmt_idx) {
-                for &id in binding_ids {
-                    if let Some(&operand) = self.binding_to_operand.get(&id) {
-                        result.push(operand);
-                    }
+        if let Some(binding_ids) = self.drop_schedule.before_break.get(&stmt_idx) {
+            for &id in binding_ids {
+                if let Some(&operand) = self.binding_to_operand.get(&id) {
+                    result.push(operand);
                 }
             }
         }
@@ -534,12 +518,10 @@ impl<'db> LowerCtx<'db> {
     /// Get operands to drop before continue.
     fn get_scheduled_drops_continue(&self, stmt_idx: usize) -> Vec<Operand> {
         let mut result = Vec::new();
-        if let Some(schedule) = &self.drop_schedule {
-            if let Some(binding_ids) = schedule.before_continue.get(&stmt_idx) {
-                for &id in binding_ids {
-                    if let Some(&operand) = self.binding_to_operand.get(&id) {
-                        result.push(operand);
-                    }
+        if let Some(binding_ids) = self.drop_schedule.before_continue.get(&stmt_idx) {
+            for &id in binding_ids {
+                if let Some(&operand) = self.binding_to_operand.get(&id) {
+                    result.push(operand);
                 }
             }
         }

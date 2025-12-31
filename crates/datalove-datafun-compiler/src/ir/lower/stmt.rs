@@ -30,7 +30,6 @@ pub fn lower_statement_indexed<'db>(
         Statement::Let(let_stmt) => {
             let name = let_stmt.name(ctx.db).text(ctx.db).to_string();
             let init_expr = let_stmt.value(ctx.db);
-            let value_type = ctx.expr_type(init_expr);
             let value_id = lower_expression(ctx, init_expr)?;
             let operand = Operand::Value(value_id);
             ctx.bind_var(&name, operand);
