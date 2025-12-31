@@ -43,6 +43,8 @@ pub struct BindingInfo {
     pub ty: IrType,
     /// Whether this binding is a slot (var) vs value (let/param).
     pub is_slot: bool,
+    /// Whether this binding is a ScriptUnit top-level binding (exported, never dropped).
+    pub is_script_unit: bool,
 }
 
 /// Error detected during drop analysis.
@@ -139,6 +141,8 @@ struct ScopeFrame {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ScopeKind {
     Function,
+    /// Script unit top-level scope. Bindings are exported, not dropped.
+    ScriptUnit,
     Loop,
     IfThen,
     IfElse,
@@ -165,7 +169,13 @@ impl<'db> AnalysisCtx<'db> {
     fn alloc_binding(&mut self, name: String, ty: IrType, is_slot: bool) -> BindingId {
         let id = BindingId(self.next_binding);
         self.next_binding += 1;
-        self.bindings.push(BindingInfo { name: name.clone(), ty, is_slot });
+
+        // Check if we're directly in ScriptUnit scope.
+        let is_script_unit = self.scope_stack.last()
+            .map(|f| f.kind == ScopeKind::ScriptUnit)
+            .unwrap_or(false);
+
+        self.bindings.push(BindingInfo { name: name.clone(), ty, is_slot, is_script_unit });
 
         // Record in current scope.
         if let Some(frame) = self.scope_stack.last_mut() {
@@ -197,12 +207,17 @@ impl<'db> AnalysisCtx<'db> {
     fn exit_scope(&mut self) -> Vec<BindingId> {
         let frame = self.scope_stack.pop().expect("unbalanced scope");
 
+        // ScriptUnit bindings are exported, not dropped.
+        let is_script_unit = frame.kind == ScopeKind::ScriptUnit;
+
         // Collect bindings that are still live and need dropping.
         let mut to_drop = Vec::new();
-        for &id in &frame.bindings {
-            if frame.current_state.get(&id) == Some(&BindingState::Live) {
-                if !self.bindings[id.0 as usize].ty.is_copy() {
-                    to_drop.push(id);
+        if !is_script_unit {
+            for &id in &frame.bindings {
+                if frame.current_state.get(&id) == Some(&BindingState::Live) {
+                    if !self.bindings[id.0 as usize].ty.is_copy() {
+                        to_drop.push(id);
+                    }
                 }
             }
         }
@@ -245,6 +260,11 @@ impl<'db> AnalysisCtx<'db> {
 
     /// Mark a binding as moved.
     fn mark_moved(&mut self, id: BindingId) {
+        // ScriptUnit bindings are never moved - they're exported.
+        if self.bindings[id.0 as usize].is_script_unit {
+            return;
+        }
+
         if self.get_state(id) == Some(BindingState::Moved) {
             // Double move error.
             let name = self.bindings[id.0 as usize].name.clone();
@@ -269,7 +289,8 @@ impl<'db> AnalysisCtx<'db> {
                     }
                 }
             }
-            if frame.kind == stop_at {
+            // Stop at the requested scope or at script unit boundary.
+            if frame.kind == stop_at || frame.kind == ScopeKind::ScriptUnit {
                 break;
             }
         }
@@ -277,10 +298,19 @@ impl<'db> AnalysisCtx<'db> {
     }
 
     /// Get all live bindings for return (all live bindings in all scopes).
+    ///
+    /// For functions, stops at Function scope. For scripts, stops at ScriptUnit scope.
+    /// Script top-level bindings are NOT included (they're exported, not dropped).
     fn live_bindings_for_return(&self) -> Vec<BindingId> {
         let mut result = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for frame in self.scope_stack.iter().rev() {
+            // For ScriptUnit, don't include its bindings (they're exported).
+            // Just stop here without adding them.
+            if frame.kind == ScopeKind::ScriptUnit {
+                break;
+            }
+
             // Include bindings defined in this frame.
             for &id in &frame.bindings {
                 if frame.current_state.get(&id) == Some(&BindingState::Live) {
@@ -566,6 +596,49 @@ pub fn analyze_script_functions<'db>(
     }
 }
 
+/// Result of analyzing script-level statements.
+#[derive(Clone, Debug)]
+pub struct ScriptDropAnalysis {
+    /// Errors detected during analysis.
+    pub errors: Vec<AnalysisError>,
+    /// Computed drop schedule.
+    pub schedule: DropSchedule,
+    /// Information about each binding (indexed by BindingId).
+    pub bindings: Vec<BindingInfo>,
+}
+
+/// Analyze script-level statements and compute drop schedule.
+///
+/// Similar to `analyze_function` but for script units. Key differences:
+/// - Enters `ScriptUnit` scope instead of `Function` scope
+/// - Top-level bindings are NOT scheduled for drops (they're exported)
+/// - Nested scopes (if, loop) get normal drop analysis
+pub fn analyze_script_statements<'db>(
+    db: &'db dyn Db,
+    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    stmts: &[Statement<'db>],
+) -> ScriptDropAnalysis {
+    let mut ctx = AnalysisCtx::new(db, expr_types);
+
+    // Enter script unit scope.
+    ctx.enter_scope(ScopeKind::ScriptUnit);
+
+    // Analyze statements.
+    analyze_statements(&mut ctx, stmts, &[]);
+
+    // Exit script unit scope. Top-level bindings are NOT dropped (they're exported).
+    // The exit_scope call still cleans up the scope frame.
+    let _final_drops = ctx.exit_scope();
+    // Note: _final_drops will be empty for ScriptUnit scope because top-level
+    // bindings are exported. Nested scope drops are scheduled during analysis.
+
+    ScriptDropAnalysis {
+        errors: ctx.errors,
+        schedule: ctx.schedule,
+        bindings: ctx.bindings,
+    }
+}
+
 /// Analyze a list of statements.
 ///
 /// `stmt_path` is the index path from the root to the current statement list.
@@ -672,7 +745,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtSet<'db>, stmt_idx: us
         }
     }
 
-    // Analyze moves in the expression. The expression result is consumed by the set.
+    // Analyze moves in the expression. The value is moved into the slot.
     ctx.analyze_expr_moves(expr, true);
 
     // Set doesn't create a new binding, but the slot is now live again.
@@ -691,7 +764,12 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtRet<'db>, stmt_idx:
     // All live bindings need dropping before return.
     let drops = ctx.live_bindings_for_return();
     if !drops.is_empty() {
-        ctx.schedule.before_return.insert(stmt_idx, drops);
+        ctx.schedule.before_return.insert(stmt_idx, drops.clone());
+    }
+
+    // Mark dropped bindings as Moved so they're not included in scope exit drops.
+    for id in drops {
+        ctx.set_state(id, BindingState::Moved);
     }
 }
 

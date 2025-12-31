@@ -283,7 +283,7 @@ fn lower_if_option<'db>(
     condition: ExprFun<'db>,
     inner_type: &IrType,
     binding_name: InternedText<'db>,
-    _stmt_idx: usize,
+    stmt_idx: usize,
 ) -> Result<(), LowerError> {
     // Lower the Option expression.
     let opt_id = lower_expression(ctx, condition)?;
@@ -335,6 +335,10 @@ fn lower_if_option<'db>(
         ctx.variables.remove(binding_str);
     }
 
+    // Emit drops before exiting scope.
+    if ctx.has_drop_schedule() {
+        ctx.emit_then_branch_drops(stmt_idx);
+    }
     let drops = ctx.scope_tracker.exit_scope();
     if !ctx.has_drop_schedule() {
         ctx.emit_drops(drops);
@@ -353,6 +357,10 @@ fn lower_if_option<'db>(
         }
     }
 
+    // Emit drops before exiting scope.
+    if ctx.has_drop_schedule() {
+        ctx.emit_else_branch_drops(stmt_idx);
+    }
     let drops = ctx.scope_tracker.exit_scope();
     if !ctx.has_drop_schedule() {
         ctx.emit_drops(drops);
@@ -373,7 +381,7 @@ fn lower_if_result<'db>(
     ok_type: &IrType,
     ok_binding: InternedText<'db>,
     err_binding: InternedText<'db>,
-    _stmt_idx: usize,
+    stmt_idx: usize,
 ) -> Result<(), LowerError> {
     // Lower the Result expression.
     let result_id = lower_expression(ctx, condition)?;
@@ -428,6 +436,10 @@ fn lower_if_result<'db>(
         ctx.variables.remove(ok_binding_str);
     }
 
+    // Emit drops before exiting scope.
+    if ctx.has_drop_schedule() {
+        ctx.emit_then_branch_drops(stmt_idx);
+    }
     let drops = ctx.scope_tracker.exit_scope();
     if !ctx.has_drop_schedule() {
         ctx.emit_drops(drops);
@@ -461,6 +473,10 @@ fn lower_if_result<'db>(
         ctx.variables.remove(err_binding_str);
     }
 
+    // Emit drops before exiting scope.
+    if ctx.has_drop_schedule() {
+        ctx.emit_else_branch_drops(stmt_idx);
+    }
     let drops = ctx.scope_tracker.exit_scope();
     if !ctx.has_drop_schedule() {
         ctx.emit_drops(drops);
