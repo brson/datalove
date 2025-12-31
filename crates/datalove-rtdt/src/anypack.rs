@@ -44,8 +44,8 @@ pub enum Tag {
     Reserved7 = 7,
 }
 
-const TAG_MASK: u64 = 0b111;
-const PTR_MASK: u64 = !TAG_MASK;
+const TAG_MASK: usize = 0b111;
+const PTR_MASK: usize = !TAG_MASK;
 const VALUE_SHIFT: u32 = 3;
 
 impl Data {
@@ -56,7 +56,7 @@ impl Data {
     /// Extract the tag from the primary word.
     #[inline]
     pub fn tag(&self) -> Tag {
-        let tag_bits = (self.primary & TAG_MASK) as u8;
+        let tag_bits = (self.primary.addr() & TAG_MASK) as u8;
         match tag_bits {
             0 => Tag::TwoPointers,
             1 => Tag::SmallImmediate,
@@ -70,34 +70,35 @@ impl Data {
         }
     }
 
-    /// Extract pointer from tagged primary word.
+    /// Extract pointer from tagged primary word, preserving provenance.
     #[inline]
     fn primary_ptr<T>(&self) -> *const T {
-        (self.primary & PTR_MASK) as *const T
+        self.primary.map_addr(|addr| addr & PTR_MASK) as *const T
     }
 
-    /// Create a tagged pointer.
+    /// Create a tagged pointer, preserving provenance.
     #[inline]
-    fn tag_ptr<T>(ptr: *const T, tag: Tag) -> u64 {
+    fn tag_ptr<T>(ptr: *const T, tag: Tag) -> *const () {
         debug_assert_eq!(
-            ptr as usize & TAG_MASK as usize,
+            ptr.addr() & TAG_MASK,
             0,
             "pointer not 8-byte aligned"
         );
-        (ptr as u64) | (tag as u8 as u64)
+        ptr.map_addr(|addr| addr | (tag as usize)) as *const ()
     }
 
     /// Extract 61-bit immediate value (unsigned).
     #[inline]
     fn immediate_u61(&self) -> u64 {
-        self.primary >> VALUE_SHIFT
+        (self.primary.addr() >> VALUE_SHIFT) as u64
     }
 
-    /// Create primary word from 61-bit immediate value.
+    /// Create primary word from 61-bit immediate value (no provenance).
     #[inline]
-    fn pack_immediate_u61(value: u64, tag: Tag) -> u64 {
+    fn pack_immediate_u61(value: u64, tag: Tag) -> *const () {
         debug_assert!(value < (1u64 << 61), "value too large for 61 bits");
-        (value << VALUE_SHIFT) | (tag as u8 as u64)
+        let addr = ((value << VALUE_SHIFT) | (tag as u64)) as usize;
+        std::ptr::without_provenance(addr)
     }
 
     // ============================================================================
@@ -109,13 +110,13 @@ impl Data {
     /// This is the default, unoptimized encoding used for heap-allocated values.
     pub fn from_pointers(tydesc: *const TyDesc, value: *const u8) -> Self {
         debug_assert_eq!(
-            tydesc as usize & TAG_MASK as usize,
+            tydesc.addr() & TAG_MASK,
             0,
             "tydesc not 8-byte aligned"
         );
         Self {
-            primary: tydesc as u64, // Untagged (tag = 0)
-            secondary: value as u64,
+            primary: tydesc as *const (), // Untagged (tag = 0)
+            secondary: value as *const (),
         }
     }
 
@@ -130,7 +131,7 @@ impl Data {
         debug_assert!(value < (1u64 << 61), "value too large for 61 bits");
         Self {
             primary: Self::pack_immediate_u61(value, Tag::SmallImmediate),
-            secondary: tytag as u64,
+            secondary: std::ptr::without_provenance(tytag as usize),
         }
     }
 
@@ -151,13 +152,13 @@ impl Data {
     /// Construct Data from tydesc + inline 64-bit value (Tag 4).
     pub fn from_inline64(tydesc: *const TyDesc, value: u64) -> Self {
         debug_assert_eq!(
-            tydesc as usize & TAG_MASK as usize,
+            tydesc.addr() & TAG_MASK,
             0,
             "tydesc not 8-byte aligned"
         );
         Self {
             primary: Self::tag_ptr(tydesc, Tag::InlineWithTyDesc),
-            secondary: value,
+            secondary: std::ptr::without_provenance(value as usize),
         }
     }
 
@@ -270,11 +271,7 @@ impl Data {
         match self.tag() {
             Tag::TwoPointers => self.primary as *const TyDesc,
             Tag::InlineWithTyDesc => self.primary_ptr::<TyDesc>(),
-            Tag::SmallImmediate => {
-                // Would need to synthesize tydesc from TyTag stored in secondary.
-                // For now, return null.
-                std::ptr::null()
-            }
+            Tag::SmallImmediate => std::ptr::null(),
             _ => panic!("invalid tag"),
         }
     }
@@ -291,7 +288,7 @@ impl Data {
                 unsafe { (*tydesc).type_tag }
             }
             Tag::SmallImmediate => {
-                let tytag_u8 = (self.secondary & 0xFF) as u8;
+                let tytag_u8 = (self.secondary.addr() & 0xFF) as u8;
                 unsafe { std::mem::transmute(tytag_u8) }
             }
             _ => panic!("invalid tag"),
@@ -310,6 +307,12 @@ impl Data {
         }
     }
 
+    /// Get the secondary word as a u64 value (for inline values).
+    #[inline]
+    fn secondary_value(&self) -> u64 {
+        self.secondary.addr() as u64
+    }
+
     /// Get pointer to value as specific type (only valid for Tag 0).
     pub fn value_ptr_as<T>(&self) -> *const T {
         self.value_ptr() as *const T
@@ -326,7 +329,7 @@ impl Data {
                 std::option::Option::Some(self.immediate_u61() != 0)
             }
             Tag::InlineWithTyDesc if self.tytag() == TyTag::Bool => {
-                std::option::Option::Some(self.secondary != 0)
+                std::option::Option::Some(self.secondary_value() != 0)
             }
             _ => std::option::Option::None,
         }
@@ -348,7 +351,7 @@ impl Data {
     pub fn as_f32(&self) -> std::option::Option<f32> {
         match self.tag() {
             Tag::InlineWithTyDesc if self.tytag() == TyTag::F32 => {
-                std::option::Option::Some(f32::from_bits(self.secondary as u32))
+                std::option::Option::Some(f32::from_bits(self.secondary_value() as u32))
             }
             _ => std::option::Option::None,
         }
@@ -414,7 +417,7 @@ impl Data {
     pub fn as_u64(&self) -> std::option::Option<u64> {
         match self.tag() {
             Tag::InlineWithTyDesc if self.tytag() == TyTag::U64 => {
-                std::option::Option::Some(self.secondary)
+                std::option::Option::Some(self.secondary_value())
             }
             _ => std::option::Option::None,
         }
@@ -424,7 +427,7 @@ impl Data {
     pub fn as_i64(&self) -> std::option::Option<i64> {
         match self.tag() {
             Tag::InlineWithTyDesc if self.tytag() == TyTag::I64 => {
-                std::option::Option::Some(self.secondary as i64)
+                std::option::Option::Some(self.secondary_value() as i64)
             }
             _ => std::option::Option::None,
         }
@@ -434,7 +437,7 @@ impl Data {
     pub fn as_f64(&self) -> std::option::Option<f64> {
         match self.tag() {
             Tag::InlineWithTyDesc if self.tytag() == TyTag::F64 => {
-                std::option::Option::Some(f64::from_bits(self.secondary))
+                std::option::Option::Some(f64::from_bits(self.secondary_value()))
             }
             _ => std::option::Option::None,
         }
@@ -600,8 +603,8 @@ impl std::fmt::Debug for Data {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut debug_struct = f.debug_struct("Data");
         debug_struct
-            .field("primary", &format_args!("0x{:016x}", self.primary))
-            .field("secondary", &format_args!("0x{:016x}", self.secondary))
+            .field("primary", &format_args!("0x{:016x}", self.primary.addr()))
+            .field("secondary", &format_args!("0x{:016x}", self.secondary.addr()))
             .field("tag", &self.tag());
 
         // Only try to get tytag if tydesc is not null.
@@ -690,22 +693,22 @@ mod tests {
     fn test_tag_extraction() {
         // Tag 0 (untagged pointer)
         let data = Data {
-            primary: 0x1000,
-            secondary: 0x2000,
+            primary: std::ptr::without_provenance(0x1000),
+            secondary: std::ptr::without_provenance(0x2000),
         };
         assert_eq!(data.tag(), Tag::TwoPointers);
 
         // Tag 1
         let data = Data {
-            primary: 0x1001,
-            secondary: 0,
+            primary: std::ptr::without_provenance(0x1001),
+            secondary: std::ptr::without_provenance(0),
         };
         assert_eq!(data.tag(), Tag::SmallImmediate);
 
         // Tag 4
         let data = Data {
-            primary: 0x1004,
-            secondary: 0,
+            primary: std::ptr::without_provenance(0x1004),
+            secondary: std::ptr::without_provenance(0),
         };
         assert_eq!(data.tag(), Tag::InlineWithTyDesc);
     }
@@ -754,8 +757,8 @@ mod tests {
     #[test]
     fn test_error() {
         let error_val = Error {
-            primary: 0,
-            secondary: 0,
+            primary: std::ptr::null(),
+            secondary: std::ptr::null(),
         };
 
         let tydesc = make_tydesc(TyTag::Error);

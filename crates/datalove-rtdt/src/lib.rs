@@ -333,18 +333,20 @@ pub struct ResultLayout {
 
 // ## Dynamic types
 
-// Encoding is described in anypack
+// Encoding is described in anypack.
+// Fields are pointers to preserve provenance through tagged pointer manipulation.
 #[repr(C)]
 pub struct Data {
-    primary: u64,
-    secondary: u64,
+    primary: *const (),
+    secondary: *const (),
 }
 
-// Encoding is described in anypack
+// Encoding is described in anypack.
+// Fields are pointers to preserve provenance through tagged pointer manipulation.
 #[repr(C)]
 pub struct Error {
-    primary: u64,
-    secondary: u64,
+    primary: *const (),
+    secondary: *const (),
 }
 
 

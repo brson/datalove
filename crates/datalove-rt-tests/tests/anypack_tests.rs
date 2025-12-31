@@ -278,7 +278,7 @@ fn test_from_f64_extremes() {
 #[test]
 fn test_from_pointers() {
     let tydesc = make_tydesc(TyTag::Int);
-    let mock_value = 0xABC8 as *const u8; // Must be aligned.
+    let mock_value: *const u8 = std::ptr::without_provenance(0xABC8); // Must be aligned.
     let data = Data::from_pointers(&tydesc, mock_value);
     assert_eq!(data.tag(), anypack::Tag::TwoPointers);
     assert_eq!(data.tydesc(), &tydesc as *const TyDesc);
