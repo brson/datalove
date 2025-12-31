@@ -229,8 +229,9 @@ impl IrInterpreter {
         // Functions use ret_dest for Return/TryReturn, not expr_dest.
         let result = self.execute_blocks(&func.blocks, &mut frame, ret_dest, None, ctx, registry, frames);
 
-        // Destroy frame values before returning.
-        frame.destroy_all(self.runtime.handle());
+        // Note: We no longer call frame.destroy_all() here. IR has precise drops
+        // via drop_analysis, so all values should be explicitly dropped before
+        // return. The leak checker will catch any issues.
 
         // Convert UnitCompletion to () - functions always complete normally.
         result.map(|_| ())

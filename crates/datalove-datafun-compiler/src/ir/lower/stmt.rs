@@ -321,6 +321,8 @@ fn lower_if_option<'db>(
 
     // Track the binding for drops at scope exit.
     ctx.scope_tracker.record_binding(Operand::Value(inner_dest), inner_type.clone());
+    // Register with drop schedule system.
+    ctx.record_binding_operand(Operand::Value(inner_dest));
 
     for stmt in if_stmt.then_body(ctx.db) {
         lower_statement(ctx, stmt)?;
@@ -412,6 +414,8 @@ fn lower_if_result<'db>(
 
     // Track for drops.
     ctx.scope_tracker.record_binding(Operand::Value(ok_dest), ok_type.clone());
+    // Register with drop schedule system.
+    ctx.record_binding_operand(Operand::Value(ok_dest));
 
     for stmt in if_stmt.then_body(ctx.db) {
         lower_statement(ctx, stmt)?;
@@ -441,6 +445,8 @@ fn lower_if_result<'db>(
 
     // Track for drops (Error type is always non-copy).
     ctx.scope_tracker.record_binding(Operand::Value(err_dest), IrType::Error);
+    // Register with drop schedule system.
+    ctx.record_binding_operand(Operand::Value(err_dest));
 
     if let Some(else_body) = if_stmt.else_body(ctx.db) {
         for stmt in else_body {
