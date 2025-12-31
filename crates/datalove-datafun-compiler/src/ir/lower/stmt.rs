@@ -114,8 +114,12 @@ pub fn lower_statement_indexed<'db>(
                 .ok_or(LowerError::BreakOutsideLoop)?;
             let break_target = *break_target;
             // Emit drops for all scopes up to the loop.
-            let drops = ctx.scope_tracker.bindings_to_drop_for_break();
-            ctx.emit_drops(drops);
+            if ctx.has_drop_schedule() {
+                ctx.emit_before_break_drops(stmt_idx);
+            } else {
+                let drops = ctx.scope_tracker.bindings_to_drop_for_break();
+                ctx.emit_drops(drops);
+            }
             ctx.finish_block(Terminator::Goto(break_target));
             // Start unreachable block for code after break.
             let dead_block = ctx.fresh_block();
@@ -127,8 +131,12 @@ pub fn lower_statement_indexed<'db>(
                 .ok_or(LowerError::ContinueOutsideLoop)?;
             let continue_target = *continue_target;
             // Emit drops for current loop iteration.
-            let drops = ctx.scope_tracker.bindings_to_drop_for_continue();
-            ctx.emit_drops(drops);
+            if ctx.has_drop_schedule() {
+                ctx.emit_before_continue_drops(stmt_idx);
+            } else {
+                let drops = ctx.scope_tracker.bindings_to_drop_for_continue();
+                ctx.emit_drops(drops);
+            }
             ctx.finish_block(Terminator::Goto(continue_target));
             // Start unreachable block for code after continue.
             let dead_block = ctx.fresh_block();
@@ -326,7 +334,9 @@ fn lower_if_option<'db>(
     }
 
     let drops = ctx.scope_tracker.exit_scope();
-    ctx.emit_drops(drops);
+    if !ctx.has_drop_schedule() {
+        ctx.emit_drops(drops);
+    }
     ctx.finish_block(Terminator::Goto(merge_block));
 
     // === Else branch: None case ===
@@ -342,7 +352,9 @@ fn lower_if_option<'db>(
     }
 
     let drops = ctx.scope_tracker.exit_scope();
-    ctx.emit_drops(drops);
+    if !ctx.has_drop_schedule() {
+        ctx.emit_drops(drops);
+    }
     ctx.finish_block(Terminator::Goto(merge_block));
 
     ctx.start_block(merge_block);
@@ -413,7 +425,9 @@ fn lower_if_result<'db>(
     }
 
     let drops = ctx.scope_tracker.exit_scope();
-    ctx.emit_drops(drops);
+    if !ctx.has_drop_schedule() {
+        ctx.emit_drops(drops);
+    }
     ctx.finish_block(Terminator::Goto(merge_block));
 
     // === Else branch: Error case ===
@@ -442,7 +456,9 @@ fn lower_if_result<'db>(
     }
 
     let drops = ctx.scope_tracker.exit_scope();
-    ctx.emit_drops(drops);
+    if !ctx.has_drop_schedule() {
+        ctx.emit_drops(drops);
+    }
     ctx.finish_block(Terminator::Goto(merge_block));
 
     ctx.start_block(merge_block);
@@ -453,7 +469,7 @@ fn lower_if_result<'db>(
 pub fn lower_loop<'db>(
     ctx: &mut LowerCtx<'db>,
     loop_stmt: ast::StmtLoop<'db>,
-    _stmt_idx: usize,
+    stmt_idx: usize,
 ) -> Result<(), LowerError> {
     let loop_header = ctx.fresh_block();
     let loop_exit = ctx.fresh_block();
@@ -474,8 +490,13 @@ pub fn lower_loop<'db>(
     }
 
     // Exit loop scope and emit drops before looping back.
+    if ctx.has_drop_schedule() {
+        ctx.emit_loop_body_end_drops(stmt_idx);
+    }
     let drops = ctx.scope_tracker.exit_scope();
-    ctx.emit_drops(drops);
+    if !ctx.has_drop_schedule() {
+        ctx.emit_drops(drops);
+    }
 
     // Loop back to header.
     ctx.finish_block(Terminator::Goto(loop_header));

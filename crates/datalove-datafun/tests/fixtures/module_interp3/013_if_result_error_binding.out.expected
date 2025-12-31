@@ -4,7 +4,7 @@ ModulesIr3Analysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn test():\nblock0:\n    v0 = const \"failed\"\n    v1 = error_from v0\n    v2 = err v1\n    return v2\n\nfn main():\nblock0:\n    v0 = call module.test()\n    v1, v2, v3 = unwrap_result v0\n    branch v3, block1, block2\nblock1:\n    return v1\nblock4:\n    goto block3\nblock2:\n    v4 = const 999u32\n    return v4\nblock5:\n    drop v2\n    goto block3\nblock3:\n    return\n",
+        ir: "fn test():\nblock0:\n    v0 = const \"failed\"\n    v1 = error_from v0\n    v2 = err v1\n    return v2\n\nfn main():\nblock0:\n    v0 = call module.test()\n    v1, v2, v3 = unwrap_result v0\n    branch v3, block1, block2\nblock1:\n    return v1\nblock4:\n    goto block3\nblock2:\n    v4 = const 999u32\n    return v4\nblock5:\n    goto block3\nblock3:\n    return\n",
     ),
     output: "@999",
 )

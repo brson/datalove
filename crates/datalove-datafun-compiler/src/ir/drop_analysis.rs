@@ -260,10 +260,14 @@ impl<'db> AnalysisCtx<'db> {
         self.get_state(id) == Some(BindingState::Live)
     }
 
-    /// Get all live bindings that need dropping for return/break/continue.
-    fn live_bindings_for_exit(&self, stop_at: ScopeKind) -> Vec<BindingId> {
+    /// Get all live bindings defined in scopes we're exiting (for break/continue).
+    ///
+    /// Only includes bindings that were created within the scopes being traversed,
+    /// not bindings from outer scopes that happen to be live.
+    fn live_bindings_in_scopes(&self, stop_at: ScopeKind) -> Vec<BindingId> {
         let mut result = Vec::new();
         for frame in self.scope_stack.iter().rev() {
+            // Only include bindings defined in this frame.
             for &id in &frame.bindings {
                 if frame.current_state.get(&id) == Some(&BindingState::Live) {
                     if !self.bindings[id.0 as usize].ty.is_copy() {
@@ -271,20 +275,35 @@ impl<'db> AnalysisCtx<'db> {
                     }
                 }
             }
-            // Also check bindings from parent scopes that are live.
-            for (&id, &state) in &frame.current_state {
-                if state == BindingState::Live {
-                    // Only include if not already in frame.bindings.
-                    if !frame.bindings.contains(&id) {
-                        if !self.bindings[id.0 as usize].ty.is_copy() {
-                            if !result.contains(&id) {
-                                result.push(id);
-                            }
-                        }
+            if frame.kind == stop_at {
+                break;
+            }
+        }
+        result
+    }
+
+    /// Get all live bindings for return (all live bindings in all scopes).
+    fn live_bindings_for_return(&self) -> Vec<BindingId> {
+        let mut result = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for frame in self.scope_stack.iter().rev() {
+            // Include bindings defined in this frame.
+            for &id in &frame.bindings {
+                if frame.current_state.get(&id) == Some(&BindingState::Live) {
+                    if !self.bindings[id.0 as usize].ty.is_copy() && seen.insert(id) {
+                        result.push(id);
                     }
                 }
             }
-            if frame.kind == stop_at {
+            // Also include bindings from parent scopes that are tracked here.
+            for (&id, &state) in &frame.current_state {
+                if state == BindingState::Live {
+                    if !self.bindings[id.0 as usize].ty.is_copy() && seen.insert(id) {
+                        result.push(id);
+                    }
+                }
+            }
+            if frame.kind == ScopeKind::Function {
                 break;
             }
         }
@@ -549,15 +568,15 @@ fn analyze_statements<'db>(
                 analyze_loop(ctx, *loop_stmt, i);
             }
             Statement::Break(_) => {
-                // Drops before break are computed in analyze_loop.
-                let drops = ctx.live_bindings_for_exit(ScopeKind::Loop);
+                // Drops before break - only bindings defined in loop body.
+                let drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
                 if !drops.is_empty() {
                     ctx.schedule.before_break.insert(i, drops);
                 }
             }
             Statement::Continue(_) => {
-                // Drops before continue.
-                let drops = ctx.live_bindings_for_exit(ScopeKind::Loop);
+                // Drops before continue - only bindings defined in loop body.
+                let drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
                 if !drops.is_empty() {
                     ctx.schedule.before_continue.insert(i, drops);
                 }
@@ -577,7 +596,7 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLet<'db>, stmt_idx: us
 
     // Check for early return operators.
     if ctx.expr_may_early_return(expr) {
-        let drops = ctx.live_bindings_for_exit(ScopeKind::Function);
+        let drops = ctx.live_bindings_for_return();
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
         }
@@ -597,7 +616,7 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtVar<'db>, stmt_idx: us
 
     // Check for early return operators.
     if ctx.expr_may_early_return(expr) {
-        let drops = ctx.live_bindings_for_exit(ScopeKind::Function);
+        let drops = ctx.live_bindings_for_return();
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
         }
@@ -617,7 +636,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtSet<'db>, stmt_idx: us
 
     // Check for early return operators.
     if ctx.expr_may_early_return(expr) {
-        let drops = ctx.live_bindings_for_exit(ScopeKind::Function);
+        let drops = ctx.live_bindings_for_return();
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
         }
@@ -640,7 +659,7 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtRet<'db>, stmt_idx:
     }
 
     // All live bindings need dropping before return.
-    let drops = ctx.live_bindings_for_exit(ScopeKind::Function);
+    let drops = ctx.live_bindings_for_return();
     if !drops.is_empty() {
         ctx.schedule.before_return.insert(stmt_idx, drops);
     }

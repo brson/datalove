@@ -482,4 +482,73 @@ impl<'db> LowerCtx<'db> {
     pub fn has_drop_schedule(&self) -> bool {
         self.drop_schedule.is_some()
     }
+
+    /// Emit drops scheduled for loop body end.
+    pub fn emit_loop_body_end_drops(&mut self, stmt_idx: usize) {
+        let operands = self.get_scheduled_drops_loop(stmt_idx);
+        for operand in operands {
+            self.emit(Instruction::Drop { operand });
+        }
+    }
+
+    /// Emit drops scheduled before a break statement.
+    pub fn emit_before_break_drops(&mut self, stmt_idx: usize) {
+        let operands = self.get_scheduled_drops_break(stmt_idx);
+        for operand in operands {
+            self.emit(Instruction::Drop { operand });
+        }
+    }
+
+    /// Emit drops scheduled before a continue statement.
+    pub fn emit_before_continue_drops(&mut self, stmt_idx: usize) {
+        let operands = self.get_scheduled_drops_continue(stmt_idx);
+        for operand in operands {
+            self.emit(Instruction::Drop { operand });
+        }
+    }
+
+    /// Get operands to drop at loop body end.
+    fn get_scheduled_drops_loop(&self, stmt_idx: usize) -> Vec<Operand> {
+        let mut result = Vec::new();
+        if let Some(schedule) = &self.drop_schedule {
+            if let Some(binding_ids) = schedule.loop_body_end.get(&stmt_idx) {
+                for &id in binding_ids {
+                    if let Some(&operand) = self.binding_to_operand.get(&id) {
+                        result.push(operand);
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    /// Get operands to drop before break.
+    fn get_scheduled_drops_break(&self, stmt_idx: usize) -> Vec<Operand> {
+        let mut result = Vec::new();
+        if let Some(schedule) = &self.drop_schedule {
+            if let Some(binding_ids) = schedule.before_break.get(&stmt_idx) {
+                for &id in binding_ids {
+                    if let Some(&operand) = self.binding_to_operand.get(&id) {
+                        result.push(operand);
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    /// Get operands to drop before continue.
+    fn get_scheduled_drops_continue(&self, stmt_idx: usize) -> Vec<Operand> {
+        let mut result = Vec::new();
+        if let Some(schedule) = &self.drop_schedule {
+            if let Some(binding_ids) = schedule.before_continue.get(&stmt_idx) {
+                for &id in binding_ids {
+                    if let Some(&operand) = self.binding_to_operand.get(&id) {
+                        result.push(operand);
+                    }
+                }
+            }
+        }
+        result
+    }
 }
