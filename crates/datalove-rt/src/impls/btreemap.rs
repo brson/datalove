@@ -6,6 +6,7 @@ use rmx::prelude::*;
 use crate::impls::rt_local::RtLocal;
 use crate::rtdt::{self, *};
 use crate::c::RtStatus;
+use crate::rust::AlignedBuffer;
 
 // B-tree constants.
 const MAP_NODE_B: u32 = rtdt::MAP_NODE_B;
@@ -340,7 +341,7 @@ enum LeafInsertResult {
 /// Information about a node split.
 struct SplitInfo {
     /// The separator key to insert into parent.
-    separator_key_buf: Vec<u8>,
+    separator_key_buf: AlignedBuffer,
     /// The new right sibling node created by the split.
     new_node: *mut MapNode,
     /// The result of inserting the pending key during the split.
@@ -357,7 +358,6 @@ impl SplitInfo {
                 self.separator_key_buf.as_mut_ptr(),
                 key_tydesc.as_ptr(),
             );
-            // Vec will be dropped automatically after key is destroyed.
         }
     }
 }
@@ -549,7 +549,7 @@ unsafe fn split_leaf(
 
         // Clone the separator key (first key of new_leaf) into a buffer.
         // In a B+tree, the separator stays in the leaf, but internal nodes need their own copy.
-        let mut separator_key_buf = vec![0u8; key_size];
+        let mut separator_key_buf = AlignedBuffer::with_align(key_size, key_tydesc.align() as usize);
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::impls::clone::clone_value(
             rt_handle,
@@ -700,7 +700,7 @@ unsafe fn split_internal_node(
         let key_size = key_tydesc.size() as usize;
 
         // Clone the middle key as the separator to push up.
-        let mut separator_key_buf = vec![0u8; key_size];
+        let mut separator_key_buf = AlignedBuffer::with_align(key_size, key_tydesc.align() as usize);
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::impls::clone::clone_value(
             rt_handle,
@@ -975,7 +975,7 @@ unsafe fn propagate_split_up(
             match insert_into_internal(
                 rt,
                 parent,
-                &split_info.separator_key_buf,
+                split_info.separator_key_buf.as_slice(),
                 split_info.new_node,
                 key_tydesc,
             ) {
@@ -2214,8 +2214,8 @@ pub unsafe fn btreemap_clone_from_slice_impl(
             let key_size = map_key_ty.size() as usize;
             let value_size = map_value_ty.size() as usize;
 
-            let mut key_buf = vec![0u8; key_size];
-            let mut value_buf = vec![0u8; value_size];
+            let mut key_buf = AlignedBuffer::with_align(key_size, map_key_ty.align() as usize);
+            let mut value_buf = AlignedBuffer::with_align(value_size, map_value_ty.align() as usize);
 
             let status = crate::impls::clone::clone_value(
                 rt_handle,

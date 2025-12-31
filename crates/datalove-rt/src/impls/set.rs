@@ -4,6 +4,7 @@ use rmx::prelude::*;
 use crate::rtdt::{self, TyDesc, Set, SetNode, SetNodeTag, SET_NODE_CAPACITY};
 use crate::impls::rt_local::RtLocal;
 use crate::c::RtStatus;
+use crate::rust::AlignedBuffer;
 
 /// Reads the tag from a set node.
 unsafe fn read_node_tag(node: *const SetNode) -> SetNodeTag {
@@ -645,7 +646,7 @@ enum LeafInsertResult {
 /// Information about a node split.
 struct SplitInfo {
     /// The separator key to insert into parent.
-    separator_key_buf: Vec<u8>,
+    separator_key_buf: AlignedBuffer,
     /// The new right sibling node created by the split.
     new_node: *mut SetNode,
     /// The result of inserting the pending element during the split.
@@ -765,7 +766,7 @@ unsafe fn split_leaf(
         write_node_len(new_leaf, move_count as u32);
 
         // Clone the separator key (first key of new_leaf).
-        let mut separator_key_buf = vec![0u8; element_size];
+        let mut separator_key_buf = AlignedBuffer::with_align(element_size, element_tydesc_ref.align() as usize);
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::impls::clone::clone_value(
             rt_handle,
@@ -924,7 +925,7 @@ unsafe fn insert_into_internal(
         );
         if status != RtStatus::Ok {
             return Err(SplitInfo {
-                separator_key_buf: Vec::new(),
+                separator_key_buf: AlignedBuffer::new(0),
                 new_node: std::ptr::null_mut(),
                 insert_result: LeafInsertResult::NeedsSplit,
             });
@@ -951,7 +952,7 @@ unsafe fn split_internal_node(
         let new_internal = alloc_internal_node(rt, element_tydesc);
         if new_internal.is_null() {
             return SplitInfo {
-                separator_key_buf: Vec::new(),
+                separator_key_buf: AlignedBuffer::new(0),
                 new_node: std::ptr::null_mut(),
                 insert_result: LeafInsertResult::NeedsSplit,
             };
@@ -967,7 +968,7 @@ unsafe fn split_internal_node(
         let element_size = element_tydesc_ref.size() as usize;
 
         // Clone the middle key as the separator to push up.
-        let mut separator_key_buf = vec![0u8; element_size];
+        let mut separator_key_buf = AlignedBuffer::with_align(element_size, element_tydesc_ref.align() as usize);
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::impls::clone::clone_value(
             rt_handle,
@@ -977,7 +978,7 @@ unsafe fn split_internal_node(
         );
         if status != RtStatus::Ok {
             return SplitInfo {
-                separator_key_buf: Vec::new(),
+                separator_key_buf: AlignedBuffer::new(0),
                 new_node: std::ptr::null_mut(),
                 insert_result: LeafInsertResult::NeedsSplit,
             };
@@ -1090,7 +1091,7 @@ unsafe fn propagate_split_up(
             let result = insert_into_internal(
                 rt,
                 parent,
-                &split_info.separator_key_buf,
+                split_info.separator_key_buf.as_slice(),
                 split_info.new_node,
                 element_tydesc,
             );
@@ -1269,7 +1270,7 @@ pub unsafe fn btreeset_clone_from_slice_impl(
             let element_ptr = slice_ptr_ref.add(i as usize * element_size);
 
             // Clone the element into a temporary buffer.
-            let mut element_buf = vec![0u8; element_size];
+            let mut element_buf = AlignedBuffer::with_align(element_size, slice_element_tydesc_ref.align() as usize);
             let status = crate::impls::clone::clone_value(
                 rt_handle,
                 element_ptr,

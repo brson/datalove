@@ -3,30 +3,32 @@
 use std::alloc::{alloc_zeroed, dealloc, Layout};
 use std::ptr::NonNull;
 
-/// A byte buffer with 64-byte alignment.
-///
-/// 64 bytes covers AVX-512, cache lines, and all standard scalar types.
-/// This alignment is sufficient for any practical runtime data.
+/// A byte buffer with configurable alignment.
 pub struct AlignedBuffer {
     ptr: NonNull<u8>,
     layout: Layout,
 }
 
 impl AlignedBuffer {
-    /// Alignment for all buffers.
-    pub const ALIGN: usize = 64;
+    /// Maximum alignment, sufficient for AVX-512, cache lines, and all scalar types.
+    pub const MAX_ALIGN: usize = 64;
 
-    /// Create a new buffer of the given size, zero-initialized.
+    /// Create a new buffer with maximum (64-byte) alignment, zero-initialized.
     pub fn new(size: usize) -> Self {
+        Self::with_align(size, Self::MAX_ALIGN)
+    }
+
+    /// Create a new buffer with specified alignment, zero-initialized.
+    pub fn with_align(size: usize, align: usize) -> Self {
         if size == 0 {
             // Return a dangling but aligned pointer for zero-size.
             return Self {
                 ptr: NonNull::dangling(),
-                layout: Layout::from_size_align(0, Self::ALIGN).unwrap(),
+                layout: Layout::from_size_align(0, align).unwrap(),
             };
         }
 
-        let layout = Layout::from_size_align(size, Self::ALIGN)
+        let layout = Layout::from_size_align(size, align)
             .expect("invalid layout");
         let ptr = unsafe { alloc_zeroed(layout) };
         let ptr = NonNull::new(ptr).unwrap_or_else(|| {
@@ -54,6 +56,15 @@ impl AlignedBuffer {
     /// Returns true if the buffer is empty.
     pub fn is_empty(&self) -> bool {
         self.layout.size() == 0
+    }
+
+    /// Get the buffer as a byte slice.
+    pub fn as_slice(&self) -> &[u8] {
+        if self.layout.size() == 0 {
+            &[]
+        } else {
+            unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.layout.size()) }
+        }
     }
 }
 
