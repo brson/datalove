@@ -1,0 +1,21 @@
+----------
+module local/test/wrapper
+----------
+
+// Module function that creates data.
+fun wrap(): data
+    ret @data @true
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/wrapper
+import wrapper.wrap
+
+----------
+scriptunit-expr
+----------
+
+wrap()

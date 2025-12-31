@@ -540,19 +540,32 @@ TODO:
   - Only signed integers can overflow (negating MIN value)
   - Tests: 116-119 (interp3)
 
+- **Error Type (@error)** - DONE. Error from any value via `ErrorFrom` instruction
+  - Works with all inner types: u32, bool, String, Int, tuple
+  - Tests in expr, fragment, cross-unit, module function contexts
+  - Tests: 034-035, 123-125, 131, 133, 135 (interp3), 043-044, 048 (module_interp3)
+
+- **Data Type (@data)** - DONE. Data from any value via `DataFrom` instruction
+  - Works with all inner types: u32, bool, String, Int, tuple
+  - Tests in expr, fragment, cross-unit, module function contexts
+  - Tests: 126-130, 132, 134, 136 (interp3), 045-047 (module_interp3)
+
 **Missing Features (LOW priority):**
 
-4. **Data Type (@data)**
-   - Old: `data(value)` coercion wrapper
-   - IR: `IrType::Data` exists, no creation instruction
-
 5. **Hex Literals** - May already parse to int values
+
+**Bug Fixes:**
+
+- **Pack instruction move semantics** - Fixed. Pack now marks source fields as dropped
+  - Previously, non-copy types packed into tuples weren't marked as moved
+  - This caused double-free when destroying frames containing tuples with Int/String etc.
+  - Fix in `crates/datalove-datafun-compiler/src/ir/interp/mod.rs:571-578`
 
 **Test Coverage:**
 
 - Old interpreter (module_interp_tests): 219 tests
-- IR interpreter (interp3_tests): 108 tests
-- IR interpreter (module_interp3_tests): 42 tests
+- IR interpreter (interp3_tests): 124 tests
+- IR interpreter (module_interp3_tests): 48 tests
 - All tests pass with leak checking enabled
 
 Test matrix (each feature should be tested in):

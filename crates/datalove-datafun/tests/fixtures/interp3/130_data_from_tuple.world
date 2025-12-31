@@ -1,0 +1,6 @@
+----------
+scriptunit-expr
+----------
+
+// Create Data from a tuple of bigints.
+@data (@1, @2)

@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Store error in a let binding.
+let e = @error @100
+
+----------
+scriptunit-expr
+----------
+
+// Access error from previous unit.
+e

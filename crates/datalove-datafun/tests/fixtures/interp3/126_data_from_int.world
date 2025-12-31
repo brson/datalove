@@ -1,0 +1,6 @@
+----------
+scriptunit-expr
+----------
+
+// Create Data from an int (inferred as u32).
+@data @42

@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Store data in a let binding.
+let d = @data (@1, @2)
+
+----------
+scriptunit-expr
+----------
+
+// Access data from previous unit.
+d

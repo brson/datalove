@@ -1,0 +1,12 @@
+----------
+module local/test/main
+----------
+
+// Return error containing string from module function.
+fun make_error(): error
+    ret @error "something went wrong"
+end fun
+
+fun main(): error
+    ret make_error()
+end fun

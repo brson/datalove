@@ -1,0 +1,21 @@
+----------
+module local/test/errors
+----------
+
+// Module function that creates an error.
+fun make_err(): error
+    ret @error "module error"
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/errors
+import errors.make_err
+
+----------
+scriptunit-expr
+----------
+
+make_err()

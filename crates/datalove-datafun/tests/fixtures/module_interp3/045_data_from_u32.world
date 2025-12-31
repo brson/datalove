@@ -1,0 +1,12 @@
+----------
+module local/test/main
+----------
+
+// Return data containing u32 from module function.
+fun make_data(): data
+    ret @data @42
+end fun
+
+fun main(): data
+    ret make_data()
+end fun

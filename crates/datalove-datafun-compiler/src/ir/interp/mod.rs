@@ -568,6 +568,14 @@ impl IrInterpreter {
                     )),
                 }
                 frame.mark_value_initialized(*dest);
+                // Mark source fields as moved (linear semantics - consumes fields).
+                for field in fields {
+                    match field {
+                        Operand::Value(id) => frame.mark_value_dropped(*id),
+                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                    }
+                }
             }
             Instruction::Unpack { dests, src } => {
                 let src_val = self.read_operand(src, frame, frames)?;

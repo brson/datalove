@@ -1,0 +1,6 @@
+----------
+scriptunit-expr
+----------
+
+// Create Error from a bool.
+@error @true
