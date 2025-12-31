@@ -1910,7 +1910,7 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
-            &tensor as *const rtdt::Tensor as *const u8,
+            &mut tensor as *mut rtdt::Tensor as *mut u8,
             tensor_tydesc as *const rtdt::TyDesc,
             perm.as_ptr(),
             &mut transposed as *mut rtdt::Tensor as *mut u8,
@@ -2044,7 +2044,7 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
-            &tensor as *const rtdt::Tensor as *const u8,
+            &mut tensor as *mut rtdt::Tensor as *mut u8,
             tensor_tydesc as *const rtdt::TyDesc,
             perm.as_ptr(),
             &mut transposed as *mut rtdt::Tensor as *mut u8,
@@ -2134,7 +2134,7 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
-            &tensor as *const rtdt::Tensor as *const u8,
+            &mut tensor as *mut rtdt::Tensor as *mut u8,
             tensor_tydesc as *const rtdt::TyDesc,
             perm.as_ptr(),
             &mut transposed as *mut rtdt::Tensor as *mut u8,
@@ -2221,7 +2221,7 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_tensor_transpose_local(
             rt,
-            &tensor as *const rtdt::Tensor as *const u8,
+            &mut tensor as *mut rtdt::Tensor as *mut u8,
             tensor_tydesc as *const rtdt::TyDesc,
             perm.as_ptr(),
             &mut transposed as *mut rtdt::Tensor as *mut u8,

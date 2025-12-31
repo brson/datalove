@@ -1894,7 +1894,7 @@ fn test_btreeset_string_contains() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let search = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
+    let mut search = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
     let mut contains = 0u8;
 
     let status = unsafe {
@@ -1913,7 +1913,7 @@ fn test_btreeset_string_contains() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &search as *const rtdt::String as *mut u8,
+            &mut search as *mut rtdt::String as *mut u8,
             element_tydesc as *const rtdt::TyDesc,
         )
     };
@@ -1974,7 +1974,7 @@ fn test_btreeset_string_remove() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(set.len, 1);
 
-    let search = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
+    let mut search = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
     let mut was_removed = 0u8;
 
     let status = unsafe {
@@ -1994,7 +1994,7 @@ fn test_btreeset_string_remove() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &search as *const rtdt::String as *mut u8,
+            &mut search as *mut rtdt::String as *mut u8,
             element_tydesc as *const rtdt::TyDesc,
         )
     };
@@ -2385,7 +2385,7 @@ fn test_btreeset_string_duplicates() -> AnyResult<()> {
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt,
-            &element2 as *const rtdt::String as *mut u8,
+            &mut element2 as *mut rtdt::String as *mut u8,
             element_tydesc as *const rtdt::TyDesc,
         )
     };
