@@ -219,6 +219,9 @@ impl fmt::Display for Instruction {
             Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
                 write!(f, "{}, {} = {}.checked {}, {}", dest, overflow, op, lhs, rhs)
             }
+            Instruction::UnaryOpChecked { dest, overflow, op, operand } => {
+                write!(f, "{}, {} = {}.checked {}", dest, overflow, op, operand)
+            }
             Instruction::Call { dest, func, args } => {
                 write!(f, "{} = call {}(", dest, func)?;
                 for (i, arg) in args.iter().enumerate() {

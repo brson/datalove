@@ -621,6 +621,15 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
                 frame.mark_value_initialized(*overflow);
             }
+            Instruction::UnaryOpChecked { dest, overflow, op, operand } => {
+                // Execute checked unary op and set overflow flag.
+                let operand_val = self.read_operand(operand, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest)?;
+                let overflow_slot = frame.value_dest(*overflow)?;
+                self.execute_unaryop_checked(*op, &operand_val, dest_slot, overflow_slot)?;
+                frame.mark_value_initialized(*dest);
+                frame.mark_value_initialized(*overflow);
+            }
             Instruction::WrapSome { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
@@ -1515,6 +1524,47 @@ impl IrInterpreter {
             let tag = (*lhs.tydesc).type_tag;
             Err(InterpError::TypeMismatch(
                 format!("unsupported checked binop {:?} for type {:?}", op, tag)
+            ))
+        }
+    }
+
+    /// Execute checked unary operation (e.g., negation with overflow detection).
+    fn execute_unaryop_checked(
+        &self,
+        op: UnaryOp,
+        src: &Value,
+        dest: Destination,
+        overflow_dest: Destination,
+    ) -> Result<(), InterpError> {
+        // Only negation can overflow for signed integers.
+        if op != UnaryOp::Neg {
+            return Err(InterpError::TypeMismatch(
+                format!("checked unaryop only supports Neg, got {:?}", op)
+            ));
+        }
+
+        // Macro to generate checked negation for signed integer types.
+        macro_rules! checked_signed_neg {
+            ($tag:ident, $ty:ty, $src:expr, $dest:expr, $overflow:expr) => {
+                if (*$src.tydesc).type_tag == rtdt::TyTag::$tag {
+                    let a = *($src.ptr as *const $ty);
+                    let (result, overflowed) = a.overflowing_neg();
+                    *($dest.ptr as *mut $ty) = result;
+                    *($overflow.ptr as *mut bool) = overflowed;
+                    return Ok(());
+                }
+            };
+        }
+
+        unsafe {
+            checked_signed_neg!(I8, i8, src, dest, overflow_dest);
+            checked_signed_neg!(I16, i16, src, dest, overflow_dest);
+            checked_signed_neg!(I32, i32, src, dest, overflow_dest);
+            checked_signed_neg!(I64, i64, src, dest, overflow_dest);
+
+            let tag = (*src.tydesc).type_tag;
+            Err(InterpError::TypeMismatch(
+                format!("checked negation only supported for signed integers, got {:?}", tag)
             ))
         }
     }

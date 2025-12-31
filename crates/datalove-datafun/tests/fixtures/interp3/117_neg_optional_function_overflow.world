@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test -? in a function - overflow case (i8::MIN = -128, -(-128) overflows)
+fun test_neg(a: i8): ?i8
+    ret some (-? a)
+end fun
+
+let output = test_neg(@-128)

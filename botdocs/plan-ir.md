@@ -525,22 +525,26 @@ TODO:
   - Temporary Int allocations destroyed after operation
   - Tests: 003_u32_add, 004_i64_arithmetic, 013_crossunit_chain, 063_int_compare_negative
 
+- **Unary Checked/Optional (-?, -!)** - DONE. Checked negation with early-return semantics
+  - Added `UnaryOpChecked` instruction to IR (dest + overflow flag)
+  - `execute_unaryop_checked()` uses `overflowing_neg()` for signed integers
+  - `-?` returns None on overflow via `lower_optional_unaryop()`
+  - `-!` returns Err("negation overflow") via `lower_checked_result_unaryop()`
+  - Only signed integers can overflow (negating MIN value)
+  - Tests: 116-119 (interp3)
+
 **Missing Features (LOW priority):**
 
-4. **Unary Checked/Optional (-?, -!)**
-   - Old: `NegOptional`, `NegResult` for checked negation
-   - IR: `UnaryOp` only has `Neg`, `BitNot`, `Not`
-
-5. **Data Type (@data)**
+4. **Data Type (@data)**
    - Old: `data(value)` coercion wrapper
    - IR: `IrType::Data` exists, no creation instruction
 
-6. **Hex Literals** - May already parse to int values
+5. **Hex Literals** - May already parse to int values
 
 **Test Coverage:**
 
 - Old interpreter (module_interp_tests): 219 tests
-- IR interpreter (interp3_tests): 103 tests
+- IR interpreter (interp3_tests): 107 tests
 - IR interpreter (module_interp3_tests): 42 tests
 - All tests pass with leak checking enabled
 

@@ -1362,6 +1362,134 @@ fn lower_checked_result_binop<'db>(
     Ok(dest)
 }
 
+/// Lower an optional unary operation with early return on overflow.
+///
+/// For operators like `-?`:
+/// - Performs checked negation
+/// - On success: returns the result value
+/// - On overflow: early returns with None
+fn lower_optional_unaryop<'db>(
+    ctx: &mut LowerCtx<'db>,
+    op: UnaryOp,
+    operand: Operand,
+    dest: ValueId,
+) -> Result<ValueId, LowerError> {
+    // Emit checked operation.
+    let overflow = ctx.fresh_value(IrType::Bool);
+    ctx.emit(Instruction::UnaryOpChecked {
+        dest,
+        overflow,
+        op,
+        operand,
+    });
+    ctx.emit_expr_temp_drops();
+
+    // Create early return and continue blocks.
+    let early_return_block = ctx.fresh_block();
+    let continue_block = ctx.fresh_block();
+
+    // Branch: if overflow, early return; else continue.
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(overflow),
+        then_block: early_return_block,
+        else_block: continue_block,
+    });
+
+    // Early return block: wrap None and return.
+    ctx.start_block(early_return_block);
+    let return_type = ctx.return_type.clone()
+        .expect("optional arithmetic requires return type");
+    let none_value = ctx.fresh_value(return_type);
+    ctx.emit(Instruction::WrapNone { dest: none_value });
+    if ctx.is_script_unit {
+        ctx.finish_block(Terminator::UnitEarlyReturn {
+            value: Operand::Value(none_value),
+        });
+    } else {
+        ctx.finish_block(Terminator::TryReturn {
+            value: Some(Operand::Value(none_value)),
+        });
+    }
+
+    // Continue block: dest already has the computed value.
+    ctx.start_block(continue_block);
+    Ok(dest)
+}
+
+/// Lower checked result unary operators (-!).
+///
+/// For operators like `-!`:
+/// - Performs checked negation
+/// - On success: returns the result value
+/// - On overflow: early returns with Err(overflow error)
+fn lower_checked_result_unaryop<'db>(
+    ctx: &mut LowerCtx<'db>,
+    op: UnaryOp,
+    operand: Operand,
+    dest: ValueId,
+) -> Result<ValueId, LowerError> {
+    // Emit checked operation.
+    let overflow = ctx.fresh_value(IrType::Bool);
+    ctx.emit(Instruction::UnaryOpChecked {
+        dest,
+        overflow,
+        op,
+        operand,
+    });
+    ctx.emit_expr_temp_drops();
+
+    // Create early return and continue blocks.
+    let early_return_block = ctx.fresh_block();
+    let continue_block = ctx.fresh_block();
+
+    // Branch: if overflow, early return; else continue.
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(overflow),
+        then_block: early_return_block,
+        else_block: continue_block,
+    });
+
+    // Early return block: create error and return Err.
+    ctx.start_block(early_return_block);
+
+    // Create error message constant.
+    let err_msg = ctx.fresh_value(IrType::String);
+    ctx.emit(Instruction::Const {
+        dest: err_msg,
+        value: ConstValue::String("negation overflow".to_string()),
+    });
+
+    // Create Error from string.
+    let err_value = ctx.fresh_value(IrType::Error);
+    ctx.emit(Instruction::ErrorFrom {
+        dest: err_value,
+        inner: Operand::Value(err_msg),
+    });
+
+    // Wrap in Err.
+    let return_type = ctx.return_type.clone()
+        .expect("checked result arithmetic requires return type");
+    let wrapped_err = ctx.fresh_value(return_type);
+    ctx.emit(Instruction::WrapErr {
+        dest: wrapped_err,
+        inner: Operand::Value(err_value),
+    });
+
+    if ctx.is_script_unit {
+        ctx.finish_block(Terminator::UnitEarlyReturn {
+            value: Operand::Value(wrapped_err),
+        });
+    } else {
+        ctx.finish_block(Terminator::TryReturn {
+            value: Some(Operand::Value(wrapped_err)),
+        });
+    }
+
+    // Continue block: dest already has the computed value.
+    ctx.start_block(continue_block);
+    Ok(dest)
+}
+
 /// Lower an operand for borrowing contexts (binop, unaryop).
 ///
 /// Returns an Operand directly:
@@ -1534,25 +1662,27 @@ fn lower_expression<'db>(
         ExprFunKind::UnaryOp(unary) => {
             // Use lower_operand for borrowing semantics.
             let operand = lower_operand(ctx, unary.operand(ctx.db))?;
-
-            let op = match unary.op(ctx.db) {
-                ast::UnaryOp::Neg => UnaryOp::Neg,
-                ast::UnaryOp::NegOptional | ast::UnaryOp::NegResult => {
-                    // TODO: Handle checked unary ops.
-                    UnaryOp::Neg
-                }
-            };
-
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::UnaryOp {
-                dest,
-                op,
-                operand,
-            });
-            // Drop expression temporaries after borrowing operation completes.
-            ctx.emit_expr_temp_drops();
-            Ok(dest)
+
+            match unary.op(ctx.db) {
+                ast::UnaryOp::Neg => {
+                    ctx.emit(Instruction::UnaryOp {
+                        dest,
+                        op: UnaryOp::Neg,
+                        operand,
+                    });
+                    // Drop expression temporaries after borrowing operation completes.
+                    ctx.emit_expr_temp_drops();
+                    Ok(dest)
+                }
+                ast::UnaryOp::NegOptional => {
+                    return lower_optional_unaryop(ctx, UnaryOp::Neg, operand, dest);
+                }
+                ast::UnaryOp::NegResult => {
+                    return lower_checked_result_unaryop(ctx, UnaryOp::Neg, operand, dest);
+                }
+            }
         }
         ExprFunKind::FunctionCall(call) => {
             let func_name = call.name(ctx.db).text(ctx.db).to_string();

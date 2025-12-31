@@ -453,6 +453,14 @@ pub enum Instruction {
         rhs: Operand,
     },
 
+    /// Checked unary operation (produces value + overflow flag).
+    UnaryOpChecked {
+        dest: ValueId,
+        overflow: ValueId,
+        op: UnaryOp,
+        operand: Operand,
+    },
+
     /// Function call.
     Call {
         dest: ValueId,
