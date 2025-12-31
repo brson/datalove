@@ -396,7 +396,7 @@ fn process_fragment<'db>(
     // Run drop analysis on all functions first.
     let expr_types = tycheck_result.expr_types(db);
     let stmts = script.statements(db).to_vec();
-    let func_analyses = match ir::lower::analyze_script_functions(db, expr_types, &stmts) {
+    let func_analyses = match ir::drop_analysis::analyze_script_functions(db, expr_types, &stmts) {
         Ok(analyses) => analyses,
         Err(errors) => {
             let error_msgs: Vec<String> = errors.into_iter()

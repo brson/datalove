@@ -24,10 +24,7 @@ mod script;
 // Re-export public types and functions.
 pub use context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
 pub use func::lower_function_for_module;
-pub use script::{
-    lower_script_unit, lower_script_fragment_raw, lower_script_expr,
-    analyze_script_functions, ScriptFunctionAnalyses,
-};
+pub use script::{lower_script_unit, lower_script_fragment_raw, lower_script_expr};
 
 /// Errors that can occur during lowering.
 #[derive(Debug, Clone, PartialEq)]

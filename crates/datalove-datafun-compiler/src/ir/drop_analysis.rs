@@ -18,6 +18,9 @@ use crate::ast::{
 use crate::Db;
 use super::IrType;
 
+/// Pre-computed drop analyses for functions in a script unit.
+pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionDropAnalysis>;
+
 /// Identifies a binding (parameter or let/var).
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub struct BindingId(pub u32);
@@ -530,6 +533,36 @@ pub fn analyze_function<'db>(
         errors: ctx.errors,
         schedule: ctx.schedule,
         bindings: ctx.bindings,
+    }
+}
+
+/// Analyze all functions in a list of statements.
+///
+/// Returns a map of function analyses, or an error if any function has analysis errors.
+/// Call this before lowering to ensure all functions are valid.
+pub fn analyze_script_functions<'db>(
+    db: &'db dyn Db,
+    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    stmts: &[Statement<'db>],
+) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError>)>> {
+    let mut analyses = HashMap::new();
+    let mut errors = Vec::new();
+
+    for stmt in stmts {
+        if let Statement::Fun(func) = stmt {
+            let analysis = analyze_function(db, *func, expr_types);
+            if !analysis.errors.is_empty() {
+                let func_name = func.name(db).text(db).to_string();
+                errors.push((func_name, analysis.errors.clone()));
+            }
+            analyses.insert(*func, analysis);
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(analyses)
+    } else {
+        Err(errors)
     }
 }
 

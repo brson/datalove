@@ -43,7 +43,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));
 
                 // Run drop analysis on all functions first.
-                let func_analyses = match ir::lower::analyze_script_functions(&db, expr_types, &stmts) {
+                let func_analyses = match ir::drop_analysis::analyze_script_functions(&db, expr_types, &stmts) {
                     Ok(analyses) => analyses,
                     Err(errors) => {
                         for (func_name, errs) in errors {

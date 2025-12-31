@@ -2,52 +2,18 @@
 //!
 //! Handles lowering of script units (fragments and expressions).
 
-use std::collections::HashMap;
-use crate::ast::{Statement, ExprFun, StmtFun};
+use crate::ast::{Statement, ExprFun};
 use crate::tycheck::TypecheckResult;
 use crate::Db;
 use super::super::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
-    ExportBinding, BlockId, drop_analysis::{self, FunctionDropAnalysis},
+    ExportBinding, BlockId, drop_analysis::{FunctionDropAnalysis, ScriptFunctionAnalyses},
 };
 use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
 use super::scope::{is_copy_type, ScopeKind, ScopeTracker};
 use super::expr::lower_expression;
 use super::func::lower_function_body;
 use super::LowerError;
-
-/// Pre-computed drop analyses for functions in a script unit.
-pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionDropAnalysis>;
-
-/// Analyze all functions in a list of statements.
-///
-/// Returns a map of function analyses, or an error if any function has analysis errors.
-/// Call this before lowering to ensure all functions are valid.
-pub fn analyze_script_functions<'db>(
-    db: &'db dyn Db,
-    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
-    stmts: &[Statement<'db>],
-) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<drop_analysis::AnalysisError>)>> {
-    let mut analyses = HashMap::new();
-    let mut errors = Vec::new();
-
-    for stmt in stmts {
-        if let Statement::Fun(func) = stmt {
-            let analysis = drop_analysis::analyze_function(db, *func, expr_types);
-            if !analysis.errors.is_empty() {
-                let func_name = func.name(db).text(db).to_string();
-                errors.push((func_name, analysis.errors.clone()));
-            }
-            analyses.insert(*func, analysis);
-        }
-    }
-
-    if errors.is_empty() {
-        Ok(analyses)
-    } else {
-        Err(errors)
-    }
-}
 
 /// Lower a script unit.
 ///
