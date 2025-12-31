@@ -176,8 +176,18 @@ pub fn analyze_modules_worldfile_ir3(
             if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
                 let func_name = func.name(db).text(db).to_string();
 
+                // Run drop analysis first.
+                let analysis = ir::drop_analysis::analyze_function(db, *func, combined_expr_types);
+                if !analysis.errors.is_empty() {
+                    let error_msgs: Vec<String> = analysis.errors.iter()
+                        .map(|e| format!("{:?}", e))
+                        .collect();
+                    lowering_errors.push(format!("Drop analysis error in {}/{}: {}", module_path, func_name, error_msgs.join("; ")));
+                    continue;
+                }
+
                 match ir::lower::lower_function_for_module(
-                    db, combined_expr_types, &all_module_functions, *func
+                    db, combined_expr_types, &all_module_functions, *func, analysis
                 ) {
                     Ok(ir_func) => {
                         ir_dumps.push(format!("{}", ir_func));

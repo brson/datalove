@@ -3,47 +3,24 @@
 //! Handles lowering of function definitions to IR.
 
 use crate::ast;
-use crate::tycheck::TypecheckResult;
 use crate::Db;
 use super::super::{IrType, IrFunction, Operand, FuncId, Terminator};
-use super::super::drop_analysis;
+use super::super::drop_analysis::FunctionDropAnalysis;
 use super::context::LowerCtx;
 use super::scope::ScopeKind;
 use super::stmt::lower_statement_indexed;
 use super::LowerError;
 
-/// Lower a function to IR.
-///
-/// For standalone function lowering (not in a script context).
-pub fn lower_function<'db>(
-    db: &'db dyn Db,
-    tycheck_result: TypecheckResult<'db>,
-    func: ast::StmtFun<'db>,
-) -> Result<IrFunction, LowerError> {
-    lower_function_with_expr_types(db, tycheck_result.expr_types(db), func)
-}
-
-/// Lower a function to IR using pre-computed expr_types.
-///
-/// This variant is useful when lowering functions from a module graph
-/// where expr_types are combined across all modules.
-pub fn lower_function_with_expr_types<'db>(
-    db: &'db dyn Db,
-    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
-    func: ast::StmtFun<'db>,
-) -> Result<IrFunction, LowerError> {
-    lower_function_for_module(db, expr_types, &[], func)
-}
-
 /// Lower a function to IR with available module functions in scope.
 ///
-/// This variant is used when lowering module functions that may call
-/// other module functions (imported from other modules).
+/// Caller must run `drop_analysis::analyze_function` first, check for errors,
+/// and pass the result here. This function asserts that `analysis` has no errors.
 pub fn lower_function_for_module<'db>(
     db: &'db dyn Db,
     expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
     available_functions: &[String],
     func: ast::StmtFun<'db>,
+    analysis: FunctionDropAnalysis,
 ) -> Result<IrFunction, LowerError> {
     let mut ctx = LowerCtx::new_for_module(db, expr_types, available_functions);
     let name = func.name(db).text(db).to_string();
@@ -52,27 +29,26 @@ pub fn lower_function_for_module<'db>(
     // Define the function in the symbol table.
     let func_id = ctx.define_func(&name, param_count);
 
-    lower_function_body(&mut ctx, func_id, func)
+    lower_function_body(&mut ctx, func_id, func, analysis)
 }
 
-/// Lower a function body given an already-allocated FuncId.
+/// Lower a function body given an already-allocated FuncId and pre-computed drop analysis.
+///
+/// The caller must ensure `analysis` has no errors before calling this function.
 pub fn lower_function_body<'db>(
     ctx: &mut LowerCtx<'db>,
     func_id: FuncId,
     func: ast::StmtFun<'db>,
+    analysis: FunctionDropAnalysis,
 ) -> Result<IrFunction, LowerError> {
+    // Assert no analysis errors - caller should have checked.
+    assert!(
+        analysis.errors.is_empty(),
+        "lower_function_body called with analysis errors: {:?}",
+        analysis.errors
+    );
+
     let name = func.name(ctx.db).text(ctx.db).to_string();
-
-    // Run drop analysis to compute precise drop points.
-    let analysis = drop_analysis::analyze_function(ctx.db, func, ctx.expr_types);
-
-    // For now, just log errors but don't fail (analysis errors are informational).
-    // TODO: Return errors instead of continuing.
-    if !analysis.errors.is_empty() {
-        for err in &analysis.errors {
-            eprintln!("Drop analysis error: {:?}", err);
-        }
-    }
 
     // Set drop schedule for this function.
     ctx.set_drop_schedule(analysis.schedule, analysis.bindings);

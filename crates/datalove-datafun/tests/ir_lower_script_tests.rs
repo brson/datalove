@@ -38,10 +38,27 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
                 // Typecheck to get expression types.
                 let tycheck_result = datalove_datafun_compiler::tycheck::type_check(&db, source_obj, script_ast);
+                let expr_types = tycheck_result.expr_types(&db);
 
                 output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));
 
-                match ir::lower::lower_script_unit(&db, tycheck_result, script_ctx.clone(), ScriptUnitKind::Fragment(stmts)) {
+                // Run drop analysis on all functions first.
+                let func_analyses = match ir::lower::analyze_script_functions(&db, expr_types, &stmts) {
+                    Ok(analyses) => analyses,
+                    Err(errors) => {
+                        for (func_name, errs) in errors {
+                            let error_msgs: Vec<String> = errs.iter()
+                                .map(|e| format!("{:?}", e))
+                                .collect();
+                            output.push_str(&format!("Drop analysis error in {}: {}\n", func_name, error_msgs.join("; ")));
+                        }
+                        output.push('\n');
+                        unit_index += 1;
+                        continue;
+                    }
+                };
+
+                match ir::lower::lower_script_unit(&db, tycheck_result, script_ctx.clone(), ScriptUnitKind::Fragment(stmts), func_analyses) {
                     Ok(ir_unit) => {
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

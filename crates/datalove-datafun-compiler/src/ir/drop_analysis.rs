@@ -129,8 +129,6 @@ struct ScopeFrame {
     bindings: Vec<BindingId>,
     /// Kind of scope (for handling break/continue).
     kind: ScopeKind,
-    /// State of all bindings at scope entry (for branch convergence).
-    entry_state: HashMap<BindingId, BindingState>,
     /// Current state of bindings.
     current_state: HashMap<BindingId, BindingState>,
 }
@@ -138,7 +136,6 @@ struct ScopeFrame {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ScopeKind {
     Function,
-    Block,
     Loop,
     IfThen,
     IfElse,
@@ -182,15 +179,14 @@ impl<'db> AnalysisCtx<'db> {
     /// Enter a new scope.
     fn enter_scope(&mut self, kind: ScopeKind) {
         // Copy current state from parent scope.
-        let entry_state = self.scope_stack.last()
+        let current_state = self.scope_stack.last()
             .map(|f| f.current_state.clone())
             .unwrap_or_default();
 
         self.scope_stack.push(ScopeFrame {
             bindings: Vec::new(),
             kind,
-            entry_state: entry_state.clone(),
-            current_state: entry_state,
+            current_state,
         });
     }
 
@@ -253,11 +249,6 @@ impl<'db> AnalysisCtx<'db> {
         } else {
             self.set_state(id, BindingState::Moved);
         }
-    }
-
-    /// Check if a binding is live.
-    fn is_live(&self, id: BindingId) -> bool {
-        self.get_state(id) == Some(BindingState::Live)
     }
 
     /// Get all live bindings defined in scopes we're exiting (for break/continue).
@@ -387,6 +378,12 @@ impl<'db> AnalysisCtx<'db> {
             ExprFunKind::Name(name) => {
                 let name_str = name.text(self.db);
                 if let Some(id) = self.lookup(name_str) {
+                    // Check for use after move.
+                    if self.get_state(id) == Some(BindingState::Moved) {
+                        let name = self.bindings[id.0 as usize].name.clone();
+                        self.errors.push(AnalysisError::UseAfterMove { binding: id, name });
+                        return None;
+                    }
                     if is_consumed && !self.bindings[id.0 as usize].ty.is_copy() {
                         // This is a move.
                         self.mark_moved(id);
@@ -751,14 +748,6 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
                     else_extra_drops.push(id);
                 }
             }
-        }
-    }
-
-    // Also check bindings only in else state.
-    for (&id, &else_state) in &state_after_else {
-        if !state_after_then.contains_key(&id) {
-            // This shouldn't happen for bindings from outer scope.
-            continue;
         }
     }
 

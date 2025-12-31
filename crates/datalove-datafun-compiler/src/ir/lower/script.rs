@@ -2,12 +2,13 @@
 //!
 //! Handles lowering of script units (fragments and expressions).
 
-use crate::ast::{Statement, ExprFun};
+use std::collections::HashMap;
+use crate::ast::{Statement, ExprFun, StmtFun};
 use crate::tycheck::TypecheckResult;
 use crate::Db;
 use super::super::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
-    ExportBinding, BlockId,
+    ExportBinding, BlockId, drop_analysis::{self, FunctionDropAnalysis},
 };
 use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
 use super::scope::{is_copy_type, ScopeKind, ScopeTracker};
@@ -15,15 +16,52 @@ use super::expr::lower_expression;
 use super::func::lower_function_body;
 use super::LowerError;
 
+/// Pre-computed drop analyses for functions in a script unit.
+pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionDropAnalysis>;
+
+/// Analyze all functions in a list of statements.
+///
+/// Returns a map of function analyses, or an error if any function has analysis errors.
+/// Call this before lowering to ensure all functions are valid.
+pub fn analyze_script_functions<'db>(
+    db: &'db dyn Db,
+    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    stmts: &[Statement<'db>],
+) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<drop_analysis::AnalysisError>)>> {
+    let mut analyses = HashMap::new();
+    let mut errors = Vec::new();
+
+    for stmt in stmts {
+        if let Statement::Fun(func) = stmt {
+            let analysis = drop_analysis::analyze_function(db, *func, expr_types);
+            if !analysis.errors.is_empty() {
+                let func_name = func.name(db).text(db).to_string();
+                errors.push((func_name, analysis.errors.clone()));
+            }
+            analyses.insert(*func, analysis);
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(analyses)
+    } else {
+        Err(errors)
+    }
+}
+
 /// Lower a script unit.
 ///
 /// Script units are sequences of statements (fragment) or a single expression (expr).
 /// They can reference values from previous units and export bindings to subsequent units.
+///
+/// For fragments, caller must first call `analyze_script_functions` to get `func_analyses`.
+/// For expressions, pass an empty map since there are no function definitions.
 pub fn lower_script_unit<'db>(
     db: &'db dyn Db,
     tycheck_result: TypecheckResult<'db>,
     script_ctx: ScriptLowerContext,
     kind: ScriptUnitKind<'db>,
+    func_analyses: ScriptFunctionAnalyses<'db>,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, tycheck_result.expr_types(db), script_ctx);
 
@@ -34,7 +72,7 @@ pub fn lower_script_unit<'db>(
         ScriptUnitKind::Fragment(stmts) => {
             // Lower all statements.
             for stmt in &stmts {
-                lower_statement_for_script(&mut ctx, stmt)?;
+                lower_statement_for_script(&mut ctx, stmt, &func_analyses)?;
             }
             // Fragment units have no result value.
             None
@@ -71,11 +109,14 @@ pub fn lower_script_unit<'db>(
 ///
 /// Like `lower_script_unit` but takes expr_types directly instead of TypecheckResult.
 /// Used when typechecking with context (non-salsa version).
+///
+/// Caller must first call `analyze_script_functions` to get `func_analyses`.
 pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn Db,
     expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
     script_ctx: ScriptLowerContext,
     stmts: Vec<Statement<'db>>,
+    func_analyses: ScriptFunctionAnalyses<'db>,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, script_ctx);
 
@@ -84,7 +125,7 @@ pub fn lower_script_fragment_raw<'db>(
 
     // Lower all statements.
     for stmt in &stmts {
-        lower_statement_for_script(&mut ctx, stmt)?;
+        lower_statement_for_script(&mut ctx, stmt, &func_analyses)?;
     }
 
     // Exit scope (no drops for ScriptUnit - bindings are exported).
@@ -141,9 +182,11 @@ pub fn lower_script_expr<'db>(
 /// Lower a statement in script unit context.
 ///
 /// This handles function definitions by lowering them and adding to the unit's functions.
-pub fn lower_statement_for_script<'db>(
+/// The `func_analyses` map must contain pre-computed analyses for all function statements.
+fn lower_statement_for_script<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &Statement<'db>,
+    func_analyses: &ScriptFunctionAnalyses<'db>,
 ) -> Result<(), LowerError> {
     match stmt {
         Statement::Let(let_stmt) => {
@@ -232,6 +275,11 @@ pub fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Fun(fun_stmt) => {
+            // Look up pre-computed analysis.
+            let analysis = func_analyses.get(fun_stmt)
+                .expect("function analysis not found - caller must run analyze_script_functions first")
+                .clone();
+
             // Define the function in the symbol table first (allows recursion).
             let func_name = fun_stmt.name(ctx.db).text(ctx.db).to_string();
             let param_count = fun_stmt.params(ctx.db).len();
@@ -255,7 +303,7 @@ pub fn lower_statement_for_script<'db>(
             ctx.scope_tracker = ScopeTracker::new();
 
             // Lower the function body.
-            let func = lower_function_body(ctx, func_id, *fun_stmt)?;
+            let func = lower_function_body(ctx, func_id, *fun_stmt, analysis)?;
 
             // Restore parent state.
             ctx.blocks = saved_blocks;

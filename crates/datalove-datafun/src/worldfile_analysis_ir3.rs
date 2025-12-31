@@ -233,9 +233,19 @@ pub fn analyze_worldfile_ir3(
             if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
                 let func_name = func.name(db).text(db).to_string();
 
+                // Run drop analysis first.
+                let analysis = ir::drop_analysis::analyze_function(db, *func, combined_expr_types);
+                if !analysis.errors.is_empty() {
+                    let error_msgs: Vec<String> = analysis.errors.iter()
+                        .map(|e| format!("{:?}", e))
+                        .collect();
+                    ir_dumps.push(format!("Drop analysis error in {}: {}", func_name, error_msgs.join("; ")));
+                    continue;
+                }
+
                 // Lower the function with all module functions available.
                 match ir::lower::lower_function_for_module(
-                    db, combined_expr_types, &all_module_functions, *func
+                    db, combined_expr_types, &all_module_functions, *func, analysis
                 ) {
                     Ok(ir_func) => {
                         ir_dumps.push(format!("{}", ir_func));
@@ -383,12 +393,35 @@ fn process_fragment<'db>(
         }
     }
 
+    // Run drop analysis on all functions first.
+    let expr_types = tycheck_result.expr_types(db);
+    let stmts = script.statements(db).to_vec();
+    let func_analyses = match ir::lower::analyze_script_functions(db, expr_types, &stmts) {
+        Ok(analyses) => analyses,
+        Err(errors) => {
+            let error_msgs: Vec<String> = errors.into_iter()
+                .map(|(func_name, errs)| {
+                    let errs_str: Vec<String> = errs.iter().map(|e| format!("{:?}", e)).collect();
+                    format!("{}: {}", func_name, errs_str.join("; "))
+                })
+                .collect();
+            return SectionResult {
+                section_type: "scriptunit-fragment".to_string(),
+                name: None,
+                typecheck: TypecheckResult::Success,
+                lowering: LoweringResult::Error { message: format!("Drop analysis errors: {}", error_msgs.join(", ")) },
+                output: String::new(),
+            };
+        }
+    };
+
     // Lower using the typecheck result's expr_types.
     let ir_unit = match ir::lower::lower_script_fragment_raw(
         db,
-        tycheck_result.expr_types(db),
+        expr_types,
         script_ctx.clone(),
-        script.statements(db).to_vec(),
+        stmts,
+        func_analyses,
     ) {
         Ok(unit) => unit,
         Err(e) => {

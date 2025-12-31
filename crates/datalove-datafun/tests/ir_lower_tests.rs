@@ -66,10 +66,22 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Lower each function to IR.
     let mut output = String::new();
+    let expr_types = tycheck_result.expr_types(&db);
 
     for stmt in script_ast.statements(&db) {
         if let datalove_datafun_compiler::ast::Statement::Fun(func) = stmt {
-            match ir::lower::lower_function(&db, tycheck_result, *func) {
+            // Run drop analysis first.
+            let analysis = ir::drop_analysis::analyze_function(&db, *func, expr_types);
+            if !analysis.errors.is_empty() {
+                let error_msgs: Vec<String> = analysis.errors.iter()
+                    .map(|e| format!("{:?}", e))
+                    .collect();
+                output.push_str(&format!("Drop analysis error in {}: {}\n",
+                    func.name(&db).text(&db), error_msgs.join("; ")));
+                continue;
+            }
+
+            match ir::lower::lower_function_for_module(&db, expr_types, &[], *func, analysis) {
                 Ok(ir_func) => {
                     output.push_str(&format!("{}", ir_func));
                     output.push('\n');
