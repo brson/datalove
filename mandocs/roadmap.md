@@ -22,6 +22,7 @@ With core->runtime calls.
 
 # on deck
 
+- run miri on interpreter
 - move semantics
 - rename ExprFunKind::Err to Error
 - move/clone semantics - moves-etc.md
