@@ -2787,7 +2787,7 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
     // Remove every other key.
     for i in (0..20).step_by(2) {
         let key_str = format!("key_{:03}", i);
-        let key = unsafe {
+        let mut key = unsafe {
             create_runtime_string(rt, &key_str, key_tydesc)
         };
 
@@ -2806,7 +2806,7 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_string_destroy_local(
                 rt,
-                &key as *const rtdt::String as *mut u8,
+                &mut key as *mut rtdt::String as *mut u8,
                 key_tydesc,
             )
         };
@@ -2885,7 +2885,7 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
     // Remove keys in a pattern that forces rebalancing.
     for i in (0..50).step_by(3) {
         let key_str = format!("key_{:03}", i);
-        let key = unsafe {
+        let mut key = unsafe {
             create_runtime_string(rt, &key_str, key_tydesc)
         };
 
@@ -2904,7 +2904,7 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
         let status = unsafe {
             datalove_rt::c::dtlv_rti_string_destroy_local(
                 rt,
-                &key as *const rtdt::String as *mut u8,
+                &mut key as *mut rtdt::String as *mut u8,
                 key_tydesc,
             )
         };
