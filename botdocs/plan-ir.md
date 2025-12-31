@@ -463,8 +463,8 @@ If-binding tests (066-083 in interp3, 010-016 in module_interp3):
 - `083_nested_if_option.world` - nested if-bindings
 
 **Test counts:**
-- interp3_tests: 71 tests
-- module_interp3_tests: 26 tests
+- interp3_tests: 103 tests
+- module_interp3_tests: 42 tests
 - module_interp_tests: 219 tests
 - All tests pass with `DATALOVE_LEAK_CHECK=panic-backtrace`
 
@@ -509,13 +509,16 @@ TODO:
   - Branches on overflow flag: continue or early return with None
   - Supports all fixed-width integer types (i8-i64, u8-u64)
   - Division handles both div-by-zero and signed overflow (MIN / -1)
-  - Tests 027-034 (module_interp3)
+  - Tests 027-034 (module_interp3), 084-099 (interp3)
+
+- **Checked Arithmetic Result (+!, -!, *!, /!)** - DONE. Early-return with Err on overflow/div-zero
+  - Uses `BinOpChecked` to get `(value, overflow_flag)`
+  - Branches on overflow flag: continue or early return with Err("arithmetic overflow")
+  - Works in script units (return type is Result)
+  - Supports all fixed-width integer types (i8-i64, u8-u64)
+  - Tests 035-042 (module_interp3), 100-115 (interp3)
 
 **Missing Features (MEDIUM priority):**
-
-3. **Checked Arithmetic Result (+!, -!, *!, /!)**
-   - Old: Returns `Result<T, Error>`, Err on overflow/div-zero
-   - IR: `BinOpChecked` needs Result wrapping (similar to Optional)
 
 4. **Widening Arithmetic**
    - Bare `+`, `-`, `*` on fixed ints widen both operands to Int (bigint)
@@ -538,8 +541,8 @@ TODO:
 **Test Coverage:**
 
 - Old interpreter (module_interp_tests): 219 tests
-- IR interpreter (interp3_tests): 87 tests
-- IR interpreter (module_interp3_tests): 34 tests
+- IR interpreter (interp3_tests): 103 tests
+- IR interpreter (module_interp3_tests): 42 tests
 - All tests pass with leak checking enabled
 
 Test matrix (each feature should be tested in):

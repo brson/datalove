@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test /! in a function - no div-by-zero case
+fun test_div(a: u32, b: u32): !u32
+    ret ok (a /! b)
+end fun
+
+let output = test_div(@100, @20)

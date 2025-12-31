@@ -1286,6 +1286,82 @@ fn lower_optional_binop<'db>(
     Ok(dest)
 }
 
+/// Lower checked result binary operators (+!, -!, *!, /!).
+///
+/// For operators like `+!`, `-!`, `*!`, `/!`:
+/// - Performs checked arithmetic
+/// - On success: returns the result value
+/// - On overflow/error: early returns with Err(overflow error)
+fn lower_checked_result_binop<'db>(
+    ctx: &mut LowerCtx<'db>,
+    op: BinOp,
+    lhs: Operand,
+    rhs: Operand,
+    dest: ValueId,
+) -> Result<ValueId, LowerError> {
+    // Emit checked operation.
+    let overflow = ctx.fresh_value(IrType::Bool);
+    ctx.emit(Instruction::BinOpChecked {
+        dest,
+        overflow,
+        op,
+        lhs,
+        rhs,
+    });
+    ctx.emit_expr_temp_drops();
+
+    // Create early return and continue blocks.
+    let early_return_block = ctx.fresh_block();
+    let continue_block = ctx.fresh_block();
+
+    // Branch: if overflow, early return; else continue.
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(overflow),
+        then_block: early_return_block,
+        else_block: continue_block,
+    });
+
+    // Early return block: create error and return Err.
+    ctx.start_block(early_return_block);
+
+    // Create error message constant.
+    let err_msg = ctx.fresh_value(IrType::String);
+    ctx.emit(Instruction::Const {
+        dest: err_msg,
+        value: ConstValue::String("arithmetic overflow".to_string()),
+    });
+
+    // Create Error from string.
+    let err_value = ctx.fresh_value(IrType::Error);
+    ctx.emit(Instruction::ErrorFrom {
+        dest: err_value,
+        inner: Operand::Value(err_msg),
+    });
+
+    // Wrap in Err.
+    let return_type = ctx.return_type.clone()
+        .expect("checked result arithmetic requires return type");
+    let wrapped_err = ctx.fresh_value(return_type);
+    ctx.emit(Instruction::WrapErr {
+        dest: wrapped_err,
+        inner: Operand::Value(err_value),
+    });
+
+    if ctx.is_script_unit {
+        ctx.finish_block(Terminator::UnitEarlyReturn {
+            value: Operand::Value(wrapped_err),
+        });
+    } else {
+        ctx.finish_block(Terminator::TryReturn {
+            value: Some(Operand::Value(wrapped_err)),
+        });
+    }
+
+    // Continue block: dest already has the computed value.
+    ctx.start_block(continue_block);
+    Ok(dest)
+}
+
 /// Lower an operand for borrowing contexts (binop, unaryop).
 ///
 /// Returns an Operand directly:
@@ -1417,54 +1493,18 @@ fn lower_expression<'db>(
                 ast::BinOp::Le => BinOp::Le,
                 ast::BinOp::Gt => BinOp::Gt,
                 ast::BinOp::Ge => BinOp::Ge,
-                // Checked ops - emit BinOpChecked, ignore overflow flag.
+                // Checked result ops - emit BinOpChecked with early return on overflow.
                 ast::BinOp::AddChecked => {
-                    let overflow = ctx.fresh_value(IrType::Bool);
-                    ctx.emit(Instruction::BinOpChecked {
-                        dest,
-                        overflow,
-                        op: BinOp::Add,
-                        lhs,
-                        rhs,
-                    });
-                    ctx.emit_expr_temp_drops();
-                    return Ok(dest);
+                    return lower_checked_result_binop(ctx, BinOp::Add, lhs, rhs, dest);
                 }
                 ast::BinOp::SubChecked => {
-                    let overflow = ctx.fresh_value(IrType::Bool);
-                    ctx.emit(Instruction::BinOpChecked {
-                        dest,
-                        overflow,
-                        op: BinOp::Sub,
-                        lhs,
-                        rhs,
-                    });
-                    ctx.emit_expr_temp_drops();
-                    return Ok(dest);
+                    return lower_checked_result_binop(ctx, BinOp::Sub, lhs, rhs, dest);
                 }
                 ast::BinOp::MulChecked => {
-                    let overflow = ctx.fresh_value(IrType::Bool);
-                    ctx.emit(Instruction::BinOpChecked {
-                        dest,
-                        overflow,
-                        op: BinOp::Mul,
-                        lhs,
-                        rhs,
-                    });
-                    ctx.emit_expr_temp_drops();
-                    return Ok(dest);
+                    return lower_checked_result_binop(ctx, BinOp::Mul, lhs, rhs, dest);
                 }
                 ast::BinOp::DivChecked => {
-                    let overflow = ctx.fresh_value(IrType::Bool);
-                    ctx.emit(Instruction::BinOpChecked {
-                        dest,
-                        overflow,
-                        op: BinOp::Div,
-                        lhs,
-                        rhs,
-                    });
-                    ctx.emit_expr_temp_drops();
-                    return Ok(dest);
+                    return lower_checked_result_binop(ctx, BinOp::Div, lhs, rhs, dest);
                 }
                 // Optional ops - emit BinOpChecked with early return on overflow.
                 ast::BinOp::AddOptional => {

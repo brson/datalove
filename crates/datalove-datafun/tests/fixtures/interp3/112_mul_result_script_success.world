@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// *! in script should work - scripts return Result
+fun get_a(): u32
+    ret @100
+end fun
+
+fun get_b(): u32
+    ret @200
+end fun
+
+let output: u32 = get_a() *! get_b()

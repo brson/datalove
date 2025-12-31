@@ -1,0 +1,12 @@
+----------
+module local/test/main
+----------
+
+// Test -! operator with no underflow - returns Ok(result)
+fun test_sub(a: u32, b: u32): !u32
+    ret ok (a -! b)
+end fun
+
+fun main(): !u32
+    ret test_sub(@10, @3)
+end fun
