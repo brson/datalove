@@ -518,25 +518,24 @@ TODO:
   - Supports all fixed-width integer types (i8-i64, u8-u64)
   - Tests 035-042 (module_interp3), 100-115 (interp3)
 
-**Missing Features (MEDIUM priority):**
-
-4. **Widening Arithmetic**
-   - Bare `+`, `-`, `*` on fixed ints widen both operands to Int (bigint)
-   - Example: `a + @3` where a is u32 and @3 is Int results in Int type
-   - Typechecker handles widening; IR receives correct types
-   - IR interpreter handles Int arithmetic via runtime calls
+- **Widening Arithmetic** - DONE. Fixed-width int operands widened to Int for bare +, -, *
+  - `execute_binop` detects dest=Int with fixed-width operands
+  - `widen_to_int()` converts u8-u64, i8-i64 to temporary Int representation
+  - Calls Int runtime operations (dtlv_rti_int_add, _sub, _mul)
+  - Temporary Int allocations destroyed after operation
+  - Tests: 003_u32_add, 004_i64_arithmetic, 013_crossunit_chain, 063_int_compare_negative
 
 **Missing Features (LOW priority):**
 
-5. **Unary Checked/Optional (-?, -!)**
+4. **Unary Checked/Optional (-?, -!)**
    - Old: `NegOptional`, `NegResult` for checked negation
    - IR: `UnaryOp` only has `Neg`, `BitNot`, `Not`
 
-6. **Data Type (@data)**
+5. **Data Type (@data)**
    - Old: `data(value)` coercion wrapper
    - IR: `IrType::Data` exists, no creation instruction
 
-7. **Hex Literals** - May already parse to int values
+6. **Hex Literals** - May already parse to int values
 
 **Test Coverage:**
 

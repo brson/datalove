@@ -34,7 +34,7 @@ Ir3Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = move unit1.v1\n    unit_end v0\n",
             ),
-            output: "@0",
+            output: "@8",
         ),
     ],
 )

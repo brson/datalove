@@ -968,6 +968,108 @@ impl IrInterpreter {
         Ok(())
     }
 
+    /// Check if a type tag is a fixed-width integer (u8-u64, i8-i64).
+    fn is_fixed_width_int(tag: rtdt::TyTag) -> bool {
+        matches!(tag,
+            rtdt::TyTag::U8 | rtdt::TyTag::U16 | rtdt::TyTag::U32 | rtdt::TyTag::U64 |
+            rtdt::TyTag::I8 | rtdt::TyTag::I16 | rtdt::TyTag::I32 | rtdt::TyTag::I64
+        )
+    }
+
+    /// Widen a fixed-width integer value to an Int in a stack-allocated buffer.
+    ///
+    /// Returns the widened Int representation. The caller is responsible for
+    /// destroying the Int (freeing its limbs) after use.
+    unsafe fn widen_to_int(
+        &self,
+        src: &Value,
+        int_buf: &mut rtdt::Int,
+    ) -> Result<(), InterpError> {
+        unsafe {
+            let type_tag = (*src.tydesc).type_tag;
+
+            // Extract magnitude and sign from the fixed-width integer.
+            let (magnitude, is_negative): (u64, bool) = match type_tag {
+                rtdt::TyTag::U8 => (*(src.ptr as *const u8) as u64, false),
+                rtdt::TyTag::U16 => (*(src.ptr as *const u16) as u64, false),
+                rtdt::TyTag::U32 => (*(src.ptr as *const u32) as u64, false),
+                rtdt::TyTag::U64 => (*(src.ptr as *const u64), false),
+                rtdt::TyTag::I8 => {
+                    let v = *(src.ptr as *const i8);
+                    if v < 0 { ((-(v as i64)) as u64, true) } else { (v as u64, false) }
+                }
+                rtdt::TyTag::I16 => {
+                    let v = *(src.ptr as *const i16);
+                    if v < 0 { ((-(v as i64)) as u64, true) } else { (v as u64, false) }
+                }
+                rtdt::TyTag::I32 => {
+                    let v = *(src.ptr as *const i32);
+                    if v < 0 { ((-(v as i64)) as u64, true) } else { (v as u64, false) }
+                }
+                rtdt::TyTag::I64 => {
+                    let v = *(src.ptr as *const i64);
+                    if v == i64::MIN {
+                        // Special case: i64::MIN cannot be negated without overflow.
+                        // Its magnitude is 2^63 = 0x8000_0000_0000_0000.
+                        (0x8000_0000_0000_0000u64, true)
+                    } else if v < 0 {
+                        ((-v) as u64, true)
+                    } else {
+                        (v as u64, false)
+                    }
+                }
+                _ => return Err(InterpError::TypeMismatch(
+                    format!("Cannot widen type {:?} to Int", type_tag)
+                )),
+            };
+
+            let rt_handle = self.runtime.handle();
+
+            if magnitude == 0 {
+                int_buf.data = std::ptr::null();
+                int_buf.size_and_sign = 0;
+                int_buf.capacity = 0;
+            } else if magnitude <= u32::MAX as u64 {
+                // Fits in one limb.
+                let limb_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                    rt_handle, 4, 4, 1
+                ) as *mut u32;
+                *limb_ptr = magnitude as u32;
+                int_buf.data = limb_ptr;
+                int_buf.size_and_sign = if is_negative { -1 } else { 1 };
+                int_buf.capacity = 1;
+            } else {
+                // Needs two limbs (for u64/i64 values > u32::MAX).
+                let limb_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                    rt_handle, 4, 4, 2
+                ) as *mut u32;
+                // Low limb first (little-endian limb order).
+                *limb_ptr = magnitude as u32;
+                *limb_ptr.add(1) = (magnitude >> 32) as u32;
+                int_buf.data = limb_ptr;
+                int_buf.size_and_sign = if is_negative { -2 } else { 2 };
+                int_buf.capacity = 2;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Destroy a temporary Int's limb allocation.
+    unsafe fn destroy_temp_int(&self, int_buf: &rtdt::Int) {
+        unsafe {
+            if !int_buf.data.is_null() && int_buf.capacity > 0 {
+                datalove_rt::c::dtlv_rti_mem_free_raw_local(
+                    self.runtime.handle(),
+                    4, // align
+                    4, // elem_size
+                    int_buf.capacity,
+                    int_buf.data as *mut u8,
+                );
+            }
+        }
+    }
+
     fn execute_binop(
         &mut self,
         op: BinOp,
@@ -1013,7 +1115,73 @@ impl IrInterpreter {
         }
 
         unsafe {
-            let tag = (*lhs.tydesc).type_tag;
+            let lhs_tag = (*lhs.tydesc).type_tag;
+            let dest_tag = (*dest.tydesc).type_tag;
+
+            // Widening arithmetic: fixed-width int operands -> Int result.
+            // This is triggered when dest is Int but operands are fixed-width ints.
+            if dest_tag == rtdt::TyTag::Int && Self::is_fixed_width_int(lhs_tag) {
+                use datalove_rt::c::RtStatus;
+
+                // Allocate temporary Ints on the stack for widened operands.
+                let mut lhs_int = std::mem::MaybeUninit::<rtdt::Int>::uninit();
+                let mut rhs_int = std::mem::MaybeUninit::<rtdt::Int>::uninit();
+
+                self.widen_to_int(lhs, lhs_int.assume_init_mut())?;
+                self.widen_to_int(rhs, rhs_int.assume_init_mut())?;
+
+                let lhs_int = lhs_int.assume_init();
+                let rhs_int = rhs_int.assume_init();
+
+                let rt_handle = self.runtime.handle();
+                let int_tydesc = self.tydesc_table.get_or_create(&IrType::Int);
+
+                let lhs_ptr = &lhs_int as *const rtdt::Int as *mut u8;
+                let rhs_ptr = &rhs_int as *const rtdt::Int as *mut u8;
+
+                let status = match op {
+                    BinOp::Add => datalove_rt::c::dtlv_rti_int_add(
+                        rt_handle,
+                        lhs_ptr, int_tydesc,
+                        rhs_ptr, int_tydesc,
+                        dest.ptr, int_tydesc,
+                    ),
+                    BinOp::Sub => datalove_rt::c::dtlv_rti_int_sub(
+                        rt_handle,
+                        lhs_ptr, int_tydesc,
+                        rhs_ptr, int_tydesc,
+                        dest.ptr, int_tydesc,
+                    ),
+                    BinOp::Mul => datalove_rt::c::dtlv_rti_int_mul(
+                        rt_handle,
+                        lhs_ptr, int_tydesc,
+                        rhs_ptr, int_tydesc,
+                        dest.ptr, int_tydesc,
+                    ),
+                    _ => {
+                        // Clean up temporaries before returning error.
+                        self.destroy_temp_int(&lhs_int);
+                        self.destroy_temp_int(&rhs_int);
+                        return Err(InterpError::TypeMismatch(
+                            format!("widening arithmetic not supported for {:?}", op)
+                        ));
+                    }
+                };
+
+                // Clean up temporary Int allocations.
+                self.destroy_temp_int(&lhs_int);
+                self.destroy_temp_int(&rhs_int);
+
+                if status != RtStatus::Ok {
+                    return Err(InterpError::RuntimeError(
+                        format!("widening Int {:?} operation failed", op)
+                    ));
+                }
+                return Ok(());
+            }
+
+            // Same-type operations: fixed-width int operands with fixed-width int result.
+            let tag = lhs_tag;
 
             // Try all integer types.
             int_binop!(I8, i8, lhs, rhs, dest, op);
@@ -1025,7 +1193,7 @@ impl IrInterpreter {
             int_binop!(U32, u32, lhs, rhs, dest, op);
             int_binop!(U64, u64, lhs, rhs, dest, op);
 
-            // Bigint operations via runtime.
+            // Bigint operations via runtime (when operands are already Int).
             if tag == rtdt::TyTag::Int {
                 use datalove_rt::c::RtStatus;
 
