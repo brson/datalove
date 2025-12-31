@@ -283,8 +283,10 @@ impl IrType {
             IrType::Tuple(fields) => fields.iter().all(|f| f.is_copy()),
             IrType::Struct(fields) => fields.iter().all(|(_, f)| f.is_copy()),
 
-            // Option/Result are copy if inner is copy.
-            IrType::Option(inner) | IrType::Result(inner) => inner.is_copy(),
+            // Option is copy if inner is copy.
+            IrType::Option(inner) => inner.is_copy(),
+            // Result is never copy (Err variant contains non-copy Error).
+            IrType::Result(_) => false,
         }
     }
 }

@@ -7,7 +7,6 @@ use crate::Db;
 use super::super::{IrType, IrFunction, Operand, FuncId, Terminator};
 use super::super::drop_analysis::FunctionDropAnalysis;
 use super::context::LowerCtx;
-use super::scope::ScopeKind;
 use super::stmt::lower_statement_indexed;
 use super::LowerError;
 
@@ -61,9 +60,6 @@ pub fn lower_function_body<'db>(
     // Set return type from function signature.
     ctx.return_type = func.return_type(ctx.db).map(|ty| IrType::from_type_hint(ctx.db, &ty));
 
-    // Enter function scope for drop tracking (still used for ScopeTracker fallback).
-    ctx.scope_tracker.enter_scope(ScopeKind::Function);
-
     // Allocate ValueIds for parameters with correct types.
     // Record binding operands to match analysis order.
     let params: Vec<_> = func.params(ctx.db)
@@ -76,8 +72,6 @@ pub fn lower_function_body<'db>(
             ctx.bind_var(&param_name, operand);
             // Record binding operand for drop schedule.
             ctx.record_binding_operand(operand);
-            // Also record for ScopeTracker (fallback).
-            ctx.scope_tracker.record_binding(operand, param_type);
             id
         })
         .collect();
@@ -91,26 +85,11 @@ pub fn lower_function_body<'db>(
     ctx.current_stmt_idx = None;
 
     // If no explicit return, add implicit return unit.
-    // Emit drops before the implicit return.
-    if ctx.current_instructions.is_empty()
-        || !matches!(ctx.blocks.last().map(|b| &b.terminator), Some(Terminator::Return { .. }))
-    {
-        // Check if we already have a return as the last instruction.
-        let needs_return = ctx.blocks.is_empty()
-            || !matches!(ctx.blocks.last().unwrap().terminator, Terminator::Return { .. });
-        if needs_return {
-            // Emit drops before implicit return.
-            // When drop schedule is active, analysis handles all drops.
-            // Otherwise, fall back to ScopeTracker.
-            let drops = ctx.scope_tracker.exit_scope();
-            if !ctx.has_drop_schedule() {
-                ctx.emit_drops(drops);
-            }
-            ctx.finish_block(Terminator::Return { value: None });
-        }
-    } else {
-        // Scope already exited by explicit return, just pop it.
-        ctx.scope_tracker.scopes.pop();
+    // Drop analysis schedules drops at function scope exit.
+    let needs_return = ctx.blocks.is_empty()
+        || !matches!(ctx.blocks.last().unwrap().terminator, Terminator::Return { .. });
+    if needs_return {
+        ctx.finish_block(Terminator::Return { value: None });
     }
 
     // Restore saved context.

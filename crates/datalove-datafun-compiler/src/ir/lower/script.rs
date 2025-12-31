@@ -11,7 +11,6 @@ use super::super::{
     drop_analysis::{ScriptFunctionAnalyses, analyze_script_statements},
 };
 use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
-use super::scope::{is_copy_type, ScopeKind, ScopeTracker};
 use super::expr::lower_expression;
 use super::func::lower_function_body;
 use super::LowerError;
@@ -32,9 +31,6 @@ pub fn lower_script_unit<'db>(
 ) -> Result<IrScriptUnit, LowerError> {
     let expr_types = tycheck_result.expr_types(db);
     let mut ctx = LowerCtx::new_for_script(db, expr_types, script_ctx);
-
-    // Enter script unit scope. Top-level bindings are exported, not dropped.
-    ctx.scope_tracker.enter_scope(ScopeKind::ScriptUnit);
 
     let result = match kind {
         ScriptUnitKind::Fragment(stmts) => {
@@ -59,9 +55,6 @@ pub fn lower_script_unit<'db>(
             Some(value_id)
         }
     };
-
-    // Exit scope (no drops for ScriptUnit - bindings are exported).
-    ctx.scope_tracker.exit_scope();
 
     // Finish the final block with UnitEnd.
     ctx.finish_block(Terminator::UnitEnd {
@@ -102,18 +95,12 @@ pub fn lower_script_fragment_raw<'db>(
     // and let lowering handle any issues (or caller can check errors beforehand).
     ctx.set_drop_schedule(script_analysis.schedule, script_analysis.bindings);
 
-    // Enter script unit scope. Top-level bindings are exported, not dropped.
-    ctx.scope_tracker.enter_scope(ScopeKind::ScriptUnit);
-
     // Lower all statements with index tracking.
     for (idx, stmt) in stmts.iter().enumerate() {
         ctx.current_stmt_idx = Some(idx);
         lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses)?;
     }
     ctx.current_stmt_idx = None;
-
-    // Exit scope (no drops for ScriptUnit - bindings are exported).
-    ctx.scope_tracker.exit_scope();
 
     // Fragment units have no result value.
     ctx.finish_block(Terminator::UnitEnd { result: None });
@@ -177,14 +164,11 @@ fn lower_statement_for_script<'db>(
         Statement::Let(let_stmt) => {
             let name = let_stmt.name(ctx.db).text(ctx.db).to_string();
             let init_expr = let_stmt.value(ctx.db);
-            let value_type = ctx.expr_type(init_expr);
             let value_id = lower_expression(ctx, init_expr)?;
             let operand = Operand::Value(value_id);
             ctx.bind_var(&name, operand);
             // Record binding operand for drop schedule.
             ctx.record_binding_operand(operand);
-            // Also record for ScopeTracker (fallback).
-            ctx.scope_tracker.record_binding(operand, value_type);
             // Export the binding.
             ctx.exports.push((name, ExportBinding::Value(value_id)));
             Ok(())
@@ -193,7 +177,7 @@ fn lower_statement_for_script<'db>(
             let name = var_stmt.name(ctx.db).text(ctx.db).to_string();
             let init_expr = var_stmt.value(ctx.db);
             let slot_type = ctx.expr_type(init_expr);
-            let slot = ctx.fresh_slot(slot_type.clone());
+            let slot = ctx.fresh_slot(slot_type);
             let value_id = lower_expression(ctx, init_expr)?;
             ctx.emit(Instruction::SlotStore {
                 dest: SlotDest::Local(slot),
@@ -203,8 +187,6 @@ fn lower_statement_for_script<'db>(
             ctx.bind_var(&name, operand);
             // Record binding operand for drop schedule.
             ctx.record_binding_operand(operand);
-            // Also record for ScopeTracker (fallback).
-            ctx.scope_tracker.record_binding(operand, slot_type);
             // Export the binding.
             ctx.exports.push((name, ExportBinding::Slot(slot)));
             Ok(())
@@ -218,7 +200,7 @@ fn lower_statement_for_script<'db>(
                     Operand::Slot(slot) => {
                         // Drop old value before storing new one.
                         if let Some(slot_type) = ctx.slot_type(slot).cloned() {
-                            if !is_copy_type(&slot_type) {
+                            if !slot_type.is_copy() {
                                 ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
                             }
                         }
@@ -247,10 +229,7 @@ fn lower_statement_for_script<'db>(
             // In scripts, return means early return from the unit.
             let value = if let Some(expr) = ret_stmt.value(ctx.db) {
                 let value_id = lower_expression(ctx, expr)?;
-                let operand = Operand::Value(value_id);
-                // Mark return value as moved (not dropped).
-                ctx.scope_tracker.mark_moved(&operand);
-                operand
+                Operand::Value(value_id)
             } else {
                 // Return unit value for bare `ret`.
                 let unit_val = ctx.fresh_value(IrType::Unit);
@@ -261,13 +240,7 @@ fn lower_statement_for_script<'db>(
                 Operand::Value(unit_val)
             };
             // Emit drops for nested scopes (but not top-level bindings).
-            if ctx.has_drop_schedule() {
-                ctx.emit_before_return_drops(stmt_idx);
-            } else {
-                // Fall back to ScopeTracker - will stop at ScriptUnit scope.
-                let drops = ctx.scope_tracker.bindings_to_drop_for_return();
-                ctx.emit_drops(drops);
-            }
+            ctx.emit_before_return_drops(stmt_idx);
             ctx.finish_block(Terminator::UnitEarlyReturn { value });
             // Start a new unreachable block.
             let new_block = ctx.fresh_block();
@@ -293,14 +266,12 @@ fn lower_statement_for_script<'db>(
             let saved_next_value = ctx.next_value;
             let saved_next_slot = ctx.next_slot;
             let saved_variables = std::mem::take(&mut ctx.variables);
-            let saved_scope_tracker = std::mem::take(&mut ctx.scope_tracker);
 
             // Reset for function body.
             ctx.current_block = BlockId(0);
             ctx.next_block = 1;
             ctx.next_value = 0;
             ctx.next_slot = 0;
-            ctx.scope_tracker = ScopeTracker::new();
 
             // Lower the function body.
             let func = lower_function_body(ctx, func_id, *fun_stmt, analysis)?;
@@ -313,7 +284,6 @@ fn lower_statement_for_script<'db>(
             ctx.next_value = saved_next_value;
             ctx.next_slot = saved_next_slot;
             ctx.variables = saved_variables;
-            ctx.scope_tracker = saved_scope_tracker;
 
             // Add the function to the unit's functions.
             ctx.functions.push(func);
@@ -333,12 +303,7 @@ fn lower_statement_for_script<'db>(
                 .ok_or(LowerError::BreakOutsideLoop)?;
             let break_target = *break_target;
             // Emit drops for all scopes up to the loop.
-            if ctx.has_drop_schedule() {
-                ctx.emit_before_break_drops(stmt_idx);
-            } else {
-                let drops = ctx.scope_tracker.bindings_to_drop_for_break();
-                ctx.emit_drops(drops);
-            }
+            ctx.emit_before_break_drops(stmt_idx);
             ctx.finish_block(Terminator::Goto(break_target));
             // Start unreachable block for code after break.
             let dead_block = ctx.fresh_block();
@@ -350,12 +315,7 @@ fn lower_statement_for_script<'db>(
                 .ok_or(LowerError::ContinueOutsideLoop)?;
             let continue_target = *continue_target;
             // Emit drops for current loop iteration.
-            if ctx.has_drop_schedule() {
-                ctx.emit_before_continue_drops(stmt_idx);
-            } else {
-                let drops = ctx.scope_tracker.bindings_to_drop_for_continue();
-                ctx.emit_drops(drops);
-            }
+            ctx.emit_before_continue_drops(stmt_idx);
             ctx.finish_block(Terminator::Goto(continue_target));
             // Start unreachable block for code after continue.
             let dead_block = ctx.fresh_block();

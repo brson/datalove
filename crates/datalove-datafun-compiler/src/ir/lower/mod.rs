@@ -6,7 +6,6 @@
 //! ## Module Structure
 //!
 //! - `context`: Lowering context types (`LowerCtx`, `ScriptLowerContext`)
-//! - `scope`: Scope tracking for drop insertion
 //! - `literal`: Literal parsing utilities
 //! - `expr`: Expression lowering
 //! - `stmt`: Statement and control flow lowering
@@ -14,7 +13,6 @@
 //! - `script`: Script unit lowering
 
 mod context;
-mod scope;
 mod literal;
 mod expr;
 mod stmt;

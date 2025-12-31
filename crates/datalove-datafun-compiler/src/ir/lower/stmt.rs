@@ -9,7 +9,6 @@ use super::super::{
     IrType, Operand, Instruction, Terminator, SlotDest,
 };
 use super::context::LowerCtx;
-use super::scope::{is_copy_type, ScopeKind};
 use super::expr::lower_expression;
 use super::LowerError;
 
@@ -37,8 +36,6 @@ pub fn lower_statement_indexed<'db>(
             ctx.bind_var(&name, operand);
             // Record binding operand for drop schedule.
             ctx.record_binding_operand(operand);
-            // Also record for ScopeTracker (fallback).
-            ctx.scope_tracker.record_binding(operand, value_type);
             Ok(())
         }
         Statement::Var(var_stmt) => {
@@ -56,8 +53,6 @@ pub fn lower_statement_indexed<'db>(
             ctx.bind_var(&name, operand);
             // Record binding operand for drop schedule.
             ctx.record_binding_operand(operand);
-            // Also record for ScopeTracker (fallback).
-            ctx.scope_tracker.record_binding(operand, slot_type);
             Ok(())
         }
         Statement::Set(set_stmt) => {
@@ -66,7 +61,7 @@ pub fn lower_statement_indexed<'db>(
             if let Some(Operand::Slot(slot)) = ctx.lookup_var(&name) {
                 // Drop old value before storing new one.
                 if let Some(slot_type) = ctx.slot_type(slot).cloned() {
-                    if !is_copy_type(&slot_type) {
+                    if !slot_type.is_copy() {
                         ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
                     }
                 }
@@ -82,21 +77,12 @@ pub fn lower_statement_indexed<'db>(
         Statement::Ret(ret_stmt) => {
             let value = if let Some(expr) = ret_stmt.value(ctx.db) {
                 let value_id = lower_expression(ctx, expr)?;
-                let operand = Operand::Value(value_id);
-                // Mark return value as moved (not dropped).
-                ctx.scope_tracker.mark_moved(&operand);
-                Some(operand)
+                Some(Operand::Value(value_id))
             } else {
                 None
             };
             // Emit drops for all values in all scopes before return.
-            // When drop schedule is active, analysis handles drops before return.
-            if ctx.has_drop_schedule() {
-                ctx.emit_before_return_drops(stmt_idx);
-            } else {
-                let drops = ctx.scope_tracker.bindings_to_drop_for_return();
-                ctx.emit_drops(drops);
-            }
+            ctx.emit_before_return_drops(stmt_idx);
             ctx.finish_block(Terminator::Return { value });
             // Start a new unreachable block (code after return).
             let new_block = ctx.fresh_block();
@@ -114,12 +100,7 @@ pub fn lower_statement_indexed<'db>(
                 .ok_or(LowerError::BreakOutsideLoop)?;
             let break_target = *break_target;
             // Emit drops for all scopes up to the loop.
-            if ctx.has_drop_schedule() {
-                ctx.emit_before_break_drops(stmt_idx);
-            } else {
-                let drops = ctx.scope_tracker.bindings_to_drop_for_break();
-                ctx.emit_drops(drops);
-            }
+            ctx.emit_before_break_drops(stmt_idx);
             ctx.finish_block(Terminator::Goto(break_target));
             // Start unreachable block for code after break.
             let dead_block = ctx.fresh_block();
@@ -131,12 +112,7 @@ pub fn lower_statement_indexed<'db>(
                 .ok_or(LowerError::ContinueOutsideLoop)?;
             let continue_target = *continue_target;
             // Emit drops for current loop iteration.
-            if ctx.has_drop_schedule() {
-                ctx.emit_before_continue_drops(stmt_idx);
-            } else {
-                let drops = ctx.scope_tracker.bindings_to_drop_for_continue();
-                ctx.emit_drops(drops);
-            }
+            ctx.emit_before_continue_drops(stmt_idx);
             ctx.finish_block(Terminator::Goto(continue_target));
             // Start unreachable block for code after continue.
             let dead_block = ctx.fresh_block();
@@ -234,39 +210,23 @@ fn lower_if_bool<'db>(
 
     // Lower then branch.
     ctx.start_block(then_block);
-    ctx.scope_tracker.enter_scope(ScopeKind::IfThen);
     let then_body = if_stmt.then_body(ctx.db);
     for (idx, stmt) in then_body.iter().enumerate() {
         lower_statement_indexed(ctx, stmt, idx)?;
     }
-    // Exit scope and emit drops before Goto.
-    // Use scheduled drops if available, otherwise fall back to ScopeTracker.
-    if ctx.has_drop_schedule() {
-        ctx.emit_then_branch_drops(stmt_idx);
-    }
-    let drops = ctx.scope_tracker.exit_scope();
-    if !ctx.has_drop_schedule() {
-        ctx.emit_drops(drops);
-    }
+    // Emit drops before Goto.
+    ctx.emit_then_branch_drops(stmt_idx);
     ctx.finish_block(Terminator::Goto(merge_block));
 
     // Lower else branch.
     ctx.start_block(else_block);
-    ctx.scope_tracker.enter_scope(ScopeKind::IfElse);
     if let Some(else_body) = if_stmt.else_body(ctx.db) {
         for (idx, stmt) in else_body.iter().enumerate() {
             lower_statement_indexed(ctx, stmt, idx)?;
         }
     }
-    // Exit scope and emit drops before Goto.
-    // Use scheduled drops if available.
-    if ctx.has_drop_schedule() {
-        ctx.emit_else_branch_drops(stmt_idx);
-    }
-    let drops = ctx.scope_tracker.exit_scope();
-    if !ctx.has_drop_schedule() {
-        ctx.emit_drops(drops);
-    }
+    // Emit drops before Goto.
+    ctx.emit_else_branch_drops(stmt_idx);
     ctx.finish_block(Terminator::Goto(merge_block));
 
     // Continue in merge block.
@@ -312,16 +272,13 @@ fn lower_if_option<'db>(
 
     // === Then branch: Some case ===
     ctx.start_block(then_block);
-    ctx.scope_tracker.enter_scope(ScopeKind::IfThen);
 
     // Bind the inner value to the binding name.
     let binding_str = binding_name.text(ctx.db);
     let old_binding = ctx.lookup_var(binding_str);
     ctx.bind_var(binding_str, Operand::Value(inner_dest));
 
-    // Track the binding for drops at scope exit.
-    ctx.scope_tracker.record_binding(Operand::Value(inner_dest), inner_type.clone());
-    // Register with drop schedule system.
+    // Register binding with drop schedule system.
     ctx.record_binding_operand(Operand::Value(inner_dest));
 
     for stmt in if_stmt.then_body(ctx.db) {
@@ -336,18 +293,11 @@ fn lower_if_option<'db>(
     }
 
     // Emit drops before exiting scope.
-    if ctx.has_drop_schedule() {
-        ctx.emit_then_branch_drops(stmt_idx);
-    }
-    let drops = ctx.scope_tracker.exit_scope();
-    if !ctx.has_drop_schedule() {
-        ctx.emit_drops(drops);
-    }
+    ctx.emit_then_branch_drops(stmt_idx);
     ctx.finish_block(Terminator::Goto(merge_block));
 
     // === Else branch: None case ===
     ctx.start_block(else_block);
-    ctx.scope_tracker.enter_scope(ScopeKind::IfElse);
     // No binding in else branch for Option.
     // inner_dest is NOT valid here - do NOT access or drop it.
 
@@ -358,13 +308,7 @@ fn lower_if_option<'db>(
     }
 
     // Emit drops before exiting scope.
-    if ctx.has_drop_schedule() {
-        ctx.emit_else_branch_drops(stmt_idx);
-    }
-    let drops = ctx.scope_tracker.exit_scope();
-    if !ctx.has_drop_schedule() {
-        ctx.emit_drops(drops);
-    }
+    ctx.emit_else_branch_drops(stmt_idx);
     ctx.finish_block(Terminator::Goto(merge_block));
 
     ctx.start_block(merge_block);
@@ -413,16 +357,13 @@ fn lower_if_result<'db>(
 
     // === Then branch: Ok case ===
     ctx.start_block(then_block);
-    ctx.scope_tracker.enter_scope(ScopeKind::IfThen);
 
     // Bind ok_dest to the ok_binding name.
     let ok_binding_str = ok_binding.text(ctx.db);
     let old_ok_binding = ctx.lookup_var(ok_binding_str);
     ctx.bind_var(ok_binding_str, Operand::Value(ok_dest));
 
-    // Track for drops.
-    ctx.scope_tracker.record_binding(Operand::Value(ok_dest), ok_type.clone());
-    // Register with drop schedule system.
+    // Register binding with drop schedule system.
     ctx.record_binding_operand(Operand::Value(ok_dest));
 
     for stmt in if_stmt.then_body(ctx.db) {
@@ -437,27 +378,18 @@ fn lower_if_result<'db>(
     }
 
     // Emit drops before exiting scope.
-    if ctx.has_drop_schedule() {
-        ctx.emit_then_branch_drops(stmt_idx);
-    }
-    let drops = ctx.scope_tracker.exit_scope();
-    if !ctx.has_drop_schedule() {
-        ctx.emit_drops(drops);
-    }
+    ctx.emit_then_branch_drops(stmt_idx);
     ctx.finish_block(Terminator::Goto(merge_block));
 
     // === Else branch: Error case ===
     ctx.start_block(else_block);
-    ctx.scope_tracker.enter_scope(ScopeKind::IfElse);
 
     // Bind err_dest to the err_binding name.
     let err_binding_str = err_binding.text(ctx.db);
     let old_err_binding = ctx.lookup_var(err_binding_str);
     ctx.bind_var(err_binding_str, Operand::Value(err_dest));
 
-    // Track for drops (Error type is always non-copy).
-    ctx.scope_tracker.record_binding(Operand::Value(err_dest), IrType::Error);
-    // Register with drop schedule system.
+    // Register binding with drop schedule system.
     ctx.record_binding_operand(Operand::Value(err_dest));
 
     if let Some(else_body) = if_stmt.else_body(ctx.db) {
@@ -474,13 +406,7 @@ fn lower_if_result<'db>(
     }
 
     // Emit drops before exiting scope.
-    if ctx.has_drop_schedule() {
-        ctx.emit_else_branch_drops(stmt_idx);
-    }
-    let drops = ctx.scope_tracker.exit_scope();
-    if !ctx.has_drop_schedule() {
-        ctx.emit_drops(drops);
-    }
+    ctx.emit_else_branch_drops(stmt_idx);
     ctx.finish_block(Terminator::Goto(merge_block));
 
     ctx.start_block(merge_block);
@@ -502,23 +428,14 @@ pub fn lower_loop<'db>(
     // Push loop context for break/continue.
     ctx.loop_stack.push((loop_header, loop_exit));
 
-    // Enter loop scope for drop tracking.
-    ctx.scope_tracker.enter_scope(ScopeKind::Loop);
-
     // Lower loop body.
     ctx.start_block(loop_header);
     for stmt in loop_stmt.body(ctx.db) {
         lower_statement(ctx, stmt)?;
     }
 
-    // Exit loop scope and emit drops before looping back.
-    if ctx.has_drop_schedule() {
-        ctx.emit_loop_body_end_drops(stmt_idx);
-    }
-    let drops = ctx.scope_tracker.exit_scope();
-    if !ctx.has_drop_schedule() {
-        ctx.emit_drops(drops);
-    }
+    // Emit drops before looping back.
+    ctx.emit_loop_body_end_drops(stmt_idx);
 
     // Loop back to header.
     ctx.finish_block(Terminator::Goto(loop_header));

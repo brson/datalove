@@ -11,7 +11,6 @@ use super::super::{
     IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, BlockId, FuncId,
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding,
 };
-use super::scope::{is_copy_type, ScopeTracker};
 use super::super::drop_analysis::{BindingId, DropSchedule, BindingInfo};
 
 /// Context for lowering script units.
@@ -124,8 +123,6 @@ pub struct LowerCtx<'db> {
     pub(super) slot_types: Vec<IrType>,
     /// Loop context stack: (continue_target, break_target) for each nested loop.
     pub(super) loop_stack: Vec<(BlockId, BlockId)>,
-    /// Scope tracker for emitting drops at scope exits.
-    pub(super) scope_tracker: ScopeTracker,
     /// Return type for current function/script (for try operators).
     pub(super) return_type: Option<IrType>,
     /// Whether we're in a script unit (vs function).
@@ -164,7 +161,6 @@ impl<'db> LowerCtx<'db> {
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
-            scope_tracker: ScopeTracker::new(),
             return_type: None,
             is_script_unit: false,
             expr_temps: Vec::new(),
@@ -205,7 +201,6 @@ impl<'db> LowerCtx<'db> {
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
-            scope_tracker: ScopeTracker::new(),
             return_type: None,
             is_script_unit: false,
             expr_temps: Vec::new(),
@@ -284,12 +279,11 @@ impl<'db> LowerCtx<'db> {
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
-            scope_tracker: ScopeTracker::new(),
             // Script units have Result<()> return type for ! operator.
             return_type: Some(IrType::Result(Box::new(IrType::Unit))),
             is_script_unit: true,
             expr_temps: Vec::new(),
-            // Script units don't use drop analysis (runtime tracking instead).
+            // Drop schedule is set by caller after analyzing script statements.
             drop_schedule: None,
             binding_info: Vec::new(),
             binding_to_operand: HashMap::new(),
@@ -374,7 +368,7 @@ impl<'db> LowerCtx<'db> {
 
     /// Record an expression temporary that needs dropping after the operation.
     pub fn record_expr_temp(&mut self, value: ValueId, ty: IrType) {
-        if !is_copy_type(&ty) {
+        if !ty.is_copy() {
             self.expr_temps.push((value, ty));
         }
     }
