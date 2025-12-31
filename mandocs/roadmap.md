@@ -14,6 +14,7 @@ With core->runtime calls.
 - ir and interp3
   - add more liveness errors to drop_analysis,
     move out of lowering.
+  - use drop_analysis for scripts
 - script/function unification semantics
 - human docs
 - improve runtime implementation unsafety
