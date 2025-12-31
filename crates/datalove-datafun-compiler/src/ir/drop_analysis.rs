@@ -696,17 +696,19 @@ fn analyze_statements<'db>(
 
 fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLet<'db>, stmt_idx: usize) {
     let expr = stmt.value(ctx.db);
+    let may_early_return = ctx.expr_may_early_return(expr);
 
-    // Check for early return operators.
-    if ctx.expr_may_early_return(expr) {
+    // Analyze moves in the expression. The expression result is consumed by the binding.
+    ctx.analyze_expr_moves(expr, true);
+
+    // Check for early return operators AFTER analyzing moves.
+    // This ensures bindings consumed by the expression itself aren't dropped.
+    if may_early_return {
         let drops = ctx.live_bindings_for_return();
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
         }
     }
-
-    // Analyze moves in the expression. The expression result is consumed by the binding.
-    ctx.analyze_expr_moves(expr, true);
 
     // Create binding for the let.
     let name = stmt.name(ctx.db).text(ctx.db).to_string();
@@ -716,17 +718,19 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLet<'db>, stmt_idx: us
 
 fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtVar<'db>, stmt_idx: usize) {
     let expr = stmt.value(ctx.db);
+    let may_early_return = ctx.expr_may_early_return(expr);
 
-    // Check for early return operators.
-    if ctx.expr_may_early_return(expr) {
+    // Analyze moves in the expression. The expression result is consumed by the binding.
+    ctx.analyze_expr_moves(expr, true);
+
+    // Check for early return operators AFTER analyzing moves.
+    // This ensures bindings consumed by the expression itself aren't dropped.
+    if may_early_return {
         let drops = ctx.live_bindings_for_return();
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
         }
     }
-
-    // Analyze moves in the expression. The expression result is consumed by the binding.
-    ctx.analyze_expr_moves(expr, true);
 
     // Create binding for the var (as a slot).
     let name = stmt.name(ctx.db).text(ctx.db).to_string();
@@ -736,17 +740,19 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtVar<'db>, stmt_idx: us
 
 fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtSet<'db>, stmt_idx: usize) {
     let expr = stmt.value(ctx.db);
+    let may_early_return = ctx.expr_may_early_return(expr);
 
-    // Check for early return operators.
-    if ctx.expr_may_early_return(expr) {
+    // Analyze moves in the expression. The value is moved into the slot.
+    ctx.analyze_expr_moves(expr, true);
+
+    // Check for early return operators AFTER analyzing moves.
+    // This ensures bindings consumed by the expression itself aren't dropped.
+    if may_early_return {
         let drops = ctx.live_bindings_for_return();
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
         }
     }
-
-    // Analyze moves in the expression. The value is moved into the slot.
-    ctx.analyze_expr_moves(expr, true);
 
     // Set doesn't create a new binding, but the slot is now live again.
     let name = stmt.name(ctx.db).text(ctx.db);
@@ -756,9 +762,22 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtSet<'db>, stmt_idx: us
 }
 
 fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtRet<'db>, stmt_idx: usize) {
+    let may_early_return = stmt.value(ctx.db)
+        .map(|expr| ctx.expr_may_early_return(expr))
+        .unwrap_or(false);
+
     // Analyze moves in return value if any. The return value is consumed.
     if let Some(expr) = stmt.value(ctx.db) {
         ctx.analyze_expr_moves(expr, true);
+    }
+
+    // Check for early return operators AFTER analyzing moves.
+    // This ensures bindings consumed by the expression itself aren't dropped.
+    if may_early_return {
+        let drops = ctx.live_bindings_for_return();
+        if !drops.is_empty() {
+            ctx.schedule.before_try_return.insert(stmt_idx, drops);
+        }
     }
 
     // All live bindings need dropping before return.

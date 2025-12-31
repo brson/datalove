@@ -445,6 +445,7 @@ fn lower_optional_binop<'db>(
         .expect("optional arithmetic requires return type");
     let none_value = ctx.fresh_value(return_type);
     ctx.emit(Instruction::WrapNone { dest: none_value });
+    ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
         ctx.finish_block(Terminator::UnitEarlyReturn {
             value: Operand::Value(none_value),
@@ -520,7 +521,7 @@ fn lower_checked_result_binop<'db>(
         dest: wrapped_err,
         inner: Operand::Value(err_value),
     });
-
+    ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
         ctx.finish_block(Terminator::UnitEarlyReturn {
             value: Operand::Value(wrapped_err),
@@ -575,6 +576,7 @@ fn lower_optional_unaryop<'db>(
         .expect("optional arithmetic requires return type");
     let none_value = ctx.fresh_value(return_type);
     ctx.emit(Instruction::WrapNone { dest: none_value });
+    ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
         ctx.finish_block(Terminator::UnitEarlyReturn {
             value: Operand::Value(none_value),
@@ -648,7 +650,7 @@ fn lower_checked_result_unaryop<'db>(
         dest: wrapped_err,
         inner: Operand::Value(err_value),
     });
-
+    ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
         ctx.finish_block(Terminator::UnitEarlyReturn {
             value: Operand::Value(wrapped_err),
@@ -697,6 +699,7 @@ fn lower_try_option<'db>(
         .expect("try operator requires return type");
     let none_value = ctx.fresh_value(return_type);
     ctx.emit(Instruction::WrapNone { dest: none_value });
+    ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
         ctx.finish_block(Terminator::UnitEarlyReturn {
             value: Operand::Value(none_value),
@@ -750,6 +753,7 @@ fn lower_try_result<'db>(
         dest: wrapped_err,
         inner: Operand::Value(err_dest),
     });
+    ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
         ctx.finish_block(Terminator::UnitEarlyReturn {
             value: Operand::Value(wrapped_err),

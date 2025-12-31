@@ -426,6 +426,18 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// Emit drops scheduled before a TryReturn (checked/optional operators).
+    ///
+    /// Uses current_stmt_idx since TryReturn happens within expression lowering.
+    pub fn emit_before_try_return_drops(&mut self) {
+        if let Some(stmt_idx) = self.current_stmt_idx {
+            let operands = self.get_scheduled_drops_try(stmt_idx);
+            for operand in operands {
+                self.emit(Instruction::Drop { operand });
+            }
+        }
+    }
+
     /// Get operands to drop for then-branch exit.
     fn get_scheduled_drops_then(&self, stmt_idx: usize) -> Vec<Operand> {
         let mut result = Vec::new();
@@ -456,6 +468,19 @@ impl<'db> LowerCtx<'db> {
     fn get_scheduled_drops_return(&self, stmt_idx: usize) -> Vec<Operand> {
         let mut result = Vec::new();
         if let Some(binding_ids) = self.drop_schedule.before_return.get(&stmt_idx) {
+            for &id in binding_ids {
+                if let Some(&operand) = self.binding_to_operand.get(&id) {
+                    result.push(operand);
+                }
+            }
+        }
+        result
+    }
+
+    /// Get operands to drop before TryReturn.
+    fn get_scheduled_drops_try(&self, stmt_idx: usize) -> Vec<Operand> {
+        let mut result = Vec::new();
+        if let Some(binding_ids) = self.drop_schedule.before_try_return.get(&stmt_idx) {
             for &id in binding_ids {
                 if let Some(&operand) = self.binding_to_operand.get(&id) {
                     result.push(operand);

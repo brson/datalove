@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Test that move types are dropped before TryReturn with +! (result operator).
+// When +! overflows, the string `s` should be dropped before early return.
+fun test_add_result(a: i8, b: i8): !i8
+    let s: string = "should be dropped on overflow"
+    ret ok (a +! b)
+end fun
+
+let output = test_add_result(@127, @1)
