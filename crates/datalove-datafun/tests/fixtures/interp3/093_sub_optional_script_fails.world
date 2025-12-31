@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// -? in script should fail - scripts return Result, not Option
+fun get_a(): u32
+    ret @10
+end fun
+
+fun get_b(): u32
+    ret @3
+end fun
+
+let x: u32 = get_a() -? get_b()

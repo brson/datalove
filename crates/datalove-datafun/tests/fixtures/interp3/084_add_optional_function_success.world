@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test +? in a function - no overflow case
+fun test_add(a: u32, b: u32): ?u32
+    ret some (a +? b)
+end fun
+
+let output = test_add(@5, @3)

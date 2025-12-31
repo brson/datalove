@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test -? in a function - underflow case
+fun test_sub(a: u32, b: u32): ?u32
+    ret some (a -? b)
+end fun
+
+let output = test_sub(@5, @10)

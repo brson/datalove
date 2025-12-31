@@ -1316,8 +1316,15 @@ impl IrInterpreter {
                         BinOp::Add => a.overflowing_add(b),
                         BinOp::Sub => a.overflowing_sub(b),
                         BinOp::Mul => a.overflowing_mul(b),
+                        BinOp::Div => {
+                            // checked_div returns None on div-by-zero or overflow.
+                            match a.checked_div(b) {
+                                Some(r) => (r, false),
+                                None => (0 as $ty, true),
+                            }
+                        }
                         _ => return Err(InterpError::TypeMismatch(
-                            format!("checked binop only supports Add/Sub/Mul, got {:?}", $op)
+                            format!("checked binop only supports Add/Sub/Mul/Div, got {:?}", $op)
                         )),
                     };
                     *($dest.ptr as *mut $ty) = result;

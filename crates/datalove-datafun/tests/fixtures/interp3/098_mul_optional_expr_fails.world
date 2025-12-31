@@ -1,0 +1,19 @@
+----------
+scriptunit-fragment
+----------
+
+// Helper function to get typed u32 values.
+fun get_a(): u32
+    ret @10
+end fun
+
+fun get_b(): u32
+    ret @3
+end fun
+
+----------
+scriptunit-expr
+----------
+
+// *? in script expr should fail - script exprs return Result, not Option
+get_a() *? get_b()

@@ -504,17 +504,20 @@ TODO:
   - `IrType::is_copy()` determines copy vs non-copy types
   - `copy_value` asserts on copy types only, `move_value` for ownership transfer
 
+- **Optional Arithmetic (+?, -?, *?, /?)** - DONE. Early-return semantics on overflow/div-zero
+  - Uses `BinOpChecked` to get `(value, overflow_flag)`
+  - Branches on overflow flag: continue or early return with None
+  - Supports all fixed-width integer types (i8-i64, u8-u64)
+  - Division handles both div-by-zero and signed overflow (MIN / -1)
+  - Tests 027-034 (module_interp3)
+
 **Missing Features (MEDIUM priority):**
 
-3. **Optional Arithmetic (+?, -?, *?, /?)**
-   - Old: Returns `Option<T>`, None on overflow/div-zero
-   - IR: `BinOpChecked` returns `(value, overflow_flag)` - needs Option wrapping
-
-4. **Checked Arithmetic Result (+!, -!, *!, /!)**
+3. **Checked Arithmetic Result (+!, -!, *!, /!)**
    - Old: Returns `Result<T, Error>`, Err on overflow/div-zero
-   - IR: `BinOpChecked` needs Result wrapping
+   - IR: `BinOpChecked` needs Result wrapping (similar to Optional)
 
-5. **Widening Arithmetic**
+4. **Widening Arithmetic**
    - Bare `+`, `-`, `*` on fixed ints widen both operands to Int (bigint)
    - Example: `a + @3` where a is u32 and @3 is Int results in Int type
    - Typechecker handles widening; IR receives correct types
@@ -522,21 +525,21 @@ TODO:
 
 **Missing Features (LOW priority):**
 
-6. **Unary Checked/Optional (-?, -!)**
+5. **Unary Checked/Optional (-?, -!)**
    - Old: `NegOptional`, `NegResult` for checked negation
    - IR: `UnaryOp` only has `Neg`, `BitNot`, `Not`
 
-7. **Data Type (@data)**
+6. **Data Type (@data)**
    - Old: `data(value)` coercion wrapper
    - IR: `IrType::Data` exists, no creation instruction
 
-8. **Hex Literals** - May already parse to int values
+7. **Hex Literals** - May already parse to int values
 
 **Test Coverage:**
 
 - Old interpreter (module_interp_tests): 219 tests
-- IR interpreter (interp3_tests): 71 tests
-- IR interpreter (module_interp3_tests): 26 tests
+- IR interpreter (interp3_tests): 87 tests
+- IR interpreter (module_interp3_tests): 34 tests
 - All tests pass with leak checking enabled
 
 Test matrix (each feature should be tested in):

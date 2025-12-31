@@ -1230,6 +1230,62 @@ fn lower_loop<'db>(
     Ok(())
 }
 
+/// Lower an optional binary operation with early return on overflow.
+///
+/// For operators like `+?`, `-?`, `*?`, `/?`:
+/// - Performs checked arithmetic
+/// - On success: returns the result value
+/// - On overflow/error: early returns with None
+fn lower_optional_binop<'db>(
+    ctx: &mut LowerCtx<'db>,
+    op: BinOp,
+    lhs: Operand,
+    rhs: Operand,
+    dest: ValueId,
+) -> Result<ValueId, LowerError> {
+    // Emit checked operation.
+    let overflow = ctx.fresh_value(IrType::Bool);
+    ctx.emit(Instruction::BinOpChecked {
+        dest,
+        overflow,
+        op,
+        lhs,
+        rhs,
+    });
+    ctx.emit_expr_temp_drops();
+
+    // Create early return and continue blocks.
+    let early_return_block = ctx.fresh_block();
+    let continue_block = ctx.fresh_block();
+
+    // Branch: if overflow, early return; else continue.
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(overflow),
+        then_block: early_return_block,
+        else_block: continue_block,
+    });
+
+    // Early return block: wrap None and return.
+    ctx.start_block(early_return_block);
+    let return_type = ctx.return_type.clone()
+        .expect("optional arithmetic requires return type");
+    let none_value = ctx.fresh_value(return_type);
+    ctx.emit(Instruction::WrapNone { dest: none_value });
+    if ctx.is_script_unit {
+        ctx.finish_block(Terminator::UnitEarlyReturn {
+            value: Operand::Value(none_value),
+        });
+    } else {
+        ctx.finish_block(Terminator::TryReturn {
+            value: Some(Operand::Value(none_value)),
+        });
+    }
+
+    // Continue block: dest already has the computed value.
+    ctx.start_block(continue_block);
+    Ok(dest)
+}
+
 /// Lower an operand for borrowing contexts (binop, unaryop).
 ///
 /// Returns an Operand directly:
@@ -1361,8 +1417,8 @@ fn lower_expression<'db>(
                 ast::BinOp::Le => BinOp::Le,
                 ast::BinOp::Gt => BinOp::Gt,
                 ast::BinOp::Ge => BinOp::Ge,
-                // Checked/optional ops - emit as checked for now.
-                ast::BinOp::AddChecked | ast::BinOp::AddOptional => {
+                // Checked ops - emit BinOpChecked, ignore overflow flag.
+                ast::BinOp::AddChecked => {
                     let overflow = ctx.fresh_value(IrType::Bool);
                     ctx.emit(Instruction::BinOpChecked {
                         dest,
@@ -1374,7 +1430,7 @@ fn lower_expression<'db>(
                     ctx.emit_expr_temp_drops();
                     return Ok(dest);
                 }
-                ast::BinOp::SubChecked | ast::BinOp::SubOptional => {
+                ast::BinOp::SubChecked => {
                     let overflow = ctx.fresh_value(IrType::Bool);
                     ctx.emit(Instruction::BinOpChecked {
                         dest,
@@ -1386,7 +1442,7 @@ fn lower_expression<'db>(
                     ctx.emit_expr_temp_drops();
                     return Ok(dest);
                 }
-                ast::BinOp::MulChecked | ast::BinOp::MulOptional => {
+                ast::BinOp::MulChecked => {
                     let overflow = ctx.fresh_value(IrType::Bool);
                     ctx.emit(Instruction::BinOpChecked {
                         dest,
@@ -1398,7 +1454,7 @@ fn lower_expression<'db>(
                     ctx.emit_expr_temp_drops();
                     return Ok(dest);
                 }
-                ast::BinOp::DivChecked | ast::BinOp::DivOptional => {
+                ast::BinOp::DivChecked => {
                     let overflow = ctx.fresh_value(IrType::Bool);
                     ctx.emit(Instruction::BinOpChecked {
                         dest,
@@ -1409,6 +1465,19 @@ fn lower_expression<'db>(
                     });
                     ctx.emit_expr_temp_drops();
                     return Ok(dest);
+                }
+                // Optional ops - emit BinOpChecked with early return on overflow.
+                ast::BinOp::AddOptional => {
+                    return lower_optional_binop(ctx, BinOp::Add, lhs, rhs, dest);
+                }
+                ast::BinOp::SubOptional => {
+                    return lower_optional_binop(ctx, BinOp::Sub, lhs, rhs, dest);
+                }
+                ast::BinOp::MulOptional => {
+                    return lower_optional_binop(ctx, BinOp::Mul, lhs, rhs, dest);
+                }
+                ast::BinOp::DivOptional => {
+                    return lower_optional_binop(ctx, BinOp::Div, lhs, rhs, dest);
                 }
             };
 

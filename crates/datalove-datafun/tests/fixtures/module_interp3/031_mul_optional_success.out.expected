@@ -1,0 +1,10 @@
+ModulesIr3Analysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    lowering: LoweringResult(
+        status: "Success",
+        ir: "fn test_mul(v0, v1):\nblock0:\n    v2, v3 = mul.checked v0, v1\n    branch v3, block1, block2\nblock1:\n    v4 = none\n    try_return v4\nblock2:\n    v5 = some v2\n    return v5\n\nfn main():\nblock0:\n    v0 = const 100u32\n    v1 = const 200u32\n    v2 = call module.test_mul(v0, v1)\n    return v2\n",
+    ),
+    output: "some @20000",
+)

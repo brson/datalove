@@ -1,0 +1,16 @@
+Ir3Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 4294967295u32\n    v1 = const 1u32\n    v2 = call f0(v0, v1)\n    unit_end\n\nfn test_add(v0, v1):\nblock0:\n    v2, v3 = add.checked v0, v1\n    branch v3, block1, block2\nblock1:\n    v4 = none\n    try_return v4\nblock2:\n    v5 = some v2\n    return v5\nexports:\n    test_add = f0\n    output = v2\n",
+            ),
+            output: "(fragment executed)",
+        ),
+    ],
+)
