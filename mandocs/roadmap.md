@@ -14,6 +14,7 @@ With core->runtime calls.
 - ir and interp3
   - add more liveness errors to drop_analysis,
   - use drop_analysis for scripts
+- run miri on new interpreter
 - script/function unification semantics
 - human docs
 - improve runtime implementation unsafety
