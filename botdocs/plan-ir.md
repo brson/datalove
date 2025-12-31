@@ -370,8 +370,12 @@ Implemented:
   - **FIXED**: `expr_temps` in LowerCtx tracks non-copy values created during operand lowering
   - After BinOp/UnaryOp, `emit_expr_temp_drops()` emits Drop for all recorded temps
   - Prevents leaks in loops where literals are created each iteration
-- Drop tracking TODO:
-  - **Branch convergence** - values moved in one if branch but not other should be dropped in non-moving branch (potential memory leak)
+- **Pre-lowering drop analysis** - DONE (see plan-ir-drop2.md)
+  - `ir/drop_analysis.rs` runs before lowering to compute precise drop points
+  - Detects use-after-move errors
+  - Handles branch convergence: values moved in one branch but not other dropped correctly
+  - Test 120_conditional_move_convergence verifies fix
+  - Schedule keyed by statement index, emitted during lowering
 
 ### Phase 4: Integration - MOSTLY COMPLETE
 
@@ -462,8 +466,11 @@ If-binding tests (066-083 in interp3, 010-016 in module_interp3):
 - `082_if_option_binding_shadows.world` - if-binding shadows outer variable
 - `083_nested_if_option.world` - nested if-bindings
 
+Drop analysis tests (120):
+- `120_conditional_move_convergence.world` - branch convergence drop handling
+
 **Test counts:**
-- interp3_tests: 103 tests
+- interp3_tests: 108 tests
 - module_interp3_tests: 42 tests
 - module_interp_tests: 219 tests
 - All tests pass with `DATALOVE_LEAK_CHECK=panic-backtrace`
@@ -544,7 +551,7 @@ TODO:
 **Test Coverage:**
 
 - Old interpreter (module_interp_tests): 219 tests
-- IR interpreter (interp3_tests): 107 tests
+- IR interpreter (interp3_tests): 108 tests
 - IR interpreter (module_interp3_tests): 42 tests
 - All tests pass with leak checking enabled
 
@@ -567,6 +574,7 @@ Test matrix (each feature should be tested in):
 - `crates/datalove-datafun-compiler/src/ir/lower.rs` - AST->IR lowering
 - `crates/datalove-datafun-compiler/src/ir/display.rs` - IR pretty-printing
 - `crates/datalove-datafun-compiler/src/ir/interp.rs` - IR interpreter
+- `crates/datalove-datafun-compiler/src/ir/drop_analysis.rs` - Pre-lowering drop analysis (~845 lines)
 - `crates/datalove-datafun/tests/ir_lower_tests.rs` - function lowering tests
 - `crates/datalove-datafun/tests/ir_lower_script_tests.rs` - script unit tests
 - `crates/datalove-datafun/tests/module_interp3_tests.rs` - module-only IR3 tests
@@ -577,6 +585,7 @@ Test matrix (each feature should be tested in):
 - `crates/datalove-datafun/tests/fixtures/ir_lower_script/` - script test fixtures
 - `crates/datalove-datafun/tests/fixtures/module_interp3/` - module-only worldfiles
 - `crates/datalove-datafun/tests/fixtures/interp3/` - full worldfiles (incl. cross-unit tests)
+- `crates/datalove-datafun/tests/fixtures/interp3/120_conditional_move_convergence.world` - branch convergence drop test
 
 **Modified:**
 - `crates/datalove-datafun-compiler/src/lib.rs` - add `pub mod ir`
@@ -584,6 +593,10 @@ Test matrix (each feature should be tested in):
 - `crates/datalove-datafun-pkg/src/package_load_worldfile.rs` - new section types
 - `crates/datalove-datafun/src/worldfile_analysis.rs` - handle new sections
 - `crates/datalove-datafun/Cargo.toml` - test configurations
+- `crates/datalove-datafun-compiler/src/ir/lower/context.rs` - drop_schedule fields, emit helpers (for drop analysis)
+- `crates/datalove-datafun-compiler/src/ir/lower/func.rs` - runs drop analysis, sets schedule
+- `crates/datalove-datafun-compiler/src/ir/lower/stmt.rs` - uses scheduled drops
+- `crates/datalove-datafun-compiler/src/ir/lower/script.rs` - fixed function call args
 
 ## Benefits
 
