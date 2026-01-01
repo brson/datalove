@@ -78,6 +78,19 @@ pub fn analyze_worldfile_ir3(
     // Compile modules (typecheck, drop analysis, lower).
     let mut compiled = pipeline.compile();
 
+    // Check for resolution errors.
+    if let Some(err) = &compiled.resolution_error {
+        // Add a synthetic module result with the resolution error.
+        results.push(SectionResult {
+            section_type: "resolution".to_string(),
+            name: None,
+            typecheck: TypecheckResult::Error { errors: vec![err.clone()] },
+            lowering: LoweringResult::Skipped,
+            output: String::new(),
+        });
+        return Ok(Ir3Analysis { sections: results });
+    }
+
     // Build module specs for script unit typechecking.
     let mut module_specs: Vec<ModuleSpec> = Vec::new();
     for section in &parsed.sections {

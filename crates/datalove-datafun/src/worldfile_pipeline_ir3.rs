@@ -13,7 +13,7 @@ use datalove_datafun_pkg::package_load::{Package, PackageModule};
 use datalove_datafun_compiler::ir;
 use datalove_datafun_compiler::ir::{IrModuleId, FuncId};
 use datalove_datafun_compiler::tycheck::typecheck_module_graph;
-use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleGraphBuilder, ModuleGraphTypecheckResult};
+use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleGraphTypecheckResult};
 use ir::interp::ScriptEnvironment;
 use ir::drop_analysis::FunctionDropAnalysis;
 
@@ -44,6 +44,8 @@ pub enum LoweringResult {
 
 /// Compiled module data ready for execution.
 pub struct CompiledModules<'db> {
+    /// Package resolution error (if any).
+    pub resolution_error: Option<String>,
     /// Module graph.
     pub module_graph: ModuleGraph,
     /// Graph typecheck result (for accessing expr_types).
@@ -63,8 +65,8 @@ pub struct CompiledModules<'db> {
 /// Pipeline for compiling worldfile modules to IR.
 pub struct ModuleCompilationPipeline<'db> {
     db: &'db dyn salsa::Database,
+    pkglib_system: BTreeMap<String, Package>,
     pkglib_local: BTreeMap<String, Package>,
-    module_specs: Vec<(String, bct::input::Source)>,
 }
 
 impl<'db> ModuleCompilationPipeline<'db> {
@@ -72,31 +74,32 @@ impl<'db> ModuleCompilationPipeline<'db> {
     pub fn new(db: &'db dyn salsa::Database) -> Self {
         Self {
             db,
+            pkglib_system: BTreeMap::new(),
             pkglib_local: BTreeMap::new(),
-            module_specs: Vec::new(),
         }
     }
 
     /// Add a module section to the pipeline.
     pub fn add_module(&mut self, library: &str, package: &str, module: &str, source: &str) {
+        let library_map = match library {
+            "sys" => &mut self.pkglib_system,
+            "local" => &mut self.pkglib_local,
+            _ => return,
+        };
+
+        let pkg = library_map.entry(package.to_string())
+            .or_insert_with(|| Package {
+                name: package.to_string(),
+                modules: BTreeMap::new(),
+            });
+
         let module_path = format!("{}/{}/{}", library, package, module);
-        let src = bct::input::Source::new(self.db, source.to_string());
-        self.module_specs.push((module_path.clone(), src));
-
-        if library == "local" {
-            let pkg = self.pkglib_local.entry(package.to_string())
-                .or_insert_with(|| Package {
-                    name: package.to_string(),
-                    modules: BTreeMap::new(),
-                });
-
-            let pkg_module = PackageModule {
-                name: module.to_string(),
-                path: module_path.into(),
-                text: source.to_string(),
-            };
-            pkg.modules.insert(module.to_string(), pkg_module);
-        }
+        let pkg_module = PackageModule {
+            name: module.to_string(),
+            path: module_path.into(),
+            text: source.to_string(),
+        };
+        pkg.modules.insert(module.to_string(), pkg_module);
     }
 
     /// Add modules from worldfile sections.
@@ -120,12 +123,39 @@ impl<'db> ModuleCompilationPipeline<'db> {
     /// 2. Run drop analysis on all functions
     /// 3. Lower all functions (only after typecheck + drop analysis pass)
     pub fn compile(self) -> CompiledModules<'db> {
-        // Phase 1: Build ModuleGraph and typecheck.
-        let mut builder = ModuleGraphBuilder::new(self.db);
-        for (path, source) in &self.module_specs {
-            builder.add_module(path.clone(), *source);
-        }
-        let module_graph = builder.build();
+        // Phase 1: Build ModuleGraph via package resolution and typecheck.
+        let raw_package_world = datalove_datafun_pkg::package_load::PackageWorld {
+            pkglib_system: self.pkglib_system,
+            pkglib_local: self.pkglib_local,
+        };
+        let package_world = datalove_datafun_pkg::import_from_loader(self.db, raw_package_world);
+
+        // Resolve module dependencies.
+        let resolution = crate::package_resolve::resolve_package_world_with_imports(self.db, package_world);
+
+        // Handle resolution errors.
+        let pkg_graph = match resolution.result(self.db) {
+            Ok(graph) => graph,
+            Err(e) => {
+                // Return early with resolution error.
+                return CompiledModules {
+                    resolution_error: Some(format!("Package resolution failed: {:?}", e)),
+                    module_graph: datalove_datafun_compiler::module_graph::ModuleGraphBuilder::new(self.db).build(),
+                    graph_typecheck: typecheck_module_graph(
+                        self.db,
+                        datalove_datafun_compiler::module_graph::ModuleGraphBuilder::new(self.db).build()
+                    ),
+                    path_to_errors: BTreeMap::new(),
+                    drop_analysis_errors: BTreeMap::new(),
+                    all_module_functions: HashMap::new(),
+                    env: ScriptEnvironment::new(),
+                    module_lowering_results: BTreeMap::new(),
+                };
+            }
+        };
+
+        // Convert to ModuleGraph.
+        let module_graph = datalove_datafun_pkg::to_module_graph(self.db, package_world, pkg_graph);
 
         let graph_typecheck = typecheck_module_graph(self.db, module_graph.clone());
         let combined_expr_types = graph_typecheck.expr_types(self.db);
@@ -255,6 +285,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
         }
 
         CompiledModules {
+            resolution_error: None,
             module_graph,
             graph_typecheck,
             path_to_errors,

@@ -69,6 +69,15 @@ pub fn analyze_modules_worldfile_ir3(
     // Compile modules (typecheck, drop analysis, lower).
     let mut compiled = pipeline.compile();
 
+    // Check for resolution errors.
+    if let Some(err) = &compiled.resolution_error {
+        return Ok(ModulesIr3Analysis {
+            typecheck: TypecheckResult::Error { errors: vec![err.clone()] },
+            lowering: LoweringResult::Skipped,
+            output: String::new(),
+        });
+    }
+
     // Check for typecheck errors.
     let all_typecheck_errors: Vec<String> = compiled.path_to_errors.values()
         .flatten()
