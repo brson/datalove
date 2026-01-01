@@ -5,6 +5,7 @@
 
 use rmx::prelude::*;
 use std::path::Path;
+use std::collections::HashMap;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_pkg::package_load::{Package, PackageModule};
@@ -81,7 +82,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 continue;
             }
 
-            match ir::lower::lower_function_for_module(&db, expr_types, &[], *func, analysis) {
+            let empty_funcs: HashMap<String, (ir::IrModuleId, ir::FuncId)> = HashMap::new();
+            match ir::lower::lower_function_for_module(&db, expr_types, &empty_funcs, *func, analysis) {
                 Ok(ir_func) => {
                     output.push_str(&format!("{}", ir_func));
                     output.push('\n');

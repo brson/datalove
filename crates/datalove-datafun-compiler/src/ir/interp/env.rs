@@ -5,7 +5,7 @@
 //! - `ScriptEnvironment`: Combines registry with `FrameStore` for script execution.
 
 use rmx::std::collections::HashMap;
-use super::super::{IrFunction, FuncId, FuncRef};
+use super::super::{IrFunction, FuncId, FuncRef, IrModuleId};
 use super::error::InterpError;
 use super::frame::{Frame, FrameStore};
 
@@ -15,8 +15,8 @@ use super::frame::{Frame, FrameStore};
 pub struct FunctionRegistry {
     /// Functions from each unit, indexed by unit number.
     unit_functions: Vec<Vec<IrFunction>>,
-    /// Functions from modules, indexed by name.
-    module_functions: HashMap<String, IrFunction>,
+    /// Functions from modules, indexed by (module_id, func_id).
+    module_functions: HashMap<(IrModuleId, FuncId), IrFunction>,
 }
 
 impl FunctionRegistry {
@@ -29,8 +29,8 @@ impl FunctionRegistry {
     }
 
     /// Add a module function.
-    pub fn add_module_function(&mut self, name: String, func: IrFunction) {
-        self.module_functions.insert(name, func);
+    pub fn add_module_function(&mut self, module_id: IrModuleId, func_id: FuncId, func: IrFunction) {
+        self.module_functions.insert((module_id, func_id), func);
     }
 
     /// Add functions from a completed unit.
@@ -38,9 +38,9 @@ impl FunctionRegistry {
         self.unit_functions.push(functions);
     }
 
-    /// Get a module function by name.
-    pub fn get_module_function(&self, name: &str) -> Option<&IrFunction> {
-        self.module_functions.get(name)
+    /// Get a module function by module and function ID.
+    pub fn get_module_function(&self, module_id: IrModuleId, func_id: FuncId) -> Option<&IrFunction> {
+        self.module_functions.get(&(module_id, func_id))
     }
 
     /// Look up a function from a previous unit.
@@ -79,8 +79,8 @@ impl ScriptEnvironment {
     }
 
     /// Add a module function.
-    pub fn add_module_function(&mut self, name: String, func: IrFunction) {
-        self.registry.add_module_function(name, func);
+    pub fn add_module_function(&mut self, module_id: IrModuleId, func_id: FuncId, func: IrFunction) {
+        self.registry.add_module_function(module_id, func_id, func);
     }
 
     /// Add a completed unit's frame and functions.
@@ -128,9 +128,9 @@ impl<'a> ExecutionContext<'a> {
             FuncRef::External { unit, func } => {
                 registry.external_function(*unit, *func)
             }
-            FuncRef::Module { name } => {
-                registry.get_module_function(name)
-                    .ok_or(InterpError::ModuleFunctionNotFound(name.clone()))
+            FuncRef::Module { module, func } => {
+                registry.get_module_function(*module, *func)
+                    .ok_or(InterpError::ModuleFunctionNotFound { module: *module, func: *func })
             }
         }
     }
@@ -155,9 +155,9 @@ impl<'a> ExecutionContext<'a> {
                 let callee = registry.external_function(*unit, *func)?;
                 Ok((callee, Some(*unit))) // Need context from this unit.
             }
-            FuncRef::Module { name } => {
-                let callee = registry.get_module_function(name)
-                    .ok_or(InterpError::ModuleFunctionNotFound(name.clone()))?;
+            FuncRef::Module { module, func } => {
+                let callee = registry.get_module_function(*module, *func)
+                    .ok_or(InterpError::ModuleFunctionNotFound { module: *module, func: *func })?;
                 Ok((callee, None)) // Module functions don't have local calls.
             }
         }

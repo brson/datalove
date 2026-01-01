@@ -30,6 +30,12 @@ pub struct BlockId(pub u32);
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct FuncId(pub u32);
 
+/// Module identifier for IR.
+///
+/// Serializable numeric ID, unlike salsa's ModuleId.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct IrModuleId(pub u32);
+
 /// Reference to a function.
 ///
 /// Functions can be defined in the current unit or imported from previous units.
@@ -39,9 +45,8 @@ pub enum FuncRef {
     Local(FuncId),
     /// Function from a previous script unit.
     External { unit: u32, func: FuncId },
-    /// Function from a module, referenced by name.
-    /// The actual function is stored in ScriptEnvironment::module_functions.
-    Module { name: String },
+    /// Function from a module.
+    Module { module: IrModuleId, func: FuncId },
 }
 
 /// Reference to a type (used in Pack instructions).

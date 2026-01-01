@@ -8,7 +8,7 @@ Ir3Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn make_data(v0):\nblock0:\n    v1 = data_from v0\n    return v1\n\nfn main():\nblock0:\n    v0 = const 9999999999999999999int\n    v1 = call module.make_data(v0)\n    return v1\n",
+                ir: "fn make_data(v0):\nblock0:\n    v1 = data_from v0\n    return v1\n\nfn main():\nblock0:\n    v0 = const 9999999999999999999int\n    v1 = call m0.f0(v0)\n    return v1\n",
             ),
             output: "",
         ),

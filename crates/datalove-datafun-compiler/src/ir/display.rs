@@ -27,12 +27,18 @@ impl fmt::Display for FuncId {
     }
 }
 
+impl fmt::Display for IrModuleId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "m{}", self.0)
+    }
+}
+
 impl fmt::Display for FuncRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FuncRef::Local(id) => write!(f, "{}", id),
             FuncRef::External { unit, func } => write!(f, "unit{}.{}", unit, func),
-            FuncRef::Module { name } => write!(f, "module.{}", name),
+            FuncRef::Module { module, func } => write!(f, "{}.{}", module, func),
         }
     }
 }

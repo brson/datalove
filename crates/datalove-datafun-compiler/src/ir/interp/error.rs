@@ -1,6 +1,6 @@
 //! Interpreter errors.
 
-use super::super::{ValueId, SlotId, BlockId, FuncId};
+use super::super::{ValueId, SlotId, BlockId, FuncId, IrModuleId};
 
 /// Interpreter error.
 #[derive(Debug)]
@@ -28,7 +28,7 @@ pub enum InterpError {
     /// External unit not found.
     ExternalUnitNotFound(u32),
     /// Module function not found.
-    ModuleFunctionNotFound(String),
+    ModuleFunctionNotFound { module: IrModuleId, func: FuncId },
     /// Phi node missing predecessor.
     PhiMissingPredecessor {
         dest: ValueId,

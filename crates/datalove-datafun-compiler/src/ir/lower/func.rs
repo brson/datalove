@@ -2,9 +2,10 @@
 //!
 //! Handles lowering of function definitions to IR.
 
+use std::collections::HashMap;
 use crate::ast;
 use crate::Db;
-use super::super::{IrType, IrFunction, Operand, FuncId, Terminator};
+use super::super::{IrType, IrFunction, Operand, FuncId, IrModuleId, Terminator};
 use super::super::drop_analysis::FunctionDropAnalysis;
 use super::context::LowerCtx;
 use super::stmt::lower_statement_indexed;
@@ -17,7 +18,7 @@ use super::LowerError;
 pub fn lower_function_for_module<'db>(
     db: &'db dyn Db,
     expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
-    available_functions: &[String],
+    available_functions: &HashMap<String, (IrModuleId, FuncId)>,
     func: ast::StmtFun<'db>,
     analysis: FunctionDropAnalysis,
 ) -> Result<IrFunction, LowerError> {

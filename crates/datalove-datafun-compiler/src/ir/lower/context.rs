@@ -9,7 +9,7 @@ use crate::ast::{Statement, ExprFun};
 use crate::Db;
 use super::super::{
     IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, BlockId, FuncId,
-    FuncRef, Terminator, Instruction, SymbolTable, ExportBinding,
+    FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId,
 };
 use super::super::drop_analysis::{BindingId, DropSchedule, BindingInfo};
 
@@ -26,9 +26,10 @@ pub struct ScriptLowerContext {
     pub slot_types: HashMap<String, IrType>,
     /// Available functions: name -> (unit_index, func_id).
     pub functions: HashMap<String, (u32, FuncId)>,
-    /// Module functions: name -> lowered IR function.
-    /// These are all functions available from modules.
-    pub module_functions: HashMap<String, IrFunction>,
+    /// Module functions: (module_id, func_id) -> lowered IR function.
+    pub module_functions: HashMap<(IrModuleId, FuncId), IrFunction>,
+    /// Module function name lookup: name -> (module_id, func_id).
+    pub module_function_names: HashMap<String, (IrModuleId, FuncId)>,
     /// Imported module function names.
     /// Only functions in this set are accessible to the current unit.
     pub imported_module_functions: HashSet<String>,
@@ -79,8 +80,9 @@ impl ScriptLowerContext {
     }
 
     /// Add a lowered module function to the context.
-    pub fn add_module_function(&mut self, name: String, func: IrFunction) {
-        self.module_functions.insert(name, func);
+    pub fn add_module_function(&mut self, name: String, module_id: IrModuleId, func_id: FuncId, func: IrFunction) {
+        self.module_functions.insert((module_id, func_id), func);
+        self.module_function_names.insert(name, (module_id, func_id));
     }
 
     /// Add a module alias from a require statement.
@@ -191,12 +193,12 @@ impl<'db> LowerCtx<'db> {
     pub fn new_for_module(
         db: &'db dyn Db,
         expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
-        available_functions: &[String],
+        available_functions: &HashMap<String, (IrModuleId, FuncId)>,
     ) -> Self {
         // Seed func_scope with available module functions.
         let mut func_scope = HashMap::new();
-        for name in available_functions {
-            func_scope.insert(name.clone(), FuncRef::Module { name: name.clone() });
+        for (name, (module_id, func_id)) in available_functions {
+            func_scope.insert(name.clone(), FuncRef::Module { module: *module_id, func: *func_id });
         }
 
         Self {
@@ -272,9 +274,9 @@ impl<'db> LowerCtx<'db> {
         }
 
         // Add module functions - only those that have been imported.
-        for (name, _func) in &script_ctx.module_functions {
-            if script_ctx.imported_module_functions.contains(name) {
-                func_scope.insert(name.clone(), FuncRef::Module { name: name.clone() });
+        for name in &script_ctx.imported_module_functions {
+            if let Some((module_id, func_id)) = script_ctx.module_function_names.get(name) {
+                func_scope.insert(name.clone(), FuncRef::Module { module: *module_id, func: *func_id });
             }
         }
 

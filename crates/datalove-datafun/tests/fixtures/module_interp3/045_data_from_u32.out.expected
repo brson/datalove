@@ -4,7 +4,7 @@ ModulesIr3Analysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn make_data():\nblock0:\n    v0 = const 42u32\n    v1 = data_from v0\n    return v1\n\nfn main():\nblock0:\n    v0 = call module.make_data()\n    return v0\n",
+        ir: "fn make_data():\nblock0:\n    v0 = const 42u32\n    v1 = data_from v0\n    return v1\n\nfn main():\nblock0:\n    v0 = call m0.f0()\n    return v0\n",
     ),
     output: "@data @42",
 )

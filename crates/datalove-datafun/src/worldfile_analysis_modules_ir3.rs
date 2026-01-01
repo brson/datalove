@@ -10,11 +10,12 @@
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
-use rmx::std::collections::BTreeMap;
+use rmx::std::collections::{BTreeMap, HashMap};
 
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 use datalove_datafun_pkg::package_load::{Package, PackageModule};
 use datalove_datafun_compiler::ir;
+use datalove_datafun_compiler::ir::{IrModuleId, FuncId};
 use datalove_datafun_compiler::tycheck::typecheck_module_graph;
 use datalove_datafun_compiler::module_graph::ModuleGraphBuilder;
 use ir::interp::ScriptEnvironment;
@@ -146,15 +147,21 @@ pub fn analyze_modules_worldfile_ir3(
         });
     }
 
-    // First pass: collect all function names from all modules.
-    let mut all_module_functions: Vec<String> = Vec::new();
-    for module in module_graph.iter_modules(db) {
+    // First pass: collect all function names and assign IDs.
+    // Maps function name -> (IrModuleId, FuncId).
+    let mut all_module_functions: HashMap<String, (IrModuleId, FuncId)> = HashMap::new();
+    let mut next_func_id: u32 = 0;
+    for (ir_module_idx, module) in module_graph.iter_modules(db).enumerate() {
+        let ir_module_id = IrModuleId(ir_module_idx as u32);
         let module_source = module.source(db);
         let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
         let script = parse_result.script(db);
         for statement in script.statements(db) {
             if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
-                all_module_functions.push(func.name(db).text(db).to_string());
+                let func_name = func.name(db).text(db).to_string();
+                let func_id = FuncId(next_func_id);
+                next_func_id += 1;
+                all_module_functions.insert(func_name, (ir_module_id, func_id));
             }
         }
     }
@@ -165,9 +172,10 @@ pub fn analyze_modules_worldfile_ir3(
     let mut ir_dumps = Vec::new();
     let mut lowering_errors = Vec::new();
 
-    for module in module_graph.iter_modules(db) {
-        let module_id = module.id(db);
-        let module_path = module_id.path(db).clone();
+    for (ir_module_idx, module) in module_graph.iter_modules(db).enumerate() {
+        let ir_module_id = IrModuleId(ir_module_idx as u32);
+        let salsa_module_id = module.id(db);
+        let module_path = salsa_module_id.path(db).clone();
         let module_source = module.source(db);
         let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
         let script = parse_result.script(db);
@@ -186,6 +194,9 @@ pub fn analyze_modules_worldfile_ir3(
                     continue;
                 }
 
+                // Get the pre-assigned func_id.
+                let (_, func_id) = all_module_functions.get(&func_name).unwrap();
+
                 match ir::lower::lower_function_for_module(
                     db, combined_expr_types, &all_module_functions, *func, analysis
                 ) {
@@ -198,7 +209,7 @@ pub fn analyze_modules_worldfile_ir3(
                         }
 
                         // Add to environment for cross-function calls.
-                        env.add_module_function(func_name, ir_func);
+                        env.add_module_function(ir_module_id, *func_id, ir_func);
                     }
                     Err(e) => {
                         lowering_errors.push(format!("Error lowering {}/{}: {}", module_path, func_name, e));
