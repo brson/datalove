@@ -135,6 +135,21 @@ test-miri-rt-tests-one TEST_FILE *ARGS='':
     env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test {{TEST_FILE}} {{ARGS}}
 
+# Run Miri on the interp3 test suite (132 tests).
+test-miri-interp3 *ARGS='':
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
+        cargo +nightly miri test -p datalove-datafun --test interp3_tests {{ARGS}}
+
+# Run Miri on the module_interp3 test suite (49 tests).
+test-miri-module-interp3 *ARGS='':
+    env MIRIFLAGS="-Zmiri-disable-isolation" \
+        cargo +nightly miri test -p datalove-datafun --test module_interp3_tests {{ARGS}}
+
+# Run Miri on all interp3 tests (both suites).
+test-miri-interp3-all *ARGS='':
+    just test-miri-interp3 {{ARGS}}
+    just test-miri-module-interp3 {{ARGS}}
+
 check:
     cargo check --all
 
