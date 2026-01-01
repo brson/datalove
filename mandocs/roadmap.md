@@ -12,16 +12,15 @@ With core->runtime calls.
 # in progress
 
 - ir and interp3
-  - add more liveness errors to drop_analysis,
-- script/function unification semantics
 - human docs
 - improve runtime implementation unsafety
 - miri tests
+- run miri on interpreter
+- coverage
 
 
 # on deck
 
-- run miri on interpreter
 - move semantics
 - rename ExprFunKind::Err to Error
 - move/clone semantics - moves-etc.md
