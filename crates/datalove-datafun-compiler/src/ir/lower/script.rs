@@ -211,8 +211,14 @@ fn lower_statement_for_script<'db>(
                         Ok(())
                     }
                     Operand::ExternalSlot { unit, slot } => {
-                        // TODO: External slot drops need special handling.
-                        // For now, skip drop since we can't easily get the type.
+                        // Drop old value before storing new one.
+                        if let Some(slot_type) = ctx.external_slot_type(&name).cloned() {
+                            if !slot_type.is_copy() {
+                                ctx.emit(Instruction::Drop {
+                                    operand: Operand::ExternalSlot { unit, slot },
+                                });
+                            }
+                        }
                         ctx.emit(Instruction::SlotStore {
                             dest: SlotDest::External { unit, slot },
                             value: Operand::Value(value_id),

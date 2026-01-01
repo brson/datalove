@@ -1,0 +1,20 @@
+----------
+scriptunit-fragment
+----------
+
+// Create a var binding with a list (move type).
+var x = @[@1, @2]
+
+----------
+scriptunit-fragment
+----------
+
+// Reassign the external slot - this should drop the old list.
+set x = @[@3, @4, @5]
+
+----------
+scriptunit-expr
+----------
+
+// Read the updated value.
+x

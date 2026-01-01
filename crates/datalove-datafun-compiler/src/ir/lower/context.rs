@@ -22,6 +22,8 @@ pub struct ScriptLowerContext {
     pub values: HashMap<String, (u32, ValueId)>,
     /// Available var bindings: name -> (unit_index, slot_id).
     pub slots: HashMap<String, (u32, SlotId)>,
+    /// Types of exported slots: name -> type.
+    pub slot_types: HashMap<String, IrType>,
     /// Available functions: name -> (unit_index, func_id).
     pub functions: HashMap<String, (u32, FuncId)>,
     /// Module functions: name -> lowered IR function.
@@ -46,18 +48,28 @@ impl ScriptLowerContext {
     ///
     /// When a name is exported, it shadows any previous binding with the same name,
     /// regardless of whether the previous binding was a value or slot.
-    pub fn add_exports(&mut self, unit_index: u32, exports: &[(String, ExportBinding)]) {
+    pub fn add_exports(
+        &mut self,
+        unit_index: u32,
+        exports: &[(String, ExportBinding)],
+        unit_slot_types: &[IrType],
+    ) {
         for (name, binding) in exports {
             match binding {
                 ExportBinding::Value(v) => {
                     // Remove any slot with the same name to properly shadow.
                     self.slots.remove(name);
+                    self.slot_types.remove(name);
                     self.values.insert(name.clone(), (unit_index, *v));
                 }
                 ExportBinding::Slot(s) => {
                     // Remove any value with the same name to properly shadow.
                     self.values.remove(name);
                     self.slots.insert(name.clone(), (unit_index, *s));
+                    // Store the slot's type for drop emission in later units.
+                    if let Some(ty) = unit_slot_types.get(s.0 as usize) {
+                        self.slot_types.insert(name.clone(), ty.clone());
+                    }
                 }
                 ExportBinding::Function(func_id) => {
                     self.functions.insert(name.clone(), (unit_index, *func_id));
@@ -140,6 +152,8 @@ pub struct LowerCtx<'db> {
     pub(super) next_binding_id: u32,
     /// Current statement index in the parent body (for drop schedule lookup).
     pub(super) current_stmt_idx: Option<usize>,
+    /// Types of external slots from previous script units, keyed by name.
+    pub(super) external_slot_types: HashMap<String, IrType>,
 }
 
 impl<'db> LowerCtx<'db> {
@@ -169,6 +183,7 @@ impl<'db> LowerCtx<'db> {
             binding_to_operand: HashMap::new(),
             next_binding_id: 0,
             current_stmt_idx: None,
+            external_slot_types: HashMap::new(),
         }
     }
 
@@ -209,6 +224,7 @@ impl<'db> LowerCtx<'db> {
             binding_to_operand: HashMap::new(),
             next_binding_id: 0,
             current_stmt_idx: None,
+            external_slot_types: HashMap::new(),
         }
     }
 
@@ -288,6 +304,7 @@ impl<'db> LowerCtx<'db> {
             binding_to_operand: HashMap::new(),
             next_binding_id: 0,
             current_stmt_idx: None,
+            external_slot_types: script_ctx.slot_types,
         }
     }
 
@@ -383,6 +400,11 @@ impl<'db> LowerCtx<'db> {
     /// Get the type for a slot ID.
     pub fn slot_type(&self, id: SlotId) -> Option<&IrType> {
         self.slot_types.get(id.0 as usize)
+    }
+
+    /// Get the type for an external slot by variable name.
+    pub fn external_slot_type(&self, name: &str) -> Option<&IrType> {
+        self.external_slot_types.get(name)
     }
 
     /// Set the drop schedule for this context.

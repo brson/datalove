@@ -482,7 +482,7 @@ fn process_fragment<'db>(
 
     // Update script context with exports from this unit for subsequent lowering.
     let unit_index = script_ctx.current_unit;
-    script_ctx.add_exports(unit_index, &ir_unit.exports);
+    script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.slot_types);
     script_ctx.current_unit += 1;
 
     SectionResult {
@@ -600,7 +600,7 @@ fn process_expr<'db>(
 
     // Update script context with exports from this unit.
     let unit_index = script_ctx.current_unit;
-    script_ctx.add_exports(unit_index, &ir_unit.exports);
+    script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.slot_types);
     script_ctx.current_unit += 1;
 
     SectionResult {
