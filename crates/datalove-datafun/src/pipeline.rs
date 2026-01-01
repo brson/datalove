@@ -12,9 +12,13 @@ use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 use datalove_datafun_pkg::package_load::{Package, PackageModule};
 use datalove_datafun_compiler::ir;
 use datalove_datafun_compiler::ir::{IrModuleId, FuncId};
-use datalove_datafun_compiler::tycheck::typecheck_module_graph;
+use datalove_datafun_compiler::tycheck::{
+    typecheck_module_graph, type_check_script_units,
+    ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, UnitKindTag,
+    UnitTypecheckResultTracked,
+};
 use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleGraphTypecheckResult};
-use ir::interp::ScriptEnvironment;
+use ir::interp::{ScriptEnvironment, UnitCompletion};
 use ir::drop_analysis::FunctionDropAnalysis;
 
 /// Typecheck result summary.
@@ -320,5 +324,334 @@ pub fn format_module_lowering_result(
         LoweringResult::Skipped
     } else {
         LoweringResult::Success { ir: ir_dumps.join("\n") }
+    }
+}
+
+/// Result of compiling a single script unit.
+pub struct ScriptUnitResult {
+    /// Typecheck result.
+    pub typecheck: TypecheckResult,
+    /// Lowering result.
+    pub lowering: LoweringResult,
+    /// Output value (for expressions) or execution status.
+    pub output: String,
+}
+
+/// Context for compiling and executing script units.
+///
+/// Created from `CompiledModules::script_context()`, this provides incremental
+/// compilation and execution of script units with shared state.
+pub struct ScriptCompilationContext<'db> {
+    db: &'db dyn salsa::Database,
+    /// Lowering context (grows with each unit).
+    pub script_ctx: ir::lower::ScriptLowerContext,
+    /// Execution environment (grows with each unit).
+    pub env: ScriptEnvironment,
+    /// Accumulated unit specs for incremental typechecking.
+    accumulated_unit_specs: Vec<ScriptUnitSpec<'db>>,
+    /// Module specs for typechecking.
+    module_specs: Vec<ModuleSpec<'db>>,
+    /// Type descriptor table for interpreter.
+    tydesc_table: ir::interp::IrTyDescTable,
+    /// IR interpreter.
+    interp: ir::interp::IrInterpreter,
+}
+
+impl<'db> CompiledModules<'db> {
+    /// Create a script compilation context from compiled modules.
+    ///
+    /// Consumes the compiled modules and returns a context for incrementally
+    /// compiling and executing script units.
+    pub fn script_context(self, db: &'db dyn salsa::Database) -> ScriptCompilationContext<'db> {
+        // Build ScriptLowerContext from compiled modules.
+        let mut script_ctx = ir::lower::ScriptLowerContext::new();
+        for (name, (module_id, func_id)) in &self.all_module_functions {
+            if let Some(ir_func) = self.env.registry.get_module_function(*module_id, *func_id) {
+                script_ctx.add_module_function(name.clone(), *module_id, *func_id, ir_func.clone());
+            }
+        }
+
+        ScriptCompilationContext {
+            db,
+            script_ctx,
+            env: self.env,
+            accumulated_unit_specs: Vec::new(),
+            module_specs: Vec::new(),
+            tydesc_table: ir::interp::IrTyDescTable::new(),
+            interp: ir::interp::IrInterpreter::new(),
+        }
+    }
+}
+
+impl<'db> ScriptCompilationContext<'db> {
+    /// Add module specs for typechecking script units.
+    ///
+    /// Module specs provide type information for imports from modules.
+    pub fn add_module_specs(&mut self, specs: Vec<ModuleSpec<'db>>) {
+        self.module_specs = specs;
+    }
+
+    /// Compile and execute a script fragment.
+    pub fn eval_fragment(&mut self, source: &str) -> ScriptUnitResult {
+        let src = bct::input::Source::new(self.db, source.to_string());
+        let parse_result = datalove_datafun_compiler::parser::parse(self.db, src);
+        let script = parse_result.script(self.db);
+
+        // Incremental typecheck.
+        let unit_spec = ScriptUnitSpec::new(self.db, src, UnitKindTag::Fragment);
+        self.accumulated_unit_specs.push(unit_spec);
+        let batch_spec = ScriptBatchSpec::new(
+            self.db,
+            self.accumulated_unit_specs.clone(),
+            self.module_specs.clone(),
+        );
+        let typecheck_results = type_check_script_units(self.db, batch_spec);
+        let all_results = typecheck_results.results(self.db);
+        let tycheck_result = *all_results.last().unwrap();
+
+        self.process_fragment(script, tycheck_result)
+    }
+
+    /// Compile and execute a script expression.
+    pub fn eval_expr(&mut self, source: &str) -> ScriptUnitResult {
+        let src = bct::input::Source::new(self.db, source.to_string());
+        let expr = datalove_datafun_compiler::parser::parse_expr(self.db, src);
+
+        // Incremental typecheck.
+        let unit_spec = ScriptUnitSpec::new(self.db, src, UnitKindTag::Expr);
+        self.accumulated_unit_specs.push(unit_spec);
+        let batch_spec = ScriptBatchSpec::new(
+            self.db,
+            self.accumulated_unit_specs.clone(),
+            self.module_specs.clone(),
+        );
+        let typecheck_results = type_check_script_units(self.db, batch_spec);
+        let all_results = typecheck_results.results(self.db);
+        let tycheck_result = *all_results.last().unwrap();
+
+        self.process_expr(expr, tycheck_result)
+    }
+
+    /// Process a parsed script fragment through typecheck, lower, and execute.
+    fn process_fragment(
+        &mut self,
+        script: datalove_datafun_compiler::ast::Script<'db>,
+        tycheck_result: UnitTypecheckResultTracked<'db>,
+    ) -> ScriptUnitResult {
+        // Check for typecheck errors.
+        let tycheck_errors: Vec<_> = tycheck_result.errors(self.db).into_iter()
+            .map(|e| format!("{:?}", e.error(self.db)))
+            .collect();
+        if !tycheck_errors.is_empty() {
+            return ScriptUnitResult {
+                typecheck: TypecheckResult::Error { errors: tycheck_errors },
+                lowering: LoweringResult::Skipped,
+                output: String::new(),
+            };
+        }
+
+        // Process require/import statements to populate import tracking.
+        for statement in script.statements(self.db) {
+            match statement {
+                datalove_datafun_compiler::ast::Statement::Require(
+                    datalove_datafun_compiler::ast::StmtRequire::Module(req)
+                ) => {
+                    let import_space = req.import_space(self.db).text(self.db).to_string();
+                    let package_alias = req.package_alias(self.db).text(self.db).to_string();
+                    let module_alias = req.module_alias(self.db).text(self.db).to_string();
+                    let full_path = format!("{}/{}/{}", import_space, package_alias, module_alias);
+                    self.script_ctx.add_module_alias(module_alias, full_path);
+                }
+                datalove_datafun_compiler::ast::Statement::Import(import) => {
+                    let item_name = import.item_name(self.db).text(self.db).to_string();
+                    self.script_ctx.import_module_function(item_name);
+                }
+                _ => {}
+            }
+        }
+
+        // Run drop analysis on all functions first.
+        let expr_types = tycheck_result.expr_types(self.db);
+        let stmts = script.statements(self.db).to_vec();
+        let func_analyses = match ir::drop_analysis::analyze_script_functions(self.db, expr_types, &stmts) {
+            Ok(analyses) => analyses,
+            Err(errors) => {
+                let error_msgs: Vec<String> = errors.into_iter()
+                    .map(|(func_name, errs)| {
+                        let errs_str: Vec<String> = errs.iter().map(|e| format!("{:?}", e)).collect();
+                        format!("{}: {}", func_name, errs_str.join("; "))
+                    })
+                    .collect();
+                return ScriptUnitResult {
+                    typecheck: TypecheckResult::Success,
+                    lowering: LoweringResult::Error {
+                        message: format!("Drop analysis errors: {}", error_msgs.join(", ")),
+                    },
+                    output: String::new(),
+                };
+            }
+        };
+
+        // Lower using the typecheck result's expr_types.
+        let ir_unit = match ir::lower::lower_script_fragment_raw(
+            self.db,
+            expr_types,
+            self.script_ctx.clone(),
+            stmts,
+            func_analyses,
+        ) {
+            Ok(unit) => unit,
+            Err(e) => {
+                return ScriptUnitResult {
+                    typecheck: TypecheckResult::Success,
+                    lowering: LoweringResult::Error { message: format!("{}", e) },
+                    output: String::new(),
+                };
+            }
+        };
+
+        // Format IR dump.
+        let ir_dump = format!("{}", ir_unit);
+
+        // Execute the fragment with shared environment.
+        let ret_type = ir::IrType::Result(Box::new(ir::IrType::Unit));
+        let ret_tydesc = self.tydesc_table.get_or_create(&ret_type);
+        let ret_size = unsafe { (*ret_tydesc).size };
+        let mut ret_buffer = vec![0u8; ret_size as usize];
+        let ret_dest = ir::interp::Destination {
+            ptr: ret_buffer.as_mut_ptr(),
+            tydesc: ret_tydesc,
+        };
+
+        // Fragments have no expression result, so expr_dest is None.
+        let output = match self.interp.execute_script_unit_in_env(&ir_unit, &mut self.env, ret_dest, None) {
+            Ok(UnitCompletion::Normal) => "(fragment executed)".to_string(),
+            Ok(UnitCompletion::EarlyReturn) => {
+                let value = ir::interp::Value {
+                    ptr: ret_buffer.as_mut_ptr(),
+                    tydesc: ret_tydesc,
+                };
+                let output_str = self.interp.pretty_print_value(&value)
+                    .unwrap_or_else(|e| format!("Error: {:?}", e));
+                let _ = self.interp.destroy_value(&value);
+                output_str
+            }
+            Err(e) => format!("Error: {:?}", e),
+        };
+
+        // Update script context with exports from this unit.
+        let unit_index = self.script_ctx.current_unit;
+        self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.slot_types);
+        self.script_ctx.current_unit += 1;
+
+        ScriptUnitResult {
+            typecheck: TypecheckResult::Success,
+            lowering: LoweringResult::Success { ir: ir_dump },
+            output,
+        }
+    }
+
+    /// Process a parsed expression through typecheck, lower, and execute.
+    fn process_expr(
+        &mut self,
+        expr: datalove_datafun_compiler::ast::ExprFun<'db>,
+        tycheck_result: UnitTypecheckResultTracked<'db>,
+    ) -> ScriptUnitResult {
+        // Check for typecheck errors.
+        let tycheck_errors: Vec<_> = tycheck_result.errors(self.db).into_iter()
+            .map(|e| format!("{:?}", e.error(self.db)))
+            .collect();
+        if !tycheck_errors.is_empty() {
+            return ScriptUnitResult {
+                typecheck: TypecheckResult::Error { errors: tycheck_errors },
+                lowering: LoweringResult::Skipped,
+                output: String::new(),
+            };
+        }
+
+        // Lower the expression as a script unit.
+        let ir_unit = match ir::lower::lower_script_expr(
+            self.db,
+            tycheck_result.expr_types(self.db),
+            self.script_ctx.clone(),
+            expr,
+        ) {
+            Ok(unit) => unit,
+            Err(e) => {
+                return ScriptUnitResult {
+                    typecheck: TypecheckResult::Success,
+                    lowering: LoweringResult::Error { message: format!("{}", e) },
+                    output: String::new(),
+                };
+            }
+        };
+
+        let ir_dump = format!("{}", ir_unit);
+
+        // Execute the script unit if it has a result.
+        let output = if let Some(result_id) = ir_unit.result {
+            // ret_dest is for early returns: always Result<(), Error>.
+            let ret_type = ir::IrType::Result(Box::new(ir::IrType::Unit));
+            let ret_tydesc = self.tydesc_table.get_or_create(&ret_type);
+            let ret_size = unsafe { (*ret_tydesc).size };
+            let mut ret_buffer = vec![0u8; ret_size as usize];
+            let ret_dest = ir::interp::Destination {
+                ptr: ret_buffer.as_mut_ptr(),
+                tydesc: ret_tydesc,
+            };
+
+            // expr_dest is for the expression result.
+            let expr_type = &ir_unit.value_types[result_id.0 as usize];
+            let expr_tydesc = self.tydesc_table.get_or_create(expr_type);
+            let expr_size = unsafe { (*expr_tydesc).size };
+            let mut expr_buffer = vec![0u8; expr_size as usize];
+            let expr_dest = ir::interp::Destination {
+                ptr: expr_buffer.as_mut_ptr(),
+                tydesc: expr_tydesc,
+            };
+
+            // Execute with shared environment.
+            match self.interp.execute_script_unit_in_env(&ir_unit, &mut self.env, ret_dest, Some(expr_dest)) {
+                Ok(UnitCompletion::Normal) => {
+                    let value = ir::interp::Value {
+                        ptr: expr_buffer.as_mut_ptr(),
+                        tydesc: expr_tydesc,
+                    };
+                    let output_str = self.interp.pretty_print_value(&value)
+                        .unwrap_or_else(|e| format!("Error: {:?}", e));
+                    let _ = self.interp.destroy_value(&value);
+                    output_str
+                }
+                Ok(UnitCompletion::EarlyReturn) => {
+                    let value = ir::interp::Value {
+                        ptr: ret_buffer.as_mut_ptr(),
+                        tydesc: ret_tydesc,
+                    };
+                    let output_str = self.interp.pretty_print_value(&value)
+                        .unwrap_or_else(|e| format!("Error: {:?}", e));
+                    let _ = self.interp.destroy_value(&value);
+                    output_str
+                }
+                Err(e) => format!("Error: {:?}", e),
+            }
+        } else {
+            "(fragment executed)".to_string()
+        };
+
+        // Update script context with exports from this unit.
+        let unit_index = self.script_ctx.current_unit;
+        self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.slot_types);
+        self.script_ctx.current_unit += 1;
+
+        ScriptUnitResult {
+            typecheck: TypecheckResult::Success,
+            lowering: LoweringResult::Success { ir: ir_dump },
+            output,
+        }
+    }
+
+    /// Cleanup all allocated values.
+    pub fn destroy_all(&mut self) {
+        self.env.destroy_all(self.interp.runtime_handle());
     }
 }
