@@ -2,12 +2,14 @@
 //!
 //! Handles lowering of script units (fragments and expressions).
 
+use std::collections::HashMap;
 use crate::ast::{Statement, ExprFun};
-use crate::tycheck::TypecheckResult;
+use crate::module_graph::ModuleId;
+use crate::tycheck::{TypecheckResult, ResolvedCallTarget};
 use crate::Db;
 use super::super::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
-    ExportBinding, BlockId,
+    ExportBinding, BlockId, IrModuleId, FuncId,
     drop_analysis::{ScriptFunctionAnalyses, analyze_script_statements},
 };
 use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
@@ -25,12 +27,14 @@ use super::LowerError;
 pub fn lower_script_unit<'db>(
     db: &'db dyn Db,
     tycheck_result: TypecheckResult<'db>,
+    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
     kind: ScriptUnitKind<'db>,
     func_analyses: ScriptFunctionAnalyses<'db>,
 ) -> Result<IrScriptUnit, LowerError> {
     let expr_types = tycheck_result.expr_types(db);
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
     let result = match kind {
         ScriptUnitKind::Fragment(stmts) => {
@@ -83,11 +87,13 @@ pub fn lower_script_unit<'db>(
 pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn Db,
     expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
     stmts: Vec<Statement<'db>>,
     func_analyses: ScriptFunctionAnalyses<'db>,
 ) -> Result<IrScriptUnit, LowerError> {
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
     // Analyze script statements for drop schedule.
     let script_analysis = analyze_script_statements(db, expr_types, &stmts);
@@ -124,10 +130,12 @@ pub fn lower_script_fragment_raw<'db>(
 pub fn lower_script_expr<'db>(
     db: &'db dyn Db,
     expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
     expr: ExprFun<'db>,
 ) -> Result<IrScriptUnit, LowerError> {
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
     // Lower the expression and capture the result.
     let value_id = lower_expression(&mut ctx, expr)?;

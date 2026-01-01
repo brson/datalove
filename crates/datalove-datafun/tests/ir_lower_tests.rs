@@ -10,6 +10,7 @@ use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_pkg::package_load::{Package, PackageModule};
 use datalove_datafun_compiler::ir;
+use datalove_datafun_compiler::module_graph::ModuleId;
 use rmx::std::collections::BTreeMap;
 use bct::input::Source;
 
@@ -82,8 +83,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 continue;
             }
 
-            let empty_funcs: HashMap<String, (ir::IrModuleId, ir::FuncId)> = HashMap::new();
-            match ir::lower::lower_function_for_module(&db, expr_types, &empty_funcs, *func, analysis) {
+            // Use empty call_targets and func_id_map since these are standalone function tests.
+            let empty_call_targets: Vec<Option<datalove_datafun_compiler::tycheck::ResolvedCallTarget>> = Vec::new();
+            let empty_func_id_map: HashMap<(ModuleId, String), (ir::IrModuleId, ir::FuncId)> = HashMap::new();
+            match ir::lower::lower_function_for_module(&db, expr_types, &empty_call_targets, &empty_func_id_map, *func, analysis) {
                 Ok(ir_func) => {
                     output.push_str(&format!("{}", ir_func));
                     output.push('\n');

@@ -5,6 +5,7 @@
 
 use rmx::prelude::*;
 use std::path::Path;
+use std::collections::HashMap;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_compiler::ir;
@@ -58,7 +59,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     }
                 };
 
-                match ir::lower::lower_script_unit(&db, tycheck_result, script_ctx.clone(), ScriptUnitKind::Fragment(stmts), func_analyses) {
+                // Script tests don't use modules, so use empty func_id_map.
+                let func_id_map = HashMap::new();
+                match ir::lower::lower_script_unit(&db, tycheck_result, tycheck_result.call_targets(&db), &func_id_map, script_ctx.clone(), ScriptUnitKind::Fragment(stmts), func_analyses) {
                     Ok(ir_unit) => {
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

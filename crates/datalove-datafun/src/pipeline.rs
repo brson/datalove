@@ -17,7 +17,7 @@ use datalove_datafun_compiler::tycheck::{
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, UnitKindTag,
     UnitTypecheckResultTracked,
 };
-use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleGraphTypecheckResult};
+use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleGraphTypecheckResult, ModuleId};
 use ir::interp::{ScriptEnvironment, UnitCompletion};
 use ir::drop_analysis::FunctionDropAnalysis;
 
@@ -58,8 +58,9 @@ pub struct CompiledModules<'db> {
     pub path_to_errors: BTreeMap<String, Vec<String>>,
     /// Map from function name to drop analysis errors.
     pub drop_analysis_errors: BTreeMap<String, Vec<String>>,
-    /// Map of function name -> (module_id, func_id).
-    pub all_module_functions: HashMap<String, (IrModuleId, FuncId)>,
+    /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
+    /// Used to resolve typechecker's ResolvedCallTarget to IR function refs.
+    pub func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     /// Execution environment with lowered functions.
     pub env: ScriptEnvironment,
     /// Per-module lowering results (IR dumps or errors).
@@ -151,7 +152,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
                     ),
                     path_to_errors: BTreeMap::new(),
                     drop_analysis_errors: BTreeMap::new(),
-                    all_module_functions: HashMap::new(),
+                    func_id_map: HashMap::new(),
                     env: ScriptEnvironment::new(),
                     module_lowering_results: BTreeMap::new(),
                 };
@@ -176,11 +177,13 @@ impl<'db> ModuleCompilationPipeline<'db> {
             path_to_errors.insert(path, error_strings);
         }
 
-        // Collect all function names and assign IDs.
-        let mut all_module_functions: HashMap<String, (IrModuleId, FuncId)> = HashMap::new();
+        // Collect all functions and assign IDs.
+        // Key is (salsa ModuleId, func_name) for unambiguous lookup from ResolvedCallTarget.
+        let mut func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> = HashMap::new();
         let mut next_func_id: u32 = 0;
         for (ir_module_idx, module) in module_graph.iter_modules(self.db).enumerate() {
             let ir_module_id = IrModuleId(ir_module_idx as u32);
+            let salsa_module_id = module.id(self.db);
             let module_source = module.source(self.db);
             let parse_result = datalove_datafun_compiler::parser::parse(self.db, module_source);
             let script = parse_result.script(self.db);
@@ -189,7 +192,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
                     let func_name = func.name(self.db).text(self.db).to_string();
                     let func_id = FuncId(next_func_id);
                     next_func_id += 1;
-                    all_module_functions.insert(func_name, (ir_module_id, func_id));
+                    func_id_map.insert((salsa_module_id, func_name), (ir_module_id, func_id));
                 }
             }
         }
@@ -270,10 +273,13 @@ impl<'db> ModuleCompilationPipeline<'db> {
                         }
                     };
 
-                    let (_, func_id) = all_module_functions.get(&func_name).unwrap();
+                    let (_, func_id) = func_id_map.get(&(salsa_module_id, func_name.clone())).unwrap();
+
+                    // Get call_targets for resolving function calls.
+                    let call_targets = graph_typecheck.call_targets(self.db);
 
                     match ir::lower::lower_function_for_module(
-                        self.db, combined_expr_types, &all_module_functions, *func, analysis
+                        self.db, combined_expr_types, call_targets, &func_id_map, *func, analysis
                     ) {
                         Ok(ir_func) => {
                             ir_dumps.push(format!("{}", ir_func));
@@ -294,7 +300,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
             graph_typecheck,
             path_to_errors,
             drop_analysis_errors,
-            all_module_functions,
+            func_id_map,
             env,
             module_lowering_results,
         }
@@ -355,6 +361,9 @@ pub struct ScriptCompilationContext<'db> {
     tydesc_table: ir::interp::IrTyDescTable,
     /// IR interpreter.
     interp: ir::interp::IrInterpreter,
+    /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
+    /// Used to resolve typechecker's ResolvedCallTarget to IR function refs.
+    func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
 }
 
 impl<'db> CompiledModules<'db> {
@@ -364,10 +373,24 @@ impl<'db> CompiledModules<'db> {
     /// compiling and executing script units.
     pub fn script_context(self, db: &'db dyn salsa::Database) -> ScriptCompilationContext<'db> {
         // Build ScriptLowerContext from compiled modules.
+        // Register module functions for both execution and name lookup (fallback for call_targets).
         let mut script_ctx = ir::lower::ScriptLowerContext::new();
-        for (name, (module_id, func_id)) in &self.all_module_functions {
-            if let Some(ir_func) = self.env.registry.get_module_function(*module_id, *func_id) {
-                script_ctx.add_module_function(name.clone(), *module_id, *func_id, ir_func.clone());
+        for module in self.module_graph.iter_modules(db) {
+            let salsa_module_id = module.id(db);
+            let module_path = salsa_module_id.path(db).clone();
+            let module_source = module.source(db);
+            let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
+            let script = parse_result.script(db);
+            for statement in script.statements(db) {
+                if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
+                    let func_name = func.name(db).text(db).to_string();
+                    let qualified_name = format!("{}.{}", module_path, func_name);
+                    if let Some((ir_module_id, func_id)) = self.func_id_map.get(&(salsa_module_id, func_name)) {
+                        if let Some(ir_func) = self.env.registry.get_module_function(*ir_module_id, *func_id) {
+                            script_ctx.add_module_function(qualified_name, *ir_module_id, *func_id, ir_func.clone());
+                        }
+                    }
+                }
             }
         }
 
@@ -379,6 +402,7 @@ impl<'db> CompiledModules<'db> {
             module_specs: Vec::new(),
             tydesc_table: ir::interp::IrTyDescTable::new(),
             interp: ir::interp::IrInterpreter::new(),
+            func_id_map: self.func_id_map,
         }
     }
 }
@@ -463,8 +487,16 @@ impl<'db> ScriptCompilationContext<'db> {
                     self.script_ctx.add_module_alias(module_alias, full_path);
                 }
                 datalove_datafun_compiler::ast::Statement::Import(import) => {
+                    let module_alias = import.module_name(self.db).text(self.db).to_string();
                     let item_name = import.item_name(self.db).text(self.db).to_string();
-                    self.script_ctx.import_module_function(item_name);
+                    // Look up the full module path from the require statement.
+                    if let Some(full_path) = self.script_ctx.module_aliases.get(&module_alias) {
+                        let qualified_name = format!("{}.{}", full_path, item_name);
+                        self.script_ctx.import_module_function(qualified_name);
+                    } else {
+                        // Alias not found - import won't resolve.
+                        self.script_ctx.import_module_function(item_name);
+                    }
                 }
                 _ => {}
             }
@@ -492,10 +524,13 @@ impl<'db> ScriptCompilationContext<'db> {
             }
         };
 
-        // Lower using the typecheck result's expr_types.
+        // Lower using the typecheck result's expr_types and call_targets.
+        let call_targets = tycheck_result.call_targets(self.db);
         let ir_unit = match ir::lower::lower_script_fragment_raw(
             self.db,
             expr_types,
+            call_targets,
+            &self.func_id_map,
             self.script_ctx.clone(),
             stmts,
             func_analyses,
@@ -573,6 +608,8 @@ impl<'db> ScriptCompilationContext<'db> {
         let ir_unit = match ir::lower::lower_script_expr(
             self.db,
             tycheck_result.expr_types(self.db),
+            tycheck_result.call_targets(self.db),
+            &self.func_id_map,
             self.script_ctx.clone(),
             expr,
         ) {

@@ -121,10 +121,18 @@ pub fn analyze_modules_worldfile_ir3(
     }
 
     // Find main function.
-    let (main_module_id, main_func_id) = compiled.all_module_functions.get("main")
+    // First, find the ModuleId for "local/test/main" from the module graph.
+    let main_salsa_module_id = compiled.module_graph.iter_modules(db)
+        .find(|m| m.id(db).path(db) == "local/test/main")
+        .map(|m| m.id(db))
+        .ok_or_else(|| anyhow!("main module not found"))?;
+
+    // Look up the main function using (ModuleId, "main") key.
+    let (main_ir_module_id, main_func_id) = compiled.func_id_map
+        .get(&(main_salsa_module_id, "main".to_string()))
         .ok_or_else(|| anyhow!("main function not found"))?;
 
-    let main_func = compiled.env.registry.get_module_function(*main_module_id, *main_func_id)
+    let main_func = compiled.env.registry.get_module_function(*main_ir_module_id, *main_func_id)
         .ok_or_else(|| anyhow!("main function not in registry"))?;
 
     // Verify main is nullary.

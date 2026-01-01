@@ -663,15 +663,22 @@ impl IrInterpreter {
                 self.execute_unwrap_option(&src_val, dest_slot, is_some_slot)?;
                 frame.mark_value_initialized(*dest);
                 frame.mark_value_initialized(*is_some);
-                // Mark source as consumed - Option is destructured.
-                match src {
-                    Operand::Value(id) => frame.mark_value_dropped(*id),
-                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                    Operand::ExternalValue { unit, value } => {
-                        frames.mark_external_value_dropped(*unit, *value);
-                    }
-                    Operand::ExternalSlot { unit, slot } => {
-                        frames.mark_external_slot_dropped(*unit, *slot);
+                // Mark source as consumed only if inner type is non-copy.
+                // Option<copy_type> is itself copy, so unwrapping doesn't consume it.
+                let inner_is_copy = unsafe {
+                    let option_info = (*src_val.tydesc).type_info.option;
+                    Self::is_copy_type_tag((*option_info.inner_tydesc).type_tag)
+                };
+                if !inner_is_copy {
+                    match src {
+                        Operand::Value(id) => frame.mark_value_dropped(*id),
+                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::ExternalValue { unit, value } => {
+                            frames.mark_external_value_dropped(*unit, *value);
+                        }
+                        Operand::ExternalSlot { unit, slot } => {
+                            frames.mark_external_slot_dropped(*unit, *slot);
+                        }
                     }
                 }
             }
@@ -756,13 +763,16 @@ impl IrInterpreter {
                 // Get destination for return value.
                 let dest_slot = frame.value_dest(*dest)?;
 
-                // Mark arg sources as dropped BEFORE call - they're moved immediately.
-                // Must do this before call_in_context because callee destroys them.
-                for arg in args {
-                    match arg {
-                        Operand::Value(id) => frame.mark_value_dropped(*id),
-                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                // Mark non-copy arg sources as dropped BEFORE call - they're moved.
+                // Copy types remain initialized since they're copied into the callee.
+                for (arg, arg_val) in args.iter().zip(&arg_vals) {
+                    let type_tag = unsafe { (*arg_val.tydesc).type_tag };
+                    if !Self::is_copy_type_tag(type_tag) {
+                        match arg {
+                            Operand::Value(id) => frame.mark_value_dropped(*id),
+                            Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                        }
                     }
                 }
 
@@ -999,6 +1009,16 @@ impl IrInterpreter {
         matches!(tag,
             rtdt::TyTag::U8 | rtdt::TyTag::U16 | rtdt::TyTag::U32 | rtdt::TyTag::U64 |
             rtdt::TyTag::I8 | rtdt::TyTag::I16 | rtdt::TyTag::I32 | rtdt::TyTag::I64
+        )
+    }
+
+    /// Check if a type tag is a copy type (can be duplicated without ownership transfer).
+    fn is_copy_type_tag(tag: rtdt::TyTag) -> bool {
+        matches!(tag,
+            rtdt::TyTag::Bool |
+            rtdt::TyTag::U8 | rtdt::TyTag::U16 | rtdt::TyTag::U32 | rtdt::TyTag::U64 |
+            rtdt::TyTag::I8 | rtdt::TyTag::I16 | rtdt::TyTag::I32 | rtdt::TyTag::I64 |
+            rtdt::TyTag::F32 | rtdt::TyTag::F64
         )
     }
 

@@ -5,6 +5,8 @@
 use std::collections::HashMap;
 use crate::ast;
 use crate::Db;
+use crate::module_graph::ModuleId;
+use crate::tycheck::ResolvedCallTarget;
 use super::super::{IrType, IrFunction, Operand, FuncId, IrModuleId, Terminator};
 use super::super::drop_analysis::FunctionDropAnalysis;
 use super::context::LowerCtx;
@@ -18,11 +20,12 @@ use super::LowerError;
 pub fn lower_function_for_module<'db>(
     db: &'db dyn Db,
     expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
-    available_functions: &HashMap<String, (IrModuleId, FuncId)>,
+    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     func: ast::StmtFun<'db>,
     analysis: FunctionDropAnalysis,
 ) -> Result<IrFunction, LowerError> {
-    let mut ctx = LowerCtx::new_for_module(db, expr_types, available_functions);
+    let mut ctx = LowerCtx::new_for_module(db, expr_types, call_targets, func_id_map);
     let name = func.name(db).text(db).to_string();
     let param_count = func.params(db).len();
 

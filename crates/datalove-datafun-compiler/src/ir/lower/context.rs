@@ -5,13 +5,16 @@
 
 use std::collections::{HashMap, HashSet};
 use salsa::plumbing::AsId;
-use crate::ast::{Statement, ExprFun};
+use crate::ast::{Statement, ExprFun, ExprFunctionCall};
 use crate::Db;
+use crate::module_graph::ModuleId;
+use crate::tycheck::ResolvedCallTarget;
 use super::super::{
     IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, BlockId, FuncId,
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId,
 };
 use super::super::drop_analysis::{BindingId, DropSchedule, BindingInfo};
+use super::LowerError;
 
 /// Context for lowering script units.
 ///
@@ -79,10 +82,18 @@ impl ScriptLowerContext {
         }
     }
 
-    /// Add a lowered module function to the context.
+    /// Add a lowered module function to the context (deprecated - use register_module_function).
     pub fn add_module_function(&mut self, name: String, module_id: IrModuleId, func_id: FuncId, func: IrFunction) {
         self.module_functions.insert((module_id, func_id), func);
         self.module_function_names.insert(name, (module_id, func_id));
+    }
+
+    /// Register a module function for execution only.
+    ///
+    /// Unlike `add_module_function`, this doesn't add to `module_function_names`
+    /// since we now use `call_targets` for call resolution.
+    pub fn register_module_function(&mut self, module_id: IrModuleId, func_id: FuncId, func: IrFunction) {
+        self.module_functions.insert((module_id, func_id), func);
     }
 
     /// Add a module alias from a require statement.
@@ -109,6 +120,10 @@ pub struct LowerCtx<'db> {
     pub(super) db: &'db dyn Db,
     /// Expression types from typechecker.
     pub(super) expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    /// Resolved call targets from typechecker, indexed by ExprFunctionCall salsa ID.
+    pub(super) call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
+    pub(super) func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     /// Next ValueId to allocate.
     pub(super) next_value: u32,
     /// Next SlotId to allocate.
@@ -130,6 +145,7 @@ pub struct LowerCtx<'db> {
     /// Symbol table for function resolution.
     pub(super) symbols: SymbolTable,
     /// Available functions: name -> FuncRef (for resolving calls).
+    /// Used for script-local and external unit functions (not module functions).
     pub(super) func_scope: HashMap<String, FuncRef>,
     /// Type for each ValueId.
     pub(super) value_types: Vec<IrType>,
@@ -158,11 +174,21 @@ pub struct LowerCtx<'db> {
     pub(super) external_slot_types: HashMap<String, IrType>,
 }
 
+/// Empty func_id_map for contexts that don't need module function resolution.
+static EMPTY_FUNC_ID_MAP: std::sync::LazyLock<HashMap<(ModuleId, String), (IrModuleId, FuncId)>> =
+    std::sync::LazyLock::new(HashMap::new);
+
 impl<'db> LowerCtx<'db> {
-    pub fn new(db: &'db dyn Db, expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>]) -> Self {
+    pub fn new(
+        db: &'db dyn Db,
+        expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+        call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    ) -> Self {
         Self {
             db,
             expr_types,
+            call_targets,
+            func_id_map: &EMPTY_FUNC_ID_MAP,
             next_value: 0,
             next_slot: 0,
             next_block: 1, // Block 0 is entry
@@ -189,21 +215,18 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
-    /// Create a context for lowering module functions with imported functions available.
+    /// Create a context for lowering module functions with call resolution support.
     pub fn new_for_module(
         db: &'db dyn Db,
         expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
-        available_functions: &HashMap<String, (IrModuleId, FuncId)>,
+        call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+        func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     ) -> Self {
-        // Seed func_scope with available module functions.
-        let mut func_scope = HashMap::new();
-        for (name, (module_id, func_id)) in available_functions {
-            func_scope.insert(name.clone(), FuncRef::Module { module: *module_id, func: *func_id });
-        }
-
         Self {
             db,
             expr_types,
+            call_targets,
+            func_id_map,
             next_value: 0,
             next_slot: 0,
             next_block: 1,
@@ -214,7 +237,7 @@ impl<'db> LowerCtx<'db> {
             exports: Vec::new(),
             functions: Vec::new(),
             symbols: SymbolTable::new(),
-            func_scope,
+            func_scope: HashMap::new(),
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
@@ -247,6 +270,8 @@ impl<'db> LowerCtx<'db> {
     pub fn new_for_script(
         db: &'db dyn Db,
         expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+        call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+        func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
         script_ctx: ScriptLowerContext,
     ) -> Self {
         // Seed variables with external bindings from previous units.
@@ -273,16 +298,21 @@ impl<'db> LowerCtx<'db> {
             });
         }
 
-        // Add module functions - only those that have been imported.
-        for name in &script_ctx.imported_module_functions {
-            if let Some((module_id, func_id)) = script_ctx.module_function_names.get(name) {
-                func_scope.insert(name.clone(), FuncRef::Module { module: *module_id, func: *func_id });
+        // Add imported module functions as fallback for when call_targets doesn't have the entry.
+        // The imported name is qualified (e.g. "sys/std/result.unwrap_or"),
+        // but we insert by the unqualified function name for call resolution fallback.
+        for qualified_name in &script_ctx.imported_module_functions {
+            if let Some((module_id, func_id)) = script_ctx.module_function_names.get(qualified_name) {
+                let func_name = qualified_name.rsplit('.').next().unwrap_or(qualified_name);
+                func_scope.insert(func_name.to_string(), FuncRef::Module { module: *module_id, func: *func_id });
             }
         }
 
         Self {
             db,
             expr_types,
+            call_targets,
+            func_id_map,
             next_value: 0,
             next_slot: 0,
             next_block: 1,
@@ -317,9 +347,47 @@ impl<'db> LowerCtx<'db> {
         func_id
     }
 
-    /// Look up a function by name.
+    /// Look up a function by name (for local/external functions only).
     pub fn lookup_func(&self, name: &str) -> Option<FuncRef> {
         self.func_scope.get(name).cloned()
+    }
+
+    /// Resolve a function call using typechecker's resolved call target.
+    ///
+    /// This is the preferred way to resolve function calls. It uses the
+    /// `call_targets` from typechecking to get the exact function being called,
+    /// then maps it to an IR function reference.
+    ///
+    /// Falls back to `func_scope` lookup for functions not in call_targets
+    /// (e.g., script-local functions from previous units).
+    pub fn resolve_call(&self, call: ExprFunctionCall<'db>) -> Result<FuncRef, LowerError> {
+        let id = call.as_id().index() as usize;
+        let func_name = call.name(self.db).text(self.db).to_string();
+
+        // Try to get the resolved call target from typechecking.
+        if let Some(Some(target)) = self.call_targets.get(id) {
+            match target.module_id(self.db) {
+                Some(module_id) => {
+                    // Module function - look up by (ModuleId, func_name).
+                    let resolved_func_name = target.func(self.db).name(self.db).text(self.db).to_string();
+                    let (ir_mod, func_id) = self.func_id_map
+                        .get(&(module_id, resolved_func_name.clone()))
+                        .ok_or_else(|| LowerError::FunctionNotFound(resolved_func_name))?;
+                    return Ok(FuncRef::Module { module: *ir_mod, func: *func_id });
+                }
+                None => {
+                    // Local function resolved by typechecker - use func_scope lookup.
+                    let resolved_func_name = target.func(self.db).name(self.db).text(self.db).to_string();
+                    if let Some(func_ref) = self.lookup_func(&resolved_func_name) {
+                        return Ok(func_ref);
+                    }
+                }
+            }
+        }
+
+        // Fallback: try func_scope directly (for script-local/external functions).
+        self.lookup_func(&func_name)
+            .ok_or_else(|| LowerError::FunctionNotFound(func_name))
     }
 
     /// Allocate a fresh SSA value with known type.

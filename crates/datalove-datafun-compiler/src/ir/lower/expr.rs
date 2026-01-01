@@ -127,7 +127,6 @@ pub fn lower_expression<'db>(
             lower_unaryop(ctx, expr, unary)
         }
         ExprFunKind::FunctionCall(call) => {
-            let func_name = call.name(ctx.db).text(ctx.db).to_string();
             let args: Result<Vec<_>, _> = call.args(ctx.db)
                 .iter()
                 .map(|arg| lower_expression(ctx, *arg).map(|v| Operand::Value(v)))
@@ -135,9 +134,8 @@ pub fn lower_expression<'db>(
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
 
-            // Resolve function reference.
-            let func_ref = ctx.lookup_func(&func_name)
-                .ok_or_else(|| LowerError::FunctionNotFound(func_name))?;
+            // Resolve function reference using typechecker's resolved call target.
+            let func_ref = ctx.resolve_call(call)?;
 
             ctx.emit(Instruction::Call {
                 dest,
