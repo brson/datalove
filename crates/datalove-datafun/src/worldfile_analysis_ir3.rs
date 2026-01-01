@@ -163,11 +163,6 @@ pub fn analyze_worldfile_ir3(
         }
     }
 
-    // Typecheck all units together (bindings shared across units).
-    let spec = ScriptBatchSpec::new(db, unit_specs, module_specs.clone());
-    let typecheck_results = type_check_script_units(db, spec);
-    let unit_results = typecheck_results.results(db);
-
     // Shared state for lowering and execution.
     let mut script_ctx = ir::lower::ScriptLowerContext::new();
     let mut env = ScriptEnvironment::new();
@@ -261,7 +256,10 @@ pub fn analyze_worldfile_ir3(
         module_lowering_results.insert(module_path, ir_dumps);
     }
 
-    // Process each section, using the pre-computed typecheck results.
+    // Process each section with incremental typechecking.
+    // We accumulate unit specs and re-typecheck after adding each unit to simulate
+    // REPL behavior where each script unit is typechecked with knowledge of all prior units.
+    let mut accumulated_unit_specs: Vec<ScriptUnitSpec> = Vec::new();
     let mut unit_idx = 0;
     for section in &parsed.sections {
         match section {
@@ -307,7 +305,15 @@ pub fn analyze_worldfile_ir3(
 
             WorldfileSection::ScriptFragment { .. } => {
                 let parsed_unit = &parsed_units[unit_idx];
-                let tycheck_result = unit_results[unit_idx];
+
+                // Incremental typecheck: add this unit's spec and re-typecheck all accumulated units.
+                // Memoization makes this efficient - only the new unit requires typechecking work.
+                accumulated_unit_specs.push(unit_specs[unit_idx].clone());
+                let batch_spec = ScriptBatchSpec::new(db, accumulated_unit_specs.clone(), module_specs.clone());
+                let typecheck_results = type_check_script_units(db, batch_spec);
+                let all_results = typecheck_results.results(db);
+                let tycheck_result = *all_results.last().unwrap();
+
                 unit_idx += 1;
 
                 let result = process_fragment(
@@ -323,7 +329,14 @@ pub fn analyze_worldfile_ir3(
 
             WorldfileSection::ScriptExpr { .. } => {
                 let parsed_unit = &parsed_units[unit_idx];
-                let tycheck_result = unit_results[unit_idx];
+
+                // Incremental typecheck: add this unit's spec and re-typecheck all accumulated units.
+                accumulated_unit_specs.push(unit_specs[unit_idx].clone());
+                let batch_spec = ScriptBatchSpec::new(db, accumulated_unit_specs.clone(), module_specs.clone());
+                let typecheck_results = type_check_script_units(db, batch_spec);
+                let all_results = typecheck_results.results(db);
+                let tycheck_result = *all_results.last().unwrap();
+
                 unit_idx += 1;
 
                 let result = process_expr(
