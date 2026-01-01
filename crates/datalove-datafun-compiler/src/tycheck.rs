@@ -2828,6 +2828,10 @@ fn check_hex_fits_type(value_str: &str, ty: &datalit::tycheck::Type<'_>) -> Resu
             }
         }
         datalit::tycheck::Type::Int => Ok(()), // Arbitrary precision.
+        datalit::tycheck::Type::F32 if !is_negative => {
+            // Hex must fit in 32 bits for f32 bit pattern.
+            u32::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
         _ if is_negative => Err(TypeError::IntOutOfRange), // Unsigned type with negative value.
         _ => Ok(()), // Non-integer types.
     }

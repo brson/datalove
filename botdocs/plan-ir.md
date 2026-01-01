@@ -558,9 +558,10 @@ TODO:
   - Pretty-printing implemented in runtime
   - Tests: 137-138 (interp3), 049 (module_interp3)
 
-**Missing Features (LOW priority):**
-
-5. **Hex Literals** - May already parse to int values
+- **Hex Literals** - DONE. Hex literals for all integer types and f32
+  - Syntax: `@0xFF` for integers, `: @f32 / @0x40490FDB` for floats (bit pattern)
+  - Added `ConstValue::F32(f32)` variant to IR
+  - Tests: 139-143 (interp3)
 
 **Bug Fixes:**
 
@@ -578,7 +579,7 @@ TODO:
 **Test Coverage:**
 
 - Old interpreter (module_interp_tests): 219 tests
-- IR interpreter (interp3_tests): 126 tests
+- IR interpreter (interp3_tests): 131 tests
 - IR interpreter (module_interp3_tests): 49 tests
 - All tests pass with leak checking enabled
 
