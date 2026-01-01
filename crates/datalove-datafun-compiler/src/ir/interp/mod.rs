@@ -796,6 +796,11 @@ impl IrInterpreter {
                 self.execute_map_new(entries, dest_slot, frame, frames)?;
                 frame.mark_value_initialized(*dest);
             }
+            Instruction::TensorNew { dest, shape, elements } => {
+                let dest_slot = frame.value_dest(*dest)?;
+                self.execute_tensor_new(shape, elements, dest_slot, frame, frames)?;
+                frame.mark_value_initialized(*dest);
+            }
             Instruction::Phi { .. } => {
                 // Phi nodes are handled separately in execute_blocks before other instructions.
                 // This branch should not be reached since we skip Phi in the instruction loop.
@@ -2087,6 +2092,132 @@ impl IrInterpreter {
 
         if status != RtStatus::Ok {
             return Err(InterpError::RuntimeError("Failed to build map B-tree".to_string()));
+        }
+
+        Ok(())
+    }
+
+    /// Execute TensorNew: create a tensor from shape and elements.
+    fn execute_tensor_new(
+        &mut self,
+        shape: &[u32],
+        elements: &[Operand],
+        dest: Destination,
+        frame: &Frame,
+        frames: &FrameStore,
+    ) -> Result<(), InterpError> {
+        let rt_handle = self.runtime.handle();
+        let tensor_ptr = dest.ptr;
+        let tensor_tydesc = dest.tydesc;
+
+        // Get element tydesc from tensor tydesc.
+        let tensor_tydesc_ref = unsafe { TyDescRef::from_ptr(tensor_tydesc) };
+        let element_tydesc = tensor_tydesc_ref.tensor_element_ty().as_ptr();
+        let element_size = unsafe { (*element_tydesc).size as usize };
+
+        let rank = shape.len();
+        let total_elems: usize = shape.iter().map(|&d| d as usize).product();
+
+        // Allocate tensor data array.
+        let data_ptr = if total_elems > 0 {
+            let array_ptr = unsafe {
+                datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, element_tydesc, total_elems as u32)
+            };
+            if array_ptr.is_null() {
+                return Err(InterpError::RuntimeError("Failed to allocate tensor data".to_string()));
+            }
+
+            // Copy each element into the data buffer.
+            for (i, elem_op) in elements.iter().enumerate() {
+                let elem_val = self.read_operand(elem_op, frame, frames)?;
+                let elem_dest = unsafe { array_ptr.add(i * element_size) };
+                unsafe {
+                    std::ptr::copy_nonoverlapping(elem_val.ptr, elem_dest, element_size);
+                }
+            }
+            array_ptr
+        } else {
+            std::ptr::null_mut()
+        };
+
+        // Allocate shape array.
+        let shape_ptr = if rank > 0 {
+            let shape_array = unsafe {
+                datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                    rt_handle,
+                    std::mem::size_of::<u32>() as u32,
+                    std::mem::align_of::<u32>() as u32,
+                    rank as u32,
+                ) as *mut u32
+            };
+            if shape_array.is_null() {
+                // Cleanup data if allocated.
+                if !data_ptr.is_null() {
+                    unsafe {
+                        datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, element_tydesc, total_elems as u32, data_ptr);
+                    }
+                }
+                return Err(InterpError::RuntimeError("Failed to allocate tensor shape".to_string()));
+            }
+            for (i, &dim) in shape.iter().enumerate() {
+                unsafe { *shape_array.add(i) = dim; }
+            }
+            shape_array as *const u32
+        } else {
+            std::ptr::null()
+        };
+
+        // Allocate and compute strides array.
+        let strides_ptr = if rank > 0 {
+            let strides_array = unsafe {
+                datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
+                    rt_handle,
+                    std::mem::size_of::<u32>() as u32,
+                    std::mem::align_of::<u32>() as u32,
+                    rank as u32,
+                ) as *mut u32
+            };
+            if strides_array.is_null() {
+                // Cleanup.
+                if !data_ptr.is_null() {
+                    unsafe {
+                        datalove_rt::c::dtlv_rti_mem_free_local(rt_handle, element_tydesc, total_elems as u32, data_ptr);
+                    }
+                }
+                if !shape_ptr.is_null() {
+                    unsafe {
+                        datalove_rt::c::dtlv_rti_mem_free_raw_local(
+                            rt_handle,
+                            (rank * std::mem::size_of::<u32>()) as u32,
+                            std::mem::align_of::<u32>() as u32,
+                            1,
+                            shape_ptr as *mut u8,
+                        );
+                    }
+                }
+                return Err(InterpError::RuntimeError("Failed to allocate tensor strides".to_string()));
+            }
+
+            // Compute strides for row-major layout.
+            for i in 0..rank {
+                let stride = shape[i+1..rank].iter().map(|&d| d).product::<u32>();
+                unsafe { *strides_array.add(i) = if stride == 0 { 1 } else { stride }; }
+            }
+
+            strides_array as *const u32
+        } else {
+            std::ptr::null()
+        };
+
+        // Fill in the Tensor struct.
+        unsafe {
+            let tensor = tensor_ptr as *mut rtdt::Tensor;
+            (*tensor).ptr_base = data_ptr;
+            (*tensor).capacity_elems = total_elems as u32;
+            (*tensor).offset_elems = 0;
+            (*tensor).shape = shape_ptr;
+            (*tensor).strides = strides_ptr;
+            (*tensor).layout = rtdt::TensorLayout::RowMajor;
         }
 
         Ok(())

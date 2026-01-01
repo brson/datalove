@@ -142,6 +142,7 @@ impl IrTyDescTable {
             IrType::Map(key, val) => self.create_map_tydesc(key, val),
             IrType::Option(inner) => self.create_option_tydesc(inner),
             IrType::Result(inner) => self.create_result_tydesc(inner),
+            IrType::Tensor(elem, rank) => self.create_tensor_tydesc(elem, *rank),
         }
     }
 
@@ -338,6 +339,18 @@ impl IrTyDescTable {
             align: layout.align,
             type_info: rtdt::TyInfo {
                 result: rtdt::TyInfoResult { ok_tydesc },
+            },
+        })
+    }
+
+    fn create_tensor_tydesc(&mut self, elem: &IrType, rank: u32) -> Box<TyDesc> {
+        let element_tydesc = self.get_or_create(elem);
+        Box::new(TyDesc {
+            type_tag: rtdt::TyTag::Tensor,
+            size: std::mem::size_of::<rtdt::Tensor>() as u32,
+            align: std::mem::align_of::<rtdt::Tensor>() as u32,
+            type_info: rtdt::TyInfo {
+                tensor: rtdt::TyInfoTensor { element_tydesc, rank },
             },
         })
     }

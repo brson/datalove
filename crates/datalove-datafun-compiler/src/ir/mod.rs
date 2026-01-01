@@ -101,6 +101,8 @@ pub enum IrType {
     Option(Box<IrType>),
     /// Result with ok type.
     Result(Box<IrType>),
+    /// Tensor with element type and rank.
+    Tensor(Box<IrType>, u32),
 }
 
 impl IrType {
@@ -182,8 +184,9 @@ impl IrType {
                 let ok = Self::from_type_hint(db, &res.inner_type(db));
                 IrType::Result(Box::new(ok))
             }
-            TypeHint::Tensor(_) => {
-                todo!("tensor types in IR")
+            TypeHint::Tensor(t) => {
+                let elem = Self::from_type_hint(db, &t.element_type(db));
+                IrType::Tensor(Box::new(elem), t.rank(db))
             }
             TypeHint::ParseError(_) => {
                 IrType::Error
@@ -257,8 +260,9 @@ impl IrType {
                 let ok = Self::from_datalit_tyandheap(db, &res.inner_type(db));
                 IrType::Result(Box::new(ok))
             }
-            DlType::Tensor(_) => {
-                todo!("tensor types in IR")
+            DlType::Tensor(t) => {
+                let elem = Self::from_datalit_tyandheap(db, &t.element_type(db));
+                IrType::Tensor(Box::new(elem), t.rank(db))
             }
         }
     }
@@ -277,7 +281,7 @@ impl IrType {
 
             // Heap-allocated types are never copy.
             IrType::Int | IrType::String | IrType::Data | IrType::Error => false,
-            IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) => false,
+            IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) | IrType::Tensor(_, _) => false,
 
             // Composite types are copy if all fields are copy.
             IrType::Tuple(fields) => fields.iter().all(|f| f.is_copy()),
@@ -547,6 +551,13 @@ pub enum Instruction {
     MapNew {
         dest: ValueId,
         entries: Vec<(Operand, Operand)>,
+    },
+
+    /// Create a new tensor.
+    TensorNew {
+        dest: ValueId,
+        shape: Vec<u32>,
+        elements: Vec<Operand>,
     },
 
     /// Store value to mutable slot.

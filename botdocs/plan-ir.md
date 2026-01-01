@@ -550,6 +550,14 @@ TODO:
   - Tests in expr, fragment, cross-unit, module function contexts
   - Tests: 126-130, 132, 134, 136 (interp3), 045-047 (module_interp3)
 
+- **Tensor Literals** - DONE. `TensorNew` instruction for tensor creation
+  - `IrType::Tensor(Box<IrType>, u32)` - element type and rank
+  - Syntax: `@tensor [shape] [elements]` (1D comma-separated, 2D+ space-separated rows)
+  - Allocates data array, shape array, strides array via runtime
+  - Row-major layout with computed strides
+  - Tests: 137-138 (interp3), 049 (module_interp3)
+  - Note: Runtime pretty-print shows `<unsupported-type>` (separate from IR implementation)
+
 **Missing Features (LOW priority):**
 
 5. **Hex Literals** - May already parse to int values
@@ -570,8 +578,8 @@ TODO:
 **Test Coverage:**
 
 - Old interpreter (module_interp_tests): 219 tests
-- IR interpreter (interp3_tests): 124 tests
-- IR interpreter (module_interp3_tests): 48 tests
+- IR interpreter (interp3_tests): 126 tests
+- IR interpreter (module_interp3_tests): 49 tests
 - All tests pass with leak checking enabled
 
 Test matrix (each feature should be tested in):

@@ -1,0 +1,10 @@
+ModulesIr3Analysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    lowering: LoweringResult(
+        status: "Success",
+        ir: "fn main():\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = const 4u32\n    v4 = tensor [2, 2] [v0, v1, v2, v3]\n    return v4\n",
+    ),
+    output: "<unsupported-type>",
+)

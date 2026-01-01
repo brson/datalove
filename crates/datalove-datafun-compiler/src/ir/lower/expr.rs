@@ -299,8 +299,20 @@ pub fn lower_expression<'db>(
         ExprFunKind::AnonEnum(_) => {
             Err(LowerError::NotImplemented("AnonEnum".to_string()))
         }
-        ExprFunKind::Tensor(_) => {
-            Err(LowerError::NotImplemented("Tensor".to_string()))
+        ExprFunKind::Tensor(tensor) => {
+            let shape = tensor.shape(ctx.db).clone();
+            let elements: Result<Vec<_>, _> = tensor.elements(ctx.db)
+                .iter()
+                .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
+                .collect();
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
+            ctx.emit(Instruction::TensorNew {
+                dest,
+                shape,
+                elements: elements?,
+            });
+            Ok(dest)
         }
         ExprFunKind::ParseError(_) => {
             Err(LowerError::NotImplemented("ParseError".to_string()))

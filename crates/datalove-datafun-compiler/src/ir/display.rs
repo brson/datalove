@@ -312,6 +312,23 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, "}}")
             }
+            Instruction::TensorNew { dest, shape, elements } => {
+                write!(f, "{} = tensor [", dest)?;
+                for (i, dim) in shape.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", dim)?;
+                }
+                write!(f, "] [")?;
+                for (i, elem) in elements.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", elem)?;
+                }
+                write!(f, "]")
+            }
             Instruction::SlotStore { dest, value } => {
                 write!(f, "store {}, {}", dest, value)
             }
