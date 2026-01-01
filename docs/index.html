@@ -16,8 +16,8 @@
     <main>
         <h1><a href="#the-datalove-guide" aria-hidden="true" class="anchor" id="user-content-the-datalove-guide"></a>The Datalove Guide</h1>
 <p>Datalove is
-a simple and expressive interactive scripting language -
-strongly and statically typed -
+a simple and expressive interactive scripting language —
+strongly and statically typed, but with ergonomic coercions —
 for efficient data modeling and transformation.</p>
 <p>Datalove is built around one core idea:
 first let us define a simple but complete language
@@ -30,8 +30,12 @@ scripts and prototypes in Python,
 Datalove was born from my dissatisfaction with
 Python's weak typing and inconsistent
 facilities for expressing simple data structures.
-Datalove is most usefully compared to Python, JavaScript, and Julia.</p>
-<hr />
+Datalove is most usefully compared to Python, JavaScript, and Julia,
+through a Rustic linear-typing lens.</p>
+<blockquote>
+<p>Datalove is under active design and development.
+There is currently no recommended way to install or test.</p>
+</blockquote>
 <p>Datalove is built from three cleanly-scoped strict sublanguages of increasing power:</p>
 <h3><a href="#datalove-literals-datalit" aria-hidden="true" class="anchor" id="user-content-datalove-literals-datalit"></a>Datalove Literals (&quot;Datalit&quot;)</h3>
 <p>The tiny and comprehensible foundation of Datalove, a strongly-typed and
@@ -41,7 +45,6 @@ anonymous tuples, structs, and enums;
 strings, lists, maps and sets, tensors;
 option and result;
 existential runtime-typed data and error types.</p>
-<p>File extension: <code>.dlt</code></p>
 <pre><code class="language-datalove">{
   name = &quot;Ada&quot;,
   born = 1815,
@@ -61,13 +64,11 @@ existential runtime-typed data and error types.</p>
 <h3><a href="#datalove-functions-datafun" aria-hidden="true" class="anchor" id="user-content-datalove-functions-datafun"></a>Datalove Functions (&quot;Datafun&quot;)</h3>
 <p>A simple pure-functional language that feels like an imperative language, built
 on the datalit type system.</p>
-<p>File extensions: <code>.dfs</code> (scripts), <code>.dfm</code> (modules)</p>
 <p>TODO continue address-book example</p>
 <h3><a href="#datalove" aria-hidden="true" class="anchor" id="user-content-datalove"></a>Datalove</h3>
 <p>The complete language with I/O-bearing procedures,
 owned native pointers, objects with identity,
 and stack unwinding.</p>
-<p>File extensions: <code>.dls</code> (scripts), <code>.dlm</code> (module)</p>
 <p>TODO</p>
 <hr />
 <ul>

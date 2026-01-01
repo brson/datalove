@@ -1,8 +1,8 @@
 # The Datalove Guide
 
 Datalove is
-a simple and expressive interactive scripting language -
-strongly and statically typed -
+a simple and expressive interactive scripting language &mdash;
+strongly and statically typed, but with ergonomic coercions &mdash;
 for efficient data modeling and transformation.
 
 Datalove is built around one core idea:
@@ -17,15 +17,14 @@ scripts and prototypes in Python,
 Datalove was born from my dissatisfaction with
 Python's weak typing and inconsistent
 facilities for expressing simple data structures.
-Datalove is most usefully compared to Python, JavaScript, and Julia.
+Datalove is most usefully compared to Python, JavaScript, and Julia,
+through a Rustic linear-typing lens.
 
-> Datalove is in active development.
+> Datalove is under active design and development.
 > There is currently no recommended way to install or test.
 
 
 
-
----
 
 Datalove is built from three cleanly-scoped strict sublanguages of increasing power:
 
@@ -39,8 +38,6 @@ anonymous tuples, structs, and enums;
 strings, lists, maps and sets, tensors;
 option and result;
 existential runtime-typed data and error types.
-
-File extension: `.dlt`
 
 ```datalove
 {
@@ -68,8 +65,6 @@ File extension: `.dlt`
 A simple pure-functional language that feels like an imperative language, built
 on the datalit type system.
 
-File extensions: `.dfs` (scripts), `.dfm` (modules)
-
 TODO continue address-book example
 
 
@@ -80,8 +75,6 @@ TODO continue address-book example
 The complete language with I/O-bearing procedures,
 owned native pointers, objects with identity,
 and stack unwinding.
-
-File extensions: `.dls` (scripts), `.dlm` (module)
 
 TODO
 

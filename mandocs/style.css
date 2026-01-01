@@ -158,11 +158,21 @@ pre {
     border-style: solid;
     border-width: 1px;
     overflow-x: auto;
+    margin: 2rem 0;
 }
 
 pre code {
     padding: 0;
     background: none;
+}
+
+blockquote {
+    border-radius: 5px;
+    border-color: var(--accent);
+    border-style: solid;
+    border-width: 1px;
+    padding: 0 1rem;
+    margin: 2rem 0;
 }
 
 hr {
