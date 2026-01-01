@@ -18,8 +18,8 @@ Ir3Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "UnresolvedName(\"module base (not required)\")",
-                    "UnresolvedName(\"double\")",
+                    "local/test/derived: UnresolvedName(\"module base (not required)\")",
+                    "local/test/derived: UnresolvedName(\"double\")",
                 ],
             ),
             lowering: LoweringResult(

@@ -23,5 +23,6 @@ pub mod import_demands;
 pub mod package_resolve;
 pub mod worldfile_analysis;
 pub mod worldfile_analysis_modules;
+pub mod worldfile_pipeline_ir3;
 pub mod worldfile_analysis_modules_ir3;
 pub mod worldfile_analysis_ir3;

@@ -9,18 +9,18 @@
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
-use rmx::std::collections::{BTreeMap, HashMap};
 
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
-use datalove_datafun_pkg::package_load::{Package, PackageModule};
 use datalove_datafun_compiler::ir;
-use datalove_datafun_compiler::ir::{IrModuleId, FuncId};
 use datalove_datafun_compiler::tycheck::{
-    type_check_script_units, UnitTypecheckResultTracked, typecheck_module_graph,
+    type_check_script_units, UnitTypecheckResultTracked,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, UnitKindTag,
 };
-use datalove_datafun_compiler::module_graph::ModuleGraphBuilder;
 use ir::interp::{ScriptEnvironment, UnitCompletion};
+
+use crate::worldfile_pipeline_ir3::{
+    ModuleCompilationPipeline, TypecheckResult, LoweringResult, format_module_lowering_result,
+};
 
 /// Result of analyzing a worldfile with IR interpreter.
 #[derive(Debug, Serialize, Deserialize)]
@@ -42,31 +42,6 @@ pub struct SectionResult {
     pub lowering: LoweringResult,
     /// Output value (for expression units) or function call result.
     pub output: String,
-}
-
-/// Typecheck result summary.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "status")]
-pub enum TypecheckResult {
-    Success,
-    Error {
-        errors: Vec<String>,
-    },
-    Skipped,
-}
-
-/// Lowering result summary.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "status")]
-pub enum LoweringResult {
-    Success {
-        /// IR dump.
-        ir: String,
-    },
-    Error {
-        message: String,
-    },
-    Skipped,
 }
 
 /// Parsed script unit info for processing.
@@ -96,40 +71,28 @@ pub fn analyze_worldfile_ir3(
 ) -> AnyResult<Ir3Analysis> {
     let mut results = Vec::new();
 
-    // First pass: collect all modules for context.
-    let mut pkglib_local = BTreeMap::<String, Package>::new();
+    // Build pipeline and add modules.
+    let mut pipeline = ModuleCompilationPipeline::new(db);
+    pipeline.add_modules_from_sections(&parsed.sections);
 
-    for section in &parsed.sections {
-        if let WorldfileSection::Module { library, package, module, source } = section {
-            if library != "local" {
-                continue;  // Skip non-local modules for now.
-            }
+    // Compile modules (typecheck, drop analysis, lower).
+    let mut compiled = pipeline.compile();
 
-            let pkg = pkglib_local.entry(package.C())
-                .or_insert_with(|| Package {
-                    name: package.C(),
-                    modules: BTreeMap::new(),
-                });
-
-            let module_path_str = format!("{}/{}/{}", library, package, module);
-
-            let pkg_module = PackageModule {
-                name: module.C(),
-                path: module_path_str.C().into(),
-                text: source.C(),
-            };
-
-            pkg.modules.insert(module.C(), pkg_module);
-        }
-    }
-
-    // Build module specs for typechecking.
+    // Build module specs for script unit typechecking.
     let mut module_specs: Vec<ModuleSpec> = Vec::new();
     for section in &parsed.sections {
         if let WorldfileSection::Module { library, package, module, source } = section {
             let module_path = format!("{}/{}/{}", library, package, module);
             let src = bct::input::Source::new(db, source.to_string());
             module_specs.push(ModuleSpec::new(db, module_path, src));
+        }
+    }
+
+    // Build ScriptLowerContext from compiled modules.
+    let mut script_ctx = ir::lower::ScriptLowerContext::new();
+    for (name, (module_id, func_id)) in &compiled.all_module_functions {
+        if let Some(ir_func) = compiled.env.registry.get_module_function(*module_id, *func_id) {
+            script_ctx.add_module_function(name.clone(), *module_id, *func_id, ir_func.clone());
         }
     }
 
@@ -140,7 +103,7 @@ pub fn analyze_worldfile_ir3(
     for section in &parsed.sections {
         match section {
             WorldfileSection::Module { .. } => {
-                // Modules are handled above.
+                // Modules are handled by pipeline.
             }
             WorldfileSection::ScriptFragment { source } => {
                 let src = bct::input::Source::new(db, source.to_string());
@@ -164,107 +127,7 @@ pub fn analyze_worldfile_ir3(
         }
     }
 
-    // Shared state for lowering and execution.
-    let mut script_ctx = ir::lower::ScriptLowerContext::new();
-    let mut env = ScriptEnvironment::new();
     let mut interp = ir::interp::IrInterpreter::new();
-
-    // Build ModuleGraph and typecheck all modules together.
-    // This handles module-to-module imports properly.
-    let mut builder = ModuleGraphBuilder::new(db);
-    for module_spec in &module_specs {
-        builder.add_module(module_spec.path(db).clone(), module_spec.source(db));
-    }
-    let module_graph = builder.build();
-
-    // Typecheck all modules together (handles inter-module imports).
-    let graph_typecheck = typecheck_module_graph(db, module_graph.clone());
-    let combined_expr_types = graph_typecheck.expr_types(db);
-
-    // Build map from module path to typecheck errors.
-    let module_errors = graph_typecheck.module_errors(db);
-    let mut path_to_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (module_id, errors) in module_errors {
-        let path = module_id.path(db).clone();
-        let error_strings: Vec<String> = errors.iter()
-            .map(|e| format!("{:?}", e))
-            .collect();
-        path_to_errors.insert(path, error_strings);
-    }
-
-    // First pass: collect all module function names and assign IDs.
-    // Maps function name -> (IrModuleId, FuncId).
-    let mut all_module_functions: HashMap<String, (IrModuleId, FuncId)> = HashMap::new();
-    let mut next_func_id: u32 = 0;
-    for (ir_module_idx, module) in module_graph.iter_modules(db).enumerate() {
-        let ir_module_id = IrModuleId(ir_module_idx as u32);
-        let module_source = module.source(db);
-        let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
-        let script = parse_result.script(db);
-        for statement in script.statements(db) {
-            if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
-                let func_name = func.name(db).text(db).to_string();
-                let func_id = FuncId(next_func_id);
-                next_func_id += 1;
-                all_module_functions.insert(func_name, (ir_module_id, func_id));
-            }
-        }
-    }
-
-    // Second pass: lower module functions with all function IDs available.
-    // Track lowering results per module path.
-    let mut module_lowering_results: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (ir_module_idx, module) in module_graph.iter_modules(db).enumerate() {
-        let ir_module_id = IrModuleId(ir_module_idx as u32);
-        let salsa_module_id = module.id(db);
-        let module_path = salsa_module_id.path(db).clone();
-
-        // Skip lowering if module has typecheck errors.
-        if path_to_errors.get(&module_path).map_or(false, |e| !e.is_empty()) {
-            continue;
-        }
-
-        let module_source = module.source(db);
-        let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
-        let script = parse_result.script(db);
-
-        let mut ir_dumps = Vec::new();
-
-        // Lower each function in the module.
-        for statement in script.statements(db) {
-            if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
-                let func_name = func.name(db).text(db).to_string();
-
-                // Run drop analysis first.
-                let analysis = ir::drop_analysis::analyze_function(db, *func, combined_expr_types);
-                if !analysis.errors.is_empty() {
-                    let error_msgs: Vec<String> = analysis.errors.iter()
-                        .map(|e| format!("{:?}", e))
-                        .collect();
-                    ir_dumps.push(format!("Drop analysis error in {}: {}", func_name, error_msgs.join("; ")));
-                    continue;
-                }
-
-                // Get the pre-assigned func_id.
-                let (_, func_id) = all_module_functions.get(&func_name).unwrap();
-
-                // Lower the function with all module functions available.
-                match ir::lower::lower_function_for_module(
-                    db, combined_expr_types, &all_module_functions, *func, analysis
-                ) {
-                    Ok(ir_func) => {
-                        ir_dumps.push(format!("{}", ir_func));
-                        script_ctx.add_module_function(func_name.clone(), ir_module_id, *func_id, ir_func.clone());
-                        env.add_module_function(ir_module_id, *func_id, ir_func);
-                    }
-                    Err(e) => {
-                        ir_dumps.push(format!("Error lowering {}: {}", func_name, e));
-                    }
-                }
-            }
-        }
-        module_lowering_results.insert(module_path, ir_dumps);
-    }
 
     // Process each section with incremental typechecking.
     // We accumulate unit specs and re-typecheck after adding each unit to simulate
@@ -277,31 +140,31 @@ pub fn analyze_worldfile_ir3(
                 let module_path = format!("{}/{}/{}", library, package, module);
 
                 // Look up typecheck errors for this module.
-                let typecheck = match path_to_errors.get(&module_path) {
+                let typecheck = match compiled.path_to_errors.get(&module_path) {
                     Some(errors) if !errors.is_empty() => {
                         TypecheckResult::Error { errors: errors.clone() }
                     }
                     _ => TypecheckResult::Success,
                 };
 
+                // Look up drop analysis errors.
+                let drop_key = format!("{}", module_path);
+                let has_drop_errors = compiled.drop_analysis_errors.keys()
+                    .any(|k| k.starts_with(&drop_key));
+
                 // Look up lowering results for this module.
-                let lowering = match &typecheck {
-                    TypecheckResult::Error { .. } => LoweringResult::Skipped,
-                    _ => match module_lowering_results.get(&module_path) {
-                        Some(ir_dumps) => {
-                            let has_errors = ir_dumps.iter().any(|s| s.starts_with("Error"));
-                            if has_errors {
-                                let errors: Vec<_> = ir_dumps.iter()
-                                    .filter(|s| s.starts_with("Error"))
-                                    .cloned()
-                                    .collect();
-                                LoweringResult::Error { message: errors.join("\n") }
-                            } else {
-                                LoweringResult::Success { ir: ir_dumps.join("\n") }
-                            }
-                        }
+                let has_typecheck_errors = matches!(&typecheck, TypecheckResult::Error { .. });
+                let lowering = if has_drop_errors {
+                    let errors: Vec<_> = compiled.drop_analysis_errors.iter()
+                        .filter(|(k, _)| k.starts_with(&drop_key))
+                        .flat_map(|(_, v)| v.iter().cloned())
+                        .collect();
+                    LoweringResult::Error { message: format!("Drop analysis errors: {}", errors.join("; ")) }
+                } else {
+                    match compiled.module_lowering_results.get(&module_path) {
+                        Some(ir_dumps) => format_module_lowering_result(ir_dumps, has_typecheck_errors),
                         None => LoweringResult::Skipped,
-                    },
+                    }
                 };
 
                 results.push(SectionResult {
@@ -331,7 +194,7 @@ pub fn analyze_worldfile_ir3(
                     parsed_unit,
                     tycheck_result,
                     &mut script_ctx,
-                    &mut env,
+                    &mut compiled.env,
                     &mut interp,
                 );
                 results.push(result);
@@ -354,7 +217,7 @@ pub fn analyze_worldfile_ir3(
                     parsed_unit,
                     tycheck_result,
                     &mut script_ctx,
-                    &mut env,
+                    &mut compiled.env,
                     &mut interp,
                 );
                 results.push(result);
@@ -363,7 +226,7 @@ pub fn analyze_worldfile_ir3(
     }
 
     // Cleanup: destroy all values in frames to prevent memory leaks.
-    env.destroy_all(interp.runtime_handle());
+    compiled.env.destroy_all(interp.runtime_handle());
 
     Ok(Ir3Analysis { sections: results })
 }

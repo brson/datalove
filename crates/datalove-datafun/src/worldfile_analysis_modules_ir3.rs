@@ -10,15 +10,13 @@
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
-use rmx::std::collections::{BTreeMap, HashMap};
 
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
-use datalove_datafun_pkg::package_load::{Package, PackageModule};
 use datalove_datafun_compiler::ir;
-use datalove_datafun_compiler::ir::{IrModuleId, FuncId};
-use datalove_datafun_compiler::tycheck::typecheck_module_graph;
-use datalove_datafun_compiler::module_graph::ModuleGraphBuilder;
-use ir::interp::ScriptEnvironment;
+
+use crate::worldfile_pipeline_ir3::{
+    ModuleCompilationPipeline, TypecheckResult, LoweringResult,
+};
 
 /// Result of analyzing a module-only worldfile with IR interpreter.
 #[derive(Debug, Serialize, Deserialize)]
@@ -29,30 +27,6 @@ pub struct ModulesIr3Analysis {
     pub lowering: LoweringResult,
     /// Output value from calling main().
     pub output: String,
-}
-
-/// Typecheck result summary.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "status")]
-pub enum TypecheckResult {
-    Success,
-    Error {
-        errors: Vec<String>,
-    },
-}
-
-/// Lowering result summary.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "status")]
-pub enum LoweringResult {
-    Success {
-        /// IR dump of the main function.
-        ir: String,
-    },
-    Error {
-        message: String,
-    },
-    Skipped,
 }
 
 /// Analyze a module-only worldfile using the IR interpreter.
@@ -81,144 +55,54 @@ pub fn analyze_modules_worldfile_ir3(
         }
     }
 
-    // Extract modules to build PackageWorld (for validation) and module specs (for typechecking).
-    let mut pkglib_local = BTreeMap::<String, Package>::new();
-    let mut module_specs = Vec::new();
-
-    for section in &parsed.sections {
-        if let WorldfileSection::Module { library, package, module, source } = section {
-            // Build module path.
-            let module_path = format!("{}/{}/{}", library, package, module);
-
-            // Create source for module graph.
-            let src = bct::input::Source::new(db, source.to_string());
-            module_specs.push((module_path.clone(), src));
-
-            // Also track in package structure for validation.
-            if library == "local" {
-                let pkg = pkglib_local.entry(package.C())
-                    .or_insert_with(|| Package {
-                        name: package.C(),
-                        modules: BTreeMap::new(),
-                    });
-
-                let pkg_module = PackageModule {
-                    name: module.C(),
-                    path: module_path.C().into(),
-                    text: source.C(),
-                };
-
-                pkg.modules.insert(module.C(), pkg_module);
-            }
-        }
-    }
+    // Build pipeline and add modules.
+    let mut pipeline = ModuleCompilationPipeline::new(db);
+    pipeline.add_modules_from_sections(&parsed.sections);
 
     // Verify local/test/main module exists.
-    let local_lib = pkglib_local.get("test")
+    let local_lib = pipeline.pkglib_local().get("test")
         .ok_or_else(|| anyhow!("missing local/test package"))?;
     if !local_lib.modules.contains_key("main") {
         bail!("missing local/test/main module");
     }
 
-    // Build ModuleGraph for typechecking.
-    let mut builder = ModuleGraphBuilder::new(db);
-    for (path, source) in &module_specs {
-        builder.add_module(path.clone(), *source);
-    }
-    let module_graph = builder.build();
-
-    // Typecheck all modules together (handles inter-module imports).
-    let graph_typecheck = typecheck_module_graph(db, module_graph.clone());
-    let combined_expr_types = graph_typecheck.expr_types(db);
+    // Compile modules (typecheck, drop analysis, lower).
+    let mut compiled = pipeline.compile();
 
     // Check for typecheck errors.
-    let module_errors = graph_typecheck.module_errors(db);
-    let mut all_errors = Vec::new();
-    for (module_id, errors) in module_errors {
-        for e in errors {
-            all_errors.push(format!("{}: {:?}", module_id.path(db), e));
-        }
-    }
-    if !all_errors.is_empty() {
+    let all_typecheck_errors: Vec<String> = compiled.path_to_errors.values()
+        .flatten()
+        .cloned()
+        .collect();
+    if !all_typecheck_errors.is_empty() {
         return Ok(ModulesIr3Analysis {
-            typecheck: TypecheckResult::Error { errors: all_errors },
+            typecheck: TypecheckResult::Error { errors: all_typecheck_errors },
             lowering: LoweringResult::Skipped,
             output: String::new(),
         });
     }
 
-    // First pass: collect all function names and assign IDs.
-    // Maps function name -> (IrModuleId, FuncId).
-    let mut all_module_functions: HashMap<String, (IrModuleId, FuncId)> = HashMap::new();
-    let mut next_func_id: u32 = 0;
-    for (ir_module_idx, module) in module_graph.iter_modules(db).enumerate() {
-        let ir_module_id = IrModuleId(ir_module_idx as u32);
-        let module_source = module.source(db);
-        let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
-        let script = parse_result.script(db);
-        for statement in script.statements(db) {
-            if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
-                let func_name = func.name(db).text(db).to_string();
-                let func_id = FuncId(next_func_id);
-                next_func_id += 1;
-                all_module_functions.insert(func_name, (ir_module_id, func_id));
-            }
-        }
+    // Check for drop analysis errors.
+    let all_drop_errors: Vec<String> = compiled.drop_analysis_errors.values()
+        .flatten()
+        .cloned()
+        .collect();
+    if !all_drop_errors.is_empty() {
+        return Ok(ModulesIr3Analysis {
+            typecheck: TypecheckResult::Success,
+            lowering: LoweringResult::Error {
+                message: format!("Drop analysis errors: {}", all_drop_errors.join("; ")),
+            },
+            output: String::new(),
+        });
     }
 
-    // Second pass: lower all functions and build the execution environment.
-    let mut env = ScriptEnvironment::new();
-    let mut main_ir: Option<ir::IrFunction> = None;
-    let mut ir_dumps = Vec::new();
-    let mut lowering_errors = Vec::new();
-
-    for (ir_module_idx, module) in module_graph.iter_modules(db).enumerate() {
-        let ir_module_id = IrModuleId(ir_module_idx as u32);
-        let salsa_module_id = module.id(db);
-        let module_path = salsa_module_id.path(db).clone();
-        let module_source = module.source(db);
-        let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
-        let script = parse_result.script(db);
-
-        for statement in script.statements(db) {
-            if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
-                let func_name = func.name(db).text(db).to_string();
-
-                // Run drop analysis first.
-                let analysis = ir::drop_analysis::analyze_function(db, *func, combined_expr_types);
-                if !analysis.errors.is_empty() {
-                    let error_msgs: Vec<String> = analysis.errors.iter()
-                        .map(|e| format!("{:?}", e))
-                        .collect();
-                    lowering_errors.push(format!("Drop analysis error in {}/{}: {}", module_path, func_name, error_msgs.join("; ")));
-                    continue;
-                }
-
-                // Get the pre-assigned func_id.
-                let (_, func_id) = all_module_functions.get(&func_name).unwrap();
-
-                match ir::lower::lower_function_for_module(
-                    db, combined_expr_types, &all_module_functions, *func, analysis
-                ) {
-                    Ok(ir_func) => {
-                        ir_dumps.push(format!("{}", ir_func));
-
-                        // Track main function separately.
-                        if module_path == "local/test/main" && func_name == "main" {
-                            main_ir = Some(ir_func.clone());
-                        }
-
-                        // Add to environment for cross-function calls.
-                        env.add_module_function(ir_module_id, *func_id, ir_func);
-                    }
-                    Err(e) => {
-                        lowering_errors.push(format!("Error lowering {}/{}: {}", module_path, func_name, e));
-                    }
-                }
-            }
-        }
-    }
-
+    // Check for lowering errors.
+    let lowering_errors: Vec<String> = compiled.module_lowering_results.values()
+        .flatten()
+        .filter(|s| s.starts_with("Error") || s.starts_with("Drop analysis error") || s.starts_with("Missing drop analysis"))
+        .cloned()
+        .collect();
     if !lowering_errors.is_empty() {
         return Ok(ModulesIr3Analysis {
             typecheck: TypecheckResult::Success,
@@ -227,15 +111,24 @@ pub fn analyze_modules_worldfile_ir3(
         });
     }
 
-    let main_func = main_ir.ok_or_else(|| anyhow!("main function not found in local/test/main module"))?;
+    // Find main function.
+    let (main_module_id, main_func_id) = compiled.all_module_functions.get("main")
+        .ok_or_else(|| anyhow!("main function not found"))?;
+
+    let main_func = compiled.env.registry.get_module_function(*main_module_id, *main_func_id)
+        .ok_or_else(|| anyhow!("main function not in registry"))?;
 
     // Verify main is nullary.
     if !main_func.params.is_empty() {
         bail!("main function must have no parameters");
     }
 
-    // Capture IR dump (all functions).
-    let ir_dump = ir_dumps.join("\n");
+    // Collect IR dump from all modules.
+    let ir_dump: String = compiled.module_lowering_results.values()
+        .flatten()
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
 
     // Create IR interpreter and execute main.
     let mut interp = ir::interp::IrInterpreter::new();
@@ -254,7 +147,7 @@ pub fn analyze_modules_worldfile_ir3(
     };
 
     // Execute main with the environment (so it can call other functions).
-    let output = match interp.call_with_env(&main_func, Vec::new(), ret_dest, &env) {
+    let output = match interp.call_with_env(main_func, Vec::new(), ret_dest, &compiled.env) {
         Ok(()) => {
             // Pretty-print the return value.
             let value = ir::interp::Value {
@@ -271,7 +164,7 @@ pub fn analyze_modules_worldfile_ir3(
     };
 
     // Cleanup: destroy all values in frames to prevent memory leaks.
-    env.destroy_all(interp.runtime_handle());
+    compiled.env.destroy_all(interp.runtime_handle());
 
     Ok(ModulesIr3Analysis {
         typecheck: TypecheckResult::Success,

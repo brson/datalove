@@ -6,7 +6,7 @@ Ir3Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "TypeMismatch { expected: \"u32\", actual: \"int\" }",
+                    "local/test/bad_module: TypeMismatch { expected: \"u32\", actual: \"int\" }",
                 ],
             ),
             lowering: LoweringResult(
