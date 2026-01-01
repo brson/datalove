@@ -561,6 +561,12 @@ TODO:
   - This caused double-free when destroying frames containing tuples with Int/String etc.
   - Fix in `crates/datalove-datafun-compiler/src/ir/interp/mod.rs:571-578`
 
+- **Parser asymmetry for @error vs @data** - Fixed. Both now accept any expression
+  - Previously `@error` used `parse_lit_expr_full` (only datalit literals)
+  - While `@data` used `parse_expr_primary` (any expression including names/calls)
+  - This caused `@error x` to fail to parse while `@data x` worked
+  - Fix in `crates/datalove-datafun-compiler/src/parser.rs:1344`
+
 **Test Coverage:**
 
 - Old interpreter (module_interp_tests): 219 tests
