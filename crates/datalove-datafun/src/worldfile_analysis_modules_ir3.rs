@@ -14,7 +14,7 @@ use serde::{Serialize, Deserialize};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 use datalove_datafun_compiler::ir;
 
-use crate::worldfile_pipeline_ir3::{
+use crate::pipeline::{
     ModuleCompilationPipeline, TypecheckResult, LoweringResult,
 };
 

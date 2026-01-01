@@ -18,7 +18,7 @@ use datalove_datafun_compiler::tycheck::{
 };
 use ir::interp::{ScriptEnvironment, UnitCompletion};
 
-use crate::worldfile_pipeline_ir3::{
+use crate::pipeline::{
     ModuleCompilationPipeline, TypecheckResult, LoweringResult, format_module_lowering_result,
 };
 
