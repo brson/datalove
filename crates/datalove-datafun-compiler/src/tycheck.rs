@@ -115,26 +115,32 @@ pub struct TypecheckResult<'db> {
     pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
 }
 
-/// Tag for script unit kind (before parsing).
-#[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
-pub enum UnitKindTag {
-    Fragment,
-    Expr,
+/// Kind of script unit for batch typechecking (with parsed content).
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub enum ScriptUnitKind<'db> {
+    /// A fragment containing statements.
+    Fragment(Script<'db>),
+    /// A single expression.
+    Expr(ExprFun<'db>),
 }
 
-/// Spec for a single script unit (just source + kind tag).
+/// Spec for a single script unit (with pre-parsed content).
 #[salsa::interned]
 pub struct ScriptUnitSpec<'db> {
     pub source: bct::input::Source,
-    pub kind_tag: UnitKindTag,
+    #[returns(ref)]
+    pub kind: ScriptUnitKind<'db>,
 }
 
-/// Spec for a module (path + source).
+/// Spec for a module (path + pre-parsed script + module ID).
 #[salsa::interned]
 pub struct ModuleSpec<'db> {
     #[returns(ref)]
     pub path: String,
     pub source: bct::input::Source,
+    pub script: Script<'db>,
+    pub module_id: crate::module_graph::ModuleId,
 }
 
 /// Spec for a batch of script units (the "input" to typechecking).
@@ -144,16 +150,6 @@ pub struct ScriptBatchSpec<'db> {
     pub units: Vec<ScriptUnitSpec<'db>>,
     #[returns(ref)]
     pub modules: Vec<ModuleSpec<'db>>,
-}
-
-/// Kind of script unit for batch typechecking (with parsed content).
-#[derive(Clone, Hash)]
-#[derive(salsa::Update)]
-pub enum ScriptUnitKind<'db> {
-    /// A fragment containing statements.
-    Fragment(Script<'db>),
-    /// A single expression.
-    Expr(ExprFun<'db>),
 }
 
 /// A script unit with parsed content (tracked - created inside tracked fn).
@@ -171,6 +167,7 @@ pub struct ModuleInfo<'db> {
     pub path: String,
     pub script: Script<'db>,
     pub source: bct::input::Source,
+    pub module_id: crate::module_graph::ModuleId,
 }
 
 /// Batch of script units (tracked).
@@ -572,32 +569,22 @@ pub fn type_check_script_units<'db>(
     db: &'db dyn crate::Db,
     spec: ScriptBatchSpec<'db>,
 ) -> ScriptUnitsTypecheckResultTracked<'db> {
-    // Build tracked types from specs.
+    // Build tracked types from specs (already pre-parsed).
     let mut units = Vec::new();
     for unit_spec in spec.units(db) {
         let source = unit_spec.source(db);
-        let kind = match unit_spec.kind_tag(db) {
-            UnitKindTag::Fragment => {
-                let parse_result = crate::parser::parse(db, source);
-                ScriptUnitKind::Fragment(parse_result.script(db))
-            }
-            UnitKindTag::Expr => {
-                let expr = crate::parser::parse_expr(db, source);
-                ScriptUnitKind::Expr(expr)
-            }
-        };
+        let kind = unit_spec.kind(db).clone();
         units.push(ScriptUnitInput::new(db, source, kind));
     }
 
     let mut modules = Vec::new();
     for module_spec in spec.modules(db) {
-        let source = module_spec.source(db);
-        let parse_result = crate::parser::parse(db, source);
         modules.push(ModuleInfo::new(
             db,
             module_spec.path(db).clone(),
-            parse_result.script(db),
-            source,
+            module_spec.script(db),
+            module_spec.source(db),
+            module_spec.module_id(db),
         ));
     }
 
@@ -606,6 +593,8 @@ pub fn type_check_script_units<'db>(
     // Build module function info for import resolution.
     // Map: module_path -> (function_name -> (signature, ast))
     let mut module_functions: HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>> = HashMap::new();
+    // Map: module_path -> ModuleId (for call target resolution).
+    let mut path_to_module_id: HashMap<String, crate::module_graph::ModuleId> = HashMap::new();
     for module_info in &modules {
         let mut funcs = HashMap::new();
         // First pass: collect function signatures.
@@ -624,7 +613,9 @@ pub fn type_check_script_units<'db>(
                 }
             }
         }
-        module_functions.insert(module_info.path(db).clone(), funcs);
+        let path = module_info.path(db).clone();
+        path_to_module_id.insert(path.clone(), module_info.module_id(db));
+        module_functions.insert(path, funcs);
     }
 
     let mut accumulated_vars: HashMap<InternedText<'db>, TypeAndHeap<'db>> = HashMap::new();
@@ -704,8 +695,10 @@ pub fn type_check_script_units<'db>(
 
                         if let Some(funcs) = module_functions.get(module_path) {
                             if let Some((func_ty, func_ast)) = funcs.get(&item_name) {
+                                // Get the source module's ModuleId for call target resolution.
+                                let source_module_id = path_to_module_id.get(module_path).copied();
                                 ctx.add_function(item_name, *func_ty);
-                                ctx.function_asts.insert(item_name, (*func_ast, None));
+                                ctx.function_asts.insert(item_name, (*func_ast, source_module_id));
                                 // Also add to accumulated so subsequent units can use it.
                                 accumulated_fns.insert(item_name, *func_ty);
                                 accumulated_fn_asts.insert(item_name, *func_ast);
@@ -1118,7 +1111,8 @@ pub fn typecheck_module_graph<'db>(
         path_to_id.insert(id.path(db).clone(), id);
     }
 
-    // Build a map of function ASTs per module for resolving imports.
+    // Parse all modules once and build maps for scripts and function ASTs.
+    let mut module_scripts: HashMap<ModuleId, Script<'db>> = HashMap::new();
     let mut module_function_asts: HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> = HashMap::new();
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
@@ -1132,6 +1126,7 @@ pub fn typecheck_module_graph<'db>(
                 funcs.insert(func.name(db), *func);
             }
         }
+        module_scripts.insert(module_id, script);
         module_function_asts.insert(module_id, funcs);
     }
 
@@ -1140,9 +1135,10 @@ pub fn typecheck_module_graph<'db>(
         let module_id = module.id(db);
         let source = module.source(db);
 
-        // Parse the module.
-        let parse_result = crate::parser::parse(db, source);
-        let script = parse_result.script(db);
+        // Get the pre-parsed script.
+        let script = module_scripts.get(&module_id)
+            .copied()
+            .expect("module should have been parsed in first pass");
 
         // Create type context for this module.
         let mut ctx = TypeContext::new(db, source);

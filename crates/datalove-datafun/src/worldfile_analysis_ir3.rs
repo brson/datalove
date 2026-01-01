@@ -11,7 +11,6 @@ use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
-use datalove_datafun_compiler::tycheck::ModuleSpec;
 
 use crate::pipeline::{
     ModuleCompilationPipeline, TypecheckResult, LoweringResult, format_module_lowering_result,
@@ -73,16 +72,6 @@ pub fn analyze_worldfile_ir3(
         return Ok(Ir3Analysis { sections: results });
     }
 
-    // Build module specs for script unit typechecking.
-    let mut module_specs: Vec<ModuleSpec> = Vec::new();
-    for section in &parsed.sections {
-        if let WorldfileSection::Module { library, package, module, source } = section {
-            let module_path = format!("{}/{}/{}", library, package, module);
-            let src = bct::input::Source::new(db, source.to_string());
-            module_specs.push(ModuleSpec::new(db, module_path, src));
-        }
-    }
-
     // Collect module results first.
     for section in &parsed.sections {
         if let WorldfileSection::Module { library, package, module, .. } = section {
@@ -126,9 +115,8 @@ pub fn analyze_worldfile_ir3(
         }
     }
 
-    // Create script compilation context.
+    // Create script compilation context (module specs built internally from module graph).
     let mut ctx = compiled.script_context(db);
-    ctx.add_module_specs(module_specs);
 
     // Process script units using the context.
     for section in &parsed.sections {

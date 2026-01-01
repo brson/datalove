@@ -4,7 +4,6 @@ use rmx::prelude::*;
 use std::path::Path;
 use datalove_datafun as datafun;
 use datafun::pipeline::{ModuleCompilationPipeline, TypecheckResult, LoweringResult};
-use datafun::tycheck::ModuleSpec;
 
 /// Run a script with the std library loaded from sys/ directory.
 fn analyze_file(path: &Path) -> Result<String, String> {
@@ -55,19 +54,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         }
     }
 
-    // Build module specs for script typechecking.
-    let mut module_specs: Vec<ModuleSpec> = Vec::new();
-    for (pkg_name, pkg) in &package_world_raw.pkglib_system {
-        for (mod_name, pkg_mod) in &pkg.modules {
-            let module_path = format!("sys/{}/{}", pkg_name, mod_name);
-            let src = bct::input::Source::new(&db, pkg_mod.text.clone());
-            module_specs.push(ModuleSpec::new(&db, module_path, src));
-        }
-    }
-
-    // Create script compilation context.
+    // Create script compilation context (module specs are built internally from module graph).
     let mut ctx = compiled.script_context(&db);
-    ctx.add_module_specs(module_specs);
 
     // Run the script as a fragment.
     let result = ctx.eval_fragment(&script_text);

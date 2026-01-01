@@ -14,7 +14,7 @@ use datalove_datafun_compiler::ir;
 use datalove_datafun_compiler::ir::{IrModuleId, FuncId};
 use datalove_datafun_compiler::tycheck::{
     typecheck_module_graph, type_check_script_units,
-    ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, UnitKindTag,
+    ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
     UnitTypecheckResultTracked,
 };
 use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleGraphTypecheckResult, ModuleId};
@@ -372,15 +372,28 @@ impl<'db> CompiledModules<'db> {
     /// Consumes the compiled modules and returns a context for incrementally
     /// compiling and executing script units.
     pub fn script_context(self, db: &'db dyn salsa::Database) -> ScriptCompilationContext<'db> {
-        // Build ScriptLowerContext from compiled modules.
-        // Register module functions for both execution and name lookup (fallback for call_targets).
+        // Build ScriptLowerContext and module specs from compiled modules.
+        // Parse each module once and reuse for both.
         let mut script_ctx = ir::lower::ScriptLowerContext::new();
+        let mut module_specs = Vec::new();
+
         for module in self.module_graph.iter_modules(db) {
             let salsa_module_id = module.id(db);
             let module_path = salsa_module_id.path(db).clone();
             let module_source = module.source(db);
             let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
             let script = parse_result.script(db);
+
+            // Build module spec with pre-parsed script and ModuleId.
+            module_specs.push(ModuleSpec::new(
+                db,
+                module_path.clone(),
+                module_source,
+                script,
+                salsa_module_id,
+            ));
+
+            // Register module functions for execution and name lookup.
             for statement in script.statements(db) {
                 if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
                     let func_name = func.name(db).text(db).to_string();
@@ -399,7 +412,7 @@ impl<'db> CompiledModules<'db> {
             script_ctx,
             env: self.env,
             accumulated_unit_specs: Vec::new(),
-            module_specs: Vec::new(),
+            module_specs,
             tydesc_table: ir::interp::IrTyDescTable::new(),
             interp: ir::interp::IrInterpreter::new(),
             func_id_map: self.func_id_map,
@@ -408,21 +421,14 @@ impl<'db> CompiledModules<'db> {
 }
 
 impl<'db> ScriptCompilationContext<'db> {
-    /// Add module specs for typechecking script units.
-    ///
-    /// Module specs provide type information for imports from modules.
-    pub fn add_module_specs(&mut self, specs: Vec<ModuleSpec<'db>>) {
-        self.module_specs = specs;
-    }
-
     /// Compile and execute a script fragment.
     pub fn eval_fragment(&mut self, source: &str) -> ScriptUnitResult {
         let src = bct::input::Source::new(self.db, source.to_string());
         let parse_result = datalove_datafun_compiler::parser::parse(self.db, src);
         let script = parse_result.script(self.db);
 
-        // Incremental typecheck.
-        let unit_spec = ScriptUnitSpec::new(self.db, src, UnitKindTag::Fragment);
+        // Incremental typecheck with pre-parsed content.
+        let unit_spec = ScriptUnitSpec::new(self.db, src, ScriptUnitKind::Fragment(script));
         self.accumulated_unit_specs.push(unit_spec);
         let batch_spec = ScriptBatchSpec::new(
             self.db,
@@ -441,8 +447,8 @@ impl<'db> ScriptCompilationContext<'db> {
         let src = bct::input::Source::new(self.db, source.to_string());
         let expr = datalove_datafun_compiler::parser::parse_expr(self.db, src);
 
-        // Incremental typecheck.
-        let unit_spec = ScriptUnitSpec::new(self.db, src, UnitKindTag::Expr);
+        // Incremental typecheck with pre-parsed content.
+        let unit_spec = ScriptUnitSpec::new(self.db, src, ScriptUnitKind::Expr(expr));
         self.accumulated_unit_specs.push(unit_spec);
         let batch_spec = ScriptBatchSpec::new(
             self.db,
