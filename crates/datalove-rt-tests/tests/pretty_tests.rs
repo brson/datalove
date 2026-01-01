@@ -434,3 +434,53 @@ fn test_pretty_deeply_nested() -> AnyResult<()> {
         "@map {@\"data\" = some @[@(@1, @true)]}",
     )
 }
+
+// Tensors
+
+#[test]
+fn test_pretty_tensor_1d() -> AnyResult<()> {
+    test_pretty(
+        ": @tensor<@u32, 1> / @tensor [3] [@1, @2, @3]",
+        "@tensor [3] [@1, @2, @3]",
+    )
+}
+
+#[test]
+fn test_pretty_tensor_1d_empty() -> AnyResult<()> {
+    test_pretty(
+        ": @tensor<@u32, 1> / @tensor [0] []",
+        "@tensor [0] []",
+    )
+}
+
+#[test]
+fn test_pretty_tensor_2d() -> AnyResult<()> {
+    test_pretty(
+        ": @tensor<@u32, 2> / @tensor [2, 3] [@1 @2 @3, @4 @5 @6]",
+        "@tensor [2, 3] [@1 @2 @3, @4 @5 @6]",
+    )
+}
+
+#[test]
+fn test_pretty_tensor_2d_single_row() -> AnyResult<()> {
+    test_pretty(
+        ": @tensor<@u32, 2> / @tensor [1, 3] [@1 @2 @3]",
+        "@tensor [1, 3] [@1 @2 @3]",
+    )
+}
+
+#[test]
+fn test_pretty_tensor_3d() -> AnyResult<()> {
+    test_pretty(
+        ": @tensor<@u32, 3> / @tensor [2, 2, 2] [@1 @2, @3 @4, @5 @6, @7 @8]",
+        "@tensor [2, 2, 2] [@1 @2, @3 @4, @5 @6, @7 @8]",
+    )
+}
+
+#[test]
+fn test_pretty_tensor_f32() -> AnyResult<()> {
+    test_pretty(
+        ": @tensor<@f32, 1> / @tensor [3] [@1.5, @2.5, @3.5]",
+        "@tensor [3] [@1.5, @2.5, @3.5]",
+    )
+}

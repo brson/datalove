@@ -10,7 +10,7 @@ Ir3Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = tensor [3] [v0, v1, v2]\n    unit_end v3\n",
             ),
-            output: "<unsupported-type>",
+            output: "@tensor [3] [@1, @2, @3]",
         ),
     ],
 )

@@ -73,6 +73,8 @@ unsafe fn pretty_value(
             rtdt::TyTag::Data => pretty_data(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::Error => pretty_error(rt, value_ref, string_mut, string_tydesc),
 
+            rtdt::TyTag::Tensor => pretty_tensor(rt, value_ref, tydesc, string_mut, string_tydesc),
+
             _ => {
                 push_str(rt, string_mut, string_tydesc, b"<unsupported-type>")?;
                 Ok(())
@@ -577,6 +579,83 @@ unsafe fn pretty_error(
         let inner_tydesc = rtdt::TyDescRef::from_ptr(tydesc_ptr);
         let inner_value = error.value_ptr();
         pretty_value(rt, inner_value, inner_tydesc, string_mut, string_tydesc)
+    }
+}
+
+unsafe fn pretty_tensor(
+    rt: LocalRtHandle,
+    value_ref: *const u8,
+    tydesc: rtdt::TyDescRef,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let tensor = &*(value_ref as *const rtdt::Tensor);
+        let elem_ty = tydesc.tensor_element_ty();
+        let rank = tydesc.tensor_rank() as usize;
+        let elem_size = elem_ty.size() as usize;
+
+        push_str(rt, string_mut, string_tydesc, b"@tensor [")?;
+
+        // Print shape.
+        if rank > 0 && !tensor.shape.is_null() {
+            for i in 0..rank {
+                if i > 0 {
+                    push_str(rt, string_mut, string_tydesc, b", ")?;
+                }
+                let dim = *tensor.shape.add(i);
+                let s = dim.to_string();
+                push_str(rt, string_mut, string_tydesc, s.as_bytes())?;
+            }
+        }
+
+        push_str(rt, string_mut, string_tydesc, b"] [")?;
+
+        // Calculate total elements.
+        let total_elems: usize = if rank > 0 && !tensor.shape.is_null() {
+            (0..rank).map(|i| *tensor.shape.add(i) as usize).product()
+        } else {
+            0
+        };
+
+        // Print elements.
+        if total_elems > 0 && !tensor.ptr_base.is_null() {
+            if rank == 1 {
+                // 1D: comma-separated elements.
+                for i in 0..total_elems {
+                    if i > 0 {
+                        push_str(rt, string_mut, string_tydesc, b", ")?;
+                    }
+                    let elem_ptr = tensor.ptr_base.add(i * elem_size);
+                    pretty_value(rt, elem_ptr, elem_ty, string_mut, string_tydesc)?;
+                }
+            } else {
+                // 2D+: comma-separated rows, space-separated elements within rows.
+                // For row-major layout, the last dimension is contiguous.
+                let row_size = if rank > 0 && !tensor.shape.is_null() {
+                    *tensor.shape.add(rank - 1) as usize
+                } else {
+                    1
+                };
+                let num_rows = total_elems / row_size;
+
+                for row in 0..num_rows {
+                    if row > 0 {
+                        push_str(rt, string_mut, string_tydesc, b", ")?;
+                    }
+                    for col in 0..row_size {
+                        if col > 0 {
+                            push_str(rt, string_mut, string_tydesc, b" ")?;
+                        }
+                        let elem_idx = row * row_size + col;
+                        let elem_ptr = tensor.ptr_base.add(elem_idx * elem_size);
+                        pretty_value(rt, elem_ptr, elem_ty, string_mut, string_tydesc)?;
+                    }
+                }
+            }
+        }
+
+        push_str(rt, string_mut, string_tydesc, b"]")
     }
 }
 

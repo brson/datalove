@@ -555,8 +555,8 @@ TODO:
   - Syntax: `@tensor [shape] [elements]` (1D comma-separated, 2D+ space-separated rows)
   - Allocates data array, shape array, strides array via runtime
   - Row-major layout with computed strides
+  - Pretty-printing implemented in runtime
   - Tests: 137-138 (interp3), 049 (module_interp3)
-  - Note: Runtime pretty-print shows `<unsupported-type>` (separate from IR implementation)
 
 **Missing Features (LOW priority):**
 
