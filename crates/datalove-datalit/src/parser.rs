@@ -90,6 +90,7 @@ fn parse_from_tokens_with_source<'db>(
         pos: 0,
         source_text,
         expr_spans: Vec::new(),
+        had_error: false,
     };
     let expr = dyn_parser.parse_expr_full();
     ast::ParseResult::new(db, expr, dyn_parser.expr_spans)
@@ -108,6 +109,7 @@ pub fn parse_type_hint_and_heap_from_tokens<'db>(
         pos: 0,
         source_text: None,
         expr_spans: Vec::new(),
+        had_error: false,
     };
     let type_hint = dyn_parser.parse_type_hint_and_heap();
     let consumed = dyn_parser.pos;
@@ -120,18 +122,20 @@ struct DynParser<'db> {
     pos: usize,
     source_text: Option<bct::text::Text<'db>>,
     expr_spans: Vec<ast::ParseSpanEntry>,
+    had_error: bool,
 }
 
 impl<'db> DynParser<'db> {
     /// Emit both a diagnostic and create an ExprParseError node in one call.
     fn emit_expr_error(
-        &self,
+        &mut self,
         text: bct::text::Text<'db>,
         span: datalove_diagnostic::ByteSpan,
         message: &str,
         code: &str,
         label: &str,
     ) -> ast::Expr<'db> {
+        self.had_error = true;
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code)
@@ -142,13 +146,14 @@ impl<'db> DynParser<'db> {
 
     /// Emit both a diagnostic and create a TypeHintParseError node in one call.
     fn emit_type_hint_error(
-        &self,
+        &mut self,
         text: bct::text::Text<'db>,
         span: datalove_diagnostic::ByteSpan,
         message: &str,
         code: &str,
         label: &str,
     ) -> ast::TypeHint<'db> {
+        self.had_error = true;
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code)
@@ -218,8 +223,10 @@ impl<'db> DynParser<'db> {
                                 pos: 0,
                                 source_text: self.source_text,
                                 expr_spans: Vec::new(),
+                                had_error: false,
                             };
                             let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
+                            sub_parser.error_if_not_exhausted_type_hint();
                             ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
                         }
                         _ => {
@@ -258,8 +265,10 @@ impl<'db> DynParser<'db> {
                                 pos: 0,
                                 source_text: self.source_text,
                                 expr_spans: Vec::new(),
+                                had_error: false,
                             };
                             let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
+                            sub_parser.error_if_not_exhausted_type_hint();
                             ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
                         }
                         _ => {
@@ -298,8 +307,10 @@ impl<'db> DynParser<'db> {
                                 pos: 0,
                                 source_text: self.source_text,
                                 expr_spans: Vec::new(),
+                                had_error: false,
                             };
                             let variants = sub_parser.parse_comma_separated(|p| p.parse_type_hint_enum_variant());
+                            sub_parser.error_if_not_exhausted_type_hint();
                             ast::TypeHint::AnonEnum(ast::TypeHintAnonEnum::new(
                                 self.db,
                                 variants,
@@ -339,6 +350,7 @@ impl<'db> DynParser<'db> {
                             pos: 0,
                             source_text: self.source_text,
                             expr_spans: Vec::new(),
+                            had_error: false,
                         };
                         let key_type = sub_parser.parse_type_hint_and_heap();
                         if !sub_parser.eat_sigil(Sigil::Comma) {
@@ -352,6 +364,7 @@ impl<'db> DynParser<'db> {
                             );
                         }
                         let value_type = sub_parser.parse_type_hint_and_heap();
+                        sub_parser.error_if_not_exhausted_type_hint();
                         ast::TypeHint::Map(ast::TypeHintMap::new(self.db, key_type, value_type))
                     }
                     _ => {
@@ -379,8 +392,10 @@ impl<'db> DynParser<'db> {
                             pos: 0,
                             source_text: self.source_text,
                             expr_spans: Vec::new(),
+                            had_error: false,
                         };
                         let element_type = sub_parser.parse_type_hint_and_heap();
+                        sub_parser.error_if_not_exhausted_type_hint();
                         ast::TypeHint::Set(ast::TypeHintSet::new(self.db, element_type))
                     }
                     _ => {
@@ -408,6 +423,7 @@ impl<'db> DynParser<'db> {
                             pos: 0,
                             source_text: self.source_text,
                             expr_spans: Vec::new(),
+                            had_error: false,
                         };
                         let element_type = sub_parser.parse_type_hint_and_heap();
                         if !sub_parser.eat_sigil(Sigil::Comma) {
@@ -435,6 +451,7 @@ impl<'db> DynParser<'db> {
                             }
                         };
 
+                        sub_parser.error_if_not_exhausted_type_hint();
                         ast::TypeHint::Tensor(ast::TypeHintTensor::new(
                             self.db,
                             element_type,
@@ -465,8 +482,10 @@ impl<'db> DynParser<'db> {
                             pos: 0,
                             source_text: self.source_text,
                             expr_spans: Vec::new(),
+                            had_error: false,
                         };
                         let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
+                        sub_parser.error_if_not_exhausted_type_hint();
                         ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
                     }
                     Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
@@ -479,8 +498,10 @@ impl<'db> DynParser<'db> {
                             pos: 0,
                             source_text: self.source_text,
                             expr_spans: Vec::new(),
+                            had_error: false,
                         };
                         let element_type = sub_parser.parse_type_hint_and_heap();
+                        sub_parser.error_if_not_exhausted_type_hint();
                         ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
                     }
                     Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
@@ -493,8 +514,10 @@ impl<'db> DynParser<'db> {
                             pos: 0,
                             source_text: self.source_text,
                             expr_spans: Vec::new(),
+                            had_error: false,
                         };
                         let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
+                        sub_parser.error_if_not_exhausted_type_hint();
                         ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
                     }
                     _ => {
@@ -589,6 +612,7 @@ impl<'db> DynParser<'db> {
                 pos: 0,
                 source_text: self.source_text,
                 expr_spans: Vec::new(),
+                had_error: false,
             };
             let payload_type = sub_parser.parse_type_hint_and_heap();
 
@@ -858,15 +882,23 @@ impl<'db> DynParser<'db> {
                             pos: 0,
                             source_text: self.source_text,
                             expr_spans: Vec::new(),
+                            had_error: false,
                         };
-                        sub_parser.parse_comma_separated(|p| {
+                        let shape = sub_parser.parse_comma_separated(|p| {
                             match p.parse_u32_literal() {
                                 Some(dim) => dim,
                                 None => {
-                                    panic!("expected dimension value in tensor shape");
+                                    let (text, span) = p.current_text_span();
+                                    DiagnosticBuilder::error(p.db, "expected dimension value in tensor shape")
+                                        .code("D023")
+                                        .primary_label(text, span, "expected integer")
+                                        .emit_parse();
+                                    0 // Placeholder dimension.
                                 }
                             }
-                        })
+                        });
+                        sub_parser.error_if_not_exhausted();
+                        shape
                     }
                     _ => {
                         let (text, span) = self.current_text_span();
@@ -906,8 +938,10 @@ impl<'db> DynParser<'db> {
                                 pos: 0,
                                 source_text: self.source_text,
                                 expr_spans: Vec::new(),
+                                had_error: false,
                             };
                             let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                            sub_parser.error_if_not_exhausted();
                             // Merge spans from sub-parser.
                             self.expr_spans.extend(sub_parser.expr_spans);
                             elements
@@ -933,6 +967,7 @@ impl<'db> DynParser<'db> {
                                     pos: 0,
                                     source_text: self.source_text,
                                     expr_spans: Vec::new(),
+                                    had_error: false,
                                 };
 
                                 let mut row_elements = Vec::new();
@@ -1003,8 +1038,10 @@ impl<'db> DynParser<'db> {
                         pos: 0,
                         source_text: self.source_text,
                         expr_spans: Vec::new(),
+                        had_error: false,
                     };
                     let payload_expr = sub_parser.parse_expr_full();
+                    sub_parser.error_if_not_exhausted();
                     // Merge spans from sub-parser.
                     self.expr_spans.extend(sub_parser.expr_spans);
                     Some(payload_expr)
@@ -1030,6 +1067,7 @@ impl<'db> DynParser<'db> {
                             pos: 0,
                             source_text: self.source_text,
                             expr_spans: Vec::new(),
+                            had_error: false,
                         };
                         let entries = sub_parser.parse_comma_separated(|p| {
                             let key = p.parse_expr_full();
@@ -1052,6 +1090,7 @@ impl<'db> DynParser<'db> {
                             let value = p.parse_expr_full();
                             ast::ExprMapEntry::new(p.db, key, value)
                         });
+                        sub_parser.error_if_not_exhausted();
                         // Merge spans from sub-parser.
                         self.expr_spans.extend(sub_parser.expr_spans);
                         return ast::Expr::Map(ast::ExprMap::new(self.db, entries));
@@ -1080,8 +1119,10 @@ impl<'db> DynParser<'db> {
                             pos: 0,
                             source_text: self.source_text,
                             expr_spans: Vec::new(),
+                            had_error: false,
                         };
                         let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                        sub_parser.error_if_not_exhausted();
                         // Merge spans from sub-parser.
                         self.expr_spans.extend(sub_parser.expr_spans);
                         return ast::Expr::Set(ast::ExprSet::new(self.db, elements));
@@ -1179,8 +1220,10 @@ impl<'db> DynParser<'db> {
                     pos: 0,
                     source_text: self.source_text,
                     expr_spans: Vec::new(),
+                    had_error: false,
                 };
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
                 self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::AnonTuple(ast::ExprAnonTuple::new(self.db, elements))
@@ -1195,8 +1238,10 @@ impl<'db> DynParser<'db> {
                     pos: 0,
                     source_text: self.source_text,
                     expr_spans: Vec::new(),
+                    had_error: false,
                 };
                 let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
+                sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
                 self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::AnonStruct(ast::ExprAnonStruct::new(self.db, fields))
@@ -1211,8 +1256,10 @@ impl<'db> DynParser<'db> {
                     pos: 0,
                     source_text: self.source_text,
                     expr_spans: Vec::new(),
+                    had_error: false,
                 };
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
                 self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::List(ast::ExprList::new(self.db, elements))
@@ -1426,6 +1473,34 @@ impl<'db> DynParser<'db> {
     }
 
 
+    /// Check that all tokens have been consumed, emitting an error if not.
+    ///
+    /// Only emits if the parser succeeded (no prior errors). This avoids cascading
+    /// errors when unconsumed tokens are a consequence of an earlier parse failure.
+    fn error_if_not_exhausted(&self) {
+        if self.pos < self.tokens.len() && !self.had_error {
+            let (text, span) = self.current_text_span();
+            DiagnosticBuilder::error(self.db, "unexpected token after expression")
+                .code("D021")
+                .primary_label(text, span, "unexpected token")
+                .emit_parse();
+        }
+    }
+
+    /// Check that all tokens have been consumed for type hints, emitting an error if not.
+    ///
+    /// Only emits if the parser succeeded (no prior errors). This avoids cascading
+    /// errors when unconsumed tokens are a consequence of an earlier parse failure.
+    fn error_if_not_exhausted_type_hint(&self) {
+        if self.pos < self.tokens.len() && !self.had_error {
+            let (text, span) = self.current_text_span();
+            DiagnosticBuilder::error(self.db, "unexpected token after type")
+                .code("D022")
+                .primary_label(text, span, "unexpected token")
+                .emit_parse();
+        }
+    }
+
     /// Get Text for error reporting.
     /// Try source_text first, otherwise extract from current token.
     fn get_error_text(&self) -> bct::text::Text<'db> {
@@ -1584,7 +1659,7 @@ fn test_parse_float_with_type() {
 #[test]
 fn test_parse_anon_enum_type() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": @enum { Foo, Bar: @u32 } / @enum Foo"));
+    let source = Source::new(db, S(": @enum { Foo, Bar(@u32) } / @enum Foo"));
     let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
