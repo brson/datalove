@@ -291,8 +291,41 @@ pub fn lower_expression<'db>(
             });
             Ok(dest)
         }
-        ExprFunKind::AnonStruct(_) => {
-            Err(LowerError::NotImplemented("AnonStruct".to_string()))
+        ExprFunKind::AnonStruct(struct_expr) => {
+            // Get the result type - this is IrType::Struct with sorted fields.
+            let result_type = ctx.expr_type(expr);
+            let sorted_field_names: Vec<String> = match &result_type {
+                IrType::Struct(fields) => fields.iter().map(|(n, _)| n.clone()).collect(),
+                _ => return Err(LowerError::NotImplemented(
+                    format!("AnonStruct with non-struct type: {:?}", result_type)
+                )),
+            };
+
+            // Lower all field expressions and collect by name.
+            let mut field_values: std::collections::HashMap<String, ValueId> =
+                std::collections::HashMap::new();
+            for field in struct_expr.fields(ctx.db).iter() {
+                let name = field.name(ctx.db).text(ctx.db).to_string();
+                let value = lower_expression(ctx, field.value(ctx.db))?;
+                field_values.insert(name, value);
+            }
+
+            // Build operands in sorted field order.
+            let fields: Vec<Operand> = sorted_field_names.iter()
+                .map(|name| {
+                    field_values.get(name)
+                        .map(|v| Operand::Value(*v))
+                        .expect("struct field should exist")
+                })
+                .collect();
+
+            let dest = ctx.fresh_value(result_type);
+            ctx.emit(Instruction::Pack {
+                dest,
+                ty: TypeRef::AnonStruct(0),
+                fields,
+            });
+            Ok(dest)
         }
         ExprFunKind::AnonEnum(_) => {
             Err(LowerError::NotImplemented("AnonEnum".to_string()))

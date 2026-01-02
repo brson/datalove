@@ -9,14 +9,14 @@
     "eval": {
       "SuccessLet": {
         "name": "struct_in_list",
-        "ty": "[@{x: @u32}]",
+        "ty": "list<{x: u32}>",
         "value": "@[@{x = @1}, @{x = @2}]"
       }
     },
     "environment": [
       {
         "name": "struct_in_list",
-        "ty": "[@{x: @u32}]",
+        "ty": "list<{x: u32}>",
         "value": "@[@{x = @1}, @{x = @2}]"
       }
     ]
@@ -30,12 +30,18 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "[@{x: @u32}]",
+        "expr_kind": "expr",
+        "ty": "list<{x: u32}>",
         "value": "@[@{x = @1}, @{x = @2}]"
       }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "struct_in_list",
+        "ty": "list<{x: u32}>",
+        "value": "<moved>"
+      }
+    ]
   },
   {
     "input": "let list_in_struct = @{items = @[@1, @2, @3]}",
@@ -47,15 +53,20 @@
     "eval": {
       "SuccessLet": {
         "name": "list_in_struct",
-        "ty": "{items: @[@u32]}",
+        "ty": "{items: list<u32>}",
         "value": "@{items = @[@1, @2, @3]}"
       }
     },
     "environment": [
       {
         "name": "list_in_struct",
-        "ty": "{items: @[@u32]}",
+        "ty": "{items: list<u32>}",
         "value": "@{items = @[@1, @2, @3]}"
+      },
+      {
+        "name": "struct_in_list",
+        "ty": "list<{x: u32}>",
+        "value": "<moved>"
       }
     ]
   },
@@ -68,11 +79,22 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "{items: @[@u32]}",
+        "expr_kind": "expr",
+        "ty": "{items: list<u32>}",
         "value": "@{items = @[@1, @2, @3]}"
       }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "list_in_struct",
+        "ty": "{items: list<u32>}",
+        "value": "<moved>"
+      },
+      {
+        "name": "struct_in_list",
+        "ty": "list<{x: u32}>",
+        "value": "<moved>"
+      }
+    ]
   }
 ]

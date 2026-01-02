@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Basic struct with integer fields.
+let point = @{x = @10, y = @20}
+
+----------
+scriptunit-expr
+----------
+
+point
