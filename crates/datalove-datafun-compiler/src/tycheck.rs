@@ -36,6 +36,7 @@ pub use datalove_datafun_tycheck::{
     ModuleImports,
     ModuleGraphTypecheckResult,
     ModuleId,
+    ParsedModuleGraph,
 };
 
 /// Context for typechecking.
@@ -743,7 +744,7 @@ pub fn type_check_with_module_graph<'db>(
     db: &'db dyn crate::Db,
     spans: DatafunSpans<'db>,
     script: Script<'db>,
-    parsed_graph: crate::module_graph::ParsedModuleGraph<'db>,
+    parsed_graph: ParsedModuleGraph<'db>,
     graph_typecheck: crate::module_graph::ModuleGraphTypecheckResult<'db>,
 ) -> TypecheckResult<'db> {
     use crate::module_graph::ModuleId;
@@ -849,7 +850,7 @@ pub fn type_check_with_module_graph<'db>(
 #[salsa::tracked]
 pub fn typecheck_module_graph<'db>(
     db: &'db dyn crate::Db,
-    parsed_graph: crate::module_graph::ParsedModuleGraph<'db>,
+    parsed_graph: ParsedModuleGraph<'db>,
 ) -> crate::module_graph::ModuleGraphTypecheckResult<'db> {
     use crate::module_graph::{ModuleId, ModuleExports as MgModuleExports, ModuleImports as MgModuleImports, ModuleGraphTypecheckResult};
 

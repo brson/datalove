@@ -12,8 +12,8 @@ use datalove_datalit;
 /// Re-export Db trait for convenience.
 pub use salsa::Database as Db;
 
-/// Re-export ModuleId from bct for convenience.
-pub use bct::module_graph::ModuleId;
+/// Re-export ModuleId and ModuleGraph from bct for convenience.
+pub use bct::module_graph::{ModuleId, ModuleGraph};
 
 /// Re-export DatafunSpans from AST crate.
 pub use datalove_datafun_ast::spans::DatafunSpans;
@@ -288,5 +288,37 @@ impl<'db> ModuleGraphTypecheckResult<'db> {
     /// Get all errors across all modules.
     pub fn all_errors(&self, db: &'db dyn Db) -> Vec<&TypeError> {
         self.module_errors(db).values().flatten().collect()
+    }
+}
+
+// ============================================================================
+// Parsed Module Graph
+// ============================================================================
+
+/// A module graph paired with pre-parsed scripts and spans for each module.
+#[salsa::tracked]
+pub struct ParsedModuleGraph<'db> {
+    /// The underlying module graph.
+    pub graph: ModuleGraph,
+
+    /// Pre-parsed scripts with spans, as (ModuleId, Script, DatafunSpans) tuples.
+    /// Order matches graph.iter_modules() order.
+    #[returns(ref)]
+    pub scripts: Vec<(ModuleId, Script<'db>, DatafunSpans<'db>)>,
+}
+
+impl<'db> ParsedModuleGraph<'db> {
+    /// Get the script for a module by its ID.
+    pub fn get_script(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<Script<'db>> {
+        self.scripts(db).iter()
+            .find(|(id, _, _)| *id == module_id)
+            .map(|(_, script, _)| *script)
+    }
+
+    /// Get the spans for a module by its ID.
+    pub fn get_spans(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<DatafunSpans<'db>> {
+        self.scripts(db).iter()
+            .find(|(id, _, _)| *id == module_id)
+            .map(|(_, _, spans)| *spans)
     }
 }
