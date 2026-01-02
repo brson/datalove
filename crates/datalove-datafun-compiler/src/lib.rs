@@ -7,12 +7,8 @@ pub mod script;
 pub mod parser;
 pub mod resolution;
 pub mod tycheck;
-pub mod function_analysis;
 pub mod spans;
 pub mod funlit_equiv;
-
-// Interpreter module.
-pub mod interp;
 
 // SSA IR module.
 pub mod ir;

@@ -1,4 +1,0 @@
-fun do_nothing()
-end fun
-
-let result = @true

@@ -1,7 +1,0 @@
-----------
-script
-----------
-
-// Test list literal where elements are coerced to u32.
-// u8 and u16 values should widen to u32.
-let output: @[@u32] = @[: u8 / @1, : u16 / @2]

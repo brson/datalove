@@ -1,8 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): int
-    let a = @42 + @0
-    ret -a
-end fun

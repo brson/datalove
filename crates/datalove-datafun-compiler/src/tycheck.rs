@@ -1089,7 +1089,6 @@ pub fn typecheck_module_graph<'db>(
     let mut module_errors: BTreeMap<ModuleId, Vec<TypeError>> = BTreeMap::new();
     let mut module_exports_map: BTreeMap<ModuleId, MgModuleExports<'db>> = BTreeMap::new();
     let mut module_imports_map: BTreeMap<ModuleId, MgModuleImports<'db>> = BTreeMap::new();
-    let mut function_analyses: Vec<Option<crate::function_analysis::FunctionAnalysis<'db>>> = Vec::new();
     let mut combined_expr_types: Vec<Option<TypeAndHeap<'db>>> = Vec::new();
     let mut combined_call_targets: Vec<Option<ResolvedCallTarget<'db>>> = Vec::new();
 
@@ -1211,7 +1210,7 @@ pub fn typecheck_module_graph<'db>(
             .iter()
             .map(|e| TypeErrorEntry::new(db, e.clone()))
             .collect();
-        let module_typecheck_result = TypecheckResult::new(db, script, errors, ctx.expr_types.clone(), ctx.call_targets.clone());
+        let _module_typecheck_result = TypecheckResult::new(db, script, errors, ctx.expr_types.clone(), ctx.call_targets.clone());
 
         // Merge this module's expr_types into combined.
         let new_types = &ctx.expr_types;
@@ -1234,25 +1233,9 @@ pub fn typecheck_module_graph<'db>(
                 combined_call_targets[i] = *target;
             }
         }
-
-        // Only run function analysis if there are no typecheck errors.
-        // With errors, expr_types may be incomplete, causing analysis to fail.
-        if ctx.errors.is_empty() {
-            for statement in script.statements(db) {
-                if let Statement::Fun(func_stmt) = statement {
-                    use salsa::plumbing::AsId;
-                    let analysis = crate::function_analysis::analyze_function(db, *func_stmt, module_typecheck_result);
-                    let index = func_stmt.as_id().index() as usize;
-                    if index >= function_analyses.len() {
-                        function_analyses.resize(index + 1, None);
-                    }
-                    function_analyses[index] = Some(analysis);
-                }
-            }
-        }
     }
 
-    ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, function_analyses, combined_expr_types, combined_call_targets)
+    ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, combined_expr_types, combined_call_targets)
 }
 
 /// Collect function signature without checking body (first pass).

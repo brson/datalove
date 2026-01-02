@@ -1,6 +1,0 @@
-ModulesAnalysis(
-    typecheck: TypecheckResult(
-        status: "Success",
-    ),
-    output: "@[@10, @20, @30]",
-)

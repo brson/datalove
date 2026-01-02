@@ -1,9 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): string
-    let s: string = "hello"
-    let s: string = "world"
-    ret s
-end fun

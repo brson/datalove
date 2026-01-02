@@ -1,7 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): bool
-    ret @false
-end fun

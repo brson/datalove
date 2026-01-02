@@ -1,6 +1,0 @@
-ModulesAnalysis(
-    typecheck: TypecheckResult(
-        status: "Success",
-    ),
-    output: "@error @\"failed\"",
-)

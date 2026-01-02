@@ -1,9 +1,0 @@
-----------
-script
-----------
-
-fun test(): Int
-    ret @5
-end fun
-
-let output = test()

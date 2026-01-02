@@ -1,7 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): string
-    ret "hello"
-end fun

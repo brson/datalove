@@ -1,8 +1,0 @@
-----------
-script
-----------
-
-// Test u64 bare addition (widens to int).
-let a: @u64 = @500
-let b: @u64 = @300
-let output = a + b

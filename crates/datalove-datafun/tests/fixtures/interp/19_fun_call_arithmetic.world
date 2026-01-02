@@ -1,9 +1,0 @@
-----------
-script
-----------
-
-fun calculate(): int
-    ret @10 + @20
-end fun
-
-let output = calculate()

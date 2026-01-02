@@ -1,9 +1,0 @@
-----------
-script
-----------
-
-fun greet(): string
-    ret "hello"
-end fun
-
-let output = greet()

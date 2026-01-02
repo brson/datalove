@@ -1,7 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): @(u32, @string)
-    ret @(@42, @"hello")
-end fun

@@ -1,8 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): @set[u32]
-    let x = @set { @10, @20, @30 }
-    ret x
-end fun

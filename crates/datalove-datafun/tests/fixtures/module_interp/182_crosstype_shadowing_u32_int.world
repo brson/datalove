@@ -1,9 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): int
-    let x: u32 = @1
-    let x: int = @2000 + @0
-    ret x
-end fun

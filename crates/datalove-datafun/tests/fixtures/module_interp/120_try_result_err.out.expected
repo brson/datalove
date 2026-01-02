@@ -1,9 +1,0 @@
-ModulesAnalysis(
-    typecheck: TypecheckResult(
-        status: "Error",
-        errors: [
-            "TypeMismatch { expected: \"@!u32\", actual: \"error\" }",
-        ],
-    ),
-    output: "",
-)

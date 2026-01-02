@@ -1,9 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): int
-    let a = @1000000000 + @1000000000
-    let b = @3 + @0
-    ret a * b
-end fun

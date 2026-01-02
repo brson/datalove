@@ -1,6 +1,0 @@
-----------
-script
-----------
-
-// Test nested set in list.
-let output = @[@set { @1, @2 }, @set { @3, @4 }]

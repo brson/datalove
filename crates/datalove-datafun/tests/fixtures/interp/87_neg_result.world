@@ -1,9 +1,0 @@
-----------
-script
-----------
-
-fun checked_neg(x: i32): !i32
-    ret ok (-!x)
-end fun
-
-let output = checked_neg(@42)

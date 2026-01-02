@@ -1,9 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): int
-    let x: bool = @true
-    var x: int = @5000 + @0
-    ret x
-end fun

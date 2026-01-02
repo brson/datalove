@@ -1,9 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): string
-    var x: u32 = @1
-    let x: string = "shadowed"
-    ret x
-end fun

@@ -1,7 +1,0 @@
-----------
-script
-----------
-
-// Test list literal where elements are coerced to int.
-// u8 and i16 values should widen to int.
-let output: @[@int] = @[: u8 / @1, : i16 / @2]

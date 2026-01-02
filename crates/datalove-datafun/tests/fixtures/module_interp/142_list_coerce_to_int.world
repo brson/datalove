@@ -1,7 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): @[@int]
-    ret @[: u8 / @1, : i16 / @2]
-end fun

@@ -1,7 +1,0 @@
-----------
-script
-----------
-
-// Test let with omitted heap specifier.
-let x: u32 = @42
-let output = x

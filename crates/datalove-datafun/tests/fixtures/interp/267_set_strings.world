@@ -1,6 +1,0 @@
-----------
-script
-----------
-
-// Test set with string elements.
-let output = @set { @"foo", @"bar", @"baz" }

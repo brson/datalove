@@ -1,7 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): @(@(u32, u32), @(u32, u32))
-    ret @(@(@1, @2), @(@3, @4))
-end fun

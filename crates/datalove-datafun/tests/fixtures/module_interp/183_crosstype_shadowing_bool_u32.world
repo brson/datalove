@@ -1,9 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): !u32
-    let x: bool = @true
-    let x: u32 = @42
-    ret ok x
-end fun

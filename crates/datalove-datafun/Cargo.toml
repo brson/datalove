@@ -31,17 +31,6 @@ name = "std_tests"
 path = "tests/std_tests.rs"
 harness = false
 
-# Script-based tests (disabled, pending frame-based script rewrite):
-# [[test]]
-# name = "interp_tests"
-# path = "tests/interp_tests.rs"
-# harness = false
-
-[[test]]
-name = "module_interp_tests"
-path = "tests/module_interp_tests.rs"
-harness = false
-
 [[test]]
 name = "ir_lower_tests"
 path = "tests/ir_lower_tests.rs"

@@ -1,9 +1,0 @@
-----------
-script
-----------
-
-fun add_checked(x: u32, y: u32): !u32
-    ret ok (x +! y)
-end fun
-
-let output = add_checked(@10, @32)

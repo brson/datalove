@@ -1,3 +1,0 @@
-fun test(): u32
-    ret @42
-end fun

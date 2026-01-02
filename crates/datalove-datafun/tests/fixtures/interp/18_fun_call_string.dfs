@@ -1,5 +1,0 @@
-fun greet(): String
-    ret "hello"
-end fun
-
-let output = greet()

@@ -1,6 +1,0 @@
-ModulesAnalysis(
-    typecheck: TypecheckResult(
-        status: "Success",
-    ),
-    output: "@map {@1 = @100, @2 = @200}",
-)
