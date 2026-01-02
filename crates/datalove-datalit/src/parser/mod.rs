@@ -18,7 +18,7 @@ use bct::{
 };
 
 use crate::ast;
-use state::DynParser;
+use state::Parser;
 
 /// Parse a Source into a datalit expression with span information.
 #[salsa::tracked]
@@ -86,9 +86,9 @@ fn parse_from_tokens_with_source<'db>(
     tokens: Vec<TreeToken<'db>>,
     source_text: Option<bct::text::Text<'db>>,
 ) -> ast::ParseResult<'db> {
-    let mut dyn_parser = DynParser::new(db, tokens, source_text);
-    let expr = dyn_parser.parse_expr_full();
-    ast::ParseResult::new(db, expr, dyn_parser.take_expr_spans())
+    let mut parser = Parser::new(db, tokens, source_text);
+    let expr = parser.parse_expr_full();
+    ast::ParseResult::new(db, expr, parser.take_expr_spans())
 }
 
 /// Parse a type hint and heap from a vector of tokens.
@@ -98,9 +98,9 @@ pub fn parse_type_hint_and_heap_from_tokens<'db>(
     db: &'db dyn crate::Db,
     tokens: Vec<TreeToken<'db>>,
 ) -> (ast::TypeHintAndHeap<'db>, usize) {
-    let mut dyn_parser = DynParser::new(db, tokens, None);
-    let type_hint = dyn_parser.parse_type_hint_and_heap();
-    let consumed = dyn_parser.pos();
+    let mut parser = Parser::new(db, tokens, None);
+    let type_hint = parser.parse_type_hint_and_heap();
+    let consumed = parser.pos();
     (type_hint, consumed)
 }
 

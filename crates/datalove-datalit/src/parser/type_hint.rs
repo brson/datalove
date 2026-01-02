@@ -7,9 +7,9 @@ use bct::{
 
 use crate::ast;
 use crate::parser_util::TokenStreamExt;
-use super::state::DynParser;
+use super::state::Parser;
 
-impl<'db> DynParser<'db> {
+impl<'db> Parser<'db> {
     pub(super) fn parse_type_hint_and_heap(&mut self) -> ast::TypeHintAndHeap<'db> {
         // Heap sigils: @ for local, # for global.
         // If omitted, defaults to Heap::Omitted (inferred).
@@ -62,7 +62,7 @@ impl<'db> DynParser<'db> {
                 if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
                     // Anonymous tuple with explicit keyword.
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
@@ -83,7 +83,7 @@ impl<'db> DynParser<'db> {
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     // Anonymous struct with explicit keyword.
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
@@ -104,7 +104,7 @@ impl<'db> DynParser<'db> {
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     // Anonymous enum.
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let variants = sub_parser.parse_comma_separated(|p| p.parse_type_hint_enum_variant());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonEnum(ast::TypeHintAnonEnum::new(
@@ -127,7 +127,7 @@ impl<'db> DynParser<'db> {
                 // Expect angle bracket with key and value types.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let key_type = sub_parser.parse_type_hint_and_heap();
                     if !sub_parser.eat_sigil(Sigil::Comma) {
                         let (text, span) = sub_parser.peek_text_span();
@@ -158,7 +158,7 @@ impl<'db> DynParser<'db> {
                 // Expect angle bracket with element type.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let element_type = sub_parser.parse_type_hint_and_heap();
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::Set(ast::TypeHintSet::new(self.db, element_type))
@@ -178,7 +178,7 @@ impl<'db> DynParser<'db> {
                 // Expect angle bracket with <element_type, rank, optional_layout>.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let element_type = sub_parser.parse_type_hint_and_heap();
                     if !sub_parser.eat_sigil(Sigil::Comma) {
                         let (text, span) = sub_parser.peek_text_span();
@@ -226,21 +226,21 @@ impl<'db> DynParser<'db> {
                 if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
                     // Anonymous tuple.
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
                 } else if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
                     // List type.
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let element_type = sub_parser.parse_type_hint_and_heap();
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
                 } else if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     // Anonymous struct.
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
@@ -333,7 +333,7 @@ impl<'db> DynParser<'db> {
         let payload = if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
             // Parse a single type as payload.
             let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-            let mut sub_parser = DynParser::new(self.db, tokens.clone(), self.source_text);
+            let mut sub_parser = Parser::new(self.db, tokens.clone(), self.source_text);
             let payload_type = sub_parser.parse_type_hint_and_heap();
 
             // Check for unparsed tokens - this indicates a syntax error.

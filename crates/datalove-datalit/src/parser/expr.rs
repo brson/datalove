@@ -11,9 +11,9 @@ use bct::{
 use crate::ast;
 use crate::parser_util::{self, TokenStream, TokenStreamExt};
 use datalove_diagnostic::DiagnosticBuilder;
-use super::state::DynParser;
+use super::state::Parser;
 
-impl<'db> DynParser<'db> {
+impl<'db> Parser<'db> {
     pub(super) fn parse_expr_full(&mut self) -> ast::ExprFull<'db> {
         // Capture span before parsing.
         let (text, span) = self.peek_text_span();
@@ -249,7 +249,7 @@ impl<'db> DynParser<'db> {
                 // Parse shape: [dim1, dim2, ...]
                 let shape = if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let shape = sub_parser.parse_comma_separated(|p| {
                         match p.parse_u32_literal() {
                             Some(dim) => dim,
@@ -294,7 +294,7 @@ impl<'db> DynParser<'db> {
                     if rank == 1 {
                         // 1D tensor: comma-separated elements [1, 2, 3, 4, 5].
                         let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                        let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                         let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                         sub_parser.error_if_not_exhausted();
                         // Merge spans from sub-parser.
@@ -316,7 +316,7 @@ impl<'db> DynParser<'db> {
                                 .collect();
 
                             // Parse each element in the row.
-                            let mut row_parser = DynParser::new(self.db, elem_tokens.clone(), self.source_text);
+                            let mut row_parser = Parser::new(self.db, elem_tokens.clone(), self.source_text);
 
                             let mut row_elements = Vec::new();
                             while row_parser.pos < row_parser.tokens.len() {
@@ -377,7 +377,7 @@ impl<'db> DynParser<'db> {
                 let payload = if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
                     // Parse a single expression as payload.
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let payload_expr = sub_parser.parse_expr_full();
                     sub_parser.error_if_not_exhausted();
                     // Merge spans from sub-parser.
@@ -397,7 +397,7 @@ impl<'db> DynParser<'db> {
                 self.eat_word("map");
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let entries = sub_parser.parse_comma_separated(|p| {
                         let key = p.parse_expr_full();
                         if !p.eat_sigil(Sigil::Equals) {
@@ -438,7 +438,7 @@ impl<'db> DynParser<'db> {
                 self.eat_word("set");
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                    let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                     let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                     sub_parser.error_if_not_exhausted();
                     // Merge spans from sub-parser.
@@ -519,7 +519,7 @@ impl<'db> DynParser<'db> {
                         self.emit_expr_error(
                             text,
                             span,
-                            "unexpected token in DynParser expression",
+                            "unexpected token in Parser expression",
                             "D020",
                             "unexpected token"
                         )
@@ -530,7 +530,7 @@ impl<'db> DynParser<'db> {
                 // Tuple.
                 self.next(); // Consume the branch.
                 let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
@@ -541,7 +541,7 @@ impl<'db> DynParser<'db> {
                 // Struct.
                 self.next(); // Consume the branch.
                 let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                 let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
@@ -552,7 +552,7 @@ impl<'db> DynParser<'db> {
                 // List.
                 self.next(); // Consume the branch.
                 let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
+                let mut sub_parser = Parser::new(self.db, tokens, self.source_text);
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
@@ -564,7 +564,7 @@ impl<'db> DynParser<'db> {
                 self.emit_expr_error(
                     text,
                     span,
-                    "unexpected tree node in DynParser expression",
+                    "unexpected tree node in Parser expression",
                     "D018",
                     "unexpected token"
                 )

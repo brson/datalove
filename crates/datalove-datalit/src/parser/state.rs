@@ -12,7 +12,7 @@ use crate::parser_util::TokenStream;
 use datalove_diagnostic::DiagnosticBuilder;
 
 /// Parser state for datalit parsing.
-pub(super) struct DynParser<'db> {
+pub(super) struct Parser<'db> {
     pub(super) db: &'db dyn crate::Db,
     pub(super) tokens: Vec<TreeToken<'db>>,
     pub(super) pos: usize,
@@ -21,14 +21,14 @@ pub(super) struct DynParser<'db> {
     pub(super) had_error: bool,
 }
 
-impl<'db> DynParser<'db> {
+impl<'db> Parser<'db> {
     /// Create a new parser with the given tokens.
     pub(super) fn new(
         db: &'db dyn crate::Db,
         tokens: Vec<TreeToken<'db>>,
         source_text: Option<bct::text::Text<'db>>,
     ) -> Self {
-        DynParser {
+        Parser {
             db,
             tokens,
             pos: 0,
@@ -188,12 +188,12 @@ impl<'db> DynParser<'db> {
     }
 
     /// Create a sub-parser for processing branch content.
-    pub(super) fn sub_parser(&self, tokens: Vec<TreeToken<'db>>) -> DynParser<'db> {
-        DynParser::new(self.db, tokens, self.source_text)
+    pub(super) fn sub_parser(&self, tokens: Vec<TreeToken<'db>>) -> Parser<'db> {
+        Parser::new(self.db, tokens, self.source_text)
     }
 }
 
-impl<'db> TokenStream<'db> for DynParser<'db> {
+impl<'db> TokenStream<'db> for Parser<'db> {
     fn db(&self) -> &'db dyn salsa::Database {
         self.db
     }
