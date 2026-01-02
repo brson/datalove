@@ -8,7 +8,7 @@ pub use datalove_datafun_ast::script;
 // Note: spans module is local - it re-exports types from AST and adds query function.
 pub mod spans;
 
-pub mod parser;
+pub use datalove_datafun_parser as parser;
 pub mod resolution;
 pub mod tycheck;
 pub mod funlit_equiv;
