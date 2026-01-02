@@ -16,6 +16,8 @@ pub struct IrTyDescTable {
     tuple_fields: Vec<Vec<rtdt::TyInfoTupleField>>,
     /// Storage for struct field arrays.
     struct_fields: Vec<Vec<rtdt::TyInfoStructField>>,
+    /// Storage for enum variant arrays.
+    enum_variants: Vec<Vec<rtdt::TyInfoEnumVariant>>,
     /// Storage for field name strings (to keep them alive).
     field_names: Vec<String>,
 }
@@ -26,6 +28,7 @@ impl IrTyDescTable {
             tydescs: Vec::new(),
             tuple_fields: Vec::new(),
             struct_fields: Vec::new(),
+            enum_variants: Vec::new(),
             field_names: Vec::new(),
         }
     }
@@ -137,6 +140,7 @@ impl IrTyDescTable {
             }),
             IrType::Tuple(fields) => self.create_tuple_tydesc(fields),
             IrType::Struct(fields) => self.create_struct_tydesc(fields),
+            IrType::Enum(variants) => self.create_enum_tydesc(variants),
             IrType::List(elem) => self.create_list_tydesc(elem),
             IrType::Set(elem) => self.create_set_tydesc(elem),
             IrType::Map(key, val) => self.create_map_tydesc(key, val),
@@ -249,6 +253,68 @@ impl IrTyDescTable {
                 struct_: rtdt::TyInfoStruct {
                     num_fields: fields.len() as u32,
                     fields: fields_ptr,
+                },
+            },
+        })
+    }
+
+    fn create_enum_tydesc(&mut self, variants: &[(String, Option<IrType>)]) -> Box<TyDesc> {
+        // Create tydescs for each variant payload.
+        let payload_tydescs: Vec<Option<*const TyDesc>> = variants.iter()
+            .map(|(_, payload)| payload.as_ref().map(|p| self.get_or_create(p)))
+            .collect();
+
+        // Store variant names.
+        let name_start = self.field_names.len();
+        for (name, _) in variants {
+            self.field_names.push(name.clone());
+        }
+
+        // Create variant info with placeholder offsets.
+        let mut variant_info: Vec<_> = variants.iter().enumerate()
+            .map(|(i, _)| {
+                let name_ref = &self.field_names[name_start + i];
+                rtdt::TyInfoEnumVariant {
+                    name: name_ref.as_ptr(),
+                    name_len: name_ref.len() as u32,
+                    offset: 0,
+                    payload: payload_tydescs[i].unwrap_or(std::ptr::null()),
+                }
+            })
+            .collect();
+
+        // Compute layout.
+        let layout = unsafe {
+            let temp_tydesc = TyDesc {
+                type_tag: rtdt::TyTag::Enum,
+                size: 0,
+                align: 1,
+                type_info: rtdt::TyInfo {
+                    enum_: rtdt::TyInfoEnum {
+                        num_variants: variants.len() as u32,
+                        variants: variant_info.as_ptr(),
+                    },
+                },
+            };
+            rtdt::layout::compute_enum_layout(TyDescRef::from_ptr(&temp_tydesc))
+        };
+
+        // Update offsets.
+        for (i, vi) in variant_info.iter_mut().enumerate() {
+            vi.offset = layout.variant_offsets[i];
+        }
+
+        self.enum_variants.push(variant_info);
+        let variants_ptr = self.enum_variants.last().unwrap().as_ptr();
+
+        Box::new(TyDesc {
+            type_tag: rtdt::TyTag::Enum,
+            size: layout.size,
+            align: layout.align,
+            type_info: rtdt::TyInfo {
+                enum_: rtdt::TyInfoEnum {
+                    num_variants: variants.len() as u32,
+                    variants: variants_ptr,
                 },
             },
         })

@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Enum variant with string payload - tests move semantics.
+let message = : @enum { Text(@string), Empty } / @enum Text(@"hello")
+
+----------
+scriptunit-expr
+----------
+
+message

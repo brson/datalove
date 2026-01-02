@@ -96,6 +96,8 @@ pub enum IrType {
     Tuple(Vec<IrType>),
     /// Anonymous struct with named fields (sorted by name).
     Struct(Vec<(String, IrType)>),
+    /// Anonymous enum with variants (name and optional payload type, sorted by name).
+    Enum(Vec<(String, Option<IrType>)>),
     /// List with element type.
     List(Box<IrType>),
     /// Set with element type.
@@ -141,6 +143,18 @@ impl std::fmt::Display for IrType {
                 for (i, (name, ty)) in fields.iter().enumerate() {
                     if i > 0 { write!(f, ", ")?; }
                     write!(f, "{}: {}", name, ty)?;
+                }
+                write!(f, "}}")
+            }
+            IrType::Enum(variants) => {
+                write!(f, "enum{{")?;
+                for (i, (name, payload)) in variants.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    if let Some(ty) = payload {
+                        write!(f, "{}({})", name, ty)?;
+                    } else {
+                        write!(f, "{}", name)?;
+                    }
                 }
                 write!(f, "}}")
             }
@@ -209,8 +223,18 @@ impl IrType {
                     .collect();
                 IrType::Struct(fields)
             }
-            TypeHint::AnonEnum(_) => {
-                todo!("anonymous enum types in IR")
+            TypeHint::AnonEnum(enum_) => {
+                let mut variants: Vec<_> = enum_.variants(db)
+                    .iter()
+                    .map(|v| {
+                        let name = v.name(db).text(db).to_string();
+                        let payload = v.payload(db).map(|p| Self::from_type_hint(db, &p));
+                        (name, payload)
+                    })
+                    .collect();
+                // Sort variants by name for consistent layout.
+                variants.sort_by(|a, b| a.0.cmp(&b.0));
+                IrType::Enum(variants)
             }
             TypeHint::List(list) => {
                 let elem = Self::from_type_hint(db, &list.element_type(db));
@@ -285,8 +309,18 @@ impl IrType {
                     .collect();
                 IrType::Struct(fields)
             }
-            DlType::AnonEnum(_) => {
-                todo!("anonymous enum types in IR")
+            DlType::AnonEnum(enum_) => {
+                let mut variants: Vec<_> = enum_.variants(db)
+                    .iter()
+                    .map(|v| {
+                        let name = v.name(db).text(db).to_string();
+                        let payload = v.payload(db).map(|p| Self::from_datalit_tyandheap(db, &p));
+                        (name, payload)
+                    })
+                    .collect();
+                // Sort variants by name for consistent layout.
+                variants.sort_by(|a, b| a.0.cmp(&b.0));
+                IrType::Enum(variants)
             }
             DlType::List(list) => {
                 let elem = Self::from_datalit_tyandheap(db, &list.element_type(db));
@@ -335,6 +369,10 @@ impl IrType {
             // Composite types are copy if all fields are copy.
             IrType::Tuple(fields) => fields.iter().all(|f| f.is_copy()),
             IrType::Struct(fields) => fields.iter().all(|(_, f)| f.is_copy()),
+            // Enum is copy if all variant payloads are copy.
+            IrType::Enum(variants) => variants.iter().all(|(_, payload)| {
+                payload.as_ref().map(|p| p.is_copy()).unwrap_or(true)
+            }),
 
             // Option is copy if inner is copy.
             IrType::Option(inner) => inner.is_copy(),
@@ -560,6 +598,16 @@ pub enum Instruction {
 
     /// Create None.
     WrapNone { dest: ValueId },
+
+    /// Create an enum variant.
+    ///
+    /// The variant_index is the index into the sorted variants of the enum type.
+    /// Payload is provided for variants that have data.
+    EnumVariant {
+        dest: ValueId,
+        variant_index: u32,
+        payload: Option<Operand>,
+    },
 
     /// Unwrap Option, producing (inner_value, is_some).
     UnwrapOption {

@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Enum variant with integer payload.
+let result = : @enum { Ok(@u32), Error } / @enum Ok(@42)
+
+----------
+scriptunit-expr
+----------
+
+result

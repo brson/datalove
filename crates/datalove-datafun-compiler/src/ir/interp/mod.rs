@@ -661,6 +661,22 @@ impl IrInterpreter {
                 self.execute_wrap_none(dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
+            Instruction::EnumVariant { dest, variant_index, payload } => {
+                let payload_val = payload.as_ref()
+                    .map(|p| self.read_operand(p, frame, frames))
+                    .transpose()?;
+                let dest_slot = frame.value_dest(*dest)?;
+                self.execute_enum_variant(*variant_index, payload_val.as_ref(), dest_slot)?;
+                frame.mark_value_initialized(*dest);
+                // Mark payload source as moved if present.
+                if let Some(p) = payload {
+                    match p {
+                        Operand::Value(id) => frame.mark_value_dropped(*id),
+                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                    }
+                }
+            }
             Instruction::UnwrapOption { dest, is_some, src } => {
                 let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest)?;
@@ -1675,6 +1691,34 @@ impl IrInterpreter {
         unsafe {
             // Tag is at offset 0. Set to None (0).
             *(dest.ptr as *mut u8) = rtdt::OptionTag::None as u8;
+        }
+        Ok(())
+    }
+
+    /// Create an enum variant value.
+    fn execute_enum_variant(
+        &self,
+        variant_index: u32,
+        payload: Option<&Value>,
+        dest: Destination,
+    ) -> Result<(), InterpError> {
+        unsafe {
+            let enum_info = (*dest.tydesc).type_info.enum_;
+
+            // Write discriminant at offset 0.
+            *(dest.ptr as *mut u32) = variant_index;
+
+            // Copy payload if present.
+            if let Some(payload_val) = payload {
+                let variant_info = &*enum_info.variants.add(variant_index as usize);
+                let payload_offset = variant_info.offset as usize;
+                let payload_size = (*payload_val.tydesc).size as usize;
+                std::ptr::copy_nonoverlapping(
+                    payload_val.ptr,
+                    dest.ptr.add(payload_offset),
+                    payload_size,
+                );
+            }
         }
         Ok(())
     }

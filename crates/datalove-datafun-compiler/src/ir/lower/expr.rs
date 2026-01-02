@@ -327,8 +327,38 @@ pub fn lower_expression<'db>(
             });
             Ok(dest)
         }
-        ExprFunKind::AnonEnum(_) => {
-            Err(LowerError::NotImplemented("AnonEnum".to_string()))
+        ExprFunKind::AnonEnum(enum_expr) => {
+            // Get the result type - this is IrType::Enum with sorted variants.
+            let result_type = ctx.expr_type(expr);
+            let variant_name = enum_expr.variant_name(ctx.db).text(ctx.db).to_string();
+
+            // Find the variant index in the sorted list.
+            let variant_index = match &result_type {
+                IrType::Enum(variants) => {
+                    variants.iter()
+                        .position(|(n, _)| n == &variant_name)
+                        .ok_or_else(|| LowerError::NotImplemented(
+                            format!("enum variant {} not found", variant_name)
+                        ))?
+                }
+                _ => return Err(LowerError::NotImplemented(
+                    format!("AnonEnum with non-enum type: {:?}", result_type)
+                )),
+            };
+
+            // Lower payload if present.
+            let payload = enum_expr.payload(ctx.db)
+                .map(|p| lower_expression(ctx, p))
+                .transpose()?
+                .map(Operand::Value);
+
+            let dest = ctx.fresh_value(result_type);
+            ctx.emit(Instruction::EnumVariant {
+                dest,
+                variant_index: variant_index as u32,
+                payload,
+            });
+            Ok(dest)
         }
         ExprFunKind::Tensor(tensor) => {
             let shape = tensor.shape(ctx.db).clone();

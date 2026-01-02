@@ -277,6 +277,13 @@ impl fmt::Display for Instruction {
             Instruction::WrapNone { dest } => {
                 write!(f, "{} = none", dest)
             }
+            Instruction::EnumVariant { dest, variant_index, payload } => {
+                if let Some(p) = payload {
+                    write!(f, "{} = enum_variant {} {}", dest, variant_index, p)
+                } else {
+                    write!(f, "{} = enum_variant {}", dest, variant_index)
+                }
+            }
             Instruction::UnwrapOption { dest, is_some, src } => {
                 write!(f, "{}, {} = unwrap_option {}", dest, is_some, src)
             }
