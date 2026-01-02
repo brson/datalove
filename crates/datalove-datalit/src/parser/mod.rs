@@ -36,57 +36,16 @@ fn parse_bracer<'db>(
     db: &'db dyn crate::Db,
     bracer: Bracer<'db>,
 ) -> ast::ParseResult<'db> {
-    let chunk_lex = bracer.chunk(db);
-    // Get source text from the first token.
-    let source_text = chunk_lex.tokens(db).first().map(|token| {
-        let subtext = token.text(db);
-        subtext.text(db)
-    });
     let tokens = bracer.iter(db).filter_map(|t| t.without_space(db)).collect::<Vec<_>>();
-    parse_from_tokens_with_source(db, tokens, source_text)
+    parse_from_tokens(db, tokens)
 }
 
 /// Parse a datalit expression directly from a vector of tokens.
-///
-/// Allows other parsers to delegate to the datalit parser without
-/// reconstructing source text from tokens.
 pub fn parse_from_tokens<'db>(
     db: &'db dyn crate::Db,
     tokens: Vec<TreeToken<'db>>,
 ) -> ast::ParseResult<'db> {
-    // Try to extract source text from the first token for better error reporting.
-    let source_text = tokens.first().and_then(|token| {
-        match token {
-            TreeToken::Token(tok) => {
-                let subtext = tok.text(db);
-                Some(subtext.text(db))
-            }
-            TreeToken::Branch(_, iter) => {
-                // Look inside the branch for a token.
-                iter.clone().find_map(|inner| {
-                    inner.without_space(db).and_then(|t| {
-                        match t {
-                            TreeToken::Token(tok) => {
-                                let subtext = tok.text(db);
-                                Some(subtext.text(db))
-                            }
-                            TreeToken::Branch(_, _) => None
-                        }
-                    })
-                })
-            }
-        }
-    });
-    parse_from_tokens_with_source(db, tokens, source_text)
-}
-
-/// Parse a datalit expression from tokens with an optional source Text for error reporting.
-fn parse_from_tokens_with_source<'db>(
-    db: &'db dyn crate::Db,
-    tokens: Vec<TreeToken<'db>>,
-    source_text: Option<bct::text::Text<'db>>,
-) -> ast::ParseResult<'db> {
-    let mut parser = Parser::new(db, tokens, source_text);
+    let mut parser = Parser::new(db, tokens);
     let expr = parser.parse_expr_full();
     ast::ParseResult::new(db, expr, parser.take_expr_spans())
 }
@@ -98,7 +57,7 @@ pub fn parse_type_hint_and_heap_from_tokens<'db>(
     db: &'db dyn crate::Db,
     tokens: Vec<TreeToken<'db>>,
 ) -> (ast::TypeHintAndHeap<'db>, usize) {
-    let mut parser = Parser::new(db, tokens, None);
+    let mut parser = Parser::new(db, tokens);
     let type_hint = parser.parse_type_hint_and_heap();
     let consumed = parser.pos();
     (type_hint, consumed)

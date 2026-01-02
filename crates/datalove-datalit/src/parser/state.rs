@@ -16,23 +16,17 @@ pub(super) struct Parser<'db> {
     pub(super) db: &'db dyn crate::Db,
     pub(super) tokens: Vec<TreeToken<'db>>,
     pub(super) pos: usize,
-    pub(super) source_text: Option<bct::text::Text<'db>>,
     pub(super) expr_spans: Vec<ast::ParseSpanEntry>,
     pub(super) had_error: bool,
 }
 
 impl<'db> Parser<'db> {
     /// Create a new parser with the given tokens.
-    pub(super) fn new(
-        db: &'db dyn crate::Db,
-        tokens: Vec<TreeToken<'db>>,
-        source_text: Option<bct::text::Text<'db>>,
-    ) -> Self {
+    pub(super) fn new(db: &'db dyn crate::Db, tokens: Vec<TreeToken<'db>>) -> Self {
         Parser {
             db,
             tokens,
             pos: 0,
-            source_text,
             expr_spans: Vec::new(),
             had_error: false,
         }
@@ -136,32 +130,23 @@ impl<'db> Parser<'db> {
     }
 
     /// Get source Text for error reporting.
-    ///
-    /// Try source_text field first, otherwise extract from first token.
     pub(super) fn source_text(&self) -> bct::text::Text<'db> {
-        if let Some(text) = self.source_text {
-            return text;
-        }
-        // Try to get from the first token.
         if let Some(token) = self.tokens.first() {
             match token {
                 TreeToken::Token(tok) => {
-                    let subtext = tok.text(self.db);
-                    return subtext.text(self.db);
+                    return tok.text(self.db).text(self.db);
                 }
                 TreeToken::Branch(_, iter) => {
                     // Try to find a Token inside the branch.
                     for inner_token in iter.clone() {
                         if let Some(TreeToken::Token(tok)) = inner_token.without_space(self.db) {
-                            let subtext = tok.text(self.db);
-                            return subtext.text(self.db);
+                            return tok.text(self.db).text(self.db);
                         }
                     }
                 }
             }
         }
-        // Last resort: create an empty text as a fallback.
-        // This can happen when parsing tokens without source_text (e.g., from datafun parser).
+        // Empty token list - create empty text as fallback.
         bct::text::Text::new(self.db, String::new())
     }
 
