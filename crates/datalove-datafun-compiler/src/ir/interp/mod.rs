@@ -88,6 +88,11 @@ impl IrInterpreter {
         self.runtime.handle()
     }
 
+    /// Get mutable access to the type descriptor table.
+    pub fn tydesc_table_mut(&mut self) -> &mut IrTyDescTable {
+        &mut self.tydesc_table
+    }
+
     /// Pretty-print a value using the runtime's pretty printer.
     pub fn pretty_print_value(&mut self, value: &Value) -> Result<String, InterpError> {
         use datalove_rt::c::RtStatus;
@@ -795,21 +800,58 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_list_new(elements, dest_slot, frame, frames)?;
                 frame.mark_value_initialized(*dest);
+                // Mark source elements as moved (linear semantics - consumes elements).
+                for elem in elements {
+                    match elem {
+                        Operand::Value(id) => frame.mark_value_dropped(*id),
+                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                    }
+                }
             }
             Instruction::SetNew { dest, elements } => {
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_set_new(elements, dest_slot, frame, frames)?;
                 frame.mark_value_initialized(*dest);
+                // Mark source elements as moved (linear semantics - consumes elements).
+                for elem in elements {
+                    match elem {
+                        Operand::Value(id) => frame.mark_value_dropped(*id),
+                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                    }
+                }
             }
             Instruction::MapNew { dest, entries } => {
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_map_new(entries, dest_slot, frame, frames)?;
                 frame.mark_value_initialized(*dest);
+                // Mark source entries as moved (linear semantics - consumes entries).
+                for (key, val) in entries {
+                    match key {
+                        Operand::Value(id) => frame.mark_value_dropped(*id),
+                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                    }
+                    match val {
+                        Operand::Value(id) => frame.mark_value_dropped(*id),
+                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                    }
+                }
             }
             Instruction::TensorNew { dest, shape, elements } => {
                 let dest_slot = frame.value_dest(*dest)?;
                 self.execute_tensor_new(shape, elements, dest_slot, frame, frames)?;
                 frame.mark_value_initialized(*dest);
+                // Mark source elements as moved (linear semantics - consumes elements).
+                for elem in elements {
+                    match elem {
+                        Operand::Value(id) => frame.mark_value_dropped(*id),
+                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                    }
+                }
             }
             Instruction::Phi { .. } => {
                 // Phi nodes are handled separately in execute_blocks before other instructions.

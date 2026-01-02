@@ -65,7 +65,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     Ok(ir_unit) => {
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.
-                        script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.slot_types);
+                        script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.value_types, &ir_unit.slot_types);
                         script_ctx.current_unit = unit_index + 1;
                     }
                     Err(e) => {

@@ -8,8 +8,8 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
+        "expr_kind": "expr",
+        "ty": "U32",
         "value": "@1"
       }
     },
@@ -23,7 +23,11 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "I32",
+        "value": "@-5"
+      }
     },
     "environment": []
   },
@@ -36,8 +40,8 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u64",
+        "expr_kind": "expr",
+        "ty": "U64",
         "value": "@42"
       }
     },
@@ -52,8 +56,8 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "int",
+        "expr_kind": "expr",
+        "ty": "Int",
         "value": "@30"
       }
     },
@@ -67,7 +71,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): InvalidOperandType { op: \"Div\", ty: \"u32\" }"
+      "Error": "InvalidOperandType { op: \"Div\", ty: \"u32\" }"
     },
     "environment": []
   }

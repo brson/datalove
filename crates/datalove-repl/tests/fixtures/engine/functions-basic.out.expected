@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },
@@ -19,7 +19,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"double\")"
+      "Error": "function not found: double"
     },
     "environment": []
   },
@@ -31,7 +31,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },
@@ -43,7 +43,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"add\")"
+      "Error": "function not found: add"
     },
     "environment": []
   },
@@ -63,7 +63,7 @@
       {
         "name": "get_five",
         "ty": "function",
-        "value": ""
+        "value": "-"
       }
     ]
   },
@@ -76,8 +76,8 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
+        "expr_kind": "expr",
+        "ty": "U32",
         "value": "@5"
       }
     },
@@ -85,7 +85,7 @@
       {
         "name": "get_five",
         "ty": "function",
-        "value": ""
+        "value": "-"
       }
     ]
   }

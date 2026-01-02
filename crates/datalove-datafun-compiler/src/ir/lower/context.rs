@@ -25,6 +25,8 @@ pub struct ScriptLowerContext {
     pub values: HashMap<String, (u32, ValueId)>,
     /// Available var bindings: name -> (unit_index, slot_id).
     pub slots: HashMap<String, (u32, SlotId)>,
+    /// Types of exported values: name -> type.
+    pub value_types: HashMap<String, IrType>,
     /// Types of exported slots: name -> type.
     pub slot_types: HashMap<String, IrType>,
     /// Available functions: name -> (unit_index, func_id).
@@ -46,6 +48,7 @@ impl ScriptLowerContext {
         &mut self,
         unit_index: u32,
         exports: &[(String, ExportBinding)],
+        unit_value_types: &[IrType],
         unit_slot_types: &[IrType],
     ) {
         for (name, binding) in exports {
@@ -55,10 +58,15 @@ impl ScriptLowerContext {
                     self.slots.remove(name);
                     self.slot_types.remove(name);
                     self.values.insert(name.clone(), (unit_index, *v));
+                    // Store the value's type.
+                    if let Some(ty) = unit_value_types.get(v.0 as usize) {
+                        self.value_types.insert(name.clone(), ty.clone());
+                    }
                 }
                 ExportBinding::Slot(s) => {
                     // Remove any value with the same name to properly shadow.
                     self.values.remove(name);
+                    self.value_types.remove(name);
                     self.slots.insert(name.clone(), (unit_index, *s));
                     // Store the slot's type for drop emission in later units.
                     if let Some(ty) = unit_slot_types.get(s.0 as usize) {

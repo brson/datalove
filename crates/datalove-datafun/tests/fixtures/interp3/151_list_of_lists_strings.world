@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Nested list of string lists - deeply nested move types.
+let nested = @[@[@"a", @"b"], @[@"c", @"d", @"e"]]
+
+----------
+scriptunit-expr
+----------
+
+nested

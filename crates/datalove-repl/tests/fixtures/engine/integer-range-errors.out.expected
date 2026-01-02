@@ -7,19 +7,9 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
+      "Error": "invalid literal: 256"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u8_negative: @u8 = @-1",
@@ -29,15 +19,9 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
+      "Error": "invalid literal: -1"
     },
-    "environment": [
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i8_overflow: @i8 = @128",
@@ -47,24 +31,9 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      }
+      "Error": "invalid literal: 128"
     },
-    "environment": [
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i8_underflow: @i8 = @-129",
@@ -74,20 +43,9 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
+      "Error": "invalid literal: -129"
     },
-    "environment": [
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u16_overflow: @u16 = @65536",
@@ -97,29 +55,9 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      }
+      "Error": "invalid literal: 65536"
     },
-    "environment": [
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u16_negative: @u16 = @-1",
@@ -129,25 +67,9 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
+      "Error": "invalid literal: -1"
     },
-    "environment": [
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i16_overflow: @i16 = @32768",
@@ -157,34 +79,9 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "i16_overflow",
-        "ty": "i16",
-        "value": "@32768"
-      }
+      "Error": "invalid literal: 32768"
     },
-    "environment": [
-      {
-        "name": "i16_overflow",
-        "ty": "i16",
-        "value": "@32768"
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i16_underflow: @i16 = @-32769",
@@ -194,30 +91,9 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
+      "Error": "invalid literal: -32769"
     },
-    "environment": [
-      {
-        "name": "i16_overflow",
-        "ty": "i16",
-        "value": "@32768"
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u32_overflow: @u32 = @4294967296",
@@ -227,30 +103,9 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Failed to parse integer: number too large to fit in target type\")"
+      "Error": "invalid literal: 4294967296"
     },
-    "environment": [
-      {
-        "name": "i16_overflow",
-        "ty": "i16",
-        "value": "@32768"
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u32_negative: @u32 = @-1",
@@ -260,30 +115,9 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
+      "Error": "invalid literal: -1"
     },
-    "environment": [
-      {
-        "name": "i16_overflow",
-        "ty": "i16",
-        "value": "@32768"
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i32_overflow: @i32 = @2147483648",
@@ -293,39 +127,9 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "i32_overflow",
-        "ty": "i32",
-        "value": "@2147483648"
-      }
+      "Error": "invalid literal: 2147483648"
     },
-    "environment": [
-      {
-        "name": "i16_overflow",
-        "ty": "i16",
-        "value": "@32768"
-      },
-      {
-        "name": "i32_overflow",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i32_underflow: @i32 = @-2147483649",
@@ -335,35 +139,9 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
+      "Error": "invalid literal: -2147483649"
     },
-    "environment": [
-      {
-        "name": "i16_overflow",
-        "ty": "i16",
-        "value": "@32768"
-      },
-      {
-        "name": "i32_overflow",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u64_overflow: @u64 = @18446744073709551616",
@@ -373,35 +151,9 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Failed to parse integer: number too large to fit in target type\")"
+      "Error": "invalid literal: 18446744073709551616"
     },
-    "environment": [
-      {
-        "name": "i16_overflow",
-        "ty": "i16",
-        "value": "@32768"
-      },
-      {
-        "name": "i32_overflow",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let u64_negative: @u64 = @-1",
@@ -411,35 +163,9 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
+      "Error": "invalid literal: -1"
     },
-    "environment": [
-      {
-        "name": "i16_overflow",
-        "ty": "i16",
-        "value": "@32768"
-      },
-      {
-        "name": "i32_overflow",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i64_overflow: @i64 = @9223372036854775808",
@@ -449,35 +175,9 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Failed to parse integer: number too large to fit in target type\")"
+      "Error": "invalid literal: 9223372036854775808"
     },
-    "environment": [
-      {
-        "name": "i16_overflow",
-        "ty": "i16",
-        "value": "@32768"
-      },
-      {
-        "name": "i32_overflow",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "let i64_underflow: @i64 = @-9223372036854775809",
@@ -487,34 +187,8 @@
       }
     },
     "eval": {
-      "Error": "execution error: RuntimeError(\"Failed to parse integer: invalid digit found in string\")"
+      "Error": "invalid literal: -9223372036854775809"
     },
-    "environment": [
-      {
-        "name": "i16_overflow",
-        "ty": "i16",
-        "value": "@32768"
-      },
-      {
-        "name": "i32_overflow",
-        "ty": "i32",
-        "value": "@2147483648"
-      },
-      {
-        "name": "i8_overflow",
-        "ty": "i8",
-        "value": "@128"
-      },
-      {
-        "name": "u16_overflow",
-        "ty": "u16",
-        "value": "@65536"
-      },
-      {
-        "name": "u8_overflow",
-        "ty": "u8",
-        "value": "@256"
-      }
-    ]
+    "environment": []
   }
 ]

@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Map with string keys and values - tests move semantics for non-Copy types.
+let dict = {|@"one" => @"first", @"two" => @"second"|}
+
+----------
+scriptunit-expr
+----------
+
+dict

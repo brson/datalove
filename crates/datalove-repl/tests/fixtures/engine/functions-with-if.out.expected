@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"i32\", actual: \"u32\" }, TypeMismatch { expected: \"u32\", actual: \"i32\" }"
+      "Error": "TypeMismatch { expected: \"i32\", actual: \"u32\" }; TypeMismatch { expected: \"u32\", actual: \"i32\" }"
     },
     "environment": []
   },
@@ -19,7 +19,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"abs\")"
+      "Error": "function not found: abs"
     },
     "environment": []
   },
@@ -31,7 +31,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"abs\")"
+      "Error": "function not found: abs"
     },
     "environment": []
   },
@@ -51,7 +51,7 @@
       {
         "name": "classify",
         "ty": "function",
-        "value": ""
+        "value": "-"
       }
     ]
   },
@@ -64,8 +64,8 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
+        "expr_kind": "expr",
+        "ty": "U32",
         "value": "@1"
       }
     },
@@ -73,7 +73,7 @@
       {
         "name": "classify",
         "ty": "function",
-        "value": ""
+        "value": "-"
       }
     ]
   },
@@ -86,8 +86,8 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
+        "expr_kind": "expr",
+        "ty": "U32",
         "value": "@2"
       }
     },
@@ -95,7 +95,7 @@
       {
         "name": "classify",
         "ty": "function",
-        "value": ""
+        "value": "-"
       }
     ]
   },
@@ -108,8 +108,8 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
+        "expr_kind": "expr",
+        "ty": "U32",
         "value": "@3"
       }
     },
@@ -117,7 +117,7 @@
       {
         "name": "classify",
         "ty": "function",
-        "value": ""
+        "value": "-"
       }
     ]
   },
@@ -137,12 +137,12 @@
       {
         "name": "classify",
         "ty": "function",
-        "value": ""
+        "value": "-"
       },
       {
         "name": "grade",
         "ty": "function",
-        "value": ""
+        "value": "-"
       }
     ]
   },
@@ -155,8 +155,8 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
+        "expr_kind": "expr",
+        "ty": "U32",
         "value": "@4"
       }
     },
@@ -164,12 +164,12 @@
       {
         "name": "classify",
         "ty": "function",
-        "value": ""
+        "value": "-"
       },
       {
         "name": "grade",
         "ty": "function",
-        "value": ""
+        "value": "-"
       }
     ]
   },
@@ -182,8 +182,8 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
+        "expr_kind": "expr",
+        "ty": "U32",
         "value": "@3"
       }
     },
@@ -191,12 +191,12 @@
       {
         "name": "classify",
         "ty": "function",
-        "value": ""
+        "value": "-"
       },
       {
         "name": "grade",
         "ty": "function",
-        "value": ""
+        "value": "-"
       }
     ]
   },
@@ -209,8 +209,8 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
+        "expr_kind": "expr",
+        "ty": "U32",
         "value": "@2"
       }
     },
@@ -218,12 +218,12 @@
       {
         "name": "classify",
         "ty": "function",
-        "value": ""
+        "value": "-"
       },
       {
         "name": "grade",
         "ty": "function",
-        "value": ""
+        "value": "-"
       }
     ]
   },
@@ -236,8 +236,8 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
+        "expr_kind": "expr",
+        "ty": "U32",
         "value": "@1"
       }
     },
@@ -245,12 +245,12 @@
       {
         "name": "classify",
         "ty": "function",
-        "value": ""
+        "value": "-"
       },
       {
         "name": "grade",
         "ty": "function",
-        "value": ""
+        "value": "-"
       }
     ]
   }

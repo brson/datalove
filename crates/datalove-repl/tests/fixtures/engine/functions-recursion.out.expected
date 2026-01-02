@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },
@@ -19,7 +19,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"factorial\")"
+      "Error": "function not found: factorial"
     },
     "environment": []
   },
@@ -31,7 +31,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"factorial\")"
+      "Error": "function not found: factorial"
     },
     "environment": []
   },
@@ -43,7 +43,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"factorial\")"
+      "Error": "function not found: factorial"
     },
     "environment": []
   },
@@ -55,7 +55,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"factorial\")"
+      "Error": "function not found: factorial"
     },
     "environment": []
   }

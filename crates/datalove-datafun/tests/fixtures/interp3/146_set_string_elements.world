@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Set with string elements - tests move semantics for non-Copy types.
+let names = {|@"alice", @"bob", @"charlie"|}
+
+----------
+scriptunit-expr
+----------
+
+names

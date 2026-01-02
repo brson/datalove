@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): CannotSynthesize"
+      "Error": "CannotSynthesize"
     },
     "environment": []
   },
@@ -21,14 +21,14 @@
     "eval": {
       "SuccessLet": {
         "name": "x",
-        "ty": "u32",
+        "ty": "U32",
         "value": "@42"
       }
     },
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
+        "ty": "U32",
         "value": "@42"
       }
     ]
@@ -41,12 +41,12 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"y\")"
+      "Error": "UnresolvedName(\"y\")"
     },
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
+        "ty": "U32",
         "value": "@42"
       }
     ]

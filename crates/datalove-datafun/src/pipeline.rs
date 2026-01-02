@@ -349,6 +349,8 @@ pub struct ScriptUnitResult {
     pub typecheck: TypecheckResult,
     /// Lowering result.
     pub lowering: LoweringResult,
+    /// Type of the result (for expressions).
+    pub ty: Option<String>,
     /// Output value (for expressions) or execution status.
     pub output: String,
 }
@@ -367,9 +369,7 @@ pub struct ScriptCompilationContext<'db> {
     accumulated_unit_specs: Vec<ScriptUnitSpec<'db>>,
     /// Module specs for typechecking.
     module_specs: Vec<ModuleSpec<'db>>,
-    /// Type descriptor table for interpreter.
-    tydesc_table: ir::interp::IrTyDescTable,
-    /// IR interpreter.
+    /// IR interpreter (owns the tydesc_table and runtime).
     interp: ir::interp::IrInterpreter,
     /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
     /// Used to resolve typechecker's ResolvedCallTarget to IR function refs.
@@ -410,7 +410,6 @@ impl<'db> CompiledModules<'db> {
             env: self.env,
             accumulated_unit_specs: Vec::new(),
             module_specs,
-            tydesc_table: ir::interp::IrTyDescTable::new(),
             interp: ir::interp::IrInterpreter::new(),
             func_id_map: self.func_id_map,
         }
@@ -505,6 +504,7 @@ impl<'db> ScriptCompilationContext<'db> {
             return ScriptUnitResult {
                 typecheck: TypecheckResult::Error { errors: tycheck_errors },
                 lowering: LoweringResult::Skipped,
+                ty: None,
                 output: String::new(),
             };
         }
@@ -526,6 +526,7 @@ impl<'db> ScriptCompilationContext<'db> {
                     lowering: LoweringResult::Error {
                         message: format!("Drop analysis errors: {}", error_msgs.join(", ")),
                     },
+                    ty: None,
                     output: String::new(),
                 };
             }
@@ -547,6 +548,7 @@ impl<'db> ScriptCompilationContext<'db> {
                 return ScriptUnitResult {
                     typecheck: TypecheckResult::Success,
                     lowering: LoweringResult::Error { message: format!("{}", e) },
+                    ty: None,
                     output: String::new(),
                 };
             }
@@ -557,7 +559,7 @@ impl<'db> ScriptCompilationContext<'db> {
 
         // Execute the fragment with shared environment.
         let ret_type = ir::IrType::Result(Box::new(ir::IrType::Unit));
-        let ret_tydesc = self.tydesc_table.get_or_create(&ret_type);
+        let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
         let ret_size = unsafe { (*ret_tydesc).size };
         let mut ret_buffer = vec![0u8; ret_size as usize];
         let ret_dest = ir::interp::Destination {
@@ -583,12 +585,13 @@ impl<'db> ScriptCompilationContext<'db> {
 
         // Update script context with exports from this unit.
         let unit_index = self.script_ctx.current_unit;
-        self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.slot_types);
+        self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.value_types, &ir_unit.slot_types);
         self.script_ctx.current_unit += 1;
 
         ScriptUnitResult {
             typecheck: TypecheckResult::Success,
             lowering: LoweringResult::Success { ir: ir_dump },
+            ty: None, // Fragments don't have a result type.
             output,
         }
     }
@@ -607,6 +610,7 @@ impl<'db> ScriptCompilationContext<'db> {
             return ScriptUnitResult {
                 typecheck: TypecheckResult::Error { errors: tycheck_errors },
                 lowering: LoweringResult::Skipped,
+                ty: None,
                 output: String::new(),
             };
         }
@@ -625,6 +629,7 @@ impl<'db> ScriptCompilationContext<'db> {
                 return ScriptUnitResult {
                     typecheck: TypecheckResult::Success,
                     lowering: LoweringResult::Error { message: format!("{}", e) },
+                    ty: None,
                     output: String::new(),
                 };
             }
@@ -632,11 +637,15 @@ impl<'db> ScriptCompilationContext<'db> {
 
         let ir_dump = format!("{}", ir_unit);
 
+        // Get the result type if there is one.
+        let result_ty = ir_unit.result
+            .map(|id| format!("{:?}", &ir_unit.value_types[id.0 as usize]));
+
         // Execute the script unit if it has a result.
         let output = if let Some(result_id) = ir_unit.result {
             // ret_dest is for early returns: always Result<(), Error>.
             let ret_type = ir::IrType::Result(Box::new(ir::IrType::Unit));
-            let ret_tydesc = self.tydesc_table.get_or_create(&ret_type);
+            let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
             let ret_size = unsafe { (*ret_tydesc).size };
             let mut ret_buffer = vec![0u8; ret_size as usize];
             let ret_dest = ir::interp::Destination {
@@ -646,7 +655,7 @@ impl<'db> ScriptCompilationContext<'db> {
 
             // expr_dest is for the expression result.
             let expr_type = &ir_unit.value_types[result_id.0 as usize];
-            let expr_tydesc = self.tydesc_table.get_or_create(expr_type);
+            let expr_tydesc = self.interp.tydesc_table_mut().get_or_create(expr_type);
             let expr_size = unsafe { (*expr_tydesc).size };
             let mut expr_buffer = vec![0u8; expr_size as usize];
             let expr_dest = ir::interp::Destination {
@@ -684,12 +693,13 @@ impl<'db> ScriptCompilationContext<'db> {
 
         // Update script context with exports from this unit.
         let unit_index = self.script_ctx.current_unit;
-        self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.slot_types);
+        self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.value_types, &ir_unit.slot_types);
         self.script_ctx.current_unit += 1;
 
         ScriptUnitResult {
             typecheck: TypecheckResult::Success,
             lowering: LoweringResult::Success { ir: ir_dump },
+            ty: result_ty,
             output,
         }
     }
@@ -697,5 +707,90 @@ impl<'db> ScriptCompilationContext<'db> {
     /// Cleanup all allocated values.
     pub fn destroy_all(&mut self) {
         self.env.destroy_all(self.interp.runtime_handle());
+    }
+
+    /// Get type and value for a specific binding by name.
+    ///
+    /// Returns Some((type, value)) if the binding exists, None otherwise.
+    pub fn get_binding(&mut self, name: &str) -> Option<(String, String)> {
+        use ir::interp::InterpError;
+
+        // Check let bindings (values).
+        if let Some((unit, value_id)) = self.script_ctx.values.get(name) {
+            let ty = self.script_ctx.value_types.get(name)
+                .map(|t| format!("{:?}", t))
+                .unwrap_or_else(|| "?".to_string());
+            let val = match self.env.frames.external_value(*unit, *value_id) {
+                Ok(v) => self.interp.pretty_print_value(&v)
+                    .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
+                Err(InterpError::UninitializedValue(_)) => "<moved>".to_string(),
+                Err(e) => format!("<error: {:?}>", e),
+            };
+            return Some((ty, val));
+        }
+
+        // Check var bindings (slots).
+        if let Some((unit, slot_id)) = self.script_ctx.slots.get(name) {
+            let ty = self.script_ctx.slot_types.get(name)
+                .map(|t| format!("{:?}", t))
+                .unwrap_or_else(|| "?".to_string());
+            let val = match self.env.frames.external_slot(*unit, *slot_id) {
+                Ok(v) => self.interp.pretty_print_value(&v)
+                    .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
+                Err(InterpError::UninitializedSlot(_)) => "<moved>".to_string(),
+                Err(e) => format!("<error: {:?}>", e),
+            };
+            return Some((ty, val));
+        }
+
+        None
+    }
+
+    /// Get environment bindings with types and values.
+    ///
+    /// Returns a list of (name, kind, type, value) tuples, sorted by name.
+    /// - kind is "let", "var", or "fun"
+    /// - type is the IrType formatted as a string
+    /// - value is the pretty-printed value (or "<moved>" if consumed)
+    pub fn get_environment(&mut self) -> Vec<(String, String, String, String)> {
+        use ir::interp::InterpError;
+        let mut result = Vec::new();
+
+        // Let bindings (values).
+        for (name, (unit, value_id)) in &self.script_ctx.values {
+            let ty = self.script_ctx.value_types.get(name)
+                .map(|t| format!("{:?}", t))
+                .unwrap_or_else(|| "?".to_string());
+            let val = match self.env.frames.external_value(*unit, *value_id) {
+                Ok(v) => self.interp.pretty_print_value(&v)
+                    .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
+                Err(InterpError::UninitializedValue(_)) => "<moved>".to_string(),
+                Err(e) => format!("<error: {:?}>", e),
+            };
+            result.push((name.clone(), "let".to_string(), ty, val));
+        }
+
+        // Var bindings (slots).
+        for (name, (unit, slot_id)) in &self.script_ctx.slots {
+            let ty = self.script_ctx.slot_types.get(name)
+                .map(|t| format!("{:?}", t))
+                .unwrap_or_else(|| "?".to_string());
+            let val = match self.env.frames.external_slot(*unit, *slot_id) {
+                Ok(v) => self.interp.pretty_print_value(&v)
+                    .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
+                Err(InterpError::UninitializedSlot(_)) => "<moved>".to_string(),
+                Err(e) => format!("<error: {:?}>", e),
+            };
+            result.push((name.clone(), "var".to_string(), ty, val));
+        }
+
+        // Functions.
+        for (name, _) in &self.script_ctx.functions {
+            result.push((name.clone(), "fun".to_string(), "function".to_string(), "-".to_string()));
+        }
+
+        // Sort by name.
+        result.sort_by(|a, b| a.0.cmp(&b.0));
+        result
     }
 }

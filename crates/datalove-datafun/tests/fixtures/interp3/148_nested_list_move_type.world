@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Nested list - inner lists are move types.
+let matrix = @[@[@1, @2], @[@3, @4], @[@5, @6]]
+
+----------
+scriptunit-expr
+----------
+
+matrix

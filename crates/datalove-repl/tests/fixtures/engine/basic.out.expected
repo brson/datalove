@@ -9,14 +9,14 @@
     "eval": {
       "SuccessLet": {
         "name": "x",
-        "ty": "u32",
+        "ty": "U32",
         "value": "@42"
       }
     },
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
+        "ty": "U32",
         "value": "@42"
       }
     ]
@@ -30,15 +30,15 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "u32",
+        "expr_kind": "expr",
+        "ty": "U32",
         "value": "@42"
       }
     },
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
+        "ty": "U32",
         "value": "@42"
       }
     ]
@@ -53,19 +53,19 @@
     "eval": {
       "SuccessLet": {
         "name": "y",
-        "ty": "int",
+        "ty": "Int",
         "value": "@52"
       }
     },
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
+        "ty": "U32",
         "value": "@42"
       },
       {
         "name": "y",
-        "ty": "int",
+        "ty": "Int",
         "value": "@52"
       }
     ]
@@ -79,16 +79,21 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "int",
+        "expr_kind": "expr",
+        "ty": "Int",
         "value": "@52"
       }
     },
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
+        "ty": "U32",
         "value": "@42"
+      },
+      {
+        "name": "y",
+        "ty": "Int",
+        "value": "<moved>"
       }
     ]
   }

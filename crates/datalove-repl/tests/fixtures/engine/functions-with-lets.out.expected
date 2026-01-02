@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"int\", actual: \"u32\" }, UnresolvedName(\"b\")"
+      "Error": "TypeMismatch { expected: \"int\", actual: \"u32\" }; UnresolvedName(\"b\")"
     },
     "environment": []
   },
@@ -19,7 +19,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"compute\")"
+      "Error": "function not found: compute"
     },
     "environment": []
   },
@@ -31,7 +31,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }, TypeMismatch { expected: \"u32\", actual: \"int\" }, UnresolvedName(\"a\")"
+      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }; TypeMismatch { expected: \"u32\", actual: \"int\" }; UnresolvedName(\"a\")"
     },
     "environment": []
   },
@@ -43,7 +43,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"fib\")"
+      "Error": "function not found: fib"
     },
     "environment": []
   },
@@ -55,7 +55,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"int\", actual: \"u32\" }, TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "Error": "TypeMismatch { expected: \"int\", actual: \"u32\" }; TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },
@@ -67,7 +67,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"shadow\")"
+      "Error": "function not found: shadow"
     },
     "environment": []
   }

@@ -1,18 +1,16 @@
 //! REPL engine for evaluating Datalove expressions and statements.
 
 use rmx::prelude::*;
-use std::collections::BTreeMap;
 
-use crate::{Command, ReplCommand, Eval, InputParse, Input};
+use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, EvalFun, InputParse, Input};
 use crate::datafun;
+use datafun::pipeline::{ModuleCompilationPipeline, ScriptCompilationContext, TypecheckResult, LoweringResult};
 
 pub struct Engine<'db> {
-    _db: &'db dyn datafun::Db,
+    db: &'db dyn datafun::Db,
     history: ReplHistory,
-    /// Module graph for the REPL (empty for now).
-    _module_graph: datafun::module_graph::ModuleGraph,
-    /// Typecheck result for the module graph.
-    _typecheck_result: datafun::module_graph::ModuleGraphTypecheckResult<'db>,
+    /// Script compilation context for incremental evaluation.
+    ctx: ScriptCompilationContext<'db>,
 }
 
 struct ReplHistory {
@@ -41,33 +39,33 @@ impl ReplHistory {
 
 impl<'db> Engine<'db> {
     pub fn new(db: &'db dyn datafun::Db) -> AnyResult<Engine<'db>> {
-        // Create empty package world.
-        let empty_package_world = datafun::package_load::PackageWorld {
-            pkglib_system: BTreeMap::new(),
-            pkglib_local: BTreeMap::new(),
-        };
-        let package_world = datafun::package::import_from_loader(db, empty_package_world);
+        // Create an empty module pipeline and compile.
+        let pipeline = ModuleCompilationPipeline::new(db);
+        let compiled = pipeline.compile();
 
-        // Resolve and convert to ModuleGraph.
-        let resolution = datafun::package_resolve::resolve_package_world_with_imports(db, package_world);
-        let pkg_graph = resolution.result(db)
-            .map_err(|e| rmx::anyhow::anyhow!("Package resolution failed: {:?}", e))?;
+        // Check for resolution errors.
+        if let Some(err) = &compiled.resolution_error {
+            bail!("Module resolution error: {}", err);
+        }
 
-        // Convert to package-agnostic ModuleGraph, parse, and typecheck.
-        let module_graph = datafun::to_module_graph(db, package_world, pkg_graph);
-        let parsed_graph = datafun::module_graph::parse_module_graph(db, module_graph);
-        let typecheck_result = datafun::tycheck::typecheck_module_graph(db, parsed_graph);
+        // Create script compilation context.
+        let ctx = compiled.script_context(db);
 
         Ok(Engine {
-            _db: db,
+            db,
             history: ReplHistory::new(),
-            _module_graph: module_graph,
-            _typecheck_result: typecheck_result,
+            ctx,
         })
     }
 
     fn reset(&mut self) {
         self.history = ReplHistory::new();
+        // Cleanup the current context.
+        self.ctx.destroy_all();
+        // Create a new context.
+        let pipeline = ModuleCompilationPipeline::new(self.db);
+        let compiled = pipeline.compile();
+        self.ctx = compiled.script_context(self.db);
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {
@@ -173,19 +171,99 @@ impl<'db> Engine<'db> {
         }
     }
 
-    fn eval_script_statement(&mut self, _source: String) -> Eval {
-        todo!("script interpreter gutted - pending frame-based rewrite")
+    fn eval_script_statement(&mut self, source: String) -> Eval {
+        let result = self.ctx.eval_fragment(&source);
+
+        // Check for typecheck errors.
+        if let TypecheckResult::Error { errors } = &result.typecheck {
+            return Eval::Error(errors.join("; "));
+        }
+
+        // Check for lowering errors.
+        if let LoweringResult::Error { message } = &result.lowering {
+            return Eval::Error(message.clone());
+        }
+
+        // Check for runtime errors.
+        if result.output.starts_with("Error:") {
+            return Eval::Error(result.output);
+        }
+
+        // Detect what kind of statement was evaluated.
+        let trimmed = source.trim();
+        if trimmed.starts_with("let ") {
+            // Extract let binding name (simple parsing).
+            let after_let = &trimmed[4..];
+            let name = after_let.split(|c: char| !c.is_alphanumeric() && c != '_')
+                .next()
+                .unwrap_or("?")
+                .to_string();
+
+            // Look up type and value from the context.
+            let (ty, value) = self.ctx.get_binding(&name)
+                .unwrap_or(("?".to_string(), "?".to_string()));
+
+            Eval::SuccessLet(EvalLet { name, ty, value })
+        } else if trimmed.starts_with("fun ") {
+            // Extract function name.
+            let after_fun = &trimmed[4..];
+            let name = after_fun.split(|c: char| !c.is_alphanumeric() && c != '_')
+                .next()
+                .unwrap_or("?")
+                .to_string();
+            Eval::SuccessFun(EvalFun { name })
+        } else if trimmed.starts_with("var ") {
+            // Extract var binding name.
+            let after_var = &trimmed[4..];
+            let name = after_var.split(|c: char| !c.is_alphanumeric() && c != '_')
+                .next()
+                .unwrap_or("?")
+                .to_string();
+
+            // Look up type and value from the context.
+            let (ty, value) = self.ctx.get_binding(&name)
+                .unwrap_or(("?".to_string(), "?".to_string()));
+
+            Eval::SuccessLet(EvalLet { name, ty, value })
+        } else {
+            Eval::Nothing
+        }
     }
 
-    fn eval_expression(&mut self, _source: String) -> Eval {
-        todo!("script interpreter gutted - pending frame-based rewrite")
+    fn eval_expression(&mut self, source: String) -> Eval {
+        let result = self.ctx.eval_expr(&source);
+
+        // Check for typecheck errors.
+        if let TypecheckResult::Error { errors } = &result.typecheck {
+            return Eval::Error(errors.join("; "));
+        }
+
+        // Check for lowering errors.
+        if let LoweringResult::Error { message } = &result.lowering {
+            return Eval::Error(message.clone());
+        }
+
+        // Check for runtime errors.
+        if result.output.starts_with("Error:") {
+            return Eval::Error(result.output);
+        }
+
+        Eval::SuccessExpr(EvalExpr {
+            expr_kind: "expr".to_string(),
+            ty: result.ty.unwrap_or_else(|| "?".to_string()),
+            value: result.output,
+        })
     }
 
     /// Get current environment bindings (functions and let statements).
-    /// Returns a list of (name, type, value) triples.
+    ///
+    /// Returns a list of (name, type, value) triples, sorted by name.
     pub fn get_environment(&mut self) -> Vec<(String, String, String)> {
-        // TODO: Implement with frame-based interpreter.
-        Vec::new()
+        // Delegate to the script context's get_environment method.
+        self.ctx.get_environment()
+            .into_iter()
+            .map(|(name, _kind, ty, value)| (name, ty, value))
+            .collect()
     }
 
     /// Execute a script file line by line and output JSON results.
@@ -210,6 +288,13 @@ impl<'db> Engine<'db> {
             println!("{}", serde_json::to_string(&output)?);
         }
 
+        // Engine's Drop impl will call destroy_all().
         Ok(())
     }
-} 
+}
+
+impl<'db> Drop for Engine<'db> {
+    fn drop(&mut self) {
+        self.ctx.destroy_all();
+    }
+}

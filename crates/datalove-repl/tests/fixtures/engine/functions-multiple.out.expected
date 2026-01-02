@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },
@@ -19,7 +19,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },
@@ -31,7 +31,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"inc\")"
+      "Error": "function not found: inc"
     },
     "environment": []
   },
@@ -43,7 +43,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"double\")"
+      "Error": "function not found: double"
     },
     "environment": []
   },
@@ -55,7 +55,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"double\")"
+      "Error": "function not found: double"
     },
     "environment": []
   },
@@ -67,7 +67,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"inc\")"
+      "Error": "function not found: inc"
     },
     "environment": []
   },
@@ -79,7 +79,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },
@@ -91,7 +91,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
     },
     "environment": []
   },
@@ -103,7 +103,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"add\"), UnresolvedName(\"multiply\"), UnresolvedName(\"b\")"
+      "Error": "function not found: add"
     },
     "environment": []
   },
@@ -115,7 +115,7 @@
       }
     },
     "eval": {
-      "Error": "type error(s): UnresolvedName(\"compute\")"
+      "Error": "function not found: compute"
     },
     "environment": []
   }

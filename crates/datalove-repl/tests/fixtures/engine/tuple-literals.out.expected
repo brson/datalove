@@ -9,14 +9,14 @@
     "eval": {
       "SuccessLet": {
         "name": "pair",
-        "ty": "(@u32, @string)",
+        "ty": "Tuple([U32, String])",
         "value": "@(@42, @\"hello\")"
       }
     },
     "environment": [
       {
         "name": "pair",
-        "ty": "(@u32, @string)",
+        "ty": "Tuple([U32, String])",
         "value": "@(@42, @\"hello\")"
       }
     ]
@@ -30,12 +30,18 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "(@u32, @string)",
+        "expr_kind": "expr",
+        "ty": "Tuple([U32, String])",
         "value": "@(@42, @\"hello\")"
       }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "pair",
+        "ty": "Tuple([U32, String])",
+        "value": "<moved>"
+      }
+    ]
   },
   {
     "input": "let triple = @(@1, @2, @3)",
@@ -47,14 +53,19 @@
     "eval": {
       "SuccessLet": {
         "name": "triple",
-        "ty": "(@u32, @u32, @u32)",
+        "ty": "Tuple([U32, U32, U32])",
         "value": "@(@1, @2, @3)"
       }
     },
     "environment": [
       {
+        "name": "pair",
+        "ty": "Tuple([U32, String])",
+        "value": "<moved>"
+      },
+      {
         "name": "triple",
-        "ty": "(@u32, @u32, @u32)",
+        "ty": "Tuple([U32, U32, U32])",
         "value": "@(@1, @2, @3)"
       }
     ]
@@ -68,15 +79,20 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "(@u32, @u32, @u32)",
+        "expr_kind": "expr",
+        "ty": "Tuple([U32, U32, U32])",
         "value": "@(@1, @2, @3)"
       }
     },
     "environment": [
       {
+        "name": "pair",
+        "ty": "Tuple([U32, String])",
+        "value": "<moved>"
+      },
+      {
         "name": "triple",
-        "ty": "(@u32, @u32, @u32)",
+        "ty": "Tuple([U32, U32, U32])",
         "value": "@(@1, @2, @3)"
       }
     ]
@@ -91,19 +107,24 @@
     "eval": {
       "SuccessLet": {
         "name": "mixed",
-        "ty": "(@u32, @string, @bool)",
+        "ty": "Tuple([U32, String, Bool])",
         "value": "@(@100, @\"test\", @true)"
       }
     },
     "environment": [
       {
         "name": "mixed",
-        "ty": "(@u32, @string, @bool)",
+        "ty": "Tuple([U32, String, Bool])",
         "value": "@(@100, @\"test\", @true)"
       },
       {
+        "name": "pair",
+        "ty": "Tuple([U32, String])",
+        "value": "<moved>"
+      },
+      {
         "name": "triple",
-        "ty": "(@u32, @u32, @u32)",
+        "ty": "Tuple([U32, U32, U32])",
         "value": "@(@1, @2, @3)"
       }
     ]
@@ -117,15 +138,25 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expression",
-        "ty": "(@u32, @string, @bool)",
+        "expr_kind": "expr",
+        "ty": "Tuple([U32, String, Bool])",
         "value": "@(@100, @\"test\", @true)"
       }
     },
     "environment": [
       {
+        "name": "mixed",
+        "ty": "Tuple([U32, String, Bool])",
+        "value": "<moved>"
+      },
+      {
+        "name": "pair",
+        "ty": "Tuple([U32, String])",
+        "value": "<moved>"
+      },
+      {
         "name": "triple",
-        "ty": "(@u32, @u32, @u32)",
+        "ty": "Tuple([U32, U32, U32])",
         "value": "@(@1, @2, @3)"
       }
     ]

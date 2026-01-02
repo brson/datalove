@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// List with string elements - tests move semantics for non-Copy types.
+// The string constants should be moved into the list, not double-freed.
+let words = @[@"hello", @"world", @"test"]
+
+----------
+scriptunit-expr
+----------
+
+words
