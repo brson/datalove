@@ -186,14 +186,16 @@ impl<'db> Parser<'db> {
         )
     }
 
-    /// Check that an iterator is exhausted.
+    /// Emit error if tokens remain unconsumed after a successful parse.
     ///
-    /// Emits an error diagnostic if tokens remain and no prior error occurred.
+    /// Only emits if the parser succeeded (no prior errors). This catches
+    /// both parser bugs and user syntax errors.
     fn error_if_not_exhausted(
-        &self,
+        &mut self,
         tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
     ) {
         if tokens.peek().is_some() && !self.had_error {
+            self.had_error = true;
             let (text, span) = self.peek_text_span(tokens);
             DiagnosticBuilder::error(self.db, "unexpected token after expression")
                 .code("P021")
@@ -225,7 +227,7 @@ impl<'db> Parser<'db> {
     ) -> ast::Statement<'db> {
         let mut tokens = line.into_iter().peekable();
 
-        match self.peek_word(&mut tokens) {
+        let stmt = match self.peek_word(&mut tokens) {
             Some("let") => self.parse_let(&mut tokens),
             Some("var") => self.parse_var(&mut tokens),
             Some("set") => self.parse_set(&mut tokens),
@@ -247,7 +249,12 @@ impl<'db> Parser<'db> {
                     "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', or 'continue'"
                 )
             }
-        }
+        };
+
+        // Check for unconsumed tokens on this line.
+        self.error_if_not_exhausted(&mut tokens);
+
+        stmt
     }
 
     fn parse_let(

@@ -3,10 +3,10 @@ scriptunit-fragment
 ----------
 
 let neg = @0 - @5
-let pos = @10
+let pos = @10 - @0
 
 ----------
 scriptunit-expr
 ----------
 
-neg < pos
+neg .< pos

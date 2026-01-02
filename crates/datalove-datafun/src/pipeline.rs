@@ -29,6 +29,9 @@ use ir::drop_analysis::FunctionDropAnalysis;
 #[serde(tag = "status")]
 pub enum TypecheckResult {
     Success,
+    ParseError {
+        errors: Vec<String>,
+    },
     Error {
         errors: Vec<String>,
     },
@@ -421,6 +424,22 @@ impl<'db> ScriptCompilationContext<'db> {
         let parse_result = datalove_datafun_compiler::parser::parse(self.db, src);
         let script = parse_result.script(self.db);
 
+        // Collect parse diagnostics.
+        let parse_diags = datalove_datafun_compiler::parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
+        if !parse_diags.is_empty() {
+            let parse_errors: Vec<String> = parse_diags.iter()
+                .map(|d| {
+                    let diag = d.to_diagnostic(self.db);
+                    diag.message.as_str(self.db).to_string()
+                })
+                .collect();
+            return ScriptUnitResult {
+                typecheck: TypecheckResult::ParseError { errors: parse_errors },
+                lowering: LoweringResult::Skipped,
+                output: String::new(),
+            };
+        }
+
         // Incremental typecheck with pre-parsed content.
         let unit_spec = ScriptUnitSpec::new(self.db, src, ScriptUnitKind::Fragment(script));
         self.accumulated_unit_specs.push(unit_spec);
@@ -440,6 +459,22 @@ impl<'db> ScriptCompilationContext<'db> {
     pub fn eval_expr(&mut self, source: &str) -> ScriptUnitResult {
         let src = bct::input::Source::new(self.db, source.to_string());
         let expr = datalove_datafun_compiler::parser::parse_expr(self.db, src);
+
+        // Collect parse diagnostics.
+        let parse_diags = datalove_datafun_compiler::parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
+        if !parse_diags.is_empty() {
+            let parse_errors: Vec<String> = parse_diags.iter()
+                .map(|d| {
+                    let diag = d.to_diagnostic(self.db);
+                    diag.message.as_str(self.db).to_string()
+                })
+                .collect();
+            return ScriptUnitResult {
+                typecheck: TypecheckResult::ParseError { errors: parse_errors },
+                lowering: LoweringResult::Skipped,
+                output: String::new(),
+            };
+        }
 
         // Incremental typecheck with pre-parsed content.
         let unit_spec = ScriptUnitSpec::new(self.db, src, ScriptUnitKind::Expr(expr));

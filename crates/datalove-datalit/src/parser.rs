@@ -589,6 +589,7 @@ impl<'db> DynParser<'db> {
             Some(n) => n,
             None => {
                 // No name found - emit error and create placeholder.
+                self.had_error = true;
                 let (text, span) = self.current_text_span();
                 DiagnosticBuilder::error(self.db, "expected variant name in enum definition")
                     .code("D011")
@@ -888,6 +889,7 @@ impl<'db> DynParser<'db> {
                             match p.parse_u32_literal() {
                                 Some(dim) => dim,
                                 None => {
+                                    p.had_error = true;
                                     let (text, span) = p.current_text_span();
                                     DiagnosticBuilder::error(p.db, "expected dimension value in tensor shape")
                                         .code("D023")
@@ -1473,12 +1475,13 @@ impl<'db> DynParser<'db> {
     }
 
 
-    /// Check that all tokens have been consumed, emitting an error if not.
+    /// Emit error if tokens remain unconsumed after a successful parse.
     ///
-    /// Only emits if the parser succeeded (no prior errors). This avoids cascading
-    /// errors when unconsumed tokens are a consequence of an earlier parse failure.
-    fn error_if_not_exhausted(&self) {
+    /// Only emits if the parser succeeded (no prior errors). This catches
+    /// both parser bugs and user syntax errors.
+    fn error_if_not_exhausted(&mut self) {
         if self.pos < self.tokens.len() && !self.had_error {
+            self.had_error = true;
             let (text, span) = self.current_text_span();
             DiagnosticBuilder::error(self.db, "unexpected token after expression")
                 .code("D021")
@@ -1487,12 +1490,13 @@ impl<'db> DynParser<'db> {
         }
     }
 
-    /// Check that all tokens have been consumed for type hints, emitting an error if not.
+    /// Emit error if tokens remain unconsumed after a successful type hint parse.
     ///
-    /// Only emits if the parser succeeded (no prior errors). This avoids cascading
-    /// errors when unconsumed tokens are a consequence of an earlier parse failure.
-    fn error_if_not_exhausted_type_hint(&self) {
+    /// Only emits if the parser succeeded (no prior errors). This catches
+    /// both parser bugs and user syntax errors.
+    fn error_if_not_exhausted_type_hint(&mut self) {
         if self.pos < self.tokens.len() && !self.had_error {
+            self.had_error = true;
             let (text, span) = self.current_text_span();
             DiagnosticBuilder::error(self.db, "unexpected token after type")
                 .code("D022")

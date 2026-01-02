@@ -59,8 +59,22 @@
               {
                 "condition": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "i"
+                    "kind": "BinOp",
+                    "lhs": {
+                      "expr": {
+                        "kind": "Name",
+                        "name": "i"
+                      }
+                    },
+                    "op": "Gt",
+                    "rhs": {
+                      "expr": {
+                        "heap": "Local",
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "5"
+                      }
+                    }
                   }
                 },
                 "else_body": null,

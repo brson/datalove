@@ -13,6 +13,7 @@ serde = { version = "1", features = ["derive"] }
 datalove-datafun-compiler.path = "../datalove-datafun-compiler"
 datalove-datafun-pkg.path = "../datalove-datafun-pkg"
 datalove-rt.path = "../datalove-rt"
+datalove-diagnostic.path = "../datalove-diagnostic"
 
 [dev-dependencies]
 datalove-exampletest.path = "../datalove-exampletest"

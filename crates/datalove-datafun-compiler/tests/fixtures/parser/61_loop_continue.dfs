@@ -3,7 +3,7 @@ fun skip_evens(): @u32
   let i = @0
   loop
     let i = i + @1
-    if i > @5
+    if i .> @5
       break
     end if
     if i == @2
