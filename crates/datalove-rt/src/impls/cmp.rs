@@ -650,17 +650,17 @@ unsafe fn eq_value(
                     rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
                         // For same type, compare the Data structures field-wise.
                         // This works because each type has a consistent encoding.
-                        // Data is repr(C) with two u64 fields: (primary, secondary).
+                        // Data is repr(C) with two pointer fields: (primary, secondary).
                         if std::ptr::eq(data_a, data_b) {
                             true
                         } else {
-                            // Read Data as two u64 values and compare.
+                            // Read Data as two usize values and compare.
                             let data_a_bytes = std::ptr::read(data_a);
                             let data_b_bytes = std::ptr::read(data_b);
 
-                            // Compare using transmute to [u64; 2] for consistent equality.
-                            let a_words: [u64; 2] = std::mem::transmute(data_a_bytes);
-                            let b_words: [u64; 2] = std::mem::transmute(data_b_bytes);
+                            // Compare using transmute to [usize; 2] for consistent equality.
+                            let a_words: [usize; 2] = std::mem::transmute(data_a_bytes);
+                            let b_words: [usize; 2] = std::mem::transmute(data_b_bytes);
 
                             a_words == b_words
                         }
@@ -704,13 +704,13 @@ unsafe fn eq_value(
                         if std::ptr::eq(err_a, err_b) {
                             true
                         } else {
-                            // Read Error as two u64 values and compare.
+                            // Read Error as two usize values and compare.
                             let err_a_bytes = std::ptr::read(as_data_a);
                             let err_b_bytes = std::ptr::read(as_data_b);
 
-                            // Compare using transmute to [u64; 2] for consistent equality.
-                            let a_words: [u64; 2] = std::mem::transmute(err_a_bytes);
-                            let b_words: [u64; 2] = std::mem::transmute(err_b_bytes);
+                            // Compare using transmute to [usize; 2] for consistent equality.
+                            let a_words: [usize; 2] = std::mem::transmute(err_a_bytes);
+                            let b_words: [usize; 2] = std::mem::transmute(err_b_bytes);
 
                             a_words == b_words
                         }
@@ -1328,17 +1328,17 @@ unsafe fn cmp_value(
                     rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
                         // For same type, compare the Data structures field-wise.
                         // This works because each type has a consistent encoding.
-                        // Data is repr(C) with two u64 fields: (primary, secondary).
+                        // Data is repr(C) with two pointer fields: (primary, secondary).
                         if std::ptr::eq(data_a, data_b) {
                             crate::c::RtOrdering::Equal
                         } else {
-                            // Read Data as two u64 values and compare.
+                            // Read Data as two usize values and compare.
                             let data_a_bytes = std::ptr::read(data_a);
                             let data_b_bytes = std::ptr::read(data_b);
 
-                            // Compare using transmute to [u64; 2] for consistent ordering.
-                            let a_words: [u64; 2] = std::mem::transmute(data_a_bytes);
-                            let b_words: [u64; 2] = std::mem::transmute(data_b_bytes);
+                            // Compare using transmute to [usize; 2] for consistent ordering.
+                            let a_words: [usize; 2] = std::mem::transmute(data_a_bytes);
+                            let b_words: [usize; 2] = std::mem::transmute(data_b_bytes);
 
                             match a_words.cmp(&b_words) {
                                 std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
@@ -1394,17 +1394,17 @@ unsafe fn cmp_value(
                     rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
                         // For same type, compare the Error structures field-wise.
                         // This works because each type has a consistent encoding.
-                        // Error has same repr as Data: two u64 fields.
+                        // Error has same repr as Data: two pointer fields.
                         if std::ptr::eq(err_a, err_b) {
                             crate::c::RtOrdering::Equal
                         } else {
-                            // Read Error as two u64 values and compare.
+                            // Read Error as two usize values and compare.
                             let err_a_bytes = std::ptr::read(err_a);
                             let err_b_bytes = std::ptr::read(err_b);
 
-                            // Compare using transmute to [u64; 2] for consistent ordering.
-                            let a_words: [u64; 2] = std::mem::transmute(err_a_bytes);
-                            let b_words: [u64; 2] = std::mem::transmute(err_b_bytes);
+                            // Compare using transmute to [usize; 2] for consistent ordering.
+                            let a_words: [usize; 2] = std::mem::transmute(err_a_bytes);
+                            let b_words: [usize; 2] = std::mem::transmute(err_b_bytes);
 
                             match a_words.cmp(&b_words) {
                                 std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
