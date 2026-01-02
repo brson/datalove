@@ -187,10 +187,6 @@ impl<'db> Parser<'db> {
         }
     }
 
-    /// Create a sub-parser for processing branch content.
-    pub(super) fn sub_parser(&self, tokens: Vec<TreeToken<'db>>) -> Parser<'db> {
-        Parser::new(self.db, tokens, self.source_text)
-    }
 }
 
 impl<'db> TokenStream<'db> for Parser<'db> {

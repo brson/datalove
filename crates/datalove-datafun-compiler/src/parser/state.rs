@@ -83,16 +83,6 @@ impl<'db> Parser<'db> {
         self.peek_sigil(Sigil::Colon)
     }
 
-    /// Create a sub-parser for processing branch content.
-    pub(super) fn sub_parser(&self, tokens: Vec<TreeToken<'db>>) -> Parser<'db> {
-        Parser {
-            db: self.db,
-            tokens,
-            pos: 0,
-            had_error: false,
-        }
-    }
-
     /// Get source Text for error reporting from the first token.
     pub(super) fn source_text(&self) -> bct::text::Text<'db> {
         if let Some(token) = self.tokens.first() {

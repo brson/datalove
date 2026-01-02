@@ -57,7 +57,7 @@ impl<'db> Parser<'db> {
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
     ) -> ast::Statement<'db> {
         let line_tokens: Vec<_> = line.into_iter().filter_map(|t| t.without_space(self.db)).collect();
-        let mut sub = self.sub_parser(line_tokens);
+        let mut sub = Parser::new(self.db, line_tokens);
         let stmt = sub.parse_statement(remaining_lines);
         self.had_error |= sub.had_error;
         stmt
@@ -243,7 +243,7 @@ impl<'db> Parser<'db> {
             return vec![];
         }
 
-        let mut sub = self.sub_parser(tokens);
+        let mut sub = Parser::new(self.db, tokens);
         let mut params = vec![];
 
         loop {
@@ -471,7 +471,7 @@ impl<'db> Parser<'db> {
             // Consume the "else" line and parse any binding.
             let (_, else_line) = remaining_lines.next().X();
             let else_tokens: Vec<_> = else_line.into_iter().filter_map(|t| t.without_space(self.db)).collect();
-            let mut else_sub = self.sub_parser(else_tokens);
+            let mut else_sub = Parser::new(self.db, else_tokens);
             else_sub.eat_word("else");
 
             // Parse optional else binding: |identifier|

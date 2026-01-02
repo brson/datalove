@@ -350,7 +350,7 @@ impl<'db> Parser<'db> {
         // Parse each argument group with a sub-parser.
         let mut args = vec![];
         for group in arg_token_groups {
-            let mut sub = self.sub_parser(group);
+            let mut sub = Parser::new(self.db, group);
             let arg = sub.parse_expr_full();
             sub.error_if_not_exhausted();
             args.push(arg);
@@ -389,7 +389,7 @@ impl<'db> Parser<'db> {
         }
 
         // Use incremental parsing like datalit.
-        let mut sub = self.sub_parser(all_tokens);
+        let mut sub = Parser::new(self.db, all_tokens);
         let mut elements = vec![];
 
         loop {

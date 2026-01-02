@@ -423,7 +423,7 @@ impl<'db> Parser<'db> {
                 if all_tokens.is_empty() {
                     return None;
                 }
-                let mut sub = self.sub_parser(all_tokens);
+                let mut sub = Parser::new(self.db, all_tokens);
                 let expr = sub.parse_expr_full();
                 sub.error_if_not_exhausted();
                 self.had_error |= sub.had_error;
@@ -510,7 +510,7 @@ impl<'db> Parser<'db> {
                 .collect();
 
             // Parse all elements in the row using a sub-parser.
-            let mut sub = self.sub_parser(elem_tokens);
+            let mut sub = Parser::new(self.db, elem_tokens);
             let mut row_elements = Vec::new();
             while sub.peek().is_some() {
                 row_elements.push(sub.parse_expr_full());
@@ -624,7 +624,7 @@ impl<'db> Parser<'db> {
             return vec![];
         }
 
-        let mut sub = self.sub_parser(all_tokens);
+        let mut sub = Parser::new(self.db, all_tokens);
         let mut elements = Vec::new();
 
         loop {
@@ -658,7 +658,7 @@ impl<'db> Parser<'db> {
             return vec![];
         }
 
-        let mut sub = self.sub_parser(all_tokens);
+        let mut sub = Parser::new(self.db, all_tokens);
         let mut fields = Vec::new();
 
         loop {
@@ -728,7 +728,7 @@ impl<'db> Parser<'db> {
             return vec![];
         }
 
-        let mut sub = self.sub_parser(all_tokens);
+        let mut sub = Parser::new(self.db, all_tokens);
         let mut entries = Vec::new();
 
         loop {
