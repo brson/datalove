@@ -64,7 +64,22 @@ existential runtime-typed data and error types.</p>
 <h3><a href="#datalove-functions-datafun" aria-hidden="true" class="anchor" id="user-content-datalove-functions-datafun"></a>Datalove Functions (&quot;Datafun&quot;)</h3>
 <p>A simple pure-functional language that feels like an imperative language, built
 on the datalit type system.</p>
-<p>TODO continue address-book example</p>
+<pre><code class="language-datalove">typealias Person: {
+  name: string,
+  born: int,
+  interests: [string],
+  address_book: set {
+    {
+      kind: enum { Friend, Family },
+      name: string,
+    }
+  }
+}
+
+fun get_friends(ref person: Person): [string]
+  // todo
+end fun
+</code></pre>
 <h3><a href="#datalove" aria-hidden="true" class="anchor" id="user-content-datalove"></a>Datalove</h3>
 <p>The complete language with I/O-bearing procedures,
 owned native pointers, objects with identity,

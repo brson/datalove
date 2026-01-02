@@ -65,7 +65,23 @@ existential runtime-typed data and error types.
 A simple pure-functional language that feels like an imperative language, built
 on the datalit type system.
 
-TODO continue address-book example
+```datalove
+typealias Person: {
+  name: string,
+  born: int,
+  interests: [string],
+  address_book: set {
+    {
+      kind: enum { Friend, Family },
+      name: string,
+    }
+  }
+}
+
+fun get_friends(ref person: Person): [string]
+  // todo
+end fun
+```
 
 
 

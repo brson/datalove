@@ -15,26 +15,27 @@
     </nav>
     <main>
         <h1><a href="#datalove-roadmap" aria-hidden="true" class="anchor" id="user-content-datalove-roadmap"></a>Datalove Roadmap</h1>
-<p>The MVP is a working bare datafun language.
-With modules and closures.
-With tools: repl, script runner, and compiler.
-With backends: interpreter, jit, aot.
-With embedding engine.
-With compute-only core library.
-With core-&gt;runtime calls.</p>
+<p>The MVP is a working bare datafun language with:</p>
+<ul>
+<li>documentation</li>
+<li>modules</li>
+<li>closures</li>
+<li>generic functions for built-in generic types</li>
+<li>repl, script runner</li>
+<li>interpreter, jit, aot</li>
+<li>compute-only core library</li>
+<li>core-&gt;runtime calls</li>
+</ul>
 <h1><a href="#in-progress" aria-hidden="true" class="anchor" id="user-content-in-progress"></a>in progress</h1>
 <ul>
 <li>ir and interp3</li>
 <li>human docs</li>
-<li>improve runtime implementation unsafety</li>
-<li>miri tests</li>
-<li>run miri on interpreter</li>
-<li>coverage</li>
+<li>refactor datafun-compiler into diamond deps</li>
 </ul>
 <h1><a href="#on-deck" aria-hidden="true" class="anchor" id="user-content-on-deck"></a>on deck</h1>
 <ul>
-<li>split compiler into peer/diamond deps</li>
-<li>refactor datafun-compiler into diamond deps</li>
+<li>interp coverage</li>
+<li>run miri on interpreter</li>
 <li>move semantics</li>
 <li>rename ExprFunKind::Err to Error</li>
 <li>move/clone semantics - moves-etc.md</li>
@@ -42,16 +43,16 @@ With core-&gt;runtime calls.</p>
 <li>destructuring</li>
 <li>runtime calls</li>
 <li>boolean ops - and or xor implies not</li>
-<li>anonymous enums with payloads</li>
 <li>named types</li>
-<li>clean up demo files</li>
+<li>clean up demo files in style of learn x in y minutes</li>
 <li>alternate backend</li>
 <li>generics</li>
+<li>datafun ast roundtrip</li>
 </ul>
 <hr />
 <h1><a href="#future" aria-hidden="true" class="anchor" id="user-content-future"></a>future</h1>
 <ul>
-<li>datafun ast roundtrip</li>
+<li>improve runtime implementation unsafety</li>
 <li>type declarations</li>
 <li>heap genericity and clone method</li>
 <li>aot</li>
