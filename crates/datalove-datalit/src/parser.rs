@@ -17,6 +17,7 @@ use bct::{
 };
 
 use crate::ast;
+use crate::parser_util::{self, TokenStream, TokenStreamExt};
 use datalove_diagnostic::DiagnosticBuilder;
 
 /// Parse a Source into a datalit expression with span information.
@@ -125,6 +126,24 @@ struct DynParser<'db> {
     had_error: bool,
 }
 
+impl<'db> TokenStream<'db> for DynParser<'db> {
+    fn db(&self) -> &'db dyn salsa::Database {
+        self.db
+    }
+
+    fn peek(&self) -> Option<&TreeToken<'db>> {
+        self.tokens.get(self.pos)
+    }
+
+    fn next(&mut self) -> Option<TreeToken<'db>> {
+        let token = self.tokens.get(self.pos).cloned();
+        if token.is_some() {
+            self.pos += 1;
+        }
+        token
+    }
+}
+
 impl<'db> DynParser<'db> {
     /// Emit both a diagnostic and create an ExprParseError node in one call.
     fn emit_expr_error(
@@ -211,34 +230,20 @@ impl<'db> DynParser<'db> {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("tuple");
                 // Check if it's anonymous (starts with () or named (starts with name).
-                if self.peek_sigil(Sigil::ParenOpen) {
+                if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
                     // Anonymous tuple with explicit keyword.
-                    match self.peek() {
-                        Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
-                            self.next(); // Consume the branch.
-                            let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                            let mut sub_parser = DynParser {
-                                db: self.db,
-                                tokens,
-                                pos: 0,
-                                source_text: self.source_text,
-                                expr_spans: Vec::new(),
-                                had_error: false,
-                            };
-                            let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
-                            sub_parser.error_if_not_exhausted_type_hint();
-                            ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
-                        }
-                        _ => {
-                            self.emit_type_hint_error(
-                                keyword_text,
-                                keyword_span,
-                                "expected () after tuple keyword",
-                                "D001",
-                                "expected '(' after 'tuple'"
-                            )
-                        }
-                    }
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
+                        had_error: false,
+                    };
+                    let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
+                    sub_parser.error_if_not_exhausted_type_hint();
+                    ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
                 } else {
                     self.emit_type_hint_error(
                         keyword_text,
@@ -253,34 +258,20 @@ impl<'db> DynParser<'db> {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("struct");
                 // Check if it's anonymous (starts with {) or named (starts with name).
-                if self.peek_sigil(Sigil::BraceOpen) {
+                if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     // Anonymous struct with explicit keyword.
-                    match self.peek() {
-                        Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
-                            self.next(); // Consume the branch.
-                            let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                            let mut sub_parser = DynParser {
-                                db: self.db,
-                                tokens,
-                                pos: 0,
-                                source_text: self.source_text,
-                                expr_spans: Vec::new(),
-                                had_error: false,
-                            };
-                            let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
-                            sub_parser.error_if_not_exhausted_type_hint();
-                            ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
-                        }
-                        _ => {
-                            self.emit_type_hint_error(
-                                keyword_text,
-                                keyword_span,
-                                "expected {} after struct keyword",
-                                "D002",
-                                "expected '{' after 'struct'"
-                            )
-                        }
-                    }
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
+                        had_error: false,
+                    };
+                    let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
+                    sub_parser.error_if_not_exhausted_type_hint();
+                    ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
                 } else {
                     self.emit_type_hint_error(
                         keyword_text,
@@ -295,37 +286,23 @@ impl<'db> DynParser<'db> {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("enum");
                 // Check if it's anonymous (starts with {) or named (starts with name).
-                if self.peek_sigil(Sigil::BraceOpen) {
+                if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     // Anonymous enum.
-                    match self.peek() {
-                        Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
-                            self.next(); // Consume the branch.
-                            let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                            let mut sub_parser = DynParser {
-                                db: self.db,
-                                tokens,
-                                pos: 0,
-                                source_text: self.source_text,
-                                expr_spans: Vec::new(),
-                                had_error: false,
-                            };
-                            let variants = sub_parser.parse_comma_separated(|p| p.parse_type_hint_enum_variant());
-                            sub_parser.error_if_not_exhausted_type_hint();
-                            ast::TypeHint::AnonEnum(ast::TypeHintAnonEnum::new(
-                                self.db,
-                                variants,
-                            ))
-                        }
-                        _ => {
-                            self.emit_type_hint_error(
-                                keyword_text,
-                                keyword_span,
-                                "expected {} after enum keyword",
-                                "D003",
-                                "expected '{' after 'enum'"
-                            )
-                        }
-                    }
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
+                        had_error: false,
+                    };
+                    let variants = sub_parser.parse_comma_separated(|p| p.parse_type_hint_enum_variant());
+                    sub_parser.error_if_not_exhausted_type_hint();
+                    ast::TypeHint::AnonEnum(ast::TypeHintAnonEnum::new(
+                        self.db,
+                        variants,
+                    ))
                 } else {
                     self.emit_type_hint_error(
                         keyword_text,
@@ -340,210 +317,190 @@ impl<'db> DynParser<'db> {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("map");
                 // Expect angle bracket with key and value types.
-                match self.peek() {
-                    Some(TreeToken::Branch(Sigil::AngleOpen, iter)) => {
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                            had_error: false,
-                        };
-                        let key_type = sub_parser.parse_type_hint_and_heap();
-                        if !sub_parser.eat_sigil(Sigil::Comma) {
-                            let (text, span) = sub_parser.current_text_span();
-                            return self.emit_type_hint_error(
-                                text,
-                                span,
-                                "expected comma between map key and value types",
-                                "D005",
-                                "expected ',' between key and value types"
-                            );
-                        }
-                        let value_type = sub_parser.parse_type_hint_and_heap();
-                        sub_parser.error_if_not_exhausted_type_hint();
-                        ast::TypeHint::Map(ast::TypeHintMap::new(self.db, key_type, value_type))
-                    }
-                    _ => {
-                        self.emit_type_hint_error(
-                            keyword_text,
-                            keyword_span,
-                            "expected <> after map keyword",
+                if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
+                        had_error: false,
+                    };
+                    let key_type = sub_parser.parse_type_hint_and_heap();
+                    if !sub_parser.eat_sigil(Sigil::Comma) {
+                        let (text, span) = sub_parser.current_text_span();
+                        return self.emit_type_hint_error(
+                            text,
+                            span,
+                            "expected comma between map key and value types",
                             "D005",
-                            "expected '<' after 'map'"
-                        )
+                            "expected ',' between key and value types"
+                        );
                     }
+                    let value_type = sub_parser.parse_type_hint_and_heap();
+                    sub_parser.error_if_not_exhausted_type_hint();
+                    ast::TypeHint::Map(ast::TypeHintMap::new(self.db, key_type, value_type))
+                } else {
+                    self.emit_type_hint_error(
+                        keyword_text,
+                        keyword_span,
+                        "expected <> after map keyword",
+                        "D005",
+                        "expected '<' after 'map'"
+                    )
                 }
             }
             Some("set") => {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("set");
                 // Expect angle bracket with element type.
-                match self.peek() {
-                    Some(TreeToken::Branch(Sigil::AngleOpen, iter)) => {
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                            had_error: false,
-                        };
-                        let element_type = sub_parser.parse_type_hint_and_heap();
-                        sub_parser.error_if_not_exhausted_type_hint();
-                        ast::TypeHint::Set(ast::TypeHintSet::new(self.db, element_type))
-                    }
-                    _ => {
-                        self.emit_type_hint_error(
-                            keyword_text,
-                            keyword_span,
-                            "expected <> after set keyword",
-                            "D006",
-                            "expected '<' after 'set'"
-                        )
-                    }
+                if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
+                        had_error: false,
+                    };
+                    let element_type = sub_parser.parse_type_hint_and_heap();
+                    sub_parser.error_if_not_exhausted_type_hint();
+                    ast::TypeHint::Set(ast::TypeHintSet::new(self.db, element_type))
+                } else {
+                    self.emit_type_hint_error(
+                        keyword_text,
+                        keyword_span,
+                        "expected <> after set keyword",
+                        "D006",
+                        "expected '<' after 'set'"
+                    )
                 }
             }
             Some("tensor") => {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("tensor");
                 // Expect angle bracket with <element_type, rank, optional_layout>.
-                match self.peek() {
-                    Some(TreeToken::Branch(Sigil::AngleOpen, iter)) => {
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                            had_error: false,
-                        };
-                        let element_type = sub_parser.parse_type_hint_and_heap();
-                        if !sub_parser.eat_sigil(Sigil::Comma) {
+                if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
+                        had_error: false,
+                    };
+                    let element_type = sub_parser.parse_type_hint_and_heap();
+                    if !sub_parser.eat_sigil(Sigil::Comma) {
+                        let (text, span) = sub_parser.current_text_span();
+                        return self.emit_type_hint_error(
+                            text,
+                            span,
+                            "expected comma between tensor element type and rank",
+                            "D009",
+                            "expected ',' after element type"
+                        );
+                    }
+
+                    let rank = match sub_parser.parse_u32_literal() {
+                        Some(r) => r,
+                        None => {
                             let (text, span) = sub_parser.current_text_span();
                             return self.emit_type_hint_error(
                                 text,
                                 span,
-                                "expected comma between tensor element type and rank",
-                                "D009",
-                                "expected ',' after element type"
+                                "expected rank (positive integer)",
+                                "D008",
+                                "expected rank"
                             );
                         }
+                    };
 
-                        let rank = match sub_parser.parse_u32_literal() {
-                            Some(r) => r,
-                            None => {
-                                let (text, span) = sub_parser.current_text_span();
-                                return self.emit_type_hint_error(
-                                    text,
-                                    span,
-                                    "expected rank (positive integer)",
-                                    "D008",
-                                    "expected rank"
-                                );
-                            }
-                        };
-
-                        sub_parser.error_if_not_exhausted_type_hint();
-                        ast::TypeHint::Tensor(ast::TypeHintTensor::new(
-                            self.db,
-                            element_type,
-                            rank,
-                        ))
-                    }
-                    _ => {
-                        self.emit_type_hint_error(
-                            keyword_text,
-                            keyword_span,
-                            "expected <> after tensor keyword",
-                            "D009",
-                            "expected '<' after 'tensor'"
-                        )
-                    }
+                    sub_parser.error_if_not_exhausted_type_hint();
+                    ast::TypeHint::Tensor(ast::TypeHintTensor::new(
+                        self.db,
+                        element_type,
+                        rank,
+                    ))
+                } else {
+                    self.emit_type_hint_error(
+                        keyword_text,
+                        keyword_span,
+                        "expected <> after tensor keyword",
+                        "D009",
+                        "expected '<' after 'tensor'"
+                    )
                 }
             }
             _ => {
                 // Check for branches: parentheses for tuples, brackets for lists, braces for structs.
-                match self.peek() {
-                    Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
-                        // Anonymous tuple.
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                            had_error: false,
-                        };
-                        let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
-                        sub_parser.error_if_not_exhausted_type_hint();
-                        ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
-                    }
-                    Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
-                        // List type.
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                            had_error: false,
-                        };
-                        let element_type = sub_parser.parse_type_hint_and_heap();
-                        sub_parser.error_if_not_exhausted_type_hint();
-                        ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
-                    }
-                    Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
-                        // Anonymous struct.
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                            had_error: false,
-                        };
-                        let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
-                        sub_parser.error_if_not_exhausted_type_hint();
-                        ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
-                    }
-                    _ => {
-                        let (text, span) = self.current_text_span();
-                        // Check if this looks like a capitalized type name.
-                        let message = if let Some(word) = self.peek_word() {
-                            let lower = word.to_lowercase();
-                            match lower.as_str() {
-                                "int" | "bool" | "string" | "data" | "error" |
-                                "u8" | "i8" | "u16" | "i16" | "u32" | "i32" |
-                                "u64" | "i64" | "f32" => {
-                                    format!("unknown type '{}', did you mean '{}'?", word, lower)
-                                }
-                                _ => format!("unknown type '{}'", word)
+                if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
+                    // Anonymous tuple.
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
+                        had_error: false,
+                    };
+                    let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
+                    sub_parser.error_if_not_exhausted_type_hint();
+                    ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
+                } else if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
+                    // List type.
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
+                        had_error: false,
+                    };
+                    let element_type = sub_parser.parse_type_hint_and_heap();
+                    sub_parser.error_if_not_exhausted_type_hint();
+                    ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
+                } else if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
+                    // Anonymous struct.
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
+                        had_error: false,
+                    };
+                    let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
+                    sub_parser.error_if_not_exhausted_type_hint();
+                    ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
+                } else {
+                    let (text, span) = self.current_text_span();
+                    // Check if this looks like a capitalized type name.
+                    let message = if let Some(word) = self.peek_word() {
+                        let lower = word.to_lowercase();
+                        match lower.as_str() {
+                            "int" | "bool" | "string" | "data" | "error" |
+                            "u8" | "i8" | "u16" | "i16" | "u32" | "i32" |
+                            "u64" | "i64" | "f32" => {
+                                format!("unknown type '{}', did you mean '{}'?", word, lower)
                             }
-                        } else {
-                            "unexpected token in type hint".to_string()
-                        };
-                        self.emit_type_hint_error(
-                            text,
-                            span,
-                            &message,
-                            "D008",
-                            "unexpected token in type hint"
-                        )
-                    }
+                            _ => format!("unknown type '{}'", word)
+                        }
+                    } else {
+                        "unexpected token in type hint".to_string()
+                    };
+                    self.emit_type_hint_error(
+                        text,
+                        span,
+                        &message,
+                        "D008",
+                        "unexpected token in type hint"
+                    )
                 }
             }
         }
@@ -603,9 +560,8 @@ impl<'db> DynParser<'db> {
                 );
             }
         };
-        let payload = if let Some(TreeToken::Branch(Sigil::ParenOpen, iter)) = self.peek() {
+        let payload = if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
             // Parse a single type as payload.
-            self.next(); // Consume the branch.
             let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
             let mut sub_parser = DynParser {
                 db: self.db,
@@ -703,7 +659,7 @@ impl<'db> DynParser<'db> {
                         }
                         TokenKind::Word => {
                             if let Some(word) = token.word_str(self.db) {
-                                if Self::is_numeric_literal(word) {
+                                if parser_util::is_numeric_literal(word) {
                                     // Bare number literal (decimal or hex) - use Omitted heap.
                                     ast::Heap::Omitted
                                 } else if matches!(word, "data" | "error" | "tensor" | "tuple" | "struct" | "enum" | "map" | "set" | "true" | "false" | "none" | "some" | "ok" | "er") {
@@ -781,7 +737,7 @@ impl<'db> DynParser<'db> {
             self.eat_sigil(Sigil::Minus);
             if let Some(TreeToken::Token(token)) = self.peek() {
                 if let Some(word) = token.word_str(self.db) {
-                    if Self::is_numeric_literal(word) {
+                    if parser_util::is_numeric_literal(word) {
                         // It's a negative number! Consume the literal.
                         self.next();
                         // Only check for float pattern on decimal literals (not hex).
@@ -873,9 +829,59 @@ impl<'db> DynParser<'db> {
                 self.eat_word("tensor");
 
                 // Parse shape: [dim1, dim2, ...]
-                let shape = match self.peek() {
-                    Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
-                        self.next(); // Consume the branch.
+                let shape = if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
+                        had_error: false,
+                    };
+                    let shape = sub_parser.parse_comma_separated(|p| {
+                        match p.parse_u32_literal() {
+                            Some(dim) => dim,
+                            None => {
+                                p.had_error = true;
+                                let (text, span) = p.current_text_span();
+                                DiagnosticBuilder::error(p.db, "expected dimension value in tensor shape")
+                                    .code("D023")
+                                    .primary_label(text, span, "expected integer")
+                                    .emit_parse();
+                                0 // Placeholder dimension.
+                            }
+                        }
+                    });
+                    sub_parser.error_if_not_exhausted();
+                    shape
+                } else {
+                    let (text, span) = self.current_text_span();
+                    return self.emit_expr_error(
+                        text,
+                        span,
+                        "expected shape [...] after tensor keyword",
+                        "D010",
+                        "expected '[' for tensor shape"
+                    );
+                };
+
+                // Parse data: For rank 1, comma-separated elements; for rank 2+, comma-separated rows with space-separated elements.
+                let elements = if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
+                    let rank = shape.len();
+                    if rank == 0 {
+                        let (text, span) = self.current_text_span();
+                        return self.emit_expr_error(
+                            text,
+                            span,
+                            "tensor rank must be at least 1",
+                            "D012",
+                            "invalid rank"
+                        );
+                    }
+
+                    if rank == 1 {
+                        // 1D tensor: comma-separated elements [1, 2, 3, 4, 5].
                         let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
                         let mut sub_parser = DynParser {
                             db: self.db,
@@ -885,131 +891,72 @@ impl<'db> DynParser<'db> {
                             expr_spans: Vec::new(),
                             had_error: false,
                         };
-                        let shape = sub_parser.parse_comma_separated(|p| {
-                            match p.parse_u32_literal() {
-                                Some(dim) => dim,
-                                None => {
-                                    p.had_error = true;
-                                    let (text, span) = p.current_text_span();
-                                    DiagnosticBuilder::error(p.db, "expected dimension value in tensor shape")
-                                        .code("D023")
-                                        .primary_label(text, span, "expected integer")
-                                        .emit_parse();
-                                    0 // Placeholder dimension.
-                                }
-                            }
-                        });
+                        let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                         sub_parser.error_if_not_exhausted();
-                        shape
-                    }
-                    _ => {
-                        let (text, span) = self.current_text_span();
-                        return self.emit_expr_error(
-                            text,
-                            span,
-                            "expected shape [...] after tensor keyword",
-                            "D010",
-                            "expected '[' for tensor shape"
-                        );
-                    }
-                };
+                        // Merge spans from sub-parser.
+                        self.expr_spans.extend(sub_parser.expr_spans);
+                        elements
+                    } else {
+                        // 2D+ tensor: comma-separated rows, space-separated elements [1 2 3, 4 5 6].
+                        let row_size = *shape.last().unwrap() as usize;
+                        let all_tokens: Vec<_> = iter.collect();
 
-                // Parse data: For rank 1, comma-separated elements; for rank 2+, comma-separated rows with space-separated elements.
-                let elements = match self.peek() {
-                    Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
-                        self.next(); // Consume the branch.
+                        // Split tokens by commas to get rows.
+                        let rows = self.split_tokens_by_comma(&all_tokens);
+                        let mut all_elements = Vec::new();
 
-                        let rank = shape.len();
-                        if rank == 0 {
-                            let (text, span) = self.current_text_span();
-                            return self.emit_expr_error(
-                                text,
-                                span,
-                                "tensor rank must be at least 1",
-                                "D012",
-                                "invalid rank"
-                            );
-                        }
+                        for row_tokens in rows {
+                            // Filter spaces within the row to get individual element tokens.
+                            let elem_tokens: Vec<_> = row_tokens.into_iter()
+                                .filter_map(|t| t.without_space(self.db))
+                                .collect();
 
-                        if rank == 1 {
-                            // 1D tensor: comma-separated elements [1, 2, 3, 4, 5].
-                            let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                            let mut sub_parser = DynParser {
+                            // Parse each element in the row.
+                            let mut row_parser = DynParser {
                                 db: self.db,
-                                tokens,
+                                tokens: elem_tokens.clone(),
                                 pos: 0,
                                 source_text: self.source_text,
                                 expr_spans: Vec::new(),
                                 had_error: false,
                             };
-                            let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
-                            sub_parser.error_if_not_exhausted();
-                            // Merge spans from sub-parser.
-                            self.expr_spans.extend(sub_parser.expr_spans);
-                            elements
-                        } else {
-                            // 2D+ tensor: comma-separated rows, space-separated elements [1 2 3, 4 5 6].
-                            let row_size = *shape.last().unwrap() as usize;
-                            let all_tokens: Vec<_> = iter.collect();
 
-                            // Split tokens by commas to get rows.
-                            let rows = self.split_tokens_by_comma(&all_tokens);
-                            let mut all_elements = Vec::new();
-
-                            for row_tokens in rows {
-                                // Filter spaces within the row to get individual element tokens.
-                                let elem_tokens: Vec<_> = row_tokens.into_iter()
-                                    .filter_map(|t| t.without_space(self.db))
-                                    .collect();
-
-                                // Parse each element in the row.
-                                let mut row_parser = DynParser {
-                                    db: self.db,
-                                    tokens: elem_tokens.clone(),
-                                    pos: 0,
-                                    source_text: self.source_text,
-                                    expr_spans: Vec::new(),
-                                    had_error: false,
-                                };
-
-                                let mut row_elements = Vec::new();
-                                while row_parser.pos < row_parser.tokens.len() {
-                                    row_elements.push(row_parser.parse_expr_full());
-                                }
-
-                                // Merge spans from row sub-parser.
-                                self.expr_spans.extend(row_parser.expr_spans);
-
-                                // Validate row size matches the last dimension.
-                                if row_elements.len() != row_size {
-                                    let (text, span) = self.current_text_span();
-                                    let detailed_message = format!("expected {} elements per row but got {}", row_size, row_elements.len());
-
-                                    return self.emit_expr_error(
-                                        text,
-                                        span,
-                                        &detailed_message,
-                                        "D013",
-                                        &format!("expected {} elements", row_size)
-                                    );
-                                }
-
-                                all_elements.extend(row_elements);
+                            let mut row_elements = Vec::new();
+                            while row_parser.pos < row_parser.tokens.len() {
+                                row_elements.push(row_parser.parse_expr_full());
                             }
 
-                            all_elements
+                            // Merge spans from row sub-parser.
+                            self.expr_spans.extend(row_parser.expr_spans);
+
+                            // Validate row size matches the last dimension.
+                            if row_elements.len() != row_size {
+                                let (text, span) = self.current_text_span();
+                                let detailed_message = format!("expected {} elements per row but got {}", row_size, row_elements.len());
+
+                                return self.emit_expr_error(
+                                    text,
+                                    span,
+                                    &detailed_message,
+                                    "D013",
+                                    &format!("expected {} elements", row_size)
+                                );
+                            }
+
+                            all_elements.extend(row_elements);
                         }
+
+                        all_elements
                     }
-                    _ => {
-                        let (text, span) = self.current_text_span();
-                        return self.emit_expr_error(
-                            text,
-                            span,
-                            "expected data [...] after tensor shape",
-                            "D011",
-                            "expected '[' for tensor data"
-                        );
-                    }
+                } else {
+                    let (text, span) = self.current_text_span();
+                    return self.emit_expr_error(
+                        text,
+                        span,
+                        "expected data [...] after tensor shape",
+                        "D011",
+                        "expected '[' for tensor data"
+                    );
                 };
 
                 return ast::Expr::Tensor(ast::ExprTensor::new(self.db, shape, elements));
@@ -1030,9 +977,8 @@ impl<'db> DynParser<'db> {
                         );
                     }
                 };
-                let payload = if let Some(TreeToken::Branch(Sigil::ParenOpen, iter)) = self.peek() {
+                let payload = if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
                     // Parse a single expression as payload.
-                    self.next(); // Consume the branch.
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
                     let mut sub_parser = DynParser {
                         db: self.db,
@@ -1059,97 +1005,89 @@ impl<'db> DynParser<'db> {
             Some("map") => {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("map");
-                match self.peek() {
-                    Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                            had_error: false,
-                        };
-                        let entries = sub_parser.parse_comma_separated(|p| {
-                            let key = p.parse_expr_full();
-                            if !p.eat_sigil(Sigil::Equals) {
-                                let (text, span) = p.current_text_span();
-                                let error_expr = p.emit_expr_error(
-                                    text,
-                                    span,
-                                    "expected '=' between map key and value",
-                                    "D017",
-                                    "expected '=' after key"
-                                );
-                                let error_value = ast::ExprFull::new(
-                                    p.db,
-                                    None,
-                                    ast::ExprAndHeap::new(p.db, ast::Heap::Omitted, error_expr)
-                                );
-                                return ast::ExprMapEntry::new(p.db, key, error_value);
-                            }
-                            let value = p.parse_expr_full();
-                            ast::ExprMapEntry::new(p.db, key, value)
-                        });
-                        sub_parser.error_if_not_exhausted();
-                        // Merge spans from sub-parser.
-                        self.expr_spans.extend(sub_parser.expr_spans);
-                        return ast::Expr::Map(ast::ExprMap::new(self.db, entries));
-                    }
-                    _ => {
-                        return self.emit_expr_error(
-                            keyword_text,
-                            keyword_span,
-                            "expected {} after map keyword",
-                            "D016",
-                            "expected '{' after 'map'"
-                        );
-                    }
+                if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
+                        had_error: false,
+                    };
+                    let entries = sub_parser.parse_comma_separated(|p| {
+                        let key = p.parse_expr_full();
+                        if !p.eat_sigil(Sigil::Equals) {
+                            let (text, span) = p.current_text_span();
+                            let error_expr = p.emit_expr_error(
+                                text,
+                                span,
+                                "expected '=' between map key and value",
+                                "D017",
+                                "expected '=' after key"
+                            );
+                            let error_value = ast::ExprFull::new(
+                                p.db,
+                                None,
+                                ast::ExprAndHeap::new(p.db, ast::Heap::Omitted, error_expr)
+                            );
+                            return ast::ExprMapEntry::new(p.db, key, error_value);
+                        }
+                        let value = p.parse_expr_full();
+                        ast::ExprMapEntry::new(p.db, key, value)
+                    });
+                    sub_parser.error_if_not_exhausted();
+                    // Merge spans from sub-parser.
+                    self.expr_spans.extend(sub_parser.expr_spans);
+                    return ast::Expr::Map(ast::ExprMap::new(self.db, entries));
+                } else {
+                    return self.emit_expr_error(
+                        keyword_text,
+                        keyword_span,
+                        "expected {} after map keyword",
+                        "D016",
+                        "expected '{' after 'map'"
+                    );
                 }
             }
             Some("set") => {
                 let (keyword_text, keyword_span) = self.current_text_span();
                 self.eat_word("set");
-                match self.peek() {
-                    Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
-                        self.next(); // Consume the branch.
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = DynParser {
-                            db: self.db,
-                            tokens,
-                            pos: 0,
-                            source_text: self.source_text,
-                            expr_spans: Vec::new(),
-                            had_error: false,
-                        };
-                        let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
-                        sub_parser.error_if_not_exhausted();
-                        // Merge spans from sub-parser.
-                        self.expr_spans.extend(sub_parser.expr_spans);
-                        return ast::Expr::Set(ast::ExprSet::new(self.db, elements));
-                    }
-                    _ => {
-                        return self.emit_expr_error(
-                            keyword_text,
-                            keyword_span,
-                            "expected {} after set keyword",
-                            "D017",
-                            "expected '{' after 'set'"
-                        );
-                    }
+                if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
+                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
+                    let mut sub_parser = DynParser {
+                        db: self.db,
+                        tokens,
+                        pos: 0,
+                        source_text: self.source_text,
+                        expr_spans: Vec::new(),
+                        had_error: false,
+                    };
+                    let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                    sub_parser.error_if_not_exhausted();
+                    // Merge spans from sub-parser.
+                    self.expr_spans.extend(sub_parser.expr_spans);
+                    return ast::Expr::Set(ast::ExprSet::new(self.db, elements));
+                } else {
+                    return self.emit_expr_error(
+                        keyword_text,
+                        keyword_span,
+                        "expected {} after set keyword",
+                        "D017",
+                        "expected '{' after 'set'"
+                    );
                 }
             }
             _ => {}
         }
 
         // Not a keyword, check for numbers, tokens, or branches.
-        match self.peek() {
+        match self.peek_owned() {
             Some(TreeToken::Token(token)) => {
                 match token.kind(self.db) {
                     TokenKind::Word => {
                         let word = token.word_str(self.db).X();
-                        if Self::is_numeric_literal(word) {
+                        if parser_util::is_numeric_literal(word) {
                             self.next();
                             // Only check for float pattern on decimal literals (not hex).
                             let is_hex = word.starts_with("0x") || word.starts_with("0X");
@@ -1369,66 +1307,19 @@ impl<'db> DynParser<'db> {
         rows
     }
 
-    fn peek(&self) -> Option<TreeToken<'db>> {
-        self.tokens.get(self.pos).cloned()
-    }
+    // TokenStream trait provides: peek(), next()
+    // TokenStreamExt trait provides: peek_sigil(), eat_sigil(), peek_word(), try_eat_word(), eat_name(), need_name()
 
-    fn peek_sigil(&self, sigil: Sigil) -> bool {
-        match self.peek() {
-            Some(TreeToken::Token(token)) => {
-                matches!(token.kind(self.db), TokenKind::Sigil(s) if s == sigil)
-            }
-            Some(TreeToken::Branch(s, _)) => s == sigil,
-            None => false,
-        }
-    }
-
-    fn peek_word(&self) -> Option<&'db str> {
-        match self.peek() {
-            Some(TreeToken::Token(token)) => token.word_str(self.db),
-            _ => None,
-        }
-    }
-
-    fn next(&mut self) -> Option<TreeToken<'db>> {
-        let token = self.tokens.get(self.pos).cloned();
-        if token.is_some() {
-            self.pos += 1;
-        }
-        token
-    }
-
-    /// Try to consume a sigil. Returns true if successful, false otherwise.
-    /// Does not advance position on failure.
-    fn eat_sigil(&mut self, sigil: Sigil) -> bool {
-        if self.peek_sigil(sigil) {
-            self.next();
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Try to consume a specific word. Returns true if successful, false otherwise.
-    /// Does not advance position on failure.
+    /// Alias for try_eat_word for backward compatibility.
     fn eat_word(&mut self, word: &str) -> bool {
-        if self.peek_word() == Some(word) {
-            self.next();
-            true
-        } else {
-            false
-        }
+        self.try_eat_word(word)
     }
 
-    fn eat_name(&mut self) -> Option<InternedText<'db>> {
-        if self.peek_word().is_some() {
+    /// Consume a branch if it matches the given sigil, returning its iterator.
+    fn eat_branch(&mut self, sigil: Sigil) -> Option<bct::bracer::BracerIter<'db>> {
+        if self.peek_sigil(sigil) {
             match self.next() {
-                Some(TreeToken::Token(token)) => {
-                    match token.word_str(self.db) {
-                        Some(word) => Some(InternedText::new(self.db, word.S())),
-                        None => None,
-                    }
-                }
+                Some(TreeToken::Branch(_, iter)) => Some(iter),
                 _ => None,
             }
         } else {
@@ -1436,16 +1327,9 @@ impl<'db> DynParser<'db> {
         }
     }
 
-    fn need_name(&mut self) -> InternedText<'db> {
-        match self.next() {
-            Some(TreeToken::Token(token)) => {
-                match token.word_str(self.db) {
-                    Some(word) => InternedText::new(self.db, word.S()),
-                    None => panic!("expected name"),
-                }
-            }
-            _ => panic!("expected name"),
-        }
+    /// Peek returning an owned token (cloned) for patterns that need to capture branch content.
+    fn peek_owned(&self) -> Option<TreeToken<'db>> {
+        self.tokens.get(self.pos).cloned()
     }
 
     fn parse_u32_literal(&mut self) -> Option<u32> {
@@ -1460,17 +1344,6 @@ impl<'db> DynParser<'db> {
                 None
             }
             _ => None,
-        }
-    }
-
-    /// Check if a word is a numeric literal (decimal or hex).
-    fn is_numeric_literal(word: &str) -> bool {
-        if word.starts_with("0x") || word.starts_with("0X") {
-            // Hex literal: 0x followed by hex digits.
-            word.len() > 2 && word[2..].chars().all(|c| c.is_ascii_hexdigit())
-        } else {
-            // Decimal literal: all digits.
-            word.chars().all(|c| c.is_ascii_digit())
         }
     }
 

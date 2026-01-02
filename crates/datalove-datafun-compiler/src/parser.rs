@@ -23,6 +23,7 @@ use salsa::Accumulator;
 use crate::ast;
 use crate::datalit;
 use crate::script;
+use datalove_datalit::parser_util::{TokenStream, TokenStreamExt};
 use datalove_diagnostic::DiagnosticBuilder;
 
 /// Parse a specific unit from a Script.
@@ -167,6 +168,24 @@ struct Parser<'db> {
     had_error: bool,
 }
 
+impl<'db> TokenStream<'db> for Parser<'db> {
+    fn db(&self) -> &'db dyn salsa::Database {
+        self.db
+    }
+
+    fn peek(&self) -> Option<&TreeToken<'db>> {
+        self.tokens.get(self.pos)
+    }
+
+    fn next(&mut self) -> Option<TreeToken<'db>> {
+        let token = self.tokens.get(self.pos).cloned();
+        if token.is_some() {
+            self.pos += 1;
+        }
+        token
+    }
+}
+
 impl<'db> Parser<'db> {
     /// Emit both a diagnostic and create a StmtParseError node in one call.
     fn emit_stmt_error(
@@ -207,38 +226,8 @@ impl<'db> Parser<'db> {
         )
     }
 
-    // Token navigation methods (Vec + pos pattern).
-
-    fn peek(&self) -> Option<&TreeToken<'db>> {
-        self.tokens.get(self.pos)
-    }
-
-    fn next(&mut self) -> Option<TreeToken<'db>> {
-        let token = self.tokens.get(self.pos).cloned();
-        if token.is_some() {
-            self.pos += 1;
-        }
-        token
-    }
-
-    fn peek_sigil(&self, sigil: Sigil) -> bool {
-        match self.peek() {
-            Some(TreeToken::Token(token)) => {
-                matches!(token.kind(self.db), TokenKind::Sigil(s) if s == sigil)
-            }
-            Some(TreeToken::Branch(s, _)) => *s == sigil,
-            None => false,
-        }
-    }
-
-    fn eat_sigil(&mut self, sigil: Sigil) -> bool {
-        if self.peek_sigil(sigil) {
-            self.next();
-            true
-        } else {
-            false
-        }
-    }
+    // TokenStream trait provides: peek(), next()
+    // TokenStreamExt trait provides: peek_sigil(), eat_sigil(), peek_word(), try_eat_word(), eat_name(), need_name()
 
     fn need_sigil(&mut self, sigil: Sigil) {
         if !self.eat_sigil(sigil) {
@@ -246,13 +235,7 @@ impl<'db> Parser<'db> {
         }
     }
 
-    fn peek_word(&self) -> Option<&'db str> {
-        match self.peek() {
-            Some(TreeToken::Token(token)) => token.word_str(self.db),
-            _ => None,
-        }
-    }
-
+    /// Consume a specific word or panic.
     fn eat_word(&mut self, word: &str) {
         match self.next() {
             Some(TreeToken::Token(token)) => {
@@ -261,38 +244,6 @@ impl<'db> Parser<'db> {
                 }
             }
             _ => panic!("expected word '{}'", word),
-        }
-    }
-
-    fn eat_name(&mut self) -> Option<InternedText<'db>> {
-        if self.peek_word().is_some() {
-            match self.next() {
-                Some(TreeToken::Token(token)) => {
-                    match token.word_str(self.db) {
-                        Some(word) => Some(InternedText::new(self.db, word.S())),
-                        None => None,
-                    }
-                }
-                _ => None,
-            }
-        } else {
-            None
-        }
-    }
-
-    fn need_name(&mut self) -> InternedText<'db> {
-        match self.eat_name() {
-            Some(name) => name,
-            None => {
-                match self.peek() {
-                    Some(TreeToken::Token(token)) => {
-                        let text = token.text(self.db).as_str(self.db);
-                        panic!("expected name, got token: {}", text)
-                    }
-                    Some(TreeToken::Branch(..)) => panic!("expected name, got branch"),
-                    None => panic!("expected name, got end of input"),
-                }
-            }
         }
     }
 

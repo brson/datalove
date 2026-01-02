@@ -5,6 +5,7 @@ pub mod ast;
 pub mod ast_serde;
 pub mod canon;
 pub mod parser;
+pub mod parser_util;
 pub mod resolve;
 pub mod tycheck;
 pub mod tydesc_table;
