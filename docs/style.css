@@ -74,11 +74,12 @@
     --heath-violet: #7b59c0;
     --heath-magenta: #cc33cc;
 
-    --bg: var(--cave-base00);
-    --fg: var(--cave-base06);
+    /* Light mode (default) */
+    --bg: var(--cave-base07);
+    --fg: var(--cave-base01);
     --accent: var(--cave-red);
-    --code-bg: var(--cave-base00);
-    --table-header-bg: var(--cave-base01);
+    --code-bg: var(--cave-base06);
+    --table-header-bg: var(--cave-base06);
     --link: var(--cave-violet);
     --syn-keyword: var(--cave-magenta);
     --syn-type-name: var(--cave-cyan);
@@ -88,15 +89,44 @@
     --syn-variant: var(--cave-violet);
     --syn-comment: var(--cave-base03);
     --syn-function: var(--cave-blue);
-    --syn-brace-curly: var(--cave-base05);
-    --syn-brace-paren: var(--cave-base05);
-    --syn-brace-angle: var(--cave-base05);
-    --syn-brace-square: var(--cave-base05);
-    --syn-op-cmp: var(--cave-base05);
+    --syn-brace-curly: var(--cave-base02);
+    --syn-brace-paren: var(--cave-base02);
+    --syn-brace-angle: var(--cave-base02);
+    --syn-brace-square: var(--cave-base02);
+    --syn-op-cmp: var(--cave-base02);
     --syn-op-result: var(--cave-orange);
     --syn-op-option: var(--cave-violet);
     --syn-type-colon: var(--cave-cyan);
-    --syn-punctuation: var(--cave-base05);
+    --syn-punctuation: var(--cave-base02);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        /* Dark mode */
+        --bg: var(--cave-base00);
+        --fg: var(--cave-base06);
+        --accent: var(--cave-red);
+        --code-bg: var(--cave-base00);
+        --table-header-bg: var(--cave-base01);
+        --link: var(--cave-violet);
+        --syn-keyword: var(--cave-magenta);
+        --syn-type-name: var(--cave-cyan);
+        --syn-string: var(--cave-yellow);
+        --syn-number: var(--cave-green);
+        --syn-boolean: var(--cave-orange);
+        --syn-variant: var(--cave-violet);
+        --syn-comment: var(--cave-base03);
+        --syn-function: var(--cave-blue);
+        --syn-brace-curly: var(--cave-base05);
+        --syn-brace-paren: var(--cave-base05);
+        --syn-brace-angle: var(--cave-base05);
+        --syn-brace-square: var(--cave-base05);
+        --syn-op-cmp: var(--cave-base05);
+        --syn-op-result: var(--cave-orange);
+        --syn-op-option: var(--cave-violet);
+        --syn-type-colon: var(--cave-cyan);
+        --syn-punctuation: var(--cave-base05);
+    }
 }
 
 * {
