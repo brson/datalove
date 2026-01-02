@@ -9,14 +9,14 @@
     "eval": {
       "SuccessLet": {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     },
     "environment": [
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -31,14 +31,14 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     },
     "environment": [
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -53,19 +53,19 @@
     "eval": {
       "SuccessLet": {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       }
     },
     "environment": [
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -80,19 +80,19 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       }
     },
     "environment": [
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -107,24 +107,24 @@
     "eval": {
       "SuccessLet": {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       }
     },
     "environment": [
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -139,24 +139,24 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       }
     },
     "environment": [
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -171,29 +171,29 @@
     "eval": {
       "SuccessLet": {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       }
     },
     "environment": [
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -208,29 +208,29 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       }
     },
     "environment": [
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -245,34 +245,34 @@
     "eval": {
       "SuccessLet": {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       }
     },
     "environment": [
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -287,34 +287,34 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       }
     },
     "environment": [
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -329,39 +329,39 @@
     "eval": {
       "SuccessLet": {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       }
     },
     "environment": [
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -376,39 +376,39 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       }
     },
     "environment": [
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -423,44 +423,44 @@
     "eval": {
       "SuccessLet": {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       }
     },
     "environment": [
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -475,44 +475,44 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       }
     },
     "environment": [
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -527,49 +527,49 @@
     "eval": {
       "SuccessLet": {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -584,49 +584,49 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -641,54 +641,54 @@
     "eval": {
       "SuccessLet": {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -703,54 +703,54 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -765,59 +765,59 @@
     "eval": {
       "SuccessLet": {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -832,59 +832,59 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -899,64 +899,64 @@
     "eval": {
       "SuccessLet": {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -971,64 +971,64 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -1043,69 +1043,69 @@
     "eval": {
       "SuccessLet": {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -1120,69 +1120,69 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -1197,74 +1197,74 @@
     "eval": {
       "SuccessLet": {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -1279,74 +1279,74 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -1361,79 +1361,79 @@
     "eval": {
       "SuccessLet": {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -1448,79 +1448,79 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -1535,84 +1535,84 @@
     "eval": {
       "SuccessLet": {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -1627,84 +1627,84 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -1719,89 +1719,89 @@
     "eval": {
       "SuccessLet": {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -1816,89 +1816,89 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       }
     },
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -1916,82 +1916,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -2009,82 +2009,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -2102,82 +2102,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -2195,82 +2195,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -2288,82 +2288,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -2381,82 +2381,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -2474,82 +2474,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -2567,82 +2567,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -2660,82 +2660,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -2753,82 +2753,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -2846,82 +2846,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -2939,82 +2939,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -3032,82 +3032,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -3125,82 +3125,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -3218,82 +3218,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]
@@ -3311,82 +3311,82 @@
     "environment": [
       {
         "name": "i16_max",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@32767"
       },
       {
         "name": "i16_min",
-        "ty": "I16",
+        "ty": "i16",
         "value": "@-32768"
       },
       {
         "name": "i32_max",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@2147483647"
       },
       {
         "name": "i32_min",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-2147483648"
       },
       {
         "name": "i64_max",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@9223372036854775807"
       },
       {
         "name": "i64_min",
-        "ty": "I64",
+        "ty": "i64",
         "value": "@-9223372036854775808"
       },
       {
         "name": "i8_max",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@127"
       },
       {
         "name": "i8_min",
-        "ty": "I8",
+        "ty": "i8",
         "value": "@-128"
       },
       {
         "name": "u16_max",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@65535"
       },
       {
         "name": "u16_min",
-        "ty": "U16",
+        "ty": "u16",
         "value": "@0"
       },
       {
         "name": "u32_max",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@4294967295"
       },
       {
         "name": "u32_min",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@0"
       },
       {
         "name": "u64_max",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@18446744073709551615"
       },
       {
         "name": "u64_min",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@0"
       },
       {
         "name": "u8_max",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@255"
       },
       {
         "name": "u8_min",
-        "ty": "U8",
+        "ty": "u8",
         "value": "@0"
       }
     ]

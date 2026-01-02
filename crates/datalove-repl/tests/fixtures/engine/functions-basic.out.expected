@@ -77,7 +77,7 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@5"
       }
     },

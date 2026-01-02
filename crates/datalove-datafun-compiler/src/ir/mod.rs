@@ -110,6 +110,50 @@ pub enum IrType {
     Tensor(Box<IrType>, u32),
 }
 
+impl std::fmt::Display for IrType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IrType::Unit => write!(f, "unit"),
+            IrType::Bool => write!(f, "bool"),
+            IrType::U8 => write!(f, "u8"),
+            IrType::U16 => write!(f, "u16"),
+            IrType::U32 => write!(f, "u32"),
+            IrType::U64 => write!(f, "u64"),
+            IrType::I8 => write!(f, "i8"),
+            IrType::I16 => write!(f, "i16"),
+            IrType::I32 => write!(f, "i32"),
+            IrType::I64 => write!(f, "i64"),
+            IrType::Int => write!(f, "int"),
+            IrType::F32 => write!(f, "f32"),
+            IrType::String => write!(f, "string"),
+            IrType::Data => write!(f, "data"),
+            IrType::Error => write!(f, "error"),
+            IrType::Tuple(fields) => {
+                write!(f, "(")?;
+                for (i, ty) in fields.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", ty)?;
+                }
+                write!(f, ")")
+            }
+            IrType::Struct(fields) => {
+                write!(f, "{{")?;
+                for (i, (name, ty)) in fields.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}: {}", name, ty)?;
+                }
+                write!(f, "}}")
+            }
+            IrType::List(elem) => write!(f, "list<{}>", elem),
+            IrType::Set(elem) => write!(f, "set<{}>", elem),
+            IrType::Map(k, v) => write!(f, "map<{}, {}>", k, v),
+            IrType::Option(inner) => write!(f, "option<{}>", inner),
+            IrType::Result(ok) => write!(f, "result<{}>", ok),
+            IrType::Tensor(elem, rank) => write!(f, "tensor<{}, {}>", elem, rank),
+        }
+    }
+}
+
 impl IrType {
     /// Convert from typechecker type to IR type.
     pub fn from_tycheck<'db>(db: &'db dyn crate::Db, ty: &crate::tycheck::TypeAndHeap<'db>) -> Self {

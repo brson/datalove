@@ -9,7 +9,7 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@1"
       }
     },
@@ -25,7 +25,7 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "I32",
+        "ty": "i32",
         "value": "@-5"
       }
     },
@@ -41,7 +41,7 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "U64",
+        "ty": "u64",
         "value": "@42"
       }
     },
@@ -57,7 +57,7 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "Int",
+        "ty": "int",
         "value": "@30"
       }
     },

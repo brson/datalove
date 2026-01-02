@@ -641,7 +641,7 @@ impl<'db> ScriptCompilationContext<'db> {
 
         // Get the result type if there is one.
         let result_ty = ir_unit.result
-            .map(|id| format!("{:?}", &ir_unit.value_types[id.0 as usize]));
+            .map(|id| format!("{}", &ir_unit.value_types[id.0 as usize]));
 
         // Execute the script unit if it has a result.
         let output = if let Some(result_id) = ir_unit.result {
@@ -720,7 +720,7 @@ impl<'db> ScriptCompilationContext<'db> {
         // Check let bindings (values).
         if let Some((unit, value_id)) = self.script_ctx.values.get(name) {
             let ty = self.script_ctx.value_types.get(name)
-                .map(|t| format!("{:?}", t))
+                .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".to_string());
             let val = match self.env.frames.external_value(*unit, *value_id) {
                 Ok(v) => self.interp.pretty_print_value(&v)
@@ -734,7 +734,7 @@ impl<'db> ScriptCompilationContext<'db> {
         // Check var bindings (slots).
         if let Some((unit, slot_id)) = self.script_ctx.slots.get(name) {
             let ty = self.script_ctx.slot_types.get(name)
-                .map(|t| format!("{:?}", t))
+                .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".to_string());
             let val = match self.env.frames.external_slot(*unit, *slot_id) {
                 Ok(v) => self.interp.pretty_print_value(&v)
@@ -761,7 +761,7 @@ impl<'db> ScriptCompilationContext<'db> {
         // Let bindings (values).
         for (name, (unit, value_id)) in &self.script_ctx.values {
             let ty = self.script_ctx.value_types.get(name)
-                .map(|t| format!("{:?}", t))
+                .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".to_string());
             let val = match self.env.frames.external_value(*unit, *value_id) {
                 Ok(v) => self.interp.pretty_print_value(&v)
@@ -775,7 +775,7 @@ impl<'db> ScriptCompilationContext<'db> {
         // Var bindings (slots).
         for (name, (unit, slot_id)) in &self.script_ctx.slots {
             let ty = self.script_ctx.slot_types.get(name)
-                .map(|t| format!("{:?}", t))
+                .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".to_string());
             let val = match self.env.frames.external_slot(*unit, *slot_id) {
                 Ok(v) => self.interp.pretty_print_value(&v)

@@ -9,14 +9,14 @@
     "eval": {
       "SuccessLet": {
         "name": "nums",
-        "ty": "List(U32)",
+        "ty": "list<u32>",
         "value": "@[@1, @2, @3]"
       }
     },
     "environment": [
       {
         "name": "nums",
-        "ty": "List(U32)",
+        "ty": "list<u32>",
         "value": "@[@1, @2, @3]"
       }
     ]
@@ -31,14 +31,14 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "List(U32)",
+        "ty": "list<u32>",
         "value": "@[@1, @2, @3]"
       }
     },
     "environment": [
       {
         "name": "nums",
-        "ty": "List(U32)",
+        "ty": "list<u32>",
         "value": "<moved>"
       }
     ]
@@ -53,19 +53,19 @@
     "eval": {
       "SuccessLet": {
         "name": "words",
-        "ty": "List(String)",
+        "ty": "list<string>",
         "value": "@[@\"hello\", @\"world\"]"
       }
     },
     "environment": [
       {
         "name": "nums",
-        "ty": "List(U32)",
+        "ty": "list<u32>",
         "value": "<moved>"
       },
       {
         "name": "words",
-        "ty": "List(String)",
+        "ty": "list<string>",
         "value": "@[@\"hello\", @\"world\"]"
       }
     ]
@@ -80,19 +80,19 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "List(String)",
+        "ty": "list<string>",
         "value": "@[@\"hello\", @\"world\"]"
       }
     },
     "environment": [
       {
         "name": "nums",
-        "ty": "List(U32)",
+        "ty": "list<u32>",
         "value": "<moved>"
       },
       {
         "name": "words",
-        "ty": "List(String)",
+        "ty": "list<string>",
         "value": "<moved>"
       }
     ]
@@ -107,24 +107,24 @@
     "eval": {
       "SuccessLet": {
         "name": "bigger",
-        "ty": "List(U32)",
+        "ty": "list<u32>",
         "value": "@[@10, @20, @30, @40, @50]"
       }
     },
     "environment": [
       {
         "name": "bigger",
-        "ty": "List(U32)",
+        "ty": "list<u32>",
         "value": "@[@10, @20, @30, @40, @50]"
       },
       {
         "name": "nums",
-        "ty": "List(U32)",
+        "ty": "list<u32>",
         "value": "<moved>"
       },
       {
         "name": "words",
-        "ty": "List(String)",
+        "ty": "list<string>",
         "value": "<moved>"
       }
     ]
@@ -139,24 +139,24 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "List(U32)",
+        "ty": "list<u32>",
         "value": "@[@10, @20, @30, @40, @50]"
       }
     },
     "environment": [
       {
         "name": "bigger",
-        "ty": "List(U32)",
+        "ty": "list<u32>",
         "value": "<moved>"
       },
       {
         "name": "nums",
-        "ty": "List(U32)",
+        "ty": "list<u32>",
         "value": "<moved>"
       },
       {
         "name": "words",
-        "ty": "List(String)",
+        "ty": "list<string>",
         "value": "<moved>"
       }
     ]

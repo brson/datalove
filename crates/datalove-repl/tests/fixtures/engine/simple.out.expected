@@ -9,14 +9,14 @@
     "eval": {
       "SuccessLet": {
         "name": "a",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@100"
       }
     },
     "environment": [
       {
         "name": "a",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@100"
       }
     ]
@@ -31,19 +31,19 @@
     "eval": {
       "SuccessLet": {
         "name": "b",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@200"
       }
     },
     "environment": [
       {
         "name": "a",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@100"
       },
       {
         "name": "b",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@200"
       }
     ]
@@ -58,19 +58,19 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "Int",
+        "ty": "int",
         "value": "@300"
       }
     },
     "environment": [
       {
         "name": "a",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@100"
       },
       {
         "name": "b",
-        "ty": "U32",
+        "ty": "u32",
         "value": "@200"
       }
     ]
