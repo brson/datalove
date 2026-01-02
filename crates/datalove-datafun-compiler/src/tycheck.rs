@@ -14,6 +14,7 @@ use bct;
 
 // Re-export all types from the tycheck crate.
 pub use datalove_datafun_tycheck::{
+    DatafunSpans,
     Type,
     TypeAndHeap,
     TypeFunction,
@@ -41,7 +42,7 @@ pub use datalove_datafun_tycheck::{
 pub struct TypeContext<'db> {
     db: &'db dyn crate::Db,
     /// Pre-computed spans for error reporting.
-    spans: crate::parser::DatafunSpans<'db>,
+    spans: DatafunSpans<'db>,
     /// Variable bindings (name -> type).
     variables: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
     /// Function signatures (name -> function type).
@@ -64,7 +65,7 @@ pub struct TypeContext<'db> {
 impl<'db> TypeContext<'db> {
     pub fn new(
         db: &'db dyn crate::Db,
-        spans: crate::parser::DatafunSpans<'db>,
+        spans: DatafunSpans<'db>,
     ) -> Self {
         TypeContext {
             db,
@@ -540,7 +541,7 @@ pub fn type_check_script_units<'db>(
 pub fn type_check_single_script<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,
-    spans: crate::parser::DatafunSpans<'db>,
+    spans: DatafunSpans<'db>,
     script: Script<'db>,
 ) -> UnitTypecheckResultTracked<'db> {
     let unit_spec = ScriptUnitSpec::new(db, source, spans, ScriptUnitKind::Fragment(script));
@@ -668,7 +669,7 @@ pub struct ExprTypecheckResultRaw<'db> {
 /// Returns raw results (not salsa-tracked) to allow use outside tracked functions.
 pub fn type_check_script_with_context<'db>(
     db: &'db dyn crate::Db,
-    spans: crate::parser::DatafunSpans<'db>,
+    spans: DatafunSpans<'db>,
     script: Script<'db>,
     prior_ctx: &ScriptTypeContext<'db>,
 ) -> ScriptTypecheckResultRaw<'db> {
@@ -708,7 +709,7 @@ pub fn type_check_script_with_context<'db>(
 /// Returns raw results (not salsa-tracked) to allow use outside tracked functions.
 pub fn type_check_expr_with_context<'db>(
     db: &'db dyn crate::Db,
-    spans: crate::parser::DatafunSpans<'db>,
+    spans: DatafunSpans<'db>,
     expr: ExprFun<'db>,
     prior_ctx: &ScriptTypeContext<'db>,
 ) -> ExprTypecheckResultRaw<'db> {
@@ -740,7 +741,7 @@ pub fn type_check_expr_with_context<'db>(
 #[salsa::tracked]
 pub fn type_check_with_module_graph<'db>(
     db: &'db dyn crate::Db,
-    spans: crate::parser::DatafunSpans<'db>,
+    spans: DatafunSpans<'db>,
     script: Script<'db>,
     parsed_graph: crate::module_graph::ParsedModuleGraph<'db>,
     graph_typecheck: crate::module_graph::ModuleGraphTypecheckResult<'db>,
@@ -869,7 +870,7 @@ pub fn typecheck_module_graph<'db>(
 
     // Build maps for scripts, spans, and function ASTs from pre-parsed scripts.
     let mut module_scripts: HashMap<ModuleId, Script<'db>> = HashMap::new();
-    let mut module_spans: HashMap<ModuleId, crate::parser::DatafunSpans<'db>> = HashMap::new();
+    let mut module_spans: HashMap<ModuleId, DatafunSpans<'db>> = HashMap::new();
     let mut module_function_asts: HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> = HashMap::new();
     for (module_id, script, spans) in parsed_graph.scripts(db) {
         let mut funcs = HashMap::new();
