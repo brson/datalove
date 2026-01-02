@@ -399,19 +399,6 @@ impl<'db> CompiledModules<'db> {
                 *script,
                 *salsa_module_id,
             ));
-
-            // Register module functions for execution and name lookup.
-            for statement in script.statements(db) {
-                if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
-                    let func_name = func.name(db).text(db).to_string();
-                    let qualified_name = format!("{}.{}", module_path, func_name);
-                    if let Some((ir_module_id, func_id)) = self.func_id_map.get(&(*salsa_module_id, func_name)) {
-                        if let Some(ir_func) = self.env.registry.get_module_function(*ir_module_id, *func_id) {
-                            script_ctx.add_module_function(qualified_name, *ir_module_id, *func_id, ir_func.clone());
-                        }
-                    }
-                }
-            }
         }
 
         ScriptCompilationContext {
@@ -485,34 +472,6 @@ impl<'db> ScriptCompilationContext<'db> {
                 lowering: LoweringResult::Skipped,
                 output: String::new(),
             };
-        }
-
-        // Process require/import statements to populate import tracking.
-        for statement in script.statements(self.db) {
-            match statement {
-                datalove_datafun_compiler::ast::Statement::Require(
-                    datalove_datafun_compiler::ast::StmtRequire::Module(req)
-                ) => {
-                    let import_space = req.import_space(self.db).text(self.db).to_string();
-                    let package_alias = req.package_alias(self.db).text(self.db).to_string();
-                    let module_alias = req.module_alias(self.db).text(self.db).to_string();
-                    let full_path = format!("{}/{}/{}", import_space, package_alias, module_alias);
-                    self.script_ctx.add_module_alias(module_alias, full_path);
-                }
-                datalove_datafun_compiler::ast::Statement::Import(import) => {
-                    let module_alias = import.module_name(self.db).text(self.db).to_string();
-                    let item_name = import.item_name(self.db).text(self.db).to_string();
-                    // Look up the full module path from the require statement.
-                    if let Some(full_path) = self.script_ctx.module_aliases.get(&module_alias) {
-                        let qualified_name = format!("{}.{}", full_path, item_name);
-                        self.script_ctx.import_module_function(qualified_name);
-                    } else {
-                        // Alias not found - import won't resolve.
-                        self.script_ctx.import_module_function(item_name);
-                    }
-                }
-                _ => {}
-            }
         }
 
         // Run drop analysis on all functions first.

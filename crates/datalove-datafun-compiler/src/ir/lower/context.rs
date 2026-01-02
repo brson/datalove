@@ -3,7 +3,7 @@
 //! The main `LowerCtx` struct provides the state for lowering AST to IR,
 //! and `ScriptLowerContext` tracks bindings across script units.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use salsa::plumbing::AsId;
 use crate::ast::{Statement, ExprFun, ExprFunctionCall};
 use crate::Db;
@@ -29,16 +29,6 @@ pub struct ScriptLowerContext {
     pub slot_types: HashMap<String, IrType>,
     /// Available functions: name -> (unit_index, func_id).
     pub functions: HashMap<String, (u32, FuncId)>,
-    /// Module functions: (module_id, func_id) -> lowered IR function.
-    pub module_functions: HashMap<(IrModuleId, FuncId), IrFunction>,
-    /// Module function name lookup: name -> (module_id, func_id).
-    pub module_function_names: HashMap<String, (IrModuleId, FuncId)>,
-    /// Imported module function names.
-    /// Only functions in this set are accessible to the current unit.
-    pub imported_module_functions: HashSet<String>,
-    /// Module aliases: alias -> full path.
-    /// Built from require statements.
-    pub module_aliases: HashMap<String, String>,
     /// Current unit index.
     pub current_unit: u32,
 }
@@ -82,29 +72,6 @@ impl ScriptLowerContext {
         }
     }
 
-    /// Add a lowered module function to the context (deprecated - use register_module_function).
-    pub fn add_module_function(&mut self, name: String, module_id: IrModuleId, func_id: FuncId, func: IrFunction) {
-        self.module_functions.insert((module_id, func_id), func);
-        self.module_function_names.insert(name, (module_id, func_id));
-    }
-
-    /// Register a module function for execution only.
-    ///
-    /// Unlike `add_module_function`, this doesn't add to `module_function_names`
-    /// since we now use `call_targets` for call resolution.
-    pub fn register_module_function(&mut self, module_id: IrModuleId, func_id: FuncId, func: IrFunction) {
-        self.module_functions.insert((module_id, func_id), func);
-    }
-
-    /// Add a module alias from a require statement.
-    pub fn add_module_alias(&mut self, alias: String, full_path: String) {
-        self.module_aliases.insert(alias, full_path);
-    }
-
-    /// Mark a module function as imported.
-    pub fn import_module_function(&mut self, name: String) {
-        self.imported_module_functions.insert(name);
-    }
 }
 
 /// What kind of script unit we're lowering.
@@ -296,16 +263,6 @@ impl<'db> LowerCtx<'db> {
                 unit: *unit,
                 func: *func_id,
             });
-        }
-
-        // Add imported module functions as fallback for when call_targets doesn't have the entry.
-        // The imported name is qualified (e.g. "sys/std/result.unwrap_or"),
-        // but we insert by the unqualified function name for call resolution fallback.
-        for qualified_name in &script_ctx.imported_module_functions {
-            if let Some((module_id, func_id)) = script_ctx.module_function_names.get(qualified_name) {
-                let func_name = qualified_name.rsplit('.').next().unwrap_or(qualified_name);
-                func_scope.insert(func_name.to_string(), FuncRef::Module { module: *module_id, func: *func_id });
-            }
         }
 
         Self {
