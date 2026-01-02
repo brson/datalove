@@ -2,9 +2,9 @@
 module local/test/main
 ----------
 
-fun main(): i64
-    let a = 1
-    let b = 2
+fun main(): int
+    let a: @i64 = @1
+    let b: @i64 = @2
     let c = a + b
     ret c
 end fun

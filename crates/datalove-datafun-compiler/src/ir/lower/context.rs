@@ -315,36 +315,33 @@ impl<'db> LowerCtx<'db> {
     /// `call_targets` from typechecking to get the exact function being called,
     /// then maps it to an IR function reference.
     ///
-    /// Falls back to `func_scope` lookup for functions not in call_targets
-    /// (e.g., script-local functions from previous units).
+    /// For module functions (module_id = Some), looks up in `func_id_map`.
+    /// For local functions (module_id = None), uses `func_scope` lookup.
     pub fn resolve_call(&self, call: ExprFunctionCall<'db>) -> Result<FuncRef, LowerError> {
         let id = call.as_id().index() as usize;
         let func_name = call.name(self.db).text(self.db).to_string();
 
-        // Try to get the resolved call target from typechecking.
-        if let Some(Some(target)) = self.call_targets.get(id) {
-            match target.module_id(self.db) {
-                Some(module_id) => {
-                    // Module function - look up by (ModuleId, func_name).
-                    let resolved_func_name = target.func(self.db).name(self.db).text(self.db).to_string();
-                    let (ir_mod, func_id) = self.func_id_map
-                        .get(&(module_id, resolved_func_name.clone()))
-                        .ok_or_else(|| LowerError::FunctionNotFound(resolved_func_name))?;
-                    return Ok(FuncRef::Module { module: *ir_mod, func: *func_id });
-                }
-                None => {
-                    // Local function resolved by typechecker - use func_scope lookup.
-                    let resolved_func_name = target.func(self.db).name(self.db).text(self.db).to_string();
-                    if let Some(func_ref) = self.lookup_func(&resolved_func_name) {
-                        return Ok(func_ref);
-                    }
-                }
+        // Get the resolved call target from typechecking.
+        let target = self.call_targets.get(id)
+            .and_then(|t| t.as_ref())
+            .ok_or_else(|| LowerError::FunctionNotFound(func_name.clone()))?;
+
+        match target.module_id(self.db) {
+            Some(module_id) => {
+                // Module function - look up by (ModuleId, func_name).
+                let resolved_func_name = target.func(self.db).name(self.db).text(self.db).to_string();
+                let (ir_mod, func_id) = self.func_id_map
+                    .get(&(module_id, resolved_func_name.clone()))
+                    .ok_or_else(|| LowerError::FunctionNotFound(resolved_func_name))?;
+                Ok(FuncRef::Module { module: *ir_mod, func: *func_id })
+            }
+            None => {
+                // Local function resolved by typechecker - use func_scope lookup.
+                let resolved_func_name = target.func(self.db).name(self.db).text(self.db).to_string();
+                self.lookup_func(&resolved_func_name)
+                    .ok_or_else(|| LowerError::FunctionNotFound(resolved_func_name))
             }
         }
-
-        // Fallback: try func_scope directly (for script-local/external functions).
-        self.lookup_func(&func_name)
-            .ok_or_else(|| LowerError::FunctionNotFound(func_name))
     }
 
     /// Allocate a fresh SSA value with known type.

@@ -1,18 +1,14 @@
 //! IR lowering tests.
 //!
-//! This test suite loads worldfiles, parses functions, lowers them to IR,
+//! This test suite loads worldfiles, typechecks them as modules, lowers them to IR,
 //! and outputs the serialized IR for snapshot testing.
 
 use rmx::prelude::*;
 use std::path::Path;
-use std::collections::HashMap;
 use datalove_datafun as datafun;
-use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
-use datalove_datafun_pkg::package_load::{Package, PackageModule};
-use datalove_datafun_compiler::ir;
-use datalove_datafun_compiler::module_graph::ModuleId;
-use rmx::std::collections::BTreeMap;
-use bct::input::Source;
+use datalove_datafun_pkg::package_load_worldfile;
+
+use datafun::pipeline::ModuleCompilationPipeline;
 
 /// Analyze a worldfile and produce IR output.
 fn analyze_file(path: &Path) -> Result<String, String> {
@@ -25,87 +21,46 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
         .map_err(|e| format!("Failed to parse worldfile: {}", e))?;
 
-    // Build package world from module sections.
-    let mut pkglib_local = BTreeMap::new();
+    // Build pipeline and add modules.
+    let mut pipeline = ModuleCompilationPipeline::new(&db);
+    pipeline.add_modules_from_sections(&parsed.sections);
 
-    for section in &parsed.sections {
-        if let WorldfileSection::Module { library, package, module, source } = section {
-            if library != "local" {
-                continue;
-            }
-
-            let pkg = pkglib_local.entry(package.clone())
-                .or_insert_with(|| Package {
-                    name: package.clone(),
-                    modules: BTreeMap::new(),
-                });
-
-            let module_path_str = format!("{}/{}/{}", library, package, module);
-
-            let pkg_module = PackageModule {
-                name: module.clone(),
-                path: module_path_str.into(),
-                text: source.clone(),
-            };
-
-            pkg.modules.insert(module.clone(), pkg_module);
-        }
-    }
-
-    // Get the main module's source.
-    let main_pkg = pkglib_local.get("test")
+    // Verify local/test/main module exists.
+    let local_lib = pipeline.pkglib_local().get("test")
         .ok_or_else(|| "No local/test package found".to_string())?;
-    let main_module = main_pkg.modules.get("main")
-        .ok_or_else(|| "No local/test/main module found".to_string())?;
-
-    // Parse the module source to get AST.
-    let source = Source::new(&db, main_module.text.clone());
-    let parse_result = datalove_datafun_compiler::parser::parse(&db, source);
-    let script_ast = parse_result.script(&db);
-
-    // Typecheck the script to get expression types.
-    let tycheck_result = datalove_datafun_compiler::tycheck::type_check(&db, source, script_ast);
-
-    // Lower each function to IR.
-    let mut output = String::new();
-    let expr_types = tycheck_result.expr_types(&db);
-    let call_targets = tycheck_result.call_targets(&db);
-
-    // Empty func_id_map - intra-module calls use func_scope fallback since
-    // type_check stores None for module_id on local function calls.
-    let func_id_map: HashMap<(ModuleId, String), (ir::IrModuleId, ir::FuncId)> = HashMap::new();
-
-    for stmt in script_ast.statements(&db) {
-        if let datalove_datafun_compiler::ast::Statement::Fun(func) = stmt {
-            // Run drop analysis first.
-            let analysis = ir::drop_analysis::analyze_function(&db, *func, expr_types);
-            if !analysis.errors.is_empty() {
-                let error_msgs: Vec<String> = analysis.errors.iter()
-                    .map(|e| format!("{:?}", e))
-                    .collect();
-                output.push_str(&format!("Drop analysis error in {}: {}\n",
-                    func.name(&db).text(&db), error_msgs.join("; ")));
-                continue;
-            }
-
-            match ir::lower::lower_function_for_module(&db, expr_types, call_targets, &func_id_map, *func, analysis) {
-                Ok(ir_func) => {
-                    output.push_str(&format!("{}", ir_func));
-                    output.push('\n');
-                }
-                Err(e) => {
-                    output.push_str(&format!("Error lowering {}: {}\n",
-                        func.name(&db).text(&db), e));
-                }
-            }
-        }
+    if !local_lib.modules.contains_key("main") {
+        return Err("No local/test/main module found".to_string());
     }
+
+    // Compile modules (typecheck, drop analysis, lower).
+    let compiled = pipeline.compile();
+
+    // Check for resolution errors.
+    if let Some(err) = &compiled.resolution_error {
+        return Ok(format!("Resolution error: {}\n", err));
+    }
+
+    // Check for typecheck errors.
+    let all_typecheck_errors: Vec<String> = compiled.path_to_errors.values()
+        .flatten()
+        .cloned()
+        .collect();
+    if !all_typecheck_errors.is_empty() {
+        return Ok(format!("Typecheck error: {}\n", all_typecheck_errors.join("; ")));
+    }
+
+    // Collect IR dump from all modules.
+    let output: String = compiled.module_lowering_results.values()
+        .flatten()
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
 
     if output.is_empty() {
-        output.push_str("(no functions)\n");
+        Ok("(no functions)\n".to_string())
+    } else {
+        Ok(output + "\n")
     }
-
-    Ok(output)
 }
 
 fn main() {
