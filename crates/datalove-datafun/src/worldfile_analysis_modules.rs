@@ -115,11 +115,12 @@ pub fn analyze_modules_worldfile(
         }
     };
 
-    // Convert to package-agnostic ModuleGraph.
+    // Convert to package-agnostic ModuleGraph and parse.
     let module_graph = datalove_datafun_pkg::to_module_graph(db, package_world, pkg_graph);
+    let parsed_graph = datalove_datafun_compiler::module_graph::parse_module_graph(db, module_graph);
 
     // Typecheck using the package-agnostic path.
-    let typecheck_result = datalove_datafun_compiler::tycheck::typecheck_module_graph(db, module_graph);
+    let typecheck_result = datalove_datafun_compiler::tycheck::typecheck_module_graph(db, parsed_graph);
 
     // Check for typecheck errors.
     if !typecheck_result.is_ok(db) {

@@ -17,7 +17,10 @@ use datalove_datafun_compiler::tycheck::{
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
     UnitTypecheckResultTracked,
 };
-use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleGraphTypecheckResult, ModuleId};
+use datalove_datafun_compiler::module_graph::{
+    ModuleGraph, ModuleGraphTypecheckResult, ModuleId,
+    ParsedModuleGraph, parse_module_graph,
+};
 use ir::interp::{ScriptEnvironment, UnitCompletion};
 use ir::drop_analysis::FunctionDropAnalysis;
 
@@ -52,6 +55,8 @@ pub struct CompiledModules<'db> {
     pub resolution_error: Option<String>,
     /// Module graph.
     pub module_graph: ModuleGraph,
+    /// Parsed module graph (graph + pre-parsed scripts).
+    pub parsed_graph: ParsedModuleGraph<'db>,
     /// Graph typecheck result (for accessing expr_types).
     pub graph_typecheck: ModuleGraphTypecheckResult<'db>,
     /// Map from module path to typecheck errors.
@@ -143,13 +148,13 @@ impl<'db> ModuleCompilationPipeline<'db> {
             Ok(graph) => graph,
             Err(e) => {
                 // Return early with resolution error.
+                let empty_graph = datalove_datafun_compiler::module_graph::ModuleGraphBuilder::new(self.db).build();
+                let empty_parsed = parse_module_graph(self.db, empty_graph.clone());
                 return CompiledModules {
                     resolution_error: Some(format!("Package resolution failed: {:?}", e)),
-                    module_graph: datalove_datafun_compiler::module_graph::ModuleGraphBuilder::new(self.db).build(),
-                    graph_typecheck: typecheck_module_graph(
-                        self.db,
-                        datalove_datafun_compiler::module_graph::ModuleGraphBuilder::new(self.db).build()
-                    ),
+                    module_graph: empty_graph,
+                    parsed_graph: empty_parsed,
+                    graph_typecheck: typecheck_module_graph(self.db, empty_parsed),
                     path_to_errors: BTreeMap::new(),
                     drop_analysis_errors: BTreeMap::new(),
                     func_id_map: HashMap::new(),
@@ -159,10 +164,11 @@ impl<'db> ModuleCompilationPipeline<'db> {
             }
         };
 
-        // Convert to ModuleGraph.
+        // Convert to ModuleGraph and parse all modules.
         let module_graph = datalove_datafun_pkg::to_module_graph(self.db, package_world, pkg_graph);
+        let parsed_graph = parse_module_graph(self.db, module_graph.clone());
 
-        let graph_typecheck = typecheck_module_graph(self.db, module_graph.clone());
+        let graph_typecheck = typecheck_module_graph(self.db, parsed_graph);
         let combined_expr_types = graph_typecheck.expr_types(self.db);
 
         // Build map from module path to typecheck errors.
@@ -297,6 +303,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
         CompiledModules {
             resolution_error: None,
             module_graph,
+            parsed_graph,
             graph_typecheck,
             path_to_errors,
             drop_analysis_errors,
@@ -372,25 +379,25 @@ impl<'db> CompiledModules<'db> {
     /// Consumes the compiled modules and returns a context for incrementally
     /// compiling and executing script units.
     pub fn script_context(self, db: &'db dyn salsa::Database) -> ScriptCompilationContext<'db> {
-        // Build ScriptLowerContext and module specs from compiled modules.
-        // Parse each module once and reuse for both.
+        // Build ScriptLowerContext and module specs from pre-parsed scripts.
         let mut script_ctx = ir::lower::ScriptLowerContext::new();
         let mut module_specs = Vec::new();
 
-        for module in self.module_graph.iter_modules(db) {
-            let salsa_module_id = module.id(db);
+        for (salsa_module_id, script) in self.parsed_graph.scripts(db) {
             let module_path = salsa_module_id.path(db).clone();
-            let module_source = module.source(db);
-            let parse_result = datalove_datafun_compiler::parser::parse(db, module_source);
-            let script = parse_result.script(db);
+            // Get the source from the module graph.
+            let module_source = self.module_graph.iter_modules(db)
+                .find(|m| m.id(db) == *salsa_module_id)
+                .map(|m| m.source(db))
+                .expect("module should exist in graph");
 
             // Build module spec with pre-parsed script and ModuleId.
             module_specs.push(ModuleSpec::new(
                 db,
                 module_path.clone(),
                 module_source,
-                script,
-                salsa_module_id,
+                *script,
+                *salsa_module_id,
             ));
 
             // Register module functions for execution and name lookup.
@@ -398,7 +405,7 @@ impl<'db> CompiledModules<'db> {
                 if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
                     let func_name = func.name(db).text(db).to_string();
                     let qualified_name = format!("{}.{}", module_path, func_name);
-                    if let Some((ir_module_id, func_id)) = self.func_id_map.get(&(salsa_module_id, func_name)) {
+                    if let Some((ir_module_id, func_id)) = self.func_id_map.get(&(*salsa_module_id, func_name)) {
                         if let Some(ir_func) = self.env.registry.get_module_function(*ir_module_id, *func_id) {
                             script_ctx.add_module_function(qualified_name, *ir_module_id, *func_id, ir_func.clone());
                         }

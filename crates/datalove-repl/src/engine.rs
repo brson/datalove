@@ -53,9 +53,10 @@ impl<'db> Engine<'db> {
         let pkg_graph = resolution.result(db)
             .map_err(|e| rmx::anyhow::anyhow!("Package resolution failed: {:?}", e))?;
 
-        // Convert to package-agnostic ModuleGraph and typecheck.
+        // Convert to package-agnostic ModuleGraph, parse, and typecheck.
         let module_graph = datafun::to_module_graph(db, package_world, pkg_graph);
-        let typecheck_result = datafun::tycheck::typecheck_module_graph(db, module_graph);
+        let parsed_graph = datafun::module_graph::parse_module_graph(db, module_graph);
+        let typecheck_result = datafun::tycheck::typecheck_module_graph(db, parsed_graph);
 
         Ok(Engine {
             _db: db,

@@ -951,16 +951,19 @@ pub fn type_check_expr_with_context<'db>(
 /// This version of type_check allows scripts to import functions from modules
 /// in the module graph. Used for script units that define functions requiring
 /// access to imported function signatures.
+///
+/// Takes a `ParsedModuleGraph` which contains pre-parsed scripts for each module.
 #[salsa::tracked]
 pub fn type_check_with_module_graph<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,
     script: Script<'db>,
-    graph: crate::module_graph::ModuleGraph,
+    parsed_graph: crate::module_graph::ParsedModuleGraph<'db>,
     graph_typecheck: crate::module_graph::ModuleGraphTypecheckResult<'db>,
 ) -> TypecheckResult<'db> {
     use crate::module_graph::ModuleId;
 
+    let graph = parsed_graph.graph(db);
     let mut ctx = TypeContext::new(db, source);
 
     // Build path-to-id map from the module graph.
@@ -970,21 +973,16 @@ pub fn type_check_with_module_graph<'db>(
         path_to_id.insert(id.path(db).clone(), id);
     }
 
-    // Build a map of function ASTs per module for resolving imports.
+    // Build a map of function ASTs per module from pre-parsed scripts.
     let mut module_function_asts: HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> = HashMap::new();
-    for module in graph.iter_modules(db) {
-        let module_id = module.id(db);
-        let module_source = module.source(db);
-        let parse_result = crate::parser::parse(db, module_source);
-        let module_script = parse_result.script(db);
-
+    for (module_id, module_script) in parsed_graph.scripts(db) {
         let mut funcs = HashMap::new();
         for statement in module_script.statements(db) {
             if let Statement::Fun(func) = statement {
                 funcs.insert(func.name(db), *func);
             }
         }
-        module_function_asts.insert(module_id, funcs);
+        module_function_asts.insert(*module_id, funcs);
     }
 
     // Build module alias map from require statements.
@@ -1090,12 +1088,16 @@ pub fn lookup_variable_type<'db>(
 /// This is the core typechecking function that works with the package-agnostic
 /// ModuleGraph abstraction. Modules are processed in dependency order.
 /// Function-level imports are resolved on the fly from `require module` and `import` statements.
+///
+/// Takes a `ParsedModuleGraph` which contains pre-parsed scripts for each module.
 #[salsa::tracked]
 pub fn typecheck_module_graph<'db>(
     db: &'db dyn crate::Db,
-    graph: crate::module_graph::ModuleGraph,
+    parsed_graph: crate::module_graph::ParsedModuleGraph<'db>,
 ) -> crate::module_graph::ModuleGraphTypecheckResult<'db> {
     use crate::module_graph::{ModuleId, ModuleExports as MgModuleExports, ModuleImports as MgModuleImports, ModuleGraphTypecheckResult};
+
+    let graph = parsed_graph.graph(db);
 
     let mut module_errors: BTreeMap<ModuleId, Vec<TypeError>> = BTreeMap::new();
     let mut module_exports_map: BTreeMap<ModuleId, MgModuleExports<'db>> = BTreeMap::new();
@@ -1111,23 +1113,18 @@ pub fn typecheck_module_graph<'db>(
         path_to_id.insert(id.path(db).clone(), id);
     }
 
-    // Parse all modules once and build maps for scripts and function ASTs.
+    // Build maps for scripts and function ASTs from pre-parsed scripts.
     let mut module_scripts: HashMap<ModuleId, Script<'db>> = HashMap::new();
     let mut module_function_asts: HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> = HashMap::new();
-    for module in graph.iter_modules(db) {
-        let module_id = module.id(db);
-        let source = module.source(db);
-        let parse_result = crate::parser::parse(db, source);
-        let script = parse_result.script(db);
-
+    for (module_id, script) in parsed_graph.scripts(db) {
         let mut funcs = HashMap::new();
         for statement in script.statements(db) {
             if let Statement::Fun(func) = statement {
                 funcs.insert(func.name(db), *func);
             }
         }
-        module_scripts.insert(module_id, script);
-        module_function_asts.insert(module_id, funcs);
+        module_scripts.insert(*module_id, *script);
+        module_function_asts.insert(*module_id, funcs);
     }
 
     // Process each module in dependency order.
