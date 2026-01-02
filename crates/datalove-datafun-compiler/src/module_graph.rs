@@ -25,15 +25,15 @@ pub use datalove_datafun_tycheck::{
 /// Returns a ParsedModuleGraph containing the original graph plus pre-parsed scripts and spans.
 #[salsa::tracked]
 pub fn parse_module_graph<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     graph: ModuleGraph,
 ) -> ParsedModuleGraph<'db> {
     let mut scripts = Vec::new();
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
         let source = module.source(db);
-        let parse_result = crate::parser::parse(db, source);
-        let spans = crate::parser::datafun_spans(db, source);
+        let parse_result = datalove_datafun_parser::parse(db, source);
+        let spans = datalove_datafun_parser::datafun_spans(db, source);
         scripts.push((module_id, parse_result.script(db), spans));
     }
     ParsedModuleGraph::new(db, graph, scripts)

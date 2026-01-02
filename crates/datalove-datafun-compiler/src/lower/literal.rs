@@ -2,7 +2,7 @@
 //!
 //! Converts source text literals to IR constant values.
 
-use crate::ir::{IrType, ConstValue};
+use datalove_datafun_ir::{IrType, ConstValue};
 
 /// Convert a decimal string to bigint limbs (little-endian base 2^32).
 pub fn parse_decimal_to_limbs(text: &str) -> Result<(Vec<u32>, bool), ()> {

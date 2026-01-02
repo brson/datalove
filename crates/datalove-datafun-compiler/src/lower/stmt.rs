@@ -4,8 +4,8 @@
 //! and control flow constructs.
 
 use bct::text::InternedText;
-use crate::ast::{self, Statement, ExprFun};
-use crate::ir::{IrType, Operand, Instruction, Terminator, SlotDest};
+use datalove_datafun_ast::ast::{self, Statement, ExprFun};
+use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest};
 use super::context::LowerCtx;
 use super::expr::lower_expression;
 use super::LowerError;

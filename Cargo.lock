@@ -905,8 +905,11 @@ name = "datalove-datafun"
 version = "0.1.0"
 dependencies = [
  "bcts",
+ "datalove-datafun-ast",
  "datalove-datafun-compiler",
  "datalove-datafun-interp",
+ "datalove-datafun-ir",
+ "datalove-datafun-parser",
  "datalove-datafun-pkg",
  "datalove-datafun-tycheck",
  "datalove-datalit",

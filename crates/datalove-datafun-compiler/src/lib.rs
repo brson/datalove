@@ -1,16 +1,7 @@
-
 use rmx::prelude::*;
 
-// Re-export AST crate modules for backward compatibility.
-pub use datalove_datafun_ast::ast;
-pub use datalove_datafun_ast::ast_serde;
-pub use datalove_datafun_ast::script;
-pub use datalove_datafun_parser as parser;
 pub mod resolution;
 pub mod funlit_equiv;
-
-// Re-export IR crate for backward compatibility.
-pub use datalove_datafun_ir as ir;
 
 // IR extension trait (adds from_tycheck conversion).
 pub mod ir_ext;
@@ -23,11 +14,6 @@ pub mod drop_analysis;
 
 // Module graph abstraction (core compiler uses this).
 pub mod module_graph;
-
-pub use datalove_datalit as datalit;
-
-// Re-export Db trait for external use.
-pub use salsa::Database as Db;
 
 #[salsa::db]
 #[derive(Default, Clone)]

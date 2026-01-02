@@ -8,6 +8,9 @@
 // Re-export compiler.
 pub use datalove_datafun_compiler::*;
 
+// Re-export Db trait for external use.
+pub use salsa::Database as Db;
+
 // Re-export pkg.
 pub use datalove_datafun_pkg::{
     Package, PackageModule, PackageName, ModuleName,

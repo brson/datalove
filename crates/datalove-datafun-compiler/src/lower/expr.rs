@@ -2,8 +2,8 @@
 //!
 //! Transforms AST expressions into IR instructions.
 
-use crate::ast::{self, ExprFun, ExprFunKind};
-use crate::ir::{
+use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind};
+use datalove_datafun_ir::{
     IrType, Operand, ValueId, BinOp, UnaryOp, Instruction, ConstValue, Terminator, TypeRef,
 };
 use super::context::LowerCtx;

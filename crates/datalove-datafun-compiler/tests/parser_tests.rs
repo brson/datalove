@@ -7,10 +7,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let db = datalove_datafun_compiler::Database::default();
     let source = bct::input::Source::new(&db, source_text.S());
 
-    let script = datalove_datafun_compiler::parser::parse_integration_test(&db, source);
+    let script = datalove_datafun_parser::parse_integration_test(&db, source);
 
     // Collect accumulated parse diagnostics with spans.
-    let parse_diagnostics = datalove_datafun_compiler::parser::parse_integration_test::accumulated::<datalove_diagnostic::ParseDiagnostic>(&db, source);
+    let parse_diagnostics = datalove_datafun_parser::parse_integration_test::accumulated::<datalove_diagnostic::ParseDiagnostic>(&db, source);
     let diagnostics: Vec<_> = parse_diagnostics
         .iter()
         .map(|d| {
@@ -31,7 +31,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         })
         .collect();
 
-    let serde_ast = datalove_datafun_compiler::ast_serde::Script::from_ast(&db, script);
+    let serde_ast = datalove_datafun_ast::ast_serde::Script::from_ast(&db, script);
 
     let output = json!({
         "ast": serde_ast,

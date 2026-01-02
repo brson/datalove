@@ -107,7 +107,7 @@ fn get_datafun_errors<'db>(
     // Wrap in "let _x = " for datafun parsing.
     let datafun_text = format!("let _x = {}", source);
     let src = bct::input::Source::new(db, datafun_text.clone());
-    let script = datalove_datafun_compiler::parser::parse_integration_test(db, src);
+    let script = datalove_datafun_parser::parse_integration_test(db, src);
 
     // Check for parse errors.
     let statements = script.statements(db);
@@ -117,7 +117,7 @@ fn get_datafun_errors<'db>(
 
     // Extract the let statement value.
     let expr = match &statements[0] {
-        datalove_datafun_compiler::ast::Statement::Let(stmt) => stmt.value(db),
+        datalove_datafun_ast::ast::Statement::Let(stmt) => stmt.value(db),
         _ => return (vec!["PARSE_ERROR".to_string()], true),
     };
 
@@ -126,7 +126,7 @@ fn get_datafun_errors<'db>(
         return (vec!["PARSE_ERROR".to_string()], true);
     }
 
-    let spans = datalove_datafun_compiler::parser::datafun_spans(db, src);
+    let spans = datalove_datafun_parser::datafun_spans(db, src);
     let result = datalove_datafun_tycheck::type_check_single_script(db, src, spans, script);
 
     let errors: Vec<String> = result
@@ -141,9 +141,9 @@ fn get_datafun_errors<'db>(
 /// Check if datafun expression contains parse error.
 fn has_datafun_parse_error<'db>(
     db: &'db datalove_datafun_compiler::Database,
-    expr: datalove_datafun_compiler::ast::ExprFun<'db>,
+    expr: datalove_datafun_ast::ast::ExprFun<'db>,
 ) -> bool {
-    use datalove_datafun_compiler::ast::ExprFunKind;
+    use datalove_datafun_ast::ast::ExprFunKind;
 
     // Helper to check type hint for parse error.
     let check_type_hint = |th: Option<datalove_datalit::ast::TypeHintAndHeap<'db>>| -> bool {
@@ -979,12 +979,12 @@ fn test_debug_specific_bracket_cases() {
     // Parse with datafun
     let datafun_text1 = format!("let _x = {}", source1);
     let src1_fun = bct::input::Source::new(&db, datafun_text1);
-    let datafun_parsed = datalove_datafun_compiler::parser::parse_integration_test(&db, src1_fun);
+    let datafun_parsed = datalove_datafun_parser::parse_integration_test(&db, src1_fun);
     eprintln!("Datafun has_parse_error: {}", {
         let stmts = datafun_parsed.statements(&db);
         if stmts.is_empty() {
             true
-        } else if let datalove_datafun_compiler::ast::Statement::Let(stmt) = &stmts[0] {
+        } else if let datalove_datafun_ast::ast::Statement::Let(stmt) = &stmts[0] {
             has_datafun_parse_error(&db, stmt.value(&db))
         } else {
             true

@@ -10,6 +10,9 @@ rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
 serde = { version = "1", features = ["derive"] }
+datalove-datafun-ast.path = "../datalove-datafun-ast"
+datalove-datafun-parser.path = "../datalove-datafun-parser"
+datalove-datafun-ir.path = "../datalove-datafun-ir"
 datalove-datafun-compiler.path = "../datalove-datafun-compiler"
 datalove-datafun-tycheck.path = "../datalove-datafun-tycheck"
 datalove-datafun-interp.path = "../datalove-datafun-interp"

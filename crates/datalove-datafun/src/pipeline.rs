@@ -10,7 +10,7 @@ use rmx::std::collections::{BTreeMap, HashMap};
 
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 use datalove_datafun_pkg::package_load::{Package, PackageModule};
-use datalove_datafun_compiler::ir::{IrModuleId, FuncId, IrType};
+use datalove_datafun_ir::{IrModuleId, FuncId, IrType};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_compiler::drop_analysis;
 use datalove_datafun_tycheck::{
@@ -195,10 +195,10 @@ impl<'db> ModuleCompilationPipeline<'db> {
             let ir_module_id = IrModuleId(ir_module_idx as u32);
             let salsa_module_id = module.id(self.db);
             let module_source = module.source(self.db);
-            let parse_result = datalove_datafun_compiler::parser::parse(self.db, module_source);
+            let parse_result = datalove_datafun_parser::parse(self.db, module_source);
             let script = parse_result.script(self.db);
             for statement in script.statements(self.db) {
-                if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
+                if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
                     let func_name = func.name(self.db).text(self.db).to_string();
                     let func_id = FuncId(next_func_id);
                     next_func_id += 1;
@@ -222,11 +222,11 @@ impl<'db> ModuleCompilationPipeline<'db> {
             }
 
             let module_source = module.source(self.db);
-            let parse_result = datalove_datafun_compiler::parser::parse(self.db, module_source);
+            let parse_result = datalove_datafun_parser::parse(self.db, module_source);
             let script = parse_result.script(self.db);
 
             for statement in script.statements(self.db) {
-                if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
+                if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
                     let func_name = func.name(self.db).text(self.db).to_string();
                     let analysis = drop_analysis::analyze_function(self.db, *func, combined_expr_types);
 
@@ -258,13 +258,13 @@ impl<'db> ModuleCompilationPipeline<'db> {
             }
 
             let module_source = module.source(self.db);
-            let parse_result = datalove_datafun_compiler::parser::parse(self.db, module_source);
+            let parse_result = datalove_datafun_parser::parse(self.db, module_source);
             let script = parse_result.script(self.db);
 
             let mut ir_dumps = Vec::new();
 
             for statement in script.statements(self.db) {
-                if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
+                if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
                     let func_name = func.name(self.db).text(self.db).to_string();
 
                     // Skip if drop analysis had errors.
@@ -422,11 +422,11 @@ impl<'db> ScriptCompilationContext<'db> {
     /// Compile and execute a script fragment.
     pub fn eval_fragment(&mut self, source: &str) -> ScriptUnitResult {
         let src = bct::input::Source::new(self.db, source.to_string());
-        let parse_result = datalove_datafun_compiler::parser::parse(self.db, src);
+        let parse_result = datalove_datafun_parser::parse(self.db, src);
         let script = parse_result.script(self.db);
 
         // Collect parse diagnostics.
-        let parse_diags = datalove_datafun_compiler::parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
+        let parse_diags = datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
         if !parse_diags.is_empty() {
             let parse_errors: Vec<String> = parse_diags.iter()
                 .map(|d| {
@@ -443,7 +443,7 @@ impl<'db> ScriptCompilationContext<'db> {
         }
 
         // Incremental typecheck with pre-parsed content.
-        let spans = datalove_datafun_compiler::parser::datafun_spans(self.db, src);
+        let spans = datalove_datafun_parser::datafun_spans(self.db, src);
         let unit_spec = ScriptUnitSpec::new(self.db, src, spans, ScriptUnitKind::Fragment(script));
         self.accumulated_unit_specs.push(unit_spec);
         let batch_spec = ScriptBatchSpec::new(
@@ -461,10 +461,10 @@ impl<'db> ScriptCompilationContext<'db> {
     /// Compile and execute a script expression.
     pub fn eval_expr(&mut self, source: &str) -> ScriptUnitResult {
         let src = bct::input::Source::new(self.db, source.to_string());
-        let expr = datalove_datafun_compiler::parser::parse_expr(self.db, src);
+        let expr = datalove_datafun_parser::parse_expr(self.db, src);
 
         // Collect parse diagnostics.
-        let parse_diags = datalove_datafun_compiler::parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
+        let parse_diags = datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
         if !parse_diags.is_empty() {
             let parse_errors: Vec<String> = parse_diags.iter()
                 .map(|d| {
@@ -481,7 +481,7 @@ impl<'db> ScriptCompilationContext<'db> {
         }
 
         // Incremental typecheck with pre-parsed content.
-        let spans = datalove_datafun_compiler::parser::datafun_spans(self.db, src);
+        let spans = datalove_datafun_parser::datafun_spans(self.db, src);
         let unit_spec = ScriptUnitSpec::new(self.db, src, spans, ScriptUnitKind::Expr(expr));
         self.accumulated_unit_specs.push(unit_spec);
         let batch_spec = ScriptBatchSpec::new(
@@ -499,7 +499,7 @@ impl<'db> ScriptCompilationContext<'db> {
     /// Process a parsed script fragment through typecheck, lower, and execute.
     fn process_fragment(
         &mut self,
-        script: datalove_datafun_compiler::ast::Script<'db>,
+        script: datalove_datafun_ast::ast::Script<'db>,
         tycheck_result: UnitTypecheckResultTracked<'db>,
     ) -> ScriptUnitResult {
         // Check for typecheck errors.
@@ -605,7 +605,7 @@ impl<'db> ScriptCompilationContext<'db> {
     /// Process a parsed expression through typecheck, lower, and execute.
     fn process_expr(
         &mut self,
-        expr: datalove_datafun_compiler::ast::ExprFun<'db>,
+        expr: datalove_datafun_ast::ast::ExprFun<'db>,
         tycheck_result: UnitTypecheckResultTracked<'db>,
     ) -> ScriptUnitResult {
         // Check for typecheck errors.

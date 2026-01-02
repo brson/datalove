@@ -11,12 +11,11 @@
 //! - Loops (values from previous iterations)
 
 use std::collections::HashMap;
-use crate::ast::{
+use datalove_datafun_ast::ast::{
     Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop,
     ExprFun, ExprFunKind, BinOp, UnaryOp,
 };
-use crate::Db;
-use crate::ir::IrType;
+use datalove_datafun_ir::IrType;
 use crate::ir_ext::IrTypeExt;
 
 /// Pre-computed drop analyses for functions in a script unit.
@@ -112,7 +111,7 @@ pub struct FunctionDropAnalysis {
 
 /// Context for drop analysis.
 struct AnalysisCtx<'db> {
-    db: &'db dyn Db,
+    db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     /// Next binding ID to allocate.
     next_binding: u32,
@@ -151,7 +150,7 @@ enum ScopeKind {
 
 impl<'db> AnalysisCtx<'db> {
     fn new(
-        db: &'db dyn Db,
+        db: &'db dyn salsa::Database,
         expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     ) -> Self {
         Self {
@@ -537,7 +536,7 @@ impl<'db> AnalysisCtx<'db> {
 
 /// Analyze a function and compute drop schedule.
 pub fn analyze_function<'db>(
-    db: &'db dyn Db,
+    db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
 ) -> FunctionDropAnalysis {
@@ -572,7 +571,7 @@ pub fn analyze_function<'db>(
 /// Returns a map of function analyses, or an error if any function has analysis errors.
 /// Call this before lowering to ensure all functions are valid.
 pub fn analyze_script_functions<'db>(
-    db: &'db dyn Db,
+    db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     stmts: &[Statement<'db>],
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError>)>> {
@@ -615,7 +614,7 @@ pub struct ScriptDropAnalysis {
 /// - Top-level bindings are NOT scheduled for drops (they're exported)
 /// - Nested scopes (if, loop) get normal drop analysis
 pub fn analyze_script_statements<'db>(
-    db: &'db dyn Db,
+    db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     stmts: &[Statement<'db>],
 ) -> ScriptDropAnalysis {
@@ -927,9 +926,9 @@ mod tests {
     use super::*;
     use bct::input::Source;
 
-    fn parse_function<'db>(db: &'db dyn crate::Db, source_code: &str) -> StmtFun<'db> {
+    fn parse_function<'db>(db: &'db dyn salsa::Database, source_code: &str) -> StmtFun<'db> {
         let source = Source::new(db, source_code.to_string());
-        let script = crate::parser::parse_for_test(db, source);
+        let script = datalove_datafun_parser::parse_for_test(db, source);
         let statements = script.statements(db);
 
         for stmt in statements {

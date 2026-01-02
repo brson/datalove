@@ -3,7 +3,7 @@ use std::path::Path;
 use rmx::serde_json::json;
 use salsa::plumbing::AsId;
 
-fn type_hint_to_string(db: &dyn datalove_datafun_compiler::Db, type_hint: datalove_datalit::ast::TypeHintAndHeap) -> String {
+fn type_hint_to_string(db: &dyn salsa::Database, type_hint: datalove_datalit::ast::TypeHintAndHeap) -> String {
     use datalove_datalit::ast::{TypeHint, Heap};
 
     let heap_prefix = match type_hint.heap(db) {
@@ -190,8 +190,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let db = datalove_datafun_compiler::Database::default();
     let source = bct::input::Source::new(&db, source_text.S());
 
-    let script = datalove_datafun_compiler::parser::parse_for_diagnostics(&db, source);
-    let spans = datalove_datafun_compiler::parser::datafun_spans(&db, source);
+    let script = datalove_datafun_parser::parse_for_diagnostics(&db, source);
+    let spans = datalove_datafun_parser::datafun_spans(&db, source);
     let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source, spans, script);
 
     // Collect type judgements for variables and functions.
@@ -199,7 +199,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let expr_types = tycheck_result.expr_types(&db);
     for statement in script.statements(&db) {
         match statement {
-            datalove_datafun_compiler::ast::Statement::Let(let_stmt) => {
+            datalove_datafun_ast::ast::Statement::Let(let_stmt) => {
                 let name = let_stmt.name(&db);
                 // Get type from the let statement's value expression.
                 let value_expr = let_stmt.value(&db);
@@ -213,7 +213,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     }));
                 }
             }
-            datalove_datafun_compiler::ast::Statement::Fun(fun_stmt) => {
+            datalove_datafun_ast::ast::Statement::Fun(fun_stmt) => {
                 let name = fun_stmt.name(&db);
                 let params = fun_stmt.params(&db);
                 let return_type = fun_stmt.return_type(&db);

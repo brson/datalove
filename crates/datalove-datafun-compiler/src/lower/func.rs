@@ -3,11 +3,10 @@
 //! Handles lowering of function definitions to IR.
 
 use std::collections::HashMap;
-use crate::ast;
-use crate::Db;
+use datalove_datafun_ast::ast;
 use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::ResolvedCallTarget;
-use crate::ir::{IrType, IrFunction, Operand, FuncId, IrModuleId, Terminator};
+use datalove_datafun_ir::{IrType, IrFunction, Operand, FuncId, IrModuleId, Terminator};
 use crate::drop_analysis::FunctionDropAnalysis;
 use super::context::LowerCtx;
 use super::stmt::lower_statement_indexed;
@@ -18,7 +17,7 @@ use super::LowerError;
 /// Caller must run `drop_analysis::analyze_function` first, check for errors,
 /// and pass the result here. This function asserts that `analysis` has no errors.
 pub fn lower_function_for_module<'db>(
-    db: &'db dyn Db,
+    db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,

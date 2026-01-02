@@ -5,11 +5,10 @@
 
 use std::collections::HashMap;
 use salsa::plumbing::AsId;
-use crate::ast::{Statement, ExprFun, ExprFunctionCall};
-use crate::Db;
+use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall};
 use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::ResolvedCallTarget;
-use crate::ir::{
+use datalove_datafun_ir::{
     IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, BlockId, FuncId,
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId,
 };
@@ -93,7 +92,7 @@ pub enum ScriptUnitKind<'db> {
 
 /// Context for lowering a single function or script unit.
 pub struct LowerCtx<'db> {
-    pub(super) db: &'db dyn Db,
+    pub(super) db: &'db dyn salsa::Database,
     /// Expression types from typechecker.
     pub(super) expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     /// Resolved call targets from typechecker, indexed by ExprFunctionCall salsa ID.
@@ -156,7 +155,7 @@ static EMPTY_FUNC_ID_MAP: std::sync::LazyLock<HashMap<(ModuleId, String), (IrMod
 
 impl<'db> LowerCtx<'db> {
     pub fn new(
-        db: &'db dyn Db,
+        db: &'db dyn salsa::Database,
         expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
         call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     ) -> Self {
@@ -193,7 +192,7 @@ impl<'db> LowerCtx<'db> {
 
     /// Create a context for lowering module functions with call resolution support.
     pub fn new_for_module(
-        db: &'db dyn Db,
+        db: &'db dyn salsa::Database,
         expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
         call_targets: &'db [Option<ResolvedCallTarget<'db>>],
         func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
@@ -244,7 +243,7 @@ impl<'db> LowerCtx<'db> {
 
     /// Create a context for lowering a script unit.
     pub fn new_for_script(
-        db: &'db dyn Db,
+        db: &'db dyn salsa::Database,
         expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
         call_targets: &'db [Option<ResolvedCallTarget<'db>>],
         func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,

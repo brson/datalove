@@ -5,8 +5,8 @@
 
 use rmx::prelude::*;
 
-use crate::ast;
-use crate::datalit;
+use datalove_datafun_ast::ast;
+use datalove_datalit as datalit;
 
 /// Error during conversion from datafun to datalit serde format.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,7 +30,7 @@ impl std::error::Error for ConversionError {}
 
 /// Extract a single expression from a Script that contains exactly one Ret statement.
 pub fn extract_expr_from_script<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     script: ast::Script<'db>,
 ) -> Result<ast::ExprFun<'db>, ConversionError> {
     let statements = script.statements(db);
@@ -55,7 +55,7 @@ pub fn extract_expr_from_script<'db>(
 ///
 /// Only works for pure datalit expressions. Returns error for datafun-only constructs.
 pub fn datafun_expr_to_datalit_serde<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     expr: ast::ExprFun<'db>,
 ) -> Result<datalit::ast_serde::ExprFull, ConversionError> {
     let kind = expr.expr(db);
@@ -385,7 +385,7 @@ pub enum TypeErrorSerde {
 
 /// Convert datalit TypecheckResult to serde format.
 pub fn datalit_typecheck_to_serde<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     result: datalit::tycheck::TypecheckResult<'db>,
 ) -> TypecheckResultSerde {
     let root_type = result.root_type(db).map(|t| datalit_type_to_serde(db, t));
@@ -397,7 +397,7 @@ pub fn datalit_typecheck_to_serde<'db>(
 
 /// Convert UnitTypecheckResultTracked to serde format (production path).
 pub fn datafun_unit_typecheck_to_serde<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     result: datalove_datafun_tycheck::UnitTypecheckResultTracked<'db>,
     expr: ast::ExprFun<'db>,
 ) -> TypecheckResultSerde {
@@ -418,7 +418,7 @@ pub fn datafun_unit_typecheck_to_serde<'db>(
 }
 
 fn datalit_type_to_serde<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     ty: datalit::tycheck::TypeAndHeap<'db>,
 ) -> TypeAndHeapSerde {
     TypeAndHeapSerde {
@@ -428,7 +428,7 @@ fn datalit_type_to_serde<'db>(
 }
 
 fn datafun_type_to_serde<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     ty: &datalove_datafun_tycheck::TypeAndHeap<'db>,
 ) -> TypeAndHeapSerde {
     TypeAndHeapSerde {
@@ -446,7 +446,7 @@ fn heap_to_serde(heap: datalit::ast::Heap) -> HeapSerde {
 }
 
 fn datalit_type_inner_to_serde<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     ty: &datalit::tycheck::Type<'db>,
 ) -> TypeSerde {
     use datalit::tycheck::Type;
@@ -502,7 +502,7 @@ fn datalit_type_inner_to_serde<'db>(
 }
 
 fn datafun_type_inner_to_serde<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     ty: &datalove_datafun_tycheck::Type<'db>,
 ) -> TypeSerde {
     use datalove_datafun_tycheck::Type;

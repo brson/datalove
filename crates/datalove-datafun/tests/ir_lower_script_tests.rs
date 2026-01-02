@@ -11,7 +11,7 @@ use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_compiler::lower::{self, ScriptLowerContext};
 use datalove_datafun_compiler::drop_analysis;
 use bct::input::Source;
-use datalove_datafun_compiler::ast::Statement;
+use datalove_datafun_ast::ast::Statement;
 
 /// Analyze a worldfile and produce IR output for script units.
 fn analyze_file(path: &Path) -> Result<String, String> {
@@ -33,12 +33,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             WorldfileSection::ScriptFragment { source } => {
                 // Parse the fragment to get statements.
                 let source_obj = Source::new(&db, source.clone());
-                let parse_result = datalove_datafun_compiler::parser::parse(&db, source_obj);
+                let parse_result = datalove_datafun_parser::parse(&db, source_obj);
                 let script_ast = parse_result.script(&db);
                 let stmts: Vec<Statement> = script_ast.statements(&db).to_vec();
 
                 // Typecheck to get expression types using production path.
-                let spans = datalove_datafun_compiler::parser::datafun_spans(&db, source_obj);
+                let spans = datalove_datafun_parser::datafun_spans(&db, source_obj);
                 let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj, spans, script_ast);
                 let expr_types = tycheck_result.expr_types(&db);
                 let call_targets = tycheck_result.call_targets(&db);

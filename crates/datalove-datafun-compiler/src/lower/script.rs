@@ -3,11 +3,10 @@
 //! Handles lowering of script units (fragments and expressions).
 
 use std::collections::HashMap;
-use crate::ast::{Statement, ExprFun};
+use datalove_datafun_ast::ast::{Statement, ExprFun};
 use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::{TypecheckResult, ResolvedCallTarget};
-use crate::Db;
-use crate::ir::{
+use datalove_datafun_ir::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
     ExportBinding, BlockId, IrModuleId, FuncId,
 };
@@ -25,7 +24,7 @@ use super::LowerError;
 /// For fragments, caller must first call `analyze_script_functions` to get `func_analyses`.
 /// For expressions, pass an empty map since there are no function definitions.
 pub fn lower_script_unit<'db>(
-    db: &'db dyn Db,
+    db: &'db dyn salsa::Database,
     tycheck_result: TypecheckResult<'db>,
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
@@ -85,7 +84,7 @@ pub fn lower_script_unit<'db>(
 ///
 /// Caller must first call `analyze_script_functions` to get `func_analyses`.
 pub fn lower_script_fragment_raw<'db>(
-    db: &'db dyn Db,
+    db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
@@ -128,7 +127,7 @@ pub fn lower_script_fragment_raw<'db>(
 ///
 /// Like `lower_script_unit` but takes expr_types directly and an expression.
 pub fn lower_script_expr<'db>(
-    db: &'db dyn Db,
+    db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,

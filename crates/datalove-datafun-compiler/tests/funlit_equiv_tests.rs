@@ -15,14 +15,14 @@ use datalove_datalit::ast_gen::{AstGenConfig, gen_expr_full_seeded};
 /// Extract expression from a let statement in a Script.
 fn extract_let_value<'db>(
     db: &'db datalove_datafun_compiler::Database,
-    script: datalove_datafun_compiler::ast::Script<'db>,
-) -> Result<datalove_datafun_compiler::ast::ExprFun<'db>, String> {
+    script: datalove_datafun_ast::ast::Script<'db>,
+) -> Result<datalove_datafun_ast::ast::ExprFun<'db>, String> {
     let statements = script.statements(db);
     if statements.len() != 1 {
         return Err(format!("expected 1 statement, got {}", statements.len()));
     }
     match &statements[0] {
-        datalove_datafun_compiler::ast::Statement::Let(stmt) => Ok(stmt.value(db)),
+        datalove_datafun_ast::ast::Statement::Let(stmt) => Ok(stmt.value(db)),
         other => Err(format!("expected Let statement, got {:?}", std::mem::discriminant(other))),
     }
 }
@@ -37,7 +37,7 @@ fn test_parse_equiv(db: &datalove_datafun_compiler::Database, expr_text: &str) -
     // Parse with datafun (wrap in "let _x = " prefix).
     let datafun_text = format!("let _x = {}", expr_text);
     let datafun_source = bct::input::Source::new(db, datafun_text.clone());
-    let datafun_script = datalove_datafun_compiler::parser::parse_integration_test(db, datafun_source);
+    let datafun_script = datalove_datafun_parser::parse_integration_test(db, datafun_source);
 
     // Extract expression from let statement.
     let datafun_expr = extract_let_value(db, datafun_script)?;
@@ -72,8 +72,8 @@ fn test_typecheck_equiv(db: &datalove_datafun_compiler::Database, expr_text: &st
     // Parse and typecheck with datafun (wrap in "let _x = " prefix) using production path.
     let datafun_text = format!("let _x = {}", expr_text);
     let datafun_source = bct::input::Source::new(db, datafun_text.clone());
-    let datafun_script = datalove_datafun_compiler::parser::parse_integration_test(db, datafun_source);
-    let datafun_spans = datalove_datafun_compiler::parser::datafun_spans(db, datafun_source);
+    let datafun_script = datalove_datafun_parser::parse_integration_test(db, datafun_source);
+    let datafun_spans = datalove_datafun_parser::datafun_spans(db, datafun_source);
     let datafun_result = datalove_datafun_tycheck::type_check_single_script(db, datafun_source, datafun_spans, datafun_script);
 
     // Extract expression for type lookup.
@@ -300,7 +300,7 @@ fn test_funlit_equiv_roundtrip() {
         // Parse with datafun, pretty-print, then test again.
         let datafun_text = format!("let _x = {}", original_text);
         let datafun_source = bct::input::Source::new(&db, datafun_text);
-        let datafun_script = datalove_datafun_compiler::parser::parse_integration_test(&db, datafun_source);
+        let datafun_script = datalove_datafun_parser::parse_integration_test(&db, datafun_source);
 
         if let Ok(datafun_expr) = extract_let_value(&db, datafun_script) {
             if let Ok(serde) = datafun_expr_to_datalit_serde(&db, datafun_expr) {

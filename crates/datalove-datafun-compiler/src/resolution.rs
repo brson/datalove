@@ -2,9 +2,9 @@
 
 use rmx::prelude::*;
 
-use crate::ast;
-use crate::parser;
-use crate::script;
+use datalove_datafun_ast::ast;
+use datalove_datafun_parser as parser;
+use datalove_datafun_ast::script;
 
 /// Result of resolving function declarations in a script.
 /// Tracks which units successfully resolved ("green" units).
@@ -19,7 +19,7 @@ pub struct FunctionResolution<'db> {
 /// This implements the algorithm from notes/script-semantics.md.
 #[salsa::tracked]
 pub fn resolve_functions<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     script: script::Script,
 ) -> FunctionResolution<'db> {
     let units = script.units(db);
@@ -74,7 +74,7 @@ pub fn resolve_functions<'db>(
 /// Check function names for conflicts.
 /// Returns true if all function names are valid (newer declarations can shadow older ones).
 fn check_function_names<'db>(
-    _db: &'db dyn crate::Db,
+    _db: &'db dyn salsa::Database,
     _functions: &[(usize, ast::StmtFun<'db>)],
 ) -> bool {
     true
@@ -95,7 +95,7 @@ pub struct LetResolution<'db> {
 /// - Previous let statements (but not forward references)
 #[salsa::tracked]
 pub fn resolve_let_statement<'db>(
-    db: &'db dyn crate::Db,
+    db: &'db dyn salsa::Database,
     script: script::Script,
     unit_index: usize,
 ) -> LetResolution<'db> {

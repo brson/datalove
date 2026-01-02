@@ -8,8 +8,8 @@ use rmx::std::collections::BTreeMap;
 use bct::input::Source;
 use bct::package_resolve2::{ImportDemand, ImportDemandMap, PackageWorldMap};
 
-use datalove_datafun_compiler::parser;
-use datalove_datafun_compiler::ast;
+use datalove_datafun_parser as parser;
+use datalove_datafun_ast::ast;
 
 #[salsa::tracked]
 pub fn import_demands<'db>(
