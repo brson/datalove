@@ -21,6 +21,7 @@ With core->runtime calls.
 
 # on deck
 
+- split compiler into peer/diamond deps
 - refactor datafun-compiler into diamond deps
 - move semantics
 - rename ExprFunKind::Err to Error
