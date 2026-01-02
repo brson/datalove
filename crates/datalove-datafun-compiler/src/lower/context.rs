@@ -9,11 +9,12 @@ use crate::ast::{Statement, ExprFun, ExprFunctionCall};
 use crate::Db;
 use crate::module_graph::ModuleId;
 use crate::tycheck::ResolvedCallTarget;
-use super::super::{
-    IrType, IrTypeExt, IrBlock, IrFunction, Operand, ValueId, SlotId, BlockId, FuncId,
+use crate::ir::{
+    IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, BlockId, FuncId,
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId,
 };
-use super::super::drop_analysis::{BindingId, DropSchedule, BindingInfo};
+use crate::ir_ext::IrTypeExt;
+use crate::drop_analysis::{BindingId, DropSchedule, BindingInfo};
 use super::LowerError;
 
 /// Context for lowering script units.

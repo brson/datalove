@@ -7,11 +7,11 @@ use crate::ast::{Statement, ExprFun};
 use crate::module_graph::ModuleId;
 use crate::tycheck::{TypecheckResult, ResolvedCallTarget};
 use crate::Db;
-use super::super::{
+use crate::ir::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
     ExportBinding, BlockId, IrModuleId, FuncId,
-    drop_analysis::{ScriptFunctionAnalyses, analyze_script_statements},
 };
+use crate::drop_analysis::{ScriptFunctionAnalyses, analyze_script_statements};
 use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
 use super::expr::lower_expression;
 use super::func::lower_function_body;

@@ -1,15 +1,8 @@
-//! SSA-based intermediate representation for datafun functions.
+//! IR type extension trait.
 //!
-//! This module re-exports types from datalove-datafun-ir and adds
-//! lowering, interpretation, and type conversion that require
-//! access to the full compiler.
+//! Adds conversion from tycheck types to IR types.
 
-// Re-export all IR types from the IR crate.
-pub use datalove_datafun_ir::*;
-
-// Local submodules that depend on the compiler.
-pub mod lower;
-pub mod drop_analysis;
+use datalove_datafun_ir::IrType;
 
 /// Extension trait for IrType to add conversion from tycheck types.
 ///

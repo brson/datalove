@@ -13,8 +13,17 @@ pub mod resolution;
 pub mod tycheck;
 pub mod funlit_equiv;
 
-// SSA IR module.
-pub mod ir;
+// Re-export IR crate for backward compatibility.
+pub use datalove_datafun_ir as ir;
+
+// IR extension trait (adds from_tycheck conversion).
+pub mod ir_ext;
+
+// IR lowering from AST to IR.
+pub mod lower;
+
+// Drop analysis for IR lowering.
+pub mod drop_analysis;
 
 // Module graph abstraction (core compiler uses this).
 pub mod module_graph;

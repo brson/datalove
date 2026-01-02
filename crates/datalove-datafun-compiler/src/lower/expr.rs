@@ -3,7 +3,7 @@
 //! Transforms AST expressions into IR instructions.
 
 use crate::ast::{self, ExprFun, ExprFunKind};
-use super::super::{
+use crate::ir::{
     IrType, Operand, ValueId, BinOp, UnaryOp, Instruction, ConstValue, Terminator, TypeRef,
 };
 use super::context::LowerCtx;

@@ -8,8 +8,8 @@ use std::path::Path;
 use std::collections::HashMap;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
-use datalove_datafun_compiler::ir;
-use datalove_datafun_compiler::ir::lower::{ScriptLowerContext, ScriptUnitKind};
+use datalove_datafun_compiler::lower::{self, ScriptLowerContext, ScriptUnitKind};
+use datalove_datafun_compiler::drop_analysis;
 use bct::input::Source;
 use datalove_datafun_compiler::ast::Statement;
 
@@ -44,7 +44,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));
 
                 // Run drop analysis on all functions first.
-                let func_analyses = match ir::drop_analysis::analyze_script_functions(&db, expr_types, &stmts) {
+                let func_analyses = match drop_analysis::analyze_script_functions(&db, expr_types, &stmts) {
                     Ok(analyses) => analyses,
                     Err(errors) => {
                         for (func_name, errs) in errors {
@@ -61,7 +61,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
                 // Script tests don't use modules, so use empty func_id_map.
                 let func_id_map = HashMap::new();
-                match ir::lower::lower_script_unit(&db, tycheck_result, tycheck_result.call_targets(&db), &func_id_map, script_ctx.clone(), ScriptUnitKind::Fragment(stmts), func_analyses) {
+                match lower::lower_script_unit(&db, tycheck_result, tycheck_result.call_targets(&db), &func_id_map, script_ctx.clone(), ScriptUnitKind::Fragment(stmts), func_analyses) {
                     Ok(ir_unit) => {
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

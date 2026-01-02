@@ -5,9 +5,7 @@
 
 use bct::text::InternedText;
 use crate::ast::{self, Statement, ExprFun};
-use super::super::{
-    IrType, Operand, Instruction, Terminator, SlotDest,
-};
+use crate::ir::{IrType, Operand, Instruction, Terminator, SlotDest};
 use super::context::LowerCtx;
 use super::expr::lower_expression;
 use super::LowerError;

@@ -10,8 +10,9 @@ use rmx::std::collections::{BTreeMap, HashMap};
 
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 use datalove_datafun_pkg::package_load::{Package, PackageModule};
-use datalove_datafun_compiler::ir;
-use datalove_datafun_compiler::ir::{IrModuleId, FuncId};
+use datalove_datafun_compiler::ir::{IrModuleId, FuncId, IrType};
+use datalove_datafun_compiler::lower;
+use datalove_datafun_compiler::drop_analysis;
 use datalove_datafun_compiler::tycheck::{
     typecheck_module_graph, type_check_script_units,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
@@ -22,7 +23,7 @@ use datalove_datafun_compiler::module_graph::{
     ParsedModuleGraph, parse_module_graph,
 };
 use datalove_datafun_interp::{ScriptEnvironment, UnitCompletion};
-use ir::drop_analysis::FunctionDropAnalysis;
+use drop_analysis::FunctionDropAnalysis;
 
 /// Typecheck result summary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -227,7 +228,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
             for statement in script.statements(self.db) {
                 if let datalove_datafun_compiler::ast::Statement::Fun(func) = statement {
                     let func_name = func.name(self.db).text(self.db).to_string();
-                    let analysis = ir::drop_analysis::analyze_function(self.db, *func, combined_expr_types);
+                    let analysis = drop_analysis::analyze_function(self.db, *func, combined_expr_types);
 
                     if !analysis.errors.is_empty() {
                         let error_msgs: Vec<String> = analysis.errors.iter()
@@ -287,7 +288,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
                     // Get call_targets for resolving function calls.
                     let call_targets = graph_typecheck.call_targets(self.db);
 
-                    match ir::lower::lower_function_for_module(
+                    match lower::lower_function_for_module(
                         self.db, combined_expr_types, call_targets, &func_id_map, *func, analysis
                     ) {
                         Ok(ir_func) => {
@@ -362,7 +363,7 @@ pub struct ScriptUnitResult {
 pub struct ScriptCompilationContext<'db> {
     db: &'db dyn salsa::Database,
     /// Lowering context (grows with each unit).
-    pub script_ctx: ir::lower::ScriptLowerContext,
+    pub script_ctx: lower::ScriptLowerContext,
     /// Execution environment (grows with each unit).
     pub env: ScriptEnvironment,
     /// Accumulated unit specs for incremental typechecking.
@@ -383,7 +384,7 @@ impl<'db> CompiledModules<'db> {
     /// compiling and executing script units.
     pub fn script_context(self, db: &'db dyn salsa::Database) -> ScriptCompilationContext<'db> {
         // Build ScriptLowerContext and module specs from pre-parsed scripts.
-        let script_ctx = ir::lower::ScriptLowerContext::new();
+        let script_ctx = lower::ScriptLowerContext::new();
         let mut module_specs = Vec::new();
 
         for (salsa_module_id, script) in self.parsed_graph.scripts(db) {
@@ -514,7 +515,7 @@ impl<'db> ScriptCompilationContext<'db> {
         // Run drop analysis on all functions first.
         let expr_types = tycheck_result.expr_types(self.db);
         let stmts = script.statements(self.db).to_vec();
-        let func_analyses = match ir::drop_analysis::analyze_script_functions(self.db, expr_types, &stmts) {
+        let func_analyses = match drop_analysis::analyze_script_functions(self.db, expr_types, &stmts) {
             Ok(analyses) => analyses,
             Err(errors) => {
                 let error_msgs: Vec<String> = errors.into_iter()
@@ -536,7 +537,7 @@ impl<'db> ScriptCompilationContext<'db> {
 
         // Lower using the typecheck result's expr_types and call_targets.
         let call_targets = tycheck_result.call_targets(self.db);
-        let ir_unit = match ir::lower::lower_script_fragment_raw(
+        let ir_unit = match lower::lower_script_fragment_raw(
             self.db,
             expr_types,
             call_targets,
@@ -560,7 +561,7 @@ impl<'db> ScriptCompilationContext<'db> {
         let ir_dump = format!("{}", ir_unit);
 
         // Execute the fragment with shared environment.
-        let ret_type = ir::IrType::Result(Box::new(ir::IrType::Unit));
+        let ret_type = IrType::Result(Box::new(IrType::Unit));
         let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
         let ret_size = unsafe { (*ret_tydesc).size };
         let mut ret_buffer = vec![0u8; ret_size as usize];
@@ -618,7 +619,7 @@ impl<'db> ScriptCompilationContext<'db> {
         }
 
         // Lower the expression as a script unit.
-        let ir_unit = match ir::lower::lower_script_expr(
+        let ir_unit = match lower::lower_script_expr(
             self.db,
             tycheck_result.expr_types(self.db),
             tycheck_result.call_targets(self.db),
@@ -646,7 +647,7 @@ impl<'db> ScriptCompilationContext<'db> {
         // Execute the script unit if it has a result.
         let output = if let Some(result_id) = ir_unit.result {
             // ret_dest is for early returns: always Result<(), Error>.
-            let ret_type = ir::IrType::Result(Box::new(ir::IrType::Unit));
+            let ret_type = IrType::Result(Box::new(IrType::Unit));
             let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
             let ret_size = unsafe { (*ret_tydesc).size };
             let mut ret_buffer = vec![0u8; ret_size as usize];
