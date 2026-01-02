@@ -2602,6 +2602,34 @@ fn check_expr<'db>(
             }
         }
 
+        // Handle anonymous enum expressions - check against expected enum type.
+        ExprFunKind::AnonEnum(enum_expr) => {
+            match expected.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::AnonEnum(_)) => {
+                    // Check the variant and payload against expected enum type.
+                    check_enum_variant(ctx, enum_expr.variant_name(db), enum_expr.payload(db), &expected)?;
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                Type::Datalit(datalit::tycheck::Type::Data) => {
+                    // Any type can coerce to Data - but we need a concrete type.
+                    // Try to get the type hint, otherwise synthesize will fail.
+                    if let Some(type_hint) = enum_expr.type_hint(db) {
+                        let enum_ty = convert_type_hint(db, type_hint)?;
+                        check_enum_variant(ctx, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty)?;
+                        ctx.store_expr_type(expr, expected);
+                        Ok(())
+                    } else {
+                        Err(ctx.error_cannot_synthesize(expr, "anonymous enum requires type hint when coercing to data"))
+                    }
+                }
+                _ => {
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, "enum", "expected enum type"))
+                }
+            }
+        }
+
         // Handle list expressions - check elements against expected element type.
         ExprFunKind::List(list_expr) => {
             match expected.ty(db) {
