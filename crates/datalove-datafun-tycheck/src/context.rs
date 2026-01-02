@@ -7,38 +7,39 @@ use std::collections::HashMap;
 use bct::text::InternedText;
 use salsa::plumbing::AsId;
 
-use crate::ast::*;
+use datalove_datafun_ast::ast::*;
 
-pub use datalove_datafun_tycheck::{
+pub use crate::{
     DatafunSpans,
     TypeAndHeap,
     TypeFunction,
     TypeError,
     ResolvedCallTarget,
+    ModuleId,
 };
 
 /// Context for typechecking.
 pub struct TypeContext<'db> {
-    pub(super) db: &'db dyn crate::Db,
+    pub(crate) db: &'db dyn crate::Db,
     /// Pre-computed spans for error reporting.
-    pub(super) spans: DatafunSpans<'db>,
+    pub(crate) spans: DatafunSpans<'db>,
     /// Variable bindings (name -> type).
-    pub(super) variables: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
+    pub(crate) variables: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
     /// Function signatures (name -> function type).
-    pub(super) functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
+    pub(crate) functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
     /// Function ASTs for resolving call targets (name -> (AST, module_id)).
-    pub(super) function_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<crate::module_graph::ModuleId>)>,
+    pub(crate) function_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<ModuleId>)>,
     /// Expected return type for current function (if inside a function).
-    pub(super) expected_return_type: Option<TypeAndHeap<'db>>,
+    pub(crate) expected_return_type: Option<TypeAndHeap<'db>>,
     /// Whether current function has no declared return type (void function).
-    pub(super) is_void_function: bool,
-    pub(super) errors: Vec<TypeError>,
+    pub(crate) is_void_function: bool,
+    pub(crate) errors: Vec<TypeError>,
     /// Expression types, indexed by ExprFun ID.
-    pub(super) expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub(crate) expr_types: Vec<Option<TypeAndHeap<'db>>>,
     /// Resolved call targets, indexed by ExprFunctionCall ID.
-    pub(super) call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+    pub(crate) call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
     /// Current loop nesting depth (for validating break/continue).
-    pub(super) loop_depth: u32,
+    pub(crate) loop_depth: u32,
 }
 
 impl<'db> TypeContext<'db> {
@@ -241,7 +242,7 @@ impl<'db> TypeContext<'db> {
         name: InternedText<'db>,
         func_type: TypeFunction<'db>,
         func_ast: StmtFun<'db>,
-        module_id: Option<crate::module_graph::ModuleId>,
+        module_id: Option<ModuleId>,
     ) {
         self.functions.insert(name, func_type);
         self.function_asts.insert(name, (func_ast, module_id));
@@ -253,7 +254,7 @@ impl<'db> TypeContext<'db> {
         name: InternedText<'db>,
         func_type: TypeFunction<'db>,
         func_ast: StmtFun<'db>,
-        source_module_id: crate::module_graph::ModuleId,
+        source_module_id: ModuleId,
     ) {
         self.functions.insert(name, func_type);
         self.function_asts.insert(name, (func_ast, Some(source_module_id)));
@@ -268,12 +269,12 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Look up the resolved function AST by name.
-    pub fn lookup_function_ast(&self, name: InternedText<'db>) -> Option<(StmtFun<'db>, Option<crate::module_graph::ModuleId>)> {
+    pub fn lookup_function_ast(&self, name: InternedText<'db>) -> Option<(StmtFun<'db>, Option<ModuleId>)> {
         self.function_asts.get(&name).copied()
     }
 
     /// Store resolved call target for a function call expression.
-    pub fn store_call_target(&mut self, call: ExprFunctionCall<'db>, func: StmtFun<'db>, module_id: Option<crate::module_graph::ModuleId>) {
+    pub fn store_call_target(&mut self, call: ExprFunctionCall<'db>, func: StmtFun<'db>, module_id: Option<ModuleId>) {
         let id = call.as_id();
         let index = id.index() as usize;
 
@@ -300,7 +301,7 @@ impl<'db> TypeContext<'db> {
 
     /// Synthesize the type of an expression.
     pub fn synthesize_expr(&mut self, expr: ExprFun<'db>) -> Result<TypeAndHeap<'db>, TypeError> {
-        let ty = super::synthesize::synthesize_expr(self, expr)?;
+        let ty = crate::synthesize::synthesize_expr(self, expr)?;
         self.store_expr_type(expr, ty);
         Ok(ty)
     }
@@ -406,14 +407,14 @@ pub fn build_function_type_from_stmt<'db>(
     // Convert parameter types.
     let mut param_types = Vec::new();
     for param in params {
-        let ty = super::types::convert_type_hint(db, param.type_hint(db)).ok()?;
+        let ty = crate::types::convert_type_hint(db, param.type_hint(db)).ok()?;
         param_types.push(ty);
     }
 
     // Convert return type (default to unit if not specified).
     let ret_ty = match return_type {
-        Some(type_hint) => super::types::convert_type_hint(db, type_hint).ok()?,
-        None => super::types::unit_type(db),
+        Some(type_hint) => crate::types::convert_type_hint(db, type_hint).ok()?,
+        None => crate::types::unit_type(db),
     };
 
     Some(TypeFunction::new(db, param_types, ret_ty))

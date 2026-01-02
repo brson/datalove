@@ -2,19 +2,20 @@
 //!
 //! Provides functions for type checking statements including function definitions.
 
-use crate::ast::*;
-use crate::datalit;
-use super::context::TypeContext;
-use super::check::check_expr;
-use super::types::{convert_type_hint, type_to_string, unit_type};
+use datalove_datafun_ast::ast::*;
+use datalove_datalit as datalit;
+use crate::context::TypeContext;
+use crate::check::check_expr;
+use crate::types::{convert_type_hint, type_to_string, unit_type};
+use crate::ModuleId;
 
-pub use datalove_datafun_tycheck::{Type, TypeAndHeap, TypeFunction, TypeError};
+pub use crate::{Type, TypeAndHeap, TypeFunction, TypeError};
 
 /// Collect function signature without checking body (first pass).
 pub fn collect_function_signature<'db>(
     ctx: &mut TypeContext<'db>,
     stmt: &StmtFun<'db>,
-    module_id: Option<crate::module_graph::ModuleId>,
+    module_id: Option<ModuleId>,
 ) {
     let db = ctx.db;
     let name = stmt.name(db);

@@ -2,10 +2,10 @@
 //!
 //! Provides type predicates, conversion functions, and helper utilities.
 
-use crate::ast::*;
-use crate::datalit;
+use datalove_datafun_ast::ast::*;
+use datalove_datalit as datalit;
 
-pub use datalove_datafun_tycheck::{Type, TypeAndHeap, TypeFunction, TypeError};
+pub use crate::{Type, TypeAndHeap, TypeFunction, TypeError};
 
 /// Check if a type is numeric.
 pub fn is_numeric_type<'db>(ty: &Type<'db>) -> bool {
@@ -285,7 +285,7 @@ pub fn heap_to_string(heap: datalit::ast::Heap) -> String {
 /// Returns the heap sigil used on the expression itself (e.g. `@` in `@{...}`).
 /// Returns `Heap::Omitted` for expressions that don't have an explicit heap.
 pub fn get_expr_heap<'db>(db: &'db dyn crate::Db, expr: ExprFun<'db>) -> datalit::ast::Heap {
-    use crate::ast::ExprFunKind;
+    use ExprFunKind;
     match expr.expr(db) {
         ExprFunKind::True(lit) | ExprFunKind::False(lit) | ExprFunKind::None(lit) => lit.heap(db),
         ExprFunKind::Int(e) => e.heap(db),

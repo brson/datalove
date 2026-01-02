@@ -6,13 +6,13 @@
 use std::collections::{HashMap, BTreeMap};
 use bct::text::InternedText;
 
-use crate::ast::*;
-use crate::datalit;
-use super::context::{TypeContext, ScriptTypeContext, ScriptTypecheckResultRaw, ExprTypecheckResultRaw};
-use super::statement::{check_statement, collect_function_signature};
-use super::types::{convert_type_hint, unit_type};
+use datalove_datafun_ast::ast::*;
+use datalove_datalit as datalit;
+use crate::context::{TypeContext, ScriptTypeContext, ScriptTypecheckResultRaw, ExprTypecheckResultRaw};
+use crate::statement::{check_statement, collect_function_signature};
+use crate::types::{convert_type_hint, unit_type};
 
-pub use datalove_datafun_tycheck::{
+pub use crate::{
     DatafunSpans,
     Type,
     TypeAndHeap,
@@ -30,6 +30,10 @@ pub use datalove_datafun_tycheck::{
     UnitTypecheckResultTracked,
     ScriptUnitsTypecheckResultTracked,
     ParsedModuleGraph,
+    ModuleId,
+    ModuleExports,
+    ModuleImports,
+    ModuleGraphTypecheckResult,
 };
 
 /// Typecheck multiple script units together, with bindings shared across units.
@@ -66,7 +70,7 @@ pub fn type_check_script_units<'db>(
     // Map: module_path -> (function_name -> (signature, ast))
     let mut module_functions: HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>> = HashMap::new();
     // Map: module_path -> ModuleId (for call target resolution).
-    let mut path_to_module_id: HashMap<String, crate::module_graph::ModuleId> = HashMap::new();
+    let mut path_to_module_id: HashMap<String, ModuleId> = HashMap::new();
     for (module_info, module_spec) in modules.iter().zip(spec.modules(db).iter()) {
         let mut funcs = HashMap::new();
         // First pass: collect function signatures.
@@ -93,7 +97,7 @@ pub fn type_check_script_units<'db>(
 
     let mut accumulated_vars: HashMap<InternedText<'db>, TypeAndHeap<'db>> = HashMap::new();
     let mut accumulated_fns: HashMap<InternedText<'db>, TypeFunction<'db>> = HashMap::new();
-    let mut accumulated_fn_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<crate::module_graph::ModuleId>)> = HashMap::new();
+    let mut accumulated_fn_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<ModuleId>)> = HashMap::new();
     let mut results = Vec::new();
 
     for (unit, unit_spec) in units.iter().zip(spec.units(db).iter()) {
@@ -141,7 +145,7 @@ pub fn type_check_script_units<'db>(
                 // Maps module alias (e.g., "utils") to full path (e.g., "local/test/utils").
                 let mut alias_to_path: HashMap<InternedText<'db>, String> = HashMap::new();
                 for statement in script.statements(db) {
-                    if let Statement::Require(crate::ast::StmtRequire::Module(req)) = statement {
+                    if let Statement::Require(StmtRequire::Module(req)) = statement {
                         let import_space = req.import_space(db);
                         let package_alias = req.package_alias(db);
                         let module_alias = req.module_alias(db);
@@ -334,10 +338,8 @@ pub fn type_check_with_module_graph<'db>(
     spans: DatafunSpans<'db>,
     script: Script<'db>,
     parsed_graph: ParsedModuleGraph<'db>,
-    graph_typecheck: crate::module_graph::ModuleGraphTypecheckResult<'db>,
+    graph_typecheck: ModuleGraphTypecheckResult<'db>,
 ) -> TypecheckResult<'db> {
-    use crate::module_graph::ModuleId;
-
     let graph = parsed_graph.graph(db);
     let mut ctx = TypeContext::new(db, spans);
 
@@ -440,14 +442,12 @@ pub fn type_check_with_module_graph<'db>(
 pub fn typecheck_module_graph<'db>(
     db: &'db dyn crate::Db,
     parsed_graph: ParsedModuleGraph<'db>,
-) -> crate::module_graph::ModuleGraphTypecheckResult<'db> {
-    use crate::module_graph::{ModuleId, ModuleExports as MgModuleExports, ModuleImports as MgModuleImports, ModuleGraphTypecheckResult};
-
+) -> ModuleGraphTypecheckResult<'db> {
     let graph = parsed_graph.graph(db);
 
     let mut module_errors: BTreeMap<ModuleId, Vec<TypeError>> = BTreeMap::new();
-    let mut module_exports_map: BTreeMap<ModuleId, MgModuleExports<'db>> = BTreeMap::new();
-    let mut module_imports_map: BTreeMap<ModuleId, MgModuleImports<'db>> = BTreeMap::new();
+    let mut module_exports_map: BTreeMap<ModuleId, ModuleExports<'db>> = BTreeMap::new();
+    let mut module_imports_map: BTreeMap<ModuleId, ModuleImports<'db>> = BTreeMap::new();
     let mut combined_expr_types: Vec<Option<TypeAndHeap<'db>>> = Vec::new();
     let mut combined_call_targets: Vec<Option<ResolvedCallTarget<'db>>> = Vec::new();
 
@@ -560,11 +560,11 @@ pub fn typecheck_module_graph<'db>(
 
         // Collect exports for this module.
         let exports_functions = collect_module_exports(db, script);
-        let exports = MgModuleExports::new(db, module_id, exports_functions);
+        let exports = ModuleExports::new(db, module_id, exports_functions);
         module_exports_map.insert(module_id, exports);
 
         // Collect imports for this module.
-        let imports = MgModuleImports::new(db, module_id, module_import_functions);
+        let imports = ModuleImports::new(db, module_id, module_import_functions);
         module_imports_map.insert(module_id, imports);
 
         // Analyze all functions in this module.
@@ -608,8 +608,8 @@ pub fn typecheck_module_graph<'db>(
 fn build_module_alias_map_for_graph<'db>(
     db: &'db dyn crate::Db,
     script: Script<'db>,
-    path_to_id: &HashMap<String, crate::module_graph::ModuleId>,
-) -> HashMap<InternedText<'db>, crate::module_graph::ModuleId> {
+    path_to_id: &HashMap<String, ModuleId>,
+) -> HashMap<InternedText<'db>, ModuleId> {
     let mut alias_map = HashMap::new();
 
     for statement in script.statements(db) {

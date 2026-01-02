@@ -1,7 +1,6 @@
-//! Datafun typechecker types.
+//! Datafun typechecker.
 //!
-//! This crate provides type definitions used by the datafun typechecker.
-//! The actual typechecking logic is in datalove-datafun-compiler.
+//! Provides type checking for datafun scripts and expressions.
 
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
@@ -17,6 +16,14 @@ pub use bct::module_graph::{ModuleId, ModuleGraph};
 
 /// Re-export DatafunSpans from AST crate.
 pub use datalove_datafun_ast::spans::DatafunSpans;
+
+// Implementation modules.
+mod api;
+mod check;
+mod context;
+mod statement;
+pub mod synthesize;
+pub mod types;
 
 /// Type representation for datafun (extends datalit types with function types).
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -322,3 +329,37 @@ impl<'db> ParsedModuleGraph<'db> {
             .map(|(_, _, spans)| *spans)
     }
 }
+
+// ============================================================================
+// Public API Re-exports
+// ============================================================================
+
+// Re-export public API functions.
+pub use api::{
+    type_check_script_units,
+    type_check_single_script,
+    type_check_script_with_context,
+    type_check_expr_with_context,
+    type_check_with_module_graph,
+    typecheck_module_graph,
+};
+
+// Re-export context types.
+pub use context::{
+    TypeContext,
+    ScriptTypeContext,
+    ScriptTypecheckResultRaw,
+    ExprTypecheckResultRaw,
+    build_function_type_from_stmt,
+};
+
+// Re-export statement functions.
+pub use statement::collect_function_signature;
+
+// Re-export type utilities.
+pub use types::{
+    convert_type_hint,
+    type_to_string,
+    unit_type,
+    is_unit_type,
+};

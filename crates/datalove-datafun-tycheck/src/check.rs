@@ -3,12 +3,12 @@
 //! Provides check_expr for checking expressions against expected types,
 //! and helpers for checking collection elements.
 
-use crate::ast::*;
-use crate::datalit;
-use super::context::TypeContext;
-use super::types::*;
+use datalove_datafun_ast::ast::*;
+use datalove_datalit as datalit;
+use crate::context::TypeContext;
+use crate::types::*;
 
-pub use datalove_datafun_tycheck::{Type, TypeAndHeap, TypeError};
+pub use crate::{Type, TypeAndHeap, TypeError};
 
 /// Error type for coercion failures.
 pub enum CoercionError {
@@ -426,7 +426,7 @@ pub fn check_set_elements<'db>(
 /// Check map entries against expected type.
 pub fn check_map_entries<'db>(
     ctx: &mut TypeContext<'db>,
-    entries: &[crate::ast::ExprMapEntry<'db>],
+    entries: &[ExprMapEntry<'db>],
     expected_ty: TypeAndHeap<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
@@ -510,7 +510,7 @@ pub fn check_map_entries<'db>(
 /// Check tensor shape and elements against expected type.
 pub fn check_tensor_shape_and_elements<'db>(
     ctx: &mut TypeContext<'db>,
-    tensor_expr: crate::ast::ExprTensor<'db>,
+    tensor_expr: ExprTensor<'db>,
     expected_ty: TypeAndHeap<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
@@ -650,7 +650,7 @@ pub fn check_tuple_elements<'db>(
 /// Check struct fields against expected type.
 pub fn check_struct_fields<'db>(
     ctx: &mut TypeContext<'db>,
-    fields: &[crate::ast::ExprStructField<'db>],
+    fields: &[ExprStructField<'db>],
     expected_ty: TypeAndHeap<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;

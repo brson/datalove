@@ -2,13 +2,13 @@
 //!
 //! Provides synthesize_expr for inferring types from expressions.
 
-use crate::ast::*;
-use crate::datalit;
-use super::context::TypeContext;
-use super::check::{check_expr, check_list_elements, check_set_elements, check_map_entries, check_tensor_shape_and_elements, check_tuple_elements, check_struct_fields, check_enum_variant};
-use super::types::*;
+use datalove_datafun_ast::ast::*;
+use datalove_datalit as datalit;
+use crate::context::TypeContext;
+use crate::check::{check_expr, check_list_elements, check_set_elements, check_map_entries, check_tensor_shape_and_elements, check_tuple_elements, check_struct_fields, check_enum_variant};
+use crate::types::*;
 
-pub use datalove_datafun_tycheck::{Type, TypeAndHeap, TypeError};
+pub use crate::{Type, TypeAndHeap, TypeError};
 
 /// Synthesize a type for an expression.
 pub fn synthesize_expr<'db>(
@@ -785,7 +785,7 @@ fn synthesize_try_result<'db>(
 fn synthesize_inline_list<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    list_expr: crate::ast::ExprList<'db>,
+    list_expr: ExprList<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
     let heap = list_expr.heap(db);
@@ -829,7 +829,7 @@ fn synthesize_inline_list<'db>(
 fn synthesize_inline_set<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    set_expr: crate::ast::ExprSet<'db>,
+    set_expr: ExprSet<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
     let heap = set_expr.heap(db);
@@ -869,7 +869,7 @@ fn synthesize_inline_set<'db>(
 fn synthesize_inline_map<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    map_expr: crate::ast::ExprMap<'db>,
+    map_expr: ExprMap<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
     let heap = map_expr.heap(db);
@@ -920,7 +920,7 @@ fn synthesize_inline_map<'db>(
 fn synthesize_inline_tensor<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    tensor_expr: crate::ast::ExprTensor<'db>,
+    tensor_expr: ExprTensor<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
     let heap = tensor_expr.heap(db);
@@ -964,7 +964,7 @@ fn synthesize_inline_tensor<'db>(
 fn synthesize_inline_anon_tuple<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    tuple_expr: crate::ast::ExprAnonTuple<'db>,
+    tuple_expr: ExprAnonTuple<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
     let heap = tuple_expr.heap(db);
@@ -987,7 +987,7 @@ fn synthesize_inline_anon_tuple<'db>(
 fn synthesize_inline_anon_struct<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    struct_expr: crate::ast::ExprAnonStruct<'db>,
+    struct_expr: ExprAnonStruct<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
     let heap = struct_expr.heap(db);
@@ -1010,7 +1010,7 @@ fn synthesize_inline_anon_struct<'db>(
 fn synthesize_inline_data<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    data_expr: crate::ast::ExprData<'db>,
+    data_expr: ExprData<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
     let heap = data_expr.heap(db);
@@ -1028,7 +1028,7 @@ fn synthesize_inline_data<'db>(
 fn synthesize_inline_err<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    err_expr: crate::ast::ExprErr<'db>,
+    err_expr: ExprErr<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
     let heap = err_expr.heap(db);
