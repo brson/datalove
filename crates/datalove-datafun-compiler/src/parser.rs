@@ -71,6 +71,7 @@ fn parse_bracer_expr<'db>(
     let mut parser = Parser {
         db,
         bracer,
+        had_error: false,
     };
 
     // Collect all tokens, filtering spaces but keeping the structure flat.
@@ -79,7 +80,9 @@ fn parse_bracer_expr<'db>(
         .collect();
 
     let mut tokens_iter = tokens.into_iter().peekable();
-    parser.parse_expr_full(&mut tokens_iter)
+    let expr = parser.parse_expr_full(&mut tokens_iter);
+    parser.error_if_not_exhausted(&mut tokens_iter);
+    expr
 }
 
 fn parse_bracer<'db>(
@@ -89,6 +92,7 @@ fn parse_bracer<'db>(
     let mut parser = Parser {
         db,
         bracer,
+        had_error: false,
     };
 
     // Get line iterator - newlines inside balanced braces don't count as line breaks.
@@ -139,18 +143,20 @@ fn is_line_separator<'db>(db: &'db dyn crate::Db, token: Token<'db>) -> bool {
 struct Parser<'db> {
     db: &'db dyn crate::Db,
     bracer: Bracer<'db>,
+    had_error: bool,
 }
 
 impl<'db> Parser<'db> {
     /// Emit both a diagnostic and create a StmtParseError node in one call.
     fn emit_stmt_error(
-        &self,
+        &mut self,
         text: bct::text::Text<'db>,
         span: datalove_diagnostic::ByteSpan,
         message: &str,
         code: &str,
         label: &str,
     ) -> ast::Statement<'db> {
+        self.had_error = true;
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code)
@@ -161,13 +167,14 @@ impl<'db> Parser<'db> {
 
     /// Emit both a diagnostic and create an ExprFun with ParseError kind in one call.
     fn emit_expr_error(
-        &self,
+        &mut self,
         text: bct::text::Text<'db>,
         span: datalove_diagnostic::ByteSpan,
         message: &str,
         code: &str,
         label: &str,
     ) -> ast::ExprFun<'db> {
+        self.had_error = true;
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code)
@@ -177,6 +184,22 @@ impl<'db> Parser<'db> {
             self.db,
             ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, text, span, message_text))
         )
+    }
+
+    /// Check that an iterator is exhausted.
+    ///
+    /// Emits an error diagnostic if tokens remain and no prior error occurred.
+    fn error_if_not_exhausted(
+        &self,
+        tokens: &mut Peekable<impl Iterator<Item = TreeToken<'db>>>,
+    ) {
+        if tokens.peek().is_some() && !self.had_error {
+            let (text, span) = self.peek_text_span(tokens);
+            DiagnosticBuilder::error(self.db, "unexpected token after expression")
+                .code("P021")
+                .primary_label(text, span, "unexpected token")
+                .emit_parse();
+        }
     }
 
     fn parse_statements(&mut self, lines: Vec<Vec<TreeToken<'db>>>) -> Vec<ast::Statement<'db>> {
@@ -464,6 +487,7 @@ impl<'db> Parser<'db> {
             }
         }
 
+        self.error_if_not_exhausted(&mut tokens);
         params
     }
 
@@ -504,6 +528,7 @@ impl<'db> Parser<'db> {
         for group in arg_token_groups {
             let mut group_iter = group.into_iter().peekable();
             let arg = self.parse_expr_full(&mut group_iter);
+            self.error_if_not_exhausted(&mut group_iter);
             args.push(arg);
         }
 
@@ -1610,7 +1635,9 @@ impl<'db> Parser<'db> {
                     return None;
                 }
                 let mut group_iter = all_tokens.into_iter().peekable();
-                Some(self.parse_expr_full(&mut group_iter))
+                let expr = self.parse_expr_full(&mut group_iter);
+                self.error_if_not_exhausted(&mut group_iter);
+                Some(expr)
             }
             _ => None
         }
@@ -1785,6 +1812,7 @@ impl<'db> Parser<'db> {
             }
         }
 
+        self.error_if_not_exhausted(&mut iter);
         shape
     }
 
@@ -1815,6 +1843,8 @@ impl<'db> Parser<'db> {
                 break;
             }
         }
+
+        self.error_if_not_exhausted(&mut tokens);
         elements
     }
 
@@ -1881,6 +1911,8 @@ impl<'db> Parser<'db> {
                 break;
             }
         }
+
+        self.error_if_not_exhausted(&mut tokens);
         fields
     }
 
@@ -1932,6 +1964,8 @@ impl<'db> Parser<'db> {
                 break;
             }
         }
+
+        self.error_if_not_exhausted(&mut tokens);
         entries
     }
 
@@ -2026,6 +2060,8 @@ impl<'db> Parser<'db> {
                 break;
             }
         }
+
+        self.error_if_not_exhausted(&mut inner_tokens);
 
         // If there's exactly one element and no trailing comma, treat as grouping (not tuple).
         if elements.len() == 1 {
