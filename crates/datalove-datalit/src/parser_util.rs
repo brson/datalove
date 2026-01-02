@@ -3,7 +3,7 @@
 //! Provides traits and helpers that can be shared between datalit and datafun parsers.
 
 use bct::{
-    bracer::TreeToken,
+    bracer::{BracerIter, TreeToken},
     lexer::{Sigil, TokenKind},
     text::InternedText,
 };
@@ -65,6 +65,32 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
             true
         } else {
             false
+        }
+    }
+
+    /// Consume a specific word if matched, returning true if consumed.
+    ///
+    /// Alias for `try_eat_word`.
+    fn eat_word(&mut self, word: &str) -> bool {
+        self.try_eat_word(word)
+    }
+
+    /// Consume a specific word or panic.
+    fn need_word(&mut self, word: &str) {
+        if !self.try_eat_word(word) {
+            panic!("expected word '{}'", word);
+        }
+    }
+
+    /// Consume a branch if it matches the given sigil, returning its iterator.
+    fn eat_branch(&mut self, sigil: Sigil) -> Option<BracerIter<'db>> {
+        if self.peek_sigil(sigil) {
+            match self.next() {
+                Some(TreeToken::Branch(_, iter)) => Some(iter),
+                _ => None,
+            }
+        } else {
+            None
         }
     }
 

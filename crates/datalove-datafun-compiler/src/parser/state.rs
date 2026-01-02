@@ -78,32 +78,6 @@ impl<'db> Parser<'db> {
         }
     }
 
-    /// Consume a specific word if matched, returning true if consumed.
-    ///
-    /// Alias for `try_eat_word` to match datalit's interface.
-    pub(super) fn eat_word(&mut self, word: &str) -> bool {
-        self.try_eat_word(word)
-    }
-
-    /// Consume a specific word or panic.
-    pub(super) fn need_word(&mut self, word: &str) {
-        if !self.try_eat_word(word) {
-            panic!("expected word '{}'", word);
-        }
-    }
-
-    /// Consume a branch if it matches the given sigil, returning its iterator.
-    pub(super) fn eat_branch(&mut self, sigil: Sigil) -> Option<bct::bracer::BracerIter<'db>> {
-        if self.peek_sigil(sigil) {
-            match self.next() {
-                Some(TreeToken::Branch(_, iter)) => Some(iter),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    }
-
     /// Check if looking at a colon type hint.
     pub(super) fn peek_colon_type_hint(&self) -> bool {
         self.peek_sigil(Sigil::Colon)

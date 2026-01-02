@@ -3,13 +3,12 @@
 use rmx::prelude::*;
 
 use bct::{
-    lexer::Sigil,
     bracer::TreeToken,
     text::InternedText,
 };
 
 use crate::ast;
-use crate::parser_util::{TokenStream, TokenStreamExt};
+use crate::parser_util::TokenStream;
 use datalove_diagnostic::DiagnosticBuilder;
 
 /// Parser state for datalit parsing.
@@ -83,32 +82,6 @@ impl<'db> DynParser<'db> {
             .primary_label(text, span.clone(), label)
             .emit_parse();
         ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message_text))
-    }
-
-    /// Consume a specific word if matched, returning true if consumed.
-    ///
-    /// Alias for `try_eat_word` to match datafun's interface.
-    pub(super) fn eat_word(&mut self, word: &str) -> bool {
-        self.try_eat_word(word)
-    }
-
-    /// Consume a specific word or panic.
-    pub(super) fn need_word(&mut self, word: &str) {
-        if !self.try_eat_word(word) {
-            panic!("expected word '{}'", word);
-        }
-    }
-
-    /// Consume a branch if it matches the given sigil, returning its iterator.
-    pub(super) fn eat_branch(&mut self, sigil: Sigil) -> Option<bct::bracer::BracerIter<'db>> {
-        if self.peek_sigil(sigil) {
-            match self.next() {
-                Some(TreeToken::Branch(_, iter)) => Some(iter),
-                _ => None,
-            }
-        } else {
-            None
-        }
     }
 
     /// Peek returning an owned token (cloned) for patterns that need to capture branch content.
