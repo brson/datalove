@@ -183,3 +183,37 @@ pub fn parse_for_diagnostics<'db>(
 ) -> ast::Script<'db> {
     parse(db, source).script(db)
 }
+
+// Re-export span types from AST crate.
+pub use datalove_datafun_ast::spans::{
+    DatafunSpanAccumulator,
+    SpanMapEntry,
+    DatafunSpans,
+};
+
+/// Extract datafun expression spans from a parsed source.
+///
+/// This retrieves spans accumulated during parsing. Call this after parsing
+/// to get span information for error reporting.
+#[salsa::tracked]
+pub fn datafun_spans<'db>(
+    db: &'db dyn Db,
+    source: Source,
+) -> DatafunSpans<'db> {
+    use datalove_diagnostic::SpanEntry;
+
+    // Trigger parsing to accumulate spans.
+    parse_for_diagnostics(db, source);
+
+    // Retrieve accumulated spans.
+    let accumulated = parse_for_diagnostics::accumulated::<DatafunSpanAccumulator>(db, source);
+
+    let entries: Vec<SpanMapEntry> = accumulated.iter()
+        .map(|acc| SpanMapEntry {
+            expr_id: acc.expr_id,
+            entry: SpanEntry::new(acc.text_id, acc.span.clone()),
+        })
+        .collect();
+
+    DatafunSpans::new(db, entries)
+}

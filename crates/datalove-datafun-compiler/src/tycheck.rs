@@ -40,7 +40,8 @@ pub use datalove_datafun_tycheck::{
 /// Context for typechecking.
 pub struct TypeContext<'db> {
     db: &'db dyn crate::Db,
-    source: bct::input::Source,
+    /// Pre-computed spans for error reporting.
+    spans: crate::spans::DatafunSpans<'db>,
     /// Variable bindings (name -> type).
     variables: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
     /// Function signatures (name -> function type).
@@ -63,11 +64,11 @@ pub struct TypeContext<'db> {
 impl<'db> TypeContext<'db> {
     pub fn new(
         db: &'db dyn crate::Db,
-        source: bct::input::Source,
+        spans: crate::spans::DatafunSpans<'db>,
     ) -> Self {
         TypeContext {
             db,
-            source,
+            spans,
             variables: HashMap::new(),
             functions: HashMap::new(),
             function_asts: HashMap::new(),
@@ -240,10 +241,9 @@ impl<'db> TypeContext<'db> {
         }
     }
 
-    /// Look up span for a datafun expression (on-demand).
+    /// Look up span for a datafun expression.
     fn get_span(&self, expr: ExprFun<'db>) -> Option<(bct::text::Text<'db>, datalove_diagnostic::ByteSpan)> {
-        let spans = crate::spans::datafun_spans(self.db, self.source);
-        spans.lookup(self.db, expr).map(|entry| entry.to_text_and_span(self.db))
+        self.spans.lookup(self.db, expr).map(|entry| entry.to_text_and_span(self.db))
     }
 
     pub fn add_variable(&mut self, name: InternedText<'db>, ty: TypeAndHeap<'db>) {
@@ -335,7 +335,8 @@ pub fn type_check<'db>(
     source: bct::input::Source,
     script: Script<'db>,
 ) -> TypecheckResult<'db> {
-    let mut ctx = TypeContext::new(db, source);
+    let spans = crate::spans::datafun_spans(db, source);
+    let mut ctx = TypeContext::new(db, spans);
 
     // First pass: collect all function signatures.
     for statement in script.statements(db) {
@@ -365,7 +366,8 @@ pub fn type_check_expr<'db>(
     source: bct::input::Source,
     expr: ExprFun<'db>,
 ) -> ExprTypecheckResult<'db> {
-    let mut ctx = TypeContext::new(db, source);
+    let spans = crate::spans::datafun_spans(db, source);
+    let mut ctx = TypeContext::new(db, spans);
     let _ = ctx.synthesize_expr(expr);
 
     let errors = ctx.errors.into_iter()
@@ -413,7 +415,9 @@ pub fn type_check_script_units<'db>(
     for module_info in &modules {
         let mut funcs = HashMap::new();
         // First pass: collect function signatures.
-        let mut temp_ctx = TypeContext::new(db, module_info.source(db));
+        let module_source = module_info.source(db);
+        let module_spans = crate::spans::datafun_spans(db, module_source);
+        let mut temp_ctx = TypeContext::new(db, module_spans);
         for statement in module_info.script(db).statements(db) {
             if let Statement::Fun(stmt) = statement {
                 collect_function_signature(&mut temp_ctx, stmt, None);
@@ -440,7 +444,8 @@ pub fn type_check_script_units<'db>(
 
     for unit in &units {
         let source = unit.source(db);
-        let mut ctx = TypeContext::new(db, source);
+        let spans = crate::spans::datafun_spans(db, source);
+        let mut ctx = TypeContext::new(db, spans);
 
         // Script units have Result<()> return type for try operators.
         // This allows `!` (try-result) but not `?` (try-option).
@@ -703,7 +708,8 @@ pub fn type_check_script_with_context<'db>(
     script: Script<'db>,
     prior_ctx: &ScriptTypeContext<'db>,
 ) -> ScriptTypecheckResultRaw<'db> {
-    let mut ctx = TypeContext::new(db, source);
+    let spans = crate::spans::datafun_spans(db, source);
+    let mut ctx = TypeContext::new(db, spans);
 
     // Seed with prior bindings.
     for (name, ty) in &prior_ctx.variables {
@@ -743,7 +749,8 @@ pub fn type_check_expr_with_context<'db>(
     expr: ExprFun<'db>,
     prior_ctx: &ScriptTypeContext<'db>,
 ) -> ExprTypecheckResultRaw<'db> {
-    let mut ctx = TypeContext::new(db, source);
+    let spans = crate::spans::datafun_spans(db, source);
+    let mut ctx = TypeContext::new(db, spans);
 
     // Seed with prior bindings.
     for (name, ty) in &prior_ctx.variables {
@@ -779,7 +786,8 @@ pub fn type_check_with_module_graph<'db>(
     use crate::module_graph::ModuleId;
 
     let graph = parsed_graph.graph(db);
-    let mut ctx = TypeContext::new(db, source);
+    let spans = crate::spans::datafun_spans(db, source);
+    let mut ctx = TypeContext::new(db, spans);
 
     // Build path-to-id map from the module graph.
     let mut path_to_id: HashMap<String, ModuleId> = HashMap::new();
@@ -879,9 +887,9 @@ pub fn lookup_variable_type<'db>(
     script: Script<'db>,
     name: InternedText<'db>,
 ) -> Option<TypeAndHeap<'db>> {
-    // Create a dummy source since we don't have one available here.
-    let dummy_source = bct::input::Source::new(db, String::new());
-    let mut ctx = TypeContext::new(db, dummy_source);
+    // Create empty spans since we don't have a real source here.
+    let empty_spans = crate::spans::DatafunSpans::new(db, Vec::new());
+    let mut ctx = TypeContext::new(db, empty_spans);
 
     // First pass: collect all function signatures.
     for statement in script.statements(db) {
@@ -952,7 +960,8 @@ pub fn typecheck_module_graph<'db>(
             .expect("module should have been parsed in first pass");
 
         // Create type context for this module.
-        let mut ctx = TypeContext::new(db, source);
+        let spans = crate::spans::datafun_spans(db, source);
+        let mut ctx = TypeContext::new(db, spans);
 
         // Track imports for this module.
         let mut module_import_functions: Vec<(InternedText<'db>, ModuleId, InternedText<'db>)> = Vec::new();
