@@ -395,12 +395,10 @@ pub fn datalit_typecheck_to_serde<'db>(
     TypecheckResultSerde { root_type, errors }
 }
 
-/// Convert datafun TypecheckResult to serde format.
-///
-/// Note: datafun stores types per-expression, so we need the expression to look up its type.
-pub fn datafun_typecheck_to_serde<'db>(
+/// Convert UnitTypecheckResultTracked to serde format (production path).
+pub fn datafun_unit_typecheck_to_serde<'db>(
     db: &'db dyn crate::Db,
-    result: crate::tycheck::TypecheckResult<'db>,
+    result: crate::tycheck::UnitTypecheckResultTracked<'db>,
     expr: ast::ExprFun<'db>,
 ) -> TypecheckResultSerde {
     use salsa::plumbing::AsId;

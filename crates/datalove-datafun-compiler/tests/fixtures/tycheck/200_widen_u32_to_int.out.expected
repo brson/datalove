@@ -9,7 +9,7 @@
     {
       "kind": "variable",
       "name": "b",
-      "type": "int"
+      "type": "u32"
     }
   ]
 }

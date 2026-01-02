@@ -8,7 +8,7 @@ use rmx::prelude::*;
 use datalove_datafun_compiler::funlit_equiv::{
     datafun_expr_to_datalit_serde,
     datalit_typecheck_to_serde,
-    datafun_typecheck_to_serde,
+    datafun_unit_typecheck_to_serde,
 };
 use datalove_datalit::ast_gen::{AstGenConfig, gen_expr_full_seeded};
 
@@ -69,17 +69,17 @@ fn test_typecheck_equiv(db: &datalove_datafun_compiler::Database, expr_text: &st
     let datalit_result = datalove_datalit::tycheck::type_check(db, datalit_parsed, datalit_resolved);
     let datalit_serde = datalit_typecheck_to_serde(db, datalit_result);
 
-    // Parse and typecheck with datafun (wrap in "let _x = " prefix).
+    // Parse and typecheck with datafun (wrap in "let _x = " prefix) using production path.
     let datafun_text = format!("let _x = {}", expr_text);
     let datafun_source = bct::input::Source::new(db, datafun_text.clone());
     let datafun_script = datalove_datafun_compiler::parser::parse_integration_test(db, datafun_source);
     let datafun_spans = datalove_datafun_compiler::parser::datafun_spans(db, datafun_source);
-    let datafun_result = datalove_datafun_compiler::tycheck::type_check(db, datafun_spans, datafun_script);
+    let datafun_result = datalove_datafun_compiler::tycheck::type_check_single_script(db, datafun_source, datafun_spans, datafun_script);
 
     // Extract expression for type lookup.
     let datafun_expr = extract_let_value(db, datafun_script)?;
 
-    let datafun_serde = datafun_typecheck_to_serde(db, datafun_result, datafun_expr);
+    let datafun_serde = datafun_unit_typecheck_to_serde(db, datafun_result, datafun_expr);
 
     // Compare.
     if datalit_serde != datafun_serde {

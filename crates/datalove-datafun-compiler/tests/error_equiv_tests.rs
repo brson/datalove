@@ -127,7 +127,7 @@ fn get_datafun_errors<'db>(
     }
 
     let spans = datalove_datafun_compiler::parser::datafun_spans(db, src);
-    let result = datalove_datafun_compiler::tycheck::type_check(db, spans, script);
+    let result = datalove_datafun_compiler::tycheck::type_check_single_script(db, src, spans, script);
 
     let errors: Vec<String> = result
         .errors(db)

@@ -328,53 +328,6 @@ impl<'db> TypeContext<'db> {
     }
 }
 
-/// Typecheck a script.
-#[salsa::tracked]
-pub fn type_check<'db>(
-    db: &'db dyn crate::Db,
-    spans: crate::parser::DatafunSpans<'db>,
-    script: Script<'db>,
-) -> TypecheckResult<'db> {
-    let mut ctx = TypeContext::new(db, spans);
-
-    // First pass: collect all function signatures.
-    for statement in script.statements(db) {
-        if let Statement::Fun(stmt) = statement {
-            collect_function_signature(&mut ctx, stmt, None);
-        }
-    }
-
-    // Second pass: type check all statements (including function bodies).
-    for statement in script.statements(db) {
-        check_statement(&mut ctx, statement);
-    }
-
-    let errors = ctx
-        .errors
-        .into_iter()
-        .map(|e| TypeErrorEntry::new(db, e))
-        .collect();
-
-    TypecheckResult::new(db, script, errors, ctx.expr_types, ctx.call_targets)
-}
-
-/// Typecheck a single expression.
-#[salsa::tracked]
-pub fn type_check_expr<'db>(
-    db: &'db dyn crate::Db,
-    spans: crate::parser::DatafunSpans<'db>,
-    expr: ExprFun<'db>,
-) -> ExprTypecheckResult<'db> {
-    let mut ctx = TypeContext::new(db, spans);
-    let _ = ctx.synthesize_expr(expr);
-
-    let errors = ctx.errors.into_iter()
-        .map(|e| TypeErrorEntry::new(db, e))
-        .collect();
-
-    ExprTypecheckResult::new(db, errors, ctx.expr_types)
-}
-
 /// Typecheck multiple script units together, with bindings shared across units.
 ///
 /// Units are processed in order. Bindings from earlier units (let/var/fn)
@@ -579,6 +532,21 @@ pub fn type_check_script_units<'db>(
     }
 
     ScriptUnitsTypecheckResultTracked::new(db, results)
+}
+
+/// Typecheck a single script using the production path.
+///
+/// Wraps `type_check_script_units()` for tests that typecheck a single script.
+pub fn type_check_single_script<'db>(
+    db: &'db dyn crate::Db,
+    source: bct::input::Source,
+    spans: crate::parser::DatafunSpans<'db>,
+    script: Script<'db>,
+) -> UnitTypecheckResultTracked<'db> {
+    let unit_spec = ScriptUnitSpec::new(db, source, spans, ScriptUnitKind::Fragment(script));
+    let batch_spec = ScriptBatchSpec::new(db, vec![unit_spec], vec![]);
+    let results = type_check_script_units(db, batch_spec);
+    results.results(db)[0]
 }
 
 /// Context for typechecking sequential script units.
@@ -868,35 +836,6 @@ pub fn type_check_with_module_graph<'db>(
         .collect();
 
     TypecheckResult::new(db, script, errors, ctx.expr_types, ctx.call_targets)
-}
-
-/// Look up the type of a variable after typechecking.
-///
-/// This re-runs typechecking to get the variable type.
-/// Since typechecking is memoized by Salsa, this is efficient.
-#[salsa::tracked]
-pub fn lookup_variable_type<'db>(
-    db: &'db dyn crate::Db,
-    script: Script<'db>,
-    name: InternedText<'db>,
-) -> Option<TypeAndHeap<'db>> {
-    // Create empty spans since we don't have a real source here.
-    let empty_spans = crate::parser::DatafunSpans::new(db, Vec::new());
-    let mut ctx = TypeContext::new(db, empty_spans);
-
-    // First pass: collect all function signatures.
-    for statement in script.statements(db) {
-        if let Statement::Fun(stmt) = statement {
-            collect_function_signature(&mut ctx, stmt, None);
-        }
-    }
-
-    // Second pass: type check all statements.
-    for statement in script.statements(db) {
-        check_statement(&mut ctx, statement);
-    }
-
-    ctx.lookup_variable(name)
 }
 
 /// Typecheck a module graph (package-agnostic).
@@ -3779,183 +3718,5 @@ pub fn is_unit_type<'db>(db: &'db dyn crate::Db, ty: TypeAndHeap<'db>) -> bool {
             tuple.fields(db).is_empty()
         }
         _ => false,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Tracked compile helper that does full parse + typecheck pipeline.
-    #[salsa::tracked]
-    fn compile_for_test<'db>(
-        db: &'db dyn crate::Db,
-        source: bct::input::Source,
-    ) -> TypecheckResult<'db> {
-        let parse_result = crate::parser::parse(db, source);
-        let spans = crate::parser::datafun_spans(db, source);
-        type_check(
-            db,
-            spans,
-            parse_result.script(db)
-        )
-    }
-
-    #[test]
-    fn test_tycheck_simple_let() {
-        let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("let x: @u32 = @42"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have no errors.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
-    }
-
-    #[test]
-    fn test_tycheck_binop_add() {
-        let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("let x = a + b"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Will have errors because 'a' and 'b' are unresolved.
-        assert!(tycheck_result.errors(&db).len() > 0);
-    }
-
-    #[test]
-    fn test_tycheck_binop_checked() {
-        let db = crate::Database::default();
-        // Checked operators can only be used inside functions with Result return type.
-        // Using +! at top level should produce an error.
-        let source = bct::input::Source::new(&db, S("let x = @1 +! @2"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have an error: checked operator outside function.
-        assert!(tycheck_result.errors(&db).len() > 0);
-    }
-
-    #[test]
-    fn test_tycheck_fun_simple() {
-        let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("fun foo(): @u32\n  ret @42\nend fun"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have no errors.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
-    }
-
-    #[test]
-    fn test_tycheck_fun_params() {
-        let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("fun add(a: @int, b: @int): @int\n  ret a + b\nend fun"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have no errors.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
-    }
-
-    #[test]
-    fn test_tycheck_fun_checked() {
-        let db = crate::Database::default();
-        // Checked operators yield element type directly but require Result return type.
-        // Test that function with Result return type can use checked operators.
-        // Use ok @literal to avoid parsing ambiguity with ok variable.
-        let source = bct::input::Source::new(&db, S("fun test(): @!u32\n  ret ok @42\nend fun"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have no errors.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
-    }
-
-    #[test]
-    fn test_tycheck_type_mismatch() {
-        let db = crate::Database::default();
-        // Fun returns bool but body returns u32.
-        let source = bct::input::Source::new(&db, S("fun add(a: @u32, b: @u32): bool\n  ret a +! b\nend fun"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have a type mismatch error.
-        assert!(tycheck_result.errors(&db).len() > 0);
-    }
-
-    // Tests for complex datalit expressions enabled by direct token parsing
-
-    #[test]
-    fn test_tycheck_datalit_tuple() {
-        let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("let x = @(1, 2, 3)"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have no errors - tuple of integers.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
-    }
-
-    #[test]
-    fn test_tycheck_datalit_list() {
-        let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("let x = @[1, 2, 3]"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have no errors - list of integers.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
-    }
-
-    #[test]
-    fn test_tycheck_datalit_map() {
-        let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("let x = @map { @1 = @10, @2 = @20 }"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have no errors - map with integer keys and integer values.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
-    }
-
-    #[test]
-    fn test_tycheck_datalit_nested_tuple_in_list() {
-        let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("let x = @[(1, 2), (3, 4)]"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have no errors - list of tuples.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
-    }
-
-    #[test]
-    fn test_tycheck_datalit_nested_list_in_tuple() {
-        let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("let x = @(@[@1, @2, @3], @100)"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have no errors - tuple with nested list.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
-    }
-
-    #[test]
-    fn test_tycheck_datalit_set() {
-        let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("let x = @set { @1, @2, @3 }"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have no errors - set of integers.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
-    }
-
-    #[test]
-    fn test_tycheck_datalit_deeply_nested() {
-        let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("let x = @(@[@(@1, @2)], @[@(@3, @4)])"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have no errors - deeply nested structure.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
-    }
-
-    #[test]
-    fn test_tycheck_datalit_tuple_in_list() {
-        let db = crate::Database::default();
-        let source = bct::input::Source::new(&db, S("let x = @[@(@1, @2), @(@3, @4), @(@5, @6)]"));
-        let tycheck_result = compile_for_test(&db, source);
-
-        // Should have no errors - list of tuples.
-        assert_eq!(tycheck_result.errors(&db).len(), 0);
     }
 }

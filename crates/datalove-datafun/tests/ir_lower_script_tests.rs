@@ -8,7 +8,7 @@ use std::path::Path;
 use std::collections::HashMap;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
-use datalove_datafun_compiler::lower::{self, ScriptLowerContext, ScriptUnitKind};
+use datalove_datafun_compiler::lower::{self, ScriptLowerContext};
 use datalove_datafun_compiler::drop_analysis;
 use bct::input::Source;
 use datalove_datafun_compiler::ast::Statement;
@@ -37,10 +37,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let script_ast = parse_result.script(&db);
                 let stmts: Vec<Statement> = script_ast.statements(&db).to_vec();
 
-                // Typecheck to get expression types.
+                // Typecheck to get expression types using production path.
                 let spans = datalove_datafun_compiler::parser::datafun_spans(&db, source_obj);
-                let tycheck_result = datalove_datafun_compiler::tycheck::type_check(&db, spans, script_ast);
+                let tycheck_result = datalove_datafun_compiler::tycheck::type_check_single_script(&db, source_obj, spans, script_ast);
                 let expr_types = tycheck_result.expr_types(&db);
+                let call_targets = tycheck_result.call_targets(&db);
 
                 output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));
 
@@ -62,7 +63,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
                 // Script tests don't use modules, so use empty func_id_map.
                 let func_id_map = HashMap::new();
-                match lower::lower_script_unit(&db, tycheck_result, tycheck_result.call_targets(&db), &func_id_map, script_ctx.clone(), ScriptUnitKind::Fragment(stmts), func_analyses) {
+                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses) {
                     Ok(ir_unit) => {
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

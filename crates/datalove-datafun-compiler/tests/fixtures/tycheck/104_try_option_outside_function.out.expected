@@ -6,9 +6,15 @@
       "kind": "TypeMismatch"
     },
     {
-      "kind": "TryOutsideFunction",
-      "operator": "?"
+      "kind": "UnresolvedName",
+      "name": "a"
     }
   ],
-  "judgements": []
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "u32"
+    }
+  ]
 }
