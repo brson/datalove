@@ -4,7 +4,6 @@ default:
 test:
     cargo test --all --all-targets
 
-# Run slow tests (proptests, backtrace tests, etc).
 test-slow:
     cargo test -p datalove-rt --features slow_tests
     cargo test -p datalove-rt-tests --features slow_tests
@@ -25,83 +24,31 @@ test-time-all:
         RUST_TEST_TIME_DOCTEST=1000,10000 \
         cargo +nightly test --all -- -Zunstable-options --report-time
 
-# Sanitizer Testing
-# =================
-
-# Run all stable sanitizers (address + leak).
-test-sanitizers-stable:
-    just test-san-address
-    just test-san-leak
-
-# Run all nightly sanitizers (memory + thread).
-test-sanitizers-nightly:
-    just test-san-memory
-    just test-san-thread
-
-# Run all supported sanitizers.
 test-sanitizers-all:
     just test-sanitizers-stable
     just test-sanitizers-nightly
 
-# AddressSanitizer - detects memory errors (use-after-free, buffer overflows, etc).
-# Works on: stable, Linux/macOS/Windows
 test-san-address *ARGS='':
     env ASAN_SYMBOLIZER_PATH="$(which llvm-symbolizer-18)" ASAN_OPTIONS="symbolize=1" RUSTFLAGS="-Z sanitizer=address" cargo +nightly test --target x86_64-unknown-linux-gnu -j1 {{ARGS}}
 
-# LeakSanitizer - detects memory leaks.
-# Works on: stable, Linux/macOS
 test-san-leak *ARGS='':
     env RUSTFLAGS="-Z sanitizer=leak" \
         RUSTDOCFLAGS="-Z sanitizer=leak" \
         cargo +nightly test --all --target x86_64-unknown-linux-gnu {{ARGS}}
 
-# MemorySanitizer - detects use of uninitialized memory.
-# Works on: nightly only, Linux only, requires building std from source
 test-san-memory *ARGS='':
     env RUSTFLAGS="-Z sanitizer=memory" \
         RUSTDOCFLAGS="-Z sanitizer=memory" \
         cargo +nightly test --all -Zbuild-std --target x86_64-unknown-linux-gnu {{ARGS}}
 
-# ThreadSanitizer - detects data races.
-# Works on: nightly only, Linux/macOS, requires building std from source
-test-san-thread *ARGS='':
-    env RUSTFLAGS="-Z sanitizer=thread" \
-        RUSTDOCFLAGS="-Z sanitizer=thread" \
-        cargo +nightly test --all -Zbuild-std --target x86_64-unknown-linux-gnu {{ARGS}}
-
-# HWAddressSanitizer - hardware-assisted address sanitizer.
-# Works on: nightly only, ARM64 only
-test-san-hwaddress *ARGS='':
-    env RUSTFLAGS="-Z sanitizer=hwaddress" \
-        RUSTDOCFLAGS="-Z sanitizer=hwaddress" \
-        cargo +nightly test --all -Zbuild-std --target aarch64-unknown-linux-gnu {{ARGS}}
-
-# ControlFlowIntegrity - control flow integrity checks.
-# Works on: nightly only, requires LTO
-test-san-cfi *ARGS='':
-    env RUSTFLAGS="-Z sanitizer=cfi -Clto" \
-        RUSTDOCFLAGS="-Z sanitizer=cfi" \
-        cargo +nightly test --all -Zbuild-std --target x86_64-unknown-linux-gnu --release {{ARGS}}
-
-# Miri Testing
-# ============
-# Miri is an interpreter for Rust's MIR that detects undefined behavior.
-# Install with: rustup +nightly component add miri
-
-# Run Miri on the rt crate unit tests.
-# Skips proptests (too slow under Miri's interpreter).
-# Takes ~10 minutes.
 test-miri-rt *ARGS='':
     env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt --lib -- --skip proptest {{ARGS}}
 
-# Run Miri on a specific test (useful for debugging).
 test-miri-rt-one TEST:
     env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt --lib {{TEST}}
 
-# Run Miri on rt-tests integration tests.
-# Tests 533 tests across 13 test files. Takes ~45 minutes.
 test-miri-rt-tests *ARGS='':
     env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test int_math_tests {{ARGS}}
@@ -130,42 +77,27 @@ test-miri-rt-tests *ARGS='':
     env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test btreemap_tests {{ARGS}}
 
-# Run Miri on a specific rt-tests test file (useful for debugging).
 test-miri-rt-tests-one TEST_FILE *ARGS='':
     env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test {{TEST_FILE}} {{ARGS}}
 
-# Run Miri on the interp3 test suite (132 tests).
-test-miri-interp3 *ARGS='':
+test-miri-interp *ARGS='':
     env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-datafun --test interp3_tests {{ARGS}}
+        cargo +nightly miri test -p datalove-datafun --test interp_tests {{ARGS}}
 
-# Run Miri on the module_interp3 test suite (49 tests).
-test-miri-module-interp3 *ARGS='':
+test-miri-module-interp *ARGS='':
     env MIRIFLAGS="-Zmiri-disable-isolation" \
-        cargo +nightly miri test -p datalove-datafun --test module_interp3_tests {{ARGS}}
+        cargo +nightly miri test -p datalove-datafun --test module_interp_tests {{ARGS}}
 
-# Run Miri on all interp3 tests (both suites).
-test-miri-interp3-all *ARGS='':
+test-miri-interp-all *ARGS='':
     just test-miri-interp3 {{ARGS}}
     just test-miri-module-interp3 {{ARGS}}
 
 check:
     cargo check --all
 
-# Check that the main datalove crate compiles for wasm.
 check-wasm:
     cargo check -p datalove --target wasm32-unknown-unknown
-
-build-wasm-repl:
-    cd crates/datalove-repl-worker && env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' trunk build --release
-    ./scripts/prepare-worker.sh
-    cd crates/datalove-repl-egui && env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' trunk build --release
-
-serve-wasm-repl:
-    cd crates/datalove-repl-worker && env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' trunk build --release
-    ./scripts/prepare-worker.sh
-    cd crates/datalove-repl-egui && env RUSTFLAGS='--cfg getrandom_backend="wasm_js"' trunk serve --release
 
 loc:
     tokei
