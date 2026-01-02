@@ -69,6 +69,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Lower each function to IR.
     let mut output = String::new();
     let expr_types = tycheck_result.expr_types(&db);
+    let call_targets = tycheck_result.call_targets(&db);
+
+    // Empty func_id_map - intra-module calls use func_scope fallback since
+    // type_check stores None for module_id on local function calls.
+    let func_id_map: HashMap<(ModuleId, String), (ir::IrModuleId, ir::FuncId)> = HashMap::new();
 
     for stmt in script_ast.statements(&db) {
         if let datalove_datafun_compiler::ast::Statement::Fun(func) = stmt {
@@ -83,10 +88,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 continue;
             }
 
-            // Use empty call_targets and func_id_map since these are standalone function tests.
-            let empty_call_targets: Vec<Option<datalove_datafun_compiler::tycheck::ResolvedCallTarget>> = Vec::new();
-            let empty_func_id_map: HashMap<(ModuleId, String), (ir::IrModuleId, ir::FuncId)> = HashMap::new();
-            match ir::lower::lower_function_for_module(&db, expr_types, &empty_call_targets, &empty_func_id_map, *func, analysis) {
+            match ir::lower::lower_function_for_module(&db, expr_types, call_targets, &func_id_map, *func, analysis) {
                 Ok(ir_func) => {
                     output.push_str(&format!("{}", ir_func));
                     output.push('\n');

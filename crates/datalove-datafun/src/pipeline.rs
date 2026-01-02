@@ -380,7 +380,7 @@ impl<'db> CompiledModules<'db> {
     /// compiling and executing script units.
     pub fn script_context(self, db: &'db dyn salsa::Database) -> ScriptCompilationContext<'db> {
         // Build ScriptLowerContext and module specs from pre-parsed scripts.
-        let mut script_ctx = ir::lower::ScriptLowerContext::new();
+        let script_ctx = ir::lower::ScriptLowerContext::new();
         let mut module_specs = Vec::new();
 
         for (salsa_module_id, script) in self.parsed_graph.scripts(db) {
