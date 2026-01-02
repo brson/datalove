@@ -520,19 +520,6 @@ pub fn type_check<'db>(
     TypecheckResult::new(db, script, errors, ctx.expr_types, ctx.call_targets)
 }
 
-/// Typecheck a script for diagnostic emission.
-///
-/// This is a tracked wrapper that parses and typechecks a source,
-/// enabling diagnostic accumulation via Salsa.
-#[salsa::tracked]
-pub fn type_check_for_diagnostics<'db>(
-    db: &'db dyn crate::Db,
-    source: bct::input::Source,
-) -> TypecheckResult<'db> {
-    let script = crate::parser::parse_for_diagnostics(db, source);
-    type_check(db, source, script)
-}
-
 /// Result of typechecking a single expression.
 #[salsa::tracked]
 pub struct ExprTypecheckResult<'db> {
@@ -620,7 +607,7 @@ pub fn type_check_script_units<'db>(
 
     let mut accumulated_vars: HashMap<InternedText<'db>, TypeAndHeap<'db>> = HashMap::new();
     let mut accumulated_fns: HashMap<InternedText<'db>, TypeFunction<'db>> = HashMap::new();
-    let mut accumulated_fn_asts: HashMap<InternedText<'db>, StmtFun<'db>> = HashMap::new();
+    let mut accumulated_fn_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<crate::module_graph::ModuleId>)> = HashMap::new();
     let mut results = Vec::new();
 
     for unit in &units {
@@ -650,8 +637,8 @@ pub fn type_check_script_units<'db>(
         for (name, func_ty) in &accumulated_fns {
             ctx.add_function(*name, *func_ty);
         }
-        for (name, func_ast) in &accumulated_fn_asts {
-            ctx.function_asts.insert(*name, (*func_ast, None));
+        for (name, (func_ast, module_id)) in &accumulated_fn_asts {
+            ctx.function_asts.insert(*name, (*func_ast, *module_id));
         }
 
         // Typecheck this unit based on kind.
@@ -701,7 +688,7 @@ pub fn type_check_script_units<'db>(
                                 ctx.function_asts.insert(item_name, (*func_ast, source_module_id));
                                 // Also add to accumulated so subsequent units can use it.
                                 accumulated_fns.insert(item_name, *func_ty);
-                                accumulated_fn_asts.insert(item_name, *func_ast);
+                                accumulated_fn_asts.insert(item_name, (*func_ast, source_module_id));
                             } else {
                                 ctx.add_error(TypeError::UnresolvedName(
                                     format!("{}.{}", module_path, item_name.as_str(db))
@@ -739,7 +726,7 @@ pub fn type_check_script_units<'db>(
                             let name = fun_stmt.name(db);
                             if let Some(func_ty) = ctx.functions.get(&name) {
                                 accumulated_fns.insert(name, *func_ty);
-                                accumulated_fn_asts.insert(name, *fun_stmt);
+                                accumulated_fn_asts.insert(name, (*fun_stmt, None));
                             }
                         }
                         _ => {}

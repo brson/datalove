@@ -33,10 +33,10 @@ Ir3Analysis(
                 status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Error",
-                message: "function not found: bad_add",
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = call m0.f0(v0)\n    unit_end v1\n",
             ),
-            output: "",
+            output: "Error: ModuleFunctionNotFound { module: IrModuleId(0), func: FuncId(0) }",
         ),
     ],
 )
