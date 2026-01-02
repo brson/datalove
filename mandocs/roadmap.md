@@ -2,6 +2,7 @@
 
 The MVP is a working bare datafun language with:
 
+- documentation
 - modules
 - closures
 - generic functions for built-in generic types
