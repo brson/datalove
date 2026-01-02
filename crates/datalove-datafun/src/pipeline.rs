@@ -435,6 +435,7 @@ impl<'db> ScriptCompilationContext<'db> {
             return ScriptUnitResult {
                 typecheck: TypecheckResult::ParseError { errors: parse_errors },
                 lowering: LoweringResult::Skipped,
+                ty: None,
                 output: String::new(),
             };
         }
@@ -471,6 +472,7 @@ impl<'db> ScriptCompilationContext<'db> {
             return ScriptUnitResult {
                 typecheck: TypecheckResult::ParseError { errors: parse_errors },
                 lowering: LoweringResult::Skipped,
+                ty: None,
                 output: String::new(),
             };
         }
