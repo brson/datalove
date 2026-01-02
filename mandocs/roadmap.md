@@ -13,16 +13,13 @@ With core->runtime calls.
 
 - ir and interp3
 - human docs
-- improve runtime implementation unsafety
-- miri tests
-- run miri on interpreter
-- coverage
+- refactor datafun-compiler into diamond deps
 
 
 # on deck
 
-- split compiler into peer/diamond deps
-- refactor datafun-compiler into diamond deps
+- interp coverage
+- run miri on interpreter
 - move semantics
 - rename ExprFunKind::Err to Error
 - move/clone semantics - moves-etc.md
@@ -30,11 +27,11 @@ With core->runtime calls.
 - destructuring
 - runtime calls
 - boolean ops - and or xor implies not
-- anonymous enums with payloads
 - named types
-- clean up demo files
+- clean up demo files in style of learn x in y minutes
 - alternate backend
 - generics
+- datafun ast roundtrip
 
 
 ----------
@@ -43,7 +40,7 @@ With core->runtime calls.
 
 # future
 
-- datafun ast roundtrip
+- improve runtime implementation unsafety
 - type declarations
 - heap genericity and clone method
 - aot
