@@ -60,8 +60,8 @@ fn type_hint_to_string(db: &dyn datalove_datafun_compiler::Db, type_hint: datalo
     format!("{}{}", heap_prefix, base_type)
 }
 
-fn error_to_json(error: &datalove_datafun_compiler::tycheck::TypeError) -> rmx::serde_json::Value {
-    use datalove_datafun_compiler::tycheck::TypeError;
+fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json::Value {
+    use datalove_datafun_tycheck::TypeError;
 
     match error {
         TypeError::TypeMismatch { expected, actual } => {
@@ -192,7 +192,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     let script = datalove_datafun_compiler::parser::parse_for_diagnostics(&db, source);
     let spans = datalove_datafun_compiler::parser::datafun_spans(&db, source);
-    let tycheck_result = datalove_datafun_compiler::tycheck::type_check_single_script(&db, source, spans, script);
+    let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source, spans, script);
 
     // Collect type judgements for variables and functions.
     let mut judgements = Vec::new();
@@ -209,7 +209,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     judgements.push(json!({
                         "kind": "variable",
                         "name": name.as_str(&db),
-                        "type": datalove_datafun_compiler::tycheck::type_to_string(&db, &ty_val)
+                        "type": datalove_datafun_tycheck::type_to_string(&db, &ty_val)
                     }));
                 }
             }

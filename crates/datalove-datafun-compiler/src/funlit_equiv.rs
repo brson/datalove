@@ -398,7 +398,7 @@ pub fn datalit_typecheck_to_serde<'db>(
 /// Convert UnitTypecheckResultTracked to serde format (production path).
 pub fn datafun_unit_typecheck_to_serde<'db>(
     db: &'db dyn crate::Db,
-    result: crate::tycheck::UnitTypecheckResultTracked<'db>,
+    result: datalove_datafun_tycheck::UnitTypecheckResultTracked<'db>,
     expr: ast::ExprFun<'db>,
 ) -> TypecheckResultSerde {
     use salsa::plumbing::AsId;
@@ -429,7 +429,7 @@ fn datalit_type_to_serde<'db>(
 
 fn datafun_type_to_serde<'db>(
     db: &'db dyn crate::Db,
-    ty: &crate::tycheck::TypeAndHeap<'db>,
+    ty: &datalove_datafun_tycheck::TypeAndHeap<'db>,
 ) -> TypeAndHeapSerde {
     TypeAndHeapSerde {
         heap: heap_to_serde(ty.heap(db)),
@@ -503,9 +503,9 @@ fn datalit_type_inner_to_serde<'db>(
 
 fn datafun_type_inner_to_serde<'db>(
     db: &'db dyn crate::Db,
-    ty: &crate::tycheck::Type<'db>,
+    ty: &datalove_datafun_tycheck::Type<'db>,
 ) -> TypeSerde {
-    use crate::tycheck::Type;
+    use datalove_datafun_tycheck::Type;
     match ty {
         Type::Datalit(inner) => datalit_type_inner_to_serde(db, inner),
         Type::Function(_) => datafun_type_inner_to_serde_panic("Function"),
@@ -533,8 +533,8 @@ fn datalit_error_to_serde(err: &datalit::tycheck::TypeError) -> TypeErrorSerde {
     }
 }
 
-fn datafun_error_to_serde(err: &crate::tycheck::TypeError) -> TypeErrorSerde {
-    use crate::tycheck::TypeError;
+fn datafun_error_to_serde(err: &datalove_datafun_tycheck::TypeError) -> TypeErrorSerde {
+    use datalove_datafun_tycheck::TypeError;
     match err {
         TypeError::TypeMismatch { expected, actual } => {
             TypeErrorSerde::TypeMismatch {

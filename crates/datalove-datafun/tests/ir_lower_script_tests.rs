@@ -39,7 +39,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
                 // Typecheck to get expression types using production path.
                 let spans = datalove_datafun_compiler::parser::datafun_spans(&db, source_obj);
-                let tycheck_result = datalove_datafun_compiler::tycheck::type_check_single_script(&db, source_obj, spans, script_ast);
+                let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj, spans, script_ast);
                 let expr_types = tycheck_result.expr_types(&db);
                 let call_targets = tycheck_result.call_targets(&db);
 

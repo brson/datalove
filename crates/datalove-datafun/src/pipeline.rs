@@ -13,7 +13,7 @@ use datalove_datafun_pkg::package_load::{Package, PackageModule};
 use datalove_datafun_compiler::ir::{IrModuleId, FuncId, IrType};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_compiler::drop_analysis;
-use datalove_datafun_compiler::tycheck::{
+use datalove_datafun_tycheck::{
     typecheck_module_graph, type_check_script_units,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
     UnitTypecheckResultTracked,

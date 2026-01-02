@@ -460,7 +460,7 @@ impl TypecheckStdCommand {
         // Convert to package-agnostic ModuleGraph, parse, and typecheck.
         let module_graph = datafun::to_module_graph(&db, package_world, pkg_graph);
         let parsed_graph = datafun::module_graph::parse_module_graph(&db, module_graph);
-        let typecheck_result = datafun::tycheck::typecheck_module_graph(&db, parsed_graph);
+        let typecheck_result = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed_graph);
 
         // Report typecheck errors.
         let module_errors = typecheck_result.module_errors(&db);

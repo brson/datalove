@@ -8,7 +8,7 @@ use salsa::plumbing::AsId;
 use crate::ast::{Statement, ExprFun, ExprFunctionCall};
 use crate::Db;
 use crate::module_graph::ModuleId;
-use crate::tycheck::ResolvedCallTarget;
+use datalove_datafun_tycheck::ResolvedCallTarget;
 use crate::ir::{
     IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, BlockId, FuncId,
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId,
@@ -95,7 +95,7 @@ pub enum ScriptUnitKind<'db> {
 pub struct LowerCtx<'db> {
     pub(super) db: &'db dyn Db,
     /// Expression types from typechecker.
-    pub(super) expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    pub(super) expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     /// Resolved call targets from typechecker, indexed by ExprFunctionCall salsa ID.
     pub(super) call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
@@ -157,7 +157,7 @@ static EMPTY_FUNC_ID_MAP: std::sync::LazyLock<HashMap<(ModuleId, String), (IrMod
 impl<'db> LowerCtx<'db> {
     pub fn new(
         db: &'db dyn Db,
-        expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+        expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
         call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     ) -> Self {
         Self {
@@ -194,7 +194,7 @@ impl<'db> LowerCtx<'db> {
     /// Create a context for lowering module functions with call resolution support.
     pub fn new_for_module(
         db: &'db dyn Db,
-        expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+        expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
         call_targets: &'db [Option<ResolvedCallTarget<'db>>],
         func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     ) -> Self {
@@ -245,7 +245,7 @@ impl<'db> LowerCtx<'db> {
     /// Create a context for lowering a script unit.
     pub fn new_for_script(
         db: &'db dyn Db,
-        expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+        expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
         call_targets: &'db [Option<ResolvedCallTarget<'db>>],
         func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
         script_ctx: ScriptLowerContext,

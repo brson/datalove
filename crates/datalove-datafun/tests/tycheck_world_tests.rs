@@ -21,8 +21,8 @@ fn diagnostic_to_json(db: &dyn datalove_datafun::Db, diag: &datalove_diagnostic:
     })
 }
 
-fn error_to_json(error: &datalove_datafun::tycheck::TypeError) -> rmx::serde_json::Value {
-    use datalove_datafun::tycheck::TypeError;
+fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json::Value {
+    use datalove_datafun_tycheck::TypeError;
 
     match error {
         TypeError::TypeMismatch { expected, actual } => {
@@ -146,8 +146,8 @@ fn error_to_json(error: &datalove_datafun::tycheck::TypeError) -> rmx::serde_jso
     }
 }
 
-fn typeandheap_to_string(db: &dyn datalove_datafun::Db, tah: datalove_datafun::tycheck::TypeAndHeap) -> String {
-    use datalove_datafun::tycheck::Type;
+fn typeandheap_to_string(db: &dyn datalove_datafun::Db, tah: datalove_datafun_tycheck::TypeAndHeap) -> String {
+    use datalove_datafun_tycheck::Type;
     use datalove_datalit::ast::Heap;
 
     let heap_prefix = match tah.heap(db) {
@@ -201,10 +201,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Convert to package-agnostic ModuleGraph, parse, and typecheck.
     let module_graph = datalove_datafun::to_module_graph(&db, package_world, pkg_graph);
     let parsed_graph = datalove_datafun::module_graph::parse_module_graph(&db, module_graph);
-    let typecheck_result = datalove_datafun::tycheck::typecheck_module_graph(&db, parsed_graph);
+    let typecheck_result = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed_graph);
 
     // Collect accumulated type diagnostics with spans.
-    let type_diagnostics = datalove_datafun::tycheck::typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, parsed_graph);
+    let type_diagnostics = datalove_datafun_tycheck::typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, parsed_graph);
     let diagnostics: Vec<_> = type_diagnostics
         .iter()
         .map(|d| diagnostic_to_json(&db, &d.to_diagnostic(&db)))

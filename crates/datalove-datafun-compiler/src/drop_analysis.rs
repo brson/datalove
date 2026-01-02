@@ -113,7 +113,7 @@ pub struct FunctionDropAnalysis {
 /// Context for drop analysis.
 struct AnalysisCtx<'db> {
     db: &'db dyn Db,
-    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     /// Next binding ID to allocate.
     next_binding: u32,
     /// All bindings (indexed by BindingId).
@@ -152,7 +152,7 @@ enum ScopeKind {
 impl<'db> AnalysisCtx<'db> {
     fn new(
         db: &'db dyn Db,
-        expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+        expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     ) -> Self {
         Self {
             db,
@@ -539,7 +539,7 @@ impl<'db> AnalysisCtx<'db> {
 pub fn analyze_function<'db>(
     db: &'db dyn Db,
     func: StmtFun<'db>,
-    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
 ) -> FunctionDropAnalysis {
     let mut ctx = AnalysisCtx::new(db, expr_types);
 
@@ -573,7 +573,7 @@ pub fn analyze_function<'db>(
 /// Call this before lowering to ensure all functions are valid.
 pub fn analyze_script_functions<'db>(
     db: &'db dyn Db,
-    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     stmts: &[Statement<'db>],
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError>)>> {
     let mut analyses = HashMap::new();
@@ -616,7 +616,7 @@ pub struct ScriptDropAnalysis {
 /// - Nested scopes (if, loop) get normal drop analysis
 pub fn analyze_script_statements<'db>(
     db: &'db dyn Db,
-    expr_types: &'db [Option<crate::tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     stmts: &[Statement<'db>],
 ) -> ScriptDropAnalysis {
     let mut ctx = AnalysisCtx::new(db, expr_types);

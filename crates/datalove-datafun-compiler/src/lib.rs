@@ -7,7 +7,6 @@ pub use datalove_datafun_ast::ast_serde;
 pub use datalove_datafun_ast::script;
 pub use datalove_datafun_parser as parser;
 pub mod resolution;
-pub mod tycheck;
 pub mod funlit_equiv;
 
 // Re-export IR crate for backward compatibility.

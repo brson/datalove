@@ -11,6 +11,7 @@ bct.workspace = true
 datalove.path = "../datalove"
 datalove-datalit.path = "../datalove-datalit"
 datalove-datafun.path = "../datalove-datafun"
+datalove-datafun-tycheck.path = "../datalove-datafun-tycheck"
 datalove-datafun-interp.path = "../datalove-datafun-interp"
 datalove-diagnostic.path = "../datalove-diagnostic"
 datalove-rt.path = "../datalove-rt"
