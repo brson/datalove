@@ -21,7 +21,7 @@ use datalove_datafun_compiler::module_graph::{
     ModuleGraph, ModuleGraphTypecheckResult, ModuleId,
     ParsedModuleGraph, parse_module_graph,
 };
-use ir::interp::{ScriptEnvironment, UnitCompletion};
+use datalove_datafun_interp::{ScriptEnvironment, UnitCompletion};
 use ir::drop_analysis::FunctionDropAnalysis;
 
 /// Typecheck result summary.
@@ -370,7 +370,7 @@ pub struct ScriptCompilationContext<'db> {
     /// Module specs for typechecking.
     module_specs: Vec<ModuleSpec<'db>>,
     /// IR interpreter (owns the tydesc_table and runtime).
-    interp: ir::interp::IrInterpreter,
+    interp: datalove_datafun_interp::IrInterpreter,
     /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
     /// Used to resolve typechecker's ResolvedCallTarget to IR function refs.
     func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
@@ -410,7 +410,7 @@ impl<'db> CompiledModules<'db> {
             env: self.env,
             accumulated_unit_specs: Vec::new(),
             module_specs,
-            interp: ir::interp::IrInterpreter::new(),
+            interp: datalove_datafun_interp::IrInterpreter::new(),
             func_id_map: self.func_id_map,
         }
     }
@@ -564,7 +564,7 @@ impl<'db> ScriptCompilationContext<'db> {
         let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
         let ret_size = unsafe { (*ret_tydesc).size };
         let mut ret_buffer = vec![0u8; ret_size as usize];
-        let ret_dest = ir::interp::Destination {
+        let ret_dest = datalove_datafun_interp::Destination {
             ptr: ret_buffer.as_mut_ptr(),
             tydesc: ret_tydesc,
         };
@@ -573,7 +573,7 @@ impl<'db> ScriptCompilationContext<'db> {
         let output = match self.interp.execute_script_unit_in_env(&ir_unit, &mut self.env, ret_dest, None) {
             Ok(UnitCompletion::Normal) => "(fragment executed)".to_string(),
             Ok(UnitCompletion::EarlyReturn) => {
-                let value = ir::interp::Value {
+                let value = datalove_datafun_interp::Value {
                     ptr: ret_buffer.as_mut_ptr(),
                     tydesc: ret_tydesc,
                 };
@@ -650,7 +650,7 @@ impl<'db> ScriptCompilationContext<'db> {
             let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
             let ret_size = unsafe { (*ret_tydesc).size };
             let mut ret_buffer = vec![0u8; ret_size as usize];
-            let ret_dest = ir::interp::Destination {
+            let ret_dest = datalove_datafun_interp::Destination {
                 ptr: ret_buffer.as_mut_ptr(),
                 tydesc: ret_tydesc,
             };
@@ -660,7 +660,7 @@ impl<'db> ScriptCompilationContext<'db> {
             let expr_tydesc = self.interp.tydesc_table_mut().get_or_create(expr_type);
             let expr_size = unsafe { (*expr_tydesc).size };
             let mut expr_buffer = vec![0u8; expr_size as usize];
-            let expr_dest = ir::interp::Destination {
+            let expr_dest = datalove_datafun_interp::Destination {
                 ptr: expr_buffer.as_mut_ptr(),
                 tydesc: expr_tydesc,
             };
@@ -668,7 +668,7 @@ impl<'db> ScriptCompilationContext<'db> {
             // Execute with shared environment.
             match self.interp.execute_script_unit_in_env(&ir_unit, &mut self.env, ret_dest, Some(expr_dest)) {
                 Ok(UnitCompletion::Normal) => {
-                    let value = ir::interp::Value {
+                    let value = datalove_datafun_interp::Value {
                         ptr: expr_buffer.as_mut_ptr(),
                         tydesc: expr_tydesc,
                     };
@@ -678,7 +678,7 @@ impl<'db> ScriptCompilationContext<'db> {
                     output_str
                 }
                 Ok(UnitCompletion::EarlyReturn) => {
-                    let value = ir::interp::Value {
+                    let value = datalove_datafun_interp::Value {
                         ptr: ret_buffer.as_mut_ptr(),
                         tydesc: ret_tydesc,
                     };
@@ -715,7 +715,7 @@ impl<'db> ScriptCompilationContext<'db> {
     ///
     /// Returns Some((type, value)) if the binding exists, None otherwise.
     pub fn get_binding(&mut self, name: &str) -> Option<(String, String)> {
-        use ir::interp::InterpError;
+        use datalove_datafun_interp::InterpError;
 
         // Check let bindings (values).
         if let Some((unit, value_id)) = self.script_ctx.values.get(name) {
@@ -755,7 +755,7 @@ impl<'db> ScriptCompilationContext<'db> {
     /// - type is the IrType formatted as a string
     /// - value is the pretty-printed value (or "<moved>" if consumed)
     pub fn get_environment(&mut self) -> Vec<(String, String, String, String)> {
-        use ir::interp::InterpError;
+        use datalove_datafun_interp::InterpError;
         let mut result = Vec::new();
 
         // Let bindings (values).

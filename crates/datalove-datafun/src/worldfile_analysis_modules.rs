@@ -12,7 +12,6 @@ use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
-use datalove_datafun_compiler::ir;
 
 use crate::pipeline::{
     ModuleCompilationPipeline, TypecheckResult, LoweringResult,
@@ -148,8 +147,8 @@ pub fn analyze_modules_worldfile(
         .join("\n");
 
     // Create IR interpreter and execute main.
-    let mut interp = ir::interp::IrInterpreter::new();
-    let mut tydesc_table = ir::interp::IrTyDescTable::new();
+    let mut interp = datalove_datafun_interp::IrInterpreter::new();
+    let mut tydesc_table = datalove_datafun_interp::IrTyDescTable::new();
 
     // Infer return type from the IR function.
     let ret_ir_type = main_func.infer_return_type();
@@ -158,7 +157,7 @@ pub fn analyze_modules_worldfile(
 
     // Allocate return buffer.
     let mut ret_buffer = vec![0u8; ret_size as usize];
-    let ret_dest = ir::interp::Destination {
+    let ret_dest = datalove_datafun_interp::Destination {
         ptr: ret_buffer.as_mut_ptr(),
         tydesc: ret_tydesc,
     };
@@ -167,7 +166,7 @@ pub fn analyze_modules_worldfile(
     let output = match interp.call_with_env(main_func, Vec::new(), ret_dest, &compiled.env) {
         Ok(()) => {
             // Pretty-print the return value.
-            let value = ir::interp::Value {
+            let value = datalove_datafun_interp::Value {
                 ptr: ret_buffer.as_mut_ptr(),
                 tydesc: ret_tydesc,
             };

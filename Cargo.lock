@@ -886,6 +886,7 @@ dependencies = [
  "comrak",
  "datalove",
  "datalove-datafun",
+ "datalove-datafun-interp",
  "datalove-datalit",
  "datalove-diagnostic",
  "datalove-exampletest",
@@ -904,6 +905,7 @@ version = "0.1.0"
 dependencies = [
  "bcts",
  "datalove-datafun-compiler",
+ "datalove-datafun-interp",
  "datalove-datafun-pkg",
  "datalove-datalit",
  "datalove-diagnostic",

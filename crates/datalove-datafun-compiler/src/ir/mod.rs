@@ -9,7 +9,6 @@ pub use datalove_datafun_ir::*;
 
 // Local submodules that depend on the compiler.
 pub mod lower;
-pub mod interp;
 pub mod drop_analysis;
 
 /// Extension trait for IrType to add conversion from tycheck types.

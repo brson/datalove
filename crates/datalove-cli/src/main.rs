@@ -309,7 +309,6 @@ impl ScriptCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use datalove_datafun as datafun;
         use datafun::pipeline::ModuleCompilationPipeline;
-        use datafun::ir;
 
         let db = datafun::Database::default();
 
@@ -361,7 +360,7 @@ impl ScriptCommand {
             // It's a let binding - read value from frame.
             let value = ctx.env.frames.external_value(unit_idx, value_id)
                 .map_err(|e| anyhow!("Failed to read output value: {:?}", e))?;
-            let mut interp = ir::interp::IrInterpreter::new();
+            let mut interp = datalove_datafun_interp::IrInterpreter::new();
             let output_str = interp.pretty_print_value(&value)
                 .map_err(|e| anyhow!("Failed to pretty print output: {:?}", e))?;
             println!("{}", output_str);
@@ -369,7 +368,7 @@ impl ScriptCommand {
             // It's a var binding - read slot from frame.
             let value = ctx.env.frames.external_slot(unit_idx, slot_id)
                 .map_err(|e| anyhow!("Failed to read output slot: {:?}", e))?;
-            let mut interp = ir::interp::IrInterpreter::new();
+            let mut interp = datalove_datafun_interp::IrInterpreter::new();
             let output_str = interp.pretty_print_value(&value)
                 .map_err(|e| anyhow!("Failed to pretty print output: {:?}", e))?;
             println!("{}", output_str);
