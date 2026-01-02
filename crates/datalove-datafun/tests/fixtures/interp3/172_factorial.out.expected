@@ -1,0 +1,28 @@
+Ir3Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn factorial(v0):\nblock0:\n    v1 = const 2u32\n    v2 = lt v0, v1\n    branch v2, block1, block2\nblock1:\n    v3 = const 1u32\n    v4 = ok v3\n    return v4\nblock4:\n    goto block3\nblock2:\n    v5 = const 1u32\n    v6, v7 = sub.checked v0, v5\n    branch v7, block5, block6\nblock5:\n    v8 = const \"arithmetic overflow\"\n    v9 = error_from v8\n    v10 = err v9\n    try_return v10\nblock6:\n    v11 = call f0(v6)\n    v12, v13, v14 = unwrap_result v11\n    branch v14, block8, block7\nblock7:\n    v15 = err v13\n    try_return v15\nblock8:\n    v16, v17 = mul.checked v0, v12\n    branch v17, block9, block10\nblock9:\n    v18 = const \"arithmetic overflow\"\n    v19 = error_from v18\n    v20 = err v19\n    try_return v20\nblock10:\n    v21 = ok v16\n    return v21\nblock11:\n    goto block3\nblock3:\n    return\nexports:\n    factorial = f0\n",
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = call unit0.f0(v0)\n    unit_end v1\n",
+            ),
+            output: "ok @120",
+        ),
+    ],
+)

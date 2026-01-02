@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Function returning a tuple.
+fun make_pair(): (u32, u32)
+    ret @(@42, @100)
+end fun
+
+----------
+scriptunit-expr
+----------
+
+make_pair()

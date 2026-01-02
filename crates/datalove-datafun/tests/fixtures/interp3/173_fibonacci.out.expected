@@ -1,0 +1,28 @@
+Ir3Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn fib(v0):\nblock0:\n    v1 = const 2u32\n    v2 = lt v0, v1\n    branch v2, block1, block2\nblock1:\n    v3 = ok v0\n    return v3\nblock4:\n    goto block3\nblock2:\n    v4 = const 1u32\n    v5, v6 = sub.checked v0, v4\n    branch v6, block5, block6\nblock5:\n    v7 = const \"arithmetic overflow\"\n    v8 = error_from v7\n    v9 = err v8\n    try_return v9\nblock6:\n    v10 = call f0(v5)\n    v11, v12, v13 = unwrap_result v10\n    branch v13, block8, block7\nblock7:\n    v14 = err v12\n    try_return v14\nblock8:\n    v15 = const 2u32\n    v16, v17 = sub.checked v0, v15\n    branch v17, block9, block10\nblock9:\n    v18 = const \"arithmetic overflow\"\n    v19 = error_from v18\n    v20 = err v19\n    try_return v20\nblock10:\n    v21 = call f0(v16)\n    v22, v23, v24 = unwrap_result v21\n    branch v24, block12, block11\nblock11:\n    v25 = err v23\n    try_return v25\nblock12:\n    v26, v27 = add.checked v11, v22\n    branch v27, block13, block14\nblock13:\n    v28 = const \"arithmetic overflow\"\n    v29 = error_from v28\n    v30 = err v29\n    try_return v30\nblock14:\n    v31 = ok v26\n    return v31\nblock15:\n    goto block3\nblock3:\n    return\nexports:\n    fib = f0\n",
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = call unit0.f0(v0)\n    unit_end v1\n",
+            ),
+            output: "ok @55",
+        ),
+    ],
+)
