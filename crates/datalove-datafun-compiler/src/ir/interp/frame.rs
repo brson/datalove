@@ -3,6 +3,7 @@
 //! A `Frame` holds all values and slots for a single function/unit execution.
 //! `FrameStore` accumulates frames from script units for cross-unit value access.
 
+use datalove_rt::rust::AlignedBuffer;
 use super::super::{ValueId, SlotId};
 use super::error::InterpError;
 use super::layout::IrLayout;
@@ -10,8 +11,8 @@ use super::value::{Value, Destination};
 
 /// Execution frame for a function call.
 pub struct Frame {
-    /// Raw frame data.
-    data: Vec<u8>,
+    /// Raw frame data with proper alignment.
+    data: AlignedBuffer,
     /// Layout information.
     layout: IrLayout,
     /// Track which values are initialized.
@@ -25,7 +26,10 @@ impl Frame {
     pub fn new(layout: IrLayout) -> Self {
         let value_count = layout.value_offsets.len();
         let slot_count = layout.slot_offsets.len();
-        let data = vec![0u8; layout.frame_size as usize];
+        let data = AlignedBuffer::with_align(
+            layout.frame_size as usize,
+            layout.frame_align as usize,
+        );
 
         Self {
             data,
