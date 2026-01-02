@@ -1,0 +1,28 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    v1 = const 5u32\n    v2 = sub v0, v1\n    v3 = const 10u32\n    v4 = const 0u32\n    v5 = sub v3, v4\n    unit_end\nexports:\n    neg = v2\n    pos = v5\n",
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = lt unit0.v2, unit0.v5\n    unit_end v0\n",
+            ),
+            output: "@true",
+        ),
+    ],
+)

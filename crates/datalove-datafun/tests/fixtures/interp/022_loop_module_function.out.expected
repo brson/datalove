@@ -1,0 +1,40 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/loops"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "fn sum_to_n(v0):\nblock0:\n    v1 = const 0int\n    store s0, v1\n    v2 = const 0int\n    store s1, v2\n    goto block1\nblock1:\n    v3 = const 1int\n    v4 = add s0, v3\n    drop v3\n    drop s0\n    store s0, v4\n    v5 = add s1, s0\n    drop s1\n    store s1, v5\n    v6 = eq s0, v0\n    branch v6, block3, block4\nblock3:\n    goto block2\nblock6:\n    goto block5\nblock4:\n    goto block5\nblock5:\n    goto block1\nblock2:\n    v7 = load s1\n    drop v0\n    drop s0\n    return v7\n",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    unit_end\n",
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call m0.f0(v0)\n    unit_end v1\n",
+            ),
+            output: "@15",
+        ),
+    ],
+)

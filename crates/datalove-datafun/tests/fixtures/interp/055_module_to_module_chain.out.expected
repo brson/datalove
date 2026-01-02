@@ -1,0 +1,64 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/base"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "fn add_one(v0):\nblock0:\n    v1 = const 1int\n    v2 = add v0, v1\n    drop v1\n    drop v0\n    return v2\n",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/mid"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "fn add_two(v0):\nblock0:\n    v1 = call m0.f0(v0)\n    v2 = call m0.f0(v1)\n    return v2\n",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/top"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "fn add_four(v0):\nblock0:\n    v1 = call m1.f1(v0)\n    v2 = call m1.f1(v1)\n    return v2\n",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    unit_end\n",
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = call m2.f2(v0)\n    unit_end v1\n",
+            ),
+            output: "@14",
+        ),
+    ],
+)

@@ -1,0 +1,16 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = const 3u32\n    v4 = const 4u32\n    v5 = pack Tuple2 {v3, v4}\n    v6 = pack Tuple2 {v2, v5}\n    unit_end v6\n",
+            ),
+            output: "@(@(@1, @2), @(@3, @4))",
+        ),
+    ],
+)

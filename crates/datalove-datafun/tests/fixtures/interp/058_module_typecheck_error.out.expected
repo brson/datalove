@@ -1,0 +1,42 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/bad_module"),
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "local/test/bad_module: TypeMismatch { expected: \"u32\", actual: \"int\" }",
+                ],
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    unit_end\n",
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = call m0.f0(v0)\n    unit_end v1\n",
+            ),
+            output: "Error: ModuleFunctionNotFound { module: IrModuleId(0), func: FuncId(0) }",
+        ),
+    ],
+)

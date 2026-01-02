@@ -1,0 +1,10 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    lowering: LoweringResult(
+        status: "Success",
+        ir: "fn main():\nblock0:\n    v0 = const 42u32\n    v1 = some v0\n    v2, v3 = unwrap_option v1\n    branch v3, block2, block1\nblock1:\n    v4 = none\n    try_return v4\nblock2:\n    v5 = some v2\n    return v5\n",
+    ),
+    output: "some @42",
+)

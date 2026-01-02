@@ -1,0 +1,10 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    lowering: LoweringResult(
+        status: "Success",
+        ir: "fn main():\nblock0:\n    v0 = const 1u32\n    store s0, v0\n    v1 = const 2u32\n    store s1, v1\n    v2 = load s1\n    return v2\n",
+    ),
+    output: "@2",
+)
