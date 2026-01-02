@@ -85,9 +85,18 @@ impl<'db> DynParser<'db> {
         ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message_text))
     }
 
-    /// Alias for try_eat_word for backward compatibility.
+    /// Consume a specific word if matched, returning true if consumed.
+    ///
+    /// Alias for `try_eat_word` to match datafun's interface.
     pub(super) fn eat_word(&mut self, word: &str) -> bool {
         self.try_eat_word(word)
+    }
+
+    /// Consume a specific word or panic.
+    pub(super) fn need_word(&mut self, word: &str) {
+        if !self.try_eat_word(word) {
+            panic!("expected word '{}'", word);
+        }
     }
 
     /// Consume a branch if it matches the given sigil, returning its iterator.
@@ -130,7 +139,7 @@ impl<'db> DynParser<'db> {
     pub(super) fn error_if_not_exhausted(&mut self) {
         if self.pos < self.tokens.len() && !self.had_error {
             self.had_error = true;
-            let (text, span) = self.current_text_span();
+            let (text, span) = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "unexpected token after expression")
                 .code("D021")
                 .primary_label(text, span, "unexpected token")
@@ -145,7 +154,7 @@ impl<'db> DynParser<'db> {
     pub(super) fn error_if_not_exhausted_type_hint(&mut self) {
         if self.pos < self.tokens.len() && !self.had_error {
             self.had_error = true;
-            let (text, span) = self.current_text_span();
+            let (text, span) = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "unexpected token after type")
                 .code("D022")
                 .primary_label(text, span, "unexpected token")
@@ -153,10 +162,10 @@ impl<'db> DynParser<'db> {
         }
     }
 
-    /// Get Text for error reporting.
+    /// Get source Text for error reporting.
     ///
-    /// Try source_text first, otherwise extract from current token.
-    pub(super) fn get_error_text(&self) -> bct::text::Text<'db> {
+    /// Try source_text field first, otherwise extract from first token.
+    pub(super) fn source_text(&self) -> bct::text::Text<'db> {
         if let Some(text) = self.source_text {
             return text;
         }
@@ -183,23 +192,31 @@ impl<'db> DynParser<'db> {
         bct::text::Text::new(self.db, String::new())
     }
 
-    /// Extract Text and ByteSpan from current position for error reporting.
-    pub(super) fn current_text_span(&self) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
-        if self.pos < self.tokens.len() {
-            match &self.tokens[self.pos] {
-                TreeToken::Token(tok) => {
-                    let subtext = tok.text(self.db);
-                    (subtext.text(self.db), subtext.range(self.db))
-                }
-                TreeToken::Branch(_, _) => {
-                    // For branches, use 0..0 span.
-                    (self.get_error_text(), 0..0)
-                }
+    /// Extract Text and ByteSpan from a token.
+    pub(super) fn extract_text_span(&self, token: &TreeToken<'db>) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
+        match token {
+            TreeToken::Token(tok) => {
+                let subtext = tok.text(self.db);
+                (subtext.text(self.db), subtext.range(self.db))
             }
-        } else {
-            // End of input.
-            (self.get_error_text(), 0..0)
+            TreeToken::Branch(_, _) => {
+                (self.source_text(), 0..0)
+            }
         }
+    }
+
+    /// Get Text and ByteSpan from current position for error reporting.
+    pub(super) fn peek_text_span(&self) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
+        if let Some(token) = self.peek() {
+            self.extract_text_span(token)
+        } else {
+            (self.source_text(), 0..0)
+        }
+    }
+
+    /// Create a sub-parser for processing branch content.
+    pub(super) fn sub_parser(&self, tokens: Vec<TreeToken<'db>>) -> DynParser<'db> {
+        DynParser::new(self.db, tokens, self.source_text)
     }
 }
 

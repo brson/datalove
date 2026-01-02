@@ -56,7 +56,7 @@ impl<'db> DynParser<'db> {
             Some("data") => { self.eat_word("data"); ast::TypeHint::Data }
             Some("error") => { self.eat_word("error"); ast::TypeHint::Error }
             Some("tuple") => {
-                let (keyword_text, keyword_span) = self.current_text_span();
+                let (keyword_text, keyword_span) = self.peek_text_span();
                 self.eat_word("tuple");
                 // Check if it's anonymous (starts with () or named (starts with name).
                 if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
@@ -77,7 +77,7 @@ impl<'db> DynParser<'db> {
                 }
             }
             Some("struct") => {
-                let (keyword_text, keyword_span) = self.current_text_span();
+                let (keyword_text, keyword_span) = self.peek_text_span();
                 self.eat_word("struct");
                 // Check if it's anonymous (starts with {) or named (starts with name).
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
@@ -98,7 +98,7 @@ impl<'db> DynParser<'db> {
                 }
             }
             Some("enum") => {
-                let (keyword_text, keyword_span) = self.current_text_span();
+                let (keyword_text, keyword_span) = self.peek_text_span();
                 self.eat_word("enum");
                 // Check if it's anonymous (starts with {) or named (starts with name).
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
@@ -122,7 +122,7 @@ impl<'db> DynParser<'db> {
                 }
             }
             Some("map") => {
-                let (keyword_text, keyword_span) = self.current_text_span();
+                let (keyword_text, keyword_span) = self.peek_text_span();
                 self.eat_word("map");
                 // Expect angle bracket with key and value types.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
@@ -130,7 +130,7 @@ impl<'db> DynParser<'db> {
                     let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
                     let key_type = sub_parser.parse_type_hint_and_heap();
                     if !sub_parser.eat_sigil(Sigil::Comma) {
-                        let (text, span) = sub_parser.current_text_span();
+                        let (text, span) = sub_parser.peek_text_span();
                         return self.emit_type_hint_error(
                             text,
                             span,
@@ -153,7 +153,7 @@ impl<'db> DynParser<'db> {
                 }
             }
             Some("set") => {
-                let (keyword_text, keyword_span) = self.current_text_span();
+                let (keyword_text, keyword_span) = self.peek_text_span();
                 self.eat_word("set");
                 // Expect angle bracket with element type.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
@@ -173,7 +173,7 @@ impl<'db> DynParser<'db> {
                 }
             }
             Some("tensor") => {
-                let (keyword_text, keyword_span) = self.current_text_span();
+                let (keyword_text, keyword_span) = self.peek_text_span();
                 self.eat_word("tensor");
                 // Expect angle bracket with <element_type, rank, optional_layout>.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
@@ -181,7 +181,7 @@ impl<'db> DynParser<'db> {
                     let mut sub_parser = DynParser::new(self.db, tokens, self.source_text);
                     let element_type = sub_parser.parse_type_hint_and_heap();
                     if !sub_parser.eat_sigil(Sigil::Comma) {
-                        let (text, span) = sub_parser.current_text_span();
+                        let (text, span) = sub_parser.peek_text_span();
                         return self.emit_type_hint_error(
                             text,
                             span,
@@ -194,7 +194,7 @@ impl<'db> DynParser<'db> {
                     let rank = match sub_parser.parse_u32_literal() {
                         Some(r) => r,
                         None => {
-                            let (text, span) = sub_parser.current_text_span();
+                            let (text, span) = sub_parser.peek_text_span();
                             return self.emit_type_hint_error(
                                 text,
                                 span,
@@ -245,7 +245,7 @@ impl<'db> DynParser<'db> {
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
                 } else {
-                    let (text, span) = self.current_text_span();
+                    let (text, span) = self.peek_text_span();
                     // Check if this looks like a capitalized type name.
                     let message = if let Some(word) = self.peek_word() {
                         let lower = word.to_lowercase();
@@ -277,7 +277,7 @@ impl<'db> DynParser<'db> {
             Some(n) => n,
             None => {
                 // No name found - emit error and create placeholder.
-                let (text, span) = self.current_text_span();
+                let (text, span) = self.peek_text_span();
                 let error_hint = self.emit_type_hint_error(
                     text.clone(),
                     span.clone(),
@@ -293,7 +293,7 @@ impl<'db> DynParser<'db> {
             }
         };
         if !self.eat_sigil(Sigil::Colon) {
-            let (text, span) = self.current_text_span();
+            let (text, span) = self.peek_text_span();
             let error_hint = self.emit_type_hint_error(
                 text,
                 span,
@@ -317,7 +317,7 @@ impl<'db> DynParser<'db> {
             None => {
                 // No name found - emit error and create placeholder.
                 self.had_error = true;
-                let (text, span) = self.current_text_span();
+                let (text, span) = self.peek_text_span();
                 DiagnosticBuilder::error(self.db, "expected variant name in enum definition")
                     .code("D011")
                     .primary_label(text, span, "expected variant name")
@@ -339,7 +339,7 @@ impl<'db> DynParser<'db> {
             // Check for unparsed tokens - this indicates a syntax error.
             if sub_parser.pos < tokens.len() {
                 // There are extra tokens after the payload type.
-                let (text, span) = sub_parser.current_text_span();
+                let (text, span) = sub_parser.peek_text_span();
                 let message = InternedText::new(
                     self.db,
                     "enum variant payload must be a single type (use a tuple for multiple values)".S()

@@ -16,14 +16,14 @@ use super::state::DynParser;
 impl<'db> DynParser<'db> {
     pub(super) fn parse_expr_full(&mut self) -> ast::ExprFull<'db> {
         // Capture span before parsing.
-        let (text, span) = self.current_text_span();
+        let (text, span) = self.peek_text_span();
 
         // Check for `: type / expr` pattern.
         let expr_full = if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
             let type_hint = self.parse_type_hint_and_heap();
             if !self.eat_sigil(Sigil::SlashForward) {
-                let (err_text, err_span) = self.current_text_span();
+                let (err_text, err_span) = self.peek_text_span();
                 let error_expr = self.emit_expr_error(
                     err_text,
                     err_span,
@@ -85,7 +85,7 @@ impl<'db> DynParser<'db> {
                                     ast::Heap::Omitted
                                 } else {
                                     // Not a number or keyword - this is an error.
-                                    let (text, span) = self.current_text_span();
+                                    let (text, span) = self.peek_text_span();
                                     let error_node = self.emit_expr_error(
                                         text,
                                         span,
@@ -97,7 +97,7 @@ impl<'db> DynParser<'db> {
                                 }
                             } else {
                                 // No word string - error.
-                                let (text, span) = self.current_text_span();
+                                let (text, span) = self.peek_text_span();
                                 let error_node = self.emit_expr_error(
                                     text,
                                     span,
@@ -110,7 +110,7 @@ impl<'db> DynParser<'db> {
                         }
                         _ => {
                             // Unknown token kind - error.
-                            let (text, span) = self.current_text_span();
+                            let (text, span) = self.peek_text_span();
                             let error_node = self.emit_expr_error(
                                 text,
                                 span,
@@ -130,7 +130,7 @@ impl<'db> DynParser<'db> {
                 }
                 _ => {
                     // Not a token or branch - error.
-                    let (text, span) = self.current_text_span();
+                    let (text, span) = self.peek_text_span();
                     let error_node = self.emit_expr_error(
                         text,
                         span,
@@ -194,7 +194,7 @@ impl<'db> DynParser<'db> {
                 }
             }
             // Not a negative number - this is an error (unexpected minus).
-            let (text, span) = self.current_text_span();
+            let (text, span) = self.peek_text_span();
             return self.emit_expr_error(
                 text,
                 span,
@@ -255,7 +255,7 @@ impl<'db> DynParser<'db> {
                             Some(dim) => dim,
                             None => {
                                 p.had_error = true;
-                                let (text, span) = p.current_text_span();
+                                let (text, span) = p.peek_text_span();
                                 DiagnosticBuilder::error(p.db, "expected dimension value in tensor shape")
                                     .code("D023")
                                     .primary_label(text, span, "expected integer")
@@ -267,7 +267,7 @@ impl<'db> DynParser<'db> {
                     sub_parser.error_if_not_exhausted();
                     shape
                 } else {
-                    let (text, span) = self.current_text_span();
+                    let (text, span) = self.peek_text_span();
                     return self.emit_expr_error(
                         text,
                         span,
@@ -281,7 +281,7 @@ impl<'db> DynParser<'db> {
                 let elements = if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
                     let rank = shape.len();
                     if rank == 0 {
-                        let (text, span) = self.current_text_span();
+                        let (text, span) = self.peek_text_span();
                         return self.emit_expr_error(
                             text,
                             span,
@@ -328,7 +328,7 @@ impl<'db> DynParser<'db> {
 
                             // Validate row size matches the last dimension.
                             if row_elements.len() != row_size {
-                                let (text, span) = self.current_text_span();
+                                let (text, span) = self.peek_text_span();
                                 let detailed_message = format!("expected {} elements per row but got {}", row_size, row_elements.len());
 
                                 return self.emit_expr_error(
@@ -346,7 +346,7 @@ impl<'db> DynParser<'db> {
                         all_elements
                     }
                 } else {
-                    let (text, span) = self.current_text_span();
+                    let (text, span) = self.peek_text_span();
                     return self.emit_expr_error(
                         text,
                         span,
@@ -359,7 +359,7 @@ impl<'db> DynParser<'db> {
                 return ast::Expr::Tensor(ast::ExprTensor::new(self.db, shape, elements));
             }
             Some("enum") => {
-                let (keyword_text, keyword_span) = self.current_text_span();
+                let (keyword_text, keyword_span) = self.peek_text_span();
                 self.eat_word("enum");
                 // Enum expression syntax: enum Variant or enum Variant(...).
                 let variant_name = match self.eat_name() {
@@ -393,7 +393,7 @@ impl<'db> DynParser<'db> {
                 ));
             }
             Some("map") => {
-                let (keyword_text, keyword_span) = self.current_text_span();
+                let (keyword_text, keyword_span) = self.peek_text_span();
                 self.eat_word("map");
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
@@ -401,7 +401,7 @@ impl<'db> DynParser<'db> {
                     let entries = sub_parser.parse_comma_separated(|p| {
                         let key = p.parse_expr_full();
                         if !p.eat_sigil(Sigil::Equals) {
-                            let (text, span) = p.current_text_span();
+                            let (text, span) = p.peek_text_span();
                             let error_expr = p.emit_expr_error(
                                 text,
                                 span,
@@ -434,7 +434,7 @@ impl<'db> DynParser<'db> {
                 }
             }
             Some("set") => {
-                let (keyword_text, keyword_span) = self.current_text_span();
+                let (keyword_text, keyword_span) = self.peek_text_span();
                 self.eat_word("set");
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
@@ -490,7 +490,7 @@ impl<'db> DynParser<'db> {
                             }
                         } else {
                             // Not a number, parse error for bare identifiers.
-                            let (text, span) = self.current_text_span();
+                            let (text, span) = self.peek_text_span();
                             self.next();
                             let _message = InternedText::new(
                                 self.db,
@@ -515,7 +515,7 @@ impl<'db> DynParser<'db> {
                         ast::Expr::String(ast::ExprString::new(self.db, value))
                     }
                     _ => {
-                        let (text, span) = self.current_text_span();
+                        let (text, span) = self.peek_text_span();
                         self.emit_expr_error(
                             text,
                             span,
@@ -560,7 +560,7 @@ impl<'db> DynParser<'db> {
                 ast::Expr::List(ast::ExprList::new(self.db, elements))
             }
             _ => {
-                let (text, span) = self.current_text_span();
+                let (text, span) = self.peek_text_span();
                 self.emit_expr_error(
                     text,
                     span,
@@ -577,7 +577,7 @@ impl<'db> DynParser<'db> {
             Some(n) => n,
             None => {
                 // No name found - emit error and create placeholder.
-                let (text, span) = self.current_text_span();
+                let (text, span) = self.peek_text_span();
                 let error_expr = self.emit_expr_error(
                     text.clone(),
                     span.clone(),
@@ -595,7 +595,7 @@ impl<'db> DynParser<'db> {
             }
         };
         if !self.eat_sigil(Sigil::Equals) {
-            let (text, span) = self.current_text_span();
+            let (text, span) = self.peek_text_span();
             let error_expr = self.emit_expr_error(
                 text,
                 span,
