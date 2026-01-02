@@ -73,7 +73,8 @@ fn test_typecheck_equiv(db: &datalove_datafun_compiler::Database, expr_text: &st
     let datafun_text = format!("let _x = {}", expr_text);
     let datafun_source = bct::input::Source::new(db, datafun_text.clone());
     let datafun_script = datalove_datafun_compiler::parser::parse_integration_test(db, datafun_source);
-    let datafun_result = datalove_datafun_compiler::tycheck::type_check(db, datafun_source, datafun_script);
+    let datafun_spans = datalove_datafun_compiler::parser::datafun_spans(db, datafun_source);
+    let datafun_result = datalove_datafun_compiler::tycheck::type_check(db, datafun_spans, datafun_script);
 
     // Extract expression for type lookup.
     let datafun_expr = extract_let_value(db, datafun_script)?;

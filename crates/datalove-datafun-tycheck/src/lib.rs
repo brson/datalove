@@ -15,6 +15,9 @@ pub use salsa::Database as Db;
 /// Re-export ModuleId from bct for convenience.
 pub use bct::module_graph::ModuleId;
 
+/// Re-export DatafunSpans from AST crate.
+pub use datalove_datafun_ast::spans::DatafunSpans;
+
 /// Type representation for datafun (extends datalit types with function types).
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
@@ -145,6 +148,7 @@ pub enum ScriptUnitKind<'db> {
 #[salsa::interned]
 pub struct ScriptUnitSpec<'db> {
     pub source: bct::input::Source,
+    pub spans: DatafunSpans<'db>,
     #[returns(ref)]
     pub kind: ScriptUnitKind<'db>,
 }
@@ -155,6 +159,7 @@ pub struct ModuleSpec<'db> {
     #[returns(ref)]
     pub path: String,
     pub source: bct::input::Source,
+    pub spans: DatafunSpans<'db>,
     pub script: Script<'db>,
     pub module_id: ModuleId,
 }

@@ -19,30 +19,37 @@ pub use datalove_datafun_tycheck::{
     ModuleGraphTypecheckResult,
 };
 
-/// A module graph paired with pre-parsed scripts for each module.
+/// A module graph paired with pre-parsed scripts and spans for each module.
 #[salsa::tracked]
 pub struct ParsedModuleGraph<'db> {
     /// The underlying module graph.
     pub graph: ModuleGraph,
 
-    /// Pre-parsed scripts, as (ModuleId, Script) pairs.
+    /// Pre-parsed scripts with spans, as (ModuleId, Script, DatafunSpans) tuples.
     /// Order matches graph.iter_modules() order.
     #[returns(ref)]
-    pub scripts: Vec<(ModuleId, crate::ast::Script<'db>)>,
+    pub scripts: Vec<(ModuleId, crate::ast::Script<'db>, crate::parser::DatafunSpans<'db>)>,
 }
 
 impl<'db> ParsedModuleGraph<'db> {
     /// Get the script for a module by its ID.
     pub fn get_script(&self, db: &'db dyn crate::Db, module_id: ModuleId) -> Option<crate::ast::Script<'db>> {
         self.scripts(db).iter()
-            .find(|(id, _)| *id == module_id)
-            .map(|(_, script)| *script)
+            .find(|(id, _, _)| *id == module_id)
+            .map(|(_, script, _)| *script)
+    }
+
+    /// Get the spans for a module by its ID.
+    pub fn get_spans(&self, db: &'db dyn crate::Db, module_id: ModuleId) -> Option<crate::parser::DatafunSpans<'db>> {
+        self.scripts(db).iter()
+            .find(|(id, _, _)| *id == module_id)
+            .map(|(_, _, spans)| *spans)
     }
 }
 
 /// Parse all modules in a graph.
 ///
-/// Returns a ParsedModuleGraph containing the original graph plus pre-parsed scripts.
+/// Returns a ParsedModuleGraph containing the original graph plus pre-parsed scripts and spans.
 #[salsa::tracked]
 pub fn parse_module_graph<'db>(
     db: &'db dyn crate::Db,
@@ -53,7 +60,8 @@ pub fn parse_module_graph<'db>(
         let module_id = module.id(db);
         let source = module.source(db);
         let parse_result = crate::parser::parse(db, source);
-        scripts.push((module_id, parse_result.script(db)));
+        let spans = crate::parser::datafun_spans(db, source);
+        scripts.push((module_id, parse_result.script(db), spans));
     }
     ParsedModuleGraph::new(db, graph, scripts)
 }

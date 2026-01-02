@@ -38,7 +38,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let stmts: Vec<Statement> = script_ast.statements(&db).to_vec();
 
                 // Typecheck to get expression types.
-                let tycheck_result = datalove_datafun_compiler::tycheck::type_check(&db, source_obj, script_ast);
+                let spans = datalove_datafun_compiler::parser::datafun_spans(&db, source_obj);
+                let tycheck_result = datalove_datafun_compiler::tycheck::type_check(&db, spans, script_ast);
                 let expr_types = tycheck_result.expr_types(&db);
 
                 output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));

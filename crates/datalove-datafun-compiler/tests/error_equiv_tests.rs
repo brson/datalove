@@ -126,7 +126,8 @@ fn get_datafun_errors<'db>(
         return (vec!["PARSE_ERROR".to_string()], true);
     }
 
-    let result = datalove_datafun_compiler::tycheck::type_check(db, src, script);
+    let spans = datalove_datafun_compiler::parser::datafun_spans(db, src);
+    let result = datalove_datafun_compiler::tycheck::type_check(db, spans, script);
 
     let errors: Vec<String> = result
         .errors(db)
