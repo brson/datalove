@@ -27,12 +27,12 @@ path = "src/main.rs"
 [dev-dependencies]
 datalove-exampletest.path = "../datalove-exampletest"
 
-# Script-based tests (disabled, pending frame-based script rewrite):
-# [[test]]
-# name = "script_tests"
-# path = "tests/script_tests.rs"
-# harness = false
-#
+[[test]]
+name = "script_tests"
+path = "tests/script_tests.rs"
+harness = false
+
+# Script-based error tests (disabled, pending frame-based script rewrite):
 # [[test]]
 # name = "error_tests"
 # path = "tests/error_tests.rs"

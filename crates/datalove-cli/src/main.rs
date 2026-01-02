@@ -307,7 +307,115 @@ impl ReplCommand {
 
 impl ScriptCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        bail!("Script execution has been removed. Use module-based execution instead.")
+        use datalove_datafun as datafun;
+        use datafun::pipeline::ModuleCompilationPipeline;
+        use datafun::ir;
+
+        let db = datafun::Database::default();
+
+        // Load sys library unless --no-sys.
+        let mut pipeline = ModuleCompilationPipeline::new(&db);
+        if !self.no_sys {
+            self.load_sys_library(&db, &mut pipeline)?;
+        }
+
+        // Compile modules (typecheck, drop analysis, lower to IR).
+        let compiled = pipeline.compile();
+
+        // Check for resolution errors.
+        if let Some(err) = &compiled.resolution_error {
+            bail!("Module resolution error: {}", err);
+        }
+
+        // Check for typecheck errors in modules.
+        for (path, errors) in &compiled.path_to_errors {
+            if !errors.is_empty() {
+                bail!("Typecheck error in module {}: {}", path, errors.join("; "));
+            }
+        }
+
+        // Create script compilation context.
+        let mut ctx = compiled.script_context(&db);
+
+        // Read the script file.
+        let script_source = rmx::std::fs::read_to_string(&self.file_path)
+            .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
+
+        // Execute the script as a fragment.
+        let result = ctx.eval_fragment(&script_source);
+
+        // Check for errors.
+        if let datafun::pipeline::TypecheckResult::Error { errors } = &result.typecheck {
+            bail!("Typecheck error: {}", errors.join("; "));
+        }
+        if let datafun::pipeline::LoweringResult::Error { message } = &result.lowering {
+            bail!("Lowering error: {}", message);
+        }
+        if result.output.starts_with("Error:") {
+            bail!("{}", result.output);
+        }
+
+        // Look up the "output" binding from the exports.
+        // After eval_fragment, the exports are in script_ctx and the frame is stored.
+        if let Some((unit_idx, value_id)) = ctx.script_ctx.values.get("output").cloned() {
+            // It's a let binding - read value from frame.
+            let value = ctx.env.frames.external_value(unit_idx, value_id)
+                .map_err(|e| anyhow!("Failed to read output value: {:?}", e))?;
+            let mut interp = ir::interp::IrInterpreter::new();
+            let output_str = interp.pretty_print_value(&value)
+                .map_err(|e| anyhow!("Failed to pretty print output: {:?}", e))?;
+            println!("{}", output_str);
+        } else if let Some((unit_idx, slot_id)) = ctx.script_ctx.slots.get("output").cloned() {
+            // It's a var binding - read slot from frame.
+            let value = ctx.env.frames.external_slot(unit_idx, slot_id)
+                .map_err(|e| anyhow!("Failed to read output slot: {:?}", e))?;
+            let mut interp = ir::interp::IrInterpreter::new();
+            let output_str = interp.pretty_print_value(&value)
+                .map_err(|e| anyhow!("Failed to pretty print output: {:?}", e))?;
+            println!("{}", output_str);
+        }
+        // No output binding found - this is okay, just don't print anything.
+
+        // Cleanup.
+        ctx.destroy_all();
+
+        Ok(())
+    }
+
+    fn load_sys_library(
+        &self,
+        _db: &datalove_datafun::Database,
+        pipeline: &mut datalove_datafun::pipeline::ModuleCompilationPipeline<'_>,
+    ) -> AnyResult<()> {
+        use datalove_datafun as datafun;
+
+        // Find sys/ directory relative to the binary's location.
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_path = rmx::std::path::PathBuf::from(manifest_dir);
+        let parent = manifest_path.parent()
+            .ok_or_else(|| anyhow!("Failed to get parent directory"))?;
+        let grandparent = parent.parent()
+            .ok_or_else(|| anyhow!("Failed to get grandparent directory"))?;
+        let sys_dir = grandparent.join("sys");
+
+        // Load package world from sys/ directory.
+        let config = datafun::package_load::PackageWorldConfig {
+            dir_pkglib_system: sys_dir,
+            dir_pkglib_local: None,
+        };
+
+        let package_world_raw = rmx::futures::executor::block_on(
+            datafun::package_load::load_world(config)
+        )?;
+
+        // Add all sys modules to the pipeline.
+        for (pkg_name, pkg) in &package_world_raw.pkglib_system {
+            for (mod_name, pkg_module) in &pkg.modules {
+                pipeline.add_module("sys", pkg_name, mod_name, &pkg_module.text);
+            }
+        }
+
+        Ok(())
     }
 }
 
