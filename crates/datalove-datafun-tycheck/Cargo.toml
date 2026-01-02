@@ -1,0 +1,14 @@
+[package]
+name = "datalove-datafun-tycheck"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+rmx.workspace = true
+bct.workspace = true
+salsa.workspace = true
+datalove-datafun-ast.path = "../datalove-datafun-ast"
+datalove-datalit.path = "../datalove-datalit"
+datalove-diagnostic.path = "../datalove-diagnostic"

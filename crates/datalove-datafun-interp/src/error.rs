@@ -1,6 +1,6 @@
 //! Interpreter errors.
 
-use super::super::{ValueId, SlotId, BlockId, FuncId, IrModuleId};
+use datalove_datafun_ir::{ValueId, SlotId, BlockId, FuncId, IrModuleId};
 
 /// Interpreter error.
 #[derive(Debug)]

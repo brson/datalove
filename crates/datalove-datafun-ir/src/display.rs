@@ -1,7 +1,7 @@
 //! Pretty-printing for IR.
 
 use std::fmt;
-use super::*;
+use crate::*;
 
 impl fmt::Display for ValueId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

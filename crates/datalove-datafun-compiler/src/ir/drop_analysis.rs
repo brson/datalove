@@ -16,7 +16,7 @@ use crate::ast::{
     ExprFun, ExprFunKind, BinOp, UnaryOp,
 };
 use crate::Db;
-use super::IrType;
+use super::{IrType, IrTypeExt};
 
 /// Pre-computed drop analyses for functions in a script unit.
 pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionDropAnalysis>;

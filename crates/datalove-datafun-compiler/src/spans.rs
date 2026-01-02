@@ -1,43 +1,17 @@
-//! Span infrastructure for datafun expressions.
+//! Span query functions for datafun expressions.
 //!
-//! Provides on-demand span lookup via tracked structs and query functions.
+//! The span types are defined in datalove-datafun-ast.
+//! This module provides the query function that computes spans.
 
 use rmx::prelude::*;
-use datalove_diagnostic::{SpanEntry, ByteSpan};
-use crate::ast::ExprFun;
+use datalove_diagnostic::SpanEntry;
 
-/// Salsa accumulator for datafun expression spans.
-/// Emitted during parsing to record source locations.
-#[salsa::accumulator]
-pub struct DatafunSpanAccumulator {
-    pub expr_id: salsa::Id,
-    pub text_id: salsa::Id,
-    pub span: ByteSpan,
-}
-
-/// Entry pairing expression ID with span.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct SpanMapEntry {
-    pub expr_id: salsa::Id,
-    pub entry: SpanEntry,
-}
-
-/// Tracked struct for datafun expression spans.
-#[salsa::tracked]
-pub struct DatafunSpans<'db> {
-    pub entries: Vec<SpanMapEntry>,
-}
-
-impl<'db> DatafunSpans<'db> {
-    /// Look up span for an expression.
-    pub fn lookup(&self, db: &'db dyn crate::Db, expr: ExprFun<'db>) -> Option<SpanEntry> {
-        use salsa::plumbing::AsId;
-        let expr_id = expr.as_id();
-        self.entries(db).iter()
-            .find(|e| e.expr_id == expr_id)
-            .map(|e| e.entry.clone())
-    }
-}
+// Re-export types from AST crate.
+pub use datalove_datafun_ast::spans::{
+    DatafunSpanAccumulator,
+    SpanMapEntry,
+    DatafunSpans,
+};
 
 /// Extract datafun expression spans from a parsed source.
 #[salsa::tracked]

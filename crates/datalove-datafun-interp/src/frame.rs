@@ -4,10 +4,10 @@
 //! `FrameStore` accumulates frames from script units for cross-unit value access.
 
 use datalove_rt::rust::AlignedBuffer;
-use super::super::{ValueId, SlotId};
-use super::error::InterpError;
-use super::layout::IrLayout;
-use super::value::{Value, Destination};
+use datalove_datafun_ir::{ValueId, SlotId};
+use crate::error::InterpError;
+use crate::layout::IrLayout;
+use crate::value::{Value, Destination};
 
 /// Execution frame for a function call.
 pub struct Frame {

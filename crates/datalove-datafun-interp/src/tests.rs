@@ -1,6 +1,6 @@
-use super::*;
+use crate::*;
 use datalove_rt::rtdt;
-use crate::ir::{IrBlock, Terminator, FuncRef, FuncId, TypeRef, SlotId, SlotDest};
+use datalove_datafun_ir::{IrType, IrBlock, Terminator, FuncRef, FuncId, TypeRef, SlotId, SlotDest};
 
 #[test]
 fn test_tydesc_table_primitives() {
@@ -1814,9 +1814,9 @@ fn test_crossunit_external_value() {
         value_types: vec![IrType::I64],
         slot_types: vec![],
         functions: vec![],
-        symbols: crate::ir::SymbolTable::new(),
+        symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
-        exports: vec![("x".to_string(), crate::ir::ExportBinding::Value(ValueId(0)))],
+        exports: vec![("x".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
     };
 
     // Unit 1: return x (from unit 0)
@@ -1839,7 +1839,7 @@ fn test_crossunit_external_value() {
         value_types: vec![IrType::I64],
         slot_types: vec![],
         functions: vec![],
-        symbols: crate::ir::SymbolTable::new(),
+        symbols: datalove_datafun_ir::SymbolTable::new(),
         result: Some(ValueId(0)),
         exports: vec![],
     };
@@ -1897,9 +1897,9 @@ fn test_crossunit_external_slot() {
         value_types: vec![IrType::I64],
         slot_types: vec![IrType::I64],
         functions: vec![],
-        symbols: crate::ir::SymbolTable::new(),
+        symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
-        exports: vec![("y".to_string(), crate::ir::ExportBinding::Slot(SlotId(0)))],
+        exports: vec![("y".to_string(), datalove_datafun_ir::ExportBinding::Slot(SlotId(0)))],
     };
 
     // Unit 1: return y (from unit 0's slot)
@@ -1922,7 +1922,7 @@ fn test_crossunit_external_slot() {
         value_types: vec![IrType::I64],
         slot_types: vec![],
         functions: vec![],
-        symbols: crate::ir::SymbolTable::new(),
+        symbols: datalove_datafun_ir::SymbolTable::new(),
         result: Some(ValueId(0)),
         exports: vec![],
     };
@@ -1997,9 +1997,9 @@ fn test_crossunit_external_function() {
         value_types: vec![],
         slot_types: vec![],
         functions: vec![double_fn],
-        symbols: crate::ir::SymbolTable::new(),
+        symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
-        exports: vec![("double".to_string(), crate::ir::ExportBinding::Function(FuncId(0)))],
+        exports: vec![("double".to_string(), datalove_datafun_ir::ExportBinding::Function(FuncId(0)))],
     };
 
     // Unit 1: return double(7)
@@ -2026,7 +2026,7 @@ fn test_crossunit_external_function() {
         value_types: vec![IrType::I64, IrType::I64],
         slot_types: vec![],
         functions: vec![],
-        symbols: crate::ir::SymbolTable::new(),
+        symbols: datalove_datafun_ir::SymbolTable::new(),
         result: Some(ValueId(1)),
         exports: vec![],
     };
@@ -2080,9 +2080,9 @@ fn test_crossunit_chain() {
         value_types: vec![IrType::I64],
         slot_types: vec![],
         functions: vec![],
-        symbols: crate::ir::SymbolTable::new(),
+        symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
-        exports: vec![("a".to_string(), crate::ir::ExportBinding::Value(ValueId(0)))],
+        exports: vec![("a".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
     };
 
     // Unit 1: let b = a + 3
@@ -2115,9 +2115,9 @@ fn test_crossunit_chain() {
         value_types: vec![IrType::I64, IrType::I64, IrType::I64],
         slot_types: vec![],
         functions: vec![],
-        symbols: crate::ir::SymbolTable::new(),
+        symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
-        exports: vec![("b".to_string(), crate::ir::ExportBinding::Value(ValueId(2)))],
+        exports: vec![("b".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(2)))],
     };
 
     // Unit 2: return b
@@ -2140,7 +2140,7 @@ fn test_crossunit_chain() {
         value_types: vec![IrType::I64],
         slot_types: vec![],
         functions: vec![],
-        symbols: crate::ir::SymbolTable::new(),
+        symbols: datalove_datafun_ir::SymbolTable::new(),
         result: Some(ValueId(0)),
         exports: vec![],
     };

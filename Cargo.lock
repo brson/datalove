@@ -916,10 +916,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-datafun-ast"
+version = "0.1.0"
+dependencies = [
+ "bcts",
+ "datalove-datalit",
+ "datalove-diagnostic",
+ "rustmax",
+ "salsa",
+ "serde",
+]
+
+[[package]]
 name = "datalove-datafun-compiler"
 version = "0.1.0"
 dependencies = [
  "bcts",
+ "datalove-datafun-ast",
+ "datalove-datafun-interp",
+ "datalove-datafun-ir",
+ "datalove-datafun-parser",
+ "datalove-datafun-tycheck",
  "datalove-datalit",
  "datalove-diagnostic",
  "datalove-exampletest",
@@ -933,11 +950,54 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-datafun-interp"
+version = "0.1.0"
+dependencies = [
+ "datalove-datafun-ir",
+ "datalove-rt",
+ "datalove-rtdt",
+ "rustmax",
+]
+
+[[package]]
+name = "datalove-datafun-ir"
+version = "0.1.0"
+dependencies = [
+ "datalove-datalit",
+ "salsa",
+ "serde",
+]
+
+[[package]]
+name = "datalove-datafun-parser"
+version = "0.1.0"
+dependencies = [
+ "bcts",
+ "datalove-datafun-ast",
+ "datalove-datalit",
+ "datalove-diagnostic",
+ "rustmax",
+ "salsa",
+]
+
+[[package]]
 name = "datalove-datafun-pkg"
 version = "0.1.0"
 dependencies = [
  "bcts",
  "datalove-exampletest",
+ "rustmax",
+ "salsa",
+]
+
+[[package]]
+name = "datalove-datafun-tycheck"
+version = "0.1.0"
+dependencies = [
+ "bcts",
+ "datalove-datafun-ast",
+ "datalove-datalit",
+ "datalove-diagnostic",
  "rustmax",
  "salsa",
 ]

@@ -4,8 +4,8 @@
 //! respecting alignment requirements from type descriptors.
 
 use datalove_rt::rtdt::TyDesc;
-use super::super::IrType;
-use super::tydesc::IrTyDescTable;
+use datalove_datafun_ir::IrType;
+use crate::tydesc::IrTyDescTable;
 
 /// Align a value up to the given alignment.
 #[inline]

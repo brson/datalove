@@ -10,7 +10,7 @@ use crate::Db;
 use crate::module_graph::ModuleId;
 use crate::tycheck::ResolvedCallTarget;
 use super::super::{
-    IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, BlockId, FuncId,
+    IrType, IrTypeExt, IrBlock, IrFunction, Operand, ValueId, SlotId, BlockId, FuncId,
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId,
 };
 use super::super::drop_analysis::{BindingId, DropSchedule, BindingInfo};

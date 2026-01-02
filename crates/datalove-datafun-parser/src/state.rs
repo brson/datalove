@@ -9,13 +9,16 @@ use bct::{
 };
 use salsa::Accumulator;
 
-use crate::ast;
+use datalove_datafun_ast::ast;
+use datalove_datafun_ast::spans::DatafunSpanAccumulator;
 use datalove_datalit::parser_util::{TokenStream, TokenStreamExt};
 use datalove_diagnostic::DiagnosticBuilder;
 
+use super::Db;
+
 /// Parser state for datafun parsing.
 pub(super) struct Parser<'db> {
-    pub(super) db: &'db dyn crate::Db,
+    pub(super) db: &'db dyn Db,
     pub(super) tokens: Vec<TreeToken<'db>>,
     pub(super) pos: usize,
     pub(super) had_error: bool,
@@ -23,7 +26,7 @@ pub(super) struct Parser<'db> {
 
 impl<'db> Parser<'db> {
     /// Create a new parser with the given tokens.
-    pub(super) fn new(db: &'db dyn crate::Db, tokens: Vec<TreeToken<'db>>) -> Self {
+    pub(super) fn new(db: &'db dyn Db, tokens: Vec<TreeToken<'db>>) -> Self {
         Parser {
             db,
             tokens,
@@ -129,7 +132,7 @@ impl<'db> Parser<'db> {
     pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, text: bct::text::Text<'db>, span: datalove_diagnostic::ByteSpan) -> ast::ExprFun<'db> {
         use salsa::plumbing::AsId;
         let expr = ast::ExprFun::new(self.db, kind);
-        crate::spans::DatafunSpanAccumulator {
+        DatafunSpanAccumulator {
             expr_id: expr.as_id(),
             text_id: text.as_id(),
             span,

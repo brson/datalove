@@ -1,13 +1,16 @@
 
 use rmx::prelude::*;
 
-pub mod ast;
-pub mod ast_serde;
-pub mod script;
+// Re-export AST crate modules for backward compatibility.
+pub use datalove_datafun_ast::ast;
+pub use datalove_datafun_ast::ast_serde;
+pub use datalove_datafun_ast::script;
+// Note: spans module is local - it re-exports types from AST and adds query function.
+pub mod spans;
+
 pub mod parser;
 pub mod resolution;
 pub mod tycheck;
-pub mod spans;
 pub mod funlit_equiv;
 
 // SSA IR module.

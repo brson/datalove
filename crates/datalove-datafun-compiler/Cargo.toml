@@ -14,6 +14,11 @@ bct.workspace = true
 salsa.workspace = true
 serde = { version = "1", features = ["derive"] }
 ron = "0.8"
+datalove-datafun-ast.path = "../datalove-datafun-ast"
+datalove-datafun-ir.path = "../datalove-datafun-ir"
+datalove-datafun-parser.path = "../datalove-datafun-parser"
+datalove-datafun-tycheck.path = "../datalove-datafun-tycheck"
+datalove-datafun-interp.path = "../datalove-datafun-interp"
 datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"
 datalove-rt.path = "../datalove-rt"

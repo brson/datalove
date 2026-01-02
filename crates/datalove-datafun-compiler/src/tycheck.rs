@@ -1,3 +1,8 @@
+//! Datafun typechecker.
+//!
+//! Provides type checking for datafun scripts and expressions.
+//! Types are re-exported from the datalove-datafun-tycheck crate.
+
 use rmx::prelude::*;
 use bct::text::InternedText;
 use salsa::plumbing::AsId;
@@ -7,197 +12,30 @@ use crate::ast::*;
 use crate::datalit;
 use bct;
 
-/// Type representation for datafun (extends datalit types with function types).
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub enum Type<'db> {
-    /// Datalit type (primitives, collections, etc.).
-    Datalit(datalit::tycheck::Type<'db>),
-    /// Function type: (param_types) -> return_type.
-    Function(TypeFunction<'db>),
-}
-
-#[salsa::tracked]
-pub struct TypeAndHeap<'db> {
-    pub heap: datalit::ast::Heap,
-    #[returns(ref)]
-    pub ty: Type<'db>,
-}
-
-#[salsa::tracked]
-pub struct TypeFunction<'db> {
-    pub param_types: Vec<TypeAndHeap<'db>>,
-    pub return_type: TypeAndHeap<'db>,
-}
-
-/// Type error representation.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub enum TypeError {
-    TypeMismatch { expected: String, actual: String },
-    UnresolvedName(String),
-    CannotSynthesize,
-    InvalidOperandType { op: String, ty: String },
-    InvalidTupleElement { ty: String },
-    ArityMismatch { expected: usize, actual: usize },
-    NotAFunction(String),
-    DatalitError(String),
-    ResultRequiresErrorBinding,
-    TryOutsideFunction { operator: String },
-    TryTypeMismatch { operator: String, actual_type: String },
-    TryReturnTypeMismatch { operator: String, return_type: String },
-    // Datalit-compatible error types for error equivalence.
-    IntOutOfRange,
-    HeapMismatch { expected_heap: String, actual_heap: String },
-    MissingField(String),
-    ExtraField(String),
-    FieldOrderMismatch,
-    VariantNotFound(String),
-    // Loop control flow errors.
-    BreakOutsideLoop,
-    ContinueOutsideLoop,
-}
-
-impl From<datalit::tycheck::TypeError> for TypeError {
-    fn from(err: datalit::tycheck::TypeError) -> Self {
-        match err {
-            datalit::tycheck::TypeError::TypeMismatch { expected, actual } => {
-                TypeError::TypeMismatch { expected, actual }
-            }
-            datalit::tycheck::TypeError::HeapMismatch { expected_heap, actual_heap } => {
-                TypeError::HeapMismatch { expected_heap, actual_heap }
-            }
-            datalit::tycheck::TypeError::CannotSynthesize => TypeError::CannotSynthesize,
-            datalit::tycheck::TypeError::MissingField(name) => TypeError::MissingField(name),
-            datalit::tycheck::TypeError::ExtraField(name) => TypeError::ExtraField(name),
-            datalit::tycheck::TypeError::FieldOrderMismatch => TypeError::FieldOrderMismatch,
-            datalit::tycheck::TypeError::IntOutOfRange => TypeError::IntOutOfRange,
-            datalit::tycheck::TypeError::VariantNotFound(name) => TypeError::VariantNotFound(name),
-            datalit::tycheck::TypeError::ArityMismatch { expected, actual } => {
-                TypeError::ArityMismatch { expected, actual }
-            }
-        }
-    }
-}
-
-/// Type error entry with location info.
-#[salsa::tracked]
-pub struct TypeErrorEntry<'db> {
-    pub error: TypeError,
-}
-
-/// Resolved call target from typechecking.
-///
-/// Stores the resolved function AST and source module for a function call,
-/// eliminating the need for runtime name lookup.
-#[salsa::tracked]
-pub struct ResolvedCallTarget<'db> {
-    /// The resolved function AST.
-    pub func: StmtFun<'db>,
-    /// The source module (None for script-local functions).
-    pub module_id: Option<crate::module_graph::ModuleId>,
-}
-
-/// Result of typechecking a script.
-#[salsa::tracked]
-pub struct TypecheckResult<'db> {
-    /// The root script.
-    pub root_script: Script<'db>,
-
-    /// Type errors encountered.
-    pub errors: Vec<TypeErrorEntry<'db>>,
-
-    /// Expression types, indexed by ExprFun ID.
-    #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
-
-    /// Resolved call targets, indexed by ExprFunctionCall ID.
-    #[returns(ref)]
-    pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
-}
-
-/// Kind of script unit for batch typechecking (with parsed content).
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub enum ScriptUnitKind<'db> {
-    /// A fragment containing statements.
-    Fragment(Script<'db>),
-    /// A single expression.
-    Expr(ExprFun<'db>),
-}
-
-/// Spec for a single script unit (with pre-parsed content).
-#[salsa::interned]
-pub struct ScriptUnitSpec<'db> {
-    pub source: bct::input::Source,
-    #[returns(ref)]
-    pub kind: ScriptUnitKind<'db>,
-}
-
-/// Spec for a module (path + pre-parsed script + module ID).
-#[salsa::interned]
-pub struct ModuleSpec<'db> {
-    #[returns(ref)]
-    pub path: String,
-    pub source: bct::input::Source,
-    pub script: Script<'db>,
-    pub module_id: crate::module_graph::ModuleId,
-}
-
-/// Spec for a batch of script units (the "input" to typechecking).
-#[salsa::interned]
-pub struct ScriptBatchSpec<'db> {
-    #[returns(ref)]
-    pub units: Vec<ScriptUnitSpec<'db>>,
-    #[returns(ref)]
-    pub modules: Vec<ModuleSpec<'db>>,
-}
-
-/// A script unit with parsed content (tracked - created inside tracked fn).
-#[salsa::tracked]
-pub struct ScriptUnitInput<'db> {
-    pub source: bct::input::Source,
-    #[returns(ref)]
-    pub kind: ScriptUnitKind<'db>,
-}
-
-/// Module info with parsed content (tracked).
-#[salsa::tracked]
-pub struct ModuleInfo<'db> {
-    #[returns(ref)]
-    pub path: String,
-    pub script: Script<'db>,
-    pub source: bct::input::Source,
-    pub module_id: crate::module_graph::ModuleId,
-}
-
-/// Batch of script units (tracked).
-#[salsa::tracked]
-pub struct ScriptUnitBatch<'db> {
-    #[returns(ref)]
-    pub units: Vec<ScriptUnitInput<'db>>,
-    #[returns(ref)]
-    pub modules: Vec<ModuleInfo<'db>>,
-}
-
-/// Result of typechecking one script unit.
-#[salsa::tracked]
-pub struct UnitTypecheckResultTracked<'db> {
-    /// Type errors encountered.
-    pub errors: Vec<TypeErrorEntry<'db>>,
-    /// Expression types, indexed by ExprFun ID.
-    #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
-    /// Resolved call targets, indexed by ExprFunctionCall ID.
-    #[returns(ref)]
-    pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
-}
-
-/// Result of typechecking multiple script units together.
-#[salsa::tracked]
-pub struct ScriptUnitsTypecheckResultTracked<'db> {
-    /// Per-unit results.
-    pub results: Vec<UnitTypecheckResultTracked<'db>>,
-}
+// Re-export all types from the tycheck crate.
+pub use datalove_datafun_tycheck::{
+    Type,
+    TypeAndHeap,
+    TypeFunction,
+    TypeError,
+    TypeErrorEntry,
+    ResolvedCallTarget,
+    TypecheckResult,
+    ExprTypecheckResult,
+    ScriptUnitKind,
+    ScriptUnitSpec,
+    ModuleSpec,
+    ScriptBatchSpec,
+    ScriptUnitInput,
+    ModuleInfo,
+    ScriptUnitBatch,
+    UnitTypecheckResultTracked,
+    ScriptUnitsTypecheckResultTracked,
+    ModuleExports,
+    ModuleImports,
+    ModuleGraphTypecheckResult,
+    ModuleId,
+};
 
 /// Context for typechecking.
 pub struct TypeContext<'db> {
@@ -518,16 +356,6 @@ pub fn type_check<'db>(
         .collect();
 
     TypecheckResult::new(db, script, errors, ctx.expr_types, ctx.call_targets)
-}
-
-/// Result of typechecking a single expression.
-#[salsa::tracked]
-pub struct ExprTypecheckResult<'db> {
-    /// Type errors encountered.
-    pub errors: Vec<TypeErrorEntry<'db>>,
-    /// Expression types, indexed by ExprFun ID.
-    #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
 }
 
 /// Typecheck a single expression.

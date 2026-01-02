@@ -10,8 +10,8 @@ use bct::{
     text::InternedText,
 };
 
-use crate::ast;
-use crate::datalit;
+use datalove_datafun_ast::ast;
+use datalove_datalit as datalit;
 use datalove_datalit::parser_util::{TokenStream, TokenStreamExt};
 use datalove_diagnostic::DiagnosticBuilder;
 use super::state::Parser;

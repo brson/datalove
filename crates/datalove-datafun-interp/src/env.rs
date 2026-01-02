@@ -5,9 +5,9 @@
 //! - `ScriptEnvironment`: Combines registry with `FrameStore` for script execution.
 
 use rmx::std::collections::HashMap;
-use super::super::{IrFunction, FuncId, FuncRef, IrModuleId};
-use super::error::InterpError;
-use super::frame::{Frame, FrameStore};
+use datalove_datafun_ir::{IrFunction, FuncId, FuncRef, IrModuleId};
+use crate::error::InterpError;
+use crate::frame::{Frame, FrameStore};
 
 /// Registry of functions from modules and previous script units.
 ///
