@@ -6,8 +6,7 @@ Ir3Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "CannotSynthesize",
-                    "CannotSynthesize",
+                    "TypeMismatch { expected: \"@map<@int, @string>\", actual: \"@map<@u32, @string>\" }",
                 ],
             ),
             lowering: LoweringResult(
@@ -19,13 +18,11 @@ Ir3Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"make_map\")",
-                ],
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Error",
+                message: "function not found: make_map",
             ),
             output: "",
         ),

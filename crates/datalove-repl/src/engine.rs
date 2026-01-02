@@ -174,6 +174,11 @@ impl<'db> Engine<'db> {
     fn eval_script_statement(&mut self, source: String) -> Eval {
         let result = self.ctx.eval_fragment(&source);
 
+        // Check for parse errors.
+        if let TypecheckResult::ParseError { errors } = &result.typecheck {
+            return Eval::Error(errors.join("; "));
+        }
+
         // Check for typecheck errors.
         if let TypecheckResult::Error { errors } = &result.typecheck {
             return Eval::Error(errors.join("; "));
@@ -232,6 +237,11 @@ impl<'db> Engine<'db> {
 
     fn eval_expression(&mut self, source: String) -> Eval {
         let result = self.ctx.eval_expr(&source);
+
+        // Check for parse errors.
+        if let TypecheckResult::ParseError { errors } = &result.typecheck {
+            return Eval::Error(errors.join("; "));
+        }
 
         // Check for typecheck errors.
         if let TypecheckResult::Error { errors } = &result.typecheck {

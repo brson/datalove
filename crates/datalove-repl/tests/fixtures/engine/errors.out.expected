@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "CannotSynthesize"
+      "Error": "expected expression"
     },
     "environment": []
   },
