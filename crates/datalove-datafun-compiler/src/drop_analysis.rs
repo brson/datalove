@@ -227,7 +227,10 @@ impl<'db> AnalysisCtx<'db> {
         if !is_script_unit {
             for &id in &frame.bindings {
                 if frame.current_state.get(&id) == Some(&BindingState::Live) {
-                    if !self.bindings[id.0 as usize].ty.is_copy() {
+                    let info = &self.bindings[id.0 as usize];
+                    // Skip Copy types (no drop needed).
+                    // Skip ref params (borrowed from caller, caller drops).
+                    if !info.ty.is_copy() && !info.is_ref_param {
                         to_drop.push(id);
                     }
                 }
@@ -333,7 +336,9 @@ impl<'db> AnalysisCtx<'db> {
             // Include bindings defined in this frame.
             for &id in &frame.bindings {
                 if frame.current_state.get(&id) == Some(&BindingState::Live) {
-                    if !self.bindings[id.0 as usize].ty.is_copy() && seen.insert(id) {
+                    let info = &self.bindings[id.0 as usize];
+                    // Skip Copy types and ref params (borrowed from caller).
+                    if !info.ty.is_copy() && !info.is_ref_param && seen.insert(id) {
                         result.push(id);
                     }
                 }
@@ -341,7 +346,9 @@ impl<'db> AnalysisCtx<'db> {
             // Also include bindings from parent scopes that are tracked here.
             for (&id, &state) in &frame.current_state {
                 if state == BindingState::Live {
-                    if !self.bindings[id.0 as usize].ty.is_copy() && seen.insert(id) {
+                    let info = &self.bindings[id.0 as usize];
+                    // Skip Copy types and ref params (borrowed from caller).
+                    if !info.ty.is_copy() && !info.is_ref_param && seen.insert(id) {
                         result.push(id);
                     }
                 }

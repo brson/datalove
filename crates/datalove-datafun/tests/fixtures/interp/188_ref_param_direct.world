@@ -1,0 +1,29 @@
+----------
+module local/test/main
+----------
+
+// Direct call to ref param function from another function.
+fun inner(ref x: int): @bool
+    ret @true
+end fun
+
+fun main(): @bool
+    let val: int = :int/@100
+    ret inner(val)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+let result1 = main()
+let output = result1
+
+----------
+scriptunit-expr
+----------
+
+output

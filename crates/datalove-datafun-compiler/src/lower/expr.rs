@@ -139,9 +139,12 @@ pub fn lower_expression<'db>(
             lower_unaryop(ctx, expr, unary)
         }
         ExprFunKind::FunctionCall(call) => {
+            // Use lower_operand to get operands directly without forcing moves.
+            // This allows Param operands to be passed through for ref-mode params.
+            // The interpreter's Call handling checks param modes to decide ownership.
             let args: Result<Vec<_>, _> = call.args(ctx.db)
                 .iter()
-                .map(|arg| lower_expression(ctx, *arg).map(|v| Operand::Value(v)))
+                .map(|arg| lower_operand(ctx, *arg))
                 .collect();
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);

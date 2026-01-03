@@ -1,0 +1,27 @@
+----------
+module local/test/main
+----------
+
+// Test that caller retains ownership of ref param.
+// After calling with ref, caller can still use the value.
+fun read_int(ref x: int): int
+    ret x + :int/@0
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.read_int
+
+let val: int = :int/@42
+let result1 = read_int(val)
+let result2 = read_int(val)
+let output = (result1, result2)
+
+----------
+scriptunit-expr
+----------
+
+output

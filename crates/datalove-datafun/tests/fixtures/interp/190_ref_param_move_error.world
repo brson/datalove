@@ -1,0 +1,28 @@
+----------
+module local/test/main
+----------
+
+// Error test: attempting to move a ref param should produce an error.
+// Ref params are borrowed, so the caller retains ownership.
+// The callee cannot consume them.
+fun bad_function(ref x: int): int
+    let y = x
+    ret y
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.bad_function
+
+let val: int = :int/@100
+let result = bad_function(val)
+let output = result
+
+----------
+scriptunit-expr
+----------
+
+output

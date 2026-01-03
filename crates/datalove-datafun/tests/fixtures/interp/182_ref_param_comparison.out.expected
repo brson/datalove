@@ -2,13 +2,13 @@ Analysis(
     sections: [
         SectionResult(
             section_type: "module",
-            name: Some("local/test/math"),
+            name: Some("local/test/main"),
             typecheck: TypecheckResult(
                 status: "Success",
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn add_one(p0):\nblock0:\n    v0 = const 1int\n    v1 = add p0, v0\n    drop v0\n    drop p0\n    return v1\n\nfn add_two(p0):\nblock0:\n    v0 = call m0.f0(p0)\n    v1 = call m0.f0(v0)\n    return v1\n\nfn add_four(p0):\nblock0:\n    v0 = call m0.f1(p0)\n    v1 = call m0.f1(v0)\n    return v1\n",
+                ir: "fn is_equal(p0, p1):\nblock0:\n    v0 = eq p0, p1\n    return v0\n",
             ),
             output: "",
         ),
@@ -20,7 +20,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = const 20int\n    v2 = const 10int\n    v3 = call m0.f0(v0, v2)\n    v4 = call m0.f0(v0, v1)\n    v5 = call m0.f0(v0, v0)\n    v6 = pack Tuple3 {v3, v4, v5}\n    unit_end\nexports:\n    x = v0\n    y = v1\n    z = v2\n    eq1 = v3\n    eq2 = v4\n    eq3 = v5\n    output = v6\n",
             ),
             output: "(fragment executed)",
         ),
@@ -32,9 +32,9 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call m0.f2(v0)\n    unit_end v1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = copy unit0.v6\n    unit_end v0\n",
             ),
-            output: "@9",
+            output: "@(@true, @false, @true)",
         ),
     ],
 )

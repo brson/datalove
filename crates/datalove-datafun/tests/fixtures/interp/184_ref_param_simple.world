@@ -1,0 +1,25 @@
+----------
+module local/test/main
+----------
+
+// Simple test: one ref param function.
+fun read_ref(ref x: int): @bool
+    ret @true
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.read_ref
+
+let val: int = :int/@100
+let result1 = read_ref(val)
+let output = result1
+
+----------
+scriptunit-expr
+----------
+
+output

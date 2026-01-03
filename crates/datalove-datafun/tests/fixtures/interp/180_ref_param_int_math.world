@@ -1,0 +1,14 @@
+----------
+module local/test/main
+----------
+
+// Test ref param with linear type (int) doing math operations.
+// The ref param is borrowed, so caller retains ownership.
+fun add_ten(ref x: int): int
+    ret x + :int/@10
+end fun
+
+fun main(): int
+    let val: int = :int/@42
+    ret add_ten(val)
+end fun

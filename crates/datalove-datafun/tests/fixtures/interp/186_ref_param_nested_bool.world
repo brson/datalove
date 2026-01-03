@@ -1,0 +1,29 @@
+----------
+module local/test/main
+----------
+
+// Two functions with bool ref param (Copy type, should be safe).
+fun inner(ref x: bool): @bool
+    ret x
+end fun
+
+fun outer(ref y: bool): @bool
+    ret inner(y)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.outer
+
+let val: bool = true
+let result1 = outer(val)
+let output = result1
+
+----------
+scriptunit-expr
+----------
+
+output
