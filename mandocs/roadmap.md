@@ -21,6 +21,7 @@ The MVP is a working bare datafun language with:
 
 # on deck
 
+- add alignment checks to the runtime
 - interp coverage
 - run miri on interpreter
 - move semantics
