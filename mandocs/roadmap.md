@@ -22,6 +22,7 @@ The MVP is a working bare datafun language with:
 # on deck
 
 - argument modes - moves-etc.md
+- aot
 - move/clone semantics - moves-etc.md
 - generics
 - destructuring
