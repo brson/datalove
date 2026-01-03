@@ -922,9 +922,7 @@ impl IrInterpreter {
     fn write_const(&mut self, value: &ConstValue, dest: Destination) -> Result<(), InterpError> {
         unsafe {
             match value {
-                ConstValue::Unit => {
-                    // Unit is zero-sized, nothing to write.
-                }
+                ConstValue::Unit => {}
                 ConstValue::Bool(b) => {
                     *(dest.ptr as *mut bool) = *b;
                 }
@@ -955,7 +953,6 @@ impl IrInterpreter {
                 ConstValue::Int { limbs, negative } => {
                     let int_ptr = dest.ptr as *mut rtdt::Int;
                     if limbs.is_empty() {
-                        // Zero.
                         (*int_ptr).data = std::ptr::null();
                         (*int_ptr).size_and_sign = 0;
                         (*int_ptr).capacity = 0;

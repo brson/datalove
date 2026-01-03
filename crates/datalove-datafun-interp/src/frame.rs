@@ -115,9 +115,7 @@ impl Frame {
         idx < self.slot_initialized.len() && self.slot_initialized[idx]
     }
 
-    /// Mark value as dropped (uninitialized).
-    ///
-    /// Called after Drop instruction to prevent double-destroy.
+    /// Mark value as dropped to prevent double-destroy.
     pub fn mark_value_dropped(&mut self, id: ValueId) {
         let idx = id.0 as usize;
         if idx < self.value_initialized.len() {
@@ -125,9 +123,7 @@ impl Frame {
         }
     }
 
-    /// Mark slot as dropped (uninitialized).
-    ///
-    /// Called after Drop instruction to prevent double-destroy.
+    /// Mark slot as dropped to prevent double-destroy.
     pub fn mark_slot_dropped(&mut self, id: SlotId) {
         let idx = id.0 as usize;
         if idx < self.slot_initialized.len() {

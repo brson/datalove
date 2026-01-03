@@ -6,9 +6,7 @@
 use datalove_rt::rtdt::{self, TyDesc, TyDescRef};
 use datalove_datafun_ir::IrType;
 
-/// TyDesc table for IR types.
-///
-/// Converts IrType to runtime TyDesc pointers.
+/// Table for converting `IrType` to runtime `TyDesc` pointers.
 pub struct IrTyDescTable {
     /// Storage for TyDesc allocations.
     tydescs: Vec<Box<TyDesc>>,

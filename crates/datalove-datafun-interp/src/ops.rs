@@ -1,4 +1,8 @@
-//! Binary and unary operations for the IR interpreter.
+//! Binary and unary operations.
+//!
+//! Supports fixed-width integers (u8-u64, i8-i64), bigints (Int), floats (F32),
+//! and booleans. Includes widening arithmetic (fixed-width operands to Int result)
+//! and checked operations with overflow detection.
 
 use datalove_datafun_ir::{BinOp, IrType, UnaryOp};
 use datalove_rt::rtdt;
