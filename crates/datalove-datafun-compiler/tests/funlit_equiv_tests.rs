@@ -12,12 +12,12 @@ use datalove_datafun_compiler::funlit_equiv::{
 };
 use datalove_datalit::ast_gen::{AstGenConfig, gen_expr_full_seeded};
 
-/// Extract expression from a let statement in a Script.
+/// Extract expression from a let statement in a ParsedStatements.
 fn extract_let_value<'db>(
     db: &'db datalove_datafun_compiler::Database,
-    script: datalove_datafun_ast::ast::Script<'db>,
+    parsed: datalove_datafun_ast::ast::ParsedStatements<'db>,
 ) -> Result<datalove_datafun_ast::ast::ExprFun<'db>, String> {
-    let statements = script.statements(db);
+    let statements = parsed.statements(db);
     if statements.len() != 1 {
         return Err(format!("expected 1 statement, got {}", statements.len()));
     }
@@ -37,10 +37,10 @@ fn test_parse_equiv(db: &datalove_datafun_compiler::Database, expr_text: &str) -
     // Parse with datafun (wrap in "let _x = " prefix).
     let datafun_text = format!("let _x = {}", expr_text);
     let datafun_source = bct::input::Source::new(db, datafun_text.clone());
-    let datafun_script = datalove_datafun_parser::parse_integration_test(db, datafun_source);
+    let datafun_parsed = datalove_datafun_parser::parse_integration_test(db, datafun_source);
 
     // Extract expression from let statement.
-    let datafun_expr = extract_let_value(db, datafun_script)?;
+    let datafun_expr = extract_let_value(db, datafun_parsed)?;
 
     // Convert to datalit serde.
     let datafun_serde = datafun_expr_to_datalit_serde(db, datafun_expr)

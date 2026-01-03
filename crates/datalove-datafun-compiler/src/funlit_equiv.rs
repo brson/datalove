@@ -28,12 +28,12 @@ impl std::fmt::Display for ConversionError {
 
 impl std::error::Error for ConversionError {}
 
-/// Extract a single expression from a Script that contains exactly one Ret statement.
-pub fn extract_expr_from_script<'db>(
+/// Extract a single expression from a ParsedStatements that contains exactly one Ret statement.
+pub fn extract_expr_from_parsed<'db>(
     db: &'db dyn salsa::Database,
-    script: ast::Script<'db>,
+    parsed: ast::ParsedStatements<'db>,
 ) -> Result<ast::ExprFun<'db>, ConversionError> {
-    let statements = script.statements(db);
+    let statements = parsed.statements(db);
     if statements.len() != 1 {
         return Err(ConversionError::InvalidScriptStructure(
             format!("expected 1 statement, got {}", statements.len())

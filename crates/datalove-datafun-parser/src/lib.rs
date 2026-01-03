@@ -34,11 +34,11 @@ pub fn parse_script_unit<'db>(
     db: &'db dyn Db,
     script: script::Script,
     unit_index: usize,
-) -> ast::Script<'db> {
+) -> ast::ParsedStatements<'db> {
     let units = &script.units(db);
     let unit = units[unit_index];
     let source = unit.source(db);
-    parse(db, source).script(db)
+    parse(db, source).parsed(db)
 }
 
 /// Parse a Source into a datafun script with span information.
@@ -115,8 +115,8 @@ fn parse_bracer<'db>(
         .collect();
 
     let statements = parse_statements(db, lines);
-    let script = ast::Script::new(db, statements);
-    ast::ParseResult::new(db, script)
+    let parsed = ast::ParsedStatements::new(db, statements);
+    ast::ParseResult::new(db, parsed)
 }
 
 /// Check if a token acts as a line separator.
@@ -151,37 +151,37 @@ fn parse_statements<'db>(
     statements
 }
 
-/// Tracked wrapper for parser tests that only need the Script.
+/// Tracked wrapper for parser tests that only need the ParsedStatements.
 #[salsa::tracked]
 pub fn parse_for_test<'db>(
     db: &'db dyn Db,
     source: Source,
-) -> ast::Script<'db> {
-    parse(db, source).script(db)
+) -> ast::ParsedStatements<'db> {
+    parse(db, source).parsed(db)
 }
 
-/// Public tracked wrapper for integration tests that returns just the Script.
+/// Public tracked wrapper for integration tests that returns just the ParsedStatements.
 ///
 /// Integration tests are compiled as separate binaries and need pub access.
 #[salsa::tracked]
 pub fn parse_integration_test<'db>(
     db: &'db dyn Db,
     source: Source,
-) -> ast::Script<'db> {
-    parse(db, source).script(db)
+) -> ast::ParsedStatements<'db> {
+    parse(db, source).parsed(db)
 }
 
 /// Public tracked wrapper for integration code to enable diagnostic accumulation.
 ///
 /// This function should be called before parse() to accumulate diagnostics,
 /// then parse() can be called separately to get the full ParseResult.
-/// Returns just the Script to satisfy Salsa's type requirements.
+/// Returns just the ParsedStatements to satisfy Salsa's type requirements.
 #[salsa::tracked]
 pub fn parse_for_diagnostics<'db>(
     db: &'db dyn Db,
     source: Source,
-) -> ast::Script<'db> {
-    parse(db, source).script(db)
+) -> ast::ParsedStatements<'db> {
+    parse(db, source).parsed(db)
 }
 
 // Re-export span types from AST crate.

@@ -327,16 +327,16 @@ impl<'db> ScriptTypeContext<'db> {
 
     /// Add exported bindings from a typechecked script unit.
     ///
-    /// Extracts let/var bindings and function definitions from the script
+    /// Extracts let/var bindings and function definitions from the parsed statements
     /// and adds them to the context for subsequent units.
     pub fn add_script_exports(
         &mut self,
         db: &'db dyn crate::Db,
-        script: Script<'db>,
+        parsed: ParsedStatements<'db>,
         result: &ScriptTypecheckResultRaw<'db>,
     ) {
-        // Extract let/var bindings and function definitions from the script.
-        for stmt in script.statements(db) {
+        // Extract let/var bindings and function definitions from the parsed statements.
+        for stmt in parsed.statements(db) {
             match stmt {
                 Statement::Let(let_stmt) => {
                     let name = let_stmt.name(db);
@@ -378,8 +378,8 @@ impl<'db> ScriptTypeContext<'db> {
 
 /// Result of typechecking a script (non-salsa version for context-aware checking).
 pub struct ScriptTypecheckResultRaw<'db> {
-    /// The root script.
-    pub root_script: Script<'db>,
+    /// The root parsed statements.
+    pub root_parsed: ParsedStatements<'db>,
     /// Type errors encountered.
     pub errors: Vec<TypeError>,
     /// Expression types, indexed by ExprFun ID.

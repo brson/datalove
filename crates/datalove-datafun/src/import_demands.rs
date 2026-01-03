@@ -37,11 +37,11 @@ fn module_import_demands<'db>(
     db: &'db dyn salsa::Database,
     source: Source,
 ) -> ModuleImportDemands<'db> {
-    let ast = parser::parse(db, source).script(db);
+    let parsed = parser::parse(db, source).parsed(db);
 
     let mut demands = Vec::new();
 
-    for statement in ast.statements(db) {
+    for statement in parsed.statements(db) {
         match statement {
             ast::Statement::Require(ast::StmtRequire::Module(require)) => {
                 let demand = (

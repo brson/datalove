@@ -6,17 +6,16 @@ use crate::datalit;
 
 /// Result of parsing a source text into statements.
 #[salsa::tracked]
-pub struct Script<'db> {
+pub struct ParsedStatements<'db> {
     #[returns(ref)]
     pub statements: Vec<Statement<'db>>,
 }
 
-/// Result of parsing containing the script and span side table.
-/// Parse result containing only the Script.
+/// Parse result containing only the ParsedStatements.
 /// Spans are now accessed via accumulators instead of being stored in this struct.
 #[salsa::tracked]
 pub struct ParseResult<'db> {
-    pub script: Script<'db>,
+    pub parsed: ParsedStatements<'db>,
 }
 
 #[derive(Clone, Hash)]

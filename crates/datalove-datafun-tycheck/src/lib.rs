@@ -116,8 +116,8 @@ pub struct ResolvedCallTarget<'db> {
 /// Result of typechecking a script.
 #[salsa::tracked]
 pub struct TypecheckResult<'db> {
-    /// The root script.
-    pub root_script: Script<'db>,
+    /// The root parsed statements.
+    pub root_parsed: ParsedStatements<'db>,
 
     /// Type errors encountered.
     pub errors: Vec<TypeErrorEntry<'db>>,
@@ -146,7 +146,7 @@ pub struct ExprTypecheckResult<'db> {
 #[derive(salsa::Update)]
 pub enum ScriptUnitKind<'db> {
     /// A fragment containing statements.
-    Fragment(Script<'db>),
+    Fragment(ParsedStatements<'db>),
     /// A single expression.
     Expr(ExprFun<'db>),
 }
@@ -160,14 +160,14 @@ pub struct ScriptUnitSpec<'db> {
     pub kind: ScriptUnitKind<'db>,
 }
 
-/// Spec for a module (path + pre-parsed script + module ID).
+/// Spec for a module (path + pre-parsed statements + module ID).
 #[salsa::interned]
 pub struct ModuleSpec<'db> {
     #[returns(ref)]
     pub path: String,
     pub source: bct::input::Source,
     pub spans: DatafunSpans<'db>,
-    pub script: Script<'db>,
+    pub parsed: ParsedStatements<'db>,
     pub module_id: ModuleId,
 }
 
@@ -193,7 +193,7 @@ pub struct ScriptUnitInput<'db> {
 pub struct ModuleInfo<'db> {
     #[returns(ref)]
     pub path: String,
-    pub script: Script<'db>,
+    pub parsed: ParsedStatements<'db>,
     pub source: bct::input::Source,
     pub module_id: ModuleId,
 }
@@ -302,29 +302,29 @@ impl<'db> ModuleGraphTypecheckResult<'db> {
 // Parsed Module Graph
 // ============================================================================
 
-/// A module graph paired with pre-parsed scripts and spans for each module.
+/// A module graph paired with pre-parsed statements and spans for each module.
 #[salsa::tracked]
 pub struct ParsedModuleGraph<'db> {
     /// The underlying module graph.
     pub graph: ModuleGraph,
 
-    /// Pre-parsed scripts with spans, as (ModuleId, Script, DatafunSpans) tuples.
+    /// Pre-parsed statements with spans, as (ModuleId, ParsedStatements, DatafunSpans) tuples.
     /// Order matches graph.iter_modules() order.
     #[returns(ref)]
-    pub scripts: Vec<(ModuleId, Script<'db>, DatafunSpans<'db>)>,
+    pub parsed_statements: Vec<(ModuleId, ParsedStatements<'db>, DatafunSpans<'db>)>,
 }
 
 impl<'db> ParsedModuleGraph<'db> {
-    /// Get the script for a module by its ID.
-    pub fn get_script(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<Script<'db>> {
-        self.scripts(db).iter()
+    /// Get the parsed statements for a module by its ID.
+    pub fn get_parsed(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<ParsedStatements<'db>> {
+        self.parsed_statements(db).iter()
             .find(|(id, _, _)| *id == module_id)
-            .map(|(_, script, _)| *script)
+            .map(|(_, parsed, _)| *parsed)
     }
 
     /// Get the spans for a module by its ID.
     pub fn get_spans(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<DatafunSpans<'db>> {
-        self.scripts(db).iter()
+        self.parsed_statements(db).iter()
             .find(|(id, _, _)| *id == module_id)
             .map(|(_, _, spans)| *spans)
     }

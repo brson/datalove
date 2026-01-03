@@ -34,12 +34,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 // Parse the fragment to get statements.
                 let source_obj = Source::new(&db, source.clone());
                 let parse_result = datalove_datafun_parser::parse(&db, source_obj);
-                let script_ast = parse_result.script(&db);
-                let stmts: Vec<Statement> = script_ast.statements(&db).to_vec();
+                let parsed_ast = parse_result.parsed(&db);
+                let stmts: Vec<Statement> = parsed_ast.statements(&db).to_vec();
 
                 // Typecheck to get expression types using production path.
                 let spans = datalove_datafun_parser::datafun_spans(&db, source_obj);
-                let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj, spans, script_ast);
+                let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj, spans, parsed_ast);
                 let expr_types = tycheck_result.expr_types(&db);
                 let call_targets = tycheck_result.call_targets(&db);
 
