@@ -1,5 +1,0 @@
-fun add(x: u32, y: u32): u32
-    ret x + y
-end fun
-
-let output = add(@1, @2, @3)

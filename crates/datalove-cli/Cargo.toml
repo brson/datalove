@@ -34,13 +34,7 @@ name = "script_tests"
 path = "tests/script_tests.rs"
 harness = false
 
-# Script-based error tests (disabled, pending frame-based script rewrite):
-# [[test]]
-# name = "error_tests"
-# path = "tests/error_tests.rs"
-# harness = false
-#
-# [[test]]
-# name = "type_error_tests"
-# path = "tests/type_error_tests.rs"
-# harness = false
+[[test]]
+name = "error_tests"
+path = "tests/error_tests.rs"
+harness = false

@@ -344,6 +344,9 @@ impl ScriptCommand {
         let result = ctx.eval_fragment(&script_source);
 
         // Check for errors.
+        if let datafun::pipeline::TypecheckResult::ParseError { errors } = &result.typecheck {
+            bail!("Parse error: {}", errors.join("; "));
+        }
         if let datafun::pipeline::TypecheckResult::Error { errors } = &result.typecheck {
             bail!("Typecheck error: {}", errors.join("; "));
         }

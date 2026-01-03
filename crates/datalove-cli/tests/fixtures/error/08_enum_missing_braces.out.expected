@@ -1,8 +1,0 @@
-Parse errors:
-error[D003]: expected {} after enum keyword
- --> 08_enum_missing_braces.dfs:1:13
-  |
-1 | let output: enum Baz = @42
-  |             ^^^^ expected '{' after 'enum'
-
-Error: 1 parse error(s)

@@ -1,8 +1,1 @@
-Parse errors:
-error[P001]: unexpected statement
- --> 15_unexpected_statement.dfs:1:1
-  |
-1 | foo bar baz
-  | ^^^ expected 'let', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', or 'continue'
-
-Error: 1 parse error(s)
+Error: Parse error: unexpected statement

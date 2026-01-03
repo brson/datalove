@@ -1,8 +1,1 @@
-Parse errors:
-error[P004]: expected '/' after package alias
- --> 18_require_missing_second_slash.dfs:1:28
-  |
-1 | require module example/pkg mod
-  |                            ^^^ expected '/' after package alias
-
-Error: 1 parse error(s)
+Error: Parse error: expected '/' after package alias

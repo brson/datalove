@@ -1,8 +1,1 @@
-Parse errors:
-error[D006]: expected <> after set keyword
- --> 06_set_missing_braces.dfs:1:13
-  |
-1 | let output: set = @42
-  |             ^^^ expected '<' after 'set'
-
-Error: 1 parse error(s)
+Error: Parse error: expected <> after set keyword

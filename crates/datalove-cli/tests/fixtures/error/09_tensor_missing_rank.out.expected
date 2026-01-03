@@ -1,8 +1,1 @@
-Parse errors:
-error[D008]: expected rank (positive integer)
- --> 09_tensor_missing_rank.dfs:1:1
-  |
-1 | let output: tensor<i32, > = @5
-  | ^ expected rank
-
-Error: 1 parse error(s)
+Error: Parse error: expected rank (positive integer)

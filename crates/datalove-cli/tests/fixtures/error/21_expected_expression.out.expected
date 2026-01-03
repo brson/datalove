@@ -1,1 +1,1 @@
-Error: Execution error: ReturnOutsideFunction
+Error: Typecheck error: DatalitError("function requires return value")

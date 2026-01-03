@@ -1,1 +1,1 @@
-Error: Execution error: TypecheckErrors([CannotSynthesize])
+Error: Typecheck error: CannotSynthesize

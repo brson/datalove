@@ -1,8 +1,1 @@
-Parse errors:
-error[P005]: expected 'module' or 'data' after 'require'
- --> 19_require_wrong_keyword.dfs:1:9
-  |
-1 | require foo
-  |         ^^^ expected 'module' or 'data'
-
-Error: 1 parse error(s)
+Error: Parse error: expected 'module' or 'data' after 'require'
