@@ -128,6 +128,35 @@ impl<'db> Parser<'db> {
         }
     }
 
+    /// Get the byte position at start of current token (or end of last token).
+    pub(super) fn current_byte_pos(&self) -> usize {
+        if let Some(token) = self.peek() {
+            let (_, span) = self.extract_text_span(token);
+            span.start
+        } else if self.pos > 0 {
+            // At end of input, return end of last token.
+            if let Some(token) = self.tokens.get(self.pos - 1) {
+                let (_, span) = self.extract_text_span(token);
+                span.end
+            } else {
+                0
+            }
+        } else {
+            0
+        }
+    }
+
+    /// Get the byte position at end of previous token (after consuming).
+    pub(super) fn last_byte_end(&self) -> usize {
+        if self.pos > 0 {
+            if let Some(token) = self.tokens.get(self.pos - 1) {
+                let (_, span) = self.extract_text_span(token);
+                return span.end;
+            }
+        }
+        0
+    }
+
     /// Create an expression and emit its span as accumulator.
     pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, text: bct::text::Text<'db>, span: datalove_diagnostic::ByteSpan) -> ast::ExprFun<'db> {
         use salsa::plumbing::AsId;

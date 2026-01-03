@@ -21,6 +21,10 @@ impl<'db> Parser<'db> {
 
     /// Parse binary operations with precedence climbing algorithm.
     fn parse_expr_binop(&mut self, min_precedence: u8) -> ast::ExprFun<'db> {
+        // Track start position for span.
+        let start_pos = self.current_byte_pos();
+        let text = self.source_text();
+
         let mut lhs = self.parse_expr_primary();
 
         // Check for postfix try operators (? and !).
@@ -45,9 +49,13 @@ impl<'db> Parser<'db> {
             // Parse right-hand side with higher precedence.
             let rhs = self.parse_expr_binop(precedence + 1);
 
-            lhs = ast::ExprFun::new(
-                self.db,
-                ast::ExprFunKind::BinOp(ast::ExprBinOp::new(self.db, op, lhs, rhs))
+            // Create BinOp with span covering entire expression.
+            let end_pos = self.last_byte_end();
+            let span = start_pos..end_pos;
+            lhs = self.create_expr(
+                ast::ExprFunKind::BinOp(ast::ExprBinOp::new(self.db, op, lhs, rhs)),
+                text,
+                span,
             );
         }
 
@@ -57,23 +65,36 @@ impl<'db> Parser<'db> {
     /// Parse postfix try operators (? and !).
     ///
     /// These are postfix operators that unwrap Option/Result with early return.
+    /// Takes the start position of the inner expression for span tracking.
     fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprFun<'db>) -> ast::ExprFun<'db> {
+        let text = self.source_text();
+        // We need to track the start of the original expression.
+        // For now, use position 0 and rely on the operator position.
+        // This isn't ideal but the error will at least point to the operator.
         loop {
             match self.peek() {
                 Some(TreeToken::Token(token)) => {
+                    let (_, op_span) = self.extract_text_span(&TreeToken::Token(*token));
                     match token.kind(self.db) {
                         TokenKind::Sigil(Sigil::Question) => {
                             self.next(); // consume ?
-                            expr = ast::ExprFun::new(
-                                self.db,
-                                ast::ExprFunKind::TryOption(ast::ExprTryOption::new(self.db, expr))
+                            let end_pos = self.last_byte_end();
+                            // Span from operator to end (best we can do without tracking expr start).
+                            let span = op_span.start..end_pos;
+                            expr = self.create_expr(
+                                ast::ExprFunKind::TryOption(ast::ExprTryOption::new(self.db, expr)),
+                                text,
+                                span,
                             );
                         }
                         TokenKind::Sigil(Sigil::Exclamation) => {
                             self.next(); // consume !
-                            expr = ast::ExprFun::new(
-                                self.db,
-                                ast::ExprFunKind::TryResult(ast::ExprTryResult::new(self.db, expr))
+                            let end_pos = self.last_byte_end();
+                            let span = op_span.start..end_pos;
+                            expr = self.create_expr(
+                                ast::ExprFunKind::TryResult(ast::ExprTryResult::new(self.db, expr)),
+                                text,
+                                span,
                             );
                         }
                         _ => break,
