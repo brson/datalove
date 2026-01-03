@@ -14,14 +14,11 @@ The MVP is a working bare datafun language with:
 
 # in progress
 
-- run miri on interpreter
 - human docs
 
 
 # on deck
 
-- diagnostics reporting
-- diagnostics plumbing
 - memoization tests
 - add alignment checks to the runtime
 - interp coverage
