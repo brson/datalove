@@ -21,21 +21,16 @@ The MVP is a working bare datafun language with:
 
 # on deck
 
+- argument modes - moves-etc.md
+- move/clone semantics - moves-etc.md
+- generics
+- destructuring
 - type aliases
 - memoization tests
-- add alignment checks to the runtime
-- interp coverage
-- move semantics
-- rename ExprFunKind::Err to Error
-- move/clone semantics - moves-etc.md
-- argument modes - moves-etc.md
-- destructuring
 - runtime calls
 - boolean ops - and or xor not
-- named types
 - clean up demo files in style of learn x in y minutes
 - alternate backend
-- generics
 - datafun ast roundtrip
 
 
@@ -45,6 +40,7 @@ The MVP is a working bare datafun language with:
 
 # future
 
+- named types
 - improve runtime implementation unsafety
 - type declarations
 - heap genericity and clone method
