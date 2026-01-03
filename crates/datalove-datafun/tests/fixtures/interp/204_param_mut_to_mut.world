@@ -1,0 +1,34 @@
+----------
+module local/test/main
+----------
+
+// Test passing Mut-mode param to Mut-mode param.
+// Should work - nested mutable reference.
+fun inner(mut x: @u32): @bool
+    set x = @42
+    ret @true
+end fun
+
+fun outer(mut y: @u32): @bool
+    ret inner(y)
+end fun
+
+fun test(): @u32
+    var n: @u32 = @0
+    let _ok: @bool = outer(n)
+    ret n
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.test
+
+----------
+scriptunit-expr
+----------
+
+test()
+

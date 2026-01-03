@@ -1,0 +1,35 @@
+----------
+module local/test/main
+----------
+
+// Test reading a mut param (without writing).
+// Mut params should be readable just like ref params.
+fun read_twice(mut x: int): @bool
+    let a: @bool = x == :int/@100
+    let b: @bool = x == :int/@100
+    // Both should be true
+    if a
+        ret b
+    else
+        ret @false
+    end if
+end fun
+
+fun test(): @bool
+    var n: int = :int/@100
+    ret read_twice(n)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.test
+
+----------
+scriptunit-expr
+----------
+
+test()
+

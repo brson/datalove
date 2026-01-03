@@ -1,0 +1,22 @@
+----------
+module local/test/main
+----------
+
+// Test that setting a ref param is an error.
+// Ref params are read-only.
+fun try_set_ref(ref x: @u32)
+    set x = @42
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+
+----------
+scriptunit-expr
+----------
+
+@true
+

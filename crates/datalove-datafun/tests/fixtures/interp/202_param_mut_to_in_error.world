@@ -1,0 +1,27 @@
+----------
+module local/test/main
+----------
+
+// Test passing Mut-mode param to In-mode param (non-Copy type).
+// For non-Copy types, In-mode would consume ownership, but mut doesn't own.
+// This should produce CannotMoveRefParam error (mut is borrowed like ref).
+fun inner(x: int): @bool
+    ret x == :int/@100
+end fun
+
+fun outer(mut y: int): @bool
+    ret inner(y)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+
+----------
+scriptunit-expr
+----------
+
+@true
+

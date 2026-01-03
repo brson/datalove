@@ -353,6 +353,9 @@ impl fmt::Display for Instruction {
             Instruction::SlotStore { dest, value } => {
                 write!(f, "store {}, {}", dest, value)
             }
+            Instruction::ParamStore { param, value } => {
+                write!(f, "store {}, {}", param, value)
+            }
             Instruction::SlotLoad { dest, slot } => {
                 write!(f, "{} = load {}", dest, slot)
             }

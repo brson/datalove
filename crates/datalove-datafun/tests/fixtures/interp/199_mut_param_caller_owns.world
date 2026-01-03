@@ -1,0 +1,31 @@
+----------
+module local/test/main
+----------
+
+// Test that caller retains ownership after passing to mut param.
+// The mut param can modify the value, but caller still owns it.
+fun modify(mut x: int): @bool
+    set x = :int/@999
+    ret @true
+end fun
+
+fun test(): @bool
+    var n: int = :int/@100
+    let _ok: @bool = modify(n)
+    // n is still accessible and now contains 999
+    ret n == :int/@999
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.test
+
+----------
+scriptunit-expr
+----------
+
+test()
+

@@ -10,7 +10,7 @@ use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::ResolvedCallTarget;
 use datalove_datafun_ir::{
     IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
-    FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId,
+    FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
 };
 use crate::ir_ext::IrTypeExt;
 use crate::drop_analysis::{BindingId, DropSchedule, BindingInfo};
@@ -126,6 +126,8 @@ pub struct LowerCtx<'db> {
     pub(super) func_scope: HashMap<String, FuncRef>,
     /// Type for each ParamId.
     pub(super) param_types: Vec<IrType>,
+    /// Mode for each ParamId.
+    pub(super) param_modes: Vec<ParamMode>,
     /// Type for each ValueId.
     pub(super) value_types: Vec<IrType>,
     /// Type for each SlotId.
@@ -181,6 +183,7 @@ impl<'db> LowerCtx<'db> {
             symbols: SymbolTable::new(),
             func_scope: HashMap::new(),
             param_types: Vec::new(),
+            param_modes: Vec::new(),
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
@@ -221,6 +224,7 @@ impl<'db> LowerCtx<'db> {
             symbols: SymbolTable::new(),
             func_scope: HashMap::new(),
             param_types: Vec::new(),
+            param_modes: Vec::new(),
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
@@ -299,6 +303,7 @@ impl<'db> LowerCtx<'db> {
             symbols: SymbolTable::new(),
             func_scope,
             param_types: Vec::new(),
+            param_modes: Vec::new(),
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
@@ -362,12 +367,23 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
-    /// Allocate a fresh parameter with known type.
-    pub fn fresh_param(&mut self, ty: IrType) -> ParamId {
+    /// Allocate a fresh parameter with known type and mode.
+    pub fn fresh_param(&mut self, ty: IrType, mode: ParamMode) -> ParamId {
         let id = ParamId(self.next_param);
         self.next_param += 1;
         self.param_types.push(ty);
+        self.param_modes.push(mode);
         id
+    }
+
+    /// Get the mode of a parameter.
+    pub fn param_mode(&self, id: ParamId) -> Option<ParamMode> {
+        self.param_modes.get(id.0 as usize).copied()
+    }
+
+    /// Get the type of a parameter.
+    pub fn param_type(&self, id: ParamId) -> Option<&IrType> {
+        self.param_types.get(id.0 as usize)
     }
 
     /// Allocate a fresh SSA value with known type.

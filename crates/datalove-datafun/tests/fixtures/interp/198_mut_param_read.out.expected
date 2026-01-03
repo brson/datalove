@@ -1,0 +1,40 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "fn read_twice(p0):\nblock0:\n    v0 = const 100int\n    v1 = eq p0, v0\n    drop v0\n    v2 = const 100int\n    v3 = eq p0, v2\n    drop v2\n    branch v1, block1, block2\nblock1:\n    return v3\nblock4:\n    goto block3\nblock2:\n    v4 = const false\n    return v4\nblock5:\n    goto block3\nblock3:\n    return\n\nfn test():\nblock0:\n    v0 = const 100int\n    store s0, v0\n    v1 = call m0.f0(s0)\n    drop s0\n    return v1\n",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    unit_end\n",
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call m0.f1()\n    unit_end v0\n",
+            ),
+            output: "@true",
+        ),
+    ],
+)

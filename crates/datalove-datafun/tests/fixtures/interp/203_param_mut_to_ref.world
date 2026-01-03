@@ -1,0 +1,32 @@
+----------
+module local/test/main
+----------
+
+// Test passing Mut-mode param to Ref-mode param.
+// Should work - both are borrowed references.
+fun inner(ref x: int): @bool
+    ret x == :int/@100
+end fun
+
+fun outer(mut y: int): @bool
+    ret inner(y)
+end fun
+
+fun test(): @bool
+    var n: int = :int/@100
+    ret outer(n)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.test
+
+----------
+scriptunit-expr
+----------
+
+test()
+

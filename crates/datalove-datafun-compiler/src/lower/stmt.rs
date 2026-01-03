@@ -5,7 +5,7 @@
 
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun};
-use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest};
+use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode};
 use super::context::LowerCtx;
 use super::expr::lower_expression;
 use super::LowerError;
@@ -55,20 +55,34 @@ pub fn lower_statement_indexed<'db>(
         Statement::Set(set_stmt) => {
             let name = set_stmt.name(ctx.db).text(ctx.db).to_string();
             let value_id = lower_expression(ctx, set_stmt.value(ctx.db))?;
-            if let Some(Operand::Slot(slot)) = ctx.lookup_var(&name) {
-                // Drop old value before storing new one.
-                if let Some(slot_type) = ctx.slot_type(slot).cloned() {
-                    if !slot_type.is_copy() {
-                        ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
+            match ctx.lookup_var(&name) {
+                Some(Operand::Slot(slot)) => {
+                    // Drop old value before storing new one.
+                    if let Some(slot_type) = ctx.slot_type(slot).cloned() {
+                        if !slot_type.is_copy() {
+                            ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
+                        }
+                    }
+                    ctx.emit(Instruction::SlotStore {
+                        dest: SlotDest::Local(slot),
+                        value: Operand::Value(value_id),
+                    });
+                    Ok(())
+                }
+                Some(Operand::Param(param)) => {
+                    // Only Mut params can be assigned.
+                    if ctx.param_mode(param) == Some(ParamMode::Mut) {
+                        // ParamStore handles destroying the old value internally.
+                        ctx.emit(Instruction::ParamStore {
+                            param,
+                            value: Operand::Value(value_id),
+                        });
+                        Ok(())
+                    } else {
+                        Err(LowerError::VariableNotMutable(name))
                     }
                 }
-                ctx.emit(Instruction::SlotStore {
-                    dest: SlotDest::Local(slot),
-                    value: Operand::Value(value_id),
-                });
-                Ok(())
-            } else {
-                Err(LowerError::VariableNotMutable(name))
+                _ => Err(LowerError::VariableNotMutable(name)),
             }
         }
         Statement::Ret(ret_stmt) => {

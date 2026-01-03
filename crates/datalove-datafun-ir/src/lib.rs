@@ -664,6 +664,9 @@ pub enum Instruction {
     /// Store value to mutable slot.
     SlotStore { dest: SlotDest, value: Operand },
 
+    /// Store value to mutable parameter (writes through to caller's data).
+    ParamStore { param: ParamId, value: Operand },
+
     /// Load value from mutable slot.
     SlotLoad { dest: ValueId, slot: SlotId },
 

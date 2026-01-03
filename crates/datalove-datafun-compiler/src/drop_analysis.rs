@@ -46,8 +46,15 @@ pub struct BindingInfo {
     pub is_slot: bool,
     /// Whether this binding is a ScriptUnit top-level binding (exported, never dropped).
     pub is_script_unit: bool,
-    /// Whether this binding is a ref-mode parameter (borrowed, cannot be moved).
-    pub is_ref_param: bool,
+    /// Parameter mode if this binding is a param (None for let/var).
+    pub param_mode: Option<ParamMode>,
+}
+
+impl BindingInfo {
+    /// True if this binding is borrowed (Ref or Mut param) and cannot transfer ownership.
+    pub fn is_borrowed(&self) -> bool {
+        matches!(self.param_mode, Some(ParamMode::Ref) | Some(ParamMode::Mut))
+    }
 }
 
 /// Error detected during drop analysis.
@@ -65,6 +72,11 @@ pub enum AnalysisError {
     },
     /// Attempting to move a ref parameter (borrowed, cannot be moved).
     CannotMoveRefParam {
+        binding: BindingId,
+        name: String,
+    },
+    /// Attempting to pass a ref param to a mut param (can't get mutable from immutable).
+    CannotMutFromRef {
         binding: BindingId,
         name: String,
     },
@@ -178,7 +190,7 @@ impl<'db> AnalysisCtx<'db> {
     }
 
     /// Allocate a new binding ID.
-    fn alloc_binding(&mut self, name: String, ty: IrType, is_slot: bool, is_ref_param: bool) -> BindingId {
+    fn alloc_binding(&mut self, name: String, ty: IrType, is_slot: bool, param_mode: Option<ParamMode>) -> BindingId {
         let id = BindingId(self.next_binding);
         self.next_binding += 1;
 
@@ -187,7 +199,7 @@ impl<'db> AnalysisCtx<'db> {
             .map(|f| f.kind == ScopeKind::ScriptUnit)
             .unwrap_or(false);
 
-        self.bindings.push(BindingInfo { name: name.clone(), ty, is_slot, is_script_unit, is_ref_param });
+        self.bindings.push(BindingInfo { name: name.clone(), ty, is_slot, is_script_unit, param_mode });
 
         // Record in current scope.
         if let Some(frame) = self.scope_stack.last_mut() {
@@ -229,8 +241,8 @@ impl<'db> AnalysisCtx<'db> {
                 if frame.current_state.get(&id) == Some(&BindingState::Live) {
                     let info = &self.bindings[id.0 as usize];
                     // Skip Copy types (no drop needed).
-                    // Skip ref params (borrowed from caller, caller drops).
-                    if !info.ty.is_copy() && !info.is_ref_param {
+                    // Skip borrowed params (caller retains ownership).
+                    if !info.ty.is_copy() && !info.is_borrowed() {
                         to_drop.push(id);
                     }
                 }
@@ -280,8 +292,8 @@ impl<'db> AnalysisCtx<'db> {
             return;
         }
 
-        // Ref params cannot be moved - they're borrowed.
-        if self.bindings[id.0 as usize].is_ref_param {
+        // Borrowed params (Ref/Mut) cannot be moved - caller retains ownership.
+        if self.bindings[id.0 as usize].is_borrowed() {
             let name = self.bindings[id.0 as usize].name.clone();
             self.errors.push(AnalysisError::CannotMoveRefParam { binding: id, name });
             return;
@@ -337,8 +349,8 @@ impl<'db> AnalysisCtx<'db> {
             for &id in &frame.bindings {
                 if frame.current_state.get(&id) == Some(&BindingState::Live) {
                     let info = &self.bindings[id.0 as usize];
-                    // Skip Copy types and ref params (borrowed from caller).
-                    if !info.ty.is_copy() && !info.is_ref_param && seen.insert(id) {
+                    // Skip Copy types and borrowed params (caller retains ownership).
+                    if !info.ty.is_copy() && !info.is_borrowed() && seen.insert(id) {
                         result.push(id);
                     }
                 }
@@ -347,8 +359,8 @@ impl<'db> AnalysisCtx<'db> {
             for (&id, &state) in &frame.current_state {
                 if state == BindingState::Live {
                     let info = &self.bindings[id.0 as usize];
-                    // Skip Copy types and ref params (borrowed from caller).
-                    if !info.ty.is_copy() && !info.is_ref_param && seen.insert(id) {
+                    // Skip Copy types and borrowed params (caller retains ownership).
+                    if !info.ty.is_copy() && !info.is_borrowed() && seen.insert(id) {
                         result.push(id);
                     }
                 }
@@ -368,6 +380,16 @@ impl<'db> AnalysisCtx<'db> {
         match self.expr_types.get(index).copied().flatten() {
             Some(ty) => IrType::from_tycheck(self.db, &ty),
             None => IrType::Unit,
+        }
+    }
+
+    /// If the expression is a simple name, return its binding ID.
+    fn expr_to_binding(&self, expr: ExprFun<'db>) -> Option<BindingId> {
+        if let ExprFunKind::Name(name_text) = expr.expr(self.db) {
+            let name: &str = name_text.text(self.db).as_ref();
+            self.name_to_binding.get(name).copied()
+        } else {
+            None
         }
     }
 
@@ -479,9 +501,26 @@ impl<'db> AnalysisCtx<'db> {
                 // Analyze args with appropriate consumption based on param mode.
                 let args = call.args(self.db);
                 for (i, arg) in args.iter().enumerate() {
-                    // Ref params don't consume, other modes do.
-                    let is_consumed = callee_modes.get(i)
-                        .map(|mode| !matches!(mode, ParamMode::Ref))
+                    let callee_mode = callee_modes.get(i).copied();
+
+                    // Check for invalid ref -> mut passing.
+                    // Can't get mutable reference from immutable ref param.
+                    // Mut -> Mut is allowed since the source already has mutable access.
+                    if callee_mode == Some(ParamMode::Mut) {
+                        if let Some(binding_id) = self.expr_to_binding(*arg) {
+                            if self.bindings[binding_id.0 as usize].param_mode == Some(ParamMode::Ref) {
+                                let name = self.bindings[binding_id.0 as usize].name.clone();
+                                self.errors.push(AnalysisError::CannotMutFromRef {
+                                    binding: binding_id,
+                                    name,
+                                });
+                            }
+                        }
+                    }
+
+                    // Ref and Mut params don't consume (caller retains ownership).
+                    let is_consumed = callee_mode
+                        .map(|mode| !matches!(mode, ParamMode::Ref | ParamMode::Mut))
                         .unwrap_or(true);
                     self.analyze_expr_moves(*arg, is_consumed);
                 }
@@ -594,8 +633,7 @@ pub fn analyze_function<'db>(
     for param in func.params(db) {
         let name = param.name(db).text(db).to_string();
         let ty = IrType::from_type_hint(db, &param.type_hint(db));
-        let is_ref_param = matches!(param.mode(db), ParamMode::Ref);
-        ctx.alloc_binding(name, ty, false, is_ref_param);
+        ctx.alloc_binding(name, ty, false, Some(param.mode(db)));
     }
 
     // Analyze function body.
@@ -761,7 +799,7 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLet<'db>, stmt_idx: us
     // Create binding for the let.
     let name = stmt.name(ctx.db).text(ctx.db).to_string();
     let ty = ctx.expr_type(expr);
-    ctx.alloc_binding(name, ty, false, false);
+    ctx.alloc_binding(name, ty, false, None);
 }
 
 fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtVar<'db>, stmt_idx: usize) {
@@ -783,7 +821,7 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtVar<'db>, stmt_idx: us
     // Create binding for the var (as a slot).
     let name = stmt.name(ctx.db).text(ctx.db).to_string();
     let ty = ctx.expr_type(expr);
-    ctx.alloc_binding(name, ty, true, false);
+    ctx.alloc_binding(name, ty, true, None);
 }
 
 fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtSet<'db>, stmt_idx: usize) {
@@ -864,7 +902,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
             IrType::Result(inner) => (**inner).clone(),
             other => other.clone(),
         };
-        ctx.alloc_binding(name, inner_ty, false, false);
+        ctx.alloc_binding(name, inner_ty, false, None);
     }
 
     analyze_statements(ctx, stmt.then_body(ctx.db), &[]);
@@ -887,7 +925,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
             let name = binding_name.text(ctx.db).to_string();
             // Else binding gets the error for Result types.
             let ty = IrType::Error;
-            ctx.alloc_binding(name, ty, false, false);
+            ctx.alloc_binding(name, ty, false, None);
         }
 
         analyze_statements(ctx, else_body, &[]);
@@ -1031,7 +1069,7 @@ end fun
 
     #[test]
     fn test_ref_param_registered_correctly() {
-        // Verify that ref params are marked as is_ref_param in bindings.
+        // Verify that ref params have param_mode = Some(Ref).
         let ref db = crate::Database::default();
         let source = r#"
 fun test(ref x: @u32): @u32
@@ -1044,14 +1082,15 @@ end fun
 
         // Should have one binding (the ref param).
         assert_eq!(analysis.bindings.len(), 1);
-        assert!(analysis.bindings[0].is_ref_param, "ref param should be marked as is_ref_param");
+        assert_eq!(analysis.bindings[0].param_mode, Some(ParamMode::Ref), "ref param should have param_mode = Ref");
+        assert!(analysis.bindings[0].is_borrowed(), "ref param should be borrowed");
         assert_eq!(analysis.bindings[0].name, "x");
         assert!(analysis.errors.is_empty());
     }
 
     #[test]
     fn test_in_param_not_ref() {
-        // Verify that regular in params are NOT marked as ref.
+        // Verify that regular in params have param_mode = Some(In).
         let ref db = crate::Database::default();
         let source = r#"
 fun test(x: @u32): @u32
@@ -1064,7 +1103,8 @@ end fun
 
         // Should have one binding (the in param).
         assert_eq!(analysis.bindings.len(), 1);
-        assert!(!analysis.bindings[0].is_ref_param, "in param should NOT be marked as is_ref_param");
+        assert_eq!(analysis.bindings[0].param_mode, Some(ParamMode::In), "in param should have param_mode = In");
+        assert!(!analysis.bindings[0].is_borrowed(), "in param should NOT be borrowed");
         assert_eq!(analysis.bindings[0].name, "x");
         assert!(analysis.errors.is_empty());
     }
@@ -1109,9 +1149,9 @@ end fun
 
         // Should have three bindings.
         assert_eq!(analysis.bindings.len(), 3);
-        assert!(!analysis.bindings[0].is_ref_param, "a should be in mode");
-        assert!(analysis.bindings[1].is_ref_param, "b should be ref mode");
-        assert!(!analysis.bindings[2].is_ref_param, "c should be in mode");
+        assert_eq!(analysis.bindings[0].param_mode, Some(ParamMode::In), "a should be In mode");
+        assert_eq!(analysis.bindings[1].param_mode, Some(ParamMode::Ref), "b should be Ref mode");
+        assert_eq!(analysis.bindings[2].param_mode, Some(ParamMode::In), "c should be In mode");
         assert!(analysis.errors.is_empty());
     }
 }

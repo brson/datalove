@@ -568,6 +568,28 @@ impl IrInterpreter {
                     }
                 }
             }
+            Instruction::ParamStore { param, value } => {
+                let src_val = self.read_operand(value, frame, frames)?;
+                // Get destination pointer from param (points to caller's data).
+                let dest_ptr = frame.param_dest(*param)?;
+                // Destroy old value at destination.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        self.runtime.handle(),
+                        dest_ptr.ptr,
+                        dest_ptr.tydesc,
+                    );
+                }
+                // Move new value into destination.
+                unsafe { self.move_value(&src_val, dest_ptr)?; }
+                // Mark source as dropped.
+                match value {
+                    Operand::Value(id) => frame.mark_value_dropped(*id),
+                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::Param(id) => frame.mark_param_dropped(*id),
+                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                }
+            }
             Instruction::SlotLoad { dest, slot } => {
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest)?;

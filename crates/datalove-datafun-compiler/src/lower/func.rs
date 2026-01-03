@@ -63,25 +63,26 @@ pub fn lower_function_body<'db>(
     // Set return type from function signature.
     ctx.return_type = func.return_type(ctx.db).map(|ty| IrType::from_type_hint(ctx.db, &ty));
 
-    // Allocate ParamIds for parameters with correct types.
+    // Allocate ParamIds for parameters with correct types and modes.
     // Record binding operands to match analysis order.
     let mut params: Vec<ParamId> = Vec::new();
     let mut param_modes = Vec::new();
     for p in func.params(ctx.db) {
         let param_name = p.name(ctx.db).text(ctx.db).to_string();
         let param_type = IrType::from_type_hint(ctx.db, &p.type_hint(ctx.db));
-        let id = ctx.fresh_param(param_type.clone());
+        let mode = match p.mode(ctx.db) {
+            ast::ParamMode::In => ParamMode::In,
+            ast::ParamMode::Out => ParamMode::Out,
+            ast::ParamMode::Ref => ParamMode::Ref,
+            ast::ParamMode::Mut => ParamMode::Mut,
+        };
+        let id = ctx.fresh_param(param_type.clone(), mode);
         let operand = Operand::Param(id);
         ctx.bind_var(&param_name, operand);
         // Record binding operand for drop schedule.
         ctx.record_binding_operand(operand);
         params.push(id);
-        param_modes.push(match p.mode(ctx.db) {
-            ast::ParamMode::In => ParamMode::In,
-            ast::ParamMode::Out => ParamMode::Out,
-            ast::ParamMode::Ref => ParamMode::Ref,
-            ast::ParamMode::Mut => ParamMode::Mut,
-        });
+        param_modes.push(mode);
     }
 
     // Lower the function body with statement indices.
