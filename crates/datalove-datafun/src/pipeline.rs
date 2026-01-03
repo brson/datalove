@@ -376,6 +376,10 @@ pub struct ScriptCompilationContext<'db> {
     /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
     /// Used to resolve typechecker's ResolvedCallTarget to IR function refs.
     func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+    /// Last Source used for parsing (for diagnostic retrieval).
+    last_source: Option<bct::input::Source>,
+    /// Last batch spec used (for diagnostic retrieval).
+    last_batch_spec: Option<ScriptBatchSpec<'db>>,
 }
 
 impl<'db> CompiledModules<'db> {
@@ -415,6 +419,8 @@ impl<'db> CompiledModules<'db> {
             module_specs,
             interp: datalove_datafun_interp::IrInterpreter::new(),
             func_id_map: self.func_id_map,
+            last_source: None,
+            last_batch_spec: None,
         }
     }
 }
@@ -423,6 +429,7 @@ impl<'db> ScriptCompilationContext<'db> {
     /// Compile and execute a script fragment.
     pub fn eval_fragment(&mut self, source: &str) -> ScriptUnitResult {
         let src = bct::input::Source::new(self.db, source.to_string());
+        self.last_source = Some(src);
         let parse_result = datalove_datafun_parser::parse(self.db, src);
         let parsed = parse_result.parsed(self.db);
 
@@ -452,6 +459,7 @@ impl<'db> ScriptCompilationContext<'db> {
             self.accumulated_unit_specs.clone(),
             self.module_specs.clone(),
         );
+        self.last_batch_spec = Some(batch_spec);
         let typecheck_results = type_check_script_units(self.db, batch_spec);
         let all_results = typecheck_results.results(self.db);
         let tycheck_result = *all_results.last().unwrap();
@@ -799,5 +807,28 @@ impl<'db> ScriptCompilationContext<'db> {
         // Sort by name.
         result.sort_by(|a, b| a.0.cmp(&b.0));
         result
+    }
+
+    /// Get parse diagnostics from the last eval call.
+    pub fn get_parse_diagnostics(&self) -> Vec<&datalove_diagnostic::ParseDiagnostic> {
+        if let Some(src) = self.last_source {
+            datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src)
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Get type diagnostics from the last eval call.
+    pub fn get_type_diagnostics(&self) -> Vec<&datalove_diagnostic::TypeDiagnostic> {
+        if let Some(batch_spec) = self.last_batch_spec {
+            type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(self.db, batch_spec)
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Get database reference for rendering diagnostics.
+    pub fn db(&self) -> &'db dyn salsa::Database {
+        self.db
     }
 }

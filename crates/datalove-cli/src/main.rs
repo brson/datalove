@@ -3,6 +3,8 @@ use rmx::prelude::*;
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
+mod render;
+
 fn main() -> AnyResult<()> {
     rmx::extras::init_crate_name(env!("CARGO_CRATE_NAME"));
 
@@ -343,12 +345,16 @@ impl ScriptCommand {
         // Execute the script as a fragment.
         let result = ctx.eval_fragment(&script_source);
 
-        // Check for errors.
-        if let datafun::pipeline::TypecheckResult::ParseError { errors } = &result.typecheck {
-            bail!("Parse error: {}", errors.join("; "));
+        // Check for errors and render diagnostics.
+        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &result.typecheck {
+            let parse_diags = ctx.get_parse_diagnostics();
+            render::render_parse_diagnostics(ctx.db(), &parse_diags, &self.file_path);
+            bail!("Parse error");
         }
-        if let datafun::pipeline::TypecheckResult::Error { errors } = &result.typecheck {
-            bail!("Typecheck error: {}", errors.join("; "));
+        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &result.typecheck {
+            let type_diags = ctx.get_type_diagnostics();
+            render::render_type_diagnostics(ctx.db(), &type_diags, &self.file_path);
+            bail!("Type error");
         }
         if let datafun::pipeline::LoweringResult::Error { message } = &result.lowering {
             bail!("Lowering error: {}", message);

@@ -1,1 +1,8 @@
-Error: Parse error: expected '/' after import space
+[31m[P003] Error:[0m expected '/' after import space
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m/home/brian/.homes/dev/megaspace/datalove/crates/datalove-cli/tests/fixtures/error/17_require_missing_first_slash.dfs:1:24[38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m [38;5;249mr[0m[38;5;249me[0m[38;5;249mq[0m[38;5;249mu[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m [0m[38;5;249me[0m[38;5;249mx[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m [0m[38;5;201mp[0m[38;5;201mk[0m[38;5;201mg[0m[38;5;249m/[0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m
+ [38;5;240m  │[0m                        [38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m  
+ [38;5;240m  │[0m                         [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m expected '/' after import space
+[38;5;246m───╯[0m
+Error: Parse error

@@ -14,12 +14,15 @@ datalove-datafun.path = "../datalove-datafun"
 datalove-datafun-tycheck.path = "../datalove-datafun-tycheck"
 datalove-datafun-interp.path = "../datalove-datafun-interp"
 datalove-diagnostic.path = "../datalove-diagnostic"
+datalove-datafun-parser.path = "../datalove-datafun-parser"
 datalove-rt.path = "../datalove-rt"
 datalove-repl.path = "../datalove-repl"
 datalove-repl-term.path = "../datalove-repl-term"
 pulldown-cmark = "0.12"
 comrak = "0.32"
 tera = "1.20"
+ariadne = "0.4"
+salsa.workspace = true
 
 [[bin]]
 name = "datalove"
