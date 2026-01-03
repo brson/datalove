@@ -266,6 +266,13 @@ Allowed and optional in all sequence forms of course.
 
 
 
+### Operator overloading?
+
+No.
+
+
+
+
 ### Generics
 
 Functions can have type parameters:
