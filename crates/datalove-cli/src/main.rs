@@ -346,14 +346,15 @@ impl ScriptCommand {
         let result = ctx.eval_fragment(&script_source);
 
         // Check for errors and render diagnostics.
+        let cwd = rmx::std::env::current_dir().unwrap_or_default();
         if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &result.typecheck {
             let parse_diags = ctx.get_parse_diagnostics();
-            render::render_parse_diagnostics(ctx.db(), &parse_diags, &self.file_path);
+            render::render_parse_diagnostics(ctx.db(), &parse_diags, &self.file_path, &cwd);
             bail!("Parse error");
         }
         if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &result.typecheck {
             let type_diags = ctx.get_type_diagnostics();
-            render::render_type_diagnostics(ctx.db(), &type_diags, &self.file_path);
+            render::render_type_diagnostics(ctx.db(), &type_diags, &self.file_path, &cwd);
             bail!("Type error");
         }
         if let datafun::pipeline::LoweringResult::Error { message } = &result.lowering {

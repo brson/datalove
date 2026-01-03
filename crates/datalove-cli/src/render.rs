@@ -11,12 +11,13 @@ pub fn render_parse_diagnostics<'db>(
     db: &'db dyn salsa::Database,
     diagnostics: &[&datalove_diagnostic::ParseDiagnostic],
     file_path: &Path,
+    cwd: &Path,
 ) {
     let mut colors = ColorGenerator::new();
 
     for diag_wrapper in diagnostics {
         let diag = diag_wrapper.to_diagnostic(db);
-        render_single_diagnostic(db, &diag, file_path, &mut colors);
+        render_single_diagnostic(db, &diag, file_path, cwd, &mut colors);
     }
 }
 
@@ -25,12 +26,13 @@ pub fn render_type_diagnostics<'db>(
     db: &'db dyn salsa::Database,
     diagnostics: &[&datalove_diagnostic::TypeDiagnostic],
     file_path: &Path,
+    cwd: &Path,
 ) {
     let mut colors = ColorGenerator::new();
 
     for diag_wrapper in diagnostics {
         let diag = diag_wrapper.to_diagnostic(db);
-        render_single_diagnostic(db, &diag, file_path, &mut colors);
+        render_single_diagnostic(db, &diag, file_path, cwd, &mut colors);
     }
 }
 
@@ -39,6 +41,7 @@ fn render_single_diagnostic<'db>(
     db: &'db dyn salsa::Database,
     diag: &Diagnostic<'db>,
     file_path: &Path,
+    cwd: &Path,
     colors: &mut ColorGenerator,
 ) {
     let kind = match diag.severity {
@@ -48,8 +51,9 @@ fn render_single_diagnostic<'db>(
         Severity::Help => ReportKind::Advice,
     };
 
-    // Get the file name as string for ariadne.
-    let file_name = file_path.display().to_string();
+    // Get relative path for display, stripping cwd prefix if present.
+    let display_path = file_path.strip_prefix(cwd).unwrap_or(file_path);
+    let file_name = display_path.display().to_string();
 
     // Find the primary label's span for the report location.
     let offset = diag.labels.first()
