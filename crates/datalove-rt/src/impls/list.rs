@@ -17,10 +17,6 @@ pub unsafe fn list_create_impl(
     value_out: *mut u8,
     _tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
-    if value_out.is_null() {
-        return RtStatus::Error;
-    }
-
     // Initialize an empty list (null data, zero size and capacity).
     let list_ptr = value_out as *mut List;
     unsafe {
@@ -41,10 +37,6 @@ pub unsafe fn list_create_from_slice_impl(
     list_value_out: *mut u8,
     list_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
-    if list_value_out.is_null() || slice_ptr_ref.is_null() {
-        return RtStatus::Error;
-    }
-
     // Create empty list.
     let status = unsafe { list_create_impl(rt, list_value_out, list_tydesc) };
     if status != RtStatus::Ok {
@@ -96,10 +88,6 @@ pub unsafe fn list_destroy_impl(
     value_in: *mut u8,
     tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
-    if value_in.is_null() {
-        return RtStatus::Error;
-    }
-
     let element_ty = tydesc.list_element_ty();
     let mut list = unsafe { ListMut::new(value_in as *mut List, element_ty) };
     let data_ptr = list.data_mut();
@@ -131,10 +119,6 @@ pub unsafe fn list_clear_impl(
     value_mut: *mut u8,
     tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
-    if value_mut.is_null() {
-        return RtStatus::Error;
-    }
-
     let element_ty = tydesc.list_element_ty();
     let mut list = unsafe { ListMut::new(value_mut as *mut List, element_ty) };
     let data_ptr = list.data_mut();
@@ -171,10 +155,6 @@ pub unsafe fn list_get_impl(
     option_value_out: *mut u8,
     option_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
-    if list_value_ref.is_null() || option_value_out.is_null() {
-        return RtStatus::Error;
-    }
-
     let element_ty = list_tydesc.list_element_ty();
     let list = unsafe { ListRef::new(list_value_ref as *const List, element_ty) };
     let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
@@ -216,10 +196,6 @@ pub unsafe fn list_set_impl(
     element_in: *mut u8,
     element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
-    if list_value_mut.is_null() || element_in.is_null() {
-        return RtStatus::Error;
-    }
-
     let list = unsafe { ListMut::new(list_value_mut as *mut List, element_tydesc) };
 
     // Check bounds.
@@ -259,10 +235,6 @@ pub unsafe fn list_push_impl(
     element_in: *mut u8,
     element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
-    if list_value_mut.is_null() || element_in.is_null() {
-        return RtStatus::Error;
-    }
-
     let list_ptr = list_value_mut as *mut List;
     let mut list = unsafe { ListMut::new(list_ptr, element_tydesc) };
 
@@ -296,10 +268,6 @@ pub unsafe fn list_pop_impl(
     option_value_out: *mut u8,
     option_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
-    if list_value_mut.is_null() || option_value_out.is_null() {
-        return RtStatus::Error;
-    }
-
     let element_ty = list_tydesc.list_element_ty();
     let mut list = unsafe { ListMut::new(list_value_mut as *mut List, element_ty) };
     let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
@@ -343,10 +311,6 @@ pub unsafe fn list_insert_impl(
     element_in: *mut u8,
     element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
-    if list_value_mut.is_null() || element_in.is_null() {
-        return RtStatus::Error;
-    }
-
     let list_ptr = list_value_mut as *mut List;
     let mut list = unsafe { ListMut::new(list_ptr, element_tydesc) };
     let size = list.size();
@@ -401,10 +365,6 @@ pub unsafe fn list_remove_impl(
     option_value_out: *mut u8,
     option_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
-    if list_value_mut.is_null() || option_value_out.is_null() {
-        return RtStatus::Error;
-    }
-
     let element_ty = list_tydesc.list_element_ty();
     let mut list = unsafe { ListMut::new(list_value_mut as *mut List, element_ty) };
     let size = list.size();
@@ -449,10 +409,6 @@ pub unsafe fn list_reserve_impl(
     list_tydesc: rtdt::TyDescRef,
     additional: u32,
 ) -> RtStatus {
-    if list_value_mut.is_null() {
-        return RtStatus::Error;
-    }
-
     let element_ty = list_tydesc.list_element_ty();
     let list_ptr = list_value_mut as *mut List;
     let list = unsafe { ListMut::new(list_ptr, element_ty) };
@@ -472,10 +428,6 @@ pub unsafe fn list_shrink_to_fit_impl(
     list_value_mut: *mut u8,
     list_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
-    if list_value_mut.is_null() {
-        return RtStatus::Error;
-    }
-
     let element_ty = list_tydesc.list_element_ty();
     let mut list = unsafe { ListMut::new(list_value_mut as *mut List, element_ty) };
     let size = list.size();
@@ -532,10 +484,6 @@ pub unsafe fn list_extend_from_slice_impl(
     slice_len: u32,
     element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
-    if list_value_mut.is_null() || slice_ptr_ref.is_null() {
-        return RtStatus::Error;
-    }
-
     if slice_len == 0 {
         return RtStatus::Ok;
     }

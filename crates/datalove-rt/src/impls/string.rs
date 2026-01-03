@@ -14,10 +14,6 @@ pub unsafe fn string_create_local(
     value_out: *mut u8,
     tydesc_in: *const rtdt::TyDesc,
 ) -> RtStatus {
-    if value_out.is_null() || tydesc_in.is_null() {
-        return RtStatus::Error;
-    }
-
     unsafe {
         let ty = &*tydesc_in;
         if ty.type_tag != rtdt::TyTag::String {
@@ -39,10 +35,6 @@ pub unsafe fn string_destroy_local(
     value_in: *mut u8,
     tydesc_in: *const rtdt::TyDesc,
 ) -> RtStatus {
-    if rt.is_null() || value_in.is_null() || tydesc_in.is_null() {
-        return RtStatus::Error;
-    }
-
     unsafe {
         let ty = &*tydesc_in;
         if ty.type_tag != rtdt::TyTag::String {
@@ -75,16 +67,8 @@ pub unsafe fn string_push_bytes_local(
     bytes_ref: *const u8,
     bytes_len: u32,
 ) -> RtStatus {
-    if rt.is_null() || string_value_mut.is_null() || string_tydesc.is_null() {
-        return RtStatus::Error;
-    }
-
     if bytes_len == 0 {
         return RtStatus::Ok;
-    }
-
-    if bytes_ref.is_null() {
-        return RtStatus::Error;
     }
 
     unsafe {
@@ -153,10 +137,6 @@ pub unsafe fn string_clear_local(
     string_value_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
-    if string_value_mut.is_null() || string_tydesc.is_null() {
-        return RtStatus::Error;
-    }
-
     unsafe {
         let ty = &*string_tydesc;
         if ty.type_tag != rtdt::TyTag::String {
@@ -429,20 +409,6 @@ mod tests {
 
             let rt = Box::from_raw(rt_handle as *mut RtLocal);
             rt.shutdown();
-        }
-    }
-
-    #[test]
-    fn test_string_error_null_pointer() {
-        let tydesc = unsafe { create_string_tydesc() };
-
-        unsafe {
-            let status = string_create_local(
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                &tydesc,
-            );
-            assert_eq!(status, RtStatus::Error);
         }
     }
 

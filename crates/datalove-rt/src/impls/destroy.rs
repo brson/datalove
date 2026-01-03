@@ -9,10 +9,6 @@ pub unsafe fn any_destroy_local(
     value_in: *mut u8,
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
-    if rt.is_null() || value_in.is_null() || tydesc.is_null() {
-        return RtStatus::Error;
-    }
-
     unsafe {
         let ty = rtdt::TyDescRef::from_ptr(tydesc);
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);

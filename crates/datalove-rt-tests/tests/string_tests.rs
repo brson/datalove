@@ -68,44 +68,6 @@ fn test_string_create_empty() -> AnyResult<()> {
     Ok(())
 }
 
-/// Test create with null value_out pointer.
-#[test]
-fn test_string_create_null_value_out() -> AnyResult<()> {
-    let rt = datalove_rt::c::dtlv_rti_init();
-    let tydesc = create_string_tydesc();
-
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_create_local(
-            rt,
-            std::ptr::null_mut(),
-            &*tydesc,
-        )
-    };
-    assert_eq!(status, RtStatus::Error);
-
-    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
-    Ok(())
-}
-
-/// Test create with null tydesc pointer.
-#[test]
-fn test_string_create_null_tydesc() -> AnyResult<()> {
-    let rt = datalove_rt::c::dtlv_rti_init();
-
-    let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_create_local(
-            rt,
-            string.as_mut_ptr() as *mut u8,
-            std::ptr::null(),
-        )
-    };
-    assert_eq!(status, RtStatus::Error);
-
-    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
-    Ok(())
-}
-
 /// Test create with wrong type tag.
 #[test]
 fn test_string_create_wrong_type() -> AnyResult<()> {
@@ -203,72 +165,6 @@ fn test_string_destroy_with_data() -> AnyResult<()> {
     assert!(string.data.is_null());
     assert_eq!(string.size, 0);
     assert_eq!(string.capacity, 0);
-
-    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
-    Ok(())
-}
-
-/// Test destroy with null rt handle.
-#[test]
-fn test_string_destroy_null_rt() -> AnyResult<()> {
-    let tydesc = create_string_tydesc();
-
-    let mut string = rtdt::String {
-        data: std::ptr::null(),
-        size: 0,
-        capacity: 0,
-    };
-
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_destroy_local(
-            std::ptr::null_mut(),
-            &mut string as *mut rtdt::String as *mut u8,
-            &*tydesc,
-        )
-    };
-    assert_eq!(status, RtStatus::Error);
-
-    Ok(())
-}
-
-/// Test destroy with null value_in pointer.
-#[test]
-fn test_string_destroy_null_value_in() -> AnyResult<()> {
-    let rt = datalove_rt::c::dtlv_rti_init();
-    let tydesc = create_string_tydesc();
-
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_destroy_local(
-            rt,
-            std::ptr::null_mut(),
-            &*tydesc,
-        )
-    };
-    assert_eq!(status, RtStatus::Error);
-
-    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
-    Ok(())
-}
-
-/// Test destroy with null tydesc pointer.
-#[test]
-fn test_string_destroy_null_tydesc() -> AnyResult<()> {
-    let rt = datalove_rt::c::dtlv_rti_init();
-
-    let mut string = rtdt::String {
-        data: std::ptr::null(),
-        size: 0,
-        capacity: 0,
-    };
-
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_destroy_local(
-            rt,
-            &mut string as *mut rtdt::String as *mut u8,
-            std::ptr::null(),
-        )
-    };
-    assert_eq!(status, RtStatus::Error);
 
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     Ok(())
@@ -489,110 +385,6 @@ fn test_string_push_bytes_large() -> AnyResult<()> {
     Ok(())
 }
 
-/// Test push with null rt handle.
-#[test]
-fn test_string_push_bytes_null_rt() -> AnyResult<()> {
-    let tydesc = create_string_tydesc();
-
-    let mut string = rtdt::String {
-        data: std::ptr::null(),
-        size: 0,
-        capacity: 0,
-    };
-
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_push_bytes_local(
-            std::ptr::null_mut(),
-            &mut string as *mut rtdt::String as *mut u8,
-            &*tydesc,
-            b"test".as_ptr(),
-            4,
-        )
-    };
-    assert_eq!(status, RtStatus::Error);
-
-    Ok(())
-}
-
-/// Test push with null string pointer.
-#[test]
-fn test_string_push_bytes_null_string() -> AnyResult<()> {
-    let rt = datalove_rt::c::dtlv_rti_init();
-    let tydesc = create_string_tydesc();
-
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_push_bytes_local(
-            rt,
-            std::ptr::null_mut(),
-            &*tydesc,
-            b"test".as_ptr(),
-            4,
-        )
-    };
-    assert_eq!(status, RtStatus::Error);
-
-    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
-    Ok(())
-}
-
-/// Test push with null tydesc.
-#[test]
-fn test_string_push_bytes_null_tydesc() -> AnyResult<()> {
-    let rt = datalove_rt::c::dtlv_rti_init();
-
-    let mut string = rtdt::String {
-        data: std::ptr::null(),
-        size: 0,
-        capacity: 0,
-    };
-
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_push_bytes_local(
-            rt,
-            &mut string as *mut rtdt::String as *mut u8,
-            std::ptr::null(),
-            b"test".as_ptr(),
-            4,
-        )
-    };
-    assert_eq!(status, RtStatus::Error);
-
-    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
-    Ok(())
-}
-
-/// Test push with null bytes_ref but non-zero length.
-#[test]
-fn test_string_push_bytes_null_bytes_ref() -> AnyResult<()> {
-    let rt = datalove_rt::c::dtlv_rti_init();
-    let tydesc = create_string_tydesc();
-
-    let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
-    unsafe {
-        datalove_rt::c::dtlv_rti_string_create_local(
-            rt,
-            string.as_mut_ptr() as *mut u8,
-            &*tydesc,
-        );
-    }
-    let mut string = unsafe { string.assume_init() };
-
-    // Null pointer with non-zero length should fail.
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_push_bytes_local(
-            rt,
-            &mut string as *mut rtdt::String as *mut u8,
-            &*tydesc,
-            std::ptr::null(),
-            10,
-        )
-    };
-    assert_eq!(status, RtStatus::Error);
-
-    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
-    Ok(())
-}
-
 /// Test push with wrong type tag.
 #[test]
 fn test_string_push_bytes_wrong_type() -> AnyResult<()> {
@@ -770,49 +562,6 @@ fn test_string_clear_then_push() -> AnyResult<()> {
         );
         datalove_rt::c::dtlv_rti_shutdown(rt);
     }
-    Ok(())
-}
-
-/// Test clear with null string pointer.
-#[test]
-fn test_string_clear_null_string() -> AnyResult<()> {
-    let rt = datalove_rt::c::dtlv_rti_init();
-    let tydesc = create_string_tydesc();
-
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_clear_local(
-            rt,
-            std::ptr::null_mut(),
-            &*tydesc,
-        )
-    };
-    assert_eq!(status, RtStatus::Error);
-
-    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
-    Ok(())
-}
-
-/// Test clear with null tydesc.
-#[test]
-fn test_string_clear_null_tydesc() -> AnyResult<()> {
-    let rt = datalove_rt::c::dtlv_rti_init();
-
-    let mut string = rtdt::String {
-        data: std::ptr::null(),
-        size: 0,
-        capacity: 0,
-    };
-
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_clear_local(
-            rt,
-            &mut string as *mut rtdt::String as *mut u8,
-            std::ptr::null(),
-        )
-    };
-    assert_eq!(status, RtStatus::Error);
-
-    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     Ok(())
 }
 
