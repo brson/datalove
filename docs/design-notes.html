@@ -99,14 +99,18 @@ cases in machine-size integers and floats.</p>
 <p>Bigints (<code>int</code>) support all but div:
 <code>+ - *</code> and unary <code>-</code>.
 For div we must use a checked variant to handle divide-by-zero.</p>
-<p>Fixed ints do not support any bare bath ops, not even unary <code>-</code>.</p>
-<p>Fixed ints support early-return varieties:</p>
-<pre><code class="language-datalove">let a = 1 +? 1
+<p>Fixed ints support all but div:
+<code>+ - *</code> and unary <code>-</code>,
+but <em>widen</em> to bigints.</p>
+<p>Fixed ints support checked early-return varieties:</p>
+<pre><code class="language-datalove">// Checked optional arithmetic, early-returning `none`.
+let a = 1 +? 1
 let a = 1 -? 1
 let a = 1 *? 1
 let a = 1 /? 1
 let a = -?a     // early-return negation
 
+// Checked result arithmetic, early-returning `er`.
 let a = 1 +! 1
 let a = 1 -! 1
 let a = 1 *! 1
@@ -117,38 +121,22 @@ let a = -!a
 <p>These either result in the same type as the input types or early return -
 they do not result in option or result types. Their enclosing function
 must be the correct optionr/result type.</p>
-<p><code>-?</code> unary op is not defined for unsigned ints -
-it has a sensible semantic but is a pure footgun.</p>
 <p>Bigints support the early-return division but not the others.
 Floats don't support early-return math.</p>
 <p>If we decide to let funs panic we'll also add panicking variations.</p>
-<h3><a href="#numeric-widening" aria-hidden="true" class="anchor" id="user-content-numeric-widening"></a>Numeric widening</h3>
-<p>Fixed ints automatically widen, up to bigints:</p>
-<pre><code class="language-datalove">let a: u8 = 1
-let b: u16 = a
-let c: int = b
+<h3><a href="#pure-functions--mutable-reference-argument-modes" aria-hidden="true" class="anchor" id="user-content-pure-functions--mutable-reference-argument-modes"></a>Pure functions + mutable-reference argument modes</h3>
+<p>Four argument modes: <code>in</code>, <code>out</code>, <code>ref</code>, <code>mut</code></p>
+<pre><code class="language-datalove">fun (
+  a: int,     // default `in`
+  out b: int,
+  ref c: int,
+  mut d: int,
+)
+  // `out` args must be assigned on all code paths
+  set b = a
+  set d = c + d
+end fun
 </code></pre>
-<p>Same for signed fixed ints:</p>
-<pre><code class="language-datalove">let a: i8 = 1
-let b: i16 = a
-let c: int = b
-</code></pre>
-<p>Unsigned and signed ints never automatically coerce to each other.</p>
-<p>Widening also apllies to bare / unchecked math, which
-widens to <code>int</code>:</p>
-<pre><code class="language-datalove">// this checks to `int` because the `*` binop,
-// forcing the literals to be int
-let a = 1 * 2
-// locals also get coercions
-let b: u32 = 1
-// another `int`
-let c = b * b
-</code></pre>
-<h3><a href="#-pure-functions--mutable-reference-argument-modes" aria-hidden="true" class="anchor" id="user-content--pure-functions--mutable-reference-argument-modes"></a>† Pure functions + mutable-reference argument modes</h3>
-<p>Datalove at first does not look pure functional because
-it has mutable by-reference arguments:</p>
-<pre><code class="language-datalove"></code></pre>
-<p>etc.</p>
 <h3><a href="#allocations" aria-hidden="true" class="anchor" id="user-content-allocations"></a>Allocations</h3>
 <p>Besides encoding heaps in types,
 having local and global heaps,
@@ -199,6 +187,32 @@ The datafun interpreter runs on the web
 as a egui_ratatui application.</p>
 <h3><a href="#trailing-commas-and-separators" aria-hidden="true" class="anchor" id="user-content-trailing-commas-and-separators"></a>Trailing commas and separators</h3>
 <p>Allowed and optional in all sequence forms of course.</p>
+<h3><a href="#generics" aria-hidden="true" class="anchor" id="user-content-generics"></a>Generics</h3>
+<p>Functions can have type parameters:</p>
+<pre><code class="language-datalove">fun unwrap_or&lt;T&gt;(self: ?T, default: T): T where {
+  T is move,
+}
+  if self |value|
+    ret value
+  else
+    ret default
+  end if
+end fun
+</code></pre>
+<p>By default type parameters have no capabilities,
+<code>clone</code>, <code>move</code>, <code>etc</code>. <code>where</code> clauses are
+usually needed.</p>
+<p>Data structures can not have type parameters.</p>
+<p>TODO: How are generics translated?</p>
+<h3><a href="#type-aliases" aria-hidden="true" class="anchor" id="user-content-type-aliases"></a>Type aliases</h3>
+<p>Datafun has a structural type system.
+We can asign names with <code>typealias</code>.</p>
+<pre><code class="language-datalove">// `Contact` is an alias for a struct.
+typealias Contact: {
+  name: string,
+  age: int,
+}
+</code></pre>
 
     </main>
     <script data-manual src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
