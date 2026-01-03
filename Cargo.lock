@@ -896,7 +896,6 @@ dependencies = [
  "datalove-rt",
  "pulldown-cmark",
  "rustmax",
- "syntect",
  "tera",
 ]
 
