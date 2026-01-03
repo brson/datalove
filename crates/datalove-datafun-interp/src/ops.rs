@@ -380,14 +380,21 @@ impl IrInterpreter {
                     }
                     // Int comparison operations via runtime.
                     BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
-                        let cmp = datalove_rt::c::dtlv_rti_int_cmp(lhs.ptr, rhs.ptr);
+                        use datalove_rt::c::RtOrdering;
+                        let cmp = datalove_rt::c::dtlv_rti_cmp_local(
+                            rt_handle,
+                            lhs.ptr,
+                            int_tydesc,
+                            rhs.ptr,
+                            int_tydesc,
+                        );
                         let result = match op {
-                            BinOp::Eq => cmp == 0,
-                            BinOp::Ne => cmp != 0,
-                            BinOp::Lt => cmp < 0,
-                            BinOp::Le => cmp <= 0,
-                            BinOp::Gt => cmp > 0,
-                            BinOp::Ge => cmp >= 0,
+                            BinOp::Eq => cmp == RtOrdering::Equal,
+                            BinOp::Ne => cmp != RtOrdering::Equal,
+                            BinOp::Lt => cmp == RtOrdering::Less,
+                            BinOp::Le => cmp == RtOrdering::Less || cmp == RtOrdering::Equal,
+                            BinOp::Gt => cmp == RtOrdering::Greater,
+                            BinOp::Ge => cmp == RtOrdering::Greater || cmp == RtOrdering::Equal,
                             _ => unreachable!(),
                         };
                         *(dest.ptr as *mut bool) = result;

@@ -57,6 +57,20 @@ pub enum RtOrdering {
     Error = 4,
 }
 
+/// Debug assertion to verify pointer alignment matches tydesc requirements.
+#[inline]
+fn debug_assert_aligned(ptr: *const u8, tydesc: *const rtdt::TyDesc, name: &str) {
+    if false && cfg!(debug_assertions) {
+        debug_assert!(!tydesc.is_null(), "{}: tydesc is null", name);
+        let align = unsafe { (*tydesc).align } as usize;
+        debug_assert!(
+            (ptr as usize) % align == 0,
+            "{}: pointer {:p} not aligned to {} bytes",
+            name, ptr, align
+        );
+    }
+}
+
 /// May return null.
 #[unsafe(no_mangle)]
 pub extern "C-unwind" fn dtlv_rti_init() -> LocalRtHandle {
@@ -172,6 +186,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_clone_local(
     value_out: *mut u8,
     tydesc_out: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(value_in, tydesc_in, "clone_local:value_in");
+    debug_assert_aligned(value_out, tydesc_out, "clone_local:value_out");
     debug_assert_eq!(
         tydesc_in, tydesc_out,
         "clone: tydesc_in and tydesc_out must be identical"
@@ -192,6 +208,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_eq_local(
     value_b_ref: *const u8,
     value_b_tydesc: *const rtdt::TyDesc,
 ) -> RtEq {
+    debug_assert_aligned(value_a_ref, value_a_tydesc, "eq_local:value_a");
+    debug_assert_aligned(value_b_ref, value_b_tydesc, "eq_local:value_b");
     // Note that the runtime handle isn't needed
     // because we don't allocate - it's just part
     // of the ABI.
@@ -213,6 +231,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_eq_unique_local(
     value_b_ref: *const u8,
     value_b_tydesc: *const rtdt::TyDesc,
 ) -> RtEq {
+    debug_assert_aligned(value_a_ref, value_a_tydesc, "eq_unique_local:value_a");
+    debug_assert_aligned(value_b_ref, value_b_tydesc, "eq_unique_local:value_b");
     unsafe {
         crate::impls::cmp::eq_unique(value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc)
     }
@@ -230,6 +250,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_cmp_local(
     value_b_ref: *const u8,
     value_b_tydesc: *const rtdt::TyDesc,
 ) -> RtOrdering {
+    debug_assert_aligned(value_a_ref, value_a_tydesc, "cmp_local:value_a");
+    debug_assert_aligned(value_b_ref, value_b_tydesc, "cmp_local:value_b");
     unsafe {
         crate::impls::cmp::cmp(value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc)
     }
@@ -248,6 +270,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_cmp_total_local(
     value_b_ref: *const u8,
     value_b_tydesc: *const rtdt::TyDesc,
 ) -> RtOrdering {
+    debug_assert_aligned(value_a_ref, value_a_tydesc, "cmp_total_local:value_a");
+    debug_assert_aligned(value_b_ref, value_b_tydesc, "cmp_total_local:value_b");
     unsafe {
         crate::impls::cmp::cmp_total(value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc)
     }
@@ -262,15 +286,18 @@ pub unsafe extern "C-unwind" fn dtlv_rti_cmp_total_local(
 pub unsafe extern "C-unwind" fn dtlv_rti_int_add(
     rt: LocalRtHandle,
     a_in: *const u8,
-    _a_tydesc: *const rtdt::TyDesc,
+    a_tydesc: *const rtdt::TyDesc,
     b_in: *const u8,
-    _b_tydesc: *const rtdt::TyDesc,
+    b_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    _result_tydesc: *const rtdt::TyDesc,
+    result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
         return RtStatus::Error;
     }
+    debug_assert_aligned(a_in, a_tydesc, "int_add:a");
+    debug_assert_aligned(b_in, b_tydesc, "int_add:b");
+    debug_assert_aligned(result_out, result_tydesc, "int_add:result");
 
     unsafe {
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
@@ -283,15 +310,18 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_add(
 pub unsafe extern "C-unwind" fn dtlv_rti_int_sub(
     rt: LocalRtHandle,
     a_in: *const u8,
-    _a_tydesc: *const rtdt::TyDesc,
+    a_tydesc: *const rtdt::TyDesc,
     b_in: *const u8,
-    _b_tydesc: *const rtdt::TyDesc,
+    b_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    _result_tydesc: *const rtdt::TyDesc,
+    result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
         return RtStatus::Error;
     }
+    debug_assert_aligned(a_in, a_tydesc, "int_sub:a");
+    debug_assert_aligned(b_in, b_tydesc, "int_sub:b");
+    debug_assert_aligned(result_out, result_tydesc, "int_sub:result");
 
     unsafe {
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
@@ -304,15 +334,18 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_sub(
 pub unsafe extern "C-unwind" fn dtlv_rti_int_mul(
     rt: LocalRtHandle,
     a_in: *const u8,
-    _a_tydesc: *const rtdt::TyDesc,
+    a_tydesc: *const rtdt::TyDesc,
     b_in: *const u8,
-    _b_tydesc: *const rtdt::TyDesc,
+    b_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    _result_tydesc: *const rtdt::TyDesc,
+    result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
         return RtStatus::Error;
     }
+    debug_assert_aligned(a_in, a_tydesc, "int_mul:a");
+    debug_assert_aligned(b_in, b_tydesc, "int_mul:b");
+    debug_assert_aligned(result_out, result_tydesc, "int_mul:result");
 
     unsafe {
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
@@ -325,13 +358,15 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_mul(
 pub unsafe extern "C-unwind" fn dtlv_rti_int_neg(
     rt: LocalRtHandle,
     a_in: *const u8,
-    _a_tydesc: *const rtdt::TyDesc,
+    a_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    _result_tydesc: *const rtdt::TyDesc,
+    result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     if rt.is_null() || a_in.is_null() || result_out.is_null() {
         return RtStatus::Error;
     }
+    debug_assert_aligned(a_in, a_tydesc, "int_neg:a");
+    debug_assert_aligned(result_out, result_tydesc, "int_neg:result");
 
     unsafe {
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
@@ -345,37 +380,22 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_neg(
 pub unsafe extern "C-unwind" fn dtlv_rti_int_div_checked(
     rt: LocalRtHandle,
     a_in: *const u8,
-    _a_tydesc: *const rtdt::TyDesc,
+    a_tydesc: *const rtdt::TyDesc,
     b_in: *const u8,
-    _b_tydesc: *const rtdt::TyDesc,
+    b_tydesc: *const rtdt::TyDesc,
     result_out: *mut u8,
-    _result_tydesc: *const rtdt::TyDesc,
+    result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     if rt.is_null() || a_in.is_null() || b_in.is_null() || result_out.is_null() {
         return RtStatus::Error;
     }
+    debug_assert_aligned(a_in, a_tydesc, "int_div_checked:a");
+    debug_assert_aligned(b_in, b_tydesc, "int_div_checked:b");
+    debug_assert_aligned(result_out, result_tydesc, "int_div_checked:result");
 
     unsafe {
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         crate::impls::int_math::int_div_checked_impl(rt_ref, a_in, b_in, result_out)
-    }
-}
-
-/// Compare two bigints.
-///
-/// Returns -1 if a < b, 0 if a == b, 1 if a > b.
-/// Does not require runtime handle since no allocation is performed.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_int_cmp(
-    a_in: *const u8,
-    b_in: *const u8,
-) -> i32 {
-    if a_in.is_null() || b_in.is_null() {
-        return 0; // Treat null as zero for comparison.
-    }
-
-    unsafe {
-        crate::impls::int_math::int_cmp_impl(a_in, b_in)
     }
 }
 
@@ -386,6 +406,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_any_destroy_local(
     value_in: *mut u8,
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(value_in, tydesc, "any_destroy_local:value");
     unsafe {
         crate::impls::destroy::any_destroy_local(rt, value_in, tydesc)
     }
@@ -398,6 +419,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_string_create_local(
     value_out: *mut u8,
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(value_out, tydesc, "string_create_local:value_out");
     unsafe {
         crate::impls::string::string_create_local(rt, value_out, tydesc)
     }
@@ -410,6 +432,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_string_destroy_local(
     value_in: *mut u8,
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(value_in, tydesc, "string_destroy_local:value");
     unsafe {
         crate::impls::string::string_destroy_local(rt, value_in, tydesc)
     }
@@ -423,6 +446,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_string_push_bytes_local(
     bytes_ref: *const u8,
     bytes_len: u32,
 ) -> RtStatus {
+    debug_assert_aligned(string_value_mut, string_tydesc, "string_push_bytes_local:string");
     unsafe {
         crate::impls::string::string_push_bytes_local(rt, string_value_mut, string_tydesc, bytes_ref, bytes_len)
     }
@@ -434,6 +458,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_string_clear_local(
     string_value_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(string_value_mut, string_tydesc, "string_clear_local:string");
     unsafe {
         crate::impls::string::string_clear_local(rt, string_value_mut, string_tydesc)
     }
@@ -448,6 +473,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_pretty_print_local(
     string_value_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(arg_value_ref, arg_tydesc_ref, "pretty_print_local:arg");
+    debug_assert_aligned(string_value_mut, string_tydesc, "pretty_print_local:string");
     unsafe {
         crate::impls::pretty::pretty_print_local(rt, arg_value_ref, arg_tydesc_ref, string_value_mut, string_tydesc)
     }
@@ -461,6 +488,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_create_local(
     // BTreeMap type.
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(value_out, tydesc, "btreemap_create_local:value_out");
     unsafe {
         if rt.is_null() || tydesc.is_null() {
             return RtStatus::Error;
@@ -485,6 +513,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_clone_from_slice_local(
     // BTreeMap type.
     btreemap_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(slice_ref, slice_element_tydesc, "btreemap_clone_from_slice:slice");
+    debug_assert_aligned(btreemap_value_out, btreemap_tydesc, "btreemap_clone_from_slice:btreemap");
     unsafe {
         if rt.is_null() || btreemap_tydesc.is_null() {
             return RtStatus::Error;
@@ -518,6 +548,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_build_from_sorted_slices_local
     values_ptr: *mut u8,
     num_entries: u32,
 ) -> RtStatus {
+    debug_assert_aligned(keys_ptr, key_tydesc, "btreemap_build_from_sorted_slices:keys");
+    debug_assert_aligned(values_ptr, value_tydesc, "btreemap_build_from_sorted_slices:values");
     unsafe {
         if rt.is_null() || key_tydesc.is_null() || value_tydesc.is_null() {
             return RtStatus::Error;
@@ -546,6 +578,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_destroy_local(
     // BTreMap type.
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(value_in, tydesc, "btreemap_destroy_local:value");
     unsafe {
         if rt.is_null() || tydesc.is_null() {
             return RtStatus::Error;
@@ -569,6 +602,9 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_insert_local(
     value_in: *mut u8,
     value_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(btreemap_value_mut, btreemap_tydesc, "btreemap_insert:map");
+    debug_assert_aligned(key_in, key_tydesc, "btreemap_insert:key");
+    debug_assert_aligned(value_in, value_tydesc, "btreemap_insert:value");
     unsafe {
         if rt.is_null() || btreemap_tydesc.is_null()
             || key_tydesc.is_null() || value_tydesc.is_null() {
@@ -607,6 +643,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_remove_local(
     key_ref: *const u8,
     key_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(btreemap_value_mut, btreemap_tydesc, "btreemap_remove:map");
+    debug_assert_aligned(key_ref, key_tydesc, "btreemap_remove:key");
     unsafe {
         if rt.is_null() || btreemap_tydesc.is_null() || key_tydesc.is_null() {
             return RtStatus::Error;
@@ -639,6 +677,9 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_local(
     option_value_out: *mut u8,
     option_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(btreemap_value_ref, btreemap_tydesc, "btreemap_get:map");
+    debug_assert_aligned(key_ref, key_tydesc, "btreemap_get:key");
+    debug_assert_aligned(option_value_out, option_tydesc, "btreemap_get:option");
     unsafe {
         if rt.is_null() || btreemap_value_ref.is_null() || btreemap_tydesc.is_null()
             || key_ref.is_null() || key_tydesc.is_null()
@@ -672,6 +713,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_clear_local(
     btreemap_value_mut: *mut u8,
     btreemap_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(btreemap_value_mut, btreemap_tydesc, "btreemap_clear:map");
     unsafe {
         if rt.is_null() || btreemap_tydesc.is_null() {
             return RtStatus::Error;
@@ -692,6 +734,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_create_local(
     // BTreeSet type.
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(value_out, tydesc, "btreeset_create:value_out");
     unsafe {
         if rt.is_null() || tydesc.is_null() {
             return RtStatus::Error;
@@ -708,6 +751,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_destroy_local(
     btreeset_value_in: *mut u8,
     btreeset_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(btreeset_value_in, btreeset_tydesc, "btreeset_destroy:value");
     unsafe {
         if rt.is_null() || btreeset_tydesc.is_null() {
             return RtStatus::Error;
@@ -729,6 +773,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_insert_local(
     // Output: 1 if newly inserted, 0 if already existed.
     bool_out: *mut u8,
 ) -> RtStatus {
+    debug_assert_aligned(btreeset_value_mut, btreeset_tydesc, "btreeset_insert:set");
+    debug_assert_aligned(element_in, element_tydesc, "btreeset_insert:element");
     unsafe {
         if rt.is_null() || btreeset_tydesc.is_null() || element_tydesc.is_null() {
             return RtStatus::Error;
@@ -762,6 +808,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_remove_local(
     // Output: 1 if removed, 0 if not found.
     bool_out: *mut u8,
 ) -> RtStatus {
+    debug_assert_aligned(btreeset_value_mut, btreeset_tydesc, "btreeset_remove:set");
+    debug_assert_aligned(element_ref, element_tydesc, "btreeset_remove:element");
     unsafe {
         if rt.is_null() || btreeset_tydesc.is_null() || element_tydesc.is_null() {
             return RtStatus::Error;
@@ -795,6 +843,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_contains_local(
     // Output: 1 if contains, 0 if not.
     bool_out: *mut u8,
 ) -> RtStatus {
+    debug_assert_aligned(btreeset_value_ref, btreeset_tydesc, "btreeset_contains:set");
+    debug_assert_aligned(element_ref, element_tydesc, "btreeset_contains:element");
     unsafe {
         if rt.is_null() || btreeset_tydesc.is_null() || element_tydesc.is_null() {
             return RtStatus::Error;
@@ -824,6 +874,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clear_local(
     btreeset_value_mut: *mut u8,
     btreeset_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(btreeset_value_mut, btreeset_tydesc, "btreeset_clear:set");
     unsafe {
         if rt.is_null() || btreeset_tydesc.is_null() {
             return RtStatus::Error;
@@ -843,6 +894,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clone_from_slice_local(
     btreeset_value_out: *mut u8,
     btreeset_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(slice_ref, slice_element_tydesc, "btreeset_clone_from_slice:slice");
+    debug_assert_aligned(btreeset_value_out, btreeset_tydesc, "btreeset_clone_from_slice:set");
     unsafe {
         if rt.is_null() || btreeset_tydesc.is_null() || slice_element_tydesc.is_null() {
             return RtStatus::Error;
@@ -879,6 +932,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_build_from_sorted_slice_local(
     elements_ptr: *mut u8,
     num_elements: u32,
 ) -> RtStatus {
+    debug_assert_aligned(elements_ptr, element_tydesc, "btreeset_build_from_sorted_slice:elements");
     unsafe {
         if rt.is_null() || element_tydesc.is_null() {
             return RtStatus::Error;
@@ -905,6 +959,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_create_local(
     value_out: *mut u8,
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(value_out, tydesc, "list_create:value_out");
     unsafe {
         if rt.is_null() || tydesc.is_null() {
             return RtStatus::Error;
@@ -930,6 +985,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_create_from_slice_local(
     list_value_out: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(slice_ref, element_tydesc, "list_create_from_slice:slice");
+    debug_assert_aligned(list_value_out, list_tydesc, "list_create_from_slice:list");
     unsafe {
         if rt.is_null() || list_value_out.is_null() || list_tydesc.is_null()
             || slice_ref.is_null() || element_tydesc.is_null() {
@@ -960,6 +1017,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_destroy_local(
     value_in: *mut u8,
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(value_in, tydesc, "list_destroy:value");
     unsafe {
         if rt.is_null() || tydesc.is_null() {
             return RtStatus::Error;
@@ -977,6 +1035,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_clear_local(
     value_mut: *mut u8,
     tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(value_mut, tydesc, "list_clear:value");
     unsafe {
         if rt.is_null() || tydesc.is_null() {
             return RtStatus::Error;
@@ -997,6 +1056,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_get_local(
     option_value_out: *mut u8,
     option_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(list_value_ref, list_tydesc, "list_get:list");
+    debug_assert_aligned(option_value_out, option_tydesc, "list_get:option");
     unsafe {
         if rt.is_null() || list_value_ref.is_null() || list_tydesc.is_null()
             || option_value_out.is_null() || option_tydesc.is_null() {
@@ -1026,6 +1087,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_set_local(
     element_in: *mut u8,
     element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(list_value_mut, list_tydesc, "list_set:list");
+    debug_assert_aligned(element_in, element_tydesc, "list_set:element");
     unsafe {
         if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
             || element_in.is_null() || element_tydesc.is_null() {
@@ -1058,6 +1121,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_push_local(
     element_in: *mut u8,
     element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(list_value_mut, list_tydesc, "list_push:list");
+    debug_assert_aligned(element_in, element_tydesc, "list_push:element");
     unsafe {
         if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
             || element_in.is_null() || element_tydesc.is_null() {
@@ -1089,6 +1154,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_pop_local(
     option_value_out: *mut u8,
     option_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(list_value_mut, list_tydesc, "list_pop:list");
+    debug_assert_aligned(option_value_out, option_tydesc, "list_pop:option");
     unsafe {
         if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
             || option_value_out.is_null() || option_tydesc.is_null() {
@@ -1117,6 +1184,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_insert_local(
     element_in: *mut u8,
     element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(list_value_mut, list_tydesc, "list_insert:list");
+    debug_assert_aligned(element_in, element_tydesc, "list_insert:element");
     unsafe {
         if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
             || element_in.is_null() || element_tydesc.is_null() {
@@ -1150,6 +1219,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_remove_local(
     option_value_out: *mut u8,
     option_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(list_value_mut, list_tydesc, "list_remove:list");
+    debug_assert_aligned(option_value_out, option_tydesc, "list_remove:option");
     unsafe {
         if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
             || option_value_out.is_null() || option_tydesc.is_null() {
@@ -1177,6 +1248,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_reserve_local(
     list_tydesc: *const rtdt::TyDesc,
     additional: u32,
 ) -> RtStatus {
+    debug_assert_aligned(list_value_mut, list_tydesc, "list_reserve:list");
     unsafe {
         if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null() {
             return RtStatus::Error;
@@ -1199,6 +1271,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_shrink_to_fit_local(
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(list_value_mut, list_tydesc, "list_shrink_to_fit:list");
     unsafe {
         if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null() {
             return RtStatus::Error;
@@ -1223,6 +1296,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_extend_from_slice_local(
     slice_len: u32,
     element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(list_value_mut, list_tydesc, "list_extend_from_slice:list");
+    debug_assert_aligned(slice_ref, element_tydesc, "list_extend_from_slice:slice");
     unsafe {
         if rt.is_null() || list_value_mut.is_null() || list_tydesc.is_null()
             || slice_ref.is_null() || element_tydesc.is_null() {
@@ -1263,6 +1338,9 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_create_from_slice_local(
     tensor_value_out: *mut u8,
     tensor_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(slice_ref, element_tydesc, "tensor_create_from_slice:slice");
+    debug_assert_aligned(shape_in, shape_tydesc, "tensor_create_from_slice:shape");
+    debug_assert_aligned(tensor_value_out, tensor_tydesc, "tensor_create_from_slice:tensor");
     unsafe {
         if rt.is_null() || tensor_value_out.is_null() || tensor_tydesc.is_null()
             || slice_ref.is_null() || element_tydesc.is_null()
@@ -1298,6 +1376,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_destroy_local(
     tensor_value_in: *mut u8,
     tensor_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(tensor_value_in, tensor_tydesc, "tensor_destroy:tensor");
     unsafe {
         if rt.is_null() || tensor_value_in.is_null() || tensor_tydesc.is_null() {
             return RtStatus::Error;
@@ -1318,6 +1397,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_get_local(
     element_value_out: *mut u8,
     element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(tensor_value_ref, tensor_tydesc, "tensor_get:tensor");
+    debug_assert_aligned(element_value_out, element_tydesc, "tensor_get:element");
     unsafe {
         if rt.is_null() || tensor_value_ref.is_null() || tensor_tydesc.is_null()
             || indices_ptr.is_null() || element_value_out.is_null() {
@@ -1349,6 +1430,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_local(
     element_ref: *const u8,
     element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(tensor_value_ref, tensor_tydesc, "tensor_set:tensor");
+    debug_assert_aligned(element_ref, element_tydesc, "tensor_set:element");
     unsafe {
         if rt.is_null() || tensor_value_ref.is_null() || tensor_tydesc.is_null()
             || indices_ptr.is_null() || element_ref.is_null() {
@@ -1380,6 +1463,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_transpose_local(
     tensor_value_out: *mut u8,
     tensor_tydesc_out: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(tensor_ref, tensor_tydesc_ref, "tensor_transpose:tensor_in");
+    debug_assert_aligned(tensor_value_out, tensor_tydesc_out, "tensor_transpose:tensor_out");
     unsafe {
         if rt.is_null() || tensor_ref.is_null() || tensor_tydesc_ref.is_null()
             || perm_ptr.is_null() || tensor_value_out.is_null() {
@@ -1412,6 +1497,8 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_slice_local(
     result_value_out: *mut u8,
     result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(tensor_value_in, tensor_tydesc, "tensor_slice:tensor");
+    debug_assert_aligned(result_value_out, result_tydesc, "tensor_slice:result");
     unsafe {
         if rt.is_null() || tensor_value_in.is_null() || tensor_tydesc.is_null()
             || ranges_ptr.is_null() || result_value_out.is_null() || result_tydesc.is_null() {
@@ -1442,6 +1529,9 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_reshape_local(
     result_value_out: *mut u8,
     result_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
+    debug_assert_aligned(tensor_value_in, tensor_tydesc, "tensor_reshape:tensor");
+    debug_assert_aligned(new_shape_in, new_shape_tydesc, "tensor_reshape:shape");
+    debug_assert_aligned(result_value_out, result_tydesc, "tensor_reshape:result");
     unsafe {
         if rt.is_null() || tensor_value_in.is_null() || tensor_tydesc.is_null()
             || new_shape_in.is_null() || new_shape_tydesc.is_null()

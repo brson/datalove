@@ -903,101 +903,11 @@ unsafe fn cmp_value(
                 }
             }
             rtdt::TyTag::Int => {
-                let int_a = &*(value_a as *const rtdt::Int);
-                let int_b = &*(value_b as *const rtdt::Int);
-
-                let abs_size_a = int_a.size_and_sign.abs() as usize;
-                let abs_size_b = int_b.size_and_sign.abs() as usize;
-                let is_neg_a = int_a.size_and_sign < 0;
-                let is_neg_b = int_b.size_and_sign < 0;
-
-                // Handle zero cases, including denormalized zeros.
-                let is_zero_a = if abs_size_a == 0 {
-                    true
-                } else {
-                    let limbs = std::slice::from_raw_parts(int_a.data, abs_size_a);
-                    limbs.iter().all(|&limb| limb == 0)
-                };
-                let is_zero_b = if abs_size_b == 0 {
-                    true
-                } else {
-                    let limbs = std::slice::from_raw_parts(int_b.data, abs_size_b);
-                    limbs.iter().all(|&limb| limb == 0)
-                };
-
-                if is_zero_a && is_zero_b {
-                    return crate::c::RtOrdering::Equal;
+                match super::int_math::int_cmp_impl(value_a, value_b) {
+                    c if c < 0 => crate::c::RtOrdering::Less,
+                    c if c > 0 => crate::c::RtOrdering::Greater,
+                    _ => crate::c::RtOrdering::Equal,
                 }
-                if is_zero_a {
-                    return if is_neg_b {
-                        crate::c::RtOrdering::Greater
-                    } else {
-                        crate::c::RtOrdering::Less
-                    };
-                }
-                if is_zero_b {
-                    return if is_neg_a {
-                        crate::c::RtOrdering::Less
-                    } else {
-                        crate::c::RtOrdering::Greater
-                    };
-                }
-
-                // Compare by sign.
-                if is_neg_a && !is_neg_b {
-                    return crate::c::RtOrdering::Less;
-                }
-                if !is_neg_a && is_neg_b {
-                    return crate::c::RtOrdering::Greater;
-                }
-
-                // Same sign, compare magnitudes.
-                let limbs_a = std::slice::from_raw_parts(int_a.data, abs_size_a);
-                let limbs_b = std::slice::from_raw_parts(int_b.data, abs_size_b);
-
-                // Compare by number of limbs first.
-                if abs_size_a != abs_size_b {
-                    let mag_cmp = abs_size_a.cmp(&abs_size_b);
-                    return if is_neg_a {
-                        // Negative: more limbs = smaller (more negative).
-                        match mag_cmp {
-                            std::cmp::Ordering::Less => crate::c::RtOrdering::Greater,
-                            std::cmp::Ordering::Greater => crate::c::RtOrdering::Less,
-                            std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                        }
-                    } else {
-                        // Positive: more limbs = greater.
-                        match mag_cmp {
-                            std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                            std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                            std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                        }
-                    };
-                }
-
-                // Same number of limbs, compare limb by limb from most significant.
-                for i in (0..abs_size_a).rev() {
-                    if limbs_a[i] != limbs_b[i] {
-                        let limb_cmp = limbs_a[i].cmp(&limbs_b[i]);
-                        return if is_neg_a {
-                            // Negative numbers: invert comparison.
-                            match limb_cmp {
-                                std::cmp::Ordering::Less => crate::c::RtOrdering::Greater,
-                                std::cmp::Ordering::Greater => crate::c::RtOrdering::Less,
-                                std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                            }
-                        } else {
-                            // Positive numbers.
-                            match limb_cmp {
-                                std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                                std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                                std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                            }
-                        };
-                    }
-                }
-
-                crate::c::RtOrdering::Equal
             }
             rtdt::TyTag::String => {
                 let str_a = &*(value_a as *const rtdt::String);
