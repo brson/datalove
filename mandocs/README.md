@@ -109,6 +109,7 @@ TODO
 - [Novelties](novelties.md)
 - [Datalit Types](datalit-types.md)
 - [Datalit Runtime Types](datalit-runtime-types.md)
-- [Testing Tower](testing-tower.md)
+- [Compiler Guide](todo.md)
+- [Testing](testing-tower.md)
 - [Influences](influences.md)
 

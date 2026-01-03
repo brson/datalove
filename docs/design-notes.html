@@ -124,6 +124,16 @@ must be the correct optionr/result type.</p>
 <p>Bigints support the early-return division but not the others.
 Floats don't support early-return math.</p>
 <p>If we decide to let funs panic we'll also add panicking variations.</p>
+<h3><a href="#comparison-operators" aria-hidden="true" class="anchor" id="user-content-comparison-operators"></a>Comparison operators</h3>
+<h4><a href="#floats-and-total-ordering" aria-hidden="true" class="anchor" id="user-content-floats-and-total-ordering"></a>Floats and total ordering</h4>
+<p>All pure data types support a total order,
+which is used for maps and sets.</p>
+<p>Floats use the typical ordering, like Rust's <code>total_cmp</code>:</p>
+<blockquote>
+<p>-NaN &lt; -Infinity &lt; -numbers &lt; -0.0 &lt; +0.0 &lt; +numbers &lt; +Infinity &lt; +NaN</p>
+</blockquote>
+<p>Equality, less than, greater than, etc. behave
+the standard way wrt float zeros and NaNs.</p>
 <h3><a href="#pure-functions--mutable-reference-argument-modes" aria-hidden="true" class="anchor" id="user-content-pure-functions--mutable-reference-argument-modes"></a>Pure functions + mutable-reference argument modes</h3>
 <p>Four argument modes: <code>in</code>, <code>out</code>, <code>ref</code>, <code>mut</code></p>
 <pre><code class="language-datalove">fun (
@@ -146,37 +156,12 @@ Datalove is not concerned with providing
 control over the allocator;
 but instead only with providing data access patterns
 and metadata with which the allocator can perform optimally.</p>
-<h3><a href="#garbage-collection" aria-hidden="true" class="anchor" id="user-content-garbage-collection"></a>Garbage collection</h3>
-<p>Datalit and Datafun do not require a GC.
-Datalove may experiment with interior pointers and GCs in the future.</p>
 <h3><a href="#error-handling" aria-hidden="true" class="anchor" id="user-content-error-handling"></a>Error handling</h3>
 <p>The result type is a language type,
 and is dedicated the <code>!</code> sigil —
 if you see <code>!</code> you are looking at error handling.</p>
 <p>The error type is a dynamic type that can hold
 any type (an existential type).</p>
-<h3><a href="#panicking-and-exceptions" aria-hidden="true" class="anchor" id="user-content-panicking-and-exceptions"></a>Panicking and exceptions</h3>
-<p>In the pure-functional sublanguage Datafun,
-functions are <em>total</em>,
-and there is no mechanism for panicking,
-exceptions or unwinding.</p>
-<p>These cases are handled with <code>?</code>.</p>
-<p>Full Datalove has panics, design TBD.</p>
-<h3><a href="#threading-and-concurrency" aria-hidden="true" class="anchor" id="user-content-threading-and-concurrency"></a>Threading and concurrency</h3>
-<p>For simplicity and OS-mechanical sympathy,
-Datalove is a multithreaded language;
-no lightweight tasks or async-await.
-We may experiment with callback-based
-asynchrony and Gleam-style inline continuation syntax.</p>
-<h3><a href="#floats-and-total-ordering" aria-hidden="true" class="anchor" id="user-content-floats-and-total-ordering"></a>Floats and total ordering</h3>
-<p>All pure data types support a total order,
-which is used for maps and sets.</p>
-<p>Floats use the typical ordering, like Rust's <code>total_cmp</code>:</p>
-<blockquote>
-<p>-NaN &lt; -Infinity &lt; -numbers &lt; -0.0 &lt; +0.0 &lt; +numbers &lt; +Infinity &lt; +NaN</p>
-</blockquote>
-<p>Equality, less than, greater than, etc. behave
-the standard way wrt float zeros and NaNs.</p>
 <h3><a href="#repl" aria-hidden="true" class="anchor" id="user-content-repl"></a>REPL</h3>
 <p>The script is REPL-first and intends to advance the
 state of the art in REPLs.

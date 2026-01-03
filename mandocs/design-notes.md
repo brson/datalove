@@ -3,6 +3,12 @@
 Datalove on various language design topics.
 
 
+
+
+
+
+
+
 ### Function return types
 
 Functions with return types require `ret` with value.
@@ -155,6 +161,28 @@ If we decide to let funs panic we'll also add panicking variations.
 
 
 
+### Comparison operators
+#### Floats and total ordering
+
+All pure data types support a total order,
+which is used for maps and sets.
+
+Floats use the typical ordering, like Rust's `total_cmp`:
+
+> -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
+
+Equality, less than, greater than, etc. behave
+the standard way wrt float zeros and NaNs.
+
+
+
+
+
+
+
+
+
+
 ### Pure functions + mutable-reference argument modes
 
 Four argument modes: `in`, `out`, `ref`, `mut`
@@ -187,10 +215,6 @@ but instead only with providing data access patterns
 and metadata with which the allocator can perform optimally.
 
 
-### Garbage collection
-
-Datalit and Datafun do not require a GC.
-Datalove may experiment with interior pointers and GCs in the future.
 
 
 ### Error handling
@@ -201,46 +225,6 @@ if you see `!` you are looking at error handling.
 
 The error type is a dynamic type that can hold
 any type (an existential type).
-
-
-
-
-### Panicking and exceptions
-
-In the pure-functional sublanguage Datafun,
-functions are _total_,
-and there is no mechanism for panicking,
-exceptions or unwinding.
-
-These cases are handled with `?`.
-
-Full Datalove has panics, design TBD.
-
-
-
-
-### Threading and concurrency
-
-For simplicity and OS-mechanical sympathy,
-Datalove is a multithreaded language;
-no lightweight tasks or async-await.
-We may experiment with callback-based
-asynchrony and Gleam-style inline continuation syntax.
-
-
-
-
-### Floats and total ordering
-
-All pure data types support a total order,
-which is used for maps and sets.
-
-Floats use the typical ordering, like Rust's `total_cmp`:
-
-> -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
-
-Equality, less than, greater than, etc. behave
-the standard way wrt float zeros and NaNs.
 
 
 
@@ -262,13 +246,6 @@ as a egui_ratatui application.
 ### Trailing commas and separators
 
 Allowed and optional in all sequence forms of course.
-
-
-
-
-### Operator overloading?
-
-No.
 
 
 
