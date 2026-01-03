@@ -166,7 +166,7 @@ pub enum ExprFunKind {
     Ok(ExprOk),
     Er(ExprEr),
     Data(ExprData),
-    Err(ExprErr),
+    Error(ExprError),
 
     ParseError(ExprFunParseError),
 }
@@ -367,7 +367,7 @@ pub struct ExprData {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ExprErr {
+pub struct ExprError {
     pub heap: crate::datalit::ast_serde::Heap,
     pub type_hint: Option<crate::datalit::ast_serde::TypeHintAndHeap>,
     pub value: Box<ExprFun>,
@@ -574,7 +574,7 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::Ok(e) => ExprFunKind::Ok(ExprOk::from_ast(db, e)),
             crate::ast::ExprFunKind::Er(e) => ExprFunKind::Er(ExprEr::from_ast(db, e)),
             crate::ast::ExprFunKind::Data(e) => ExprFunKind::Data(ExprData::from_ast(db, e)),
-            crate::ast::ExprFunKind::Err(e) => ExprFunKind::Err(ExprErr::from_ast(db, e)),
+            crate::ast::ExprFunKind::Error(e) => ExprFunKind::Error(ExprError::from_ast(db, e)),
 
             crate::ast::ExprFunKind::ParseError(e) => ExprFunKind::ParseError(ExprFunParseError::from_ast(db, e)),
         }
@@ -868,9 +868,9 @@ impl ExprData {
     }
 }
 
-impl ExprErr {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprErr<'db>) -> Self {
-        ExprErr {
+impl ExprError {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprError<'db>) -> Self {
+        ExprError {
             heap: heap_from_ast(ast.heap(db)),
             type_hint: type_hint_from_ast(db, ast.type_hint(db)),
             value: Box::new(ExprFun::from_ast(db, ast.value(db))),

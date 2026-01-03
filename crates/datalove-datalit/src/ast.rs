@@ -162,7 +162,7 @@ pub enum Expr<'db> {
     Ok(ExprOk<'db>),
     Er(ExprEr<'db>),
     Data(ExprData<'db>),
-    Err(ExprErr<'db>),
+    Error(ExprError<'db>),
     ParseError(ExprParseError<'db>),
 }
 
@@ -256,7 +256,7 @@ pub struct ExprData<'db> {
 }
 
 #[salsa::tracked]
-pub struct ExprErr<'db> {
+pub struct ExprError<'db> {
     pub value: ExprFull<'db>,
 }
 

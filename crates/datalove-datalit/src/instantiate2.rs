@@ -170,7 +170,7 @@ fn instantiate_expr_into<'db>(
             instantiate_option(db, rt, true, Some(some_expr.payload(db)), opt.inner_type(db), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
-        (Expr::Err(err_expr), Type::Result(res)) => {
+        (Expr::Error(err_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
             instantiate_result(db, rt, false, None, Some(err_expr.value(db)), res.inner_type(db), tydesc_table, tydesc, dest_ptr, resolved)
         }
@@ -190,7 +190,7 @@ fn instantiate_expr_into<'db>(
             instantiate_data(db, rt, data_expr.value(db), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
-        (Expr::Err(err_expr), Type::Error) => {
+        (Expr::Error(err_expr), Type::Error) => {
             let tydesc = tydesc_table.get_or_create(ty);
             instantiate_error(db, rt, err_expr.value(db), tydesc_table, tydesc, dest_ptr, resolved)
         }

@@ -203,7 +203,7 @@ pub enum ExprFunKind<'db> {
     Ok(ExprOk<'db>),
     Er(ExprEr<'db>),
     Data(ExprData<'db>),
-    Err(ExprErr<'db>),
+    Error(ExprError<'db>),
 
     // Parse error
     ParseError(ExprFunParseError<'db>),
@@ -417,7 +417,7 @@ pub struct ExprData<'db> {
 }
 
 #[salsa::tracked]
-pub struct ExprErr<'db> {
+pub struct ExprError<'db> {
     pub heap: datalit::ast::Heap,
     pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
     pub value: ExprFun<'db>,

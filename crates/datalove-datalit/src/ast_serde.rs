@@ -138,7 +138,7 @@ pub enum Expr {
     Ok(ExprOk),
     Er(ExprEr),
     Data(ExprData),
-    Err(ExprErr),
+    Error(ExprError),
     ParseError(ExprParseError),
 }
 
@@ -232,7 +232,7 @@ pub struct ExprData {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ExprErr {
+pub struct ExprError {
     pub value: Box<ExprFull>,
 }
 
@@ -429,7 +429,7 @@ impl Expr {
             crate::ast::Expr::Ok(e) => Expr::Ok(ExprOk::from_ast(db, e)),
             crate::ast::Expr::Er(e) => Expr::Er(ExprEr::from_ast(db, e)),
             crate::ast::Expr::Data(e) => Expr::Data(ExprData::from_ast(db, e)),
-            crate::ast::Expr::Err(e) => Expr::Err(ExprErr::from_ast(db, e)),
+            crate::ast::Expr::Error(e) => Expr::Error(ExprError::from_ast(db, e)),
             crate::ast::Expr::ParseError(e) => Expr::ParseError(ExprParseError::from_ast(db, e)),
         }
     }
@@ -575,9 +575,9 @@ impl ExprData {
     }
 }
 
-impl ExprErr {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprErr<'db>) -> Self {
-        ExprErr {
+impl ExprError {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprError<'db>) -> Self {
+        ExprError {
             value: Box::new(ExprFull::from_ast(db, ast.value(db))),
         }
     }

@@ -253,7 +253,7 @@ pub fn lower_expression<'db>(
             });
             Ok(dest)
         }
-        ExprFunKind::Err(err_expr) => {
+        ExprFunKind::Error(err_expr) => {
             let inner_id = lower_expression(ctx, err_expr.value(ctx.db))?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);

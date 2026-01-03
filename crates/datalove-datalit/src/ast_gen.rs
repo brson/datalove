@@ -722,7 +722,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                     Some(error_type_hint),
                     ExprAndHeap::new(db, heap, error_value),
                 );
-                (Expr::Err(ExprErr::new(db, error_expr_full)), heap)
+                (Expr::Error(ExprError::new(db, error_expr_full)), heap)
             }
         }
         TypeHint::Tensor(th) => {
@@ -773,7 +773,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 None,
                 ExprAndHeap::new(db, Heap::Omitted, error_msg),
             );
-            (Expr::Err(ExprErr::new(db, error_expr_full)), heap)
+            (Expr::Error(ExprError::new(db, error_expr_full)), heap)
         }
         TypeHint::ParseError(_) => (Expr::None, heap),
     }

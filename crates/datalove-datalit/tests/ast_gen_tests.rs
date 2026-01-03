@@ -190,7 +190,7 @@ fn test_max_collection_size_enforced() {
             Expr::Data(d) => {
                 check_collection_size(db, &d.value(db).expr(db).expr(db), max_size);
             }
-            Expr::Err(e) => {
+            Expr::Error(e) => {
                 check_collection_size(db, &e.value(db).expr(db).expr(db), max_size);
             }
             _ => {}
@@ -429,7 +429,7 @@ fn test_result_error_case_generation() {
 
         fn check_for_err(db: &dyn salsa::Database, expr: &Expr, seen: &mut bool) {
             match expr {
-                Expr::Err(_) => {
+                Expr::Error(_) => {
                     *seen = true;
                 }
                 Expr::List(list) => {
@@ -465,7 +465,7 @@ fn test_result_error_case_generation() {
             }
         }
 
-        if matches!(expr_full.expr(&db).expr(&db), Expr::Err(_)) {
+        if matches!(expr_full.expr(&db).expr(&db), Expr::Error(_)) {
             seen_err = true;
         } else {
             seen_ok = true;
@@ -474,6 +474,6 @@ fn test_result_error_case_generation() {
         check_for_err(&db, &expr_full.expr(&db).expr(&db), &mut seen_err);
     }
 
-    assert!(seen_err, "Should generate at least one Result error case (Expr::Err)");
+    assert!(seen_err, "Should generate at least one Result error case (Expr::Error)");
     assert!(seen_ok, "Should generate at least one Result success case (non-Err)");
 }

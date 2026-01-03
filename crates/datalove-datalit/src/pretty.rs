@@ -539,7 +539,7 @@ fn pretty_expr<'db>(
             pretty_expr_full(db, d.value(db), out, indent);
         }
 
-        Expr::Err(e) => {
+        Expr::Error(e) => {
             out.push_str("error ");
             pretty_expr_full(db, e.value(db), out, indent);
         }

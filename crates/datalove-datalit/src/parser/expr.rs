@@ -241,7 +241,7 @@ impl<'db> Parser<'db> {
             Some("error") => {
                 self.eat_word("error");
                 let value = self.parse_expr_full();
-                return ast::Expr::Err(ast::ExprErr::new(self.db, value));
+                return ast::Expr::Error(ast::ExprError::new(self.db, value));
             }
             Some("tensor") => {
                 self.eat_word("tensor");

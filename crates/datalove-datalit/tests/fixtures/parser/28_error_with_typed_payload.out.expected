@@ -2,7 +2,7 @@
   "ast": {
     "expr": {
       "expr": {
-        "Err": {
+        "Error": {
           "value": {
             "expr": {
               "expr": {

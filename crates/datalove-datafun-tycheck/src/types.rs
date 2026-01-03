@@ -303,7 +303,7 @@ pub fn get_expr_heap<'db>(db: &'db dyn crate::Db, expr: ExprFun<'db>) -> datalit
         ExprFunKind::Ok(e) => e.heap(db),
         ExprFunKind::Er(e) => e.heap(db),
         ExprFunKind::Data(e) => e.heap(db),
-        ExprFunKind::Err(e) => e.heap(db),
+        ExprFunKind::Error(e) => e.heap(db),
         // Non-literal expressions don't have an outer heap.
         _ => datalit::ast::Heap::Omitted,
     }

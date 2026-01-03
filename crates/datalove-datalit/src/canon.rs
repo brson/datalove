@@ -150,7 +150,7 @@ fn cmp_expr_inner<'db>(db: &'db dyn salsa::Database, a: &Expr<'db>, b: &Expr<'db
             cmp_expr(db, a_data.value(db), b_data.value(db))
         }
 
-        (Err(a_err), Err(b_err)) => {
+        (Error(a_err), Error(b_err)) => {
             cmp_expr(db, a_err.value(db), b_err.value(db))
         }
 
@@ -235,7 +235,7 @@ fn expr_type_tag(expr: &Expr) -> u8 {
         Map(_) => 15,
         Tensor(_) => 16,
         Data(_) => 17,
-        Err(_) => 18,
+        Error(_) => 18,
         ParseError(_) => 19,
     }
 }

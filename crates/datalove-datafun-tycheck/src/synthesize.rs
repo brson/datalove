@@ -314,7 +314,7 @@ pub fn synthesize_expr<'db>(
             }
             synthesize_inline_data(ctx, expr, data_expr)
         }
-        ExprFunKind::Err(err_expr) => {
+        ExprFunKind::Error(err_expr) => {
             if let Some(type_hint) = err_expr.type_hint(db) {
                 // Synthesize inner value type (Error can wrap any type).
                 ctx.synthesize_expr(err_expr.value(db))?;
@@ -1028,7 +1028,7 @@ fn synthesize_inline_data<'db>(
 fn synthesize_inline_err<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    err_expr: ExprErr<'db>,
+    err_expr: ExprError<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
     let heap = err_expr.heap(db);

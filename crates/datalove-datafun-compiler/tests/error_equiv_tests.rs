@@ -90,7 +90,7 @@ fn has_parse_error<'db>(
         Expr::AnonStruct(s) => s.fields(db).iter().any(|f| has_parse_error(db, f.value(db))),
         Expr::AnonEnum(e) => e.payload(db).map(|p| has_parse_error(db, p)).unwrap_or(false),
         Expr::Data(d) => has_parse_error(db, d.value(db)),
-        Expr::Err(e) => has_parse_error(db, e.value(db)),
+        Expr::Error(e) => has_parse_error(db, e.value(db)),
         Expr::Tensor(t) => t.elements(db).iter().any(|e| has_parse_error(db, *e)),
         Expr::Some(s) => has_parse_error(db, s.payload(db)),
         Expr::Ok(o) => has_parse_error(db, o.payload(db)),
@@ -182,7 +182,7 @@ fn has_datafun_parse_error<'db>(
             check_type_hint(d.type_hint(db)) ||
             has_datafun_parse_error(db, d.value(db))
         }
-        ExprFunKind::Err(e) => {
+        ExprFunKind::Error(e) => {
             check_type_hint(e.type_hint(db)) ||
             has_datafun_parse_error(db, e.value(db))
         }

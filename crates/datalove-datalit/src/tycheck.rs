@@ -539,7 +539,7 @@ fn synthesize<'db>(
         Expr::Data(_) => Type::Data,
 
         // Rule: Syn-Error - error values synthesize as Type::Error.
-        Expr::Err(_) => Type::Error,
+        Expr::Error(_) => Type::Error,
 
         // Cannot synthesize for these - need type context.
         Expr::AnonEnum(_)
@@ -677,7 +677,7 @@ fn check<'db>(
         (Expr::Some(_), Type::Option(_)) => expected.heap(db),
         (Expr::Ok(_), Type::Result(_)) => expected.heap(db),
         (Expr::Er(_), Type::Result(_)) => expected.heap(db),
-        (Expr::Err(_), Type::Result(_)) => expected.heap(db),
+        (Expr::Error(_), Type::Result(_)) => expected.heap(db),
         (_, Type::Option(opt)) => opt.inner_type(db).heap(db),
         (_, Type::Result(res)) => res.inner_type(db).heap(db),
         _ => expected.heap(db),
@@ -722,7 +722,7 @@ fn check<'db>(
             let payload = e.payload(db);
             let payload_expr = payload.expr(db);
             match payload_expr.expr(db) {
-                Expr::Err(_) => Ok(()),
+                Expr::Error(_) => Ok(()),
                 Expr::Data(_) => Ok(()), // data can be used as error payload
                 _ => {
                     // T040: Er payload must be an error expression.
@@ -742,7 +742,7 @@ fn check<'db>(
         }
 
         // Rule: Check-ResultErr (implicit Err wrapping)
-        (Expr::Err(_), Type::Result(_)) => {
+        (Expr::Error(_), Type::Result(_)) => {
             // Error expressions can check against any Result type (implicit Err wrapping).
             Ok(())
         }
@@ -1277,7 +1277,7 @@ fn check<'db>(
         (Expr::Data(_), Type::Data) => Ok(()),
 
         // Rule: Check-Error
-        (Expr::Err(_), Type::Error) => Ok(()),
+        (Expr::Error(_), Type::Error) => Ok(()),
 
         // Otherwise, try subsumption.
         _ => {

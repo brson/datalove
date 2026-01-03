@@ -165,7 +165,7 @@ impl<'db> Parser<'db> {
                 self.eat_word("error");
                 // Parse any datafun expression (superset of datalit).
                 let value = self.parse_expr_primary();
-                return ast::ExprFunKind::Err(ast::ExprErr::new(self.db, heap, type_hint, value));
+                return ast::ExprFunKind::Error(ast::ExprError::new(self.db, heap, type_hint, value));
             }
             Some("tensor") => {
                 return self.parse_lit_tensor(heap, type_hint);

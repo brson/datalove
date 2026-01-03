@@ -394,7 +394,7 @@ impl<'db> AnalysisCtx<'db> {
             ExprFunKind::Ok(o) => self.expr_may_early_return(o.payload(self.db)),
             ExprFunKind::Er(e) => self.expr_may_early_return(e.payload(self.db)),
             ExprFunKind::Data(d) => self.expr_may_early_return(d.value(self.db)),
-            ExprFunKind::Err(e) => self.expr_may_early_return(e.value(self.db)),
+            ExprFunKind::Error(e) => self.expr_may_early_return(e.value(self.db)),
             _ => false,
         }
     }
@@ -516,7 +516,7 @@ impl<'db> AnalysisCtx<'db> {
                 self.analyze_expr_moves(d.value(self.db), true);
                 None
             }
-            ExprFunKind::Err(e) => {
+            ExprFunKind::Error(e) => {
                 // Value is consumed.
                 self.analyze_expr_moves(e.value(self.db), true);
                 None

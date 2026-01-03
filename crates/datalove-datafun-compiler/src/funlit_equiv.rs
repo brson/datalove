@@ -232,12 +232,12 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 }),
             )
         }
-        ast::ExprFunKind::Err(e) => {
+        ast::ExprFunKind::Error(e) => {
             let value = datafun_expr_to_datalit_serde(db, e.value(db))?;
             (
                 e.heap(db),
                 e.type_hint(db),
-                datalit::ast_serde::Expr::Err(datalit::ast_serde::ExprErr {
+                datalit::ast_serde::Expr::Error(datalit::ast_serde::ExprError {
                     value: Box::new(value),
                 }),
             )
