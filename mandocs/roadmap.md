@@ -14,6 +14,7 @@ The MVP is a working bare datafun language with:
 
 # in progress
 
+- run miri on interpreter
 - human docs
 
 
@@ -24,7 +25,6 @@ The MVP is a working bare datafun language with:
 - memoization tests
 - add alignment checks to the runtime
 - interp coverage
-- run miri on interpreter
 - move semantics
 - rename ExprFunKind::Err to Error
 - move/clone semantics - moves-etc.md
