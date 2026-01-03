@@ -45,6 +45,7 @@ pub struct TypeAndHeap<'db> {
 #[salsa::tracked]
 pub struct TypeFunction<'db> {
     pub param_types: Vec<TypeAndHeap<'db>>,
+    pub param_modes: Vec<ParamMode>,
     pub return_type: TypeAndHeap<'db>,
 }
 

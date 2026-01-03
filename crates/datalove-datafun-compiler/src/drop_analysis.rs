@@ -11,9 +11,10 @@
 //! - Loops (values from previous iterations)
 
 use std::collections::HashMap;
+use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop,
-    ExprFun, ExprFunKind, BinOp, UnaryOp,
+    ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode,
 };
 use datalove_datafun_ir::IrType;
 use crate::ir_ext::IrTypeExt;
@@ -45,6 +46,8 @@ pub struct BindingInfo {
     pub is_slot: bool,
     /// Whether this binding is a ScriptUnit top-level binding (exported, never dropped).
     pub is_script_unit: bool,
+    /// Whether this binding is a ref-mode parameter (borrowed, cannot be moved).
+    pub is_ref_param: bool,
 }
 
 /// Error detected during drop analysis.
@@ -57,6 +60,11 @@ pub enum AnalysisError {
     },
     /// Moving a value multiple times.
     DoubleMove {
+        binding: BindingId,
+        name: String,
+    },
+    /// Attempting to move a ref parameter (borrowed, cannot be moved).
+    CannotMoveRefParam {
         binding: BindingId,
         name: String,
     },
@@ -113,6 +121,8 @@ pub struct FunctionDropAnalysis {
 struct AnalysisCtx<'db> {
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    /// Resolved call targets for looking up callee parameter modes.
+    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     /// Next binding ID to allocate.
     next_binding: u32,
     /// All bindings (indexed by BindingId).
@@ -152,10 +162,12 @@ impl<'db> AnalysisCtx<'db> {
     fn new(
         db: &'db dyn salsa::Database,
         expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+        call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     ) -> Self {
         Self {
             db,
             expr_types,
+            call_targets,
             next_binding: 0,
             bindings: Vec::new(),
             name_to_binding: HashMap::new(),
@@ -166,7 +178,7 @@ impl<'db> AnalysisCtx<'db> {
     }
 
     /// Allocate a new binding ID.
-    fn alloc_binding(&mut self, name: String, ty: IrType, is_slot: bool) -> BindingId {
+    fn alloc_binding(&mut self, name: String, ty: IrType, is_slot: bool, is_ref_param: bool) -> BindingId {
         let id = BindingId(self.next_binding);
         self.next_binding += 1;
 
@@ -175,7 +187,7 @@ impl<'db> AnalysisCtx<'db> {
             .map(|f| f.kind == ScopeKind::ScriptUnit)
             .unwrap_or(false);
 
-        self.bindings.push(BindingInfo { name: name.clone(), ty, is_slot, is_script_unit });
+        self.bindings.push(BindingInfo { name: name.clone(), ty, is_slot, is_script_unit, is_ref_param });
 
         // Record in current scope.
         if let Some(frame) = self.scope_stack.last_mut() {
@@ -262,6 +274,13 @@ impl<'db> AnalysisCtx<'db> {
     fn mark_moved(&mut self, id: BindingId) {
         // ScriptUnit bindings are never moved - they're exported.
         if self.bindings[id.0 as usize].is_script_unit {
+            return;
+        }
+
+        // Ref params cannot be moved - they're borrowed.
+        if self.bindings[id.0 as usize].is_ref_param {
+            let name = self.bindings[id.0 as usize].name.clone();
+            self.errors.push(AnalysisError::CannotMoveRefParam { binding: id, name });
             return;
         }
 
@@ -437,9 +456,27 @@ impl<'db> AnalysisCtx<'db> {
                 None
             }
             ExprFunKind::FunctionCall(call) => {
-                // Function args are consumed.
-                for arg in call.args(self.db) {
-                    self.analyze_expr_moves(*arg, true);
+                // Look up callee's parameter modes if available.
+                let call_index = call.as_id().index() as usize;
+                let callee_modes: Vec<ParamMode> = self.call_targets
+                    .get(call_index)
+                    .and_then(|opt| opt.as_ref())
+                    .map(|target| {
+                        target.func(self.db).params(self.db)
+                            .iter()
+                            .map(|p| p.mode(self.db))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                // Analyze args with appropriate consumption based on param mode.
+                let args = call.args(self.db);
+                for (i, arg) in args.iter().enumerate() {
+                    // Ref params don't consume, other modes do.
+                    let is_consumed = callee_modes.get(i)
+                        .map(|mode| !matches!(mode, ParamMode::Ref))
+                        .unwrap_or(true);
+                    self.analyze_expr_moves(*arg, is_consumed);
                 }
                 None
             }
@@ -539,8 +576,9 @@ pub fn analyze_function<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
 ) -> FunctionDropAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types);
+    let mut ctx = AnalysisCtx::new(db, expr_types, call_targets);
 
     // Enter function scope.
     ctx.enter_scope(ScopeKind::Function);
@@ -549,7 +587,8 @@ pub fn analyze_function<'db>(
     for param in func.params(db) {
         let name = param.name(db).text(db).to_string();
         let ty = IrType::from_type_hint(db, &param.type_hint(db));
-        ctx.alloc_binding(name, ty, false);
+        let is_ref_param = matches!(param.mode(db), ParamMode::Ref);
+        ctx.alloc_binding(name, ty, false, is_ref_param);
     }
 
     // Analyze function body.
@@ -573,6 +612,7 @@ pub fn analyze_function<'db>(
 pub fn analyze_script_functions<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     stmts: &[Statement<'db>],
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError>)>> {
     let mut analyses = HashMap::new();
@@ -580,7 +620,7 @@ pub fn analyze_script_functions<'db>(
 
     for stmt in stmts {
         if let Statement::Fun(func) = stmt {
-            let analysis = analyze_function(db, *func, expr_types);
+            let analysis = analyze_function(db, *func, expr_types, call_targets);
             if !analysis.errors.is_empty() {
                 let func_name = func.name(db).text(db).to_string();
                 errors.push((func_name, analysis.errors.clone()));
@@ -616,9 +656,10 @@ pub struct ScriptDropAnalysis {
 pub fn analyze_script_statements<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     stmts: &[Statement<'db>],
 ) -> ScriptDropAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types);
+    let mut ctx = AnalysisCtx::new(db, expr_types, call_targets);
 
     // Enter script unit scope.
     ctx.enter_scope(ScopeKind::ScriptUnit);
@@ -713,7 +754,7 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLet<'db>, stmt_idx: us
     // Create binding for the let.
     let name = stmt.name(ctx.db).text(ctx.db).to_string();
     let ty = ctx.expr_type(expr);
-    ctx.alloc_binding(name, ty, false);
+    ctx.alloc_binding(name, ty, false, false);
 }
 
 fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtVar<'db>, stmt_idx: usize) {
@@ -735,7 +776,7 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtVar<'db>, stmt_idx: us
     // Create binding for the var (as a slot).
     let name = stmt.name(ctx.db).text(ctx.db).to_string();
     let ty = ctx.expr_type(expr);
-    ctx.alloc_binding(name, ty, true);
+    ctx.alloc_binding(name, ty, true, false);
 }
 
 fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtSet<'db>, stmt_idx: usize) {
@@ -816,7 +857,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
             IrType::Result(inner) => (**inner).clone(),
             other => other.clone(),
         };
-        ctx.alloc_binding(name, inner_ty, false);
+        ctx.alloc_binding(name, inner_ty, false, false);
     }
 
     analyze_statements(ctx, stmt.then_body(ctx.db), &[]);
@@ -839,7 +880,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
             let name = binding_name.text(ctx.db).to_string();
             // Else binding gets the error for Result types.
             let ty = IrType::Error;
-            ctx.alloc_binding(name, ty, false);
+            ctx.alloc_binding(name, ty, false, false);
         }
 
         analyze_statements(ctx, else_body, &[]);
@@ -951,7 +992,8 @@ end fun
 
         let func = parse_function(db, source);
         let expr_types = &[];
-        let analysis = analyze_function(db, func, expr_types);
+        let call_targets = &[];
+        let analysis = analyze_function(db, func, expr_types, call_targets);
 
         assert!(analysis.errors.is_empty());
     }
@@ -974,9 +1016,95 @@ end fun
         let func = parse_function(db, source);
         // Without full expr_types, types default to Unit (Copy), so no drops scheduled.
         // This just tests that analysis completes without panicking.
-        let analysis = analyze_function(db, func, &[]);
+        let analysis = analyze_function(db, func, &[], &[]);
 
         // No errors expected even without type info.
+        assert!(analysis.errors.is_empty());
+    }
+
+    #[test]
+    fn test_ref_param_registered_correctly() {
+        // Verify that ref params are marked as is_ref_param in bindings.
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(ref x: @u32): @u32
+    ret x
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let analysis = analyze_function(db, func, &[], &[]);
+
+        // Should have one binding (the ref param).
+        assert_eq!(analysis.bindings.len(), 1);
+        assert!(analysis.bindings[0].is_ref_param, "ref param should be marked as is_ref_param");
+        assert_eq!(analysis.bindings[0].name, "x");
+        assert!(analysis.errors.is_empty());
+    }
+
+    #[test]
+    fn test_in_param_not_ref() {
+        // Verify that regular in params are NOT marked as ref.
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(x: @u32): @u32
+    ret x
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let analysis = analyze_function(db, func, &[], &[]);
+
+        // Should have one binding (the in param).
+        assert_eq!(analysis.bindings.len(), 1);
+        assert!(!analysis.bindings[0].is_ref_param, "in param should NOT be marked as is_ref_param");
+        assert_eq!(analysis.bindings[0].name, "x");
+        assert!(analysis.errors.is_empty());
+    }
+
+    #[test]
+    fn test_ref_param_cannot_be_moved() {
+        // Verify that trying to move a ref param produces an error.
+        // Use @int (non-Copy type) since Copy types don't trigger move tracking.
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(ref x: int): int
+    let sink = x
+    ret sink
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let analysis = analyze_function(db, func, &[], &[]);
+
+        // Should have an error for moving the ref param.
+        assert!(!analysis.errors.is_empty(), "should have error for moving ref param");
+
+        // Check that it's specifically a CannotMoveRefParam error.
+        let has_cannot_move_error = analysis.errors.iter().any(|e| {
+            matches!(e, AnalysisError::CannotMoveRefParam { name, .. } if name == "x")
+        });
+        assert!(has_cannot_move_error, "error should be CannotMoveRefParam for 'x'");
+    }
+
+    #[test]
+    fn test_mixed_ref_and_in_params() {
+        // Verify mixed parameter modes are tracked correctly.
+        let ref db = crate::Database::default();
+        let source = r#"
+fun test(a: @u32, ref b: @u32, c: @u32): @u32
+    ret a
+end fun
+        "#;
+
+        let func = parse_function(db, source);
+        let analysis = analyze_function(db, func, &[], &[]);
+
+        // Should have three bindings.
+        assert_eq!(analysis.bindings.len(), 3);
+        assert!(!analysis.bindings[0].is_ref_param, "a should be in mode");
+        assert!(analysis.bindings[1].is_ref_param, "b should be ref mode");
+        assert!(!analysis.bindings[2].is_ref_param, "c should be in mode");
         assert!(analysis.errors.is_empty());
     }
 }

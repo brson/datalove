@@ -1,6 +1,6 @@
 use crate::*;
 use datalove_rt::rtdt;
-use datalove_datafun_ir::{IrType, IrBlock, Terminator, FuncRef, FuncId, TypeRef, SlotId, SlotDest, BinOp, UnaryOp};
+use datalove_datafun_ir::{IrType, IrBlock, Terminator, FuncRef, FuncId, ParamId, TypeRef, SlotId, SlotDest, BinOp, UnaryOp};
 
 #[test]
 fn test_tydesc_table_primitives() {
@@ -42,26 +42,28 @@ fn make_add_function() -> IrFunction {
     IrFunction {
         id: FuncId(0),
         name: "add".to_string(),
-        params: vec![ValueId(0), ValueId(1)],  // a, b
+        params: vec![ParamId(0), ParamId(1)],  // a, b
+        param_modes: vec![],
+        param_types: vec![IrType::I64, IrType::I64],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
                 instructions: vec![
                     Instruction::BinOp {
-                        dest: ValueId(2),
+                        dest: ValueId(0),
                         op: BinOp::Add,
-                        lhs: Operand::Value(ValueId(0)),
-                        rhs: Operand::Value(ValueId(1)),
+                        lhs: Operand::Param(ParamId(0)),
+                        rhs: Operand::Param(ParamId(1)),
                     },
                 ],
                 terminator: Terminator::Return {
-                    value: Some(Operand::Value(ValueId(2))),
+                    value: Some(Operand::Value(ValueId(0))),
                 },
             },
         ],
-        value_count: 3,
+        value_count: 1,
         slot_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::I64],
+        value_types: vec![IrType::I64],
         slot_types: vec![],
     }
 }
@@ -77,6 +79,8 @@ fn test_simple_function_call() {
         id: FuncId(1),
         name: "main".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -135,16 +139,53 @@ fn test_nested_function_calls() {
     let double_fn = IrFunction {
         id: FuncId(0),
         name: "double".to_string(),
-        params: vec![ValueId(0)],
+        params: vec![ParamId(0)],
+        param_modes: vec![],
+        param_types: vec![IrType::I64],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
                 instructions: vec![
                     Instruction::BinOp {
-                        dest: ValueId(1),
+                        dest: ValueId(0),
                         op: BinOp::Add,
-                        lhs: Operand::Value(ValueId(0)),
-                        rhs: Operand::Value(ValueId(0)),
+                        lhs: Operand::Param(ParamId(0)),
+                        rhs: Operand::Param(ParamId(0)),
+                    },
+                ],
+                terminator: Terminator::Return {
+                    value: Some(Operand::Value(ValueId(0))),
+                },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![IrType::I64],
+        slot_types: vec![],
+    };
+
+    // fn quadruple(x: i64) -> i64 { double(double(x)) }
+    let quadruple_fn = IrFunction {
+        id: FuncId(1),
+        name: "quadruple".to_string(),
+        params: vec![ParamId(0)],
+        param_modes: vec![],
+        param_types: vec![IrType::I64],
+        blocks: vec![
+            IrBlock {
+                id: BlockId(0),
+                instructions: vec![
+                    // First call: double(x)
+                    Instruction::Call {
+                        dest: ValueId(0),
+                        func: FuncRef::Local(FuncId(0)),
+                        args: vec![Operand::Param(ParamId(0))],
+                    },
+                    // Second call: double(result)
+                    Instruction::Call {
+                        dest: ValueId(1),
+                        func: FuncRef::Local(FuncId(0)),
+                        args: vec![Operand::Value(ValueId(0))],
                     },
                 ],
                 terminator: Terminator::Return {
@@ -155,39 +196,6 @@ fn test_nested_function_calls() {
         value_count: 2,
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64],
-        slot_types: vec![],
-    };
-
-    // fn quadruple(x: i64) -> i64 { double(double(x)) }
-    let quadruple_fn = IrFunction {
-        id: FuncId(1),
-        name: "quadruple".to_string(),
-        params: vec![ValueId(0)],
-        blocks: vec![
-            IrBlock {
-                id: BlockId(0),
-                instructions: vec![
-                    // First call: double(x)
-                    Instruction::Call {
-                        dest: ValueId(1),
-                        func: FuncRef::Local(FuncId(0)),
-                        args: vec![Operand::Value(ValueId(0))],
-                    },
-                    // Second call: double(result)
-                    Instruction::Call {
-                        dest: ValueId(2),
-                        func: FuncRef::Local(FuncId(0)),
-                        args: vec![Operand::Value(ValueId(1))],
-                    },
-                ],
-                terminator: Terminator::Return {
-                    value: Some(Operand::Value(ValueId(2))),
-                },
-            },
-        ],
-        value_count: 3,
-        slot_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::I64],
         slot_types: vec![],
     };
 
@@ -281,6 +289,8 @@ fn test_const_u8() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -322,6 +332,8 @@ fn test_const_i32() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -363,6 +375,8 @@ fn test_const_bool() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -397,6 +411,8 @@ fn test_binop_sub() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -429,6 +445,8 @@ fn test_binop_mul() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -461,6 +479,8 @@ fn test_binop_div() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -493,6 +513,8 @@ fn test_binop_mod() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -525,6 +547,8 @@ fn test_binop_eq() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -557,6 +581,8 @@ fn test_binop_ne() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -589,6 +615,8 @@ fn test_binop_lt() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -621,6 +649,8 @@ fn test_binop_bitand() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -653,6 +683,8 @@ fn test_binop_bitor() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -685,6 +717,8 @@ fn test_binop_shl() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -722,6 +756,8 @@ fn test_binop_checked_no_overflow() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -756,6 +792,8 @@ fn test_binop_checked_overflow() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -793,6 +831,8 @@ fn test_unaryop_neg() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -823,6 +863,8 @@ fn test_unaryop_not() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -853,6 +895,8 @@ fn test_unaryop_bitnot() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -887,6 +931,8 @@ fn test_slot_store_load() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -928,6 +974,8 @@ fn test_slot_multiple_updates() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -975,6 +1023,8 @@ fn test_branch_true() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1018,6 +1068,8 @@ fn test_branch_false() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1061,6 +1113,8 @@ fn test_goto_chain() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1117,6 +1171,8 @@ fn test_copy() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1143,6 +1199,8 @@ fn test_move() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1176,6 +1234,8 @@ fn test_pack_tuple() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1214,6 +1274,8 @@ fn test_unpack_tuple() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1263,6 +1325,8 @@ fn test_tuple_index_second() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1312,6 +1376,8 @@ fn test_wrap_some_unwrap() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1348,6 +1414,8 @@ fn test_is_some() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1384,6 +1452,8 @@ fn test_is_none() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1421,6 +1491,8 @@ fn test_option_branch() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1479,6 +1551,8 @@ fn test_wrap_ok_unwrap() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1516,6 +1590,8 @@ fn test_is_ok() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1553,6 +1629,8 @@ fn test_is_err() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1597,6 +1675,8 @@ fn test_result_branch() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1659,6 +1739,8 @@ fn test_pack_struct() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1701,6 +1783,8 @@ fn test_field_access_second() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1749,6 +1833,8 @@ fn test_unpack_struct() {
         id: FuncId(0),
         name: "test".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1961,26 +2047,28 @@ fn test_crossunit_external_function() {
     let double_fn = IrFunction {
         id: FuncId(0),
         name: "double".to_string(),
-        params: vec![ValueId(0)],
+        params: vec![ParamId(0)],
+        param_modes: vec![],
+        param_types: vec![IrType::I64],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
                 instructions: vec![
                     Instruction::BinOp {
-                        dest: ValueId(1),
+                        dest: ValueId(0),
                         op: BinOp::Add,
-                        lhs: Operand::Value(ValueId(0)),
-                        rhs: Operand::Value(ValueId(0)),
+                        lhs: Operand::Param(ParamId(0)),
+                        rhs: Operand::Param(ParamId(0)),
                     },
                 ],
                 terminator: Terminator::Return {
-                    value: Some(Operand::Value(ValueId(1))),
+                    value: Some(Operand::Value(ValueId(0))),
                 },
             },
         ],
-        value_count: 2,
+        value_count: 1,
         slot_count: 0,
-        value_types: vec![IrType::I64, IrType::I64],
+        value_types: vec![IrType::I64],
         slot_types: vec![],
     };
 
@@ -2200,6 +2288,8 @@ fn test_phi_true_branch() {
         id: FuncId(0),
         name: "test_phi_true".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -2269,6 +2359,8 @@ fn test_phi_false_branch() {
         id: FuncId(0),
         name: "test_phi_false".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -2360,6 +2452,8 @@ fn test_phi_nested_if() {
         id: FuncId(0),
         name: "test_phi_nested".to_string(),
         params: vec![],
+        param_modes: vec![],
+        param_types: vec![],
         blocks: vec![
             IrBlock {
                 id: BlockId(0),

@@ -1,0 +1,7 @@
+fun read_val(ref x: @u32): @u32
+    ret x
+end fun
+
+let a = @42
+let b = read_val(a)
+let output = a

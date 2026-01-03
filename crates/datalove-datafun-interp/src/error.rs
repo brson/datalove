@@ -1,6 +1,6 @@
 //! Interpreter errors.
 
-use datalove_datafun_ir::{ValueId, SlotId, BlockId, FuncId, IrModuleId};
+use datalove_datafun_ir::{ValueId, SlotId, ParamId, BlockId, FuncId, IrModuleId};
 
 /// Interpreter error.
 #[derive(Debug)]
@@ -9,10 +9,14 @@ pub enum InterpError {
     MissingType(ValueId),
     /// Type information missing for slot.
     MissingSlotType(SlotId),
+    /// Parameter not found.
+    MissingParam(ParamId),
     /// Value not initialized.
     UninitializedValue(ValueId),
     /// Slot not initialized.
     UninitializedSlot(SlotId),
+    /// Parameter not initialized.
+    UninitializedParam(ParamId),
     /// Block not found.
     BlockNotFound(BlockId),
     /// Function not found.

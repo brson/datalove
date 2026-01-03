@@ -4,14 +4,15 @@
 //! `FrameStore` accumulates frames from script units for cross-unit value access.
 
 use datalove_rt::rust::AlignedBuffer;
-use datalove_datafun_ir::{ValueId, SlotId};
+use datalove_rt::rtdt::TyDesc;
+use datalove_datafun_ir::{ValueId, SlotId, ParamId};
 use crate::error::InterpError;
 use crate::layout::IrLayout;
 use crate::value::{Value, Destination};
 
 /// Execution frame for a function call.
 pub struct Frame {
-    /// Raw frame data with proper alignment.
+    /// Raw frame data with proper alignment (values and slots).
     data: AlignedBuffer,
     /// Layout information.
     layout: IrLayout,
@@ -19,11 +20,19 @@ pub struct Frame {
     value_initialized: Vec<bool>,
     /// Track which slots are initialized.
     slot_initialized: Vec<bool>,
+    /// Track which values are borrowed (not owned, skip destruction).
+    value_borrowed: Vec<bool>,
+    /// Pointers to caller's data for each parameter.
+    param_ptrs: Vec<*mut u8>,
+    /// Type descriptors for each parameter.
+    param_tydescs: Vec<*const TyDesc>,
+    /// Track which params are borrowed (Ref/Mut - caller retains ownership).
+    param_borrowed: Vec<bool>,
 }
 
 impl Frame {
     /// Create a new frame from layout.
-    pub fn new(layout: IrLayout) -> Self {
+    pub fn new(layout: IrLayout, param_count: usize) -> Self {
         let value_count = layout.value_offsets.len();
         let slot_count = layout.slot_offsets.len();
         let data = AlignedBuffer::with_align(
@@ -36,6 +45,18 @@ impl Frame {
             layout,
             value_initialized: vec![false; value_count],
             slot_initialized: vec![false; slot_count],
+            value_borrowed: vec![false; value_count],
+            param_ptrs: vec![std::ptr::null_mut(); param_count],
+            param_tydescs: vec![std::ptr::null(); param_count],
+            param_borrowed: vec![false; param_count],
+        }
+    }
+
+    /// Mark a value as borrowed (not owned, skip destruction).
+    pub fn mark_value_borrowed(&mut self, id: ValueId) {
+        let idx = id.0 as usize;
+        if idx < self.value_borrowed.len() {
+            self.value_borrowed[idx] = true;
         }
     }
 
@@ -131,13 +152,72 @@ impl Frame {
         }
     }
 
-    /// Destroy all initialized values and slots.
+    /// Set a parameter with pointer to caller's data.
+    pub fn set_param(&mut self, id: ParamId, ptr: *mut u8, tydesc: *const TyDesc, borrowed: bool) {
+        let idx = id.0 as usize;
+        if idx < self.param_ptrs.len() {
+            self.param_ptrs[idx] = ptr;
+            self.param_tydescs[idx] = tydesc;
+            self.param_borrowed[idx] = borrowed;
+        }
+    }
+
+    /// Read param (dereferences pointer to caller's data).
+    pub fn param(&self, id: ParamId) -> Result<Value, InterpError> {
+        let idx = id.0 as usize;
+        if idx >= self.param_ptrs.len() {
+            return Err(InterpError::MissingParam(id));
+        }
+        let ptr = self.param_ptrs[idx];
+        if ptr.is_null() {
+            return Err(InterpError::UninitializedParam(id));
+        }
+        let tydesc = self.param_tydescs[idx];
+        Ok(Value { ptr, tydesc })
+    }
+
+    /// Get mutable destination for Mut/Out params.
+    pub fn param_dest(&self, id: ParamId) -> Result<Destination, InterpError> {
+        let idx = id.0 as usize;
+        if idx >= self.param_ptrs.len() {
+            return Err(InterpError::MissingParam(id));
+        }
+        let ptr = self.param_ptrs[idx];
+        if ptr.is_null() {
+            return Err(InterpError::UninitializedParam(id));
+        }
+        let tydesc = self.param_tydescs[idx];
+        Ok(Destination { ptr, tydesc })
+    }
+
+    /// Mark param as dropped (for In params after consuming).
+    pub fn mark_param_dropped(&mut self, id: ParamId) {
+        let idx = id.0 as usize;
+        if idx < self.param_ptrs.len() {
+            self.param_ptrs[idx] = std::ptr::null_mut();
+        }
+    }
+
+    /// Destroy all initialized values, slots, and owned params.
     ///
     /// Calls the runtime destructor for each initialized value/slot.
+    /// Skips borrowed values and borrowed params (they're not owned by this frame).
     pub fn destroy_all(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
-        // Destroy initialized values.
+        // Destroy In params (not borrowed - callee owns through pointer).
+        for idx in 0..self.param_ptrs.len() {
+            let ptr = self.param_ptrs[idx];
+            if !ptr.is_null() && !self.param_borrowed[idx] {
+                let tydesc = self.param_tydescs[idx];
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
+                }
+                self.param_ptrs[idx] = std::ptr::null_mut();
+            }
+        }
+
+        // Destroy initialized values (skip borrowed ones).
         for idx in 0..self.value_initialized.len() {
-            if self.value_initialized[idx] {
+            if self.value_initialized[idx] && !self.value_borrowed[idx] {
                 let offset = self.layout.value_offsets[idx] as usize;
                 let tydesc = self.layout.value_tydescs[idx];
                 let ptr = unsafe { self.data.as_mut_ptr().add(offset) };

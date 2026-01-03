@@ -175,6 +175,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
 
         let graph_typecheck = typecheck_module_graph(self.db, parsed_graph);
         let combined_expr_types = graph_typecheck.expr_types(self.db);
+        let combined_call_targets = graph_typecheck.call_targets(self.db);
 
         // Build map from module path to typecheck errors.
         // Errors include the module path prefix for unified formatting.
@@ -229,7 +230,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
             for statement in parsed.statements(self.db) {
                 if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
                     let func_name = func.name(self.db).text(self.db).to_string();
-                    let analysis = drop_analysis::analyze_function(self.db, *func, combined_expr_types);
+                    let analysis = drop_analysis::analyze_function(self.db, *func, combined_expr_types, combined_call_targets);
 
                     if !analysis.errors.is_empty() {
                         let error_msgs: Vec<String> = analysis.errors.iter()
@@ -526,8 +527,9 @@ impl<'db> ScriptCompilationContext<'db> {
 
         // Run drop analysis on all functions first.
         let expr_types = tycheck_result.expr_types(self.db);
+        let call_targets = tycheck_result.call_targets(self.db);
         let stmts = parsed.statements(self.db).to_vec();
-        let func_analyses = match drop_analysis::analyze_script_functions(self.db, expr_types, &stmts) {
+        let func_analyses = match drop_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts) {
             Ok(analyses) => analyses,
             Err(errors) => {
                 let error_msgs: Vec<String> = errors.into_iter()

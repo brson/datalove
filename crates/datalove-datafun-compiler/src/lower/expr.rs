@@ -62,6 +62,18 @@ pub fn lower_expression<'db>(
                         ctx.emit(Instruction::SlotLoad { dest, slot: s });
                         Ok(dest)
                     }
+                    Operand::Param(_) => {
+                        // For params, emit Copy or Move from the param.
+                        // The interpreter will read through the param pointer.
+                        let param_type = ctx.expr_type(expr);
+                        let dest = ctx.fresh_value(param_type.clone());
+                        if param_type.is_copy() {
+                            ctx.emit(Instruction::Copy { dest, src: operand });
+                        } else {
+                            ctx.emit(Instruction::Move { dest, src: operand });
+                        }
+                        Ok(dest)
+                    }
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
                         // External operands from previous script units.
                         // Copy types use Copy, non-copy types use Move.

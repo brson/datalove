@@ -9,7 +9,7 @@ use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall};
 use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::ResolvedCallTarget;
 use datalove_datafun_ir::{
-    IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, BlockId, FuncId,
+    IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId,
 };
 use crate::ir_ext::IrTypeExt;
@@ -99,6 +99,8 @@ pub struct LowerCtx<'db> {
     pub(super) call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
     pub(super) func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+    /// Next ParamId to allocate.
+    pub(super) next_param: u32,
     /// Next ValueId to allocate.
     pub(super) next_value: u32,
     /// Next SlotId to allocate.
@@ -122,6 +124,8 @@ pub struct LowerCtx<'db> {
     /// Available functions: name -> FuncRef (for resolving calls).
     /// Used for script-local and external unit functions (not module functions).
     pub(super) func_scope: HashMap<String, FuncRef>,
+    /// Type for each ParamId.
+    pub(super) param_types: Vec<IrType>,
     /// Type for each ValueId.
     pub(super) value_types: Vec<IrType>,
     /// Type for each SlotId.
@@ -164,6 +168,7 @@ impl<'db> LowerCtx<'db> {
             expr_types,
             call_targets,
             func_id_map: &EMPTY_FUNC_ID_MAP,
+            next_param: 0,
             next_value: 0,
             next_slot: 0,
             next_block: 1, // Block 0 is entry
@@ -175,6 +180,7 @@ impl<'db> LowerCtx<'db> {
             functions: Vec::new(),
             symbols: SymbolTable::new(),
             func_scope: HashMap::new(),
+            param_types: Vec::new(),
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
@@ -202,6 +208,7 @@ impl<'db> LowerCtx<'db> {
             expr_types,
             call_targets,
             func_id_map,
+            next_param: 0,
             next_value: 0,
             next_slot: 0,
             next_block: 1,
@@ -213,6 +220,7 @@ impl<'db> LowerCtx<'db> {
             functions: Vec::new(),
             symbols: SymbolTable::new(),
             func_scope: HashMap::new(),
+            param_types: Vec::new(),
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
@@ -278,6 +286,7 @@ impl<'db> LowerCtx<'db> {
             expr_types,
             call_targets,
             func_id_map,
+            next_param: 0,
             next_value: 0,
             next_slot: 0,
             next_block: 1,
@@ -289,6 +298,7 @@ impl<'db> LowerCtx<'db> {
             functions: Vec::new(),
             symbols: SymbolTable::new(),
             func_scope,
+            param_types: Vec::new(),
             value_types: Vec::new(),
             slot_types: Vec::new(),
             loop_stack: Vec::new(),
@@ -350,6 +360,14 @@ impl<'db> LowerCtx<'db> {
                     .ok_or_else(|| LowerError::FunctionNotFound(resolved_func_name))
             }
         }
+    }
+
+    /// Allocate a fresh parameter with known type.
+    pub fn fresh_param(&mut self, ty: IrType) -> ParamId {
+        let id = ParamId(self.next_param);
+        self.next_param += 1;
+        self.param_types.push(ty);
+        id
     }
 
     /// Allocate a fresh SSA value with known type.

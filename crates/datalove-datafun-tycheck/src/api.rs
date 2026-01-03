@@ -650,12 +650,16 @@ fn collect_module_exports<'db>(
             let params = stmt.params(db);
             let return_type = stmt.return_type(db);
 
-            // Convert parameter types.
+            // Convert parameter types and collect modes.
             let mut param_types = Vec::new();
+            let mut param_modes = Vec::new();
             let mut has_error = false;
             for param in params {
                 match convert_type_hint(db, param.type_hint(db)) {
-                    Ok(ty) => param_types.push(ty),
+                    Ok(ty) => {
+                        param_types.push(ty);
+                        param_modes.push(param.mode(db));
+                    }
                     Err(_) => {
                         has_error = true;
                         break;
@@ -682,7 +686,7 @@ fn collect_module_exports<'db>(
             };
 
             // Create function type.
-            let func_type = TypeFunction::new(db, param_types, ret_ty);
+            let func_type = TypeFunction::new(db, param_types, param_modes, ret_ty);
             functions.push((name, func_type));
         }
     }

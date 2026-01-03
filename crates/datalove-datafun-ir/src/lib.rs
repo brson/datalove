@@ -18,6 +18,10 @@ pub struct ValueId(pub u32);
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct SlotId(pub u32);
 
+/// Function parameter - reference to caller's data.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct ParamId(pub u32);
+
 /// Block identifier.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct BlockId(pub u32);
@@ -418,13 +422,15 @@ impl SymbolTable {
     }
 }
 
-/// Operand - either SSA value or mutable slot, local or from a previous script unit.
+/// Operand - SSA value, mutable slot, or function parameter.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Operand {
     /// Local SSA value.
     Value(ValueId),
     /// Local mutable slot.
     Slot(SlotId),
+    /// Function parameter (reference to caller's data).
+    Param(ParamId),
     /// SSA value from a previous script unit.
     ExternalValue { unit: u32, value: ValueId },
     /// Mutable slot from a previous script unit.
@@ -494,6 +500,19 @@ pub enum UnaryOp {
     Neg,
     Not,
     BitNot,
+}
+
+/// Parameter passing mode.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum ParamMode {
+    /// By-value (default): ownership transfers to callee.
+    In,
+    /// By-out-ptr: caller allocates, callee initializes.
+    Out,
+    /// By-ref: immutable borrow, caller retains ownership.
+    Ref,
+    /// By-mut-ref: mutable borrow, caller retains ownership.
+    Mut,
 }
 
 /// Flat instruction - no nesting, 2-3 operands max.
@@ -700,7 +719,12 @@ pub struct IrBlock {
 pub struct IrFunction {
     pub id: FuncId,
     pub name: String,
-    pub params: Vec<ValueId>,
+    /// Parameter IDs (references to caller's data).
+    pub params: Vec<ParamId>,
+    /// Parameter modes (In, Out, Ref, Mut) for each param.
+    pub param_modes: Vec<ParamMode>,
+    /// Type for each ParamId (indexed by ParamId.0).
+    pub param_types: Vec<IrType>,
     pub blocks: Vec<IrBlock>,
     pub value_count: u32,
     pub slot_count: u32,
@@ -726,6 +750,7 @@ impl IrFunction {
                 return match op {
                     Operand::Value(id) => self.value_types[id.0 as usize].clone(),
                     Operand::Slot(id) => self.slot_types[id.0 as usize].clone(),
+                    Operand::Param(id) => self.param_types[id.0 as usize].clone(),
                     // External operands not expected in function returns.
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => IrType::Unit,
                 };

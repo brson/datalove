@@ -404,11 +404,13 @@ pub fn build_function_type_from_stmt<'db>(
     let params = stmt.params(db);
     let return_type = stmt.return_type(db);
 
-    // Convert parameter types.
+    // Convert parameter types and collect modes.
     let mut param_types = Vec::new();
+    let mut param_modes = Vec::new();
     for param in params {
         let ty = crate::types::convert_type_hint(db, param.type_hint(db)).ok()?;
         param_types.push(ty);
+        param_modes.push(param.mode(db));
     }
 
     // Convert return type (default to unit if not specified).
@@ -417,5 +419,5 @@ pub fn build_function_type_from_stmt<'db>(
         None => crate::types::unit_type(db),
     };
 
-    Some(TypeFunction::new(db, param_types, ret_ty))
+    Some(TypeFunction::new(db, param_types, param_modes, ret_ty))
 }

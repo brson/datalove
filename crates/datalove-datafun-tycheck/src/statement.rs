@@ -22,11 +22,15 @@ pub fn collect_function_signature<'db>(
     let params = stmt.params(db);
     let return_type = stmt.return_type(db);
 
-    // Convert parameter types.
+    // Convert parameter types and collect modes.
     let mut param_types = Vec::new();
+    let mut param_modes = Vec::new();
     for param in params {
         match convert_type_hint(db, param.type_hint(db)) {
-            Ok(ty) => param_types.push(ty),
+            Ok(ty) => {
+                param_types.push(ty);
+                param_modes.push(param.mode(db));
+            }
             Err(e) => {
                 ctx.add_error(e);
                 return;
@@ -52,7 +56,7 @@ pub fn collect_function_signature<'db>(
     };
 
     // Create function type and add to context with AST.
-    let func_type = TypeFunction::new(db, param_types, ret_ty);
+    let func_type = TypeFunction::new(db, param_types, param_modes, ret_ty);
     ctx.add_function_with_ast(name, func_type, *stmt, module_id);
 }
 

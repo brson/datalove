@@ -60,7 +60,7 @@ pub use env::{FunctionRegistry, ScriptEnvironment, ExecutionContext};
 use datalove_rt::rtdt;
 use datalove_datafun_ir::{
     IrFunction, IrScriptUnit, IrBlock, IrType, Instruction, Terminator,
-    ValueId, BlockId, Operand, SlotDest, ConstValue,
+    ValueId, BlockId, Operand, SlotDest, ConstValue, ParamMode,
 };
 
 /// Result of executing a script unit.
@@ -217,25 +217,39 @@ impl IrInterpreter {
             &mut self.tydesc_table,
         );
 
-        // Create frame.
-        let mut frame = Frame::new(layout);
+        // Create frame with param storage.
+        let mut frame = Frame::new(layout, func.params.len());
 
-        // Move arguments into parameter slots.
-        // In linear type system, args are consumed by the call.
+        // Set up parameters as pointers to caller's data.
+        // All params store pointers - mode determines ownership semantics.
         for (i, &param_id) in func.params.iter().enumerate() {
             if i < args.len() {
-                let dest = frame.value_dest(param_id)?;
                 let src = &args[i];
-                unsafe {
-                    self.move_value(src, dest)?;
-                }
-                frame.mark_value_initialized(param_id);
+                let mode = func.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+
+                // Get tydesc for this param from param_types.
+                let param_type = &func.param_types[i];
+                let tydesc = self.tydesc_table.get_or_create(param_type);
+
+                // Borrowed semantics (caller retains ownership, callee doesn't destroy):
+                // - Ref/Mut modes: explicitly borrowed
+                // - Copy types with In mode: callee makes a copy, caller retains original
+                // Non-borrowed (callee destroys):
+                // - Non-Copy types with In mode: ownership transfers to callee
+                let borrowed = matches!(mode, ParamMode::Ref | ParamMode::Mut)
+                    || param_type.is_copy();
+
+                frame.set_param(param_id, src.ptr, tydesc, borrowed);
             }
         }
 
         // Execute blocks, writing return value directly to ret_dest.
         // Functions use ret_dest for Return/TryReturn, not expr_dest.
         let result = self.execute_blocks(&func.blocks, &mut frame, ret_dest, None, ctx, registry, frames);
+
+        // Destroy remaining values in frame.
+        // This destroys In params (ownership transferred from caller).
+        frame.destroy_all(self.runtime.handle());
 
         // Convert UnitCompletion to () - functions always complete normally.
         result.map(|_| ())
@@ -265,8 +279,8 @@ impl IrInterpreter {
             &mut self.tydesc_table,
         );
 
-        // Create frame.
-        let mut frame = Frame::new(layout);
+        // Create frame (script units have no function params).
+        let mut frame = Frame::new(layout, 0);
 
         // Create execution context with local functions.
         let ctx = ExecutionContext::new(&unit.functions);
@@ -347,6 +361,7 @@ impl IrInterpreter {
                         match op {
                             Operand::Value(id) => frame.mark_value_dropped(*id),
                             Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                            Operand::Param(id) => frame.mark_param_dropped(*id),
                             Operand::ExternalValue { unit, value } => {
                                 frames.mark_external_value_dropped(*unit, *value);
                             }
@@ -366,6 +381,7 @@ impl IrInterpreter {
                         match op {
                             Operand::Value(id) => frame.mark_value_dropped(*id),
                             Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                            Operand::Param(id) => frame.mark_param_dropped(*id),
                             Operand::ExternalValue { unit, value } => {
                                 frames.mark_external_value_dropped(*unit, *value);
                             }
@@ -385,6 +401,7 @@ impl IrInterpreter {
                         match op {
                             Operand::Value(id) => frame.mark_value_dropped(*id),
                             Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                            Operand::Param(id) => frame.mark_param_dropped(*id),
                             Operand::ExternalValue { unit, value } => {
                                 frames.mark_external_value_dropped(*unit, *value);
                             }
@@ -402,6 +419,7 @@ impl IrInterpreter {
                     match value {
                         Operand::Value(id) => frame.mark_value_dropped(*id),
                         Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::Param(id) => frame.mark_param_dropped(*id),
                         Operand::ExternalValue { unit, value } => {
                             frames.mark_external_value_dropped(*unit, *value);
                         }
@@ -443,6 +461,7 @@ impl IrInterpreter {
         match operand {
             Operand::Value(id) => frame.mark_value_dropped(*id),
             Operand::Slot(id) => frame.mark_slot_dropped(*id),
+            Operand::Param(id) => frame.mark_param_dropped(*id),
             Operand::ExternalValue { unit, value } => {
                 frames.mark_external_value_dropped(*unit, *value);
             }
@@ -483,6 +502,7 @@ impl IrInterpreter {
                 match src {
                     Operand::Value(id) => frame.mark_value_dropped(*id),
                     Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::Param(id) => frame.mark_param_dropped(*id),
                     Operand::ExternalValue { unit, value } => {
                         frames.mark_external_value_dropped(*unit, *value);
                     }
@@ -527,6 +547,7 @@ impl IrInterpreter {
                         match value {
                             Operand::Value(id) => frame.mark_value_dropped(*id),
                             Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                            Operand::Param(id) => frame.mark_param_dropped(*id),
                             Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                         }
                     }
@@ -541,6 +562,7 @@ impl IrInterpreter {
                         match value {
                             Operand::Value(id) => frame.mark_value_dropped(*id),
                             Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                            Operand::Param(id) => frame.mark_param_dropped(*id),
                             Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                         }
                     }
@@ -577,6 +599,7 @@ impl IrInterpreter {
                     match field {
                         Operand::Value(id) => frame.mark_value_dropped(*id),
                         Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::Param(id) => frame.mark_param_dropped(*id),
                         Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                     }
                 }
@@ -652,6 +675,7 @@ impl IrInterpreter {
                 match inner {
                     Operand::Value(id) => frame.mark_value_dropped(*id),
                     Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::Param(id) => frame.mark_param_dropped(*id),
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                 }
             }
@@ -672,6 +696,7 @@ impl IrInterpreter {
                     match p {
                         Operand::Value(id) => frame.mark_value_dropped(*id),
                         Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::Param(id) => frame.mark_param_dropped(*id),
                         Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                     }
                 }
@@ -693,6 +718,7 @@ impl IrInterpreter {
                     match src {
                         Operand::Value(id) => frame.mark_value_dropped(*id),
                         Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::Param(id) => frame.mark_param_dropped(*id),
                         Operand::ExternalValue { unit, value } => {
                             frames.mark_external_value_dropped(*unit, *value);
                         }
@@ -711,6 +737,7 @@ impl IrInterpreter {
                 match inner {
                     Operand::Value(id) => frame.mark_value_dropped(*id),
                     Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::Param(id) => frame.mark_param_dropped(*id),
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                 }
             }
@@ -723,6 +750,7 @@ impl IrInterpreter {
                 match inner {
                     Operand::Value(id) => frame.mark_value_dropped(*id),
                     Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::Param(id) => frame.mark_param_dropped(*id),
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                 }
             }
@@ -739,6 +767,7 @@ impl IrInterpreter {
                 match src {
                     Operand::Value(id) => frame.mark_value_dropped(*id),
                     Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::Param(id) => frame.mark_param_dropped(*id),
                     Operand::ExternalValue { unit, value } => {
                         frames.mark_external_value_dropped(*unit, *value);
                     }
@@ -756,6 +785,7 @@ impl IrInterpreter {
                 match inner {
                     Operand::Value(id) => frame.mark_value_dropped(*id),
                     Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::Param(id) => frame.mark_param_dropped(*id),
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                 }
             }
@@ -768,6 +798,7 @@ impl IrInterpreter {
                 match inner {
                     Operand::Value(id) => frame.mark_value_dropped(*id),
                     Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::Param(id) => frame.mark_param_dropped(*id),
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                 }
             }
@@ -783,16 +814,29 @@ impl IrInterpreter {
                 // Get destination for return value.
                 let dest_slot = frame.value_dest(*dest)?;
 
-                // Mark non-copy arg sources as dropped BEFORE call - they're moved.
-                // Copy types remain initialized since they're copied into the callee.
-                for (arg, arg_val) in args.iter().zip(&arg_vals) {
-                    let type_tag = unsafe { (*arg_val.tydesc).type_tag };
-                    if !Self::is_copy_type_tag(type_tag) {
-                        match arg {
-                            Operand::Value(id) => frame.mark_value_dropped(*id),
-                            Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                // Mark arg sources as dropped based on param mode and type.
+                // With reference passing:
+                // - Ref/Mut params: caller retains ownership (borrowed)
+                // - In params with Copy types: callee makes a copy, caller retains original
+                // - In params with non-Copy types: ownership transfers to callee
+                for (i, arg) in args.iter().enumerate() {
+                    let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+                    if matches!(mode, ParamMode::Ref | ParamMode::Mut) {
+                        // Borrowed param: caller retains ownership. Don't mark dropped.
+                        continue;
+                    }
+                    // For Copy types, caller retains ownership (callee makes a copy).
+                    if let Some(param_type) = callee.param_types.get(i) {
+                        if param_type.is_copy() {
+                            continue;
                         }
+                    }
+                    // Non-Copy In mode: ownership transfers to callee, mark source dropped.
+                    match arg {
+                        Operand::Value(id) => frame.mark_value_dropped(*id),
+                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::Param(id) => frame.mark_param_dropped(*id),
+                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                     }
                 }
 
@@ -820,6 +864,7 @@ impl IrInterpreter {
                     match elem {
                         Operand::Value(id) => frame.mark_value_dropped(*id),
                         Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::Param(id) => frame.mark_param_dropped(*id),
                         Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                     }
                 }
@@ -833,6 +878,7 @@ impl IrInterpreter {
                     match elem {
                         Operand::Value(id) => frame.mark_value_dropped(*id),
                         Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::Param(id) => frame.mark_param_dropped(*id),
                         Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                     }
                 }
@@ -846,11 +892,13 @@ impl IrInterpreter {
                     match key {
                         Operand::Value(id) => frame.mark_value_dropped(*id),
                         Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::Param(id) => frame.mark_param_dropped(*id),
                         Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                     }
                     match val {
                         Operand::Value(id) => frame.mark_value_dropped(*id),
                         Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::Param(id) => frame.mark_param_dropped(*id),
                         Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                     }
                 }
@@ -864,6 +912,7 @@ impl IrInterpreter {
                     match elem {
                         Operand::Value(id) => frame.mark_value_dropped(*id),
                         Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::Param(id) => frame.mark_param_dropped(*id),
                         Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                     }
                 }
@@ -892,6 +941,7 @@ impl IrInterpreter {
                 match operand {
                     Operand::Value(id) => frame.mark_value_dropped(*id),
                     Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                    Operand::Param(id) => frame.mark_param_dropped(*id),
                     // External values/slots are in other frames, handled separately.
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                 }
@@ -910,6 +960,7 @@ impl IrInterpreter {
         match op {
             Operand::Value(id) => frame.value(*id),
             Operand::Slot(id) => frame.slot(*id),
+            Operand::Param(id) => frame.param(*id),
             Operand::ExternalValue { unit, value } => {
                 frames.external_value(*unit, *value)
             }

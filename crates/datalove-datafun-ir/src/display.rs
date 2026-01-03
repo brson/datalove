@@ -15,6 +15,12 @@ impl fmt::Display for SlotId {
     }
 }
 
+impl fmt::Display for ParamId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "p{}", self.0)
+    }
+}
+
 impl fmt::Display for BlockId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "block{}", self.0)
@@ -73,6 +79,7 @@ impl fmt::Display for Operand {
         match self {
             Operand::Value(v) => write!(f, "{}", v),
             Operand::Slot(s) => write!(f, "{}", s),
+            Operand::Param(p) => write!(f, "{}", p),
             Operand::ExternalValue { unit, value } => write!(f, "unit{}.{}", unit, value),
             Operand::ExternalSlot { unit, slot } => write!(f, "unit{}.{}", unit, slot),
         }

@@ -38,7 +38,7 @@ pub fn lower_script_unit<'db>(
     let result = match kind {
         ScriptUnitKind::Fragment(stmts) => {
             // Analyze script statements for drop schedule.
-            let script_analysis = analyze_script_statements(db, expr_types, &stmts);
+            let script_analysis = analyze_script_statements(db, expr_types, call_targets, &stmts);
             ctx.set_drop_schedule(script_analysis.schedule, script_analysis.bindings);
 
             // Lower all statements with index tracking.
@@ -95,7 +95,7 @@ pub fn lower_script_fragment_raw<'db>(
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
     // Analyze script statements for drop schedule.
-    let script_analysis = analyze_script_statements(db, expr_types, &stmts);
+    let script_analysis = analyze_script_statements(db, expr_types, call_targets, &stmts);
     // Note: script_analysis.errors are for use-after-move etc. We proceed anyway
     // and let lowering handle any issues (or caller can check errors beforehand).
     ctx.set_drop_schedule(script_analysis.schedule, script_analysis.bindings);
@@ -278,6 +278,7 @@ fn lower_statement_for_script<'db>(
             let saved_next_block = ctx.next_block;
             let saved_next_value = ctx.next_value;
             let saved_next_slot = ctx.next_slot;
+            let saved_next_param = ctx.next_param;
             let saved_variables = std::mem::take(&mut ctx.variables);
 
             // Reset for function body.
@@ -285,6 +286,7 @@ fn lower_statement_for_script<'db>(
             ctx.next_block = 1;
             ctx.next_value = 0;
             ctx.next_slot = 0;
+            ctx.next_param = 0;
 
             // Lower the function body.
             let func = lower_function_body(ctx, func_id, *fun_stmt, analysis)?;
@@ -296,6 +298,7 @@ fn lower_statement_for_script<'db>(
             ctx.next_block = saved_next_block;
             ctx.next_value = saved_next_value;
             ctx.next_slot = saved_next_slot;
+            ctx.next_param = saved_next_param;
             ctx.variables = saved_variables;
 
             // Add the function to the unit's functions.
