@@ -23,6 +23,7 @@ use datalove_datafun_compiler::module_graph::{
     ParsedModuleGraph, parse_module_graph,
 };
 use datalove_datafun_interp::{ScriptEnvironment, UnitCompletion};
+use datalove_rt::rust::AlignedBuffer;
 use drop_analysis::FunctionDropAnalysis;
 
 /// Typecheck result summary.
@@ -652,8 +653,8 @@ impl<'db> ScriptCompilationContext<'db> {
             // ret_dest is for early returns: always Result<(), Error>.
             let ret_type = IrType::Result(Box::new(IrType::Unit));
             let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
-            let ret_size = unsafe { (*ret_tydesc).size };
-            let mut ret_buffer = vec![0u8; ret_size as usize];
+            let (ret_size, ret_align) = unsafe { ((*ret_tydesc).size, (*ret_tydesc).align) };
+            let mut ret_buffer = AlignedBuffer::with_align(ret_size as usize, ret_align as usize);
             let ret_dest = datalove_datafun_interp::Destination {
                 ptr: ret_buffer.as_mut_ptr(),
                 tydesc: ret_tydesc,
@@ -662,8 +663,8 @@ impl<'db> ScriptCompilationContext<'db> {
             // expr_dest is for the expression result.
             let expr_type = &ir_unit.value_types[result_id.0 as usize];
             let expr_tydesc = self.interp.tydesc_table_mut().get_or_create(expr_type);
-            let expr_size = unsafe { (*expr_tydesc).size };
-            let mut expr_buffer = vec![0u8; expr_size as usize];
+            let (expr_size, expr_align) = unsafe { ((*expr_tydesc).size, (*expr_tydesc).align) };
+            let mut expr_buffer = AlignedBuffer::with_align(expr_size as usize, expr_align as usize);
             let expr_dest = datalove_datafun_interp::Destination {
                 ptr: expr_buffer.as_mut_ptr(),
                 tydesc: expr_tydesc,
