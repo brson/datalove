@@ -567,8 +567,8 @@ impl<'db> ScriptCompilationContext<'db> {
         // Execute the fragment with shared environment.
         let ret_type = IrType::Result(Box::new(IrType::Unit));
         let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
-        let ret_size = unsafe { (*ret_tydesc).size };
-        let mut ret_buffer = vec![0u8; ret_size as usize];
+        let (ret_size, ret_align) = unsafe { ((*ret_tydesc).size, (*ret_tydesc).align) };
+        let mut ret_buffer = AlignedBuffer::with_align(ret_size as usize, ret_align as usize);
         let ret_dest = datalove_datafun_interp::Destination {
             ptr: ret_buffer.as_mut_ptr(),
             tydesc: ret_tydesc,
