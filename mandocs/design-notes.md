@@ -3,7 +3,6 @@
 Datalove on various language design topics.
 
 
-
 ### Function return types
 
 Functions with return types require `ret` with value.
@@ -120,17 +119,21 @@ Bigints (`int`) support all but div:
 `+ - *` and unary `-`.
 For div we must use a checked variant to handle divide-by-zero.
 
-Fixed ints do not support any bare bath ops, not even unary `-`.
+Fixed ints support all but div:
+`+ - *` and unary `-`,
+but _widen_ to bigints.
 
-Fixed ints support early-return varieties:
+Fixed ints support checked early-return varieties:
 
 ```datalove
+// Checked optional arithmetic, early-returning `none`.
 let a = 1 +? 1
 let a = 1 -? 1
 let a = 1 *? 1
 let a = 1 /? 1
 let a = -?a     // early-return negation
 
+// Checked result arithmetic, early-returning `er`.
 let a = 1 +! 1
 let a = 1 -! 1
 let a = 1 *! 1
@@ -144,9 +147,6 @@ These either result in the same type as the input types or early return -
 they do not result in option or result types. Their enclosing function
 must be the correct optionr/result type.
 
-`-?` unary op is not defined for unsigned ints -
-it has a sensible semantic but is a pure footgun.
-
 Bigints support the early-return division but not the others.
 Floats don't support early-return math.
 
@@ -155,50 +155,24 @@ If we decide to let funs panic we'll also add panicking variations.
 
 
 
-### Numeric widening
+### Pure functions + mutable-reference argument modes
 
-Fixed ints automatically widen, up to bigints:
-
-```datalove
-let a: u8 = 1
-let b: u16 = a
-let c: int = b
-```
-
-Same for signed fixed ints:
+Four argument modes: `in`, `out`, `ref`, `mut`
 
 ```datalove
-let a: i8 = 1
-let b: i16 = a
-let c: int = b
-```
-
-Unsigned and signed ints never automatically coerce to each other.
-
-Widening also apllies to bare / unchecked math, which
-widens to `int`:
-
-```datalove
-// this checks to `int` because the `*` binop,
-// forcing the literals to be int
-let a = 1 * 2
-// locals also get coercions
-let b: u32 = 1
-// another `int`
-let c = b * b
+fun (
+  a: int,     // default `in`
+  out b: int,
+  ref c: int,
+  mut d: int,
+)
+  // `out` args must be assigned on all code paths
+  set b = a
+  set d = c + d
+end fun
 ```
 
 
-
-### † Pure functions + mutable-reference argument modes
-
-Datalove at first does not look pure functional because
-it has mutable by-reference arguments:
-
-```datalove
-```
-
-etc.
 
 
 ### Allocations
@@ -288,3 +262,50 @@ as a egui_ratatui application.
 ### Trailing commas and separators
 
 Allowed and optional in all sequence forms of course.
+
+
+
+
+### Generics
+
+Functions can have type parameters:
+
+```datalove
+fun unwrap_or<T>(self: ?T, default: T): T where {
+  T is move,
+}
+  if self |value|
+    ret value
+  else
+    ret default
+  end if
+end fun
+```
+
+By default type parameters have no capabilities,
+`clone`, `move`, `etc`. `where` clauses are
+usually needed.
+
+Data structures can not have type parameters.
+
+TODO: How are generics translated?
+
+
+
+
+### Type aliases
+
+Datafun has a structural type system.
+We can asign names with `typealias`.
+
+```datalove
+// `Contact` is an alias for a struct.
+typealias Contact: {
+  name: string,
+  age: int,
+}
+```
+
+
+
+

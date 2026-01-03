@@ -5,6 +5,8 @@ The MVP is a working bare datafun language with:
 - documentation
 - modules
 - closures
+- clone ops
+- type aliases
 - generic functions for built-in generic types
 - repl, script runner
 - interpreter, jit, aot
@@ -19,6 +21,7 @@ The MVP is a working bare datafun language with:
 
 # on deck
 
+- type aliases
 - memoization tests
 - add alignment checks to the runtime
 - interp coverage
@@ -28,7 +31,7 @@ The MVP is a working bare datafun language with:
 - argument modes - moves-etc.md
 - destructuring
 - runtime calls
-- boolean ops - and or xor implies not
+- boolean ops - and or xor not
 - named types
 - clean up demo files in style of learn x in y minutes
 - alternate backend
