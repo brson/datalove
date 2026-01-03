@@ -39,4 +39,6 @@ pub enum InterpError {
         pred: BlockId,
         available: Vec<BlockId>,
     },
+    /// Invalid argument for out parameter (must be slot or value dest).
+    InvalidOutParamArg,
 }

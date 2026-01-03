@@ -232,14 +232,17 @@ impl IrInterpreter {
                 let tydesc = self.tydesc_table.get_or_create(param_type);
 
                 // Borrowed semantics (caller retains ownership, callee doesn't destroy):
-                // - Ref/Mut modes: explicitly borrowed
+                // - Ref/Mut/Out modes: caller retains ownership
                 // - Copy types with In mode: callee makes a copy, caller retains original
                 // Non-borrowed (callee destroys):
                 // - Non-Copy types with In mode: ownership transfers to callee
-                let borrowed = matches!(mode, ParamMode::Ref | ParamMode::Mut)
+                let borrowed = matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out)
                     || param_type.is_copy();
 
-                frame.set_param(param_id, src.ptr, tydesc, borrowed);
+                // Initialized: true for In/Ref/Mut (data exists), false for Out (callee writes first).
+                let initialized = !matches!(mode, ParamMode::Out);
+
+                frame.set_param(param_id, src.ptr, tydesc, borrowed, initialized);
             }
         }
 
@@ -572,16 +575,21 @@ impl IrInterpreter {
                 let src_val = self.read_operand(value, frame, frames)?;
                 // Get destination pointer from param (points to caller's data).
                 let dest_ptr = frame.param_dest(*param)?;
-                // Destroy old value at destination.
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        self.runtime.handle(),
-                        dest_ptr.ptr,
-                        dest_ptr.tydesc,
-                    );
+                // Destroy old value at destination only if initialized.
+                // (Out params start uninitialized - first write doesn't destroy.)
+                if frame.is_param_initialized(*param) {
+                    unsafe {
+                        datalove_rt::c::dtlv_rti_any_destroy_local(
+                            self.runtime.handle(),
+                            dest_ptr.ptr,
+                            dest_ptr.tydesc,
+                        );
+                    }
                 }
                 // Move new value into destination.
                 unsafe { self.move_value(&src_val, dest_ptr)?; }
+                // Mark param as initialized (important for Out params).
+                frame.mark_param_initialized(*param);
                 // Mark source as dropped.
                 match value {
                     Operand::Value(id) => frame.mark_value_dropped(*id),
@@ -829,21 +837,32 @@ impl IrInterpreter {
                 let (callee, callee_unit) = ctx.get_function_with_context(func, registry)?;
 
                 // Evaluate arguments.
-                let arg_vals: Vec<Value> = args.iter()
-                    .map(|op| self.read_operand(op, frame, frames))
-                    .collect::<Result<_, _>>()?;
+                // For Out params: get pointer to uninitialized slot (callee will write to it).
+                // For other params: read the value as before.
+                let mut arg_vals: Vec<Value> = Vec::with_capacity(args.len());
+                for (i, op) in args.iter().enumerate() {
+                    let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+                    if mode == ParamMode::Out {
+                        // Out param: get destination pointer without reading value.
+                        let val = self.get_operand_dest(op, frame)?;
+                        arg_vals.push(val);
+                    } else {
+                        // Other modes: read the value.
+                        arg_vals.push(self.read_operand(op, frame, frames)?);
+                    }
+                }
 
                 // Get destination for return value.
                 let dest_slot = frame.value_dest(*dest)?;
 
                 // Mark arg sources as dropped based on param mode and type.
                 // With reference passing:
-                // - Ref/Mut params: caller retains ownership (borrowed)
+                // - Ref/Mut/Out params: caller retains ownership (borrowed)
                 // - In params with Copy types: callee makes a copy, caller retains original
                 // - In params with non-Copy types: ownership transfers to callee
                 for (i, arg) in args.iter().enumerate() {
                     let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                    if matches!(mode, ParamMode::Ref | ParamMode::Mut) {
+                    if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
                         // Borrowed param: caller retains ownership. Don't mark dropped.
                         continue;
                     }
@@ -875,6 +894,19 @@ impl IrInterpreter {
                     // Local or module function - use current context.
                     self.call_in_context(callee, arg_vals, dest_slot, ctx, registry, frames)?;
                 }
+
+                // After call returns, Out param slots are now initialized.
+                for (i, arg) in args.iter().enumerate() {
+                    let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+                    if mode == ParamMode::Out {
+                        match arg {
+                            Operand::Slot(id) => frame.mark_slot_initialized(*id),
+                            // Value destinations don't need marking - they're SSA.
+                            _ => {}
+                        }
+                    }
+                }
+
                 frame.mark_value_initialized(*dest);
             }
             Instruction::ListNew { dest, elements } => {
@@ -989,6 +1021,23 @@ impl IrInterpreter {
             Operand::ExternalSlot { unit, slot } => {
                 frames.external_slot(*unit, *slot)
             }
+        }
+    }
+
+    /// Get pointer to operand's destination without checking initialization.
+    ///
+    /// Used for Out params where we need to pass a pointer to an uninitialized slot.
+    fn get_operand_dest(&mut self, op: &Operand, frame: &mut Frame) -> Result<Value, InterpError> {
+        match op {
+            Operand::Slot(id) => {
+                let dest = frame.slot_dest(*id)?;
+                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc })
+            }
+            Operand::Value(id) => {
+                let dest = frame.value_dest(*id)?;
+                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc })
+            }
+            _ => Err(InterpError::InvalidOutParamArg),
         }
     }
 

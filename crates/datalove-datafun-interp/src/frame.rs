@@ -26,8 +26,10 @@ pub struct Frame {
     param_ptrs: Vec<*mut u8>,
     /// Type descriptors for each parameter.
     param_tydescs: Vec<*const TyDesc>,
-    /// Track which params are borrowed (Ref/Mut - caller retains ownership).
+    /// Track which params are borrowed (Ref/Mut/Out - caller retains ownership).
     param_borrowed: Vec<bool>,
+    /// Track which params are initialized (Out params start uninitialized).
+    param_initialized: Vec<bool>,
 }
 
 impl Frame {
@@ -49,6 +51,7 @@ impl Frame {
             param_ptrs: vec![std::ptr::null_mut(); param_count],
             param_tydescs: vec![std::ptr::null(); param_count],
             param_borrowed: vec![false; param_count],
+            param_initialized: vec![false; param_count],
         }
     }
 
@@ -153,16 +156,21 @@ impl Frame {
     }
 
     /// Set a parameter with pointer to caller's data.
-    pub fn set_param(&mut self, id: ParamId, ptr: *mut u8, tydesc: *const TyDesc, borrowed: bool) {
+    ///
+    /// `initialized`: true for In/Ref/Mut (data exists), false for Out (callee must write first).
+    pub fn set_param(&mut self, id: ParamId, ptr: *mut u8, tydesc: *const TyDesc, borrowed: bool, initialized: bool) {
         let idx = id.0 as usize;
         if idx < self.param_ptrs.len() {
             self.param_ptrs[idx] = ptr;
             self.param_tydescs[idx] = tydesc;
             self.param_borrowed[idx] = borrowed;
+            self.param_initialized[idx] = initialized;
         }
     }
 
     /// Read param (dereferences pointer to caller's data).
+    ///
+    /// Returns error for Out params that haven't been written yet.
     pub fn param(&self, id: ParamId) -> Result<Value, InterpError> {
         let idx = id.0 as usize;
         if idx >= self.param_ptrs.len() {
@@ -170,6 +178,9 @@ impl Frame {
         }
         let ptr = self.param_ptrs[idx];
         if ptr.is_null() {
+            return Err(InterpError::UninitializedParam(id));
+        }
+        if !self.param_initialized[idx] {
             return Err(InterpError::UninitializedParam(id));
         }
         let tydesc = self.param_tydescs[idx];
@@ -195,6 +206,21 @@ impl Frame {
         let idx = id.0 as usize;
         if idx < self.param_ptrs.len() {
             self.param_ptrs[idx] = std::ptr::null_mut();
+            self.param_initialized[idx] = false;
+        }
+    }
+
+    /// Check if param is initialized (for ParamStore to decide whether to destroy old value).
+    pub fn is_param_initialized(&self, id: ParamId) -> bool {
+        let idx = id.0 as usize;
+        idx < self.param_initialized.len() && self.param_initialized[idx]
+    }
+
+    /// Mark param as initialized (after first write to Out param).
+    pub fn mark_param_initialized(&mut self, id: ParamId) {
+        let idx = id.0 as usize;
+        if idx < self.param_initialized.len() {
+            self.param_initialized[idx] = true;
         }
     }
 
@@ -203,15 +229,16 @@ impl Frame {
     /// Calls the runtime destructor for each initialized value/slot.
     /// Skips borrowed values and borrowed params (they're not owned by this frame).
     pub fn destroy_all(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
-        // Destroy In params (not borrowed - callee owns through pointer).
+        // Destroy In params (not borrowed, and initialized - callee owns through pointer).
         for idx in 0..self.param_ptrs.len() {
             let ptr = self.param_ptrs[idx];
-            if !ptr.is_null() && !self.param_borrowed[idx] {
+            if !ptr.is_null() && !self.param_borrowed[idx] && self.param_initialized[idx] {
                 let tydesc = self.param_tydescs[idx];
                 unsafe {
                     datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
                 }
                 self.param_ptrs[idx] = std::ptr::null_mut();
+                self.param_initialized[idx] = false;
             }
         }
 

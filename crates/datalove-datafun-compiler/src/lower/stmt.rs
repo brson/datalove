@@ -70,8 +70,9 @@ pub fn lower_statement_indexed<'db>(
                     Ok(())
                 }
                 Some(Operand::Param(param)) => {
-                    // Only Mut params can be assigned.
-                    if ctx.param_mode(param) == Some(ParamMode::Mut) {
+                    // Only Mut/Out params can be assigned.
+                    let mode = ctx.param_mode(param);
+                    if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
                         // ParamStore handles destroying the old value internally.
                         ctx.emit(Instruction::ParamStore {
                             param,

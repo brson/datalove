@@ -51,9 +51,12 @@ pub struct BindingInfo {
 }
 
 impl BindingInfo {
-    /// True if this binding is borrowed (Ref or Mut param) and cannot transfer ownership.
+    /// True if this binding is borrowed (Ref, Mut, or Out param) and cannot transfer ownership.
+    ///
+    /// Out params are borrowed because the caller owns the slot and retains ownership
+    /// after the call returns.
     pub fn is_borrowed(&self) -> bool {
-        matches!(self.param_mode, Some(ParamMode::Ref) | Some(ParamMode::Mut))
+        matches!(self.param_mode, Some(ParamMode::Ref) | Some(ParamMode::Mut) | Some(ParamMode::Out))
     }
 }
 
@@ -518,9 +521,9 @@ impl<'db> AnalysisCtx<'db> {
                         }
                     }
 
-                    // Ref and Mut params don't consume (caller retains ownership).
+                    // Ref, Mut, and Out params don't consume (caller retains ownership).
                     let is_consumed = callee_mode
-                        .map(|mode| !matches!(mode, ParamMode::Ref | ParamMode::Mut))
+                        .map(|mode| !matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out))
                         .unwrap_or(true);
                     self.analyze_expr_moves(*arg, is_consumed);
                 }
