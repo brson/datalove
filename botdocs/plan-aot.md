@@ -97,7 +97,9 @@
 - `crates/datalove-datafun/tests/aot_tests.rs` - Test harness using ExampleTestRunner
 - `crates/datalove-datafun/tests/fixtures/aot/001_debuglog_i32.world` - ✓ passes
 - `crates/datalove-datafun/tests/fixtures/aot/002_debuglog_bool.world` - ✓ passes
-- `crates/datalove-datafun/tests/fixtures/aot/003_arithmetic.world` - AOT compile error (BinOp verifier issue)
+- `crates/datalove-datafun/tests/fixtures/aot/003_multiple_values.world` - ✓ passes
+- `crates/datalove-datafun/tests/fixtures/aot/004_bigint_add_unsupported.world` - Shows clear error for unsupported bigint
+- `crates/datalove-datafun/tests/fixtures/aot/005_variable_basic.world` - ✓ passes (mutable variables)
 
 **Modified files:**
 - `crates/datalove-datafun/Cargo.toml` - Added aot-cranelift and tempfile dev-dependencies
@@ -139,6 +141,8 @@ Each "unsupported instruction" error becomes the next work item.
 - `84923ca` - Move FunctionRegistry from interp to IR crate
 - `43b78ab` - Use runtime TyDesc layout instead of hardcoded constants
 - `16eee19` - Implement Call instruction with implicit rt_handle threading
+- `cd11c73` - Enable position-independent code in AOT compiler
+- `e5f7d84` - Implement SlotStore, SlotLoad, and Slot operand for mutable variables
 
 **TyDesc improvements:**
 - Collect types from full module graph (not just single script unit)
@@ -161,23 +165,35 @@ Each "unsupported instruction" error becomes the next work item.
 - Local function lookup via `resolve_func_ref`
 - External/Module calls return unsupported (need registry integration)
 
+**Position-independent code:**
+- Added `is_pic=true` to Cranelift settings
+- Eliminates DT_TEXTREL linker warnings
+
+**Mutable variables (slots):**
+- `SlotStore` instruction stores values to slot offsets in frame
+- `SlotLoad` instruction loads values from slot offsets
+- `Operand::Slot` support in `get_operand_value` and `get_operand_ptr`
+- Handles both scalar (load/store) and aggregate (memcpy) types
+- Test: `005_variable_basic.world` demonstrates var declaration, mutation, access
+
 **Remaining known issues:**
 1. Wasteful temp stack slots - creates new slot per spill in `get_operand_ptr`
-2. No position-independent code - linker warns about DT_TEXTREL
-3. TryReturn/UnitEnd/UnitEarlyReturn terminators not implemented
-4. Many instructions not implemented (SlotLoad, SlotStore, Drop, Clone, etc.)
-5. No Slot/ExternalValue/ExternalSlot operand support
-6. No aggregate fields in Pack (needs memcpy)
-7. Int/String constants require runtime calls
-8. BinOp with bigint not implemented
+2. TryReturn/UnitEnd/UnitEarlyReturn terminators not implemented
+3. Drop, Clone instructions not implemented
+4. ExternalValue/ExternalSlot operand support missing
+5. No aggregate fields in Pack (needs memcpy)
+6. Int/String constants require runtime calls
+7. BinOp with bigint not implemented
+8. External/Module function calls need FunctionRegistry integration
 
 ### Phases 4-8: Feature Development (Test-Driven)
 
 Order TBD based on what the test harness reveals. Expected needs:
 
-**Slots & Variables**
-- `SlotStore`, `SlotLoad` instructions
-- Mutable variable support
+**Slots & Variables** ✓ COMPLETE
+- `SlotStore`, `SlotLoad` instructions - ✓
+- `Operand::Slot` support - ✓
+- Mutable variable support - ✓
 
 **Function Calls** (partially done)
 - `Call` instruction - ✓ implemented for local functions
