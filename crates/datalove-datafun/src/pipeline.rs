@@ -10,7 +10,7 @@ use rmx::std::collections::{BTreeMap, HashMap};
 
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 use datalove_datafun_pkg::package_load::{Package, PackageModule};
-use datalove_datafun_ir::{IrModuleId, FuncId, IrType};
+use datalove_datafun_ir::{IrModuleId, FuncId, IrType, IrScriptUnit};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_compiler::drop_analysis;
 use datalove_datafun_tycheck::{
@@ -358,6 +358,16 @@ pub struct ScriptUnitResult {
     pub output: String,
 }
 
+/// Result of lowering a script unit (without execution).
+pub struct ScriptLowerResult {
+    /// Typecheck result.
+    pub typecheck: TypecheckResult,
+    /// Lowering result.
+    pub lowering: LoweringResult,
+    /// The lowered IR (if successful).
+    pub ir_unit: Option<IrScriptUnit>,
+}
+
 /// Context for compiling and executing script units.
 ///
 /// Created from `CompiledModules::script_context()`, this provides incremental
@@ -513,6 +523,209 @@ impl<'db> ScriptCompilationContext<'db> {
         let tycheck_result = *all_results.last().unwrap();
 
         self.process_expr(expr, tycheck_result)
+    }
+
+    /// Lower a script fragment without executing (for AOT compilation).
+    pub fn lower_fragment(&mut self, source: &str) -> ScriptLowerResult {
+        let src = bct::input::Source::new(self.db, source.to_string());
+        self.last_source = Some(src);
+        let parse_result = datalove_datafun_parser::parse(self.db, src);
+        let parsed = parse_result.parsed(self.db);
+
+        // Collect parse diagnostics.
+        let parse_diags = datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
+        if !parse_diags.is_empty() {
+            let parse_errors: Vec<String> = parse_diags.iter()
+                .map(|d| {
+                    let diag = d.to_diagnostic(self.db);
+                    diag.message.as_str(self.db).to_string()
+                })
+                .collect();
+            return ScriptLowerResult {
+                typecheck: TypecheckResult::ParseError { errors: parse_errors },
+                lowering: LoweringResult::Skipped,
+                ir_unit: None,
+            };
+        }
+
+        // Incremental typecheck with pre-parsed content.
+        let spans = datalove_datafun_parser::datafun_spans(self.db, src);
+        let unit_spec = ScriptUnitSpec::new(self.db, src, spans, ScriptUnitKind::Fragment(parsed));
+        self.accumulated_unit_specs.push(unit_spec);
+        let batch_spec = ScriptBatchSpec::new(
+            self.db,
+            self.accumulated_unit_specs.clone(),
+            self.module_specs.clone(),
+        );
+        self.last_batch_spec = Some(batch_spec);
+        let typecheck_results = type_check_script_units(self.db, batch_spec);
+        let all_results = typecheck_results.results(self.db);
+        let tycheck_result = *all_results.last().unwrap();
+
+        self.lower_fragment_inner(parsed, tycheck_result)
+    }
+
+    /// Lower a script expression without executing (for AOT compilation).
+    pub fn lower_expr(&mut self, source: &str) -> ScriptLowerResult {
+        let src = bct::input::Source::new(self.db, source.to_string());
+        let expr = datalove_datafun_parser::parse_expr(self.db, src);
+
+        // Collect parse diagnostics.
+        let parse_diags = datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
+        if !parse_diags.is_empty() {
+            let parse_errors: Vec<String> = parse_diags.iter()
+                .map(|d| {
+                    let diag = d.to_diagnostic(self.db);
+                    diag.message.as_str(self.db).to_string()
+                })
+                .collect();
+            return ScriptLowerResult {
+                typecheck: TypecheckResult::ParseError { errors: parse_errors },
+                lowering: LoweringResult::Skipped,
+                ir_unit: None,
+            };
+        }
+
+        // Incremental typecheck with pre-parsed content.
+        let spans = datalove_datafun_parser::datafun_spans(self.db, src);
+        let unit_spec = ScriptUnitSpec::new(self.db, src, spans, ScriptUnitKind::Expr(expr));
+        self.accumulated_unit_specs.push(unit_spec);
+        let batch_spec = ScriptBatchSpec::new(
+            self.db,
+            self.accumulated_unit_specs.clone(),
+            self.module_specs.clone(),
+        );
+        let typecheck_results = type_check_script_units(self.db, batch_spec);
+        let all_results = typecheck_results.results(self.db);
+        let tycheck_result = *all_results.last().unwrap();
+
+        self.lower_expr_inner(expr, tycheck_result)
+    }
+
+    /// Lower a fragment to IR without execution.
+    fn lower_fragment_inner(
+        &mut self,
+        parsed: datalove_datafun_ast::ast::ParsedStatements<'db>,
+        tycheck_result: UnitTypecheckResultTracked<'db>,
+    ) -> ScriptLowerResult {
+        // Check for typecheck errors.
+        let tycheck_errors: Vec<_> = tycheck_result.errors(self.db).into_iter()
+            .map(|e| format!("{:?}", e.error(self.db)))
+            .collect();
+        if !tycheck_errors.is_empty() {
+            return ScriptLowerResult {
+                typecheck: TypecheckResult::Error { errors: tycheck_errors },
+                lowering: LoweringResult::Skipped,
+                ir_unit: None,
+            };
+        }
+
+        // Run drop analysis.
+        let expr_types = tycheck_result.expr_types(self.db);
+        let call_targets = tycheck_result.call_targets(self.db);
+        let stmts = parsed.statements(self.db).to_vec();
+        let func_analyses = match drop_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts) {
+            Ok(analyses) => analyses,
+            Err(errors) => {
+                let error_msgs: Vec<String> = errors.into_iter()
+                    .map(|(func_name, errs)| {
+                        let errs_str: Vec<String> = errs.iter().map(|e| format!("{:?}", e)).collect();
+                        format!("{}: {}", func_name, errs_str.join("; "))
+                    })
+                    .collect();
+                return ScriptLowerResult {
+                    typecheck: TypecheckResult::Success,
+                    lowering: LoweringResult::Error {
+                        message: format!("Drop analysis errors: {}", error_msgs.join(", ")),
+                    },
+                    ir_unit: None,
+                };
+            }
+        };
+
+        // Lower to IR.
+        let ir_unit = match lower::lower_script_fragment_raw(
+            self.db,
+            expr_types,
+            call_targets,
+            &self.func_id_map,
+            self.script_ctx.clone(),
+            stmts,
+            func_analyses,
+        ) {
+            Ok(unit) => unit,
+            Err(e) => {
+                return ScriptLowerResult {
+                    typecheck: TypecheckResult::Success,
+                    lowering: LoweringResult::Error { message: format!("{}", e) },
+                    ir_unit: None,
+                };
+            }
+        };
+
+        let ir_dump = format!("{}", ir_unit);
+
+        // Update script context with exports from this unit.
+        let unit_index = self.script_ctx.current_unit;
+        self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.value_types, &ir_unit.slot_types);
+        self.script_ctx.current_unit += 1;
+
+        ScriptLowerResult {
+            typecheck: TypecheckResult::Success,
+            lowering: LoweringResult::Success { ir: ir_dump },
+            ir_unit: Some(ir_unit),
+        }
+    }
+
+    /// Lower an expression to IR without execution.
+    fn lower_expr_inner(
+        &mut self,
+        expr: datalove_datafun_ast::ast::ExprFun<'db>,
+        tycheck_result: UnitTypecheckResultTracked<'db>,
+    ) -> ScriptLowerResult {
+        // Check for typecheck errors.
+        let tycheck_errors: Vec<_> = tycheck_result.errors(self.db).into_iter()
+            .map(|e| format!("{:?}", e.error(self.db)))
+            .collect();
+        if !tycheck_errors.is_empty() {
+            return ScriptLowerResult {
+                typecheck: TypecheckResult::Error { errors: tycheck_errors },
+                lowering: LoweringResult::Skipped,
+                ir_unit: None,
+            };
+        }
+
+        // Lower the expression.
+        let ir_unit = match lower::lower_script_expr(
+            self.db,
+            tycheck_result.expr_types(self.db),
+            tycheck_result.call_targets(self.db),
+            &self.func_id_map,
+            self.script_ctx.clone(),
+            expr,
+        ) {
+            Ok(unit) => unit,
+            Err(e) => {
+                return ScriptLowerResult {
+                    typecheck: TypecheckResult::Success,
+                    lowering: LoweringResult::Error { message: format!("{}", e) },
+                    ir_unit: None,
+                };
+            }
+        };
+
+        let ir_dump = format!("{}", ir_unit);
+
+        // Update script context with exports from this unit.
+        let unit_index = self.script_ctx.current_unit;
+        self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.value_types, &ir_unit.slot_types);
+        self.script_ctx.current_unit += 1;
+
+        ScriptLowerResult {
+            typecheck: TypecheckResult::Success,
+            lowering: LoweringResult::Success { ir: ir_dump },
+            ir_unit: Some(ir_unit),
+        }
     }
 
     /// Process a parsed fragment through typecheck, lower, and execute.

@@ -24,7 +24,9 @@ datalove-diagnostic.path = "../datalove-diagnostic"
 datalove-exampletest.path = "../datalove-exampletest"
 datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"
+datalove-datafun-aot-cranelift.path = "../datalove-datafun-aot-cranelift"
 ron = "0.8"
+tempfile = "3"
 
 [[test]]
 name = "tycheck_world_tests"
@@ -54,4 +56,9 @@ harness = false
 [[test]]
 name = "interp_tests"
 path = "tests/interp_tests.rs"
+harness = false
+
+[[test]]
+name = "aot_tests"
+path = "tests/aot_tests.rs"
 harness = false

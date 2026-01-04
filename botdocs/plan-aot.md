@@ -49,14 +49,20 @@
 
 ### Phase 2.5: DebugLog Minimal Path ✓ COMPLETE
 
+**Commits:**
+- `2428d90` - AOT DebugLog compilation support
+- `facdfce` - Link-and-run tests for debuglog
+
 **New files:**
 - `crates/datalove-datafun-aot-cranelift/src/runtime.rs` - Runtime function imports (dtlv_rti_*)
 - `crates/datalove-datafun-aot-cranelift/src/tydesc_emit.rs` - TyDesc static data emission
-- `crates/datalove-datafun-aot-cranelift/tests/aot_debuglog_tests.rs` - Integration tests
+- `crates/datalove-datafun-aot-cranelift/tests/aot_debuglog_tests.rs` - Compilation tests
+- `crates/datalove-datafun-aot-cranelift/tests/aot_run_tests.rs` - Link-and-run tests
 
 **Modified files:**
 - `src/codegen.rs` - Added DebugLog instruction, value-in-memory spilling, rt_handle support
 - `src/lib.rs` - Script unit compilation with entry point generation
+- `crates/datalove-rt/Cargo.toml` - Added cdylib crate type for shared library linking
 
 **Features implemented:**
 - `DebugLog` instruction codegen
@@ -65,18 +71,91 @@
 - Script unit → IrFunction conversion
 - `main()` entry point generation (init, set_debug_mode, body, shutdown)
 - Runtime function imports (init, shutdown, set_debug_mode, debuglog_local)
+- Linking with libdatalove_rt.so
+- Execution and output verification
 
-**Tests:** 3 integration tests (debuglog_i32, debuglog_bool, multiple_debuglogs)
+**Tests:**
+- 3 compilation tests (debuglog_i32, debuglog_bool, multiple_debuglogs)
+- 3 link-and-run tests (compile → link → execute → verify stderr)
 
 **What works:**
-- Compilation of `debuglog @42` to object file
-- Generated main() calls dtlv_rti_init, sets debug mode, calls body, shuts down
+- Full pipeline: `debuglog @42` → object file → link → execute → prints "42" to stderr
+- Multiple debuglogs in sequence
+- Bool and i32 scalar types
 
-**Not yet done:**
-- Actual linking with runtime library (object file only)
-- Execution verification
+**Known issues:**
+- Linker warnings about DT_TEXTREL (not generating position-independent code yet)
 
-### Phases 3-8: NOT STARTED
+### Phase 3: Full Worldfile Test Harness ✓ HARNESS COMPLETE
+
+**Goal:** Build the test harness NOW. Failing tests guide what to implement next.
+
+**Commits:**
+- (pending) - AOT worldfile test harness with pipeline integration
+
+**New files:**
+- `crates/datalove-datafun/tests/aot_tests.rs` - Test harness using ExampleTestRunner
+- `crates/datalove-datafun/tests/fixtures/aot/001_debuglog_i32.world` - ✓ passes
+- `crates/datalove-datafun/tests/fixtures/aot/002_debuglog_bool.world` - ✓ passes
+- `crates/datalove-datafun/tests/fixtures/aot/003_arithmetic.world` - AOT compile error (BinOp verifier issue)
+
+**Modified files:**
+- `crates/datalove-datafun/Cargo.toml` - Added aot-cranelift and tempfile dev-dependencies
+- `crates/datalove-datafun/src/pipeline.rs` - Added `lower_fragment()` and `lower_expr()` methods
+
+**Pipeline implemented:**
+```
+.world file
+    → parse_worldfile_sections()
+    → ModuleCompilationPipeline::compile()
+    → ScriptCompilationContext::lower_fragment/lower_expr() (IR extraction)
+    → AotCompiler::compile_script_unit()
+    → link with libdatalove_rt.so
+    → execute, capture stderr
+    → compare to .out.expected
+```
+
+**Error categories tracked:**
+- PARSE_ERROR / TYPECHECK_ERROR / LOWER_ERROR - existing pipeline errors
+- AOT_COMPILE_ERROR - unsupported IR or codegen bugs
+- LINK_ERROR - missing runtime symbol
+- RUNTIME_ERROR - crash or bad exit code
+
+**Current status:**
+- Tests 001 and 002 pass: full compile → link → run → capture output
+- Test 003 reveals BinOp codegen bug (Cranelift verifier error)
+- Next step: Fix BinOp codegen, then add more fixtures to drive feature development
+
+**3.5: Incremental Feature Development**
+Run harness → see what fails → implement that feature → repeat.
+Each "unsupported instruction" error becomes the next work item.
+
+### Phases 4-8: Feature Development (Test-Driven)
+
+Order TBD based on what the test harness reveals. Expected needs:
+
+**Slots & Variables**
+- `SlotStore`, `SlotLoad` instructions
+- Mutable variable support
+
+**Function Calls**
+- `Call` instruction
+- Parameter passing (In/Ref/Mut/Out modes)
+- Local and cross-module calls
+
+**Option/Result Types**
+- `WrapSome`, `WrapOk`, `WrapErr`
+- `UnwrapOption`, `UnwrapResult`
+- `TryReturn` terminator
+
+**Runtime Types**
+- `Int`/`String` constants via runtime calls
+- Collection operations (List, Set, Map)
+
+**Advanced**
+- Drop scheduling
+- Cross-unit references
+- Phi nodes for loops
 
 ---
 
@@ -232,53 +311,51 @@ The ObjectProduct can be written to .o files, then linked with the runtime libra
 
 ## Implementation Phases
 
-### Phase 1: Foundation
+### Phase 1: Foundation ✓
 1. Create crate structure with Cargo.toml
 2. Implement types.rs - basic type mapping
 3. Implement layout.rs - frame layout computation (port from interp)
 4. Set up Cranelift module infrastructure
 
-### Phase 2: Basic Codegen
+### Phase 2: Basic Codegen ✓
 1. Implement single-block functions (no control flow)
 2. Constants, arithmetic, simple binops
 3. Pack/Unpack for tuples and structs
-4. Return values
+4. Return values, Goto, Branch terminators
+5. DebugLog instruction with runtime calls
 
-### Phase 3: Control Flow
-1. Multi-block functions with Goto
-2. Branch terminator
-3. Phi node handling via Cranelift SSA builder
-4. Loops (while)
+### Phase 3: Full Worldfile Test Harness
+1. Add `datalove-datafun-aot-cranelift` as dev-dependency to `datalove-datafun`
+2. Create `tests/aot_tests.rs` using ExampleTestRunner
+3. Integrate with existing pipeline (parse → typecheck → lower → AOT → link → run)
+4. Initial fixtures for debuglog + arithmetic
+5. Error categorization (AOT_COMPILE_ERROR guides next features)
 
-### Phase 4: Function Calls
-1. In parameter mode (copy and non-copy)
-2. Ref/Mut parameter modes
-3. Out parameter mode
-4. Local function calls
-5. External function calls (cross-module)
+### Phase 4+: Test-Driven Feature Development
+Order determined by failing tests. Expected features:
 
-### Phase 5: Advanced Features
-1. Option/Result types
-2. Enum variants
-3. Try/early return
-4. Drop scheduling and destructor calls
+**Slots & Variables**
+- SlotStore, SlotLoad instructions
+- Mutable variable support
 
-### Phase 6: Runtime Integration
-1. String operations (runtime calls)
-2. Int (bigint) operations
-3. Collection operations (List, Set, Map)
-4. Tensor operations
+**Function Calls**
+- Call instruction with ABI setup
+- Parameter modes (In/Ref/Mut/Out)
+- Local and cross-module calls
 
-### Phase 7: Script Units & Linking
-1. Script unit compilation to object files
-2. Cross-unit value/slot access via relocations
-3. Linker integration for final executable
+**Option/Result**
+- WrapSome/WrapOk/WrapErr
+- UnwrapOption/UnwrapResult
+- TryReturn terminator
 
-### Phase 8: Integration & Testing
-1. Add as dependency to datalove-datafun-compiler
-2. Integration with datalove-datafun pipeline
-3. Test harness mirroring interp tests
-4. Performance benchmarks
+**Runtime Types**
+- Int/String constants via runtime
+- Collection operations
+
+**Advanced**
+- Drop scheduling
+- Phi nodes for loops
+- Cross-unit references
 
 ## Files to Modify
 

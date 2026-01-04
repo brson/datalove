@@ -1042,6 +1042,7 @@ name = "datalove-datafun"
 version = "0.1.0"
 dependencies = [
  "bcts",
+ "datalove-datafun-aot-cranelift",
  "datalove-datafun-ast",
  "datalove-datafun-compiler",
  "datalove-datafun-interp",
@@ -1057,6 +1058,7 @@ dependencies = [
  "rustmax",
  "salsa",
  "serde",
+ "tempfile",
 ]
 
 [[package]]
