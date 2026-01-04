@@ -23,6 +23,7 @@ The MVP is a working bare datafun language with:
 
 - aot
 - jit
+- serialized ir bundles
 - clone
 - destructuring
 - generics
