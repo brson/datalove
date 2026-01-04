@@ -132,6 +132,45 @@
 Run harness → see what fails → implement that feature → repeat.
 Each "unsupported instruction" error becomes the next work item.
 
+### Phase 3.5: Infrastructure Improvements ✓ COMPLETE
+
+**Commits:**
+- `5f78320` - Emit TyDescs upfront from full module graph
+- `84923ca` - Move FunctionRegistry from interp to IR crate
+- `43b78ab` - Use runtime TyDesc layout instead of hardcoded constants
+- `16eee19` - Implement Call instruction with implicit rt_handle threading
+
+**TyDesc improvements:**
+- Collect types from full module graph (not just single script unit)
+- Added `collect_types_from_functions()` helper for world compilation
+- Replaced hardcoded layout constants with computed values from rtdt
+- Use `size_of`, `align_of`, `offset_of!` on `rtdt::TyDesc`
+- Import `TyTag` enum directly instead of duplicating values
+
+**FunctionRegistry shared:**
+- Moved `FunctionRegistry` from interp crate to IR crate
+- Both interpreter and AOT can now use it without circular deps
+- Changed `external_function()` to `get_external_function()` returning `Option`
+
+**Call instruction with rt_handle threading:**
+- All functions have implicit rt_handle as first parameter (codegen-only)
+- IR stays clean - no rt_handle in `param_types`
+- `build_signature` prepends PTR_TYPE for rt_handle
+- Entry block extracts rt_handle, user params start at index 1
+- `compile_call` threads rt_handle to callees
+- Local function lookup via `resolve_func_ref`
+- External/Module calls return unsupported (need registry integration)
+
+**Remaining known issues:**
+1. Wasteful temp stack slots - creates new slot per spill in `get_operand_ptr`
+2. No position-independent code - linker warns about DT_TEXTREL
+3. TryReturn/UnitEnd/UnitEarlyReturn terminators not implemented
+4. Many instructions not implemented (SlotLoad, SlotStore, Drop, Clone, etc.)
+5. No Slot/ExternalValue/ExternalSlot operand support
+6. No aggregate fields in Pack (needs memcpy)
+7. Int/String constants require runtime calls
+8. BinOp with bigint not implemented
+
 ### Phases 4-8: Feature Development (Test-Driven)
 
 Order TBD based on what the test harness reveals. Expected needs:
@@ -140,10 +179,12 @@ Order TBD based on what the test harness reveals. Expected needs:
 - `SlotStore`, `SlotLoad` instructions
 - Mutable variable support
 
-**Function Calls**
-- `Call` instruction
-- Parameter passing (In/Ref/Mut/Out modes)
-- Local and cross-module calls
+**Function Calls** (partially done)
+- `Call` instruction - ✓ implemented for local functions
+- rt_handle threading - ✓ implicit first param
+- Two-pass compilation for mutual recursion
+- External/Module function calls via FunctionRegistry
+- Parameter passing modes (In/Ref/Mut/Out)
 
 **Option/Result Types**
 - `WrapSome`, `WrapOk`, `WrapErr`
@@ -247,7 +288,13 @@ Port or share the interpreter's `IrLayout` computation to ensure identical layou
 
 ### 3. Calling Convention (abi.rs)
 
-**All parameters passed by pointer** - uniform ABI:
+**Implicit rt_handle as first parameter** - all functions receive runtime handle:
+- Codegen adds rt_handle (PTR_TYPE) as first param to all signatures
+- IR stays clean (no rt_handle in `param_types`)
+- Call instruction threads rt_handle to callees
+- Interpreter doesn't need this (has direct runtime access)
+
+**All user parameters passed by pointer** - uniform ABI:
 - **In**: Pass pointer, callee takes ownership (destroys at end)
 - **Out**: Pass pointer to uninitialized slot, callee writes
 - **Ref**: Pass pointer, read-only borrow
