@@ -22,15 +22,15 @@ The MVP is a working bare datafun language with:
 # on deck
 
 - aot
-- move/clone semantics - moves-etc.md
-- generics
+- jit
+- clone
 - destructuring
+- generics
 - type aliases
 - memoization tests
 - runtime calls
 - boolean ops - and or xor not
 - clean up demo files in style of learn x in y minutes
-- alternate backend
 - datafun ast roundtrip
 
 
