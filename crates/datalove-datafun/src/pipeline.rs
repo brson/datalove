@@ -388,7 +388,16 @@ impl<'db> CompiledModules<'db> {
     ///
     /// Consumes the compiled modules and returns a context for incrementally
     /// compiling and executing script units.
-    pub fn script_context(self, db: &'db dyn salsa::Database) -> ScriptCompilationContext<'db> {
+    ///
+    /// The `debug_mode` parameter controls debug output behavior:
+    /// - `Disabled`: debuglog statements do nothing (default for production)
+    /// - `Stderr`: debuglog outputs to stderr
+    /// - `Buffer`: debuglog outputs to an internal buffer (for testing)
+    pub fn script_context(
+        self,
+        db: &'db dyn salsa::Database,
+        debug_mode: datalove_rt::c::DebugOutputMode,
+    ) -> ScriptCompilationContext<'db> {
         // Build ScriptLowerContext and module specs from pre-parsed statements.
         let script_ctx = lower::ScriptLowerContext::new();
         let mut module_specs = Vec::new();
@@ -418,7 +427,7 @@ impl<'db> CompiledModules<'db> {
             env: self.env,
             accumulated_unit_specs: Vec::new(),
             module_specs,
-            interp: datalove_datafun_interp::IrInterpreter::new(),
+            interp: datalove_datafun_interp::IrInterpreter::new_with_debug_mode(debug_mode),
             func_id_map: self.func_id_map,
             last_source: None,
             last_batch_spec: None,
@@ -832,11 +841,6 @@ impl<'db> ScriptCompilationContext<'db> {
     /// Get database reference for rendering diagnostics.
     pub fn db(&self) -> &'db dyn salsa::Database {
         self.db
-    }
-
-    /// Set the debug output mode.
-    pub fn set_debug_mode(&self, mode: datalove_rt::c::DebugOutputMode) {
-        self.interp.set_debug_mode(mode);
     }
 
     /// Get the contents of the debug buffer.

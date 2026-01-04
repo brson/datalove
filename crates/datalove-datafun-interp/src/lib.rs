@@ -56,6 +56,7 @@ pub use layout::IrLayout;
 pub use tydesc::IrTyDescTable;
 pub use frame::{Frame, FrameStore};
 pub use env::{FunctionRegistry, ScriptEnvironment, ExecutionContext};
+pub use datalove_rt::c::DebugOutputMode;
 
 use datalove_rt::rtdt;
 use datalove_datafun_ir::{
@@ -79,9 +80,15 @@ pub struct IrInterpreter {
 }
 
 impl IrInterpreter {
+    /// Create a new interpreter with default settings (debug output disabled).
     pub fn new() -> Self {
+        Self::new_with_debug_mode(datalove_rt::c::DebugOutputMode::Disabled)
+    }
+
+    /// Create a new interpreter with the specified debug output mode.
+    pub fn new_with_debug_mode(debug_mode: datalove_rt::c::DebugOutputMode) -> Self {
         Self {
-            runtime: datalove_rt::rust::Runtime::new(),
+            runtime: datalove_rt::rust::Runtime::new_with_debug_mode(debug_mode),
             tydesc_table: IrTyDescTable::new(),
         }
     }
@@ -94,13 +101,6 @@ impl IrInterpreter {
     /// Get mutable access to the type descriptor table.
     pub fn tydesc_table_mut(&mut self) -> &mut IrTyDescTable {
         &mut self.tydesc_table
-    }
-
-    /// Set the debug output mode.
-    pub fn set_debug_mode(&self, mode: datalove_rt::c::DebugOutputMode) {
-        unsafe {
-            datalove_rt::c::dtlv_rti_set_debug_mode(self.runtime.handle(), mode);
-        }
     }
 
     /// Get the contents of the debug buffer.

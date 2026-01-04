@@ -8,6 +8,9 @@
 // Re-export compiler.
 pub use datalove_datafun_compiler::*;
 
+// Re-export DebugOutputMode for debug output configuration.
+pub use datalove_datafun_interp::DebugOutputMode;
+
 // Re-export Db trait for external use.
 pub use salsa::Database as Db;
 

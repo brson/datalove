@@ -335,8 +335,8 @@ impl ScriptCommand {
             }
         }
 
-        // Create script compilation context.
-        let mut ctx = compiled.script_context(&db);
+        // Create script compilation context with Stderr mode for CLI debugging.
+        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr);
 
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(&self.file_path)

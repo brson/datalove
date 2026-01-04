@@ -16,10 +16,18 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    /// Create a new runtime instance.
+    /// Create a new runtime instance with default settings (debug output disabled).
     pub fn new() -> Self {
+        Self::new_with_debug_mode(crate::c::DebugOutputMode::Disabled)
+    }
+
+    /// Create a new runtime instance with the specified debug output mode.
+    pub fn new_with_debug_mode(debug_mode: crate::c::DebugOutputMode) -> Self {
         let handle = crate::c::dtlv_rti_init();
         assert!(!handle.is_null(), "Failed to initialize runtime");
+        unsafe {
+            crate::c::dtlv_rti_set_debug_mode(handle, debug_mode);
+        }
         Runtime { handle }
     }
 
@@ -27,7 +35,6 @@ impl Runtime {
     pub fn handle(&self) -> LocalRtHandle {
         self.handle
     }
-
 }
 
 impl Default for Runtime {
