@@ -1091,6 +1091,7 @@ name = "datalove-datafun-compiler"
 version = "0.1.0"
 dependencies = [
  "bcts",
+ "datalove-datafun-aot-cranelift",
  "datalove-datafun-ast",
  "datalove-datafun-interp",
  "datalove-datafun-ir",
