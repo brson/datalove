@@ -22,7 +22,30 @@
 - Type layouts use exact rtdt sizes via `std::mem::size_of`
 - Composite type layouts computed with matching algorithms
 
-### Phase 2: Basic Codegen - NOT STARTED
+### Phase 2: Basic Codegen ✓ COMPLETE
+
+**Commit:**
+- `7afeb0b` - Core codegen driver with FunctionCompiler
+
+**Created files:**
+- `crates/datalove-datafun-aot-cranelift/src/codegen.rs` (~690 lines)
+
+**Instructions implemented:**
+- `Const` - scalar types (Bool, U8-U64, I8-I64, F32)
+- `BinOp` - all operators (Add, Sub, Mul, Div, Mod, comparisons, logical, bitwise, shifts)
+- `UnaryOp` - Neg, Not, BitNot
+- `Copy`/`Move` - value copying
+- `Pack`/`Unpack` - tuple/struct (scalar fields only)
+
+**Terminators implemented:**
+- `Return`, `Goto`, `Branch`
+
+**Tests:** 5 codegen smoke tests (const, binop, comparison, unary, branch)
+
+**Deferred:**
+- `Int`/`String` constants (need runtime calls)
+- Aggregate field packing (needs memcpy)
+- Slots, params, function calls
 
 ### Phases 3-8: NOT STARTED
 
