@@ -316,3 +316,352 @@ mod tests {
         assert_eq!(layout.align, 4);
     }
 }
+
+/// Tests that verify AOT layout calculations match rtdt exactly.
+///
+/// These tests ensure ABI compatibility between compiled code and the runtime.
+#[cfg(test)]
+mod rtdt_compat_tests {
+    use super::*;
+
+    // Verify our layouts match Rust's std::mem for rtdt types.
+
+    #[test]
+    fn test_int_matches_rtdt() {
+        let our_layout = ir_type_to_cranelift(&IrType::Int).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::Int>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::Int>() as u32);
+    }
+
+    #[test]
+    fn test_string_matches_rtdt() {
+        let our_layout = ir_type_to_cranelift(&IrType::String).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::String>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::String>() as u32);
+    }
+
+    #[test]
+    fn test_list_matches_rtdt() {
+        let our_layout = ir_type_to_cranelift(&IrType::List(Box::new(IrType::U32))).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::List>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::List>() as u32);
+    }
+
+    #[test]
+    fn test_set_matches_rtdt() {
+        let our_layout = ir_type_to_cranelift(&IrType::Set(Box::new(IrType::U32))).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::Set>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::Set>() as u32);
+    }
+
+    #[test]
+    fn test_map_matches_rtdt() {
+        let our_layout = ir_type_to_cranelift(&IrType::Map(
+            Box::new(IrType::String),
+            Box::new(IrType::U32),
+        )).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::Map>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::Map>() as u32);
+    }
+
+    #[test]
+    fn test_tensor_matches_rtdt() {
+        let our_layout = ir_type_to_cranelift(&IrType::Tensor(Box::new(IrType::F32), 2)).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::Tensor>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::Tensor>() as u32);
+    }
+
+    #[test]
+    fn test_data_matches_rtdt() {
+        let our_layout = ir_type_to_cranelift(&IrType::Data).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::Data>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::Data>() as u32);
+    }
+
+    #[test]
+    fn test_error_matches_rtdt() {
+        let our_layout = ir_type_to_cranelift(&IrType::Error).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::Error>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::Error>() as u32);
+    }
+
+    // Verify scalar types match their Rust equivalents.
+
+    #[test]
+    fn test_bool_matches_rust() {
+        let our_layout = ir_type_to_cranelift(&IrType::Bool).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::Bool>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::Bool>() as u32);
+    }
+
+    #[test]
+    fn test_u8_matches_rust() {
+        let our_layout = ir_type_to_cranelift(&IrType::U8).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::U8>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::U8>() as u32);
+    }
+
+    #[test]
+    fn test_u16_matches_rust() {
+        let our_layout = ir_type_to_cranelift(&IrType::U16).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::U16>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::U16>() as u32);
+    }
+
+    #[test]
+    fn test_u32_matches_rust() {
+        let our_layout = ir_type_to_cranelift(&IrType::U32).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::U32>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::U32>() as u32);
+    }
+
+    #[test]
+    fn test_u64_matches_rust() {
+        let our_layout = ir_type_to_cranelift(&IrType::U64).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::U64>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::U64>() as u32);
+    }
+
+    #[test]
+    fn test_i8_matches_rust() {
+        let our_layout = ir_type_to_cranelift(&IrType::I8).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::I8>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::I8>() as u32);
+    }
+
+    #[test]
+    fn test_i16_matches_rust() {
+        let our_layout = ir_type_to_cranelift(&IrType::I16).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::I16>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::I16>() as u32);
+    }
+
+    #[test]
+    fn test_i32_matches_rust() {
+        let our_layout = ir_type_to_cranelift(&IrType::I32).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::I32>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::I32>() as u32);
+    }
+
+    #[test]
+    fn test_i64_matches_rust() {
+        let our_layout = ir_type_to_cranelift(&IrType::I64).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::I64>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::I64>() as u32);
+    }
+
+    #[test]
+    fn test_f32_matches_rust() {
+        let our_layout = ir_type_to_cranelift(&IrType::F32).layout();
+        assert_eq!(our_layout.size, std::mem::size_of::<rtdt::F32>() as u32);
+        assert_eq!(our_layout.align, std::mem::align_of::<rtdt::F32>() as u32);
+    }
+
+    // Verify Option layout matches rtdt::layout computation.
+
+    #[test]
+    fn test_option_u32_matches_rtdt_layout() {
+        let our_layout = ir_type_to_cranelift(&IrType::Option(Box::new(IrType::U32))).layout();
+
+        // Manually compute what rtdt::layout::compute_option_layout would give.
+        // Option<u32>: tag (u8) at 0, payload at align_up(1, 4) = 4, size = 4
+        // Total: 4 + 4 = 8, align = 4
+        let inner_size = 4u32;
+        let inner_align = 4u32;
+        let payload_offset = align_up(1, inner_align);
+        let expected_size = align_up(payload_offset + inner_size, inner_align);
+
+        assert_eq!(our_layout.size, expected_size);
+        assert_eq!(our_layout.align, inner_align);
+    }
+
+    #[test]
+    fn test_option_u64_matches_rtdt_layout() {
+        let our_layout = ir_type_to_cranelift(&IrType::Option(Box::new(IrType::U64))).layout();
+
+        // Option<u64>: tag (u8) at 0, payload at align_up(1, 8) = 8, size = 8
+        // Total: 8 + 8 = 16, align = 8
+        let inner_size = 8u32;
+        let inner_align = 8u32;
+        let payload_offset = align_up(1, inner_align);
+        let expected_size = align_up(payload_offset + inner_size, inner_align);
+
+        assert_eq!(our_layout.size, expected_size);
+        assert_eq!(our_layout.align, inner_align);
+    }
+
+    #[test]
+    fn test_option_string_matches_rtdt_layout() {
+        let our_layout = ir_type_to_cranelift(&IrType::Option(Box::new(IrType::String))).layout();
+
+        // Option<String>: tag (u8) at 0, payload at align_up(1, 8) = 8
+        // String is 16 bytes, so total = 8 + 16 = 24, align = 8
+        let inner_size = std::mem::size_of::<rtdt::String>() as u32;
+        let inner_align = std::mem::align_of::<rtdt::String>() as u32;
+        let payload_offset = align_up(1, inner_align);
+        let expected_size = align_up(payload_offset + inner_size, inner_align);
+
+        assert_eq!(our_layout.size, expected_size);
+        assert_eq!(our_layout.align, inner_align);
+    }
+
+    // Verify Result layout matches rtdt::layout computation.
+
+    #[test]
+    fn test_result_u32_matches_rtdt_layout() {
+        let our_layout = ir_type_to_cranelift(&IrType::Result(Box::new(IrType::U32))).layout();
+
+        // Result<u32>: tag (u8), payload = max(u32, Error)
+        // Error is 16 bytes with 8-byte align
+        let ok_size = 4u32;
+        let ok_align = 4u32;
+        let error_size = std::mem::size_of::<rtdt::Error>() as u32;
+        let error_align = std::mem::align_of::<rtdt::Error>() as u32;
+
+        let max_payload_size = ok_size.max(error_size);
+        let max_payload_align = ok_align.max(error_align);
+        let payload_offset = align_up(1, max_payload_align);
+        let expected_size = align_up(payload_offset + max_payload_size, max_payload_align);
+
+        assert_eq!(our_layout.size, expected_size);
+        assert_eq!(our_layout.align, max_payload_align);
+    }
+
+    #[test]
+    fn test_result_string_matches_rtdt_layout() {
+        let our_layout = ir_type_to_cranelift(&IrType::Result(Box::new(IrType::String))).layout();
+
+        let ok_size = std::mem::size_of::<rtdt::String>() as u32;
+        let ok_align = std::mem::align_of::<rtdt::String>() as u32;
+        let error_size = std::mem::size_of::<rtdt::Error>() as u32;
+        let error_align = std::mem::align_of::<rtdt::Error>() as u32;
+
+        let max_payload_size = ok_size.max(error_size);
+        let max_payload_align = ok_align.max(error_align);
+        let payload_offset = align_up(1, max_payload_align);
+        let expected_size = align_up(payload_offset + max_payload_size, max_payload_align);
+
+        assert_eq!(our_layout.size, expected_size);
+        assert_eq!(our_layout.align, max_payload_align);
+    }
+
+    // Verify tuple layout algorithm.
+
+    #[test]
+    fn test_tuple_empty() {
+        let our_layout = ir_type_to_cranelift(&IrType::Tuple(vec![])).layout();
+        assert_eq!(our_layout.size, 0);
+        assert_eq!(our_layout.align, 1);
+    }
+
+    #[test]
+    fn test_tuple_single_field() {
+        let our_layout = ir_type_to_cranelift(&IrType::Tuple(vec![IrType::U64])).layout();
+        assert_eq!(our_layout.size, 8);
+        assert_eq!(our_layout.align, 8);
+    }
+
+    #[test]
+    fn test_tuple_mixed_alignment() {
+        // (u8, u32, u8, u64): layout should be
+        // u8 at 0, u32 at 4, u8 at 8, u64 at 16, total 24
+        let our_layout = ir_type_to_cranelift(&IrType::Tuple(vec![
+            IrType::U8,
+            IrType::U32,
+            IrType::U8,
+            IrType::U64,
+        ])).layout();
+
+        assert_eq!(our_layout.align, 8);
+        // 0: u8 (1), pad to 4, 4: u32 (4), 8: u8 (1), pad to 16, 16: u64 (8) = 24
+        assert_eq!(our_layout.size, 24);
+    }
+
+    #[test]
+    fn test_tuple_field_offsets() {
+        let fields = vec![IrType::U8, IrType::U32, IrType::U8, IrType::U64];
+        let offsets = compute_tuple_field_offsets(&fields);
+
+        assert_eq!(offsets[0], 0);  // u8 at 0
+        assert_eq!(offsets[1], 4);  // u32 at 4 (aligned)
+        assert_eq!(offsets[2], 8);  // u8 at 8
+        assert_eq!(offsets[3], 16); // u64 at 16 (aligned)
+    }
+
+    // Verify enum layout algorithm.
+
+    #[test]
+    fn test_enum_no_payloads() {
+        let our_layout = ir_type_to_cranelift(&IrType::Enum(vec![
+            ("A".into(), None),
+            ("B".into(), None),
+            ("C".into(), None),
+        ])).layout();
+
+        // Just discriminant (u32), no payload
+        assert_eq!(our_layout.size, 4);
+        assert_eq!(our_layout.align, 4);
+    }
+
+    #[test]
+    fn test_enum_with_payloads() {
+        let our_layout = ir_type_to_cranelift(&IrType::Enum(vec![
+            ("None".into(), None),
+            ("Some".into(), Some(IrType::U64)),
+        ])).layout();
+
+        // discriminant (u32) + padding + u64 payload
+        // discriminant at 0 (4 bytes), payload at align_up(4, 8) = 8
+        // Total: 8 + 8 = 16, align = 8
+        assert_eq!(our_layout.size, 16);
+        assert_eq!(our_layout.align, 8);
+    }
+
+    #[test]
+    fn test_enum_variant_offsets() {
+        let variants = vec![
+            ("None".into(), None),
+            ("SomeU32".into(), Some(IrType::U32)),
+            ("SomeU64".into(), Some(IrType::U64)),
+        ];
+        let offsets = compute_enum_variant_offsets(&variants);
+
+        assert_eq!(offsets[0], 0); // No payload
+        assert_eq!(offsets[1], 4); // u32 payload at align_up(4, 4) = 4
+        assert_eq!(offsets[2], 8); // u64 payload at align_up(4, 8) = 8
+    }
+
+    // Verify nested composite types.
+
+    #[test]
+    fn test_nested_option_tuple() {
+        // Option<(u32, u64)>
+        let tuple_layout = ir_type_to_cranelift(&IrType::Tuple(vec![IrType::U32, IrType::U64])).layout();
+        let option_layout = ir_type_to_cranelift(&IrType::Option(Box::new(
+            IrType::Tuple(vec![IrType::U32, IrType::U64])
+        ))).layout();
+
+        // Tuple is 16 bytes with 8-byte align
+        assert_eq!(tuple_layout.size, 16);
+        assert_eq!(tuple_layout.align, 8);
+
+        // Option: tag (1) + pad to 8 + tuple (16) = 24
+        let payload_offset = align_up(1, tuple_layout.align);
+        let expected_size = align_up(payload_offset + tuple_layout.size, tuple_layout.align);
+        assert_eq!(option_layout.size, expected_size);
+        assert_eq!(option_layout.align, tuple_layout.align);
+    }
+
+    #[test]
+    fn test_tuple_with_string() {
+        // (String, u32)
+        let our_layout = ir_type_to_cranelift(&IrType::Tuple(vec![
+            IrType::String,
+            IrType::U32,
+        ])).layout();
+
+        // String at 0 (16 bytes), u32 at 16 (4 bytes), total 20 -> aligned to 24
+        assert_eq!(our_layout.size, 24);
+        assert_eq!(our_layout.align, 8);
+    }
+}
