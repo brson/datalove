@@ -431,11 +431,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         lhs: &Operand,
         rhs: &Operand,
     ) -> Result<(), AotError> {
+        // Get the type of the result to determine how to compile.
+        let dest_ty = &self.func.value_types[dest.0 as usize];
+
+        // Check for runtime types that need special handling.
+        if matches!(dest_ty, IrType::Int) {
+            return Err(AotError::Unsupported(format!(
+                "BinOp with Int (bigint) result type - requires runtime call: {:?}",
+                op
+            )));
+        }
+
         let lhs_val = self.get_operand_value(builder, lhs)?;
         let rhs_val = self.get_operand_value(builder, rhs)?;
 
-        // Get the type of the result to determine signed vs unsigned.
-        let dest_ty = &self.func.value_types[dest.0 as usize];
         let is_signed = matches!(dest_ty, IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64);
         let is_float = matches!(dest_ty, IrType::F32);
 

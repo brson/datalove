@@ -122,9 +122,11 @@
 - RUNTIME_ERROR - crash or bad exit code
 
 **Current status:**
-- Tests 001 and 002 pass: full compile → link → run → capture output
-- Test 003 reveals BinOp codegen bug (Cranelift verifier error)
-- Next step: Fix BinOp codegen, then add more fixtures to drive feature development
+- Tests 001, 002, 003 pass: full compile → link → run → capture output
+- Test 004 shows clear error for unsupported bigint arithmetic
+- Investigation revealed: `@10 + @32` produces Int (bigint), not U32
+- Fixed codegen to detect and report unsupported bigint BinOp
+- Next step: Add more fixtures to drive feature development
 
 **3.5: Incremental Feature Development**
 Run harness → see what fails → implement that feature → repeat.

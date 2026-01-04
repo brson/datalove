@@ -12,7 +12,7 @@ AotAnalysis(
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Error",
-                message: "codegen error: define function: Compilation error: Verifier errors",
+                message: "unsupported: BinOp with Int (bigint) result type - requires runtime call: Add",
             )),
             output: "",
         ),
