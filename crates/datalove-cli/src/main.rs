@@ -335,7 +335,7 @@ impl ScriptCommand {
             }
         }
 
-        // Create script compilation context with Stderr mode for CLI debugging.
+        // Create script compilation context with Stderr mode for debuglog output.
         let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr);
 
         // Read the script file.

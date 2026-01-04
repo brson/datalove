@@ -48,8 +48,8 @@ impl<'db> Engine<'db> {
             bail!("Module resolution error: {}", err);
         }
 
-        // Create script compilation context with Stderr mode for interactive debugging.
-        let ctx = compiled.script_context(db, datalove_datafun::DebugOutputMode::Stderr);
+        // Create script compilation context.
+        let ctx = compiled.script_context(db, datalove_datafun::DebugOutputMode::Disabled);
 
         Ok(Engine {
             db,
@@ -65,7 +65,7 @@ impl<'db> Engine<'db> {
         // Create a new context.
         let pipeline = ModuleCompilationPipeline::new(self.db);
         let compiled = pipeline.compile();
-        self.ctx = compiled.script_context(self.db, datalove_datafun::DebugOutputMode::Stderr);
+        self.ctx = compiled.script_context(self.db, datalove_datafun::DebugOutputMode::Disabled);
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {
