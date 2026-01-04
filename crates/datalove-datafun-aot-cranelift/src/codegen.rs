@@ -16,7 +16,7 @@ use cranelift_module::{FuncId, Linkage, Module};
 
 use datalove_datafun_ir::{
     BinOp, BlockId, ConstValue, FuncRef, IrFunction, IrType, Instruction,
-    Operand, ParamId, SlotId, Terminator, UnaryOp, ValueId,
+    Operand, ParamId, SlotDest, SlotId, Terminator, UnaryOp, ValueId,
 };
 
 use crate::layout::FrameLayout;
@@ -316,6 +316,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::Call { dest, func, args } => {
                 self.compile_call(builder, *dest, func, args)?;
             }
+            Instruction::SlotStore { dest, value } => {
+                self.compile_slot_store(builder, dest, value)?;
+            }
+            Instruction::SlotLoad { dest, slot } => {
+                self.compile_slot_load(builder, *dest, *slot)?;
+            }
 
             // TODO: More instructions in later phases.
             _ => {
@@ -461,6 +467,85 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         cl_func_id: FuncId,
     ) {
         self.local_funcs.insert(ir_func_id, cl_func_id);
+    }
+
+    /// Compile a SlotStore instruction.
+    fn compile_slot_store(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: &SlotDest,
+        value: &Operand,
+    ) -> Result<(), AotError> {
+        let slot_id = match dest {
+            SlotDest::Local(id) => *id,
+            SlotDest::External { unit, slot } => {
+                return Err(AotError::Unsupported(format!(
+                    "external slot store (unit={}, slot={:?}) not yet implemented",
+                    unit, slot
+                )));
+            }
+        };
+
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            AotError::Codegen("no frame slot for slot store".into())
+        })?;
+
+        let slot_offset = self.layout.slot_offset(slot_id.0);
+        let slot_ty = &self.func.slot_types[slot_id.0 as usize];
+        let repr = types::ir_type_to_cranelift(slot_ty);
+
+        match repr {
+            CraneliftRepr::Scalar(_cl_ty) => {
+                // Scalar: store value directly.
+                let val = self.get_operand_value(builder, value)?;
+                let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                builder.ins().store(MemFlags::new(), val, addr, 0);
+            }
+            CraneliftRepr::Aggregate(layout) => {
+                // Aggregate: copy bytes from source to slot.
+                let src_ptr = self.get_operand_ptr(builder, value)?;
+                let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+
+                // Use memcpy for aggregates.
+                let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
+                builder.call_memcpy(self.isa.frontend_config(), dest_addr, src_ptr, size);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Compile a SlotLoad instruction.
+    fn compile_slot_load(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        slot: SlotId,
+    ) -> Result<(), AotError> {
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            AotError::Codegen("no frame slot for slot load".into())
+        })?;
+
+        let slot_offset = self.layout.slot_offset(slot.0);
+        let slot_ty = &self.func.slot_types[slot.0 as usize];
+        let repr = types::ir_type_to_cranelift(slot_ty);
+
+        match repr {
+            CraneliftRepr::Scalar(cl_ty) => {
+                // Scalar: load value directly.
+                let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                let val = builder.ins().load(cl_ty, MemFlags::new(), addr, 0);
+                self.values.insert(dest, val);
+            }
+            CraneliftRepr::Aggregate(_) => {
+                // Aggregate: return pointer to slot location.
+                // The value stays in place, we just track the pointer.
+                let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                self.values.insert(dest, addr);
+            }
+        }
+
+        Ok(())
     }
 
     /// Get a pointer to an operand's value.
@@ -927,7 +1012,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Get a Cranelift value for an operand.
     fn get_operand_value(
         &self,
-        _builder: &mut FunctionBuilder,
+        builder: &mut FunctionBuilder,
         op: &Operand,
     ) -> Result<cl_ir::Value, AotError> {
         match op {
@@ -942,7 +1027,28 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     AotError::Codegen(format!("undefined param: {:?}", pid))
                 })
             }
-            Operand::Slot(_) | Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
+            Operand::Slot(slot_id) => {
+                // Load value from slot in frame.
+                let frame_slot = self.frame_slot.ok_or_else(|| {
+                    AotError::Codegen("no frame slot for slot operand".into())
+                })?;
+
+                let slot_offset = self.layout.slot_offset(slot_id.0);
+                let slot_ty = &self.func.slot_types[slot_id.0 as usize];
+                let repr = types::ir_type_to_cranelift(slot_ty);
+
+                match repr {
+                    CraneliftRepr::Scalar(cl_ty) => {
+                        let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                        Ok(builder.ins().load(cl_ty, MemFlags::new(), addr, 0))
+                    }
+                    CraneliftRepr::Aggregate(_) => {
+                        // Aggregate: return pointer to slot location.
+                        Ok(builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32))
+                    }
+                }
+            }
+            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
                 Err(AotError::Unsupported(format!(
                     "operand type not yet implemented: {:?}",
                     op
