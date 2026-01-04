@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2025-12-21
+Last verified: 2026-01-03
 
 ## Overview
 
@@ -103,6 +103,8 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 | Statement | Syntax | Status |
 |-----------|--------|--------|
 | `let` | `let name: type = expr` | Implemented |
+| `var` | `var name: type = expr` | Implemented (mutable slot) |
+| `set` | `set name = expr` | Implemented (mutate var or mut/out param) |
 | `fun` | `fun name(...): ret_type ... end fun` | Implemented |
 | `ret` | `ret expr` | Implemented |
 | `require module` | `require module sys/std/bool` | Implemented |
@@ -197,12 +199,19 @@ end fun
 
 ### 2.5 Parameter Modes
 
-| Mode | Syntax | Meaning | Interpreter Status |
-|------|--------|---------|-------------------|
-| `in` | (default) | By value | Implemented |
-| `out` | `param: out type` | By mut pointer | [NOT IMPLEMENTED] |
-| `ref` | `param: ref type` | By reference | [NOT IMPLEMENTED] |
-| `mut` | `param: mut type` | By mut reference | [NOT IMPLEMENTED] |
+All parameters are passed by reference (pointer to caller's data). The mode determines allowed operations:
+
+| Mode | Syntax | Semantics | Status |
+|------|--------|-----------|--------|
+| `in` | `x: T` (default) | Read and consume; ownership transfers to callee | Implemented |
+| `ref` | `ref x: T` | Read only; caller retains ownership | Implemented |
+| `mut` | `mut x: T` | Read and write via `set`; caller retains ownership | Implemented |
+| `out` | `out x: T` | Write only via `set`; callee must initialize before return | Implemented |
+
+**Compile-time checks:**
+- `ref`/`mut`/`out` params cannot be moved (caller owns them)
+- `out` params must be initialized before reading or returning
+- `ref` params cannot be passed to `mut` parameters
 
 ### 2.6 Loop Statements
 
@@ -362,7 +371,6 @@ Features from documentation that have no or minimal implementation:
 | Pattern matching / match | demo-datafun-script.dfs | Not implemented |
 | `arena` blocks | demo-datafun-script.dfs | Not implemented |
 | `memoize` | demo-datafun-script.dfs | Not implemented |
-| `var`/`set` mutation | demo-datafun-script.dfs | Not implemented |
 | `@type` introspection | demo-datafun-script.dfs | Not implemented |
 | `@data` dynamic type | README.md | Implemented |
 | Full Datalove layer | README.md | Not implemented |
