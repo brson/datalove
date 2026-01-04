@@ -3,8 +3,9 @@
 //! Compiles datafun IR directly to native code via Cranelift,
 //! producing object files for linking.
 
-pub mod types;
+pub mod codegen;
 pub mod layout;
+pub mod types;
 
 use cranelift_codegen::isa::TargetIsa;
 use cranelift_codegen::settings::{self, Configurable};
@@ -111,11 +112,12 @@ impl AotCompiler {
     /// Compile a single function into the module.
     fn compile_function(
         &mut self,
-        _module: &mut ObjectModule,
-        _func: &IrFunction,
+        module: &mut ObjectModule,
+        func: &IrFunction,
     ) -> Result<(), AotError> {
-        // TODO: Implement function compilation in phase 2.
-        Err(AotError::Unsupported("function compilation not yet implemented".into()))
+        let compiler = codegen::FunctionCompiler::new(func, self.isa.as_ref(), module);
+        compiler.compile()?;
+        Ok(())
     }
 }
 
