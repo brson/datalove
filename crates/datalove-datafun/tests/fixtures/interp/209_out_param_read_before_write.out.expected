@@ -1,0 +1,40 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Error",
+                message: "Drop analysis errors: OutParamNotInitialized { binding: BindingId(0), name: \"x\" }; ReadUninitializedOutParam { binding: BindingId(0), name: \"x\" }",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    unit_end\n",
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    unit_end v0\n",
+            ),
+            output: "@0",
+        ),
+    ],
+)

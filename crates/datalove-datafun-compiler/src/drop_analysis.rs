@@ -35,6 +35,15 @@ pub enum BindingState {
     Moved,
 }
 
+/// Initialization state for Out params.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OutParamInitState {
+    /// Out param has not yet been written.
+    Uninitialized,
+    /// Out param has been written (via `set`).
+    Initialized,
+}
+
 /// Information about a binding.
 #[derive(Clone, Debug)]
 pub struct BindingInfo {
@@ -80,6 +89,16 @@ pub enum AnalysisError {
     },
     /// Attempting to pass a ref param to a mut param (can't get mutable from immutable).
     CannotMutFromRef {
+        binding: BindingId,
+        name: String,
+    },
+    /// Reading Out param before it was written.
+    ReadUninitializedOutParam {
+        binding: BindingId,
+        name: String,
+    },
+    /// Function returns without initializing Out param.
+    OutParamNotInitialized {
         binding: BindingId,
         name: String,
     },
@@ -161,6 +180,8 @@ struct ScopeFrame {
     kind: ScopeKind,
     /// Current state of bindings.
     current_state: HashMap<BindingId, BindingState>,
+    /// Initialization state for Out params.
+    out_param_init: HashMap<BindingId, OutParamInitState>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -208,6 +229,11 @@ impl<'db> AnalysisCtx<'db> {
         if let Some(frame) = self.scope_stack.last_mut() {
             frame.bindings.push(id);
             frame.current_state.insert(id, BindingState::Live);
+
+            // Out params start uninitialized.
+            if param_mode == Some(ParamMode::Out) {
+                frame.out_param_init.insert(id, OutParamInitState::Uninitialized);
+            }
         }
 
         // Add to name mapping.
@@ -222,11 +248,15 @@ impl<'db> AnalysisCtx<'db> {
         let current_state = self.scope_stack.last()
             .map(|f| f.current_state.clone())
             .unwrap_or_default();
+        let out_param_init = self.scope_stack.last()
+            .map(|f| f.out_param_init.clone())
+            .unwrap_or_default();
 
         self.scope_stack.push(ScopeFrame {
             bindings: Vec::new(),
             kind,
             current_state,
+            out_param_init,
         });
     }
 
@@ -266,6 +296,12 @@ impl<'db> AnalysisCtx<'db> {
                     parent.current_state.insert(id, state);
                 }
             }
+            // Propagate Out param init state.
+            for (id, state) in frame.out_param_init {
+                if parent.out_param_init.contains_key(&id) {
+                    parent.out_param_init.insert(id, state);
+                }
+            }
         }
 
         to_drop
@@ -280,6 +316,18 @@ impl<'db> AnalysisCtx<'db> {
     fn set_state(&mut self, id: BindingId, state: BindingState) {
         if let Some(frame) = self.scope_stack.last_mut() {
             frame.current_state.insert(id, state);
+        }
+    }
+
+    /// Get Out param init state.
+    fn get_out_param_init(&self, id: BindingId) -> Option<OutParamInitState> {
+        self.scope_stack.last()?.out_param_init.get(&id).copied()
+    }
+
+    /// Set Out param init state.
+    fn set_out_param_init(&mut self, id: BindingId, state: OutParamInitState) {
+        if let Some(frame) = self.scope_stack.last_mut() {
+            frame.out_param_init.insert(id, state);
         }
     }
 
@@ -462,6 +510,14 @@ impl<'db> AnalysisCtx<'db> {
             ExprFunKind::Name(name) => {
                 let name_str = name.text(self.db);
                 if let Some(id) = self.lookup(name_str) {
+                    // Check for reading uninitialized Out param.
+                    if self.bindings[id.0 as usize].param_mode == Some(ParamMode::Out) {
+                        if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
+                            let name = self.bindings[id.0 as usize].name.clone();
+                            self.errors.push(AnalysisError::ReadUninitializedOutParam { binding: id, name });
+                            return None;
+                        }
+                    }
                     // Check for use after move.
                     if self.get_state(id) == Some(BindingState::Moved) {
                         let name = self.bindings[id.0 as usize].name.clone();
@@ -847,10 +903,26 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtSet<'db>, stmt_idx: us
     let name = stmt.name(ctx.db).text(ctx.db);
     if let Some(id) = ctx.lookup(name) {
         ctx.set_state(id, BindingState::Live);
+
+        // Mark Out param as initialized.
+        if ctx.bindings[id.0 as usize].param_mode == Some(ParamMode::Out) {
+            ctx.set_out_param_init(id, OutParamInitState::Initialized);
+        }
     }
 }
 
 fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtRet<'db>, stmt_idx: usize) {
+    // Check that all Out params are initialized before return.
+    for (idx, info) in ctx.bindings.iter().enumerate() {
+        if info.param_mode == Some(ParamMode::Out) {
+            let id = BindingId(idx as u32);
+            if ctx.get_out_param_init(id) != Some(OutParamInitState::Initialized) {
+                let name = info.name.clone();
+                ctx.errors.push(AnalysisError::OutParamNotInitialized { binding: id, name });
+            }
+        }
+    }
+
     let may_early_return = stmt.value(ctx.db)
         .map(|expr| ctx.expr_may_early_return(expr))
         .unwrap_or(false);
@@ -891,6 +963,9 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
     let state_before = ctx.scope_stack.last()
         .map(|f| f.current_state.clone())
         .unwrap_or_default();
+    let out_param_init_before = ctx.scope_stack.last()
+        .map(|f| f.out_param_init.clone())
+        .unwrap_or_default();
 
     // Analyze then branch.
     ctx.enter_scope(ScopeKind::IfThen);
@@ -913,14 +988,18 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
     let state_after_then = ctx.scope_stack.last()
         .map(|f| f.current_state.clone())
         .unwrap_or_default();
+    let out_param_init_after_then = ctx.scope_stack.last()
+        .map(|f| f.out_param_init.clone())
+        .unwrap_or_default();
 
     // Reset state for else branch.
     if let Some(frame) = ctx.scope_stack.last_mut() {
         frame.current_state = state_before.clone();
+        frame.out_param_init = out_param_init_before.clone();
     }
 
     // Analyze else branch.
-    let state_after_else = if let Some(else_body) = stmt.else_body(ctx.db) {
+    let (state_after_else, out_param_init_after_else) = if let Some(else_body) = stmt.else_body(ctx.db) {
         ctx.enter_scope(ScopeKind::IfElse);
 
         // If there's an else-binding (if-let with else), create it.
@@ -938,12 +1017,16 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
             ctx.schedule.else_branch_exit.insert(stmt_idx, else_drops);
         }
 
-        ctx.scope_stack.last()
+        let state = ctx.scope_stack.last()
             .map(|f| f.current_state.clone())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        let out_init = ctx.scope_stack.last()
+            .map(|f| f.out_param_init.clone())
+            .unwrap_or_default();
+        (state, out_init)
     } else {
         // No else branch - state unchanged.
-        state_before.clone()
+        (state_before.clone(), out_param_init_before.clone())
     };
 
     // Compute convergence drops.
@@ -994,6 +1077,30 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
             } else {
                 frame.current_state.insert(id, BindingState::Live);
             }
+        }
+
+        // Out param convergence: must be initialized in both branches or neither.
+        // If initialized in only one branch, report error.
+        for (&id, &then_init) in &out_param_init_after_then {
+            let else_init = out_param_init_after_else.get(&id).copied()
+                .unwrap_or(OutParamInitState::Uninitialized);
+            if then_init != else_init {
+                // Initialized in one branch but not the other.
+                let name = ctx.bindings[id.0 as usize].name.clone();
+                ctx.errors.push(AnalysisError::OutParamNotInitialized {
+                    binding: id,
+                    name,
+                });
+            }
+            // After convergence, use the "most restrictive" state: if either is
+            // Uninitialized, the converged state is Uninitialized.
+            let converged = if then_init == OutParamInitState::Initialized
+                && else_init == OutParamInitState::Initialized {
+                OutParamInitState::Initialized
+            } else {
+                OutParamInitState::Uninitialized
+            };
+            frame.out_param_init.insert(id, converged);
         }
     }
 }

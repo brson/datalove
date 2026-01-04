@@ -1,0 +1,22 @@
+----------
+module local/test/main
+----------
+
+// Error test: reading Out param before it has been written.
+fun bad_function(out x: @u32): @u32
+    ret x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.bad_function
+
+----------
+scriptunit-expr
+----------
+
+@0
+

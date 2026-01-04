@@ -1,0 +1,25 @@
+----------
+module local/test/main
+----------
+
+// Error test: Out param initialized in only one branch.
+fun bad_function(out x: @u32, cond: @bool): @bool
+    if cond
+        set x = @42
+    end if
+    ret @true
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.bad_function
+
+----------
+scriptunit-expr
+----------
+
+@true
+
