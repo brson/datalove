@@ -20,6 +20,8 @@ use datalove_datafun_ir::{
 };
 
 use crate::layout::FrameLayout;
+use crate::runtime::RuntimeImports;
+use crate::tydesc_emit::TyDescEmitter;
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::AotError;
 
@@ -45,6 +47,12 @@ pub struct FunctionCompiler<'a, M: Module> {
     /// Next variable index for Cranelift.
     #[allow(dead_code)]
     next_var: u32,
+    /// Runtime function imports (optional, for functions that need runtime calls).
+    runtime: Option<RuntimeImports>,
+    /// TyDesc emitter for runtime type info.
+    tydesc_emitter: TyDescEmitter,
+    /// Runtime handle (passed as first parameter for script unit body functions).
+    rt_handle_param: Option<cl_ir::Value>,
 }
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
@@ -70,6 +78,40 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             slot_vars: HashMap::new(),
             frame_slot: None,
             next_var: 0,
+            runtime: None,
+            tydesc_emitter: TyDescEmitter::new(),
+            rt_handle_param: None,
+        }
+    }
+
+    /// Create a new function compiler with runtime imports.
+    ///
+    /// Use this for functions that may need runtime calls (like DebugLog).
+    pub fn new_with_runtime(
+        func: &'a IrFunction,
+        isa: &'a dyn TargetIsa,
+        module: &'a mut M,
+        runtime: RuntimeImports,
+    ) -> Self {
+        let layout = FrameLayout::compute(
+            &func.param_types,
+            &func.value_types,
+            &func.slot_types,
+        );
+
+        Self {
+            func,
+            layout,
+            isa,
+            module,
+            values: HashMap::new(),
+            blocks: HashMap::new(),
+            slot_vars: HashMap::new(),
+            frame_slot: None,
+            next_var: 0,
+            runtime: Some(runtime),
+            tydesc_emitter: TyDescEmitter::new(),
+            rt_handle_param: None,
         }
     }
 
@@ -123,6 +165,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let param_id = ParamId(i as u32);
             // We'll need a way to look up param pointers later.
             let _ = (param_id, val);
+        }
+
+        // If we have runtime imports and at least one parameter, treat first param as rt_handle.
+        if self.runtime.is_some() && !param_values.is_empty() {
+            self.rt_handle_param = Some(param_values[0]);
         }
 
         // Compile each block.
@@ -215,6 +262,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.compile_unpack(builder, dests, src)?;
             }
             Instruction::Nop => {}
+            Instruction::DebugLog { operand } => {
+                self.compile_debuglog(builder, operand)?;
+            }
 
             // TODO: More instructions in later phases.
             _ => {
@@ -225,6 +275,95 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         }
         Ok(())
+    }
+
+    /// Compile a DebugLog instruction.
+    fn compile_debuglog(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        operand: &Operand,
+    ) -> Result<(), AotError> {
+        // Need runtime imports for debuglog.
+        let debuglog_func_id = self.runtime.as_ref()
+            .ok_or_else(|| AotError::Codegen("DebugLog requires runtime imports".into()))?
+            .debuglog_local;
+
+        // Need runtime handle.
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            AotError::Codegen("DebugLog requires runtime handle parameter".into())
+        })?;
+
+        // Get the type of the operand.
+        let ty = self.get_operand_type(operand)?;
+
+        // Get pointer to the value. For scalars, we need to spill to memory first.
+        let value_ptr = self.get_operand_ptr(builder, operand)?;
+
+        // Emit tydesc as static data.
+        let tydesc_id = self.tydesc_emitter.emit(self.module, &ty)?;
+
+        // Get address of tydesc.
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+        // Declare debuglog function in this function.
+        let debuglog_ref = self.module.declare_func_in_func(
+            debuglog_func_id,
+            builder.func,
+        );
+
+        // Call debuglog.
+        builder.ins().call(debuglog_ref, &[rt_handle, value_ptr, tydesc_addr]);
+
+        Ok(())
+    }
+
+    /// Get a pointer to an operand's value.
+    ///
+    /// For aggregates already in memory, returns the pointer directly.
+    /// For scalars in registers, spills to a temporary stack location.
+    fn get_operand_ptr(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        operand: &Operand,
+    ) -> Result<cl_ir::Value, AotError> {
+        let ty = self.get_operand_type(operand)?;
+        let repr = types::ir_type_to_cranelift(&ty);
+
+        match repr {
+            CraneliftRepr::Aggregate(_) => {
+                // Already a pointer.
+                self.get_operand_value(builder, operand)
+            }
+            CraneliftRepr::Scalar(cl_ty) => {
+                // Need to spill to memory.
+                let val = self.get_operand_value(builder, operand)?;
+
+                // Use the value's frame offset if available.
+                if let Operand::Value(vid) = operand {
+                    let offset = self.layout.value_offset(vid.0);
+                    let frame_slot = self.frame_slot.ok_or_else(|| {
+                        AotError::Codegen("no frame slot for value spill".into())
+                    })?;
+                    let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, offset as i32);
+                    builder.ins().store(MemFlags::new(), val, addr, 0);
+                    return Ok(addr);
+                }
+
+                // For other operand types, create a temporary slot.
+                // This is a simple approach - we create a new stack slot for each spill.
+                let size = cl_ty.bytes();
+                let slot_data = cl_ir::StackSlotData::new(
+                    cl_ir::StackSlotKind::ExplicitSlot,
+                    size,
+                    0,
+                );
+                let temp_slot = builder.create_sized_stack_slot(slot_data);
+                let addr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
+                builder.ins().store(MemFlags::new(), val, addr, 0);
+                Ok(addr)
+            }
+        }
     }
 
     /// Compile a constant instruction.

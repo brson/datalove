@@ -5,14 +5,21 @@
 
 pub mod codegen;
 pub mod layout;
+pub mod runtime;
+pub mod tydesc_emit;
 pub mod types;
 
+use cranelift_codegen::ir::{self as cl_ir, types as cl_types, AbiParam, InstBuilder};
 use cranelift_codegen::isa::TargetIsa;
 use cranelift_codegen::settings::{self, Configurable};
+use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
+use cranelift_module::{Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule, ObjectProduct};
 use target_lexicon::Triple;
 
-use datalove_datafun_ir::{IrFunction, IrModule, IrScriptUnit};
+use datalove_datafun_ir::{
+    IrBlock, IrFunction, IrModule, IrScriptUnit, IrType, ParamId, ParamMode, Terminator,
+};
 
 /// Errors during AOT compilation.
 #[derive(Debug)]
@@ -105,8 +112,141 @@ impl AotCompiler {
     }
 
     /// Compile an IR script unit to an object file.
-    pub fn compile_script_unit(&mut self, _unit: &IrScriptUnit) -> Result<ObjectProduct, AotError> {
-        Err(AotError::Unsupported("script unit compilation not yet implemented".into()))
+    ///
+    /// Generates:
+    /// - `__script_body(rt: *mut u8)` - The script body that takes runtime handle
+    /// - `main()` - Entry point that initializes runtime, runs body, cleans up
+    pub fn compile_script_unit(&mut self, unit: &IrScriptUnit) -> Result<ObjectProduct, AotError> {
+        let obj_builder = ObjectBuilder::new(
+            self.isa.clone(),
+            "script",
+            cranelift_module::default_libcall_names(),
+        ).map_err(|e| AotError::Module(format!("object builder error: {}", e)))?;
+
+        let mut obj_module = ObjectModule::new(obj_builder);
+
+        // Declare runtime imports.
+        let call_conv = self.isa.default_call_conv();
+        let runtime = runtime::RuntimeImports::declare(&mut obj_module, call_conv)?;
+
+        // Convert script unit to a function with rt_handle as first param.
+        let body_func = self.script_unit_to_function(unit);
+
+        // Compile the body function.
+        let compiler = codegen::FunctionCompiler::new_with_runtime(
+            &body_func,
+            self.isa.as_ref(),
+            &mut obj_module,
+            runtime,
+        );
+        let body_func_id = compiler.compile()?;
+
+        // Generate the entry point.
+        self.compile_entry_point(&mut obj_module, body_func_id)?;
+
+        Ok(obj_module.finish())
+    }
+
+    /// Convert an IrScriptUnit to an IrFunction for compilation.
+    fn script_unit_to_function(&self, unit: &IrScriptUnit) -> IrFunction {
+        // The script body takes rt_handle as first parameter.
+        // Convert UnitEnd terminators to Return.
+        let blocks: Vec<IrBlock> = unit.blocks.iter().map(|block| {
+            let terminator = match &block.terminator {
+                Terminator::UnitEnd { result: _ } => {
+                    // Convert to Return with no value (script body doesn't return).
+                    Terminator::Return { value: None }
+                }
+                Terminator::UnitEarlyReturn { value: _ } => {
+                    Terminator::Return { value: None }
+                }
+                other => other.clone(),
+            };
+            IrBlock {
+                id: block.id,
+                instructions: block.instructions.clone(),
+                terminator,
+            }
+        }).collect();
+
+        IrFunction {
+            id: datalove_datafun_ir::FuncId(0),
+            name: "__script_body".to_string(),
+            params: vec![ParamId(0)], // rt_handle parameter
+            param_modes: vec![ParamMode::In],
+            param_types: vec![IrType::U64], // Pointer as u64
+            blocks,
+            value_count: unit.value_count,
+            slot_count: unit.slot_count,
+            value_types: unit.value_types.clone(),
+            slot_types: unit.slot_types.clone(),
+        }
+    }
+
+    /// Generate the main entry point.
+    fn compile_entry_point(
+        &self,
+        module: &mut ObjectModule,
+        body_func_id: cranelift_module::FuncId,
+    ) -> Result<(), AotError> {
+        let call_conv = self.isa.default_call_conv();
+
+        // Declare runtime functions we need.
+        let runtime = runtime::RuntimeImports::declare(module, call_conv)?;
+
+        // Signature: main() -> i32
+        let mut sig = cl_ir::Signature::new(call_conv);
+        sig.returns.push(AbiParam::new(cl_types::I32));
+
+        let main_id = module
+            .declare_function("main", Linkage::Export, &sig)
+            .map_err(|e| AotError::Module(format!("declare main: {}", e)))?;
+
+        let mut cl_func = cl_ir::Function::with_name_signature(
+            cl_ir::UserFuncName::user(0, main_id.as_u32()),
+            sig,
+        );
+
+        let mut fb_ctx = FunctionBuilderContext::new();
+        let mut builder = FunctionBuilder::new(&mut cl_func, &mut fb_ctx);
+
+        let entry_block = builder.create_block();
+        builder.switch_to_block(entry_block);
+        builder.seal_block(entry_block);
+
+        // Call dtlv_rti_init() to get runtime handle.
+        let init_ref = module.declare_func_in_func(runtime.init, builder.func);
+        let call_inst = builder.ins().call(init_ref, &[]);
+        let rt_handle = builder.inst_results(call_inst)[0];
+
+        // Call dtlv_rti_set_debug_mode(rt, Stderr=0).
+        let set_debug_ref = module.declare_func_in_func(runtime.set_debug_mode, builder.func);
+        let stderr_mode = builder.ins().iconst(cl_types::I8, 0); // Stderr = 0
+        builder.ins().call(set_debug_ref, &[rt_handle, stderr_mode]);
+
+        // Call __script_body(rt).
+        let body_ref = module.declare_func_in_func(body_func_id, builder.func);
+        builder.ins().call(body_ref, &[rt_handle]);
+
+        // Call dtlv_rti_shutdown(rt).
+        let shutdown_ref = module.declare_func_in_func(runtime.shutdown, builder.func);
+        builder.ins().call(shutdown_ref, &[rt_handle]);
+
+        // Return 0.
+        let zero = builder.ins().iconst(cl_types::I32, 0);
+        builder.ins().return_(&[zero]);
+
+        builder.finalize();
+
+        // Define function in module.
+        let mut ctx = cranelift_codegen::Context::new();
+        ctx.func = cl_func;
+
+        module
+            .define_function(main_id, &mut ctx)
+            .map_err(|e| AotError::Codegen(format!("define main: {}", e)))?;
+
+        Ok(())
     }
 
     /// Compile a single function into the module.

@@ -47,6 +47,35 @@
 - Aggregate field packing (needs memcpy)
 - Slots, params, function calls
 
+### Phase 2.5: DebugLog Minimal Path ✓ COMPLETE
+
+**New files:**
+- `crates/datalove-datafun-aot-cranelift/src/runtime.rs` - Runtime function imports (dtlv_rti_*)
+- `crates/datalove-datafun-aot-cranelift/src/tydesc_emit.rs` - TyDesc static data emission
+- `crates/datalove-datafun-aot-cranelift/tests/aot_debuglog_tests.rs` - Integration tests
+
+**Modified files:**
+- `src/codegen.rs` - Added DebugLog instruction, value-in-memory spilling, rt_handle support
+- `src/lib.rs` - Script unit compilation with entry point generation
+
+**Features implemented:**
+- `DebugLog` instruction codegen
+- Scalar value spilling to frame for pointer access
+- Static TyDesc emission for scalar types
+- Script unit → IrFunction conversion
+- `main()` entry point generation (init, set_debug_mode, body, shutdown)
+- Runtime function imports (init, shutdown, set_debug_mode, debuglog_local)
+
+**Tests:** 3 integration tests (debuglog_i32, debuglog_bool, multiple_debuglogs)
+
+**What works:**
+- Compilation of `debuglog @42` to object file
+- Generated main() calls dtlv_rti_init, sets debug mode, calls body, shuts down
+
+**Not yet done:**
+- Actual linking with runtime library (object file only)
+- Execution verification
+
 ### Phases 3-8: NOT STARTED
 
 ---
