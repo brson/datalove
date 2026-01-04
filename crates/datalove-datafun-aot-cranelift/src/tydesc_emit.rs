@@ -1,49 +1,30 @@
 //! TyDesc emission as static object data.
 //!
 //! Emits type descriptors as static data in the object file,
-//! matching the runtime's `rtdt::TyDesc` layout exactly.
+//! using layout from `rtdt::TyDesc` directly.
 //!
 //! Since datalove does whole-world compilation, all types are known
 //! ahead of time. TyDescs are emitted upfront in a single pass.
 
 use std::collections::{HashMap, HashSet};
+use std::mem::{align_of, offset_of, size_of};
 
 use cranelift_module::{DataDescription, DataId, Linkage, Module};
 use datalove_datafun_ir::{IrFunction, IrScriptUnit, IrType};
+use datalove_rtdt::{
+    Data as RtData, Error as RtError, Int as RtInt, String as RtString, TyDesc, TyTag,
+};
 
 use crate::AotError;
 
-/// TyDesc layout constants (must match rtdt::TyDesc repr(C)).
-const TYDESC_SIZE: usize = 32;
-const TYDESC_ALIGN: usize = 8;
-
-/// Offset of type_tag field.
-const OFFSET_TYPE_TAG: usize = 0;
-/// Offset of size field (after 3 bytes padding).
-const OFFSET_SIZE: usize = 4;
-/// Offset of align field.
-const OFFSET_ALIGN: usize = 8;
-/// Offset of type_info union (after 4 bytes padding for 8-byte alignment).
-const OFFSET_TYPE_INFO: usize = 16;
-
-/// TyTag values (must match rtdt::TyTag repr(u8)).
-mod ty_tag {
-    pub const BOOL: u8 = 0x01;
-    pub const U8: u8 = 0x10;
-    pub const I8: u8 = 0x11;
-    pub const U16: u8 = 0x12;
-    pub const I16: u8 = 0x13;
-    pub const U32: u8 = 0x14;
-    pub const I32: u8 = 0x15;
-    pub const U64: u8 = 0x16;
-    pub const I64: u8 = 0x17;
-    pub const F32: u8 = 0x20;
-    pub const INT: u8 = 0x30;
-    pub const STRING: u8 = 0x51;
-    pub const TUPLE: u8 = 0x40;
-    pub const DATA: u8 = 0x70;
-    pub const ERROR: u8 = 0x71;
-}
+// TyDesc layout computed from runtime types.
+const TYDESC_SIZE: usize = size_of::<TyDesc>();
+const TYDESC_ALIGN: usize = align_of::<TyDesc>();
+const OFFSET_TYPE_TAG: usize = offset_of!(TyDesc, type_tag);
+const OFFSET_SIZE: usize = offset_of!(TyDesc, size);
+const OFFSET_ALIGN: usize = offset_of!(TyDesc, align);
+#[allow(dead_code)]
+const OFFSET_TYPE_INFO: usize = offset_of!(TyDesc, type_info);
 
 /// Emitter for TyDesc static data.
 pub struct TyDescEmitter {
@@ -149,21 +130,22 @@ impl TyDescEmitter {
         let mut bytes = vec![0u8; TYDESC_SIZE];
 
         let (tag, size, align) = match ty {
-            IrType::Unit => (ty_tag::TUPLE, 0u32, 1u32), // Unit is empty tuple
-            IrType::Bool => (ty_tag::BOOL, 1, 1),
-            IrType::U8 => (ty_tag::U8, 1, 1),
-            IrType::I8 => (ty_tag::I8, 1, 1),
-            IrType::U16 => (ty_tag::U16, 2, 2),
-            IrType::I16 => (ty_tag::I16, 2, 2),
-            IrType::U32 => (ty_tag::U32, 4, 4),
-            IrType::I32 => (ty_tag::I32, 4, 4),
-            IrType::U64 => (ty_tag::U64, 8, 8),
-            IrType::I64 => (ty_tag::I64, 8, 8),
-            IrType::F32 => (ty_tag::F32, 4, 4),
-            IrType::Int => (ty_tag::INT, 16, 8), // size_of::<rtdt::Int>()
-            IrType::String => (ty_tag::STRING, 16, 8), // size_of::<rtdt::String>()
-            IrType::Data => (ty_tag::DATA, 16, 8),
-            IrType::Error => (ty_tag::ERROR, 16, 8),
+            // Unit is empty tuple.
+            IrType::Unit => (TyTag::Tuple as u8, 0u32, 1u32),
+            IrType::Bool => (TyTag::Bool as u8, size_of::<bool>() as u32, align_of::<bool>() as u32),
+            IrType::U8 => (TyTag::U8 as u8, size_of::<u8>() as u32, align_of::<u8>() as u32),
+            IrType::I8 => (TyTag::I8 as u8, size_of::<i8>() as u32, align_of::<i8>() as u32),
+            IrType::U16 => (TyTag::U16 as u8, size_of::<u16>() as u32, align_of::<u16>() as u32),
+            IrType::I16 => (TyTag::I16 as u8, size_of::<i16>() as u32, align_of::<i16>() as u32),
+            IrType::U32 => (TyTag::U32 as u8, size_of::<u32>() as u32, align_of::<u32>() as u32),
+            IrType::I32 => (TyTag::I32 as u8, size_of::<i32>() as u32, align_of::<i32>() as u32),
+            IrType::U64 => (TyTag::U64 as u8, size_of::<u64>() as u32, align_of::<u64>() as u32),
+            IrType::I64 => (TyTag::I64 as u8, size_of::<i64>() as u32, align_of::<i64>() as u32),
+            IrType::F32 => (TyTag::F32 as u8, size_of::<f32>() as u32, align_of::<f32>() as u32),
+            IrType::Int => (TyTag::Int as u8, size_of::<RtInt>() as u32, align_of::<RtInt>() as u32),
+            IrType::String => (TyTag::String as u8, size_of::<RtString>() as u32, align_of::<RtString>() as u32),
+            IrType::Data => (TyTag::Data as u8, size_of::<RtData>() as u32, align_of::<RtData>() as u32),
+            IrType::Error => (TyTag::Error as u8, size_of::<RtError>() as u32, align_of::<RtError>() as u32),
             _ => {
                 return Err(AotError::Unsupported(format!(
                     "tydesc emission for type: {:?}",
@@ -300,7 +282,7 @@ mod tests {
         // Check I32 layout.
         let bytes = emitter.build_tydesc_bytes(&IrType::I32).unwrap();
         assert_eq!(bytes.len(), TYDESC_SIZE);
-        assert_eq!(bytes[OFFSET_TYPE_TAG], ty_tag::I32);
+        assert_eq!(bytes[OFFSET_TYPE_TAG], TyTag::I32 as u8);
 
         // Check size field (little-endian u32).
         let size = u32::from_le_bytes([
@@ -309,7 +291,7 @@ mod tests {
             bytes[OFFSET_SIZE + 2],
             bytes[OFFSET_SIZE + 3],
         ]);
-        assert_eq!(size, 4);
+        assert_eq!(size, size_of::<i32>() as u32);
 
         // Check align field.
         let align = u32::from_le_bytes([
@@ -318,6 +300,6 @@ mod tests {
             bytes[OFFSET_ALIGN + 2],
             bytes[OFFSET_ALIGN + 3],
         ]);
-        assert_eq!(align, 4);
+        assert_eq!(align, align_of::<i32>() as u32);
     }
 }
