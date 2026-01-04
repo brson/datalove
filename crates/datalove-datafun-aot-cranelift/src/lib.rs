@@ -64,6 +64,9 @@ impl AotCompiler {
         let mut settings_builder = settings::builder();
         settings_builder.set("opt_level", "speed")
             .map_err(|e| AotError::Codegen(format!("settings error: {}", e)))?;
+        // Enable position-independent code to avoid linker warnings about DT_TEXTREL.
+        settings_builder.set("is_pic", "true")
+            .map_err(|e| AotError::Codegen(format!("settings error: {}", e)))?;
 
         let flags = settings::Flags::new(settings_builder);
         let isa = builder.finish(flags)
@@ -82,6 +85,9 @@ impl AotCompiler {
 
         let mut settings_builder = settings::builder();
         settings_builder.set("opt_level", "speed")
+            .map_err(|e| AotError::Codegen(format!("settings error: {}", e)))?;
+        // Enable position-independent code to avoid linker warnings about DT_TEXTREL.
+        settings_builder.set("is_pic", "true")
             .map_err(|e| AotError::Codegen(format!("settings error: {}", e)))?;
 
         let flags = settings::Flags::new(settings_builder);
