@@ -25,6 +25,39 @@ use crate::tydesc_emit::TyDescEmitter;
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::AotError;
 
+/// Build a Cranelift function signature for an IR function.
+///
+/// All functions have an implicit rt_handle as first parameter.
+/// User-visible parameters follow, all passed by pointer.
+pub fn build_signature_for_func(
+    func: &IrFunction,
+    isa: &dyn TargetIsa,
+) -> cl_ir::Signature {
+    let call_conv = isa.default_call_conv();
+    let mut sig = cl_ir::Signature::new(call_conv);
+
+    // Implicit rt_handle as first param (pointer to runtime).
+    sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
+
+    // User parameters are passed by pointer.
+    for _ in &func.param_types {
+        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
+    }
+
+    // Return type.
+    let ret_ty = func.infer_return_type();
+    match types::ir_type_to_cranelift(&ret_ty) {
+        CraneliftRepr::Scalar(cl_ty) => {
+            sig.returns.push(cl_ir::AbiParam::new(cl_ty));
+        }
+        CraneliftRepr::Aggregate(_) => {
+            // Aggregate returns via pointer (handled later).
+        }
+    }
+
+    sig
+}
+
 /// Compiles a single IR function to Cranelift IR.
 pub struct FunctionCompiler<'a, M: Module> {
     /// The IR function being compiled.
@@ -158,6 +191,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 
     /// Compile the function and return the Cranelift FuncId.
+    ///
+    /// This declares the function with Export linkage and then defines it.
+    /// Use `compile_predeclared` for functions that have already been declared.
     pub fn compile(mut self) -> Result<FuncId, AotError> {
         // Build function signature.
         let sig = self.build_signature();
@@ -167,6 +203,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             .declare_function(&self.func.name, Linkage::Export, &sig)
             .map_err(|e| AotError::Module(format!("declare function: {}", e)))?;
 
+        self.compile_body(func_id, sig)
+    }
+
+    /// Compile a function that has already been declared.
+    ///
+    /// Use this for two-pass compilation where functions are declared first.
+    pub fn compile_predeclared(mut self, func_id: FuncId) -> Result<FuncId, AotError> {
+        let sig = self.build_signature();
+        self.compile_body(func_id, sig)
+    }
+
+    /// Compile the function body using the given FuncId and signature.
+    fn compile_body(&mut self, func_id: FuncId, sig: cl_ir::Signature) -> Result<FuncId, AotError> {
         // Create Cranelift function.
         let mut cl_func = cl_ir::Function::with_name_signature(
             cl_ir::UserFuncName::user(0, func_id.as_u32()),
@@ -469,6 +518,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.local_funcs.insert(ir_func_id, cl_func_id);
     }
 
+    /// Set all local function mappings at once.
+    ///
+    /// Use this for two-pass compilation where all functions are declared first.
+    pub fn set_local_funcs(&mut self, local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId>) {
+        self.local_funcs = local_funcs;
+    }
+
     /// Compile a SlotStore instruction.
     fn compile_slot_store(
         &mut self,
@@ -557,6 +613,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         operand: &Operand,
     ) -> Result<cl_ir::Value, AotError> {
+        // Params are already passed by pointer - just return the pointer.
+        if let Operand::Param(pid) = operand {
+            return self.param_values.get(pid).copied().ok_or_else(|| {
+                AotError::Codegen(format!("undefined param: {:?}", pid))
+            });
+        }
+
         let ty = self.get_operand_type(operand)?;
         let repr = types::ir_type_to_cranelift(&ty);
 
@@ -1022,10 +1085,24 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 })
             }
             Operand::Param(pid) => {
-                // User params are stored in param_values (rt_handle is separate).
-                self.param_values.get(pid).copied().ok_or_else(|| {
+                // Params are passed by pointer. Load the value from the pointer.
+                let param_ptr = self.param_values.get(pid).copied().ok_or_else(|| {
                     AotError::Codegen(format!("undefined param: {:?}", pid))
-                })
+                })?;
+
+                let param_ty = &self.func.param_types[pid.0 as usize];
+                let repr = types::ir_type_to_cranelift(param_ty);
+
+                match repr {
+                    CraneliftRepr::Scalar(cl_ty) => {
+                        // Load scalar value from param pointer.
+                        Ok(builder.ins().load(cl_ty, MemFlags::new(), param_ptr, 0))
+                    }
+                    CraneliftRepr::Aggregate(_) => {
+                        // For aggregates, return the pointer itself.
+                        Ok(param_ptr)
+                    }
+                }
             }
             Operand::Slot(slot_id) => {
                 // Load value from slot in frame.

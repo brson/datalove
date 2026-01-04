@@ -9,11 +9,13 @@ pub mod runtime;
 pub mod tydesc_emit;
 pub mod types;
 
+use std::collections::HashMap;
+
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, AbiParam, InstBuilder};
 use cranelift_codegen::isa::TargetIsa;
 use cranelift_codegen::settings::{self, Configurable};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
-use cranelift_module::{Linkage, Module};
+use cranelift_module::{FuncId, Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule, ObjectProduct};
 use target_lexicon::Triple;
 
@@ -171,17 +173,44 @@ impl AotCompiler {
         let mut tydesc_emitter = tydesc_emit::TyDescEmitter::new();
         tydesc_emitter.emit_all(&mut obj_module, types)?;
 
+        // === Two-pass compilation for local functions ===
+
+        // Pass 1: Declare all local functions to get Cranelift FuncIds.
+        let mut local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId> = HashMap::new();
+        for func in &unit.functions {
+            let sig = codegen::build_signature_for_func(func, self.isa.as_ref());
+            let cl_func_id = obj_module
+                .declare_function(&func.name, Linkage::Local, &sig)
+                .map_err(|e| AotError::Module(format!("declare function {}: {}", func.name, e)))?;
+            local_funcs.insert(func.id, cl_func_id);
+        }
+
+        // Pass 2: Compile all local functions with the pre-declared FuncIds.
+        for func in &unit.functions {
+            let cl_func_id = local_funcs[&func.id];
+            let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
+                func,
+                self.isa.as_ref(),
+                &mut obj_module,
+                runtime.clone(),
+                tydesc_emitter.clone(),
+            );
+            compiler.set_local_funcs(local_funcs.clone());
+            compiler.compile_predeclared(cl_func_id)?;
+        }
+
         // Convert script unit to a function with rt_handle as first param.
         let body_func = self.script_unit_to_function(unit);
 
-        // Compile the body function with pre-populated TyDesc cache.
-        let compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
+        // Compile the body function with pre-populated local_funcs.
+        let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
             &body_func,
             self.isa.as_ref(),
             &mut obj_module,
             runtime,
             tydesc_emitter,
         );
+        compiler.set_local_funcs(local_funcs);
         let body_func_id = compiler.compile()?;
 
         // Generate the entry point.

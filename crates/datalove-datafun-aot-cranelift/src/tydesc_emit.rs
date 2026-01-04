@@ -27,6 +27,7 @@ const OFFSET_ALIGN: usize = offset_of!(TyDesc, align);
 const OFFSET_TYPE_INFO: usize = offset_of!(TyDesc, type_info);
 
 /// Emitter for TyDesc static data.
+#[derive(Clone)]
 pub struct TyDescEmitter {
     /// Maps IrType -> DataId for emitted tydescs.
     tydescs: HashMap<IrType, DataId>,

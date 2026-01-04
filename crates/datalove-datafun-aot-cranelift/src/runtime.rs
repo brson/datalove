@@ -10,6 +10,7 @@ use crate::types::PTR_TYPE;
 use crate::AotError;
 
 /// Imported runtime functions.
+#[derive(Clone, Copy)]
 pub struct RuntimeImports {
     /// `dtlv_rti_init() -> LocalRtHandle`
     pub init: FuncId,
