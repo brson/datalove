@@ -1,0 +1,227 @@
+//! Frame layout computation for AOT compilation.
+//!
+//! Computes stack slot offsets for values and mutable slots within a function frame,
+//! matching the interpreter's layout for ABI compatibility.
+
+use datalove_datafun_ir::IrType;
+use crate::types::{self, TypeLayout, CraneliftRepr};
+
+/// Align a value up to the given alignment.
+#[inline]
+pub fn align_up(value: u32, align: u32) -> u32 {
+    (value + align - 1) & !(align - 1)
+}
+
+/// Layout information for a single value or slot.
+#[derive(Debug, Clone)]
+pub struct SlotLayout {
+    /// Offset from frame base.
+    pub offset: u32,
+    /// Size in bytes.
+    pub size: u32,
+    /// Alignment requirement.
+    pub align: u32,
+    /// Cranelift representation.
+    pub repr: CraneliftRepr,
+}
+
+/// Layout information for a function/unit frame.
+///
+/// Maps ValueId/SlotId to stack slot offsets. This matches the interpreter's
+/// `IrLayout` for ABI compatibility.
+#[derive(Debug)]
+pub struct FrameLayout {
+    /// Layout for each ValueId.
+    pub values: Vec<SlotLayout>,
+    /// Layout for each SlotId (mutable slots).
+    pub slots: Vec<SlotLayout>,
+    /// Layout for each ParamId.
+    pub params: Vec<SlotLayout>,
+    /// Total frame size in bytes.
+    pub frame_size: u32,
+    /// Frame alignment requirement.
+    pub frame_align: u32,
+}
+
+impl FrameLayout {
+    /// Compute frame layout from IR type arrays.
+    ///
+    /// Layout order: params, values, slots.
+    /// This matches the interpreter's layout computation.
+    pub fn compute(
+        param_types: &[IrType],
+        value_types: &[IrType],
+        slot_types: &[IrType],
+    ) -> Self {
+        let mut params = Vec::with_capacity(param_types.len());
+        let mut values = Vec::with_capacity(value_types.len());
+        let mut slots = Vec::with_capacity(slot_types.len());
+
+        let mut offset = 0u32;
+        let mut max_align = 1u32;
+
+        // Layout params first (pointers to caller's data).
+        // Params are stored as pointers regardless of their underlying type.
+        for ty in param_types {
+            let repr = types::ir_type_to_cranelift(ty);
+
+            offset = align_up(offset, types::PTR_ALIGN);
+            params.push(SlotLayout {
+                offset,
+                size: types::PTR_SIZE,
+                align: types::PTR_ALIGN,
+                repr,
+            });
+            offset += types::PTR_SIZE;
+            max_align = max_align.max(types::PTR_ALIGN);
+        }
+
+        // Layout values.
+        for ty in value_types {
+            let repr = types::ir_type_to_cranelift(ty);
+            let TypeLayout { size, align } = repr.layout();
+
+            offset = align_up(offset, align);
+            values.push(SlotLayout {
+                offset,
+                size,
+                align,
+                repr,
+            });
+            offset += size;
+            max_align = max_align.max(align);
+        }
+
+        // Layout mutable slots.
+        for ty in slot_types {
+            let repr = types::ir_type_to_cranelift(ty);
+            let TypeLayout { size, align } = repr.layout();
+
+            offset = align_up(offset, align);
+            slots.push(SlotLayout {
+                offset,
+                size,
+                align,
+                repr,
+            });
+            offset += size;
+            max_align = max_align.max(align);
+        }
+
+        let frame_size = align_up(offset, max_align);
+
+        Self {
+            params,
+            values,
+            slots,
+            frame_size,
+            frame_align: max_align,
+        }
+    }
+
+    /// Get the offset for a value by index.
+    pub fn value_offset(&self, idx: u32) -> u32 {
+        self.values[idx as usize].offset
+    }
+
+    /// Get the offset for a slot by index.
+    pub fn slot_offset(&self, idx: u32) -> u32 {
+        self.slots[idx as usize].offset
+    }
+
+    /// Get the offset for a param by index.
+    pub fn param_offset(&self, idx: u32) -> u32 {
+        self.params[idx as usize].offset
+    }
+}
+
+/// Type descriptor table for AOT compilation.
+///
+/// Tracks type information needed for runtime calls. Unlike the interpreter's
+/// `IrTyDescTable`, this doesn't allocate TyDesc structs at compile time -
+/// those are created at runtime or linked from the runtime library.
+pub struct TyDescTable {
+    // Placeholder for now. In later phases, this will track which type
+    // descriptors need to be generated or imported.
+}
+
+impl TyDescTable {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl Default for TyDescTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_empty_frame() {
+        let layout = FrameLayout::compute(&[], &[], &[]);
+        assert_eq!(layout.frame_size, 0);
+        assert_eq!(layout.frame_align, 1);
+    }
+
+    #[test]
+    fn test_single_value() {
+        let layout = FrameLayout::compute(&[], &[IrType::U32], &[]);
+        assert_eq!(layout.values.len(), 1);
+        assert_eq!(layout.values[0].offset, 0);
+        assert_eq!(layout.values[0].size, 4);
+        assert_eq!(layout.frame_size, 4);
+    }
+
+    #[test]
+    fn test_multiple_values_alignment() {
+        // u8 at 0, u64 needs alignment to 8
+        let layout = FrameLayout::compute(&[], &[IrType::U8, IrType::U64], &[]);
+        assert_eq!(layout.values[0].offset, 0);
+        assert_eq!(layout.values[1].offset, 8); // Aligned to 8
+        assert_eq!(layout.frame_size, 16);
+        assert_eq!(layout.frame_align, 8);
+    }
+
+    #[test]
+    fn test_params_are_pointers() {
+        let layout = FrameLayout::compute(&[IrType::U32, IrType::String], &[], &[]);
+        assert_eq!(layout.params.len(), 2);
+        // All params are pointers (8 bytes each)
+        assert_eq!(layout.params[0].size, 8);
+        assert_eq!(layout.params[1].size, 8);
+        assert_eq!(layout.params[0].offset, 0);
+        assert_eq!(layout.params[1].offset, 8);
+    }
+
+    #[test]
+    fn test_values_and_slots() {
+        let layout = FrameLayout::compute(
+            &[],
+            &[IrType::U32],
+            &[IrType::U64],
+        );
+        assert_eq!(layout.values[0].offset, 0);
+        assert_eq!(layout.slots[0].offset, 8); // After u32, aligned to 8
+    }
+
+    #[test]
+    fn test_frame_with_aggregate_types() {
+        let layout = FrameLayout::compute(
+            &[],
+            &[IrType::String, IrType::U32],
+            &[],
+        );
+        // String is 16 bytes, u32 is 4 bytes
+        assert_eq!(layout.values[0].offset, 0);
+        assert_eq!(layout.values[0].size, 16);
+        assert_eq!(layout.values[1].offset, 16);
+        assert_eq!(layout.values[1].size, 4);
+        // Frame size aligned to 8
+        assert_eq!(layout.frame_size, 24);
+    }
+}
