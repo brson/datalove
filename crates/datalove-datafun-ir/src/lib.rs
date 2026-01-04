@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub mod display;
+pub mod registry;
+
+pub use registry::FunctionRegistry;
 
 /// SSA value - defined exactly once, immutable.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
