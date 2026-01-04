@@ -18,7 +18,7 @@ use cranelift_object::{ObjectBuilder, ObjectModule, ObjectProduct};
 use target_lexicon::Triple;
 
 use datalove_datafun_ir::{
-    IrBlock, IrFunction, IrModule, IrScriptUnit, IrType, ParamId, ParamMode, Terminator,
+    IrBlock, IrFunction, IrModule, IrScriptUnit, IrType, Terminator,
 };
 
 /// Errors during AOT compilation.
@@ -186,8 +186,8 @@ impl AotCompiler {
 
     /// Convert an IrScriptUnit to an IrFunction for compilation.
     fn script_unit_to_function(&self, unit: &IrScriptUnit) -> IrFunction {
-        // The script body takes rt_handle as first parameter.
         // Convert UnitEnd terminators to Return.
+        // Note: rt_handle is implicit - codegen adds it to all function signatures.
         let blocks: Vec<IrBlock> = unit.blocks.iter().map(|block| {
             let terminator = match &block.terminator {
                 Terminator::UnitEnd { result: _ } => {
@@ -209,9 +209,9 @@ impl AotCompiler {
         IrFunction {
             id: datalove_datafun_ir::FuncId(0),
             name: "__script_body".to_string(),
-            params: vec![ParamId(0)], // rt_handle parameter
-            param_modes: vec![ParamMode::In],
-            param_types: vec![IrType::U64], // Pointer as u64
+            params: vec![],
+            param_modes: vec![],
+            param_types: vec![],
             blocks,
             value_count: unit.value_count,
             slot_count: unit.slot_count,

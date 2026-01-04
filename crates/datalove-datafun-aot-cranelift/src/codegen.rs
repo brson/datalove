@@ -15,7 +15,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_module::{FuncId, Linkage, Module};
 
 use datalove_datafun_ir::{
-    BinOp, BlockId, ConstValue, IrFunction, IrType, Instruction,
+    BinOp, BlockId, ConstValue, FuncRef, IrFunction, IrType, Instruction,
     Operand, ParamId, SlotId, Terminator, UnaryOp, ValueId,
 };
 
@@ -39,6 +39,10 @@ pub struct FunctionCompiler<'a, M: Module> {
     values: HashMap<ValueId, cl_ir::Value>,
     /// Mapping from IR BlockId to Cranelift Block.
     blocks: HashMap<BlockId, cl_ir::Block>,
+    /// Mapping from IR ParamId to Cranelift Value (user params, not rt_handle).
+    param_values: HashMap<ParamId, cl_ir::Value>,
+    /// Mapping from local IR FuncId to Cranelift FuncId.
+    local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId>,
     /// Cranelift variables for mutable slots (SlotId).
     #[allow(dead_code)]
     slot_vars: HashMap<SlotId, Variable>,
@@ -51,7 +55,7 @@ pub struct FunctionCompiler<'a, M: Module> {
     runtime: Option<RuntimeImports>,
     /// TyDesc emitter for runtime type info.
     tydesc_emitter: TyDescEmitter,
-    /// Runtime handle (passed as first parameter for script unit body functions).
+    /// Runtime handle (implicit first parameter to all functions).
     rt_handle_param: Option<cl_ir::Value>,
 }
 
@@ -75,6 +79,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             module,
             values: HashMap::new(),
             blocks: HashMap::new(),
+            param_values: HashMap::new(),
+            local_funcs: HashMap::new(),
             slot_vars: HashMap::new(),
             frame_slot: None,
             next_var: 0,
@@ -106,6 +112,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             module,
             values: HashMap::new(),
             blocks: HashMap::new(),
+            param_values: HashMap::new(),
+            local_funcs: HashMap::new(),
             slot_vars: HashMap::new(),
             frame_slot: None,
             next_var: 0,
@@ -138,6 +146,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             module,
             values: HashMap::new(),
             blocks: HashMap::new(),
+            param_values: HashMap::new(),
+            local_funcs: HashMap::new(),
             slot_vars: HashMap::new(),
             frame_slot: None,
             next_var: 0,
@@ -189,19 +199,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
-        // Store parameter values.
+        // Extract block parameters.
+        // Layout: [rt_handle, user_param_0, user_param_1, ...]
         let param_values: Vec<_> = builder.block_params(entry_block).to_vec();
-        for (i, &val) in param_values.iter().enumerate() {
-            // Parameters are passed as pointers; we store the pointer.
-            // For now, just track them - actual param handling in phase 4.
-            let param_id = ParamId(i as u32);
-            // We'll need a way to look up param pointers later.
-            let _ = (param_id, val);
-        }
 
-        // If we have runtime imports and at least one parameter, treat first param as rt_handle.
-        if self.runtime.is_some() && !param_values.is_empty() {
-            self.rt_handle_param = Some(param_values[0]);
+        // First param is always rt_handle (implicit).
+        self.rt_handle_param = Some(param_values[0]);
+
+        // User params start at index 1.
+        // Store them for lookup by ParamId.
+        for (i, &val) in param_values[1..].iter().enumerate() {
+            let param_id = ParamId(i as u32);
+            // Track param values for get_operand_value.
+            self.param_values.insert(param_id, val);
         }
 
         // Compile each block.
@@ -239,11 +249,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 
     /// Build the Cranelift function signature.
+    ///
+    /// All functions have an implicit rt_handle as first parameter.
+    /// User-visible parameters follow.
     fn build_signature(&self) -> cl_ir::Signature {
         let call_conv = self.isa.default_call_conv();
         let mut sig = cl_ir::Signature::new(call_conv);
 
-        // All parameters are passed by pointer.
+        // Implicit rt_handle as first param (pointer to runtime).
+        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
+
+        // User parameters are passed by pointer.
         for _ in &self.func.param_types {
             sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
         }
@@ -296,6 +312,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::Nop => {}
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;
+            }
+            Instruction::Call { dest, func, args } => {
+                self.compile_call(builder, *dest, func, args)?;
             }
 
             // TODO: More instructions in later phases.
@@ -353,6 +372,95 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder.ins().call(debuglog_ref, &[rt_handle, value_ptr, tydesc_addr]);
 
         Ok(())
+    }
+
+    /// Compile a Call instruction.
+    ///
+    /// Threads rt_handle as implicit first argument to callee.
+    fn compile_call(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        func_ref: &FuncRef,
+        args: &[Operand],
+    ) -> Result<(), AotError> {
+        // Get rt_handle for threading.
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            AotError::Codegen("Call requires runtime handle".into())
+        })?;
+
+        // Look up or declare the callee.
+        let callee_func_id = self.resolve_func_ref(func_ref)?;
+
+        // Build call arguments: [rt_handle, user_args...]
+        let mut call_args = Vec::with_capacity(1 + args.len());
+        call_args.push(rt_handle);
+        for arg in args {
+            let arg_val = self.get_operand_ptr(builder, arg)?;
+            call_args.push(arg_val);
+        }
+
+        // Declare callee in this function.
+        let callee_ref = self.module.declare_func_in_func(callee_func_id, builder.func);
+
+        // Emit call.
+        let call_inst = builder.ins().call(callee_ref, &call_args);
+
+        // Get return value (if any).
+        let results = builder.inst_results(call_inst);
+        if !results.is_empty() {
+            self.values.insert(dest, results[0]);
+        } else {
+            // Void return - use dummy value.
+            let dummy = builder.ins().iconst(cl_types::I8, 0);
+            self.values.insert(dest, dummy);
+        }
+
+        Ok(())
+    }
+
+    /// Resolve a FuncRef to a Cranelift FuncId.
+    fn resolve_func_ref(&mut self, func_ref: &FuncRef) -> Result<FuncId, AotError> {
+        match func_ref {
+            FuncRef::Local(ir_func_id) => {
+                // Look up in local_funcs or declare.
+                if let Some(&func_id) = self.local_funcs.get(ir_func_id) {
+                    return Ok(func_id);
+                }
+
+                // For now, assume local functions aren't pre-declared.
+                // This requires the callee to be compiled before the caller,
+                // or a two-pass approach (declare all, then define all).
+                Err(AotError::Unsupported(format!(
+                    "local function {:?} not yet declared - needs two-pass compilation",
+                    ir_func_id
+                )))
+            }
+            FuncRef::External { unit, func } => {
+                Err(AotError::Unsupported(format!(
+                    "external function call (unit={}, func={:?}) not yet implemented",
+                    unit, func
+                )))
+            }
+            FuncRef::Module { module, func } => {
+                Err(AotError::Unsupported(format!(
+                    "module function call (module={:?}, func={:?}) not yet implemented",
+                    module, func
+                )))
+            }
+        }
+    }
+
+    /// Register a local function that has been declared.
+    ///
+    /// Call this for each local function before compiling any function bodies
+    /// that may call them.
+    pub fn register_local_func(
+        &mut self,
+        ir_func_id: datalove_datafun_ir::FuncId,
+        cl_func_id: FuncId,
+    ) {
+        self.local_funcs.insert(ir_func_id, cl_func_id);
     }
 
     /// Get a pointer to an operand's value.
@@ -819,7 +927,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Get a Cranelift value for an operand.
     fn get_operand_value(
         &self,
-        builder: &mut FunctionBuilder,
+        _builder: &mut FunctionBuilder,
         op: &Operand,
     ) -> Result<cl_ir::Value, AotError> {
         match op {
@@ -829,10 +937,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 })
             }
             Operand::Param(pid) => {
-                // Parameters are block params of entry block.
-                let entry = self.blocks[&BlockId(0)];
-                let params = builder.block_params(entry);
-                params.get(pid.0 as usize).copied().ok_or_else(|| {
+                // User params are stored in param_values (rt_handle is separate).
+                self.param_values.get(pid).copied().ok_or_else(|| {
                     AotError::Codegen(format!("undefined param: {:?}", pid))
                 })
             }
