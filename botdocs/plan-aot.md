@@ -1,5 +1,33 @@
 # Plan: AOT Cranelift Backend for Datafun
 
+## Progress
+
+### Phase 1: Foundation ✓ COMPLETE
+
+**Commits:**
+- `aec153f` - Initial AOT crate structure (types.rs, layout.rs, lib.rs)
+- `e831d08` - Layout compatibility tests using interpreter's IrTyDescTable
+
+**Created files:**
+- `crates/datalove-datafun-aot-cranelift/Cargo.toml`
+- `crates/datalove-datafun-aot-cranelift/src/lib.rs` - AotCompiler with host/target creation
+- `crates/datalove-datafun-aot-cranelift/src/types.rs` - IR→Cranelift type mapping with rtdt-compatible layouts
+- `crates/datalove-datafun-aot-cranelift/src/layout.rs` - FrameLayout computation
+
+**Test suite:**
+- `crates/datalove-datafun-compiler/tests/aot_layout_tests.rs` - 46 tests comparing AOT layouts against interpreter's TyDescTable
+
+**Key decisions made:**
+- All parameters passed by pointer (uniform ABI)
+- Type layouts use exact rtdt sizes via `std::mem::size_of`
+- Composite type layouts computed with matching algorithms
+
+### Phase 2: Basic Codegen - NOT STARTED
+
+### Phases 3-8: NOT STARTED
+
+---
+
 ## Overview
 
 Add a new crate `datalove-datafun-aot-cranelift` as a peer to parser/tycheck/interp that compiles IR directly to native code using Cranelift.
@@ -230,10 +258,18 @@ The ObjectProduct can be written to .o files, then linked with the runtime libra
 
 ## Testing Strategy
 
+**Layout compatibility (implemented):**
+- `aot_layout_tests.rs` compares AOT `ir_type_to_cranelift().layout()` against interpreter's `IrTyDescTable.get_or_create()` → `TyDescRef.size()/align()`
+- 46 tests covering scalars, runtime types, composites, and deeply nested types
+- Guarantees ABI compatibility between AOT and interpreter
+
+**Future testing:**
 1. Port existing interp test fixtures to aot tests
 2. Compare output with interpreter for correctness
 3. Add codegen-specific tests (register allocation, stack layout)
 4. Benchmark against interpreter
+
+**Potential enhancement:** Similar test asserting interpreter actually uses rtdt-computed layouts (would give three-way agreement: AOT ↔ interp ↔ rtdt)
 
 ## Design Decisions (Confirmed)
 
