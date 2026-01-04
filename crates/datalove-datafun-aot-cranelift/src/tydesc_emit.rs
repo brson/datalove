@@ -2,11 +2,14 @@
 //!
 //! Emits type descriptors as static data in the object file,
 //! matching the runtime's `rtdt::TyDesc` layout exactly.
+//!
+//! Since datalove does whole-world compilation, all types are known
+//! ahead of time. TyDescs are emitted upfront in a single pass.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use cranelift_module::{DataDescription, DataId, Linkage, Module};
-use datalove_datafun_ir::IrType;
+use datalove_datafun_ir::{IrFunction, IrScriptUnit, IrType};
 
 use crate::AotError;
 
@@ -93,6 +96,54 @@ impl TyDescEmitter {
         Ok(data_id)
     }
 
+    /// Emit TyDescs for all types upfront.
+    ///
+    /// Call this before codegen to populate the cache. After this,
+    /// use `get()` for lookup-only access during codegen.
+    pub fn emit_all<M: Module>(
+        &mut self,
+        module: &mut M,
+        types: impl IntoIterator<Item = IrType>,
+    ) -> Result<(), AotError> {
+        for ty in types {
+            // Skip types we can't emit - they'll error at use site if needed.
+            if self.can_emit(&ty) {
+                self.emit(module, &ty)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Look up a previously-emitted TyDesc.
+    ///
+    /// Returns None if the type was not emitted. Panics are appropriate
+    /// during codegen since all types should have been emitted upfront.
+    pub fn get(&self, ty: &IrType) -> Option<DataId> {
+        self.tydescs.get(ty).copied()
+    }
+
+    /// Check if a type can be emitted as a TyDesc.
+    fn can_emit(&self, ty: &IrType) -> bool {
+        matches!(
+            ty,
+            IrType::Unit
+                | IrType::Bool
+                | IrType::U8
+                | IrType::I8
+                | IrType::U16
+                | IrType::I16
+                | IrType::U32
+                | IrType::I32
+                | IrType::U64
+                | IrType::I64
+                | IrType::F32
+                | IrType::Int
+                | IrType::String
+                | IrType::Data
+                | IrType::Error
+        )
+    }
+
     /// Build the raw bytes for a TyDesc.
     fn build_tydesc_bytes(&self, ty: &IrType) -> Result<Vec<u8>, AotError> {
         let mut bytes = vec![0u8; TYDESC_SIZE];
@@ -134,6 +185,51 @@ impl TyDescEmitter {
 impl Default for TyDescEmitter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Collect all types from a single function.
+pub fn collect_types_from_function(func: &IrFunction, types: &mut HashSet<IrType>) {
+    for ty in &func.param_types {
+        types.insert(ty.clone());
+    }
+    for ty in &func.value_types {
+        types.insert(ty.clone());
+    }
+    for ty in &func.slot_types {
+        types.insert(ty.clone());
+    }
+}
+
+/// Collect all types from a script unit for upfront TyDesc emission.
+pub fn collect_types_from_script_unit(unit: &IrScriptUnit) -> HashSet<IrType> {
+    let mut types = HashSet::new();
+
+    // Collect from unit's value and slot types.
+    for ty in &unit.value_types {
+        types.insert(ty.clone());
+    }
+    for ty in &unit.slot_types {
+        types.insert(ty.clone());
+    }
+
+    // Collect from each function's types.
+    for func in &unit.functions {
+        collect_types_from_function(func, &mut types);
+    }
+
+    types
+}
+
+/// Collect types from an iterator of functions.
+///
+/// Use this to collect types from module functions in a ScriptEnvironment.
+pub fn collect_types_from_functions<'a>(
+    funcs: impl Iterator<Item = &'a IrFunction>,
+    types: &mut HashSet<IrType>,
+) {
+    for func in funcs {
+        collect_types_from_function(func, types);
     }
 }
 

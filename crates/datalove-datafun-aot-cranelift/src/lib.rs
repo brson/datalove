@@ -113,10 +113,42 @@ impl AotCompiler {
 
     /// Compile an IR script unit to an object file.
     ///
+    /// This method collects types only from the script unit itself. For whole-world
+    /// compilation with modules, use `compile_script_unit_with_world_types` instead.
+    ///
     /// Generates:
     /// - `__script_body(rt: *mut u8)` - The script body that takes runtime handle
     /// - `main()` - Entry point that initializes runtime, runs body, cleans up
     pub fn compile_script_unit(&mut self, unit: &IrScriptUnit) -> Result<ObjectProduct, AotError> {
+        let types = tydesc_emit::collect_types_from_script_unit(unit);
+        self.compile_script_unit_with_types(unit, types)
+    }
+
+    /// Compile an IR script unit with pre-collected world types.
+    ///
+    /// Use this when compiling in a world with modules. Pass types collected from
+    /// all module functions and prior script units.
+    ///
+    /// Generates:
+    /// - `__script_body(rt: *mut u8)` - The script body that takes runtime handle
+    /// - `main()` - Entry point that initializes runtime, runs body, cleans up
+    pub fn compile_script_unit_with_world_types<'a>(
+        &mut self,
+        unit: &IrScriptUnit,
+        world_funcs: impl Iterator<Item = &'a IrFunction>,
+    ) -> Result<ObjectProduct, AotError> {
+        // Collect types from world functions and the script unit.
+        let mut types = tydesc_emit::collect_types_from_script_unit(unit);
+        tydesc_emit::collect_types_from_functions(world_funcs, &mut types);
+        self.compile_script_unit_with_types(unit, types)
+    }
+
+    /// Compile an IR script unit with pre-collected types.
+    fn compile_script_unit_with_types(
+        &mut self,
+        unit: &IrScriptUnit,
+        types: std::collections::HashSet<IrType>,
+    ) -> Result<ObjectProduct, AotError> {
         let obj_builder = ObjectBuilder::new(
             self.isa.clone(),
             "script",
@@ -129,15 +161,20 @@ impl AotCompiler {
         let call_conv = self.isa.default_call_conv();
         let runtime = runtime::RuntimeImports::declare(&mut obj_module, call_conv)?;
 
+        // Emit all TyDescs upfront (whole-world compilation).
+        let mut tydesc_emitter = tydesc_emit::TyDescEmitter::new();
+        tydesc_emitter.emit_all(&mut obj_module, types)?;
+
         // Convert script unit to a function with rt_handle as first param.
         let body_func = self.script_unit_to_function(unit);
 
-        // Compile the body function.
-        let compiler = codegen::FunctionCompiler::new_with_runtime(
+        // Compile the body function with pre-populated TyDesc cache.
+        let compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
             &body_func,
             self.isa.as_ref(),
             &mut obj_module,
             runtime,
+            tydesc_emitter,
         );
         let body_func_id = compiler.compile()?;
 

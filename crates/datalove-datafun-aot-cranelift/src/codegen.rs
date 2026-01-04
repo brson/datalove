@@ -115,6 +115,38 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
+    /// Create a new function compiler with runtime imports and pre-populated TyDescs.
+    ///
+    /// Use this when TyDescs have been emitted upfront (whole-world compilation).
+    pub fn new_with_runtime_and_tydescs(
+        func: &'a IrFunction,
+        isa: &'a dyn TargetIsa,
+        module: &'a mut M,
+        runtime: RuntimeImports,
+        tydesc_emitter: TyDescEmitter,
+    ) -> Self {
+        let layout = FrameLayout::compute(
+            &func.param_types,
+            &func.value_types,
+            &func.slot_types,
+        );
+
+        Self {
+            func,
+            layout,
+            isa,
+            module,
+            values: HashMap::new(),
+            blocks: HashMap::new(),
+            slot_vars: HashMap::new(),
+            frame_slot: None,
+            next_var: 0,
+            runtime: Some(runtime),
+            tydesc_emitter,
+            rt_handle_param: None,
+        }
+    }
+
     /// Compile the function and return the Cranelift FuncId.
     pub fn compile(mut self) -> Result<FuncId, AotError> {
         // Build function signature.
@@ -299,8 +331,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Get pointer to the value. For scalars, we need to spill to memory first.
         let value_ptr = self.get_operand_ptr(builder, operand)?;
 
-        // Emit tydesc as static data.
-        let tydesc_id = self.tydesc_emitter.emit(self.module, &ty)?;
+        // Look up pre-emitted TyDesc (whole-world compilation guarantees it exists).
+        let tydesc_id = self.tydesc_emitter.get(&ty).ok_or_else(|| {
+            AotError::Codegen(format!(
+                "TyDesc not found for type {:?} - should have been emitted upfront",
+                ty
+            ))
+        })?;
 
         // Get address of tydesc.
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);

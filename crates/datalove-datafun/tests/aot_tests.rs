@@ -18,6 +18,7 @@ use std::process::Command;
 
 use datalove_datafun as datafun;
 use datalove_datafun_aot_cranelift::AotCompiler;
+use datalove_datafun_interp::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 
 /// Result of AOT analysis.
@@ -236,12 +237,13 @@ fn compile_and_run_fragment(
         }
     };
 
-    // AOT compile.
+    // AOT compile with world types from module functions.
     aot_compile_link_run(
         "scriptunit-fragment",
         lower_result.typecheck,
         lower_result.lowering,
         ir_unit,
+        &ctx.env.registry,
     )
 }
 
@@ -299,12 +301,13 @@ fn compile_and_run_expr(
         }
     };
 
-    // AOT compile.
+    // AOT compile with world types from module functions.
     aot_compile_link_run(
         "scriptunit-expr",
         lower_result.typecheck,
         lower_result.lowering,
         ir_unit,
+        &ctx.env.registry,
     )
 }
 
@@ -314,6 +317,7 @@ fn aot_compile_link_run(
     typecheck: datafun::pipeline::TypecheckResult,
     lowering: datafun::pipeline::LoweringResult,
     ir_unit: datalove_datafun_ir::IrScriptUnit,
+    registry: &FunctionRegistry,
 ) -> AotSectionResult {
     // Create AOT compiler.
     let mut compiler = match AotCompiler::new_for_host() {
@@ -334,8 +338,11 @@ fn aot_compile_link_run(
         }
     };
 
-    // Compile to object file.
-    let product = match compiler.compile_script_unit(&ir_unit) {
+    // Compile to object file with world types from module functions.
+    let product = match compiler.compile_script_unit_with_world_types(
+        &ir_unit,
+        registry.iter_all_functions(),
+    ) {
         Ok(p) => p,
         Err(e) => {
             return AotSectionResult {

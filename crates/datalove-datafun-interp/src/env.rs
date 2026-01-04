@@ -56,6 +56,21 @@ impl FunctionRegistry {
     pub fn unit_functions(&self, unit: u32) -> Option<&[IrFunction]> {
         self.unit_functions.get(unit as usize).map(|v| v.as_slice())
     }
+
+    /// Iterate over all module functions.
+    pub fn iter_module_functions(&self) -> impl Iterator<Item = &IrFunction> {
+        self.module_functions.values()
+    }
+
+    /// Iterate over all unit functions.
+    pub fn iter_unit_functions(&self) -> impl Iterator<Item = &IrFunction> {
+        self.unit_functions.iter().flat_map(|v| v.iter())
+    }
+
+    /// Iterate over all functions (modules + units).
+    pub fn iter_all_functions(&self) -> impl Iterator<Item = &IrFunction> {
+        self.iter_module_functions().chain(self.iter_unit_functions())
+    }
 }
 
 impl Default for FunctionRegistry {
