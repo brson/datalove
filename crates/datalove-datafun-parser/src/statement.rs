@@ -32,6 +32,7 @@ impl<'db> Parser<'db> {
             Some("loop") => self.parse_loop(remaining_lines),
             Some("break") => self.parse_break(),
             Some("continue") => self.parse_continue(),
+            Some("debuglog") => self.parse_debuglog(),
             _ => {
                 let (text, span) = self.peek_text_span();
                 self.emit_stmt_error(
@@ -39,7 +40,7 @@ impl<'db> Parser<'db> {
                     span,
                     "unexpected statement",
                     "P001",
-                    "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', or 'continue'"
+                    "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', or 'debuglog'"
                 )
             }
         };
@@ -732,6 +733,12 @@ impl<'db> Parser<'db> {
     fn parse_continue(&mut self) -> ast::Statement<'db> {
         self.eat_word("continue");
         ast::Statement::Continue(ast::StmtContinue::new(self.db, ()))
+    }
+
+    fn parse_debuglog(&mut self) -> ast::Statement<'db> {
+        self.eat_word("debuglog");
+        let value = self.parse_expr_full();
+        ast::Statement::DebugLog(ast::StmtDebugLog::new(self.db, value))
     }
 
     /// Delegate to datalit parser for type hints.

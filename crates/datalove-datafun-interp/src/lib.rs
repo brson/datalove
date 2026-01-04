@@ -96,6 +96,40 @@ impl IrInterpreter {
         &mut self.tydesc_table
     }
 
+    /// Set the debug output mode.
+    pub fn set_debug_mode(&self, mode: datalove_rt::c::DebugOutputMode) {
+        unsafe {
+            datalove_rt::c::dtlv_rti_set_debug_mode(self.runtime.handle(), mode);
+        }
+    }
+
+    /// Get the contents of the debug buffer.
+    ///
+    /// Returns the accumulated debug output as a string.
+    pub fn get_debug_buffer(&self) -> String {
+        unsafe {
+            let mut ptr: *const u8 = std::ptr::null();
+            let mut len: usize = 0;
+            let status = datalove_rt::c::dtlv_rti_get_debug_buffer(
+                self.runtime.handle(),
+                &mut ptr,
+                &mut len,
+            );
+            if status != datalove_rt::c::RtStatus::Ok || ptr.is_null() || len == 0 {
+                return String::new();
+            }
+            let bytes = std::slice::from_raw_parts(ptr, len);
+            String::from_utf8_lossy(bytes).to_string()
+        }
+    }
+
+    /// Clear the debug buffer.
+    pub fn clear_debug_buffer(&self) {
+        unsafe {
+            datalove_rt::c::dtlv_rti_clear_debug_buffer(self.runtime.handle());
+        }
+    }
+
     /// Pretty-print a value using the runtime's pretty printer.
     pub fn pretty_print_value(&mut self, value: &Value) -> Result<String, InterpError> {
         use datalove_rt::c::RtStatus;
@@ -999,6 +1033,23 @@ impl IrInterpreter {
                     // External values/slots are in other frames, handled separately.
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                 }
+            }
+            Instruction::DebugLog { operand } => {
+                let val = self.read_operand(operand, frame, frames)?;
+                let rt_handle = self.runtime.handle();
+                unsafe {
+                    let status = datalove_rt::c::dtlv_rti_debuglog_local(
+                        rt_handle,
+                        val.ptr,
+                        val.tydesc,
+                    );
+                    if status != datalove_rt::c::RtStatus::Ok {
+                        return Err(InterpError::RuntimeError(
+                            "debuglog failed".to_string(),
+                        ));
+                    }
+                }
+                // Note: no mark_dropped - we're borrowing, not consuming.
             }
             Instruction::Nop => {}
         }

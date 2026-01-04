@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+let x = @42
+debuglog x
+let y = "hello"
+debuglog y

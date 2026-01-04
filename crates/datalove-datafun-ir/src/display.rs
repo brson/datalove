@@ -372,6 +372,9 @@ impl fmt::Display for Instruction {
             Instruction::Drop { operand } => {
                 write!(f, "drop {}", operand)
             }
+            Instruction::DebugLog { operand } => {
+                write!(f, "debuglog {}", operand)
+            }
             Instruction::Nop => {
                 write!(f, "nop")
             }

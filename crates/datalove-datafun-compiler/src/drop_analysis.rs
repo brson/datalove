@@ -832,6 +832,10 @@ fn analyze_statements<'db>(
             Statement::Fun(_) => {
                 // Nested functions handled separately.
             }
+            Statement::DebugLog(stmt) => {
+                // Debuglog borrows its value, so analyze the expression but don't consume it.
+                ctx.analyze_expr_moves(stmt.value(ctx.db), false);
+            }
             Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
                 // No drops.
             }

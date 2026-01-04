@@ -36,6 +36,9 @@ pub struct SectionResult {
     pub lowering: LoweringResult,
     /// Output value (for expression units) or function call result.
     pub output: String,
+    /// Debug log output (from debuglog statements).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_output: Option<String>,
 }
 
 /// Analyze a worldfile using the IR interpreter.
@@ -68,6 +71,7 @@ pub fn analyze_worldfile(
             typecheck: TypecheckResult::Error { errors: vec![err.clone()] },
             lowering: LoweringResult::Skipped,
             output: String::new(),
+            debug_output: None,
         });
         return Ok(Analysis { sections: results });
     }
@@ -111,12 +115,16 @@ pub fn analyze_worldfile(
                 typecheck,
                 lowering,
                 output: String::new(),
+                debug_output: None,
             });
         }
     }
 
     // Create script compilation context (module specs built internally from module graph).
     let mut ctx = compiled.script_context(db);
+
+    // Enable debug buffer mode for capturing debuglog output.
+    ctx.set_debug_mode(datalove_rt::c::DebugOutputMode::Buffer);
 
     // Process script units using the context.
     for section in &parsed.sections {
@@ -125,23 +133,33 @@ pub fn analyze_worldfile(
                 // Already handled above.
             }
             WorldfileSection::ScriptFragment { source } => {
+                // Clear debug buffer before execution.
+                ctx.clear_debug_buffer();
                 let unit_result = ctx.eval_fragment(source);
+                // Capture debug output.
+                let debug_output = ctx.get_debug_buffer();
                 results.push(SectionResult {
                     section_type: "scriptunit-fragment".to_string(),
                     name: None,
                     typecheck: unit_result.typecheck,
                     lowering: unit_result.lowering,
                     output: unit_result.output,
+                    debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
                 });
             }
             WorldfileSection::ScriptExpr { source } => {
+                // Clear debug buffer before execution.
+                ctx.clear_debug_buffer();
                 let unit_result = ctx.eval_expr(source);
+                // Capture debug output.
+                let debug_output = ctx.get_debug_buffer();
                 results.push(SectionResult {
                     section_type: "scriptunit-expr".to_string(),
                     name: None,
                     typecheck: unit_result.typecheck,
                     lowering: unit_result.lowering,
                     output: unit_result.output,
+                    debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
                 });
             }
         }

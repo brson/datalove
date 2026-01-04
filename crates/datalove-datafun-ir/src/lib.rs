@@ -679,6 +679,9 @@ pub enum Instruction {
     /// Drop a value (run destructor).
     Drop { operand: Operand },
 
+    /// Debug log a value (borrows, does not consume).
+    DebugLog { operand: Operand },
+
     /// No operation.
     Nop,
 }

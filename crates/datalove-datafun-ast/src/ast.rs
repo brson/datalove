@@ -32,6 +32,7 @@ pub enum Statement<'db> {
     Loop(StmtLoop<'db>),
     Break(StmtBreak<'db>),
     Continue(StmtContinue<'db>),
+    DebugLog(StmtDebugLog<'db>),
     ParseError(StmtParseError<'db>),
 }
 
@@ -145,6 +146,12 @@ pub struct StmtBreak<'db> {
 pub struct StmtContinue<'db> {
     // Placeholder field for salsa tracking.
     pub _phantom: (),
+}
+
+/// Debug log statement for outputting values during execution.
+#[salsa::tracked]
+pub struct StmtDebugLog<'db> {
+    pub value: ExprFun<'db>,
 }
 
 #[salsa::tracked]

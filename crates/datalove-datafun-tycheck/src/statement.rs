@@ -421,6 +421,14 @@ pub fn check_statement<'db>(
             // Continue is valid - no further type checking needed.
         }
 
+        Statement::DebugLog(stmt) => {
+            let value = stmt.value(db);
+            // Accept any type - just synthesize to verify the expression is valid.
+            if let Err(e) = ctx.synthesize_expr(value) {
+                ctx.add_error(e);
+            }
+        }
+
         Statement::ParseError(_) => {
             // Skip parse errors.
         }

@@ -1601,3 +1601,75 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_reshape_local(
     }
 }
 
+// ============================================================================
+// Debug Log Operations
+// ============================================================================
+
+pub use rt_local::DebugOutputMode;
+
+/// Set the debug output mode.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_set_debug_mode(
+    rt: LocalRtHandle,
+    mode: DebugOutputMode,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        rt_ref.debug_output_mode = mode;
+    }
+    RtStatus::Ok
+}
+
+/// Debug log a value (borrows, does not consume).
+///
+/// Pretty-prints the value and outputs according to the current debug mode.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_debuglog_local(
+    rt: LocalRtHandle,
+    value_ref: *const u8,
+    value_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!value_ref.is_null(), "value_ref is null");
+    debug_assert!(!value_tydesc.is_null(), "value_tydesc is null");
+    debug_assert_aligned(value_ref, value_tydesc, "debuglog_local:value");
+    unsafe {
+        crate::impls::debuglog::debuglog_local(rt, value_ref, value_tydesc)
+    }
+}
+
+/// Get a pointer to the debug buffer contents.
+///
+/// Returns a pointer to the UTF-8 bytes and the length.
+/// The pointer is valid until the next debuglog or clear operation.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_get_debug_buffer(
+    rt: LocalRtHandle,
+    out_ptr: *mut *const u8,
+    out_len: *mut usize,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!out_ptr.is_null(), "out_ptr is null");
+    debug_assert!(!out_len.is_null(), "out_len is null");
+    unsafe {
+        let rt_ref = &*(rt as *const rt_local::RtLocal);
+        *out_ptr = rt_ref.debug_buffer.as_ptr();
+        *out_len = rt_ref.debug_buffer.len();
+    }
+    RtStatus::Ok
+}
+
+/// Clear the debug buffer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_clear_debug_buffer(
+    rt: LocalRtHandle,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        rt_ref.debug_buffer.clear();
+    }
+    RtStatus::Ok
+}
+

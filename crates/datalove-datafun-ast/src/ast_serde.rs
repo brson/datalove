@@ -25,6 +25,7 @@ pub enum Statement {
     Loop(StmtLoop),
     Break(StmtBreak),
     Continue(StmtContinue),
+    DebugLog(StmtDebugLog),
     ParseError(StmtParseError),
 }
 
@@ -119,6 +120,11 @@ pub struct StmtBreak {}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtContinue {}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtDebugLog {
+    pub value: ExprFun,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtParseError {
@@ -397,7 +403,16 @@ impl Statement {
             crate::ast::Statement::Loop(s) => Statement::Loop(StmtLoop::from_ast(db, *s)),
             crate::ast::Statement::Break(_) => Statement::Break(StmtBreak {}),
             crate::ast::Statement::Continue(_) => Statement::Continue(StmtContinue {}),
+            crate::ast::Statement::DebugLog(s) => Statement::DebugLog(StmtDebugLog::from_ast(db, *s)),
             crate::ast::Statement::ParseError(s) => Statement::ParseError(StmtParseError::from_ast(db, *s)),
+        }
+    }
+}
+
+impl StmtDebugLog {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::StmtDebugLog<'db>) -> Self {
+        StmtDebugLog {
+            value: ExprFun::from_ast(db, ast.value(db)),
         }
     }
 }

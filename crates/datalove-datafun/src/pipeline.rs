@@ -833,4 +833,19 @@ impl<'db> ScriptCompilationContext<'db> {
     pub fn db(&self) -> &'db dyn salsa::Database {
         self.db
     }
+
+    /// Set the debug output mode.
+    pub fn set_debug_mode(&self, mode: datalove_rt::c::DebugOutputMode) {
+        self.interp.set_debug_mode(mode);
+    }
+
+    /// Get the contents of the debug buffer.
+    pub fn get_debug_buffer(&self) -> String {
+        self.interp.get_debug_buffer()
+    }
+
+    /// Clear the debug buffer.
+    pub fn clear_debug_buffer(&self) {
+        self.interp.clear_debug_buffer();
+    }
 }

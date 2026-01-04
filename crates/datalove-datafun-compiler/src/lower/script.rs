@@ -342,6 +342,14 @@ fn lower_statement_for_script<'db>(
             // Module-level, handled elsewhere.
             Ok(())
         }
+        Statement::DebugLog(stmt) => {
+            let value_id = lower_expression(ctx, stmt.value(ctx.db))?;
+            ctx.emit(Instruction::DebugLog {
+                operand: Operand::Value(value_id),
+            });
+            // Note: no drop - debuglog borrows, does not consume.
+            Ok(())
+        }
         Statement::ParseError(_) => {
             Err(LowerError::ParseError)
         }
