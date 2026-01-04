@@ -59,26 +59,12 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
     }
 
     /// Try to consume a specific word. Returns true if successful.
-    fn try_eat_word(&mut self, word: &str) -> bool {
+    fn eat_word(&mut self, word: &str) -> bool {
         if self.peek_word() == Some(word) {
             self.next();
             true
         } else {
             false
-        }
-    }
-
-    /// Consume a specific word if matched, returning true if consumed.
-    ///
-    /// Alias for `try_eat_word`.
-    fn eat_word(&mut self, word: &str) -> bool {
-        self.try_eat_word(word)
-    }
-
-    /// Consume a specific word or panic.
-    fn need_word(&mut self, word: &str) {
-        if !self.try_eat_word(word) {
-            panic!("expected word '{}'", word);
         }
     }
 
@@ -105,6 +91,13 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
             }
         } else {
             None
+        }
+    }
+
+    /// Consume a specific word or panic.
+    fn need_word(&mut self, word: &str) {
+        if !self.eat_word(word) {
+            panic!("expected word '{}'", word);
         }
     }
 
