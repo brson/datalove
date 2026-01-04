@@ -5,6 +5,9 @@ license.workspace = true
 authors.workspace = true
 edition.workspace = true
 
+[lib]
+crate-type = ["lib", "cdylib"]
+
 [features]
 slow_tests = []
 

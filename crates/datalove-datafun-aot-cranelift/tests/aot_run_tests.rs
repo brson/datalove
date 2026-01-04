@@ -1,0 +1,288 @@
+//! Integration tests that compile, link, and run AOT code.
+
+use datalove_datafun_aot_cranelift::AotCompiler;
+use datalove_datafun_ir::{
+    BlockId, ConstValue, IrBlock, IrScriptUnit, IrType, Instruction, Operand, Terminator, ValueId,
+};
+use std::process::Command;
+
+/// Create a simple script unit that logs an i32 constant.
+fn create_debuglog_i32_script(value: i32) -> IrScriptUnit {
+    IrScriptUnit {
+        blocks: vec![IrBlock {
+            id: BlockId(0),
+            instructions: vec![
+                Instruction::Const {
+                    dest: ValueId(0),
+                    value: ConstValue::I32(value),
+                },
+                Instruction::DebugLog {
+                    operand: Operand::Value(ValueId(0)),
+                },
+            ],
+            terminator: Terminator::UnitEnd { result: None },
+        }],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![IrType::I32],
+        slot_types: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+    }
+}
+
+/// Get the path to the runtime library.
+fn get_runtime_lib_dir() -> std::path::PathBuf {
+    // Find the target directory relative to the crate.
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+        .unwrap_or_else(|_| ".".to_string());
+    let manifest_path = std::path::PathBuf::from(manifest_dir);
+
+    // Go up to workspace root and into target/debug.
+    manifest_path.join("../../target/debug").canonicalize()
+        .expect("failed to find target/debug directory")
+}
+
+#[test]
+fn test_link_and_run_debuglog_i32() {
+    let unit = create_debuglog_i32_script(42);
+
+    // Compile to object file.
+    let mut compiler = AotCompiler::new_for_host().expect("failed to create compiler");
+    let product = compiler
+        .compile_script_unit(&unit)
+        .expect("failed to compile script unit");
+    let obj_bytes = product.emit().expect("failed to emit object");
+
+    // Write object to temp file.
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
+    let obj_path = dir.path().join("test.o");
+    std::fs::write(&obj_path, &obj_bytes).expect("failed to write object file");
+
+    // Find runtime library.
+    let lib_dir = get_runtime_lib_dir();
+    let lib_path = lib_dir.join("libdatalove_rt.so");
+
+    if !lib_path.exists() {
+        eprintln!("Runtime library not found at {:?}, skipping link test", lib_path);
+        eprintln!("Build with: cargo build --package datalove-rt");
+        return;
+    }
+
+    // Link with cc.
+    let exe_path = dir.path().join("test");
+    let link_status = Command::new("cc")
+        .args([
+            obj_path.to_str().unwrap(),
+            "-L", lib_dir.to_str().unwrap(),
+            "-ldatalove_rt",
+            "-Wl,-rpath", lib_dir.to_str().unwrap(),
+            "-o", exe_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("failed to run linker");
+
+    if !link_status.success() {
+        panic!("Linker failed with status: {:?}", link_status);
+    }
+
+    // Run the executable.
+    let output = Command::new(&exe_path)
+        .env("LD_LIBRARY_PATH", lib_dir.to_str().unwrap())
+        .output()
+        .expect("failed to run executable");
+
+    if !output.status.success() {
+        eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+        panic!("Executable failed with status: {:?}", output.status);
+    }
+
+    // Check output.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("42"),
+        "Expected stderr to contain '42', got: {:?}",
+        stderr
+    );
+}
+
+#[test]
+fn test_link_and_run_debuglog_bool_true() {
+    let unit = IrScriptUnit {
+        blocks: vec![IrBlock {
+            id: BlockId(0),
+            instructions: vec![
+                Instruction::Const {
+                    dest: ValueId(0),
+                    value: ConstValue::Bool(true),
+                },
+                Instruction::DebugLog {
+                    operand: Operand::Value(ValueId(0)),
+                },
+            ],
+            terminator: Terminator::UnitEnd { result: None },
+        }],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![IrType::Bool],
+        slot_types: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+    };
+
+    // Compile to object file.
+    let mut compiler = AotCompiler::new_for_host().expect("failed to create compiler");
+    let product = compiler
+        .compile_script_unit(&unit)
+        .expect("failed to compile script unit");
+    let obj_bytes = product.emit().expect("failed to emit object");
+
+    // Write object to temp file.
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
+    let obj_path = dir.path().join("test.o");
+    std::fs::write(&obj_path, &obj_bytes).expect("failed to write object file");
+
+    // Find runtime library.
+    let lib_dir = get_runtime_lib_dir();
+    let lib_path = lib_dir.join("libdatalove_rt.so");
+
+    if !lib_path.exists() {
+        eprintln!("Runtime library not found, skipping link test");
+        return;
+    }
+
+    // Link with cc.
+    let exe_path = dir.path().join("test");
+    let link_status = Command::new("cc")
+        .args([
+            obj_path.to_str().unwrap(),
+            "-L", lib_dir.to_str().unwrap(),
+            "-ldatalove_rt",
+            "-Wl,-rpath", lib_dir.to_str().unwrap(),
+            "-o", exe_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("failed to run linker");
+
+    if !link_status.success() {
+        panic!("Linker failed");
+    }
+
+    // Run the executable.
+    let output = Command::new(&exe_path)
+        .env("LD_LIBRARY_PATH", lib_dir.to_str().unwrap())
+        .output()
+        .expect("failed to run executable");
+
+    if !output.status.success() {
+        eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+        panic!("Executable failed");
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("true"),
+        "Expected stderr to contain 'true', got: {:?}",
+        stderr
+    );
+}
+
+#[test]
+fn test_link_and_run_multiple_debuglogs() {
+    let unit = IrScriptUnit {
+        blocks: vec![IrBlock {
+            id: BlockId(0),
+            instructions: vec![
+                Instruction::Const {
+                    dest: ValueId(0),
+                    value: ConstValue::I32(1),
+                },
+                Instruction::DebugLog {
+                    operand: Operand::Value(ValueId(0)),
+                },
+                Instruction::Const {
+                    dest: ValueId(1),
+                    value: ConstValue::I32(2),
+                },
+                Instruction::DebugLog {
+                    operand: Operand::Value(ValueId(1)),
+                },
+                Instruction::Const {
+                    dest: ValueId(2),
+                    value: ConstValue::I32(3),
+                },
+                Instruction::DebugLog {
+                    operand: Operand::Value(ValueId(2)),
+                },
+            ],
+            terminator: Terminator::UnitEnd { result: None },
+        }],
+        value_count: 3,
+        slot_count: 0,
+        value_types: vec![IrType::I32, IrType::I32, IrType::I32],
+        slot_types: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+    };
+
+    // Compile to object file.
+    let mut compiler = AotCompiler::new_for_host().expect("failed to create compiler");
+    let product = compiler
+        .compile_script_unit(&unit)
+        .expect("failed to compile script unit");
+    let obj_bytes = product.emit().expect("failed to emit object");
+
+    // Write object to temp file.
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
+    let obj_path = dir.path().join("test.o");
+    std::fs::write(&obj_path, &obj_bytes).expect("failed to write object file");
+
+    // Find runtime library.
+    let lib_dir = get_runtime_lib_dir();
+    let lib_path = lib_dir.join("libdatalove_rt.so");
+
+    if !lib_path.exists() {
+        eprintln!("Runtime library not found, skipping link test");
+        return;
+    }
+
+    // Link with cc.
+    let exe_path = dir.path().join("test");
+    let link_status = Command::new("cc")
+        .args([
+            obj_path.to_str().unwrap(),
+            "-L", lib_dir.to_str().unwrap(),
+            "-ldatalove_rt",
+            "-Wl,-rpath", lib_dir.to_str().unwrap(),
+            "-o", exe_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("failed to run linker");
+
+    if !link_status.success() {
+        panic!("Linker failed");
+    }
+
+    // Run the executable.
+    let output = Command::new(&exe_path)
+        .env("LD_LIBRARY_PATH", lib_dir.to_str().unwrap())
+        .output()
+        .expect("failed to run executable");
+
+    if !output.status.success() {
+        eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+        panic!("Executable failed");
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("1"), "Expected '1' in output: {:?}", stderr);
+    assert!(stderr.contains("2"), "Expected '2' in output: {:?}", stderr);
+    assert!(stderr.contains("3"), "Expected '3' in output: {:?}", stderr);
+}
