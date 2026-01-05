@@ -11,7 +11,7 @@ use salsa::Accumulator;
 
 use datalove_datafun_ast::ast;
 use datalove_datafun_ast::spans::DatafunSpanAccumulator;
-use datalove_datalit::parser_util::{TokenStream, TokenStreamExt};
+use datalove_datalit::parser_util::{self, TokenStream, TokenStreamExt};
 use datalove_diagnostic::DiagnosticBuilder;
 
 use super::Db;
@@ -101,14 +101,12 @@ impl<'db> Parser<'db> {
 
     /// Extract Text and ByteSpan from a token.
     pub(super) fn extract_text_span(&self, token: &TreeToken<'db>) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
-        match token {
-            TreeToken::Token(tok) => {
-                let subtext = tok.text(self.db);
-                (subtext.text(self.db), subtext.range(self.db))
-            }
-            TreeToken::Branch(_, _) => {
-                (self.source_text(), 0..0)
-            }
+        let (text, span) = parser_util::extract_text_span(self.db, token);
+        if text.as_str(self.db).is_empty() {
+            // Fallback to source_text for branches.
+            (self.source_text(), span)
+        } else {
+            (text, span)
         }
     }
 

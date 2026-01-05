@@ -8,7 +8,7 @@ use bct::{
 };
 
 use crate::ast;
-use crate::parser_util::TokenStream;
+use crate::parser_util::{self, TokenStream};
 use datalove_diagnostic::DiagnosticBuilder;
 
 /// Parser state for datalit parsing.
@@ -76,11 +76,6 @@ impl<'db> Parser<'db> {
             .primary_label(text, span.clone(), label)
             .emit_parse();
         ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message_text))
-    }
-
-    /// Peek returning an owned token (cloned) for patterns that need to capture branch content.
-    pub(super) fn peek_owned(&self) -> Option<TreeToken<'db>> {
-        self.tokens.get(self.pos).cloned()
     }
 
     /// Parse a u32 literal from the current position.
@@ -152,14 +147,12 @@ impl<'db> Parser<'db> {
 
     /// Extract Text and ByteSpan from a token.
     pub(super) fn extract_text_span(&self, token: &TreeToken<'db>) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
-        match token {
-            TreeToken::Token(tok) => {
-                let subtext = tok.text(self.db);
-                (subtext.text(self.db), subtext.range(self.db))
-            }
-            TreeToken::Branch(_, _) => {
-                (self.source_text(), 0..0)
-            }
+        let (text, span) = parser_util::extract_text_span(self.db, token);
+        if text.as_str(self.db).is_empty() {
+            // Fallback to source_text for branches.
+            (self.source_text(), span)
+        } else {
+            (text, span)
         }
     }
 
