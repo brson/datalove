@@ -142,6 +142,8 @@ pub struct FunctionCompiler<'a, M: Module> {
     tydesc_emitter: TyDescEmitter,
     /// Runtime handle (implicit first parameter to all functions).
     rt_handle_param: Option<cl_ir::Value>,
+    /// Counter for unique static data names (e.g., string bytes).
+    static_data_counter: u32,
 }
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
@@ -174,6 +176,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             runtime: None,
             tydesc_emitter: TyDescEmitter::new(),
             rt_handle_param: None,
+            static_data_counter: 0,
         }
     }
 
@@ -209,6 +212,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             runtime: Some(runtime),
             tydesc_emitter: TyDescEmitter::new(),
             rt_handle_param: None,
+            static_data_counter: 0,
         }
     }
 
@@ -246,6 +250,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             runtime: Some(runtime),
             tydesc_emitter,
             rt_handle_param: None,
+            static_data_counter: 0,
         }
     }
 

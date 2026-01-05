@@ -195,8 +195,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         use cranelift_module::DataDescription;
 
         // Generate unique name for this data.
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let id = self.static_data_counter;
+        self.static_data_counter += 1;
         let name = format!("__string_bytes_{}", id);
 
         let data_id = self.module
