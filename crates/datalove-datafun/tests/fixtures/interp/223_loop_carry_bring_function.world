@@ -1,0 +1,20 @@
+----------
+scriptunit-fragment
+----------
+
+// Carry and bring in function context - factorial
+fun factorial(n: int): int
+    loop carry (acc = :int/@1, i = n)
+        if i <= :int/@1
+            break(acc)
+        end if
+        continue(acc * i, i - :int/@1)
+    end loop bring (result)
+    ret result
+end fun
+
+----------
+scriptunit-expr
+----------
+
+factorial(:int/@6)

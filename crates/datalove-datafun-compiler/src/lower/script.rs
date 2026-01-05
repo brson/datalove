@@ -347,25 +347,70 @@ fn lower_statement_for_script<'db>(
         Statement::Loop(loop_stmt) => {
             super::stmt::lower_loop(ctx, *loop_stmt, stmt_idx)
         }
-        Statement::Break(_) => {
-            let (_, break_target) = ctx.loop_stack.last()
+        Statement::Break(break_stmt) => {
+            let loop_ctx = ctx.loop_stack.last()
                 .ok_or(LowerError::BreakOutsideLoop)?;
-            let break_target = *break_target;
+            let break_target = loop_ctx.exit;
+            let carry_values = loop_ctx.carry_values.clone();
+
+            // Lower break values and build args for the exit block.
+            let break_values = break_stmt.values(ctx.db);
+            let mut break_args = Vec::new();
+            for value in break_values {
+                let value_id = super::expr::lower_expression(ctx, *value)?;
+                break_args.push(Operand::Value(value_id));
+            }
+
             // Emit drops for all scopes up to the loop.
             ctx.emit_before_break_drops(stmt_idx);
-            ctx.finish_block(Terminator::Goto(break_target));
+
+            // Drop carry values (block params) - they're not tracked by drop analysis.
+            for carry_value in carry_values {
+                ctx.emit(Instruction::Drop { operand: Operand::Value(carry_value) });
+            }
+
+            ctx.finish_block(Terminator::Goto { target: break_target, args: break_args });
             // Start unreachable block for code after break.
             let dead_block = ctx.fresh_block();
             ctx.start_block(dead_block);
             Ok(())
         }
-        Statement::Continue(_) => {
-            let (continue_target, _) = ctx.loop_stack.last()
+        Statement::Continue(continue_stmt) => {
+            let loop_ctx = ctx.loop_stack.last()
                 .ok_or(LowerError::ContinueOutsideLoop)?;
-            let continue_target = *continue_target;
+            let continue_target = loop_ctx.header;
+            let old_carry_values = loop_ctx.carry_values.clone();
+
+            // Lower continue values (new carry values) and build args.
+            let continue_values = continue_stmt.values(ctx.db);
+            let mut continue_args = Vec::new();
+            let has_new_values = !continue_values.is_empty();
+
+            if continue_values.is_empty() {
+                // No values provided - use current carry values.
+                for carry_value in &old_carry_values {
+                    continue_args.push(Operand::Value(*carry_value));
+                }
+            } else {
+                // Use provided values.
+                for value in continue_values {
+                    let value_id = super::expr::lower_expression(ctx, *value)?;
+                    continue_args.push(Operand::Value(value_id));
+                }
+            }
+
             // Emit drops for current loop iteration.
             ctx.emit_before_continue_drops(stmt_idx);
-            ctx.finish_block(Terminator::Goto(continue_target));
+
+            // If new values were provided, drop the OLD carry values.
+            // (If no values provided, the carry values are being reused.)
+            if has_new_values {
+                for carry_value in old_carry_values {
+                    ctx.emit(Instruction::Drop { operand: Operand::Value(carry_value) });
+                }
+            }
+
+            ctx.finish_block(Terminator::Goto { target: continue_target, args: continue_args });
             // Start unreachable block for code after continue.
             let dead_block = ctx.fresh_block();
             ctx.start_block(dead_block);

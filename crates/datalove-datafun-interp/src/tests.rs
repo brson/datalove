@@ -47,8 +47,7 @@ fn make_add_function() -> IrFunction {
         param_types: vec![IrType::I64, IrType::I64],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::BinOp {
                         dest: ValueId(0),
@@ -84,8 +83,7 @@ fn test_simple_function_call() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
                         dest: ValueId(0),
@@ -146,8 +144,7 @@ fn test_nested_function_calls() {
         param_types: vec![IrType::I64],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::BinOp {
                         dest: ValueId(0),
@@ -176,8 +173,7 @@ fn test_nested_function_calls() {
         param_types: vec![IrType::I64],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // First call: double(x)
                     Instruction::Call {
@@ -297,8 +293,7 @@ fn test_const_u8() {
         param_types: vec![],
         return_type: IrType::U8,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
                         dest: ValueId(0),
@@ -341,8 +336,7 @@ fn test_const_i32() {
         param_types: vec![],
         return_type: IrType::I32,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
                         dest: ValueId(0),
@@ -385,8 +379,7 @@ fn test_const_bool() {
         param_types: vec![],
         return_type: IrType::Bool,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
                         dest: ValueId(0),
@@ -422,8 +415,7 @@ fn test_binop_sub() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(100) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(42) },
@@ -457,8 +449,7 @@ fn test_binop_mul() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(7) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(6) },
@@ -492,8 +483,7 @@ fn test_binop_div() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(84) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(2) },
@@ -527,8 +517,7 @@ fn test_binop_mod() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(47) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(5) },
@@ -562,8 +551,7 @@ fn test_binop_eq() {
         param_types: vec![],
         return_type: IrType::Bool,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(42) },
@@ -597,8 +585,7 @@ fn test_binop_ne() {
         param_types: vec![],
         return_type: IrType::Bool,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(2) },
@@ -632,8 +619,7 @@ fn test_binop_lt() {
         param_types: vec![],
         return_type: IrType::Bool,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(2) },
@@ -667,8 +653,7 @@ fn test_binop_bitand() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(0b1100) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(0b1010) },
@@ -702,8 +687,7 @@ fn test_binop_bitor() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(0b1100) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(0b1010) },
@@ -737,8 +721,7 @@ fn test_binop_shl() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(4) },
@@ -777,8 +760,7 @@ fn test_binop_checked_no_overflow() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(20) },
@@ -814,8 +796,7 @@ fn test_binop_checked_overflow() {
         param_types: vec![],
         return_type: IrType::Bool,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(i64::MAX) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(1) },
@@ -854,8 +835,7 @@ fn test_unaryop_neg() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
                     Instruction::UnaryOp {
@@ -887,8 +867,7 @@ fn test_unaryop_not() {
         param_types: vec![],
         return_type: IrType::Bool,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::Bool(true) },
                     Instruction::UnaryOp {
@@ -920,8 +899,7 @@ fn test_unaryop_bitnot() {
         param_types: vec![],
         return_type: IrType::U32,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::U32(0) },
                     Instruction::UnaryOp {
@@ -957,8 +935,7 @@ fn test_slot_store_load() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // var x = 10
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
@@ -1001,8 +978,7 @@ fn test_slot_multiple_updates() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
                     Instruction::SlotStore { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(0)) },
@@ -1051,26 +1027,22 @@ fn test_branch_true() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::Bool(true) },
                 ],
                 terminator: Terminator::Branch {
                     cond: Operand::Value(ValueId(0)),
-                    then_block: BlockId(1),
-                    else_block: BlockId(2),
+                    then_block: BlockId(1), then_args: vec![], else_block: BlockId(2), else_args: vec![],
                 },
             },
-            IrBlock {
-                id: BlockId(1),
+            IrBlock { id: BlockId(1), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(1) },
                 ],
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(1))) },
             },
-            IrBlock {
-                id: BlockId(2),
+            IrBlock { id: BlockId(2), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(2), value: ConstValue::I64(2) },
                 ],
@@ -1097,26 +1069,22 @@ fn test_branch_false() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::Bool(false) },
                 ],
                 terminator: Terminator::Branch {
                     cond: Operand::Value(ValueId(0)),
-                    then_block: BlockId(1),
-                    else_block: BlockId(2),
+                    then_block: BlockId(1), then_args: vec![], else_block: BlockId(2), else_args: vec![],
                 },
             },
-            IrBlock {
-                id: BlockId(1),
+            IrBlock { id: BlockId(1), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(1) },
                 ],
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(1))) },
             },
-            IrBlock {
-                id: BlockId(2),
+            IrBlock { id: BlockId(2), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(2), value: ConstValue::I64(2) },
                 ],
@@ -1143,15 +1111,13 @@ fn test_goto_chain() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
                 ],
-                terminator: Terminator::Goto(BlockId(1)),
+                terminator: Terminator::Goto { target: BlockId(1), args: vec![] },
             },
-            IrBlock {
-                id: BlockId(1),
+            IrBlock { id: BlockId(1), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(2) },
                     Instruction::BinOp {
@@ -1161,10 +1127,9 @@ fn test_goto_chain() {
                         rhs: Operand::Value(ValueId(1)),
                     },
                 ],
-                terminator: Terminator::Goto(BlockId(2)),
+                terminator: Terminator::Goto { target: BlockId(2), args: vec![] },
             },
-            IrBlock {
-                id: BlockId(2),
+            IrBlock { id: BlockId(2), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(3), value: ConstValue::I64(3) },
                     Instruction::BinOp {
@@ -1202,8 +1167,7 @@ fn test_copy() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
                     Instruction::Copy { dest: ValueId(1), src: Operand::Value(ValueId(0)) },
@@ -1231,8 +1195,7 @@ fn test_move() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
                     Instruction::Move { dest: ValueId(1), src: Operand::Value(ValueId(0)) },
@@ -1267,8 +1230,7 @@ fn test_pack_tuple() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(20) },
@@ -1307,8 +1269,7 @@ fn test_unpack_tuple() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Create tuple (10, 20).
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
@@ -1363,8 +1324,7 @@ fn test_wrap_some_unwrap() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
                     Instruction::WrapSome {
@@ -1402,8 +1362,7 @@ fn test_is_some() {
         param_types: vec![],
         return_type: IrType::Bool,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
                     Instruction::WrapSome {
@@ -1441,8 +1400,7 @@ fn test_is_none() {
         param_types: vec![],
         return_type: IrType::Bool,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::WrapNone { dest: ValueId(0) },
                     Instruction::UnwrapOption {
@@ -1481,8 +1439,7 @@ fn test_option_branch() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
                     Instruction::WrapSome {
@@ -1497,19 +1454,16 @@ fn test_option_branch() {
                 ],
                 terminator: Terminator::Branch {
                     cond: Operand::Value(ValueId(3)),
-                    then_block: BlockId(1),
-                    else_block: BlockId(2),
+                    then_block: BlockId(1), then_args: vec![], else_block: BlockId(2), else_args: vec![],
                 },
             },
-            IrBlock {
-                id: BlockId(1),
+            IrBlock { id: BlockId(1), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(4), value: ConstValue::I64(1) },
                 ],
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(4))) },
             },
-            IrBlock {
-                id: BlockId(2),
+            IrBlock { id: BlockId(2), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(5), value: ConstValue::I64(0) },
                 ],
@@ -1542,8 +1496,7 @@ fn test_wrap_ok_unwrap() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
                     Instruction::WrapOk {
@@ -1582,8 +1535,7 @@ fn test_is_ok() {
         param_types: vec![],
         return_type: IrType::Bool,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
                     Instruction::WrapOk {
@@ -1622,8 +1574,7 @@ fn test_is_err() {
         param_types: vec![],
         return_type: IrType::Bool,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Create an error value for WrapErr.
                     // Error is represented as IrType::Error.
@@ -1669,8 +1620,7 @@ fn test_result_branch() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
                     Instruction::WrapOk {
@@ -1686,19 +1636,16 @@ fn test_result_branch() {
                 ],
                 terminator: Terminator::Branch {
                     cond: Operand::Value(ValueId(4)),
-                    then_block: BlockId(1),
-                    else_block: BlockId(2),
+                    then_block: BlockId(1), then_args: vec![], else_block: BlockId(2), else_args: vec![],
                 },
             },
-            IrBlock {
-                id: BlockId(1),
+            IrBlock { id: BlockId(1), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(5), value: ConstValue::I64(1) },
                 ],
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(5))) },
             },
-            IrBlock {
-                id: BlockId(2),
+            IrBlock { id: BlockId(2), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(6), value: ConstValue::I64(0) },
                 ],
@@ -1735,8 +1682,7 @@ fn test_pack_struct() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(20) },
@@ -1778,8 +1724,7 @@ fn test_unpack_struct() {
         param_types: vec![],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Create struct { x: 10, y: 20 }.
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
@@ -1826,8 +1771,7 @@ fn test_crossunit_external_value() {
     // Unit 0: let x = 42
     let unit0 = IrScriptUnit {
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
                         dest: ValueId(0),
@@ -1850,8 +1794,7 @@ fn test_crossunit_external_value() {
     // Unit 1: return x (from unit 0)
     let unit1 = IrScriptUnit {
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Copy external value to local for return.
                     Instruction::Copy {
@@ -1905,8 +1848,7 @@ fn test_crossunit_external_slot() {
     // Unit 0: var y = 10
     let unit0 = IrScriptUnit {
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
                         dest: ValueId(0),
@@ -1933,8 +1875,7 @@ fn test_crossunit_external_slot() {
     // Unit 1: return y (from unit 0's slot)
     let unit1 = IrScriptUnit {
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Copy external slot to local value for return.
                     Instruction::Copy {
@@ -1994,8 +1935,7 @@ fn test_crossunit_external_function() {
         param_types: vec![IrType::I64],
         return_type: IrType::I64,
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::BinOp {
                         dest: ValueId(0),
@@ -2017,8 +1957,7 @@ fn test_crossunit_external_function() {
 
     let unit0 = IrScriptUnit {
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![],
                 terminator: Terminator::UnitEnd { result: None },
             },
@@ -2036,8 +1975,7 @@ fn test_crossunit_external_function() {
     // Unit 1: return double(7)
     let unit1 = IrScriptUnit {
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
                         dest: ValueId(0),
@@ -2095,8 +2033,7 @@ fn test_crossunit_chain() {
     // Unit 0: let a = 5
     let unit0 = IrScriptUnit {
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
                         dest: ValueId(0),
@@ -2119,8 +2056,7 @@ fn test_crossunit_chain() {
     // Unit 1: let b = a + 3
     let unit1 = IrScriptUnit {
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Load a from unit 0.
                     Instruction::Copy {
@@ -2154,8 +2090,7 @@ fn test_crossunit_chain() {
     // Unit 2: return b
     let unit2 = IrScriptUnit {
         blocks: vec![
-            IrBlock {
-                id: BlockId(0),
+            IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Load b from unit 1.
                     Instruction::Copy {
@@ -2206,297 +2141,4 @@ fn test_crossunit_chain() {
     assert_eq!(result, 8);  // 5 + 3 = 8
 }
 
-// =========================================================================
-// Phi node tests
-// =========================================================================
-
-#[test]
-fn test_phi_true_branch() {
-    // Test: if true { 10 } else { 20 }
-    // Expected: 10
-    //
-    // block0:
-    //     v0 = const true
-    //     branch v0, block1, block2
-    // block1:
-    //     v1 = const 10
-    //     goto block3
-    // block2:
-    //     v2 = const 20
-    //     goto block3
-    // block3:
-    //     v3 = phi [(block1, v1), (block2, v2)]
-    //     return v3
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test_phi_true".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
-            IrBlock {
-                id: BlockId(0),
-                instructions: vec![
-                    Instruction::Const {
-                        dest: ValueId(0),
-                        value: ConstValue::Bool(true),
-                    },
-                ],
-                terminator: Terminator::Branch {
-                    cond: Operand::Value(ValueId(0)),
-                    then_block: BlockId(1),
-                    else_block: BlockId(2),
-                },
-            },
-            IrBlock {
-                id: BlockId(1),
-                instructions: vec![
-                    Instruction::Const {
-                        dest: ValueId(1),
-                        value: ConstValue::I64(10),
-                    },
-                ],
-                terminator: Terminator::Goto(BlockId(3)),
-            },
-            IrBlock {
-                id: BlockId(2),
-                instructions: vec![
-                    Instruction::Const {
-                        dest: ValueId(2),
-                        value: ConstValue::I64(20),
-                    },
-                ],
-                terminator: Terminator::Goto(BlockId(3)),
-            },
-            IrBlock {
-                id: BlockId(3),
-                instructions: vec![
-                    Instruction::Phi {
-                        dest: ValueId(3),
-                        incoming: vec![
-                            (BlockId(1), Operand::Value(ValueId(1))),
-                            (BlockId(2), Operand::Value(ValueId(2))),
-                        ],
-                    },
-                ],
-                terminator: Terminator::Return {
-                    value: Some(Operand::Value(ValueId(3))),
-                },
-            },
-        ],
-        value_count: 4,
-        slot_count: 0,
-        value_types: vec![IrType::Bool, IrType::I64, IrType::I64, IrType::I64],
-        slot_types: vec![],
-    };
-
-    let result = run_i64_function(&func);
-    assert_eq!(result, 10);
-}
-
-#[test]
-fn test_phi_false_branch() {
-    // Test: if false { 10 } else { 20 }
-    // Expected: 20
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test_phi_false".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
-            IrBlock {
-                id: BlockId(0),
-                instructions: vec![
-                    Instruction::Const {
-                        dest: ValueId(0),
-                        value: ConstValue::Bool(false),
-                    },
-                ],
-                terminator: Terminator::Branch {
-                    cond: Operand::Value(ValueId(0)),
-                    then_block: BlockId(1),
-                    else_block: BlockId(2),
-                },
-            },
-            IrBlock {
-                id: BlockId(1),
-                instructions: vec![
-                    Instruction::Const {
-                        dest: ValueId(1),
-                        value: ConstValue::I64(10),
-                    },
-                ],
-                terminator: Terminator::Goto(BlockId(3)),
-            },
-            IrBlock {
-                id: BlockId(2),
-                instructions: vec![
-                    Instruction::Const {
-                        dest: ValueId(2),
-                        value: ConstValue::I64(20),
-                    },
-                ],
-                terminator: Terminator::Goto(BlockId(3)),
-            },
-            IrBlock {
-                id: BlockId(3),
-                instructions: vec![
-                    Instruction::Phi {
-                        dest: ValueId(3),
-                        incoming: vec![
-                            (BlockId(1), Operand::Value(ValueId(1))),
-                            (BlockId(2), Operand::Value(ValueId(2))),
-                        ],
-                    },
-                ],
-                terminator: Terminator::Return {
-                    value: Some(Operand::Value(ValueId(3))),
-                },
-            },
-        ],
-        value_count: 4,
-        slot_count: 0,
-        value_types: vec![IrType::Bool, IrType::I64, IrType::I64, IrType::I64],
-        slot_types: vec![],
-    };
-
-    let result = run_i64_function(&func);
-    assert_eq!(result, 20);
-}
-
-#[test]
-fn test_phi_nested_if() {
-    // Test: if true { if false { 1 } else { 2 } } else { 3 }
-    // Expected: 2
-    //
-    // block0:
-    //     v0 = const true
-    //     branch v0, block1, block4
-    // block1:
-    //     v1 = const false
-    //     branch v1, block2, block3
-    // block2:
-    //     v2 = const 1
-    //     goto block5
-    // block3:
-    //     v3 = const 2
-    //     goto block5
-    // block4:
-    //     v4 = const 3
-    //     goto block6
-    // block5:
-    //     v5 = phi [(block2, v2), (block3, v3)]
-    //     goto block6
-    // block6:
-    //     v6 = phi [(block5, v5), (block4, v4)]
-    //     return v6
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test_phi_nested".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
-            IrBlock {
-                id: BlockId(0),
-                instructions: vec![
-                    Instruction::Const {
-                        dest: ValueId(0),
-                        value: ConstValue::Bool(true),
-                    },
-                ],
-                terminator: Terminator::Branch {
-                    cond: Operand::Value(ValueId(0)),
-                    then_block: BlockId(1),
-                    else_block: BlockId(4),
-                },
-            },
-            IrBlock {
-                id: BlockId(1),
-                instructions: vec![
-                    Instruction::Const {
-                        dest: ValueId(1),
-                        value: ConstValue::Bool(false),
-                    },
-                ],
-                terminator: Terminator::Branch {
-                    cond: Operand::Value(ValueId(1)),
-                    then_block: BlockId(2),
-                    else_block: BlockId(3),
-                },
-            },
-            IrBlock {
-                id: BlockId(2),
-                instructions: vec![
-                    Instruction::Const {
-                        dest: ValueId(2),
-                        value: ConstValue::I64(1),
-                    },
-                ],
-                terminator: Terminator::Goto(BlockId(5)),
-            },
-            IrBlock {
-                id: BlockId(3),
-                instructions: vec![
-                    Instruction::Const {
-                        dest: ValueId(3),
-                        value: ConstValue::I64(2),
-                    },
-                ],
-                terminator: Terminator::Goto(BlockId(5)),
-            },
-            IrBlock {
-                id: BlockId(4),
-                instructions: vec![
-                    Instruction::Const {
-                        dest: ValueId(4),
-                        value: ConstValue::I64(3),
-                    },
-                ],
-                terminator: Terminator::Goto(BlockId(6)),
-            },
-            IrBlock {
-                id: BlockId(5),
-                instructions: vec![
-                    Instruction::Phi {
-                        dest: ValueId(5),
-                        incoming: vec![
-                            (BlockId(2), Operand::Value(ValueId(2))),
-                            (BlockId(3), Operand::Value(ValueId(3))),
-                        ],
-                    },
-                ],
-                terminator: Terminator::Goto(BlockId(6)),
-            },
-            IrBlock {
-                id: BlockId(6),
-                instructions: vec![
-                    Instruction::Phi {
-                        dest: ValueId(6),
-                        incoming: vec![
-                            (BlockId(5), Operand::Value(ValueId(5))),
-                            (BlockId(4), Operand::Value(ValueId(4))),
-                        ],
-                    },
-                ],
-                terminator: Terminator::Return {
-                    value: Some(Operand::Value(ValueId(6))),
-                },
-            },
-        ],
-        value_count: 7,
-        slot_count: 0,
-        value_types: vec![
-            IrType::Bool, IrType::Bool,
-            IrType::I64, IrType::I64, IrType::I64, IrType::I64, IrType::I64,
-        ],
-        slot_types: vec![],
-    };
-
-    let result = run_i64_function(&func);
-    assert_eq!(result, 2);
-}
+// NOTE: Phi tests removed - Phi instruction has been replaced by block parameters.

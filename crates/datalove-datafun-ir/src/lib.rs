@@ -659,12 +659,6 @@ pub enum Instruction {
     /// Load value from mutable slot.
     SlotLoad { dest: ValueId, slot: SlotId },
 
-    /// Phi node - merge values at control flow join.
-    Phi {
-        dest: ValueId,
-        incoming: Vec<(BlockId, Operand)>,
-    },
-
     /// Drop a value (run destructor).
     Drop { operand: Operand },
 
@@ -678,14 +672,19 @@ pub enum Instruction {
 /// Block terminator - how control leaves a basic block.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Terminator {
-    /// Unconditional jump.
-    Goto(BlockId),
+    /// Unconditional jump with block arguments.
+    Goto {
+        target: BlockId,
+        args: Vec<Operand>,
+    },
 
-    /// Conditional branch.
+    /// Conditional branch with block arguments.
     Branch {
         cond: Operand,
         then_block: BlockId,
+        then_args: Vec<Operand>,
         else_block: BlockId,
+        else_args: Vec<Operand>,
     },
 
     /// Return from function.
@@ -702,6 +701,9 @@ pub enum Terminator {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IrBlock {
     pub id: BlockId,
+    /// Block parameters (SSA values defined at block entry).
+    /// Used for loop carry/bring values instead of Phi nodes.
+    pub params: Vec<ValueId>,
     pub instructions: Vec<Instruction>,
     pub terminator: Terminator,
 }

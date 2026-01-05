@@ -1,0 +1,32 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "DatalitError(\"bring binding requires type hint\")",
+                    "BreakArityMismatch { expected: 0, actual: 1 }",
+                    "CannotSynthesize",
+                ],
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Error",
+                message: "function not found: factorial",
+            ),
+            output: "",
+        ),
+    ],
+)

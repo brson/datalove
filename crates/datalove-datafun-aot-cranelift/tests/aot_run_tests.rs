@@ -13,6 +13,7 @@ fn create_debuglog_i32_script(value: i32) -> IrScriptUnit {
     IrScriptUnit {
         blocks: vec![IrBlock {
             id: BlockId(0),
+            params: vec![],
             instructions: vec![
                 Instruction::Const {
                     dest: ValueId(0),
@@ -121,6 +122,7 @@ fn test_link_and_run_debuglog_bool_true() {
     let unit = IrScriptUnit {
         blocks: vec![IrBlock {
             id: BlockId(0),
+            params: vec![],
             instructions: vec![
                 Instruction::Const {
                     dest: ValueId(0),
@@ -197,6 +199,7 @@ fn test_link_and_run_multiple_debuglogs() {
     let unit = IrScriptUnit {
         blocks: vec![IrBlock {
             id: BlockId(0),
+            params: vec![],
             instructions: vec![
                 Instruction::Const {
                     dest: ValueId(0),

@@ -6,6 +6,7 @@
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun};
 use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode};
+use crate::ir_ext::IrTypeExt;
 use super::context::LowerCtx;
 use super::expr::lower_expression;
 use super::LowerError;
@@ -107,25 +108,70 @@ pub fn lower_statement_indexed<'db>(
         Statement::Loop(loop_stmt) => {
             lower_loop(ctx, *loop_stmt, stmt_idx)
         }
-        Statement::Break(_) => {
-            let (_, break_target) = ctx.loop_stack.last()
+        Statement::Break(break_stmt) => {
+            let loop_ctx = ctx.loop_stack.last()
                 .ok_or(LowerError::BreakOutsideLoop)?;
-            let break_target = *break_target;
+            let break_target = loop_ctx.exit;
+            let carry_values = loop_ctx.carry_values.clone();
+
+            // Lower break values and build args for the exit block.
+            let break_values = break_stmt.values(ctx.db);
+            let mut break_args = Vec::new();
+            for value in break_values {
+                let value_id = lower_expression(ctx, *value)?;
+                break_args.push(Operand::Value(value_id));
+            }
+
             // Emit drops for all scopes up to the loop.
             ctx.emit_before_break_drops(stmt_idx);
-            ctx.finish_block(Terminator::Goto(break_target));
+
+            // Drop carry values (block params) - they're not tracked by drop analysis.
+            for carry_value in carry_values {
+                ctx.emit(Instruction::Drop { operand: Operand::Value(carry_value) });
+            }
+
+            ctx.finish_block(Terminator::Goto { target: break_target, args: break_args });
             // Start unreachable block for code after break.
             let dead_block = ctx.fresh_block();
             ctx.start_unreachable_block(dead_block);
             Ok(())
         }
-        Statement::Continue(_) => {
-            let (continue_target, _) = ctx.loop_stack.last()
+        Statement::Continue(continue_stmt) => {
+            let loop_ctx = ctx.loop_stack.last()
                 .ok_or(LowerError::ContinueOutsideLoop)?;
-            let continue_target = *continue_target;
+            let continue_target = loop_ctx.header;
+            let old_carry_values = loop_ctx.carry_values.clone();
+
+            // Lower continue values (new carry values) and build args.
+            let continue_values = continue_stmt.values(ctx.db);
+            let mut continue_args = Vec::new();
+            let has_new_values = !continue_values.is_empty();
+
+            if continue_values.is_empty() {
+                // No values provided - use current carry values.
+                for carry_value in &old_carry_values {
+                    continue_args.push(Operand::Value(*carry_value));
+                }
+            } else {
+                // Use provided values.
+                for value in continue_values {
+                    let value_id = lower_expression(ctx, *value)?;
+                    continue_args.push(Operand::Value(value_id));
+                }
+            }
+
             // Emit drops for current loop iteration.
             ctx.emit_before_continue_drops(stmt_idx);
-            ctx.finish_block(Terminator::Goto(continue_target));
+
+            // If new values were provided, drop the OLD carry values.
+            // (If no values provided, the carry values are being reused.)
+            if has_new_values {
+                for carry_value in old_carry_values {
+                    ctx.emit(Instruction::Drop { operand: Operand::Value(carry_value) });
+                }
+            }
+
+            ctx.finish_block(Terminator::Goto { target: continue_target, args: continue_args });
             // Start unreachable block for code after continue.
             let dead_block = ctx.fresh_block();
             ctx.start_unreachable_block(dead_block);
@@ -225,7 +271,9 @@ fn lower_if_bool<'db>(
     ctx.finish_block(Terminator::Branch {
         cond: Operand::Value(cond_id),
         then_block,
+        then_args: Vec::new(),
         else_block,
+        else_args: Vec::new(),
     });
 
     // Lower then branch.
@@ -238,7 +286,7 @@ fn lower_if_bool<'db>(
     let then_terminated = ctx.is_unreachable();
     if !then_terminated {
         ctx.emit_then_branch_drops(stmt_idx);
-        ctx.finish_block(Terminator::Goto(merge_block));
+        ctx.finish_block(Terminator::Goto { target: merge_block, args: Vec::new() });
     }
 
     // Lower else branch.
@@ -252,7 +300,7 @@ fn lower_if_bool<'db>(
     let else_terminated = ctx.is_unreachable();
     if !else_terminated {
         ctx.emit_else_branch_drops(stmt_idx);
-        ctx.finish_block(Terminator::Goto(merge_block));
+        ctx.finish_block(Terminator::Goto { target: merge_block, args: Vec::new() });
     }
 
     // Start merge block. If both branches terminated, it's unreachable.
@@ -297,7 +345,9 @@ fn lower_if_option<'db>(
     ctx.finish_block(Terminator::Branch {
         cond: Operand::Value(is_some),
         then_block,
+        then_args: Vec::new(),
         else_block,
+        else_args: Vec::new(),
     });
 
     // === Then branch: Some case ===
@@ -326,7 +376,7 @@ fn lower_if_option<'db>(
     let then_terminated = ctx.is_unreachable();
     if !then_terminated {
         ctx.emit_then_branch_drops(stmt_idx);
-        ctx.finish_block(Terminator::Goto(merge_block));
+        ctx.finish_block(Terminator::Goto { target: merge_block, args: Vec::new() });
     }
 
     // === Else branch: None case ===
@@ -344,7 +394,7 @@ fn lower_if_option<'db>(
     let else_terminated = ctx.is_unreachable();
     if !else_terminated {
         ctx.emit_else_branch_drops(stmt_idx);
-        ctx.finish_block(Terminator::Goto(merge_block));
+        ctx.finish_block(Terminator::Goto { target: merge_block, args: Vec::new() });
     }
 
     // Start merge block. If both branches terminated, it's unreachable.
@@ -393,7 +443,9 @@ fn lower_if_result<'db>(
     ctx.finish_block(Terminator::Branch {
         cond: Operand::Value(is_ok),
         then_block,
+        then_args: Vec::new(),
         else_block,
+        else_args: Vec::new(),
     });
 
     // === Then branch: Ok case ===
@@ -422,7 +474,7 @@ fn lower_if_result<'db>(
     let then_terminated = ctx.is_unreachable();
     if !then_terminated {
         ctx.emit_then_branch_drops(stmt_idx);
-        ctx.finish_block(Terminator::Goto(merge_block));
+        ctx.finish_block(Terminator::Goto { target: merge_block, args: Vec::new() });
     }
 
     // === Else branch: Error case ===
@@ -453,7 +505,7 @@ fn lower_if_result<'db>(
     let else_terminated = ctx.is_unreachable();
     if !else_terminated {
         ctx.emit_else_branch_drops(stmt_idx);
-        ctx.finish_block(Terminator::Goto(merge_block));
+        ctx.finish_block(Terminator::Goto { target: merge_block, args: Vec::new() });
     }
 
     // Start merge block. If both branches terminated, it's unreachable.
@@ -465,37 +517,111 @@ fn lower_if_result<'db>(
     Ok(())
 }
 
-/// Lower a loop statement.
+/// Lower a loop statement with optional carry/bring.
 pub fn lower_loop<'db>(
     ctx: &mut LowerCtx<'db>,
     loop_stmt: ast::StmtLoop<'db>,
     stmt_idx: usize,
 ) -> Result<(), LowerError> {
+    use super::context::LoopLowerContext;
+
+    let carries = loop_stmt.carries(ctx.db);
+    let brings = loop_stmt.brings(ctx.db);
+
     let loop_header = ctx.fresh_block();
     let loop_exit = ctx.fresh_block();
 
-    // Jump to loop header.
-    ctx.finish_block(Terminator::Goto(loop_header));
+    // Lower carry init expressions and collect types.
+    let mut carry_init_values = Vec::new();
+    let mut carry_types = Vec::new();
+    for carry in carries {
+        let init = carry.init(ctx.db);
+        let value_id = lower_expression(ctx, init)?;
+        let ty = ctx.expr_type(init);
+        carry_init_values.push(Operand::Value(value_id));
+        carry_types.push(ty);
+    }
+
+    // Get bring types from type hints.
+    let mut bring_types = Vec::new();
+    for bring in brings {
+        let ty = if let Some(type_hint) = bring.type_hint(ctx.db) {
+            IrType::from_type_hint(ctx.db, &type_hint)
+        } else {
+            // Should be caught by type checker.
+            IrType::Unit
+        };
+        bring_types.push(ty);
+    }
+
+    // Jump to loop header with carry init values.
+    ctx.finish_block(Terminator::Goto {
+        target: loop_header,
+        args: carry_init_values,
+    });
+
+    // Start loop header block with params for carries.
+    ctx.start_block(loop_header);
+    let mut carry_param_values = Vec::new();
+    for (i, ty) in carry_types.iter().enumerate() {
+        let param_value = ctx.fresh_value(ty.clone());
+        ctx.current_block_params.push(param_value);
+        carry_param_values.push(param_value);
+
+        // Bind carry to variable name.
+        let carry_name = carries[i].name(ctx.db).text(ctx.db).to_string();
+        ctx.bind_var(&carry_name, Operand::Value(param_value));
+    }
+
+    // Allocate bring values for the exit block params.
+    let mut bring_param_values = Vec::new();
+    for ty in &bring_types {
+        let bring_value = ctx.fresh_value(ty.clone());
+        bring_param_values.push(bring_value);
+    }
 
     // Push loop context for break/continue.
-    ctx.loop_stack.push((loop_header, loop_exit));
+    ctx.loop_stack.push(LoopLowerContext {
+        header: loop_header,
+        exit: loop_exit,
+        carry_values: carry_param_values.clone(),
+        carry_types: carry_types.clone(),
+        bring_values: bring_param_values.clone(),
+        bring_types: bring_types.clone(),
+    });
 
     // Lower loop body.
-    ctx.start_block(loop_header);
     for stmt in loop_stmt.body(ctx.db) {
         lower_statement(ctx, stmt)?;
     }
 
-    // Emit drops before looping back.
+    // Emit drops before looping back (excludes carries).
     ctx.emit_loop_body_end_drops(stmt_idx);
 
-    // Loop back to header.
-    ctx.finish_block(Terminator::Goto(loop_header));
+    // Loop back to header with current carry values.
+    // For implicit continue at body end, use the same values.
+    let continue_args: Vec<Operand> = carry_param_values.iter()
+        .map(|v| Operand::Value(*v))
+        .collect();
+    ctx.finish_block(Terminator::Goto {
+        target: loop_header,
+        args: continue_args,
+    });
 
     // Pop loop context.
     ctx.loop_stack.pop();
 
-    // Continue after loop.
+    // Start loop exit block with params for brings.
     ctx.start_block(loop_exit);
+    for bring_value in &bring_param_values {
+        ctx.current_block_params.push(*bring_value);
+    }
+
+    // Bind bring names in scope after the loop.
+    for (i, bring) in brings.iter().enumerate() {
+        let bring_name = bring.name(ctx.db).text(ctx.db).to_string();
+        ctx.bind_var(&bring_name, Operand::Value(bring_param_values[i]));
+    }
+
     Ok(())
 }

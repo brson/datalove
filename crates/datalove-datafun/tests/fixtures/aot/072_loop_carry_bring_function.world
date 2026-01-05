@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+// Carry and bring in function context - factorial
+fun factorial(n: u32): u32
+    loop carry (acc: u32 = @1, i = n)
+        if i <= @1
+            break(acc)
+        end if
+        continue(acc * i, i - @1)
+    end loop bring (result: u32)
+    ret result
+end fun
+
+debuglog factorial(@6)

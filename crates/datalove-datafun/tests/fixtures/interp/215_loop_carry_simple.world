@@ -1,0 +1,19 @@
+----------
+scriptunit-fragment
+----------
+
+// Simple carry - count up using carry binding
+var result = :int/@0
+loop carry (i = :int/@0)
+    set result = result + i
+    if i == :int/@4
+        break
+    end if
+    continue(i + :int/@1)
+end loop
+
+----------
+scriptunit-expr
+----------
+
+result

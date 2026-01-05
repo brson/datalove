@@ -1,0 +1,32 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "ParseError",
+                errors: [
+                    "unexpected token after expression",
+                ],
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "UnresolvedName(\"find_threshold\")",
+                ],
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

@@ -16,6 +16,23 @@ use crate::ir_ext::IrTypeExt;
 use crate::drop_analysis::{BindingId, DropSchedule, BindingInfo};
 use super::LowerError;
 
+/// Context for a single loop during lowering.
+#[derive(Clone, Debug)]
+pub struct LoopLowerContext {
+    /// Header block (target for continue).
+    pub header: BlockId,
+    /// Exit block (target for break).
+    pub exit: BlockId,
+    /// Current iteration's carry ValueIds (updated by continue).
+    pub carry_values: Vec<ValueId>,
+    /// Types of carry values.
+    pub carry_types: Vec<IrType>,
+    /// ValueIds for bring bindings in exit block.
+    pub bring_values: Vec<ValueId>,
+    /// Types of bring values.
+    pub bring_types: Vec<IrType>,
+}
+
 /// Context for lowering script units.
 ///
 /// Tracks bindings available from previous units.
@@ -111,6 +128,8 @@ pub struct LowerCtx<'db> {
     pub(super) blocks: Vec<IrBlock>,
     /// Current block being built.
     pub(super) current_block: BlockId,
+    /// Block parameters for current block.
+    pub(super) current_block_params: Vec<ValueId>,
     /// Instructions for current block.
     pub(super) current_instructions: Vec<Instruction>,
     /// Mapping from variable names to their operands.
@@ -132,8 +151,8 @@ pub struct LowerCtx<'db> {
     pub(super) value_types: Vec<IrType>,
     /// Type for each SlotId.
     pub(super) slot_types: Vec<IrType>,
-    /// Loop context stack: (continue_target, break_target) for each nested loop.
-    pub(super) loop_stack: Vec<(BlockId, BlockId)>,
+    /// Loop context stack for each nested loop.
+    pub(super) loop_stack: Vec<LoopLowerContext>,
     /// Return type for current function/script (for try operators).
     pub(super) return_type: Option<IrType>,
     /// Whether we're in a script unit (vs function).
@@ -180,6 +199,7 @@ impl<'db> LowerCtx<'db> {
             next_block: 1, // Block 0 is entry
             blocks: Vec::new(),
             current_block: BlockId(0),
+            current_block_params: Vec::new(),
             current_instructions: Vec::new(),
             variables: HashMap::new(),
             exports: Vec::new(),
@@ -223,6 +243,7 @@ impl<'db> LowerCtx<'db> {
             next_block: 1,
             blocks: Vec::new(),
             current_block: BlockId(0),
+            current_block_params: Vec::new(),
             current_instructions: Vec::new(),
             variables: HashMap::new(),
             exports: Vec::new(),
@@ -304,6 +325,7 @@ impl<'db> LowerCtx<'db> {
             next_block: 1,
             blocks: Vec::new(),
             current_block: BlockId(0),
+            current_block_params: Vec::new(),
             current_instructions: Vec::new(),
             variables,
             exports: Vec::new(),
@@ -428,6 +450,7 @@ impl<'db> LowerCtx<'db> {
     pub fn finish_block(&mut self, terminator: Terminator) -> BlockId {
         let block = IrBlock {
             id: self.current_block,
+            params: std::mem::take(&mut self.current_block_params),
             instructions: std::mem::take(&mut self.current_instructions),
             terminator,
         };

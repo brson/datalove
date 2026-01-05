@@ -302,9 +302,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             self.frame_slot = Some(builder.create_sized_stack_slot(slot_data));
         }
 
-        // Create blocks.
+        // Create blocks with their parameters.
         for block in &self.func.blocks {
             let cl_block = builder.create_block();
+
+            // Add block params for IR block params.
+            for &param_value_id in &block.params {
+                let param_ty = self.func.value_types.get(param_value_id.0 as usize)
+                    .cloned()
+                    .unwrap_or(IrType::Unit);
+                let cl_ty = match types::ir_type_to_cranelift(&param_ty) {
+                    CraneliftRepr::Scalar(t) => t,
+                    CraneliftRepr::Aggregate(_) => PTR_TYPE,
+                };
+                builder.append_block_param(cl_block, cl_ty);
+            }
+
             self.blocks.insert(block.id, cl_block);
         }
 
@@ -336,6 +349,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // Switch to block (entry already switched).
             if ir_block.id != BlockId(0) {
                 builder.switch_to_block(cl_block);
+
+                // Map block params to IR ValueIds.
+                // The block params were added when creating the block.
+                let cl_params = builder.block_params(cl_block).to_vec();
+                for (ir_value_id, &cl_param) in ir_block.params.iter().zip(cl_params.iter()) {
+                    self.values.insert(*ir_value_id, cl_param);
+                }
+
                 // Seal after all predecessors are known (for now, seal immediately).
                 builder.seal_block(cl_block);
             }
@@ -733,9 +754,7 @@ mod tests {
             param_types: vec![],
             return_type: IrType::I32,
             blocks: vec![
-                IrBlock {
-                    id: BlockId(0),
-                    instructions: vec![
+                IrBlock { id: BlockId(0), params: vec![], instructions: vec![
                         Instruction::Const {
                             dest: ValueId(0),
                             value: ConstValue::I32(42),
@@ -771,9 +790,7 @@ mod tests {
             param_types: vec![],
             return_type: IrType::I32,
             blocks: vec![
-                IrBlock {
-                    id: BlockId(0),
-                    instructions: vec![
+                IrBlock { id: BlockId(0), params: vec![], instructions: vec![
                         Instruction::Const {
                             dest: ValueId(0),
                             value: ConstValue::I32(10),
@@ -819,9 +836,7 @@ mod tests {
             param_types: vec![],
             return_type: IrType::Bool,
             blocks: vec![
-                IrBlock {
-                    id: BlockId(0),
-                    instructions: vec![
+                IrBlock { id: BlockId(0), params: vec![], instructions: vec![
                         Instruction::Const {
                             dest: ValueId(0),
                             value: ConstValue::I32(10),
@@ -867,9 +882,7 @@ mod tests {
             param_types: vec![],
             return_type: IrType::I32,
             blocks: vec![
-                IrBlock {
-                    id: BlockId(0),
-                    instructions: vec![
+                IrBlock { id: BlockId(0), params: vec![], instructions: vec![
                         Instruction::Const {
                             dest: ValueId(0),
                             value: ConstValue::I32(42),
@@ -915,6 +928,7 @@ mod tests {
             blocks: vec![
                 IrBlock {
                     id: BlockId(0),
+                    params: vec![],
                     instructions: vec![
                         Instruction::Const {
                             dest: ValueId(0),
@@ -924,11 +938,14 @@ mod tests {
                     terminator: Terminator::Branch {
                         cond: Operand::Value(ValueId(0)),
                         then_block: BlockId(1),
+                        then_args: vec![],
                         else_block: BlockId(2),
+                        else_args: vec![],
                     },
                 },
                 IrBlock {
                     id: BlockId(1),
+                    params: vec![],
                     instructions: vec![
                         Instruction::Const {
                             dest: ValueId(1),
@@ -941,6 +958,7 @@ mod tests {
                 },
                 IrBlock {
                     id: BlockId(2),
+                    params: vec![],
                     instructions: vec![
                         Instruction::Const {
                             dest: ValueId(2),

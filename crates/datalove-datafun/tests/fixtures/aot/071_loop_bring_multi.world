@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Multiple bring bindings
+var x: u32 = @0
+loop
+    set x = x + @1
+    if x == @5
+        break(x, x * x)
+    end if
+end loop bring (val: u32, squared: u32)
+debuglog val + squared

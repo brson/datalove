@@ -395,30 +395,170 @@ pub fn check_statement<'db>(
         }
 
         Statement::Loop(stmt) => {
-            // Increment loop depth for body.
-            ctx.loop_depth += 1;
+            let carries = stmt.carries(db);
+            let brings = stmt.brings(db);
+            let body = stmt.body(db);
+
+            // Save variables that might be shadowed.
+            let saved_variables = ctx.variables.clone();
+
+            // Type check carry init expressions and bind carry names.
+            let mut carry_types = Vec::new();
+            for carry in carries {
+                let carry_name = carry.name(db);
+                let init = carry.init(db);
+                let carry_type_hint = carry.type_hint(db);
+
+                let var_type = match carry_type_hint {
+                    Some(type_hint) => {
+                        match convert_type_hint(db, type_hint) {
+                            Ok(expected_type) => {
+                                match check_expr(ctx, init, expected_type) {
+                                    Ok(()) => Some(expected_type),
+                                    Err(e) => {
+                                        ctx.add_error(e);
+                                        None
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                ctx.add_error(e);
+                                None
+                            }
+                        }
+                    }
+                    None => {
+                        match ctx.synthesize_expr(init) {
+                            Ok(ty) => Some(ty),
+                            Err(e) => {
+                                ctx.add_error(e);
+                                None
+                            }
+                        }
+                    }
+                };
+
+                if let Some(ty) = var_type {
+                    carry_types.push(ty);
+                    ctx.add_variable(carry_name, ty);
+                }
+            }
+
+            // Process bring bindings to get expected types for break.
+            let mut bring_types = Vec::new();
+            for bring in brings {
+                let bring_type_hint = bring.type_hint(db);
+
+                let bring_ty = match bring_type_hint {
+                    Some(type_hint) => {
+                        match convert_type_hint(db, type_hint) {
+                            Ok(ty) => Some(ty),
+                            Err(e) => {
+                                ctx.add_error(e);
+                                None
+                            }
+                        }
+                    }
+                    None => {
+                        // No type hint for bring - will be inferred from break values.
+                        // For now, we can't infer without seeing break values first.
+                        // Type checking for brings without type hints would need multiple passes.
+                        // For Phase 2, require type hints on bring bindings.
+                        ctx.add_error(TypeError::DatalitError(
+                            "bring binding requires type hint".to_string()
+                        ));
+                        None
+                    }
+                };
+
+                if let Some(ty) = bring_ty {
+                    bring_types.push(ty);
+                }
+            }
+
+            // Push loop context for break/continue validation.
+            ctx.loop_contexts.push(crate::context::LoopContext {
+                carry_types,
+                bring_types: bring_types.clone(),
+            });
 
             // Type check loop body.
-            for body_stmt in stmt.body(db) {
+            for body_stmt in body {
                 check_statement(ctx, body_stmt);
             }
 
-            // Restore loop depth.
-            ctx.loop_depth -= 1;
+            // Pop loop context.
+            ctx.loop_contexts.pop();
+
+            // Bind bring names in outer scope after the loop.
+            for (bring, bring_ty) in brings.iter().zip(bring_types.iter()) {
+                ctx.add_variable(bring.name(db), *bring_ty);
+            }
+
+            // Restore shadowed variables (but keep bring bindings).
+            for (name, ty) in saved_variables {
+                // Don't restore if it's a bring binding.
+                let is_bring = brings.iter().any(|b| b.name(db) == name);
+                if !is_bring {
+                    ctx.variables.insert(name, ty);
+                }
+            }
         }
 
-        Statement::Break(_) => {
-            if ctx.loop_depth == 0 {
-                ctx.add_error(TypeError::BreakOutsideLoop);
+        Statement::Break(stmt) => {
+            let values = stmt.values(db);
+
+            // Clone bring_types to avoid borrow conflicts.
+            let bring_types = ctx.loop_contexts.last().map(|lc| lc.bring_types.clone());
+
+            match bring_types {
+                None => {
+                    ctx.add_error(TypeError::BreakOutsideLoop);
+                }
+                Some(bring_types) => {
+                    let expected = bring_types.len();
+                    let actual = values.len();
+
+                    if expected != actual {
+                        ctx.add_error(TypeError::BreakArityMismatch { expected, actual });
+                    } else {
+                        // Type check each break value against the corresponding bring type.
+                        for (value, expected_ty) in values.iter().zip(bring_types.iter()) {
+                            if let Err(e) = check_expr(ctx, *value, *expected_ty) {
+                                ctx.add_error(e);
+                            }
+                        }
+                    }
+                }
             }
-            // Break is valid - no further type checking needed.
         }
 
-        Statement::Continue(_) => {
-            if ctx.loop_depth == 0 {
-                ctx.add_error(TypeError::ContinueOutsideLoop);
+        Statement::Continue(stmt) => {
+            let values = stmt.values(db);
+
+            // Clone carry_types to avoid borrow conflicts.
+            let carry_types = ctx.loop_contexts.last().map(|lc| lc.carry_types.clone());
+
+            match carry_types {
+                None => {
+                    ctx.add_error(TypeError::ContinueOutsideLoop);
+                }
+                Some(carry_types) => {
+                    let expected = carry_types.len();
+                    let actual = values.len();
+
+                    if expected != actual {
+                        ctx.add_error(TypeError::ContinueArityMismatch { expected, actual });
+                    } else {
+                        // Type check each continue value against the corresponding carry type.
+                        for (value, expected_ty) in values.iter().zip(carry_types.iter()) {
+                            if let Err(e) = check_expr(ctx, *value, *expected_ty) {
+                                ctx.add_error(e);
+                            }
+                        }
+                    }
+                }
             }
-            // Continue is valid - no further type checking needed.
         }
 
         Statement::DebugLog(stmt) => {

@@ -18,15 +18,26 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         term: &Terminator,
     ) -> Result<(), AotError> {
         match term {
-            Terminator::Goto(target) => {
+            Terminator::Goto { target, args } => {
                 let block = self.blocks[target];
-                builder.ins().jump(block, &[]);
+                // Collect block argument values.
+                let cl_args: Vec<_> = args.iter()
+                    .map(|op| self.get_operand_value(builder, op))
+                    .collect::<Result<_, _>>()?;
+                builder.ins().jump(block, &cl_args);
             }
-            Terminator::Branch { cond, then_block, else_block } => {
+            Terminator::Branch { cond, then_block, then_args, else_block, else_args } => {
                 let cond_val = self.get_operand_value(builder, cond)?;
                 let then_blk = self.blocks[then_block];
                 let else_blk = self.blocks[else_block];
-                builder.ins().brif(cond_val, then_blk, &[], else_blk, &[]);
+                // Collect block argument values for each branch.
+                let cl_then_args: Vec<_> = then_args.iter()
+                    .map(|op| self.get_operand_value(builder, op))
+                    .collect::<Result<_, _>>()?;
+                let cl_else_args: Vec<_> = else_args.iter()
+                    .map(|op| self.get_operand_value(builder, op))
+                    .collect::<Result<_, _>>()?;
+                builder.ins().brif(cond_val, then_blk, &cl_then_args, else_blk, &cl_else_args);
             }
             Terminator::Return { value } => {
                 if let Some(val_op) = value {

@@ -1,0 +1,20 @@
+AotAnalysis(
+    sections: [
+        AotSectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "TypeMismatch { expected: \"u32\", actual: \"int\" }",
+                    "TypeMismatch { expected: \"u32\", actual: \"int\" }",
+                    "CannotSynthesize",
+                ],
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

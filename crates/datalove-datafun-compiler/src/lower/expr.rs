@@ -524,7 +524,9 @@ fn lower_optional_binop<'db>(
     ctx.finish_block(Terminator::Branch {
         cond: Operand::Value(overflow),
         then_block: early_return_block,
+        then_args: Vec::new(),
         else_block: continue_block,
+        else_args: Vec::new(),
     });
 
     // Early return block: wrap None and return.
@@ -581,7 +583,9 @@ fn lower_checked_result_binop<'db>(
     ctx.finish_block(Terminator::Branch {
         cond: Operand::Value(overflow),
         then_block: early_return_block,
+        then_args: Vec::new(),
         else_block: continue_block,
+        else_args: Vec::new(),
     });
 
     // Early return block: create error and return Err.
@@ -655,7 +659,9 @@ fn lower_optional_unaryop<'db>(
     ctx.finish_block(Terminator::Branch {
         cond: Operand::Value(overflow),
         then_block: early_return_block,
+        then_args: Vec::new(),
         else_block: continue_block,
+        else_args: Vec::new(),
     });
 
     // Early return block: wrap None and return.
@@ -710,7 +716,9 @@ fn lower_checked_result_unaryop<'db>(
     ctx.finish_block(Terminator::Branch {
         cond: Operand::Value(overflow),
         then_block: early_return_block,
+        then_args: Vec::new(),
         else_block: continue_block,
+        else_args: Vec::new(),
     });
 
     // Early return block: create error and return Err.
@@ -778,7 +786,9 @@ fn lower_try_option<'db>(
     ctx.finish_block(Terminator::Branch {
         cond: Operand::Value(is_some),
         then_block: continue_block,
+        then_args: Vec::new(),
         else_block: early_return_block,
+        else_args: Vec::new(),
     });
 
     // Early return block: wrap None and return.
@@ -829,7 +839,9 @@ fn lower_try_result<'db>(
     ctx.finish_block(Terminator::Branch {
         cond: Operand::Value(is_ok),
         then_block: continue_block,
+        then_args: Vec::new(),
         else_block: early_return_block,
+        else_args: Vec::new(),
     });
 
     // Early return block: wrap error and return.

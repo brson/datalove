@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Both carry and bring together - factorial
+loop carry (acc: u32 = @1, n: u32 = @5)
+    if n == @0
+        break(acc)
+    end if
+    continue(acc * n, n - @1)
+end loop bring (factorial: u32)
+debuglog factorial

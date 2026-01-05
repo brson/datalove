@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Multiple bring bindings
+var x = :int/@0
+loop
+    set x = x + :int/@1
+    if x == :int/@5
+        break(x, x * x)
+    end if
+end loop bring (val, squared)
+
+----------
+scriptunit-expr
+----------
+
+val + squared

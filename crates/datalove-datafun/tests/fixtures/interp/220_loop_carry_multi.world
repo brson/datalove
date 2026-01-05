@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Multiple carry bindings - fibonacci
+loop carry (a = :int/@0, b = :int/@1, count = :int/@10)
+    if count == :int/@0
+        break
+    end if
+    continue(b, a + b, count - :int/@1)
+end loop
+
+----------
+scriptunit-expr
+----------
+
+// Fib(10) = 55
+a

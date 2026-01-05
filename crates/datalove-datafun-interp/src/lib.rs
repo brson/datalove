@@ -356,7 +356,6 @@ impl IrInterpreter {
         frames: &mut FrameStore,
     ) -> Result<UnitCompletion, InterpError> {
         let mut current_block = BlockId(0);
-        let mut prev_block: Option<BlockId> = None;
 
         loop {
             let block = blocks.iter()
@@ -365,27 +364,26 @@ impl IrInterpreter {
 
             // Execute instructions.
             for instr in &block.instructions {
-                match instr {
-                    Instruction::Phi { dest, incoming } => {
-                        let pred = prev_block.expect("phi in entry block");
-                        self.execute_phi(*dest, incoming, pred, frame, frames)?;
-                    }
-                    _ => {
-                        self.execute_instruction(instr, frame, ret_dest, ctx, registry, frames)?;
-                    }
-                }
+                self.execute_instruction(instr, frame, ret_dest, ctx, registry, frames)?;
             }
 
             // Handle terminator.
-            prev_block = Some(current_block);
             match &block.terminator {
-                Terminator::Goto(target) => {
+                Terminator::Goto { target, args } => {
+                    // Pass block arguments to target block.
+                    self.pass_block_args(blocks, *target, args, frame, frames)?;
                     current_block = *target;
                 }
-                Terminator::Branch { cond, then_block, else_block } => {
+                Terminator::Branch { cond, then_block, then_args, else_block, else_args } => {
                     let cond_val = self.read_operand(cond, frame, frames)?;
                     let cond_bool = unsafe { *(cond_val.ptr as *const bool) };
-                    current_block = if cond_bool { *then_block } else { *else_block };
+                    if cond_bool {
+                        self.pass_block_args(blocks, *then_block, then_args, frame, frames)?;
+                        current_block = *then_block;
+                    } else {
+                        self.pass_block_args(blocks, *else_block, else_args, frame, frames)?;
+                        current_block = *else_block;
+                    }
                 }
                 Terminator::Return { value } => {
                     if let Some(op) = value {
@@ -450,40 +448,43 @@ impl IrInterpreter {
         }
     }
 
-    fn execute_phi(
+    /// Pass block arguments to the target block's parameters.
+    fn pass_block_args(
         &mut self,
-        dest: ValueId,
-        incoming: &[(BlockId, Operand)],
-        pred: BlockId,
+        blocks: &[IrBlock],
+        target: BlockId,
+        args: &[Operand],
         frame: &mut Frame,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
-        // Find the operand corresponding to the predecessor block.
-        let operand = incoming.iter()
-            .find(|(block, _)| *block == pred)
-            .map(|(_, op)| op)
-            .ok_or_else(|| InterpError::PhiMissingPredecessor {
-                dest,
-                pred,
-                available: incoming.iter().map(|(b, _)| *b).collect(),
-            })?;
+        if args.is_empty() {
+            return Ok(());
+        }
 
-        let src_val = self.read_operand(operand, frame, frames)?;
-        let dest_slot = frame.value_dest(dest)?;
-        // Phi uses move semantics - the value from the taken edge is consumed.
-        unsafe { self.move_value(&src_val, dest_slot)?; }
-        frame.mark_value_initialized(dest);
+        // Find the target block to get its parameters.
+        let target_block = blocks.iter()
+            .find(|b| b.id == target)
+            .ok_or(InterpError::BlockNotFound(target))?;
 
-        // Mark source as dropped.
-        match operand {
-            Operand::Value(id) => frame.mark_value_dropped(*id),
-            Operand::Slot(id) => frame.mark_slot_dropped(*id),
-            Operand::Param(id) => frame.mark_param_dropped(*id),
-            Operand::ExternalValue { unit, value } => {
-                frames.mark_external_value_dropped(*unit, *value);
-            }
-            Operand::ExternalSlot { unit, slot } => {
-                frames.mark_external_slot_dropped(*unit, *slot);
+        // Pass each argument to the corresponding block parameter.
+        for (param_id, arg) in target_block.params.iter().zip(args.iter()) {
+            let src_val = self.read_operand(arg, frame, frames)?;
+            let dest_slot = frame.value_dest(*param_id)?;
+            // Block args use move semantics.
+            unsafe { self.move_value(&src_val, dest_slot)?; }
+            frame.mark_value_initialized(*param_id);
+
+            // Mark source as dropped.
+            match arg {
+                Operand::Value(id) => frame.mark_value_dropped(*id),
+                Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                Operand::Param(id) => frame.mark_param_dropped(*id),
+                Operand::ExternalValue { unit, value } => {
+                    frames.mark_external_value_dropped(*unit, *value);
+                }
+                Operand::ExternalSlot { unit, slot } => {
+                    frames.mark_external_slot_dropped(*unit, *slot);
+                }
             }
         }
         Ok(())
@@ -972,11 +973,6 @@ impl IrInterpreter {
                         Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                     }
                 }
-            }
-            Instruction::Phi { .. } => {
-                // Phi nodes are handled separately in execute_blocks before other instructions.
-                // This branch should not be reached since we skip Phi in the instruction loop.
-                unreachable!("Phi instructions are handled separately in execute_blocks")
             }
             Instruction::Drop { operand } => {
                 // Skip drop if already dropped (can happen with move semantics).

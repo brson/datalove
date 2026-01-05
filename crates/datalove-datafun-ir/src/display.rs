@@ -353,16 +353,6 @@ impl fmt::Display for Instruction {
             Instruction::SlotLoad { dest, slot } => {
                 write!(f, "{} = load {}", dest, slot)
             }
-            Instruction::Phi { dest, incoming } => {
-                write!(f, "{} = phi ", dest)?;
-                for (i, (block, op)) in incoming.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "[{}: {}]", block, op)?;
-                }
-                Ok(())
-            }
             Instruction::Drop { operand } => {
                 write!(f, "drop {}", operand)
             }
@@ -379,11 +369,38 @@ impl fmt::Display for Instruction {
 impl fmt::Display for Terminator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Terminator::Goto(block) => {
-                write!(f, "goto {}", block)
+            Terminator::Goto { target, args } => {
+                write!(f, "goto {}", target)?;
+                if !args.is_empty() {
+                    write!(f, "(")?;
+                    for (i, arg) in args.iter().enumerate() {
+                        if i > 0 { write!(f, ", ")?; }
+                        write!(f, "{}", arg)?;
+                    }
+                    write!(f, ")")?;
+                }
+                Ok(())
             }
-            Terminator::Branch { cond, then_block, else_block } => {
-                write!(f, "branch {}, {}, {}", cond, then_block, else_block)
+            Terminator::Branch { cond, then_block, then_args, else_block, else_args } => {
+                write!(f, "branch {}, {}", cond, then_block)?;
+                if !then_args.is_empty() {
+                    write!(f, "(")?;
+                    for (i, arg) in then_args.iter().enumerate() {
+                        if i > 0 { write!(f, ", ")?; }
+                        write!(f, "{}", arg)?;
+                    }
+                    write!(f, ")")?;
+                }
+                write!(f, ", {}", else_block)?;
+                if !else_args.is_empty() {
+                    write!(f, "(")?;
+                    for (i, arg) in else_args.iter().enumerate() {
+                        if i > 0 { write!(f, ", ")?; }
+                        write!(f, "{}", arg)?;
+                    }
+                    write!(f, ")")?;
+                }
+                Ok(())
             }
             Terminator::Return { value: Some(v) } => {
                 write!(f, "return {}", v)
@@ -406,7 +423,16 @@ impl fmt::Display for Terminator {
 
 impl fmt::Display for IrBlock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{}:", self.id)?;
+        write!(f, "{}", self.id)?;
+        if !self.params.is_empty() {
+            write!(f, "(")?;
+            for (i, param) in self.params.iter().enumerate() {
+                if i > 0 { write!(f, ", ")?; }
+                write!(f, "{}", param)?;
+            }
+            write!(f, ")")?;
+        }
+        writeln!(f, ":")?;
         for instr in &self.instructions {
             writeln!(f, "    {}", instr)?;
         }

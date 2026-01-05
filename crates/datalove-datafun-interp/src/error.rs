@@ -33,12 +33,6 @@ pub enum InterpError {
     ExternalUnitNotFound(u32),
     /// Module function not found.
     ModuleFunctionNotFound { module: IrModuleId, func: FuncId },
-    /// Phi node missing predecessor.
-    PhiMissingPredecessor {
-        dest: ValueId,
-        pred: BlockId,
-        available: Vec<BlockId>,
-    },
     /// Invalid argument for out parameter (must be slot or value dest).
     InvalidOutParamArg,
 }
