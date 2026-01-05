@@ -13,7 +13,7 @@ and the machine-level register/stack/heap model.
 
 Without loop induction variables:
 
-```
+```datalove
 // This is a "memory" or "alloca" IR value and,
 // barring optimizations, a stack slot at runtime.
 var x = 0
@@ -31,28 +31,100 @@ end loop
 debuglog x
 ```
 
-```
-// `x` is an SSA variable
-loop carry (x = 0)
+```datalove
+loop carry (x = 0)   // `x` is an SSA variable
   if x = 0
-    continue (1)    // Next iteration x = 1
+    continue (1)     // Next iteration x = 1
   else if x = 10
-    // Extra let binding for clarity.
-    let x_next = 11
-    break (x_next)  // Loop exit value
+    let x_next = 11  // Extra binding for clarity
+    break (x_next)   // Loop exit value
   end if
-  // Continue is required for `loop` with induction vars.
-  continue (x + 1)
-end loop bring (x)  // Binds exit value from `break` to outer scope`s `x`
+  continue (x + 1)   // Continue is required for `loop` with induction vars.
+end loop bring (x)   // Binds exit value from `break` to outer scope`s `x`
 
 debuglog x
 ```
 
+`bring` forces the new outer-scope bindings to
+be read right before they come into scope
+(vs expression-based assignment, `let x = loop ...`).
+
 `loop` is unconditional, so all loop exits are through `break`.
 
-Hypothetical `while` with fallthrough exit.
+Hypothetical `while` condition,
+showing a multine `carry` format to bring the `while` condition
+closer to the natural reading location on the left of the screen
+but after the induction variable bindings.
 
+```datalove
+loop carry (
+  x = 0,
+) while x != 10 else break (x) // must handle the zero-iteration
+                               // case with `else break`.
+  if x = 0
+    continue (1)
+  end if
+  continue (x + 1)   // `continue` is required
+end loop bring (x)
 
+debuglog x
+```
+
+`while` loop without carries isn't so syntaxy:
+
+```datalove
+var x = 0
+
+loop while x != 10
+  if x = 0
+    set x = 1
+  else if x = 10
+    set x = 11
+  else
+    set x = x + 1
+  end if
+end loop
+
+debuglog x
+```
+
+A more feature-complete example (w/ nonsense logic):
+
+```datalove
+
+let default: int = 100
+
+// Carry args are named and positional, like function args:
+// `continue` must have same arg types as `carry`;
+// `break` as `bring`.
+//
+// Mnemonic help: "continue and carry, break and bring".
+loop carry (
+  x: int = 0,
+  y: int = 0,
+) while (
+  x != 10
+) else break (
+  x + 1,
+  y - 1,
+  x * default,       // Can access outer bindings.
+)
+  if x = 0
+    continue (1, 2)
+  else if y = 10
+    break (10, 20, 30)
+  else
+    continue (x + y, x * y)
+  end if
+  // No `continue` needed because all branches terminate.
+end loop bring (
+  a: int,
+  b: int,
+  c: int,
+)
+
+debuglog (a, b, c)
+```
 
 
 
