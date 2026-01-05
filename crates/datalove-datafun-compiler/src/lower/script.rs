@@ -299,6 +299,13 @@ fn lower_statement_for_script<'db>(
             let saved_next_slot = ctx.next_slot;
             let saved_next_param = ctx.next_param;
             let saved_variables = std::mem::take(&mut ctx.variables);
+            // Also save binding/type state that gets modified by lower_function_body.
+            let saved_binding_to_operand = std::mem::take(&mut ctx.binding_to_operand);
+            let saved_next_binding_id = ctx.next_binding_id;
+            let saved_param_types = std::mem::take(&mut ctx.param_types);
+            let saved_param_modes = std::mem::take(&mut ctx.param_modes);
+            let saved_value_types = std::mem::take(&mut ctx.value_types);
+            let saved_slot_types = std::mem::take(&mut ctx.slot_types);
 
             // Reset for function body.
             ctx.current_block = BlockId(0);
@@ -306,6 +313,7 @@ fn lower_statement_for_script<'db>(
             ctx.next_value = 0;
             ctx.next_slot = 0;
             ctx.next_param = 0;
+            ctx.next_binding_id = 0;
 
             // Lower the function body.
             let func = lower_function_body(ctx, func_id, *fun_stmt, analysis)?;
@@ -319,6 +327,12 @@ fn lower_statement_for_script<'db>(
             ctx.next_slot = saved_next_slot;
             ctx.next_param = saved_next_param;
             ctx.variables = saved_variables;
+            ctx.binding_to_operand = saved_binding_to_operand;
+            ctx.next_binding_id = saved_next_binding_id;
+            ctx.param_types = saved_param_types;
+            ctx.param_modes = saved_param_modes;
+            ctx.value_types = saved_value_types;
+            ctx.slot_types = saved_slot_types;
 
             // Add the function to the unit's functions.
             ctx.functions.push(func);

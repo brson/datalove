@@ -1,0 +1,26 @@
+AotAnalysis(
+    sections: [
+        AotSectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 42int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    v2 = call f0(v0)\n    debuglog v2\n    drop v2\n    drop v0\n    unit_end\n\nfn read_int(p0):\nblock0:\n    v0 = const 0int\n    v1 = add p0, v0\n    drop v0\n    return v1\nexports:\n    read_int = f0\n    val = v0\n",
+            ),
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+            output: "@42\n@42\n",
+        ),
+    ],
+)
