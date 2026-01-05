@@ -1255,7 +1255,6 @@ dependencies = [
  "datalove-rtdt",
  "libc",
  "proptest",
- "rustmax",
 ]
 
 [[package]]
@@ -1275,9 +1274,6 @@ dependencies = [
 [[package]]
 name = "datalove-rtdt"
 version = "0.1.0"
-dependencies = [
- "rustmax",
-]
 
 [[package]]
 name = "deranged"

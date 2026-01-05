@@ -1,6 +1,5 @@
 //! Set operations for the Datalove runtime.
 
-use rmx::prelude::*;
 use crate::rtdt::{self, TyDesc, Set, SetNode, SetNodeTag, SET_NODE_CAPACITY};
 use crate::impls::rt_local::RtLocal;
 use crate::c::RtStatus;

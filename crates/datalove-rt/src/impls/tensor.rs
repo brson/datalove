@@ -1,6 +1,5 @@
 //! Tensor operations.
 
-use rmx::prelude::*;
 use crate::{c::RtStatus, impls::rt_local::RtLocal};
 use crate::rtdt::TyDescRef;
 

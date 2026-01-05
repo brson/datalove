@@ -6,4 +6,3 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-rmx.workspace = true

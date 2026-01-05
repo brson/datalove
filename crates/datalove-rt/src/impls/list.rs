@@ -2,7 +2,6 @@
 //!
 //! Uses a simple growable array structure with element-based capacity.
 
-use rmx::prelude::*;
 use crate::impls::rt_local::RtLocal;
 use crate::rtdt::{self, *};
 use crate::c::RtStatus;

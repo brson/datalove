@@ -3,8 +3,6 @@
 //! On Unix platforms: Single-threaded allocator using mmap for page allocation.
 //! On wasm32: Uses Rust's global allocator.
 
-use rmx::prelude::*;
-
 // Unix-only imports and constants (used by unix_impl and tests).
 #[cfg(not(target_arch = "wasm32"))]
 use std::ptr;

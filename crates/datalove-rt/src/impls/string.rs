@@ -1,6 +1,5 @@
 //! String operations for the Datalove runtime.
 
-use rmx::prelude::*;
 use crate::rtdt;
 use crate::impls::rt_local::RtLocal;
 use crate::c::{LocalRtHandle, RtStatus};
