@@ -1,0 +1,19 @@
+----------
+scriptunit-fragment
+----------
+
+// Test -! operator with underflow - should return Err.
+fun checked_sub(a: u32, b: u32): !u32
+    ret ok (a -! b)
+end fun
+
+fun unwrap_or_default(r: !u32, default: u32): u32
+    if r |val|
+        ret val
+    else |e|
+        ret default
+    end if
+end fun
+
+// 3 - 10 underflows u32, returns Err -> default 999.
+debuglog unwrap_or_default(checked_sub(@3, @10), @999)

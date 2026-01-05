@@ -1,0 +1,19 @@
+----------
+scriptunit-fragment
+----------
+
+// Test +! operator with no overflow - should return Ok(result).
+fun checked_add(a: u32, b: u32): !u32
+    ret ok (a +! b)
+end fun
+
+fun unwrap_or_default(r: !u32, default: u32): u32
+    if r |val|
+        ret val
+    else |e|
+        ret default
+    end if
+end fun
+
+// 5 + 3 = 8, no overflow.
+debuglog unwrap_or_default(checked_add(@5, @3), @999)
