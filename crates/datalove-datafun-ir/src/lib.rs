@@ -579,20 +579,6 @@ pub enum Instruction {
     /// Unpack struct/tuple into fields.
     Unpack { dests: Vec<ValueId>, src: Operand },
 
-    /// Access a field of a struct by index.
-    FieldAccess {
-        dest: ValueId,
-        base: Operand,
-        field_index: u32,
-    },
-
-    /// Access a tuple element by index.
-    TupleIndex {
-        dest: ValueId,
-        base: Operand,
-        index: u32,
-    },
-
     /// Wrap value in Some.
     WrapSome { dest: ValueId, inner: Operand },
 

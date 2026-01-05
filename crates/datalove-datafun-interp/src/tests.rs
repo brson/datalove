@@ -1255,8 +1255,8 @@ fn test_move() {
 
 #[test]
 fn test_pack_tuple() {
-    // fn test() -> (i64, i64) { (10, 20) }
-    // Returns packed tuple, then extract first element.
+    // fn test() -> i64 { let t = (10, 20); let (a, _) = t; a }
+    // Pack tuple, then unpack and return first element.
     let tuple_ty = IrType::Tuple(vec![IrType::I64, IrType::I64]);
 
     let func = IrFunction {
@@ -1277,18 +1277,17 @@ fn test_pack_tuple() {
                         ty: TypeRef::Tuple(0),
                         fields: vec![Operand::Value(ValueId(0)), Operand::Value(ValueId(1))],
                     },
-                    Instruction::TupleIndex {
-                        dest: ValueId(3),
-                        base: Operand::Value(ValueId(2)),
-                        index: 0,
+                    Instruction::Unpack {
+                        dests: vec![ValueId(3), ValueId(4)],
+                        src: Operand::Value(ValueId(2)),
                     },
                 ],
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(3))) },
             },
         ],
-        value_count: 4,
+        value_count: 5,
         slot_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, tuple_ty, IrType::I64],
+        value_types: vec![IrType::I64, IrType::I64, tuple_ty, IrType::I64, IrType::I64],
         slot_types: vec![],
     };
 
@@ -1345,54 +1344,6 @@ fn test_unpack_tuple() {
     };
 
     assert_eq!(run_i64_function(&func), 30);
-}
-
-#[test]
-fn test_tuple_index_second() {
-    // fn test() -> i64 { let t = (10, 20, 30); t.1 }
-    let tuple_ty = IrType::Tuple(vec![IrType::I64, IrType::I64, IrType::I64]);
-
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
-            IrBlock {
-                id: BlockId(0),
-                instructions: vec![
-                    Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
-                    Instruction::Const { dest: ValueId(1), value: ConstValue::I64(20) },
-                    Instruction::Const { dest: ValueId(2), value: ConstValue::I64(30) },
-                    Instruction::Pack {
-                        dest: ValueId(3),
-                        ty: TypeRef::Tuple(0),
-                        fields: vec![
-                            Operand::Value(ValueId(0)),
-                            Operand::Value(ValueId(1)),
-                            Operand::Value(ValueId(2)),
-                        ],
-                    },
-                    Instruction::TupleIndex {
-                        dest: ValueId(4),
-                        base: Operand::Value(ValueId(3)),
-                        index: 1,
-                    },
-                ],
-                terminator: Terminator::Return { value: Some(Operand::Value(ValueId(4))) },
-            },
-        ],
-        value_count: 5,
-        slot_count: 0,
-        value_types: vec![
-            IrType::I64, IrType::I64, IrType::I64, tuple_ty, IrType::I64
-        ],
-        slot_types: vec![],
-    };
-
-    assert_eq!(run_i64_function(&func), 20);
 }
 
 // =========================================================================
@@ -1769,7 +1720,8 @@ fn test_result_branch() {
 
 #[test]
 fn test_pack_struct() {
-    // fn test() -> i64 { let s = { x: 10, y: 20 }; s.x }
+    // fn test() -> i64 { let s = { x: 10, y: 20 }; let { x, _ } = s; x }
+    // Pack struct, then unpack and return first field.
     let struct_ty = IrType::Struct(vec![
         ("x".to_string(), IrType::I64),
         ("y".to_string(), IrType::I64),
@@ -1793,74 +1745,21 @@ fn test_pack_struct() {
                         ty: TypeRef::AnonStruct(0),
                         fields: vec![Operand::Value(ValueId(0)), Operand::Value(ValueId(1))],
                     },
-                    Instruction::FieldAccess {
-                        dest: ValueId(3),
-                        base: Operand::Value(ValueId(2)),
-                        field_index: 0,
+                    Instruction::Unpack {
+                        dests: vec![ValueId(3), ValueId(4)],
+                        src: Operand::Value(ValueId(2)),
                     },
                 ],
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(3))) },
             },
         ],
-        value_count: 4,
+        value_count: 5,
         slot_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, struct_ty, IrType::I64],
+        value_types: vec![IrType::I64, IrType::I64, struct_ty, IrType::I64, IrType::I64],
         slot_types: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 10);
-}
-
-#[test]
-fn test_field_access_second() {
-    // fn test() -> i64 { let s = { a: 10, b: 20, c: 30 }; s.b }
-    let struct_ty = IrType::Struct(vec![
-        ("a".to_string(), IrType::I64),
-        ("b".to_string(), IrType::I64),
-        ("c".to_string(), IrType::I64),
-    ]);
-
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
-            IrBlock {
-                id: BlockId(0),
-                instructions: vec![
-                    Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
-                    Instruction::Const { dest: ValueId(1), value: ConstValue::I64(20) },
-                    Instruction::Const { dest: ValueId(2), value: ConstValue::I64(30) },
-                    Instruction::Pack {
-                        dest: ValueId(3),
-                        ty: TypeRef::AnonStruct(0),
-                        fields: vec![
-                            Operand::Value(ValueId(0)),
-                            Operand::Value(ValueId(1)),
-                            Operand::Value(ValueId(2)),
-                        ],
-                    },
-                    Instruction::FieldAccess {
-                        dest: ValueId(4),
-                        base: Operand::Value(ValueId(3)),
-                        field_index: 1,
-                    },
-                ],
-                terminator: Terminator::Return { value: Some(Operand::Value(ValueId(4))) },
-            },
-        ],
-        value_count: 5,
-        slot_count: 0,
-        value_types: vec![
-            IrType::I64, IrType::I64, IrType::I64, struct_ty, IrType::I64
-        ],
-        slot_types: vec![],
-    };
-
-    assert_eq!(run_i64_function(&func), 20);
 }
 
 #[test]

@@ -45,52 +45,6 @@ impl IrInterpreter {
         Ok(())
     }
 
-    /// Access a tuple field.
-    pub(crate) fn execute_tuple_index(
-        &self,
-        base: &Value,
-        index: u32,
-        dest: Destination,
-    ) -> Result<(), InterpError> {
-        unsafe {
-            let tuple_info = (*base.tydesc).type_info.tuple;
-            if index >= tuple_info.num_fields {
-                return Err(InterpError::RuntimeError(format!(
-                    "tuple index {} out of bounds (len {})",
-                    index, tuple_info.num_fields
-                )));
-            }
-            let field_info = &*tuple_info.fields.add(index as usize);
-            let field_ptr = base.ptr.add(field_info.offset as usize);
-            let size = (*field_info.tydesc).size as usize;
-            std::ptr::copy_nonoverlapping(field_ptr, dest.ptr, size);
-        }
-        Ok(())
-    }
-
-    /// Access a struct field by index.
-    pub(crate) fn execute_field_access(
-        &self,
-        base: &Value,
-        field_index: u32,
-        dest: Destination,
-    ) -> Result<(), InterpError> {
-        unsafe {
-            let struct_info = (*base.tydesc).type_info.struct_;
-            if field_index >= struct_info.num_fields {
-                return Err(InterpError::RuntimeError(format!(
-                    "field index {} out of bounds (len {})",
-                    field_index, struct_info.num_fields
-                )));
-            }
-            let field_info = &*struct_info.fields.add(field_index as usize);
-            let field_ptr = base.ptr.add(field_info.offset as usize);
-            let size = (*field_info.tydesc).size as usize;
-            std::ptr::copy_nonoverlapping(field_ptr, dest.ptr, size);
-        }
-        Ok(())
-    }
-
     /// Wrap a value in Some.
     pub(crate) fn execute_wrap_some(
         &self,

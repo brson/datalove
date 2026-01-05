@@ -679,18 +679,6 @@ impl IrInterpreter {
                     )),
                 }
             }
-            Instruction::TupleIndex { dest, base, index } => {
-                let base_val = self.read_operand(base, frame, frames)?;
-                let dest_slot = frame.value_dest(*dest)?;
-                self.execute_tuple_index(&base_val, *index, dest_slot)?;
-                frame.mark_value_initialized(*dest);
-            }
-            Instruction::FieldAccess { dest, base, field_index } => {
-                let base_val = self.read_operand(base, frame, frames)?;
-                let dest_slot = frame.value_dest(*dest)?;
-                self.execute_field_access(&base_val, *field_index, dest_slot)?;
-                frame.mark_value_initialized(*dest);
-            }
             Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
                 // Execute checked arithmetic and set overflow flag.
                 let lhs_val = self.read_operand(lhs, frame, frames)?;

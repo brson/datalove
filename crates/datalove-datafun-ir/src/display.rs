@@ -266,12 +266,6 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, ") = unpack {}", src)
             }
-            Instruction::FieldAccess { dest, base, field_index } => {
-                write!(f, "{} = {}.field{}", dest, base, field_index)
-            }
-            Instruction::TupleIndex { dest, base, index } => {
-                write!(f, "{} = {}.{}", dest, base, index)
-            }
             Instruction::WrapSome { dest, inner } => {
                 write!(f, "{} = some {}", dest, inner)
             }
