@@ -179,9 +179,7 @@ Each "unsupported instruction" error becomes the next work item.
 **Remaining known issues:**
 1. Wasteful temp stack slots - creates new slot per spill in `get_operand_ptr`
 2. UnitEarlyReturn terminator not implemented
-3. No aggregate fields in Pack (needs memcpy)
-4. Int BinOp widening (u32->Int) not implemented - operands must already be Int
-5. Parameter passing modes (In/Ref/Mut/Out) not implemented
+3. Parameter passing modes (In/Ref/Mut/Out) not implemented
 
 **Not applicable for AOT:**
 - ExternalValue/ExternalSlot operands - these are for REPL cross-unit references; AOT does whole-world compilation
@@ -192,6 +190,9 @@ Each "unsupported instruction" error becomes the next work item.
 - UnitEnd terminator - ✓ Phase 3.8 (with script-level drops)
 - TryReturn terminator - ✓ Phase 3.11
 - Option/Result types - ✓ Phase 3.11
+- Int BinOp - ✓ Phase 3.12
+- Aggregate fields in Pack - ✓ Phase 3.13
+- EnumVariant instruction - ✓ Phase 3.13
 
 ### Phase 3.6: Module Function Calls ✓ COMPLETE
 
@@ -425,9 +426,84 @@ lib.rs           - Entry point: AotCompiler, three-pass compilation
 - if-result with else clause generates IR with unreachable blocks that have invalid return types
   (this is an IR lowering issue, not an AOT issue)
 
-### Phases 4-8: Feature Development (Test-Driven)
+### Phase 3.12: Int BinOp (Bigint Arithmetic) ✓ COMPLETE
 
-Order TBD based on what the test harness reveals. Expected needs:
+**Goal:** Support arithmetic operations on Int (bigint) type.
+
+**Modified files:**
+- `crates/datalove-datafun-aot-cranelift/src/runtime.rs`
+  - Added `dtlv_rti_int_add_local`, `dtlv_rti_int_sub_local`, `dtlv_rti_int_mul_local`
+  - Added `dtlv_rti_int_div_local`, `dtlv_rti_int_mod_local`, `dtlv_rti_int_neg_local`
+  - Added comparison functions: `dtlv_rti_int_eq`, `dtlv_rti_int_lt`, etc.
+
+- `crates/datalove-datafun-aot-cranelift/src/codegen/ops.rs`
+  - Added Int BinOp dispatch to runtime functions
+  - Results stored in frame slots, passed by pointer
+
+**New tests:**
+- `021_int_arithmetic_script.world` - Int arithmetic at script level
+- `022_int_arithmetic_function.world` - Int arithmetic in functions
+
+**What works:**
+- All Int arithmetic operations via runtime calls
+- Proper linear type handling (drop after use)
+
+### Phase 3.13: Aggregate Fields and Enum Variants ✓ COMPLETE
+
+**Goal:** Support aggregate (non-scalar) fields in Pack instruction and EnumVariant instruction.
+
+**New runtime function:**
+- `dtlv_rti_move_value_local(rt, src, tydesc, dst)` - Shallow byte copy for moving aggregates
+
+**Modified files:**
+- `crates/datalove-rt/src/c.rs`
+  - Added `dtlv_rti_move_value_local` for shallow memcpy
+
+- `crates/datalove-datafun-aot-cranelift/src/runtime.rs`
+  - Added `move_value` import declaration
+
+- `crates/datalove-datafun-aot-cranelift/src/codegen/aggregates.rs`
+  - Modified `compile_pack` to use move_value for aggregate fields
+
+- `crates/datalove-datafun-aot-cranelift/src/codegen/options.rs`
+  - Added `compile_enum_variant` method
+
+- `crates/datalove-datafun-aot-cranelift/src/codegen/mod.rs`
+  - Added EnumVariant instruction dispatch
+
+- `crates/datalove-datafun-aot-cranelift/src/tydesc_emit.rs`
+  - Added `emit_tuple_tydesc` with field type references
+  - Added `emit_struct_tydesc` delegating to tuple emission
+  - Added `emit_enum_tydesc` with variant info (name, offset, payload tydesc)
+
+**New tests:**
+- `023_tuple_with_string.world` - Tuple containing aggregate field
+- `024_struct_with_string.world` - Struct containing aggregate field
+- `025_enum_with_string_payload.world` - Enum variant with aggregate payload
+- `026_tuple_with_int.world` - Tuple with string and Int fields
+
+**What works:**
+- Packing aggregate fields into tuples and structs
+- EnumVariant instruction with both scalar and aggregate payloads
+- TyDesc emission for Tuple, Struct, and Enum types
+- All 26 AOT tests pass with leak checking
+
+---
+
+## Remaining Work
+
+**Known Issues:**
+1. Wasteful temp stack slots - creates new slot per spill in `get_operand_ptr`
+2. UnitEarlyReturn terminator not implemented
+3. Parameter passing modes (In/Ref/Mut/Out) not implemented
+
+**Future Features:**
+- Cross-unit references (only needed for REPL-style incremental)
+- Phi nodes for loops (IR doesn't currently generate loops)
+
+---
+
+## Completed Feature Summary
 
 **Slots & Variables** ✓ COMPLETE
 - `SlotStore`, `SlotLoad` instructions - ✓
@@ -448,20 +524,22 @@ Order TBD based on what the test harness reveals. Expected needs:
 - `String` constants via `dtlv_rti_string_from_utf8_unchecked` - ✓
 - Script-level drops via `for_aot` drop analysis - ✓
 
-**Option/Result Types**
-- `WrapSome`, `WrapOk`, `WrapErr`
-- `UnwrapOption`, `UnwrapResult`
-- `TryReturn` terminator
+**Option/Result Types** ✓ COMPLETE
+- `WrapSome`, `WrapNone`, `WrapOk`, `WrapErr` - ✓
+- `UnwrapOption`, `UnwrapResult` - ✓
+- `TryReturn` terminator - ✓
+- `EnumVariant` instruction - ✓
 
 **Runtime Types** ✓ COMPLETE
 - `Int`/`String` constants - ✓
+- Int arithmetic via runtime calls - ✓
 - Collection construction (List, Set, Map) - ✓
 - Collection destruction via `Drop` - ✓
 
-**Advanced**
-- Cross-unit references
-- Phi nodes for loops
-- Clone instruction
+**Composite Types** ✓ COMPLETE
+- Tuple/Struct with aggregate fields - ✓
+- Enum variants with payloads - ✓
+- TyDesc emission for Tuple, Struct, Enum - ✓
 
 ---
 
@@ -651,30 +729,19 @@ The ObjectProduct can be written to .o files, then linked with the runtime libra
 5. Error categorization (AOT_COMPILE_ERROR guides next features)
 
 ### Phase 4+: Test-Driven Feature Development
-Order determined by failing tests. Expected features:
+Order determined by failing tests.
 
-**Slots & Variables**
-- SlotStore, SlotLoad instructions
-- Mutable variable support
+**Completed:**
+- Slots & Variables ✓
+- Function Calls ✓
+- Option/Result ✓
+- Runtime Types ✓
+- Composite Types ✓
 
-**Function Calls**
-- Call instruction with ABI setup
+**Remaining:**
 - Parameter modes (In/Ref/Mut/Out)
-- Local and cross-module calls
-
-**Option/Result**
-- WrapSome/WrapOk/WrapErr
-- UnwrapOption/UnwrapResult
-- TryReturn terminator
-
-**Runtime Types**
-- Int/String constants via runtime
-- Collection operations
-
-**Advanced**
-- Drop scheduling
 - Phi nodes for loops
-- Cross-unit references
+- Cross-unit references (REPL only)
 
 ## Files to Modify
 
