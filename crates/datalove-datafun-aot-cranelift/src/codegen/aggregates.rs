@@ -80,10 +80,28 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                             builder.ins().store(MemFlags::new(), field_val, addr, 0);
                         }
                         CraneliftRepr::Aggregate(_) => {
-                            // TODO: memcpy for aggregate fields.
-                            return Err(AotError::Unsupported(
-                                "aggregate field in pack".into()
-                            ));
+                            // Move aggregate bytes from source to destination.
+                            let dst_addr = builder.ins().iadd_imm(base, offsets[i] as i64);
+
+                            // Look up pre-emitted TyDesc.
+                            let tydesc_id = self.tydesc_emitter.get(field_ty).ok_or_else(|| {
+                                AotError::Codegen(format!(
+                                    "TyDesc not found for type {:?} - should have been emitted upfront",
+                                    field_ty
+                                ))
+                            })?;
+                            let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+                            let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+                            // Call move_value runtime function.
+                            let move_func_id = self.runtime.as_ref()
+                                .ok_or_else(|| AotError::Codegen("Pack aggregate requires runtime imports".into()))?
+                                .move_value;
+                            let rt_handle = self.rt_handle_param.ok_or_else(|| {
+                                AotError::Codegen("Pack aggregate requires runtime handle parameter".into())
+                            })?;
+                            let move_ref = self.module.declare_func_in_func(move_func_id, builder.func);
+                            builder.ins().call(move_ref, &[rt_handle, field_val, tydesc_ptr, dst_addr]);
                         }
                     }
                 }

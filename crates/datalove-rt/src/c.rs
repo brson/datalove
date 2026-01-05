@@ -168,6 +168,30 @@ pub unsafe extern "C-unwind" fn dtlv_rti_mem_free_local(
     RtStatus::Ok
 }
 
+/// Move a value from src to dst (shallow byte copy).
+///
+/// This performs a simple memcpy of `tydesc.size` bytes from src to dst.
+/// No deep cloning or allocation occurs. After the move, the caller should
+/// treat src as invalidated (ownership transferred to dst).
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_move_value_local(
+    _rt: LocalRtHandle,
+    src_ref: *const u8,
+    tydesc: *const rtdt::TyDesc,
+    dst_out: *mut u8,
+) -> RtStatus {
+    debug_assert!(!src_ref.is_null(), "src_ref is null");
+    debug_assert!(!tydesc.is_null(), "tydesc is null");
+    debug_assert!(!dst_out.is_null(), "dst_out is null");
+    debug_assert_aligned(src_ref, tydesc, "move_value_local:src");
+    debug_assert_aligned(dst_out, tydesc, "move_value_local:dst");
+    unsafe {
+        let size = (*tydesc).size as usize;
+        std::ptr::copy_nonoverlapping(src_ref, dst_out, size);
+    }
+    RtStatus::Ok
+}
+
 /// Clone any type into the local heap.
 ///
 /// Space is already allocated for the proximate type

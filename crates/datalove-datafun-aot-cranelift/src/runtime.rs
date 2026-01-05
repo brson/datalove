@@ -54,6 +54,10 @@ pub struct RuntimeImports {
     pub int_div: FuncId,
     /// `dtlv_rti_int_neg(rt, a_in, a_tydesc, result_out, result_tydesc) -> RtStatus`
     pub int_neg: FuncId,
+
+    // Value move function.
+    /// `dtlv_rti_move_value_local(rt, src_ref, tydesc, dst_out) -> RtStatus`
+    pub move_value: FuncId,
 }
 
 impl RuntimeImports {
@@ -277,6 +281,19 @@ impl RuntimeImports {
                 .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_neg: {}", e)))?
         };
 
+        // dtlv_rti_move_value_local(ptr, ptr, ptr, ptr) -> u8
+        let move_value = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // src_ref
+            sig.params.push(AbiParam::new(PTR_TYPE)); // tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // dst_out
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_move_value_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_move_value_local: {}", e)))?
+        };
+
         Ok(Self {
             init,
             shutdown,
@@ -297,6 +314,7 @@ impl RuntimeImports {
             int_mul,
             int_div,
             int_neg,
+            move_value,
         })
     }
 }
