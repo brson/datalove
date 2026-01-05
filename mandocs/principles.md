@@ -24,11 +24,14 @@ avoid bloating the compiler with extra language features.
 Syntactic niceties added with careful deliberation.
 
 
-## Mechanical sympathy
+## Mechanical and machine-model sympathy
 
 Inline values, no implicit boxing.
 Threads are simple and directly supported by the OS:
 No green threads. No async/await state machines.
+
+Syntax lowers trivially to SSA-based IRs
+to minimize analysis-based reconstruction.
 
 
 ## Numerical correctness
