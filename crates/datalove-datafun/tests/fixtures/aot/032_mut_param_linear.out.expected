@@ -11,10 +11,16 @@ AotAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = call f1()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn set_to_100(p0):\nblock0:\n    v0 = const 100int\n    store p0, v0\n    v1 = const true\n    return v1\nfn test():\nblock0:\n    v0 = const 5int\n    store s0, v0\n    v1 = call f0(s0)\n    v2 = load s0\n    return v2\nexports:\n    set_to_100 = f0\n    test = f1\n",
             ),
             aot_compile: Some(AotCompileResult(
-                status: "Error",
-                message: "unsupported: instruction not yet implemented: ParamStore { param: ParamId(0), value: Value(ValueId(0)) }",
+                status: "Success",
             )),
-            output: "",
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+            output: "@100\n",
         ),
     ],
 )

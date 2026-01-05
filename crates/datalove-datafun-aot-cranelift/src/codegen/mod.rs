@@ -439,6 +439,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::SlotLoad { dest, slot } => {
                 self.compile_slot_load(builder, *dest, *slot)?;
             }
+            Instruction::ParamStore { param, value } => {
+                self.compile_param_store(builder, *param, value)?;
+            }
             Instruction::Drop { operand } => {
                 self.compile_drop(builder, operand)?;
             }
@@ -526,6 +529,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return self.param_values.get(pid).copied().ok_or_else(|| {
                 AotError::Codegen(format!("undefined param: {:?}", pid))
             });
+        }
+
+        // Slots are in the frame - return the address directly.
+        // This is important for mut params: we pass the slot address so writes
+        // go to the original slot, not a copy.
+        if let Operand::Slot(slot_id) = operand {
+            let frame_slot = self.frame_slot.ok_or_else(|| {
+                AotError::Codegen("no frame slot for slot operand".into())
+            })?;
+            let slot_offset = self.layout.slot_offset(slot_id.0);
+            let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+            return Ok(addr);
         }
 
         let ty = self.get_operand_type(operand)?;
