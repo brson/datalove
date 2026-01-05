@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0int\n    store s0, v0\n    v1 = const 0int\n    store s1, v1\n    goto block1\nblock1:\n    v2 = const 1int\n    v3 = add s0, v2\n    drop v2\n    drop s0\n    store s0, v3\n    v4 = const 3int\n    v5 = eq s0, v4\n    drop v4\n    branch v5, block3, block4\nblock3:\n    goto block1\nblock6:\n    goto block5\nblock4:\n    goto block5\nblock5:\n    v6 = add s1, s0\n    drop s1\n    store s1, v6\n    v7 = const 5int\n    v8 = eq s0, v7\n    drop v7\n    branch v8, block7, block8\nblock7:\n    goto block2\nblock10:\n    goto block9\nblock8:\n    goto block9\nblock9:\n    goto block1\nblock2:\n    unit_end\nexports:\n    count = s0\n    sum = s1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0int\n    store s0, v0\n    v1 = const 0int\n    store s1, v1\n    goto block1\nblock1:\n    v2 = const 1int\n    v3 = add s0, v2\n    drop v2\n    drop s0\n    store s0, v3\n    v4 = const 3int\n    v5 = eq s0, v4\n    drop v4\n    branch v5, block3, block4\nblock3:\n    goto block1\nblock4:\n    goto block5\nblock5:\n    v6 = add s1, s0\n    drop s1\n    store s1, v6\n    v7 = const 5int\n    v8 = eq s0, v7\n    drop v7\n    branch v8, block7, block8\nblock7:\n    goto block2\nblock8:\n    goto block9\nblock9:\n    goto block1\nblock2:\n    unit_end\nexports:\n    count = s0\n    sum = s1\n",
             ),
             output: "(fragment executed)",
         ),

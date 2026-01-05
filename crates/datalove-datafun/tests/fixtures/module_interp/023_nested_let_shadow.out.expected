@@ -4,7 +4,7 @@ ModulesAnalysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn main():\nblock0:\n    v0 = const 1u32\n    v1 = const true\n    branch v1, block1, block2\nblock1:\n    v2 = const 2u32\n    v3 = const true\n    branch v3, block4, block5\nblock4:\n    v4 = const 3u32\n    return v4\nblock7:\n    goto block6\nblock5:\n    v5 = const 99u32\n    return v5\nblock8:\n    goto block6\nblock6:\n    goto block3\nblock2:\n    v6 = const 88u32\n    return v6\nblock9:\n    goto block3\nblock3:\n    return\n",
+        ir: "fn main():\nblock0:\n    v0 = const 1u32\n    v1 = const true\n    branch v1, block1, block2\nblock1:\n    v2 = const 2u32\n    v3 = const true\n    branch v3, block4, block5\nblock4:\n    v4 = const 3u32\n    return v4\nblock5:\n    v5 = const 99u32\n    return v5\nblock2:\n    v6 = const 88u32\n    return v6\n",
     ),
     output: "@3",
 )

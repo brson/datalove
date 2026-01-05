@@ -8,7 +8,7 @@ AotAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f1()\n    v1 = const 0u32\n    v2 = call f0(v0, v1)\n    debuglog v2\n    unit_end\n\nfn unwrap_or_default(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock4:\n    goto block3\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nfn get_some():\nblock0:\n    v0 = const 42u32\n    v1 = some v0\n    return v1\nexports:\n    unwrap_or_default = f0\n    get_some = f1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = call f1()\n    v1 = const 0u32\n    v2 = call f0(v0, v1)\n    debuglog v2\n    unit_end\n\nfn unwrap_or_default(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nfn get_some():\nblock0:\n    v0 = const 42u32\n    v1 = some v0\n    return v1\nexports:\n    unwrap_or_default = f0\n    get_some = f1\n",
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Success",

@@ -98,7 +98,7 @@ pub fn lower_statement_indexed<'db>(
             ctx.finish_block(Terminator::Return { value });
             // Start a new unreachable block (code after return).
             let new_block = ctx.fresh_block();
-            ctx.start_block(new_block);
+            ctx.start_unreachable_block(new_block);
             Ok(())
         }
         Statement::If(if_stmt) => {
@@ -116,7 +116,7 @@ pub fn lower_statement_indexed<'db>(
             ctx.finish_block(Terminator::Goto(break_target));
             // Start unreachable block for code after break.
             let dead_block = ctx.fresh_block();
-            ctx.start_block(dead_block);
+            ctx.start_unreachable_block(dead_block);
             Ok(())
         }
         Statement::Continue(_) => {
@@ -128,7 +128,7 @@ pub fn lower_statement_indexed<'db>(
             ctx.finish_block(Terminator::Goto(continue_target));
             // Start unreachable block for code after continue.
             let dead_block = ctx.fresh_block();
-            ctx.start_block(dead_block);
+            ctx.start_unreachable_block(dead_block);
             Ok(())
         }
         Statement::Fun(_) => {
@@ -234,9 +234,12 @@ fn lower_if_bool<'db>(
     for (idx, stmt) in then_body.iter().enumerate() {
         lower_statement_indexed(ctx, stmt, idx)?;
     }
-    // Emit drops before Goto.
-    ctx.emit_then_branch_drops(stmt_idx);
-    ctx.finish_block(Terminator::Goto(merge_block));
+    // Only emit Goto if branch didn't terminate early.
+    let then_terminated = ctx.is_unreachable();
+    if !then_terminated {
+        ctx.emit_then_branch_drops(stmt_idx);
+        ctx.finish_block(Terminator::Goto(merge_block));
+    }
 
     // Lower else branch.
     ctx.start_block(else_block);
@@ -245,12 +248,19 @@ fn lower_if_bool<'db>(
             lower_statement_indexed(ctx, stmt, idx)?;
         }
     }
-    // Emit drops before Goto.
-    ctx.emit_else_branch_drops(stmt_idx);
-    ctx.finish_block(Terminator::Goto(merge_block));
+    // Only emit Goto if branch didn't terminate early.
+    let else_terminated = ctx.is_unreachable();
+    if !else_terminated {
+        ctx.emit_else_branch_drops(stmt_idx);
+        ctx.finish_block(Terminator::Goto(merge_block));
+    }
 
-    // Continue in merge block.
-    ctx.start_block(merge_block);
+    // Start merge block. If both branches terminated, it's unreachable.
+    if then_terminated && else_terminated {
+        ctx.start_unreachable_block(merge_block);
+    } else {
+        ctx.start_block(merge_block);
+    }
     Ok(())
 }
 
@@ -312,9 +322,12 @@ fn lower_if_option<'db>(
         ctx.variables.remove(binding_str);
     }
 
-    // Emit drops before exiting scope.
-    ctx.emit_then_branch_drops(stmt_idx);
-    ctx.finish_block(Terminator::Goto(merge_block));
+    // Only emit Goto if branch didn't terminate early.
+    let then_terminated = ctx.is_unreachable();
+    if !then_terminated {
+        ctx.emit_then_branch_drops(stmt_idx);
+        ctx.finish_block(Terminator::Goto(merge_block));
+    }
 
     // === Else branch: None case ===
     ctx.start_block(else_block);
@@ -327,11 +340,19 @@ fn lower_if_option<'db>(
         }
     }
 
-    // Emit drops before exiting scope.
-    ctx.emit_else_branch_drops(stmt_idx);
-    ctx.finish_block(Terminator::Goto(merge_block));
+    // Only emit Goto if branch didn't terminate early.
+    let else_terminated = ctx.is_unreachable();
+    if !else_terminated {
+        ctx.emit_else_branch_drops(stmt_idx);
+        ctx.finish_block(Terminator::Goto(merge_block));
+    }
 
-    ctx.start_block(merge_block);
+    // Start merge block. If both branches terminated, it's unreachable.
+    if then_terminated && else_terminated {
+        ctx.start_unreachable_block(merge_block);
+    } else {
+        ctx.start_block(merge_block);
+    }
     Ok(())
 }
 
@@ -397,9 +418,12 @@ fn lower_if_result<'db>(
         ctx.variables.remove(ok_binding_str);
     }
 
-    // Emit drops before exiting scope.
-    ctx.emit_then_branch_drops(stmt_idx);
-    ctx.finish_block(Terminator::Goto(merge_block));
+    // Only emit Goto if branch didn't terminate early.
+    let then_terminated = ctx.is_unreachable();
+    if !then_terminated {
+        ctx.emit_then_branch_drops(stmt_idx);
+        ctx.finish_block(Terminator::Goto(merge_block));
+    }
 
     // === Else branch: Error case ===
     ctx.start_block(else_block);
@@ -425,11 +449,19 @@ fn lower_if_result<'db>(
         ctx.variables.remove(err_binding_str);
     }
 
-    // Emit drops before exiting scope.
-    ctx.emit_else_branch_drops(stmt_idx);
-    ctx.finish_block(Terminator::Goto(merge_block));
+    // Only emit Goto if branch didn't terminate early.
+    let else_terminated = ctx.is_unreachable();
+    if !else_terminated {
+        ctx.emit_else_branch_drops(stmt_idx);
+        ctx.finish_block(Terminator::Goto(merge_block));
+    }
 
-    ctx.start_block(merge_block);
+    // Start merge block. If both branches terminated, it's unreachable.
+    if then_terminated && else_terminated {
+        ctx.start_unreachable_block(merge_block);
+    } else {
+        ctx.start_block(merge_block);
+    }
     Ok(())
 }
 

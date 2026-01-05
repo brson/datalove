@@ -155,6 +155,8 @@ pub struct LowerCtx<'db> {
     pub(super) external_slot_types: HashMap<String, IrType>,
     /// Bindings to drop at unit end (for AOT compilation).
     pub(super) unit_end_drops: Vec<BindingId>,
+    /// Whether current block is unreachable (after return/break/continue).
+    pub(super) in_unreachable: bool,
 }
 
 /// Empty func_id_map for contexts that don't need module function resolution.
@@ -199,6 +201,7 @@ impl<'db> LowerCtx<'db> {
             current_stmt_idx: None,
             external_slot_types: HashMap::new(),
             unit_end_drops: Vec::new(),
+            in_unreachable: false,
         }
     }
 
@@ -241,6 +244,7 @@ impl<'db> LowerCtx<'db> {
             current_stmt_idx: None,
             external_slot_types: HashMap::new(),
             unit_end_drops: Vec::new(),
+            in_unreachable: false,
         }
     }
 
@@ -322,6 +326,7 @@ impl<'db> LowerCtx<'db> {
             current_stmt_idx: None,
             external_slot_types: script_ctx.slot_types,
             unit_end_drops: Vec::new(),
+            in_unreachable: false,
         }
     }
 
@@ -434,6 +439,19 @@ impl<'db> LowerCtx<'db> {
     pub fn start_block(&mut self, id: BlockId) {
         self.current_block = id;
         self.current_instructions.clear();
+        self.in_unreachable = false;
+    }
+
+    /// Start building an unreachable block (after return/break/continue).
+    pub fn start_unreachable_block(&mut self, id: BlockId) {
+        self.current_block = id;
+        self.current_instructions.clear();
+        self.in_unreachable = true;
+    }
+
+    /// Check if current block is unreachable.
+    pub fn is_unreachable(&self) -> bool {
+        self.in_unreachable
     }
 
     /// Bind a variable name to an operand.
