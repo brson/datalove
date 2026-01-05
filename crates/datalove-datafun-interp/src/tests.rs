@@ -45,6 +45,7 @@ fn make_add_function() -> IrFunction {
         params: vec![ParamId(0), ParamId(1)],  // a, b
         param_modes: vec![],
         param_types: vec![IrType::I64, IrType::I64],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -81,6 +82,7 @@ fn test_simple_function_call() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -142,6 +144,7 @@ fn test_nested_function_calls() {
         params: vec![ParamId(0)],
         param_modes: vec![],
         param_types: vec![IrType::I64],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -171,6 +174,7 @@ fn test_nested_function_calls() {
         params: vec![ParamId(0)],
         param_modes: vec![],
         param_types: vec![IrType::I64],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -291,6 +295,7 @@ fn test_const_u8() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::U8,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -334,6 +339,7 @@ fn test_const_i32() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I32,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -377,6 +383,7 @@ fn test_const_bool() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::Bool,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -413,6 +420,7 @@ fn test_binop_sub() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -447,6 +455,7 @@ fn test_binop_mul() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -481,6 +490,7 @@ fn test_binop_div() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -515,6 +525,7 @@ fn test_binop_mod() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -549,6 +560,7 @@ fn test_binop_eq() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::Bool,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -583,6 +595,7 @@ fn test_binop_ne() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::Bool,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -617,6 +630,7 @@ fn test_binop_lt() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::Bool,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -651,6 +665,7 @@ fn test_binop_bitand() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -685,6 +700,7 @@ fn test_binop_bitor() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -719,6 +735,7 @@ fn test_binop_shl() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -758,6 +775,7 @@ fn test_binop_checked_no_overflow() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -794,6 +812,7 @@ fn test_binop_checked_overflow() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::Bool,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -833,6 +852,7 @@ fn test_unaryop_neg() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -865,6 +885,7 @@ fn test_unaryop_not() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::Bool,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -897,6 +918,7 @@ fn test_unaryop_bitnot() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::U32,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -933,6 +955,7 @@ fn test_slot_store_load() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -976,6 +999,7 @@ fn test_slot_multiple_updates() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1025,6 +1049,7 @@ fn test_branch_true() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1070,6 +1095,7 @@ fn test_branch_false() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1115,6 +1141,7 @@ fn test_goto_chain() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1173,6 +1200,7 @@ fn test_copy() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1201,6 +1229,7 @@ fn test_move() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1236,6 +1265,7 @@ fn test_pack_tuple() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1276,6 +1306,7 @@ fn test_unpack_tuple() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1327,6 +1358,7 @@ fn test_tuple_index_second() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1378,6 +1410,7 @@ fn test_wrap_some_unwrap() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1416,6 +1449,7 @@ fn test_is_some() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::Bool,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1454,6 +1488,7 @@ fn test_is_none() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::Bool,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1493,6 +1528,7 @@ fn test_option_branch() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1553,6 +1589,7 @@ fn test_wrap_ok_unwrap() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1592,6 +1629,7 @@ fn test_is_ok() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::Bool,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1631,6 +1669,7 @@ fn test_is_err() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::Bool,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1677,6 +1716,7 @@ fn test_result_branch() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1741,6 +1781,7 @@ fn test_pack_struct() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1785,6 +1826,7 @@ fn test_field_access_second() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -1835,6 +1877,7 @@ fn test_unpack_struct() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -2050,6 +2093,7 @@ fn test_crossunit_external_function() {
         params: vec![ParamId(0)],
         param_modes: vec![],
         param_types: vec![IrType::I64],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -2290,6 +2334,7 @@ fn test_phi_true_branch() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -2361,6 +2406,7 @@ fn test_phi_false_branch() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),
@@ -2454,6 +2500,7 @@ fn test_phi_nested_if() {
         params: vec![],
         param_modes: vec![],
         param_types: vec![],
+        return_type: IrType::I64,
         blocks: vec![
             IrBlock {
                 id: BlockId(0),

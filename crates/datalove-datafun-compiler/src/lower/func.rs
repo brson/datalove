@@ -101,6 +101,9 @@ pub fn lower_function_body<'db>(
         ctx.finish_block(Terminator::Return { value: None });
     }
 
+    // Get return type from context (set from function signature) before restoring.
+    let return_type = ctx.return_type.clone().unwrap_or(IrType::Unit);
+
     // Restore saved context.
     ctx.return_type = saved_return_type;
     ctx.is_script_unit = saved_is_script_unit;
@@ -111,6 +114,7 @@ pub fn lower_function_body<'db>(
         params,
         param_modes,
         param_types: std::mem::take(&mut ctx.param_types),
+        return_type,
         blocks: std::mem::take(&mut ctx.blocks),
         value_count: ctx.next_value,
         slot_count: ctx.next_slot,

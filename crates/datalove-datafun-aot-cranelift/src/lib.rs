@@ -269,6 +269,7 @@ impl AotCompiler {
             params: vec![],
             param_modes: vec![],
             param_types: vec![],
+            return_type: datalove_datafun_ir::IrType::Unit,
             blocks,
             value_count: unit.value_count,
             slot_count: unit.slot_count,

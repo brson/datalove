@@ -731,6 +731,8 @@ pub struct IrFunction {
     pub param_modes: Vec<ParamMode>,
     /// Type for each ParamId (indexed by ParamId.0).
     pub param_types: Vec<IrType>,
+    /// Return type of the function.
+    pub return_type: IrType,
     pub blocks: Vec<IrBlock>,
     pub value_count: u32,
     pub slot_count: u32,
@@ -744,25 +746,6 @@ impl IrFunction {
     /// Get the entry block (always block 0).
     pub fn entry_block(&self) -> &IrBlock {
         &self.blocks[0]
-    }
-
-    /// Infer the return type from the IR.
-    ///
-    /// Finds the first Return terminator and gets the type of its value.
-    /// Returns `IrType::Unit` if no value is returned.
-    pub fn infer_return_type(&self) -> IrType {
-        for block in &self.blocks {
-            if let Terminator::Return { value: Some(op) } = &block.terminator {
-                return match op {
-                    Operand::Value(id) => self.value_types[id.0 as usize].clone(),
-                    Operand::Slot(id) => self.slot_types[id.0 as usize].clone(),
-                    Operand::Param(id) => self.param_types[id.0 as usize].clone(),
-                    // External operands not expected in function returns.
-                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => IrType::Unit,
-                };
-            }
-        }
-        IrType::Unit
     }
 }
 

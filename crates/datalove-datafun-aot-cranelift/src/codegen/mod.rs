@@ -88,7 +88,7 @@ pub fn build_signature_for_func(
     }
 
     // Return type: scalars in register, aggregates via pointer, Unit returns nothing.
-    let ret_ty = func.infer_return_type();
+    let ret_ty = &func.return_type;
     match &ret_ty {
         IrType::Unit => {
             // Unit returns nothing.
@@ -380,8 +380,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         // Return type: scalars in register, aggregates via pointer, Unit returns nothing.
-        let ret_ty = self.func.infer_return_type();
-        match &ret_ty {
+        let ret_ty = &self.func.return_type;
+        match ret_ty {
             IrType::Unit => {
                 // Unit returns nothing.
             }
@@ -722,6 +722,7 @@ mod tests {
             params: vec![],
             param_modes: vec![],
             param_types: vec![],
+            return_type: IrType::I32,
             blocks: vec![
                 IrBlock {
                     id: BlockId(0),
@@ -759,6 +760,7 @@ mod tests {
             params: vec![],
             param_modes: vec![],
             param_types: vec![],
+            return_type: IrType::I32,
             blocks: vec![
                 IrBlock {
                     id: BlockId(0),
@@ -806,6 +808,7 @@ mod tests {
             params: vec![],
             param_modes: vec![],
             param_types: vec![],
+            return_type: IrType::Bool,
             blocks: vec![
                 IrBlock {
                     id: BlockId(0),
@@ -853,6 +856,7 @@ mod tests {
             params: vec![],
             param_modes: vec![],
             param_types: vec![],
+            return_type: IrType::I32,
             blocks: vec![
                 IrBlock {
                     id: BlockId(0),
@@ -898,6 +902,7 @@ mod tests {
             params: vec![],
             param_modes: vec![],
             param_types: vec![],
+            return_type: IrType::I32,
             blocks: vec![
                 IrBlock {
                     id: BlockId(0),

@@ -150,8 +150,8 @@ pub fn analyze_modules_worldfile(
     let mut interp = datalove_datafun_interp::IrInterpreter::new();
     let mut tydesc_table = datalove_datafun_interp::IrTyDescTable::new();
 
-    // Infer return type from the IR function.
-    let ret_ir_type = main_func.infer_return_type();
+    // Get return type from the IR function.
+    let ret_ir_type = &main_func.return_type;
     let ret_tydesc = tydesc_table.get_or_create(&ret_ir_type);
     let ret_size = unsafe { (*ret_tydesc).size };
 
