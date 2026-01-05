@@ -136,6 +136,62 @@ debuglog (a, b, c)
 
 
 
+### `if` statements with brings
+
+In the same spirit as `loop` with `carry` and `bring`.
+
+```datalove
+let x = 100
+
+if x < 10
+  break (1)
+else if x < 100
+  break (2)
+else
+  break (3)
+end if bring (y)
+
+debuglog (y)
+```
+
+To avoid ambiguity between `break` targets with nested constructs,
+`break` only applies to the innermost control-flow construct
+with `bring` bindings:
+
+```datalove
+loop
+  if 1 < 3
+    break (1)        // `break` targets `if bring`
+  else if 2 < 3
+    break (1)
+  else
+    break (2)
+  end if bring (y)
+  break (y)
+end loop bring (x)
+
+debuglog (x)
+```
+
+`if` with `bring` is exhaustive,
+must have `else` branch and all must termimnate with `break`.
+
+If the `if` doesn't "bring":
+
+```datalove
+loop
+  if true
+    break (1)
+  else
+    break (2)
+  end if
+end loop bring (x)
+
+debuglog (x)
+```
+
+
+
 
 ### Function return types
 
