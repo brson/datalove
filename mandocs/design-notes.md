@@ -31,6 +31,8 @@ end loop
 debuglog x
 ```
 
+With loop induction variables:
+
 ```datalove
 loop carry (x = 0)   // `x` is an SSA variable
   if x = 0
@@ -45,22 +47,24 @@ end loop bring (x)   // Binds exit value from `break` to outer scope`s `x`
 debuglog x
 ```
 
-`bring` forces the new outer-scope bindings to
-be read right before they come into scope
+`carry` names per-iteration bindings that must be
+re-received each time through the loop.
+`bring` names post-iteration outer-scope bindings.
+
+We call these two types of bindings "carries" and "brings".
+
+`bring`'s end-of-loop location forces the new outer-scope bindings to
+be visually scanned immediately before they come into scope
 (vs expression-based assignment, `let x = loop ...`).
 
 `loop` is unconditional, so all loop exits are through `break`.
 
-Hypothetical `while` condition,
-showing a multine `carry` format to bring the `while` condition
-closer to the natural reading location on the left of the screen
-but after the induction variable bindings.
+We can augment loops further with `while` conditions:
 
 ```datalove
 loop carry (
   x = 0,
-) while x != 10 else break (x) // must handle the zero-iteration
-                               // case with `else break`.
+) while x != 10 else break (x)
   if x = 0
     continue (1)
   end if
@@ -70,7 +74,11 @@ end loop bring (x)
 debuglog x
 ```
 
-`while` loop without carries isn't so syntaxy:
+`while` must always be paired with `else break`
+to handle the termination condition,
+including the zero-iteration case.
+
+`while` loop without carries still has light syntax:
 
 ```datalove
 var x = 0
