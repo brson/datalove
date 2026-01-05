@@ -156,15 +156,15 @@ fn test_link_and_run_debuglog_bool_true() {
 
     // Find runtime library.
     let lib_dir = ensure_runtime_lib();
+    let lib_path = lib_dir.join("libdatalove_rt.a");
 
-    // Link with cc.
+    // Link statically with cc.
     let exe_path = dir.path().join("test");
     let link_status = Command::new("cc")
         .args([
             obj_path.to_str().unwrap(),
-            "-L", lib_dir.to_str().unwrap(),
-            "-ldatalove_rt",
-            "-Wl,-rpath", lib_dir.to_str().unwrap(),
+            lib_path.to_str().unwrap(),
+            "-ldl", "-lpthread", "-lm",
             "-o", exe_path.to_str().unwrap(),
         ])
         .status()
@@ -176,7 +176,6 @@ fn test_link_and_run_debuglog_bool_true() {
 
     // Run the executable.
     let output = Command::new(&exe_path)
-        .env("LD_LIBRARY_PATH", lib_dir.to_str().unwrap())
         .output()
         .expect("failed to run executable");
 
@@ -247,15 +246,15 @@ fn test_link_and_run_multiple_debuglogs() {
 
     // Find runtime library.
     let lib_dir = ensure_runtime_lib();
+    let lib_path = lib_dir.join("libdatalove_rt.a");
 
-    // Link with cc.
+    // Link statically with cc.
     let exe_path = dir.path().join("test");
     let link_status = Command::new("cc")
         .args([
             obj_path.to_str().unwrap(),
-            "-L", lib_dir.to_str().unwrap(),
-            "-ldatalove_rt",
-            "-Wl,-rpath", lib_dir.to_str().unwrap(),
+            lib_path.to_str().unwrap(),
+            "-ldl", "-lpthread", "-lm",
             "-o", exe_path.to_str().unwrap(),
         ])
         .status()
@@ -267,7 +266,6 @@ fn test_link_and_run_multiple_debuglogs() {
 
     // Run the executable.
     let output = Command::new(&exe_path)
-        .env("LD_LIBRARY_PATH", lib_dir.to_str().unwrap())
         .output()
         .expect("failed to run executable");
 
