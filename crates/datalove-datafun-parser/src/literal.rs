@@ -436,11 +436,10 @@ impl<'db> Parser<'db> {
                     Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
                     _ => return None,
                 };
-                let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
-                if all_tokens.is_empty() {
+                let mut sub = Parser::from_branch(self.db, iter);
+                if sub.peek().is_none() {
                     return None;
                 }
-                let mut sub = Parser::new(self.db, all_tokens);
                 let expr = sub.parse_expr_full();
                 sub.error_if_not_exhausted();
                 self.had_error |= sub.had_error;
@@ -461,8 +460,7 @@ impl<'db> Parser<'db> {
         // Parse shape: [dim1, dim2, ...]
         let shape = match self.next() {
             Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
-                let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
-                self.parse_tensor_shape(all_tokens)
+                self.parse_tensor_shape(iter)
             }
             _ => {
                 let ts = self.peek_text_span();
@@ -570,72 +568,47 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse tensor shape dimensions.
-    ///
-    /// Uses incremental parsing like datalit: parse dimension, look for comma, repeat.
-    fn parse_tensor_shape(&mut self, tokens: Vec<TreeToken<'db>>) -> Vec<u32> {
-        let filtered: Vec<_> = tokens.into_iter()
-            .filter_map(|t| t.without_space(self.db))
-            .collect();
-
-        if filtered.is_empty() {
-            return vec![];
-        }
-
-        let mut iter = filtered.into_iter().peekable();
-        let mut shape = Vec::new();
-
-        loop {
-            // Try to parse a dimension number.
-            if let Some(TreeToken::Token(t)) = iter.peek() {
-                if let Some(word) = t.word_str(self.db) {
-                    if let Ok(dim) = word.parse::<u32>() {
-                        iter.next(); // consume the token
-                        shape.push(dim);
-                    } else {
-                        // Not a valid number, stop parsing.
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            } else {
-                break;
-            }
-
-            // Look for comma to continue, otherwise stop.
-            if let Some(TreeToken::Token(t)) = iter.peek() {
-                if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Comma)) {
-                    iter.next(); // consume comma
-                    // Handle trailing comma.
-                    if iter.peek().is_none() {
-                        break;
-                    }
-                } else {
-                    // No comma, stop parsing.
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-
-        // Check for unconsumed tokens.
-        if iter.peek().is_some() {
-            self.had_error = true;
-            // Emit a diagnostic for unconsumed tokens.
-            let ts = self.peek_text_span();
-            DiagnosticBuilder::error(self.db, "unexpected tokens in tensor shape")
-                .code("D030")
-                .primary_label(ts.clone(), "unexpected")
-                .emit_parse();
-        }
+    fn parse_tensor_shape(&mut self, iter: BracerIter<'db>) -> Vec<u32> {
+        let mut sub = Parser::from_branch(self.db, iter);
+        let shape = sub.parse_comma_separated(|p| p.parse_shape_dimension());
+        sub.error_if_not_exhausted();
+        self.had_error |= sub.had_error;
         shape
+    }
+
+    /// Parse a single tensor shape dimension.
+    fn parse_shape_dimension(&mut self) -> u32 {
+        match self.peek_word() {
+            Some(word) => {
+                if let Ok(dim) = word.parse::<u32>() {
+                    self.next();
+                    dim
+                } else {
+                    self.had_error = true;
+                    let ts = self.peek_text_span();
+                    DiagnosticBuilder::error(self.db, "expected dimension number in tensor shape")
+                        .code("D030")
+                        .primary_label(ts, "expected number")
+                        .emit_parse();
+                    self.next(); // consume the invalid token
+                    0
+                }
+            }
+            None => {
+                self.had_error = true;
+                let ts = self.peek_text_span();
+                DiagnosticBuilder::error(self.db, "expected dimension in tensor shape")
+                    .code("D030")
+                    .primary_label(ts, "expected dimension")
+                    .emit_parse();
+                0
+            }
+        }
     }
 
     /// Helper to parse comma-separated expressions from a branch.
     pub(super) fn parse_comma_separated_exprs(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
-        let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
-        let mut sub = Parser::new(self.db, all_tokens);
+        let mut sub = Parser::from_branch(self.db, iter);
         let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
@@ -644,8 +617,7 @@ impl<'db> Parser<'db> {
 
     /// Helper to parse comma-separated struct fields.
     fn parse_comma_separated_struct_fields(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprStructField<'db>> {
-        let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
-        let mut sub = Parser::new(self.db, all_tokens);
+        let mut sub = Parser::from_branch(self.db, iter);
         let fields = sub.parse_comma_separated(|p| p.parse_struct_field());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
@@ -684,8 +656,7 @@ impl<'db> Parser<'db> {
 
     /// Helper to parse comma-separated map entries.
     fn parse_comma_separated_map_entries(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprMapEntry<'db>> {
-        let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
-        let mut sub = Parser::new(self.db, all_tokens);
+        let mut sub = Parser::from_branch(self.db, iter);
         let entries = sub.parse_comma_separated(|p| p.parse_map_entry());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;

@@ -269,75 +269,59 @@ impl<'db> Parser<'db> {
         ))
     }
 
-    fn parse_fun_params(&self, iter: BracerIter<'db>) -> Vec<ast::FunParam<'db>> {
-        let tokens: Vec<TreeToken<'db>> = iter.filter_map(|t| t.without_space(self.db)).collect();
-        if tokens.is_empty() {
-            return vec![];
-        }
-
-        let mut sub = Parser::new(self.db, tokens);
-        let mut params = vec![];
-
-        loop {
-            // Check if we've reached the end (handles trailing comma case).
-            if sub.peek().is_none() {
-                break;
-            }
-
-            // Check for parameter mode keywords.
-            let mode = match sub.peek_word() {
-                Some("out") => {
-                    sub.eat_word("out");
-                    ast::ParamMode::Out
-                }
-                Some("ref") => {
-                    sub.eat_word("ref");
-                    ast::ParamMode::Ref
-                }
-                Some("mut") => {
-                    sub.eat_word("mut");
-                    ast::ParamMode::Mut
-                }
-                _ => ast::ParamMode::In,
-            };
-
-            let name = match sub.eat_name() {
-                Some(n) => n,
-                None => {
-                    sub.had_error = true;
-                    let ts = sub.peek_text_span();
-                    DiagnosticBuilder::error(sub.db, "expected parameter name")
-                        .code("P011")
-                        .primary_label(ts, "expected parameter name")
-                        .emit_parse();
-                    InternedText::new(sub.db, "<error>".S())
-                }
-            };
-
-            // Need colon.
-            if !sub.eat_sigil(Sigil::Colon) {
-                sub.had_error = true;
-                let ts = sub.peek_text_span();
-                DiagnosticBuilder::error(sub.db, "expected ':' after parameter name")
-                    .code("P012")
-                    .primary_label(ts, "expected ':'")
-                    .emit_parse();
-            }
-
-            let type_hint = sub.parse_type_hint_and_heap();
-
-            params.push(ast::FunParam::new(self.db, name, mode, type_hint));
-
-            // Check for comma (more params) or end.
-            if sub.peek_sigil(Sigil::Comma) {
-                sub.eat_sigil(Sigil::Comma);
-            } else {
-                break;
-            }
-        }
-
+    fn parse_fun_params(&mut self, iter: BracerIter<'db>) -> Vec<ast::FunParam<'db>> {
+        let mut sub = Parser::from_branch(self.db, iter);
+        let params = sub.parse_comma_separated(|p| p.parse_fun_param());
         sub.error_if_not_exhausted();
+        self.had_error |= sub.had_error;
         params
+    }
+
+    /// Parse a single function parameter: `[mode] name: type`.
+    fn parse_fun_param(&mut self) -> ast::FunParam<'db> {
+        // Check for parameter mode keywords.
+        let mode = match self.peek_word() {
+            Some("out") => {
+                self.eat_word("out");
+                ast::ParamMode::Out
+            }
+            Some("ref") => {
+                self.eat_word("ref");
+                ast::ParamMode::Ref
+            }
+            Some("mut") => {
+                self.eat_word("mut");
+                ast::ParamMode::Mut
+            }
+            _ => ast::ParamMode::In,
+        };
+
+        let name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                self.had_error = true;
+                let ts = self.peek_text_span();
+                DiagnosticBuilder::error(self.db, "expected parameter name")
+                    .code("P011")
+                    .primary_label(ts, "expected parameter name")
+                    .emit_parse();
+                InternedText::new(self.db, "<error>".S())
+            }
+        };
+
+        // Need colon.
+        if !self.eat_sigil(Sigil::Colon) {
+            self.had_error = true;
+            let ts = self.peek_text_span();
+            DiagnosticBuilder::error(self.db, "expected ':' after parameter name")
+                .code("P012")
+                .primary_label(ts, "expected ':'")
+                .emit_parse();
+        }
+
+        let type_hint = self.parse_type_hint_and_heap();
+
+        ast::FunParam::new(self.db, name, mode, type_hint)
     }
 
     fn parse_ret(&mut self) -> ast::Statement<'db> {

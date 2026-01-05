@@ -323,44 +323,11 @@ impl<'db> Parser<'db> {
         }
     }
 
-    pub(super) fn parse_function_call_args(&self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
-        let tokens: Vec<TreeToken<'db>> = iter.filter_map(|t| t.without_space(self.db)).collect();
-        if tokens.is_empty() {
-            return vec![];
-        }
-
-        // Split tokens by comma to get individual argument token groups.
-        let mut arg_token_groups: Vec<Vec<TreeToken<'db>>> = vec![];
-        let mut current_group: Vec<TreeToken<'db>> = vec![];
-
-        for token in tokens {
-            match token {
-                TreeToken::Token(t) if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Comma)) => {
-                    if !current_group.is_empty() {
-                        arg_token_groups.push(current_group);
-                        current_group = vec![];
-                    }
-                }
-                _ => {
-                    current_group.push(token);
-                }
-            }
-        }
-
-        // Don't forget the last group.
-        if !current_group.is_empty() {
-            arg_token_groups.push(current_group);
-        }
-
-        // Parse each argument group with a sub-parser.
-        let mut args = vec![];
-        for group in arg_token_groups {
-            let mut sub = Parser::new(self.db, group);
-            let arg = sub.parse_expr_full();
-            sub.error_if_not_exhausted();
-            args.push(arg);
-        }
-
+    pub(super) fn parse_function_call_args(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
+        let mut sub = Parser::from_branch(self.db, iter);
+        let args = sub.parse_comma_separated(|p| p.parse_expr_full());
+        sub.error_if_not_exhausted();
+        self.had_error |= sub.had_error;
         args
     }
 
@@ -379,8 +346,7 @@ impl<'db> Parser<'db> {
             }
         };
 
-        let all_tokens: Vec<TreeToken<'db>> = iter.filter_map(|t| t.without_space(self.db)).collect();
-        let mut sub = Parser::new(self.db, all_tokens);
+        let mut sub = Parser::from_branch(self.db, iter);
         let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;

@@ -150,8 +150,8 @@ impl<'db> Parser<'db> {
                         self.next();
                         // Only check for float pattern on decimal literals (not hex).
                         let is_hex = word.starts_with("0x") || word.starts_with("0X");
-                        let is_float = !is_hex && self.peek_sigil(Sigil::Dot) && self.pos + 1 < self.tokens.len() && {
-                            if let Some(TreeToken::Token(next_token)) = self.tokens.get(self.pos + 1) {
+                        let is_float = !is_hex && self.peek_sigil(Sigil::Dot) && {
+                            if let Some(TreeToken::Token(next_token)) = self.peek_next() {
                                 if let Some(decimal_part) = next_token.word_str(self.db) {
                                     decimal_part.chars().all(|c| c.is_ascii_digit())
                                 } else {
@@ -237,8 +237,7 @@ impl<'db> Parser<'db> {
 
                 // Parse shape: [dim1, dim2, ...]
                 let shape = if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
-                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = Parser::new(self.db, tokens);
+                    let mut sub_parser = Parser::from_branch(self.db, iter);
                     let shape = sub_parser.parse_comma_separated(|p| {
                         match p.parse_u32_literal() {
                             Some(dim) => dim,
@@ -278,8 +277,7 @@ impl<'db> Parser<'db> {
 
                     if rank == 1 {
                         // 1D tensor: comma-separated elements [1, 2, 3, 4, 5].
-                        let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                        let mut sub_parser = Parser::new(self.db, tokens);
+                        let mut sub_parser = Parser::from_branch(self.db, iter);
                         let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                         sub_parser.error_if_not_exhausted();
                         // Merge spans from sub-parser.
@@ -304,7 +302,7 @@ impl<'db> Parser<'db> {
                             let mut row_parser = Parser::new(self.db, elem_tokens.clone());
 
                             let mut row_elements = Vec::new();
-                            while row_parser.pos < row_parser.tokens.len() {
+                            while row_parser.peek().is_some() {
                                 row_elements.push(row_parser.parse_expr_full());
                             }
 
@@ -355,8 +353,7 @@ impl<'db> Parser<'db> {
                 };
                 let payload = if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
                     // Parse a single expression as payload.
-                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = Parser::new(self.db, tokens);
+                    let mut sub_parser = Parser::from_branch(self.db, iter);
                     let payload_expr = sub_parser.parse_expr_full();
                     sub_parser.error_if_not_exhausted();
                     // Merge spans from sub-parser.
@@ -375,8 +372,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 self.eat_word("map");
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
-                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = Parser::new(self.db, tokens);
+                    let mut sub_parser = Parser::from_branch(self.db, iter);
                     let entries = sub_parser.parse_comma_separated(|p| {
                         let key = p.parse_expr_full();
                         if !p.eat_sigil(Sigil::Equals) {
@@ -412,8 +408,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 self.eat_word("set");
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
-                    let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                    let mut sub_parser = Parser::new(self.db, tokens);
+                    let mut sub_parser = Parser::from_branch(self.db, iter);
                     let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                     sub_parser.error_if_not_exhausted();
                     // Merge spans from sub-parser.
@@ -440,8 +435,8 @@ impl<'db> Parser<'db> {
                             self.next();
                             // Only check for float pattern on decimal literals (not hex).
                             let is_hex = word.starts_with("0x") || word.starts_with("0X");
-                            if !is_hex && self.peek_sigil(Sigil::Dot) && self.pos + 1 < self.tokens.len() {
-                                if let Some(TreeToken::Token(next_token)) = self.tokens.get(self.pos + 1) {
+                            if !is_hex && self.peek_sigil(Sigil::Dot) {
+                                if let Some(TreeToken::Token(next_token)) = self.peek_next() {
                                     if let Some(decimal_part) = next_token.word_str(self.db) {
                                         if decimal_part.chars().all(|c| c.is_ascii_digit()) {
                                             // It's a float!
@@ -496,33 +491,39 @@ impl<'db> Parser<'db> {
                     }
                 }
             }
-            Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
+            Some(TreeToken::Branch(Sigil::ParenOpen, _)) => {
                 // Tuple.
-                self.next(); // Consume the branch.
-                let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                let mut sub_parser = Parser::new(self.db, tokens);
+                let iter = match self.next() {
+                    Some(TreeToken::Branch(_, iter)) => iter,
+                    _ => unreachable!(),
+                };
+                let mut sub_parser = Parser::from_branch(self.db, iter);
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
                 self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::AnonTuple(ast::ExprAnonTuple::new(self.db, elements))
             }
-            Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => {
+            Some(TreeToken::Branch(Sigil::BraceOpen, _)) => {
                 // Struct.
-                self.next(); // Consume the branch.
-                let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                let mut sub_parser = Parser::new(self.db, tokens);
+                let iter = match self.next() {
+                    Some(TreeToken::Branch(_, iter)) => iter,
+                    _ => unreachable!(),
+                };
+                let mut sub_parser = Parser::from_branch(self.db, iter);
                 let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
                 self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::AnonStruct(ast::ExprAnonStruct::new(self.db, fields))
             }
-            Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
+            Some(TreeToken::Branch(Sigil::BracketOpen, _)) => {
                 // List.
-                self.next(); // Consume the branch.
-                let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
-                let mut sub_parser = Parser::new(self.db, tokens);
+                let iter = match self.next() {
+                    Some(TreeToken::Branch(_, iter)) => iter,
+                    _ => unreachable!(),
+                };
+                let mut sub_parser = Parser::from_branch(self.db, iter);
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
