@@ -830,8 +830,6 @@ impl TyDescEmitter {
             IrType::Enum(variants) => variants.iter().all(|(_, payload)| {
                 payload.as_ref().map_or(true, |t| self.can_emit(t))
             }),
-
-            _ => false,
         }
     }
 
