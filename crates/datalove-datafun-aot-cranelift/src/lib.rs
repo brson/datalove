@@ -1,12 +1,37 @@
 //! AOT compilation backend using Cranelift.
 //!
 //! Compiles datafun IR directly to native code via Cranelift,
-//! producing object files for linking.
+//! producing object files for linking with the datalove runtime.
+//!
+//! # Architecture
+//!
+//! The AOT compiler uses a three-pass approach for whole-world compilation:
+//!
+//! 1. **Type collection**: Collect all types from all functions and script units.
+//! 2. **Declaration**: Declare all functions and emit all type descriptors upfront.
+//! 3. **Definition**: Compile function bodies with full call graph visibility.
+//!
+//! # Key types
+//!
+//! - [`AotCompiler`]: Main entry point for compilation.
+//! - [`codegen::FunctionCompiler`]: Compiles individual IR functions to Cranelift IR.
+//! - [`tydesc_emit::TyDescEmitter`]: Emits runtime type descriptors as static data.
+//!
+//! # Generated code structure
+//!
+//! For a script unit, the compiler generates:
+//! - `__script_body(rt: *mut u8)`: The script body taking a runtime handle.
+//! - `main()`: Entry point that initializes runtime, runs body, cleans up.
 
+/// IR to Cranelift translation.
 pub mod codegen;
+/// Stack frame layout computation.
 pub mod layout;
+/// Runtime function imports.
 pub mod runtime;
+/// Type descriptor emission as static data.
 pub mod tydesc_emit;
+/// Type mapping from IR to Cranelift.
 pub mod types;
 
 use std::collections::HashMap;
@@ -48,36 +73,16 @@ impl std::error::Error for AotError {}
 
 /// AOT compiler context.
 ///
-/// Holds Cranelift state for compiling multiple functions.
+/// Holds Cranelift state for compiling IR to native code.
 pub struct AotCompiler {
     /// Target ISA for code generation.
     isa: std::sync::Arc<dyn TargetIsa>,
-    /// Type descriptor table for layout computation.
-    #[allow(dead_code)]
-    tydesc_table: layout::TyDescTable,
 }
 
 impl AotCompiler {
     /// Create a new AOT compiler for the host target.
     pub fn new_for_host() -> Result<Self, AotError> {
-        let builder = cranelift_codegen::isa::lookup(Triple::host())
-            .map_err(|e| AotError::Codegen(format!("unsupported target: {}", e)))?;
-
-        let mut settings_builder = settings::builder();
-        settings_builder.set("opt_level", "speed")
-            .map_err(|e| AotError::Codegen(format!("settings error: {}", e)))?;
-        // Enable position-independent code to avoid linker warnings about DT_TEXTREL.
-        settings_builder.set("is_pic", "true")
-            .map_err(|e| AotError::Codegen(format!("settings error: {}", e)))?;
-
-        let flags = settings::Flags::new(settings_builder);
-        let isa = builder.finish(flags)
-            .map_err(|e| AotError::Codegen(format!("isa error: {}", e)))?;
-
-        Ok(Self {
-            isa,
-            tydesc_table: layout::TyDescTable::new(),
-        })
+        Self::new_for_target(Triple::host())
     }
 
     /// Create a new AOT compiler for a specific target triple.
@@ -96,10 +101,7 @@ impl AotCompiler {
         let isa = builder.finish(flags)
             .map_err(|e| AotError::Codegen(format!("isa error: {}", e)))?;
 
-        Ok(Self {
-            isa,
-            tydesc_table: layout::TyDescTable::new(),
-        })
+        Ok(Self { isa })
     }
 
     /// Compile an IR module to an object file.

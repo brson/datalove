@@ -338,6 +338,49 @@ After: `drop s0` emitted before `unit_end`
 - Collection destruction via existing `Drop` instruction
 - All 17 AOT test fixtures pass with leak checking
 
+### Phase 3.10: Code Organization and Documentation Cleanup ✓ COMPLETE
+
+**Goal:** Clean up code organization and documentation for maintainability.
+
+**Modified files:**
+
+- `crates/datalove-datafun-aot-cranelift/src/lib.rs`
+  - Improved module doc with architecture overview, key types, and generated code structure
+  - Added doc comments to each submodule declaration
+  - Removed unused `tydesc_table` field from `AotCompiler`
+  - Deduplicated `new_for_host()` to call `new_for_target(Triple::host())`
+
+- `crates/datalove-datafun-aot-cranelift/src/layout.rs`
+  - Removed vestigial `TyDescTable` struct (was never used)
+  - Now imports `align_up` from `types` module instead of duplicating it
+
+- `crates/datalove-datafun-aot-cranelift/src/codegen/mod.rs`
+  - Improved module doc explaining submodule organization, value representation, rt_handle threading
+  - Added doc comments to each submodule declaration
+
+**Code organization:**
+```
+lib.rs           - Entry point: AotCompiler, three-pass compilation
+├── types.rs     - IR→Cranelift type mapping, TypeLayout, CraneliftRepr
+├── layout.rs    - FrameLayout computation for stack slots
+├── runtime.rs   - RuntimeImports: dtlv_rti_* function declarations
+├── tydesc_emit.rs - TyDescEmitter: static TyDesc data emission
+└── codegen/
+    ├── mod.rs       - FunctionCompiler driver
+    ├── ops.rs       - BinOp, UnaryOp
+    ├── constants.rs - Const (scalar, Int, String)
+    ├── collections.rs - ListNew, SetNew, MapNew
+    ├── aggregates.rs - Pack, Unpack, Copy
+    ├── calls.rs     - Call instruction
+    ├── slots.rs     - SlotStore, SlotLoad
+    ├── runtime.rs   - DebugLog, Drop
+    └── terminators.rs - Return, Goto, Branch
+```
+
+**Remaining scaffolding (left for future use):**
+- `registry`, `slot_vars`, `next_var`, `alloc_var` in FunctionCompiler
+  (infrastructure for potential Cranelift Variable-based slot approach)
+
 ### Phases 4-8: Feature Development (Test-Driven)
 
 Order TBD based on what the test harness reveals. Expected needs:
@@ -388,15 +431,21 @@ Add a new crate `datalove-datafun-aot-cranelift` as a peer to parser/tycheck/int
 datalove-datafun-aot-cranelift/
 ├── Cargo.toml
 └── src/
-    ├── lib.rs              # Public API: compile_function, compile_module, etc.
-    ├── codegen.rs          # Core codegen driver
-    ├── types.rs            # IR type → Cranelift type mapping
-    ├── layout.rs           # Value/slot layout (mirrors interp/layout.rs)
-    ├── abi.rs              # Calling convention, parameter modes
-    ├── instructions.rs     # IR instruction → Cranelift IR translation
-    ├── terminators.rs      # Control flow terminators
-    ├── runtime.rs          # Runtime function imports (dtlv_rti_*)
-    └── module.rs           # Module-level compilation
+    ├── lib.rs              # AotCompiler: entry point, three-pass compilation
+    ├── types.rs            # IR→Cranelift type mapping, TypeLayout
+    ├── layout.rs           # FrameLayout: stack slot offset computation
+    ├── runtime.rs          # RuntimeImports: dtlv_rti_* declarations
+    ├── tydesc_emit.rs      # TyDescEmitter: static TyDesc data emission
+    └── codegen/
+        ├── mod.rs          # FunctionCompiler: IR→Cranelift translation
+        ├── ops.rs          # BinOp, UnaryOp
+        ├── constants.rs    # Const (scalar, Int, String)
+        ├── collections.rs  # ListNew, SetNew, MapNew
+        ├── aggregates.rs   # Pack, Unpack, Copy
+        ├── calls.rs        # Call instruction
+        ├── slots.rs        # SlotStore, SlotLoad
+        ├── runtime.rs      # DebugLog, Drop
+        └── terminators.rs  # Return, Goto, Branch
 ```
 
 **Dependencies:**

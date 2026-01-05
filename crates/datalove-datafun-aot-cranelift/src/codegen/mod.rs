@@ -1,14 +1,44 @@
 //! Core codegen driver for translating IR to Cranelift.
 //!
-//! Translates IrFunction to Cranelift IR using FunctionBuilder.
+//! Translates [`IrFunction`] to Cranelift IR using FunctionBuilder. The main type is
+//! [`FunctionCompiler`], which handles the translation of a single function.
+//!
+//! # Submodules
+//!
+//! Instruction compilation is split across submodules by category:
+//! - [`ops`]: Binary and unary arithmetic/logic operations.
+//! - [`constants`]: Constant value materialization.
+//! - [`collections`]: List, Set, Map construction.
+//! - [`aggregates`]: Tuple/struct Pack and Unpack.
+//! - [`calls`]: Function call compilation.
+//! - [`slots`]: Mutable slot load/store.
+//! - [`runtime`]: Runtime calls (DebugLog, Drop).
+//! - [`terminators`]: Block terminators (Return, Branch, Goto).
+//!
+//! # Value representation
+//!
+//! IR values are represented in Cranelift as either:
+//! - **Scalar**: Fits in a register (bools, integers, floats).
+//! - **Aggregate**: Stored in the stack frame, tracked by pointer.
+//!
+//! All function parameters are passed by pointer. The implicit `rt_handle`
+//! is threaded as the first parameter to all functions.
 
+/// Tuple/struct packing and unpacking.
 mod aggregates;
+/// Function call compilation.
 mod calls;
+/// Collection type construction.
 mod collections;
+/// Constant value materialization.
 mod constants;
+/// Binary and unary operations.
 mod ops;
+/// Runtime calls (DebugLog, Drop).
 mod runtime;
+/// Mutable slot operations.
 mod slots;
+/// Block terminators.
 mod terminators;
 
 use std::collections::HashMap;

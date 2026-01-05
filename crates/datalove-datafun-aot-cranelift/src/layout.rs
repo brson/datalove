@@ -4,13 +4,7 @@
 //! matching the interpreter's layout for ABI compatibility.
 
 use datalove_datafun_ir::IrType;
-use crate::types::{self, TypeLayout, CraneliftRepr};
-
-/// Align a value up to the given alignment.
-#[inline]
-pub fn align_up(value: u32, align: u32) -> u32 {
-    (value + align - 1) & !(align - 1)
-}
+use crate::types::{self, align_up, TypeLayout, CraneliftRepr};
 
 /// Layout information for a single value or slot.
 #[derive(Debug, Clone)]
@@ -132,28 +126,6 @@ impl FrameLayout {
     /// Get the offset for a param by index.
     pub fn param_offset(&self, idx: u32) -> u32 {
         self.params[idx as usize].offset
-    }
-}
-
-/// Type descriptor table for AOT compilation.
-///
-/// Tracks type information needed for runtime calls. Unlike the interpreter's
-/// `IrTyDescTable`, this doesn't allocate TyDesc structs at compile time -
-/// those are created at runtime or linked from the runtime library.
-pub struct TyDescTable {
-    // Placeholder for now. In later phases, this will track which type
-    // descriptors need to be generated or imported.
-}
-
-impl TyDescTable {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Default for TyDescTable {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
