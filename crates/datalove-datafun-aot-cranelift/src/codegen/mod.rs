@@ -462,6 +462,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::MapNew { dest, entries } => {
                 self.compile_map_new(builder, *dest, entries)?;
             }
+            Instruction::TensorNew { dest, shape, elements } => {
+                self.compile_tensor_new(builder, *dest, shape, elements)?;
+            }
 
             // Option/Result instructions.
             Instruction::WrapSome { dest, inner } => {

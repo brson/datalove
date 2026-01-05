@@ -1661,6 +1661,55 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_reshape_local(
     }
 }
 
+/// Initialize a tensor from contiguous element data and raw shape array.
+///
+/// This is a simpler interface for AOT compilation where the shape is known
+/// at compile time. The element data must be contiguous and contain exactly
+/// `product(shape[0..rank])` elements.
+///
+/// # Arguments
+/// * `rt` - Runtime handle
+/// * `element_data_in` - Pointer to contiguous element data (will be moved/consumed)
+/// * `element_count` - Number of elements in the data array
+/// * `element_tydesc` - Type descriptor for elements
+/// * `shape_ptr` - Pointer to array of u32 dimension sizes
+/// * `rank` - Number of dimensions
+/// * `tensor_value_out` - Output tensor location
+/// * `tensor_tydesc` - Type descriptor for the tensor type
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_tensor_init_local(
+    rt: LocalRtHandle,
+    element_data_in: *mut u8,
+    element_count: u32,
+    element_tydesc: *const rtdt::TyDesc,
+    shape_ptr: *const u32,
+    rank: u32,
+    tensor_value_out: *mut u8,
+    tensor_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!element_data_in.is_null() || element_count == 0, "element_data_in is null");
+    debug_assert!(!element_tydesc.is_null(), "element_tydesc is null");
+    debug_assert!(!shape_ptr.is_null() || rank == 0, "shape_ptr is null");
+    debug_assert!(!tensor_value_out.is_null(), "tensor_value_out is null");
+    debug_assert!(!tensor_tydesc.is_null(), "tensor_tydesc is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
+        let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
+        crate::impls::tensor::tensor_init_impl(
+            rt_ref,
+            element_data_in,
+            element_count,
+            element_tydesc_ref,
+            shape_ptr,
+            rank,
+            tensor_value_out,
+            tensor_tydesc_ref,
+        )
+    }
+}
+
 // ============================================================================
 // Debug Log Operations
 // ============================================================================

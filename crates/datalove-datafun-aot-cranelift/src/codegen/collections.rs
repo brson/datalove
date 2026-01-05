@@ -1,6 +1,6 @@
-//! Collection type instruction compilation (List, Set, Map).
+//! Collection type instruction compilation (List, Set, Map, Tensor).
 
-use cranelift_codegen::ir::{self as cl_ir, InstBuilder};
+use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
@@ -223,6 +223,121 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Store pointer for this value.
         self.values.insert(dest, map_ptr);
+        Ok(())
+    }
+
+    /// Compile a TensorNew instruction.
+    ///
+    /// Creates a tensor from the given shape and elements.
+    pub(super) fn compile_tensor_new(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        shape: &[u32],
+        elements: &[Operand],
+    ) -> Result<(), AotError> {
+        // Get runtime imports and handle.
+        let runtime = self.runtime.ok_or_else(|| {
+            AotError::Codegen("TensorNew requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            AotError::Codegen("TensorNew requires runtime handle".into())
+        })?;
+
+        // Get tensor type from dest.
+        let tensor_ty = self.func.value_types[dest.0 as usize].clone();
+        let elem_ty = match &tensor_ty {
+            IrType::Tensor(elem, _rank) => elem.as_ref().clone(),
+            _ => return Err(AotError::Codegen(format!(
+                "TensorNew dest has non-tensor type: {:?}", tensor_ty
+            ))),
+        };
+
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            AotError::Codegen("no frame slot for TensorNew".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let tensor_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Get Tensor TyDesc.
+        let tensor_tydesc_id = self.tydesc_emitter.get(&tensor_ty).ok_or_else(|| {
+            AotError::Codegen(format!("TyDesc not found for {:?}", tensor_ty))
+        })?;
+        let tensor_tydesc_gv = self.module.declare_data_in_func(tensor_tydesc_id, builder.func);
+        let tensor_tydesc_ptr = builder.ins().global_value(PTR_TYPE, tensor_tydesc_gv);
+
+        // Get element TyDesc.
+        let elem_tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
+            AotError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
+        })?;
+        let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
+        let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
+
+        // Get element size from the type.
+        let elem_size = crate::types::ir_type_size(&elem_ty);
+        let element_count = elements.len() as u32;
+        let rank = shape.len() as u32;
+
+        // Allocate a temporary stack buffer for element data.
+        let data_buffer_size = (element_count as usize) * (elem_size as usize);
+        let data_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+            cl_ir::StackSlotKind::ExplicitSlot,
+            data_buffer_size as u32,
+            elem_size as u8, // alignment
+        ));
+        let data_ptr = builder.ins().stack_addr(PTR_TYPE, data_slot, 0);
+
+        // Copy each element into the data buffer.
+        for (i, elem) in elements.iter().enumerate() {
+            let elem_src_ptr = self.get_operand_ptr(builder, elem)?;
+            let elem_dest_offset = (i as u32) * elem_size;
+            let elem_dest_ptr = builder.ins().stack_addr(PTR_TYPE, data_slot, elem_dest_offset as i32);
+
+            // Use memcpy to copy the element.
+            // For small fixed sizes, could use load/store, but memcpy is simpler.
+            let size_val = builder.ins().iconst(PTR_TYPE, elem_size as i64);
+            builder.call_memcpy(
+                self.isa.frontend_config(),
+                elem_dest_ptr,
+                elem_src_ptr,
+                size_val,
+            );
+        }
+
+        // Allocate stack buffer for shape array and fill it.
+        let shape_buffer_size = (rank as usize) * std::mem::size_of::<u32>();
+        let shape_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+            cl_ir::StackSlotKind::ExplicitSlot,
+            shape_buffer_size as u32,
+            std::mem::align_of::<u32>() as u8,
+        ));
+        let shape_ptr = builder.ins().stack_addr(PTR_TYPE, shape_slot, 0);
+
+        // Store each shape dimension.
+        for (i, &dim) in shape.iter().enumerate() {
+            let offset = (i * std::mem::size_of::<u32>()) as i32;
+            let dim_val = builder.ins().iconst(cl_types::I32, dim as i64);
+            builder.ins().store(cl_ir::MemFlags::new(), dim_val, shape_ptr, offset);
+        }
+
+        // Call tensor_init runtime function.
+        let init_ref = self.module.declare_func_in_func(runtime.tensor_init, builder.func);
+        let element_count_val = builder.ins().iconst(cl_types::I32, element_count as i64);
+        let rank_val = builder.ins().iconst(cl_types::I32, rank as i64);
+        builder.ins().call(init_ref, &[
+            rt_handle,
+            data_ptr,
+            element_count_val,
+            elem_tydesc_ptr,
+            shape_ptr,
+            rank_val,
+            tensor_ptr,
+            tensor_tydesc_ptr,
+        ]);
+
+        // Store pointer for this value.
+        self.values.insert(dest, tensor_ptr);
         Ok(())
     }
 }

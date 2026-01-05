@@ -13,8 +13,9 @@ use cranelift_module::{DataDescription, DataId, Linkage, Module};
 use datalove_datafun_ir::{IrFunction, IrScriptUnit, IrType};
 use datalove_rtdt::{
     Data as RtData, Error as RtError, Int as RtInt, List as RtList, Map as RtMap,
-    Set as RtSet, String as RtString, TyDesc, TyInfoEnum, TyInfoEnumVariant, TyInfoList,
-    TyInfoMap, TyInfoOption, TyInfoResult, TyInfoSet, TyInfoTuple, TyInfoTupleField, TyTag,
+    Set as RtSet, String as RtString, Tensor as RtTensor, TyDesc, TyInfoEnum, TyInfoEnumVariant,
+    TyInfoList, TyInfoMap, TyInfoOption, TyInfoResult, TyInfoSet, TyInfoTensor, TyInfoTuple,
+    TyInfoTupleField, TyTag,
 };
 
 use crate::AotError;
@@ -27,6 +28,10 @@ const TYINFO_LIST_ELEMENT_OFFSET: usize = std::mem::offset_of!(TyInfoList, eleme
 const TYINFO_SET_ELEMENT_OFFSET: usize = std::mem::offset_of!(TyInfoSet, element_tydesc);
 const TYINFO_MAP_KEY_OFFSET: usize = std::mem::offset_of!(TyInfoMap, key_tydesc);
 const TYINFO_MAP_VALUE_OFFSET: usize = std::mem::offset_of!(TyInfoMap, value_tydesc);
+
+// Offsets within TyInfo union for Tensor type.
+const TYINFO_TENSOR_ELEMENT_OFFSET: usize = std::mem::offset_of!(TyInfoTensor, element_tydesc);
+const TYINFO_TENSOR_RANK_OFFSET: usize = std::mem::offset_of!(TyInfoTensor, rank);
 
 // Offsets within TyInfo union for Option/Result types.
 const TYINFO_OPTION_INNER_OFFSET: usize = std::mem::offset_of!(TyInfoOption, inner_tydesc);
@@ -98,6 +103,9 @@ impl TyDescEmitter {
             }
             IrType::Map(key_ty, val_ty) => {
                 return self.emit_map_tydesc(module, key_ty, val_ty);
+            }
+            IrType::Tensor(elem_ty, rank) => {
+                return self.emit_tensor_tydesc(module, elem_ty, *rank);
             }
             IrType::Option(inner_ty) => {
                 return self.emit_option_tydesc(module, inner_ty);
@@ -306,6 +314,64 @@ impl TyDescEmitter {
             .map_err(|e| AotError::Module(format!("define map tydesc: {}", e)))?;
 
         self.tydescs.insert(map_ty, data_id);
+        Ok(data_id)
+    }
+
+    /// Emit a TyDesc for a Tensor type with element type reference and rank.
+    fn emit_tensor_tydesc<M: Module>(
+        &mut self,
+        module: &mut M,
+        elem_ty: &IrType,
+        rank: u32,
+    ) -> Result<DataId, AotError> {
+        let tensor_ty = IrType::Tensor(Box::new(elem_ty.clone()), rank);
+
+        // Check cache.
+        if let Some(&id) = self.tydescs.get(&tensor_ty) {
+            return Ok(id);
+        }
+
+        // First, emit the element type TyDesc.
+        let elem_tydesc_id = self.emit(module, elem_ty)?;
+
+        // Build base TyDesc bytes.
+        let mut bytes = vec![0u8; TYDESC_SIZE];
+        let tag = TyTag::Tensor as u8;
+        let size = size_of::<RtTensor>() as u32;
+        let align = align_of::<RtTensor>() as u32;
+
+        bytes[OFFSET_TYPE_TAG] = tag;
+        bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&size.to_le_bytes());
+        bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&align.to_le_bytes());
+
+        // Write rank in type_info.
+        let rank_offset = OFFSET_TYPE_INFO + TYINFO_TENSOR_RANK_OFFSET;
+        bytes[rank_offset..rank_offset + 4].copy_from_slice(&rank.to_le_bytes());
+
+        // Create unique name.
+        let name = format!("__tydesc_{}", self.counter);
+        self.counter += 1;
+
+        // Declare data.
+        let data_id = module
+            .declare_data(&name, Linkage::Local, false, false)
+            .map_err(|e| AotError::Module(format!("declare tensor tydesc: {}", e)))?;
+
+        // Define data with relocation to element tydesc.
+        let mut data_desc = DataDescription::new();
+        data_desc.define(bytes.into_boxed_slice());
+        data_desc.set_align(TYDESC_ALIGN as u64);
+
+        // Add relocation for element_tydesc pointer in type_info.
+        let elem_gv = module.declare_data_in_data(elem_tydesc_id, &mut data_desc);
+        let elem_offset = OFFSET_TYPE_INFO + TYINFO_TENSOR_ELEMENT_OFFSET;
+        data_desc.write_data_addr(elem_offset as u32, elem_gv, 0);
+
+        module
+            .define_data(data_id, &data_desc)
+            .map_err(|e| AotError::Module(format!("define tensor tydesc: {}", e)))?;
+
+        self.tydescs.insert(tensor_ty, data_id);
         Ok(data_id)
     }
 
@@ -750,6 +816,7 @@ impl TyDescEmitter {
             IrType::List(elem_ty) => self.can_emit(elem_ty),
             IrType::Set(elem_ty) => self.can_emit(elem_ty),
             IrType::Map(key_ty, val_ty) => self.can_emit(key_ty) && self.can_emit(val_ty),
+            IrType::Tensor(elem_ty, _rank) => self.can_emit(elem_ty),
 
             // Option/Result types - can emit if inner type can be emitted.
             IrType::Option(inner_ty) => self.can_emit(inner_ty),

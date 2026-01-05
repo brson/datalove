@@ -249,6 +249,11 @@ pub const PTR_SIZE: u32 = 8;
 /// Pointer alignment in bytes.
 pub const PTR_ALIGN: u32 = 8;
 
+/// Get the size of an IR type in bytes.
+pub fn ir_type_size(ty: &IrType) -> u32 {
+    ir_type_to_cranelift(ty).layout().size
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

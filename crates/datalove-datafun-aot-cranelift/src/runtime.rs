@@ -42,6 +42,8 @@ pub struct RuntimeImports {
     pub map_create: FuncId,
     /// `dtlv_rti_btreemap_insert_local(rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc) -> RtStatus`
     pub map_insert: FuncId,
+    /// `dtlv_rti_tensor_init_local(rt, element_data_in, element_count, element_tydesc, shape_ptr, rank, tensor_out, tensor_tydesc) -> RtStatus`
+    pub tensor_init: FuncId,
 
     // Int (bigint) arithmetic functions.
     /// `dtlv_rti_int_add(rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> RtStatus`
@@ -243,6 +245,23 @@ impl RuntimeImports {
                 .map_err(|e| AotError::Module(format!("declare dtlv_rti_btreemap_insert_local: {}", e)))?
         };
 
+        // dtlv_rti_tensor_init_local(rt, element_data_in, element_count, element_tydesc, shape_ptr, rank, tensor_out, tensor_tydesc) -> u8
+        let tensor_init = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE));      // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE));      // element_data_in
+            sig.params.push(AbiParam::new(cl_types::I32)); // element_count
+            sig.params.push(AbiParam::new(PTR_TYPE));      // element_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));      // shape_ptr
+            sig.params.push(AbiParam::new(cl_types::I32)); // rank
+            sig.params.push(AbiParam::new(PTR_TYPE));      // tensor_out
+            sig.params.push(AbiParam::new(PTR_TYPE));      // tensor_tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_tensor_init_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_tensor_init_local: {}", e)))?
+        };
+
         // Int (bigint) binary operations: (rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> u8
         let int_binop_sig = || {
             let mut sig = cl_ir::Signature::new(call_conv);
@@ -335,6 +354,7 @@ impl RuntimeImports {
             set_insert,
             map_create,
             map_insert,
+            tensor_init,
             int_add,
             int_sub,
             int_mul,

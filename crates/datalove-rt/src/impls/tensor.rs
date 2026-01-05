@@ -257,6 +257,119 @@ pub unsafe fn tensor_create_from_slice_impl(
     }
 }
 
+/// Initialize a tensor from contiguous element data and raw shape array.
+///
+/// This is a simpler interface for AOT compilation. The element data is moved
+/// (not cloned) into the tensor's internal buffer.
+pub unsafe fn tensor_init_impl(
+    rt_ref: &mut RtLocal,
+    element_data_in: *mut u8,
+    element_count: u32,
+    element_tydesc_ref: TyDescRef,
+    shape_ptr: *const u32,
+    rank: u32,
+    tensor_value_out: *mut u8,
+    tensor_tydesc_ref: TyDescRef,
+) -> RtStatus {
+    unsafe {
+        if tensor_value_out.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Handle empty tensor case.
+        if rank == 0 || element_count == 0 {
+            let tensor_ptr = tensor_value_out as *mut crate::rtdt::Tensor;
+            (*tensor_ptr).ptr_base = std::ptr::null_mut();
+            (*tensor_ptr).offset_elems = 0;
+            (*tensor_ptr).capacity_elems = 0;
+            (*tensor_ptr).shape = std::ptr::null();
+            (*tensor_ptr).strides = std::ptr::null();
+            (*tensor_ptr).layout = crate::rtdt::TensorLayout::RowMajor;
+            return RtStatus::Ok;
+        }
+
+        if element_data_in.is_null() || shape_ptr.is_null() {
+            return RtStatus::Error;
+        }
+
+        // Verify rank matches tensor type.
+        let expected_rank = tensor_tydesc_ref.tensor_rank();
+        if rank != expected_rank {
+            return RtStatus::Error;
+        }
+
+        // Compute total elements from shape.
+        let shape_slice = std::slice::from_raw_parts(shape_ptr, rank as usize);
+        let mut total_elems = 1u32;
+        for &dim in shape_slice {
+            total_elems = total_elems.saturating_mul(dim);
+        }
+
+        // Validate element count matches shape.
+        if element_count != total_elems {
+            return RtStatus::Error;
+        }
+
+        let element_size = element_tydesc_ref.size();
+        let element_align = element_tydesc_ref.align();
+
+        // Allocate data buffer and copy elements (move semantics - just memcpy).
+        let data_ptr = rt_ref.alloc.alloc(element_size, element_align, total_elems);
+        if data_ptr.is_null() {
+            return RtStatus::Error;
+        }
+        std::ptr::copy_nonoverlapping(
+            element_data_in,
+            data_ptr,
+            (total_elems * element_size) as usize,
+        );
+
+        // Allocate shape array.
+        let shape_array_ptr = rt_ref.alloc.alloc(
+            std::mem::size_of::<u32>() as u32,
+            std::mem::align_of::<u32>() as u32,
+            rank,
+        ) as *mut u32;
+        if shape_array_ptr.is_null() {
+            rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
+            return RtStatus::Error;
+        }
+        std::ptr::copy_nonoverlapping(shape_ptr, shape_array_ptr, rank as usize);
+
+        // Allocate strides array.
+        let strides_array_ptr = rt_ref.alloc.alloc(
+            std::mem::size_of::<u32>() as u32,
+            std::mem::align_of::<u32>() as u32,
+            rank,
+        ) as *mut u32;
+        if strides_array_ptr.is_null() {
+            rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
+            rt_ref.alloc.free(
+                std::mem::size_of::<u32>() as u32,
+                std::mem::align_of::<u32>() as u32,
+                rank,
+                shape_array_ptr as *mut u8,
+            );
+            return RtStatus::Error;
+        }
+
+        // Compute row-major strides.
+        let strides = compute_row_major_strides(shape_slice);
+        std::ptr::copy_nonoverlapping(strides.as_ptr(), strides_array_ptr, rank as usize);
+
+        // Initialize Tensor struct.
+        let tensor_ptr = tensor_value_out as *mut crate::rtdt::Tensor;
+        (*tensor_ptr).ptr_base = data_ptr;
+        (*tensor_ptr).offset_elems = 0;
+        (*tensor_ptr).capacity_elems = total_elems;
+        (*tensor_ptr).shape = shape_array_ptr;
+        (*tensor_ptr).strides = strides_array_ptr;
+        (*tensor_ptr).layout = crate::rtdt::TensorLayout::RowMajor;
+
+        RtStatus::Ok
+    }
+}
+
 /// Gets an element at the specified indices by cloning it.
 ///
 /// Validates indices, computes linear offset, and clones element to output.
