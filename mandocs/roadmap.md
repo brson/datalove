@@ -21,6 +21,7 @@ The MVP is a working bare datafun language with:
 
 # on deck
 
+- field access
 - aot
 - jit
 - serialized ir bundles
