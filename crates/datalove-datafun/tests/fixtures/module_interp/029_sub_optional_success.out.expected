@@ -4,7 +4,7 @@ ModulesAnalysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn test_sub(p0, p1):\nblock0:\n    v0, v1 = sub.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    try_return v2\nblock2:\n    v3 = some v0\n    return v3\n\nfn main():\nblock0:\n    v0 = const 10u32\n    v1 = const 3u32\n    v2 = call m0.f0(v0, v1)\n    return v2\n",
+        ir: "fn test_sub(p0, p1):\nblock0:\n    v0, v1 = sub.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\n\nfn main():\nblock0:\n    v0 = const 10u32\n    v1 = const 3u32\n    v2 = call m0.f0(v0, v1)\n    return v2\n",
     ),
     output: "some @7",
 )

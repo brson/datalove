@@ -281,7 +281,7 @@ impl IrInterpreter {
         }
 
         // Execute blocks, writing return value directly to ret_dest.
-        // Functions use ret_dest for Return/TryReturn, not expr_dest.
+        // Functions use ret_dest for Return, not expr_dest.
         let result = self.execute_blocks(&func.blocks, &mut frame, ret_dest, None, ctx, registry, frames);
 
         // Destroy remaining values in frame.
@@ -395,26 +395,6 @@ impl IrInterpreter {
                         // ownership to avoid double-free.
                         unsafe { self.move_value(&val, ret_dest)?; }
                         // Mark source as dropped to prevent destroy in frame.destroy_all().
-                        match op {
-                            Operand::Value(id) => frame.mark_value_dropped(*id),
-                            Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                            Operand::Param(id) => frame.mark_param_dropped(*id),
-                            Operand::ExternalValue { unit, value } => {
-                                frames.mark_external_value_dropped(*unit, *value);
-                            }
-                            Operand::ExternalSlot { unit, slot } => {
-                                frames.mark_external_slot_dropped(*unit, *slot);
-                            }
-                        }
-                    }
-                    return Ok(UnitCompletion::Normal);
-                }
-                Terminator::TryReturn { value } => {
-                    if let Some(op) = value {
-                        let val = self.read_operand(op, frame, frames)?;
-                        // Use move_value (shallow copy).
-                        unsafe { self.move_value(&val, ret_dest)?; }
-                        // Mark source as dropped.
                         match op {
                             Operand::Value(id) => frame.mark_value_dropped(*id),
                             Operand::Slot(id) => frame.mark_slot_dropped(*id),

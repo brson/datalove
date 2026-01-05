@@ -539,7 +539,7 @@ fn lower_optional_binop<'db>(
             value: Operand::Value(none_value),
         });
     } else {
-        ctx.finish_block(Terminator::TryReturn {
+        ctx.finish_block(Terminator::Return {
             value: Some(Operand::Value(none_value)),
         });
     }
@@ -615,7 +615,7 @@ fn lower_checked_result_binop<'db>(
             value: Operand::Value(wrapped_err),
         });
     } else {
-        ctx.finish_block(Terminator::TryReturn {
+        ctx.finish_block(Terminator::Return {
             value: Some(Operand::Value(wrapped_err)),
         });
     }
@@ -670,7 +670,7 @@ fn lower_optional_unaryop<'db>(
             value: Operand::Value(none_value),
         });
     } else {
-        ctx.finish_block(Terminator::TryReturn {
+        ctx.finish_block(Terminator::Return {
             value: Some(Operand::Value(none_value)),
         });
     }
@@ -744,7 +744,7 @@ fn lower_checked_result_unaryop<'db>(
             value: Operand::Value(wrapped_err),
         });
     } else {
-        ctx.finish_block(Terminator::TryReturn {
+        ctx.finish_block(Terminator::Return {
             value: Some(Operand::Value(wrapped_err)),
         });
     }
@@ -793,7 +793,7 @@ fn lower_try_option<'db>(
             value: Operand::Value(none_value),
         });
     } else {
-        ctx.finish_block(Terminator::TryReturn {
+        ctx.finish_block(Terminator::Return {
             value: Some(Operand::Value(none_value)),
         });
     }
@@ -847,7 +847,7 @@ fn lower_try_result<'db>(
             value: Operand::Value(wrapped_err),
         });
     } else {
-        ctx.finish_block(Terminator::TryReturn {
+        ctx.finish_block(Terminator::Return {
             value: Some(Operand::Value(wrapped_err)),
         });
     }

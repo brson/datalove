@@ -4,7 +4,7 @@ ModulesAnalysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn main():\nblock0:\n    v0 = none\n    v1, v2 = unwrap_option v0\n    branch v2, block2, block1\nblock1:\n    v3 = none\n    try_return v3\nblock2:\n    v4 = some v1\n    return v4\n",
+        ir: "fn main():\nblock0:\n    v0 = none\n    v1, v2 = unwrap_option v0\n    branch v2, block2, block1\nblock1:\n    v3 = none\n    return v3\nblock2:\n    v4 = some v1\n    return v4\n",
     ),
     output: "@none",
 )

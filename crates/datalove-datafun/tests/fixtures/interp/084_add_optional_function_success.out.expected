@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = const 3u32\n    v2 = call f0(v0, v1)\n    unit_end\n\nfn test_add(p0, p1):\nblock0:\n    v0, v1 = add.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    try_return v2\nblock2:\n    v3 = some v0\n    return v3\nexports:\n    test_add = f0\n    output = v2\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = const 3u32\n    v2 = call f0(v0, v1)\n    unit_end\n\nfn test_add(p0, p1):\nblock0:\n    v0, v1 = add.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\nexports:\n    test_add = f0\n    output = v2\n",
             ),
             output: "(fragment executed)",
         ),

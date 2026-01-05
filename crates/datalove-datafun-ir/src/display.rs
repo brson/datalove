@@ -397,12 +397,6 @@ impl fmt::Display for Terminator {
             Terminator::Return { value: None } => {
                 write!(f, "return")
             }
-            Terminator::TryReturn { value: Some(v) } => {
-                write!(f, "try_return {}", v)
-            }
-            Terminator::TryReturn { value: None } => {
-                write!(f, "try_return")
-            }
             Terminator::UnitEnd { result: Some(v) } => {
                 write!(f, "unit_end {}", v)
             }
