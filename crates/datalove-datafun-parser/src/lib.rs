@@ -81,7 +81,7 @@ fn parse_bracer<'db>(
 ) -> ast::ParseResult<'db> {
     // Get line iterator - newlines inside balanced braces don't count as line breaks.
     // First split on newlines, then filter spaces from each line.
-    let lines: Vec<Vec<TreeToken<'db>>> = bracer.iter(db)
+    let lines = bracer.iter(db)
         .batching(|iter| {
             let mut line = vec![];
             let mut found_newline = false;
@@ -106,8 +106,7 @@ fn parse_bracer<'db>(
             } else {
                 None
             }
-        })
-        .collect();
+        });
 
     let statements = parse_statements(db, lines);
     let parsed = ast::ParsedStatements::new(db, statements);
@@ -128,10 +127,10 @@ fn is_line_separator<'db>(db: &'db dyn Db, token: Token<'db>) -> bool {
 /// Parse statements from lines, creating a Parser for each line.
 fn parse_statements<'db>(
     db: &'db dyn Db,
-    lines: Vec<Vec<TreeToken<'db>>>,
+    lines: impl Iterator<Item = Vec<TreeToken<'db>>>,
 ) -> Vec<ast::Statement<'db>> {
     let mut statements = vec![];
-    let mut line_iter = lines.into_iter().enumerate().peekable();
+    let mut line_iter = lines.enumerate().peekable();
 
     while let Some((_line_num, line)) = line_iter.next() {
         if line.is_empty() {
