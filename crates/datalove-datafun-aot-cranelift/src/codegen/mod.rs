@@ -471,6 +471,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
                 self.compile_unwrap_result(builder, *ok_dest, *err_dest, *is_ok, src)?;
             }
+            Instruction::EnumVariant { dest, variant_index, payload } => {
+                self.compile_enum_variant(builder, *dest, *variant_index, payload.as_ref())?;
+            }
 
             // TODO: More instructions in later phases.
             _ => {

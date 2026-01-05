@@ -11,10 +11,16 @@ AotAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const \"hello world\"\n    v1 = enum_variant 1 v0\n    debuglog v1\n    drop v1\n    unit_end\nexports:\n    message = v1\n",
             ),
             aot_compile: Some(AotCompileResult(
-                status: "Error",
-                message: "unsupported: instruction not yet implemented: EnumVariant { dest: ValueId(1), variant_index: 1, payload: Some(Value(ValueId(0))) }",
+                status: "Success",
             )),
-            output: "",
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+            output: "@enum Text(@\"hello world\")\n",
         ),
     ],
 )

@@ -262,6 +262,72 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
+    /// Compile an EnumVariant instruction: dest = Variant(payload).
+    pub(super) fn compile_enum_variant(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        variant_index: u32,
+        payload: Option<&Operand>,
+    ) -> Result<(), AotError> {
+        let dest_ty = &self.func.value_types[dest.0 as usize];
+
+        // Get variant info from Enum type.
+        let variants = match dest_ty {
+            IrType::Enum(v) => v,
+            _ => {
+                return Err(AotError::Codegen(format!(
+                    "EnumVariant dest is not Enum: {:?}",
+                    dest_ty
+                )));
+            }
+        };
+
+        // Compute payload offset for this variant.
+        let payload_offset = if let Some(payload_ty) = &variants[variant_index as usize].1 {
+            let payload_layout = types::ir_type_to_cranelift(payload_ty).layout();
+            types::align_up(4, payload_layout.align) // 4 = discriminant size
+        } else {
+            0
+        };
+
+        // Get destination address in frame.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            AotError::Codegen("no frame slot for EnumVariant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Write discriminant (variant_index as u32) at offset 0.
+        let disc_val = builder.ins().iconst(cl_types::I32, variant_index as i64);
+        builder.ins().store(MemFlags::new(), disc_val, dest_addr, 0);
+
+        // Copy payload if present.
+        if let Some(payload_op) = payload {
+            let payload_ty = &variants[variant_index as usize].1.as_ref().ok_or_else(|| {
+                AotError::Codegen("EnumVariant has payload but variant has no payload type".into())
+            })?;
+            let payload_repr = types::ir_type_to_cranelift(payload_ty);
+            let payload_addr = builder.ins().iadd_imm(dest_addr, payload_offset as i64);
+
+            match payload_repr {
+                CraneliftRepr::Scalar(_) => {
+                    let val = self.get_operand_value(builder, payload_op)?;
+                    builder.ins().store(MemFlags::new(), val, payload_addr, 0);
+                }
+                CraneliftRepr::Aggregate(layout) => {
+                    let src_ptr = self.get_operand_ptr(builder, payload_op)?;
+                    let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
+                    builder.call_memcpy(self.isa.frontend_config(), payload_addr, src_ptr, size);
+                }
+            }
+        }
+
+        // Store pointer to Enum in values map.
+        self.values.insert(dest, dest_addr);
+        Ok(())
+    }
+
     /// Compile an UnwrapResult instruction: (ok_dest, err_dest, is_ok) = unwrap(src).
     pub(super) fn compile_unwrap_result(
         &mut self,

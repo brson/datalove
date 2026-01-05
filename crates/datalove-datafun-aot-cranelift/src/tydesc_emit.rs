@@ -13,8 +13,8 @@ use cranelift_module::{DataDescription, DataId, Linkage, Module};
 use datalove_datafun_ir::{IrFunction, IrScriptUnit, IrType};
 use datalove_rtdt::{
     Data as RtData, Error as RtError, Int as RtInt, List as RtList, Map as RtMap,
-    Set as RtSet, String as RtString, TyDesc, TyInfoList, TyInfoMap, TyInfoOption,
-    TyInfoResult, TyInfoSet, TyInfoTuple, TyInfoTupleField, TyTag,
+    Set as RtSet, String as RtString, TyDesc, TyInfoEnum, TyInfoEnumVariant, TyInfoList,
+    TyInfoMap, TyInfoOption, TyInfoResult, TyInfoSet, TyInfoTuple, TyInfoTupleField, TyTag,
 };
 
 use crate::AotError;
@@ -40,6 +40,17 @@ const TYINFO_TUPLE_FIELDS_OFFSET: usize = std::mem::offset_of!(TyInfoTuple, fiel
 const TYINFO_TUPLE_FIELD_SIZE: usize = size_of::<TyInfoTupleField>();
 const TYINFO_TUPLE_FIELD_OFFSET_OFFSET: usize = std::mem::offset_of!(TyInfoTupleField, offset);
 const TYINFO_TUPLE_FIELD_TYDESC_OFFSET: usize = std::mem::offset_of!(TyInfoTupleField, tydesc);
+
+// Offsets within TyInfo union for Enum type.
+const TYINFO_ENUM_VARIANTS_OFFSET: usize = std::mem::offset_of!(TyInfoEnum, variants);
+const TYINFO_ENUM_NUM_VARIANTS_OFFSET: usize = std::mem::offset_of!(TyInfoEnum, num_variants);
+
+// TyInfoEnumVariant layout.
+const TYINFO_ENUM_VARIANT_SIZE: usize = size_of::<TyInfoEnumVariant>();
+const TYINFO_ENUM_VARIANT_NAME_OFFSET: usize = std::mem::offset_of!(TyInfoEnumVariant, name);
+const TYINFO_ENUM_VARIANT_NAME_LEN_OFFSET: usize = std::mem::offset_of!(TyInfoEnumVariant, name_len);
+const TYINFO_ENUM_VARIANT_OFFSET_OFFSET: usize = std::mem::offset_of!(TyInfoEnumVariant, offset);
+const TYINFO_ENUM_VARIANT_PAYLOAD_OFFSET: usize = std::mem::offset_of!(TyInfoEnumVariant, payload);
 
 // TyDesc layout computed from runtime types.
 const TYDESC_SIZE: usize = size_of::<TyDesc>();
@@ -100,6 +111,9 @@ impl TyDescEmitter {
             IrType::Struct(fields) => {
                 let field_types: Vec<_> = fields.iter().map(|(_, ty)| ty.clone()).collect();
                 return self.emit_struct_tydesc(module, ty, &field_types);
+            }
+            IrType::Enum(variants) => {
+                return self.emit_enum_tydesc(module, ty, variants);
             }
             _ => {}
         }
@@ -534,6 +548,158 @@ impl TyDescEmitter {
         self.emit_tuple_tydesc(module, original_ty, field_types)
     }
 
+    /// Emit a TyDesc for an Enum type with variant info.
+    fn emit_enum_tydesc<M: Module>(
+        &mut self,
+        module: &mut M,
+        original_ty: &IrType,
+        variants: &[(String, Option<IrType>)],
+    ) -> Result<DataId, AotError> {
+        // Check cache using the original type.
+        if let Some(&id) = self.tydescs.get(original_ty) {
+            return Ok(id);
+        }
+
+        // First, emit all payload type TyDescs.
+        let mut payload_tydesc_ids: Vec<Option<DataId>> = Vec::with_capacity(variants.len());
+        for (_, payload_ty) in variants {
+            let id = if let Some(ty) = payload_ty {
+                Some(self.emit(module, ty)?)
+            } else {
+                None
+            };
+            payload_tydesc_ids.push(id);
+        }
+
+        // Compute enum layout.
+        let layout = crate::types::ir_type_to_cranelift(original_ty).layout();
+        let variant_offsets = crate::types::compute_enum_variant_offsets(variants);
+
+        // Create variant name data objects and the variants array.
+        let variants_data_id = if variants.is_empty() {
+            None
+        } else {
+            // Build the TyInfoEnumVariant array.
+            let variants_size = TYINFO_ENUM_VARIANT_SIZE * variants.len();
+            let mut variants_bytes = vec![0u8; variants_size];
+
+            // First, create static data for each variant name.
+            let mut name_data_ids = Vec::with_capacity(variants.len());
+            for (name, _) in variants {
+                let name_bytes = name.as_bytes();
+                let name_name = format!("__enum_variant_name_{}", self.counter);
+                self.counter += 1;
+
+                let name_id = module
+                    .declare_data(&name_name, Linkage::Local, false, false)
+                    .map_err(|e| AotError::Module(format!("declare enum variant name: {}", e)))?;
+
+                let mut name_desc = DataDescription::new();
+                name_desc.define(name_bytes.to_vec().into_boxed_slice());
+                name_desc.set_align(1);
+
+                module
+                    .define_data(name_id, &name_desc)
+                    .map_err(|e| AotError::Module(format!("define enum variant name: {}", e)))?;
+
+                name_data_ids.push(name_id);
+            }
+
+            // Build variant entries.
+            for (i, ((name, _), &offset)) in variants.iter().zip(variant_offsets.iter()).enumerate() {
+                let variant_base = i * TYINFO_ENUM_VARIANT_SIZE;
+
+                // Write name_len.
+                let name_len = name.len() as u32;
+                variants_bytes[variant_base + TYINFO_ENUM_VARIANT_NAME_LEN_OFFSET..
+                               variant_base + TYINFO_ENUM_VARIANT_NAME_LEN_OFFSET + 4]
+                    .copy_from_slice(&name_len.to_le_bytes());
+
+                // Write offset.
+                variants_bytes[variant_base + TYINFO_ENUM_VARIANT_OFFSET_OFFSET..
+                               variant_base + TYINFO_ENUM_VARIANT_OFFSET_OFFSET + 4]
+                    .copy_from_slice(&offset.to_le_bytes());
+
+                // name pointer and payload pointer will be added as relocations.
+            }
+
+            let variants_name = format!("__tydesc_enum_variants_{}", self.counter);
+            self.counter += 1;
+
+            let variants_id = module
+                .declare_data(&variants_name, Linkage::Local, false, false)
+                .map_err(|e| AotError::Module(format!("declare enum variants: {}", e)))?;
+
+            let mut variants_desc = DataDescription::new();
+            variants_desc.define(variants_bytes.into_boxed_slice());
+            variants_desc.set_align(align_of::<TyInfoEnumVariant>() as u64);
+
+            // Add relocations for name pointers.
+            for (i, &name_id) in name_data_ids.iter().enumerate() {
+                let name_gv = module.declare_data_in_data(name_id, &mut variants_desc);
+                let name_offset = (i * TYINFO_ENUM_VARIANT_SIZE + TYINFO_ENUM_VARIANT_NAME_OFFSET) as u32;
+                variants_desc.write_data_addr(name_offset, name_gv, 0);
+            }
+
+            // Add relocations for payload tydesc pointers.
+            for (i, payload_id) in payload_tydesc_ids.iter().enumerate() {
+                if let Some(tydesc_id) = payload_id {
+                    let payload_gv = module.declare_data_in_data(*tydesc_id, &mut variants_desc);
+                    let payload_offset = (i * TYINFO_ENUM_VARIANT_SIZE + TYINFO_ENUM_VARIANT_PAYLOAD_OFFSET) as u32;
+                    variants_desc.write_data_addr(payload_offset, payload_gv, 0);
+                }
+                // For None payloads, the pointer stays null (zero-initialized).
+            }
+
+            module
+                .define_data(variants_id, &variants_desc)
+                .map_err(|e| AotError::Module(format!("define enum variants: {}", e)))?;
+
+            Some(variants_id)
+        };
+
+        // Build base TyDesc bytes.
+        let mut bytes = vec![0u8; TYDESC_SIZE];
+        let tag = TyTag::Enum as u8;
+        let num_variants = variants.len() as u32;
+
+        bytes[OFFSET_TYPE_TAG] = tag;
+        bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&layout.size.to_le_bytes());
+        bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&layout.align.to_le_bytes());
+
+        // Write num_variants in type_info.
+        let num_variants_offset = OFFSET_TYPE_INFO + TYINFO_ENUM_NUM_VARIANTS_OFFSET;
+        bytes[num_variants_offset..num_variants_offset + 4].copy_from_slice(&num_variants.to_le_bytes());
+
+        // Create unique name.
+        let name = format!("__tydesc_{}", self.counter);
+        self.counter += 1;
+
+        // Declare data.
+        let data_id = module
+            .declare_data(&name, Linkage::Local, false, false)
+            .map_err(|e| AotError::Module(format!("declare enum tydesc: {}", e)))?;
+
+        // Define data with relocation to variants array.
+        let mut data_desc = DataDescription::new();
+        data_desc.define(bytes.into_boxed_slice());
+        data_desc.set_align(TYDESC_ALIGN as u64);
+
+        // Add relocation for variants pointer if we have variants.
+        if let Some(variants_id) = variants_data_id {
+            let variants_gv = module.declare_data_in_data(variants_id, &mut data_desc);
+            let variants_ptr_offset = (OFFSET_TYPE_INFO + TYINFO_ENUM_VARIANTS_OFFSET) as u32;
+            data_desc.write_data_addr(variants_ptr_offset, variants_gv, 0);
+        }
+
+        module
+            .define_data(data_id, &data_desc)
+            .map_err(|e| AotError::Module(format!("define enum tydesc: {}", e)))?;
+
+        self.tydescs.insert(original_ty.clone(), data_id);
+        Ok(data_id)
+    }
+
     /// Emit TyDescs for all types upfront.
     ///
     /// Call this before codegen to populate the cache. After this,
@@ -592,6 +758,11 @@ impl TyDescEmitter {
             // Tuple/Struct types - can emit if all field types can be emitted.
             IrType::Tuple(field_types) => field_types.iter().all(|t| self.can_emit(t)),
             IrType::Struct(fields) => fields.iter().all(|(_, t)| self.can_emit(t)),
+
+            // Enum types - can emit if all payload types can be emitted.
+            IrType::Enum(variants) => variants.iter().all(|(_, payload)| {
+                payload.as_ref().map_or(true, |t| self.can_emit(t))
+            }),
 
             _ => false,
         }
