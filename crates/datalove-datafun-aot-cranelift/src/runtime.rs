@@ -20,6 +20,14 @@ pub struct RuntimeImports {
     pub set_debug_mode: FuncId,
     /// `dtlv_rti_debuglog_local(rt: LocalRtHandle, value_ref: *const u8, tydesc: *const TyDesc) -> RtStatus`
     pub debuglog_local: FuncId,
+    /// `dtlv_rti_any_destroy_local(rt: LocalRtHandle, value: *mut u8, tydesc: *const TyDesc) -> RtStatus`
+    pub destroy_local: FuncId,
+    /// `dtlv_rti_mem_alloc_raw_local(rt: LocalRtHandle, size: u32, align: u32, count: u32) -> *mut u8`
+    pub mem_alloc_raw: FuncId,
+    /// `dtlv_rti_string_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: *const TyDesc) -> RtStatus`
+    pub string_create: FuncId,
+    /// `dtlv_rti_string_push_bytes_local(rt: LocalRtHandle, value_mut: *mut u8, tydesc: *const TyDesc, bytes: *const u8, len: u32) -> RtStatus`
+    pub string_push_bytes: FuncId,
 }
 
 impl RuntimeImports {
@@ -67,11 +75,66 @@ impl RuntimeImports {
                 .map_err(|e| AotError::Module(format!("declare dtlv_rti_debuglog_local: {}", e)))?
         };
 
+        // dtlv_rti_any_destroy_local(ptr, ptr, ptr) -> u8
+        let destroy_local = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value ptr
+            sig.params.push(AbiParam::new(PTR_TYPE)); // tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_any_destroy_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_any_destroy_local: {}", e)))?
+        };
+
+        // dtlv_rti_mem_alloc_raw_local(ptr, u32, u32, u32) -> ptr
+        let mem_alloc_raw = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE));      // rt handle
+            sig.params.push(AbiParam::new(cl_types::I32)); // size
+            sig.params.push(AbiParam::new(cl_types::I32)); // align
+            sig.params.push(AbiParam::new(cl_types::I32)); // count
+            sig.returns.push(AbiParam::new(PTR_TYPE));     // allocated ptr
+            module
+                .declare_function("dtlv_rti_mem_alloc_raw_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_mem_alloc_raw_local: {}", e)))?
+        };
+
+        // dtlv_rti_string_create_local(ptr, ptr, ptr) -> u8
+        let string_create = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value_out
+            sig.params.push(AbiParam::new(PTR_TYPE)); // tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_string_create_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_string_create_local: {}", e)))?
+        };
+
+        // dtlv_rti_string_push_bytes_local(ptr, ptr, ptr, ptr, u32) -> u8
+        let string_push_bytes = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE));      // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE));      // value_mut
+            sig.params.push(AbiParam::new(PTR_TYPE));      // tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));      // bytes ptr
+            sig.params.push(AbiParam::new(cl_types::I32)); // len
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_string_push_bytes_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_string_push_bytes_local: {}", e)))?
+        };
+
         Ok(Self {
             init,
             shutdown,
             set_debug_mode,
             debuglog_local,
+            destroy_local,
+            mem_alloc_raw,
+            string_create,
+            string_push_bytes,
         })
     }
 }

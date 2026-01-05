@@ -384,6 +384,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::SlotLoad { dest, slot } => {
                 self.compile_slot_load(builder, *dest, *slot)?;
             }
+            Instruction::Drop { operand } => {
+                self.compile_drop(builder, operand)?;
+            }
 
             // TODO: More instructions in later phases.
             _ => {
@@ -438,6 +441,51 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Call debuglog.
         builder.ins().call(debuglog_ref, &[rt_handle, value_ptr, tydesc_addr]);
+
+        Ok(())
+    }
+
+    /// Compile a Drop instruction.
+    ///
+    /// Calls dtlv_rti_any_destroy_local to destroy the value.
+    fn compile_drop(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        operand: &Operand,
+    ) -> Result<(), AotError> {
+        // Need runtime imports for destroy.
+        let destroy_func_id = self.runtime.as_ref()
+            .ok_or_else(|| AotError::Codegen("Drop requires runtime imports".into()))?
+            .destroy_local;
+
+        // Need runtime handle.
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            AotError::Codegen("Drop requires runtime handle parameter".into())
+        })?;
+
+        // Get the type of the operand.
+        let ty = self.get_operand_type(operand)?;
+
+        // Get pointer to the value.
+        let value_ptr = self.get_operand_ptr(builder, operand)?;
+
+        // Look up pre-emitted TyDesc.
+        let tydesc_id = self.tydesc_emitter.get(&ty).ok_or_else(|| {
+            AotError::Codegen(format!(
+                "TyDesc not found for type {:?} - should have been emitted upfront",
+                ty
+            ))
+        })?;
+
+        // Get address of tydesc.
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+        // Declare destroy function in this function.
+        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
+
+        // Call dtlv_rti_any_destroy_local(rt, value_ptr, tydesc).
+        builder.ins().call(destroy_ref, &[rt_handle, value_ptr, tydesc_addr]);
 
         Ok(())
     }
@@ -725,17 +773,162 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ConstValue::F32(v) => {
                 builder.ins().f32const(*v)
             }
-            ConstValue::Int { .. } | ConstValue::String(_) => {
-                // Runtime types need runtime calls - phase 6.
-                return Err(AotError::Unsupported(format!(
-                    "runtime constant not yet implemented: {:?}",
-                    value
-                )));
+            ConstValue::Int { limbs, negative } => {
+                // Int is an aggregate type - write directly to frame.
+                return self.compile_int_const(builder, dest, limbs, *negative);
+            }
+            ConstValue::String(s) => {
+                // String needs runtime calls.
+                return self.compile_string_const(builder, dest, s);
             }
         };
 
         self.values.insert(dest, cl_val);
         Ok(())
+    }
+
+    /// Compile an Int (bigint) constant.
+    ///
+    /// Int layout: `{ data: *const u32, size_and_sign: i32, capacity: u32 }` = 16 bytes.
+    fn compile_int_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        limbs: &[u32],
+        negative: bool,
+    ) -> Result<(), AotError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            AotError::Codegen("no frame slot for Int constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        if limbs.is_empty() {
+            // Zero: null data, size=0, capacity=0.
+            let null = builder.ins().iconst(cl_types::I64, 0);
+            let zero32 = builder.ins().iconst(cl_types::I32, 0);
+            builder.ins().store(MemFlags::new(), null, base, 0);     // data
+            builder.ins().store(MemFlags::new(), zero32, base, 8);   // size_and_sign
+            builder.ins().store(MemFlags::new(), zero32, base, 12);  // capacity
+        } else {
+            // Need runtime handle for memory allocation.
+            let rt_handle = self.rt_handle_param.ok_or_else(|| {
+                AotError::Codegen("Int constant requires runtime handle".into())
+            })?;
+            let runtime = self.runtime.as_ref().ok_or_else(|| {
+                AotError::Codegen("Int constant requires runtime imports".into())
+            })?;
+
+            // Allocate limbs: 4 bytes each, 4-byte aligned.
+            let alloc_ref = self.module.declare_func_in_func(runtime.mem_alloc_raw, builder.func);
+            let size = builder.ins().iconst(cl_types::I32, 4);   // size of u32
+            let align = builder.ins().iconst(cl_types::I32, 4);  // align of u32
+            let count = builder.ins().iconst(cl_types::I32, limbs.len() as i64);
+            let call = builder.ins().call(alloc_ref, &[rt_handle, size, align, count]);
+            let limbs_ptr = builder.inst_results(call)[0];
+
+            // Write limbs to allocated memory.
+            for (i, &limb) in limbs.iter().enumerate() {
+                let limb_val = builder.ins().iconst(cl_types::I32, limb as i64);
+                let offset = (i * 4) as i32;
+                builder.ins().store(MemFlags::new(), limb_val, limbs_ptr, offset);
+            }
+
+            // Write Int struct fields.
+            builder.ins().store(MemFlags::new(), limbs_ptr, base, 0);  // data
+
+            let size_and_sign = if negative {
+                -(limbs.len() as i32)
+            } else {
+                limbs.len() as i32
+            };
+            let size_val = builder.ins().iconst(cl_types::I32, size_and_sign as i64);
+            builder.ins().store(MemFlags::new(), size_val, base, 8);   // size_and_sign
+
+            let cap_val = builder.ins().iconst(cl_types::I32, limbs.len() as i64);
+            builder.ins().store(MemFlags::new(), cap_val, base, 12);   // capacity
+        }
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Compile a String constant.
+    ///
+    /// String layout: `{ data: *const u8, size: u32, capacity: u32 }` = 16 bytes.
+    fn compile_string_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        s: &str,
+    ) -> Result<(), AotError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            AotError::Codegen("no frame slot for String constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Need runtime handle and imports.
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            AotError::Codegen("String constant requires runtime handle".into())
+        })?;
+        let runtime = self.runtime.ok_or_else(|| {
+            AotError::Codegen("String constant requires runtime imports".into())
+        })?;
+
+        // Get String TyDesc.
+        let tydesc_id = self.tydesc_emitter.get(&IrType::String).ok_or_else(|| {
+            AotError::Codegen("TyDesc not found for String".into())
+        })?;
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+        // Call dtlv_rti_string_create_local(rt, dest, tydesc).
+        let create_ref = self.module.declare_func_in_func(runtime.string_create, builder.func);
+        builder.ins().call(create_ref, &[rt_handle, base, tydesc_ptr]);
+
+        if !s.is_empty() {
+            // Emit string bytes as static data.
+            let bytes = s.as_bytes();
+            let bytes_data_id = self.emit_static_bytes(bytes)?;
+            let bytes_gv = self.module.declare_data_in_func(bytes_data_id, builder.func);
+            let bytes_ptr = builder.ins().global_value(PTR_TYPE, bytes_gv);
+            let len = builder.ins().iconst(cl_types::I32, bytes.len() as i64);
+
+            // Call dtlv_rti_string_push_bytes_local(rt, dest, tydesc, bytes, len).
+            let push_ref = self.module.declare_func_in_func(runtime.string_push_bytes, builder.func);
+            builder.ins().call(push_ref, &[rt_handle, base, tydesc_ptr, bytes_ptr, len]);
+        }
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Emit static bytes data and return its DataId.
+    fn emit_static_bytes(&mut self, bytes: &[u8]) -> Result<cranelift_module::DataId, AotError> {
+        use cranelift_module::DataDescription;
+
+        // Generate unique name for this data.
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let name = format!("__string_bytes_{}", id);
+
+        let data_id = self.module
+            .declare_data(&name, Linkage::Local, false, false)
+            .map_err(|e| AotError::Module(format!("declare string bytes: {}", e)))?;
+
+        let mut desc = DataDescription::new();
+        desc.define(bytes.to_vec().into_boxed_slice());
+
+        self.module
+            .define_data(data_id, &desc)
+            .map_err(|e| AotError::Module(format!("define string bytes: {}", e)))?;
+
+        Ok(data_id)
     }
 
     /// Compile a binary operation.

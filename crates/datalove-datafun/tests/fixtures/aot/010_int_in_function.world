@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+fun test_int(): u32
+    let x: int = @42
+    debuglog x
+    ret @0
+end fun
+
+debuglog test_int()
