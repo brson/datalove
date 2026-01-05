@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Test -? (negation) operator with no overflow - should return Some(result).
+fun unwrap_or_default(opt: ?i32, default: i32): i32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+fun checked_neg(a: i32): ?i32
+    ret some (-? a)
+end fun
+
+// -42 = -42, no overflow.
+debuglog unwrap_or_default(checked_neg(@42), @999)

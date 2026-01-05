@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Test /? operator with no error - should return Some(result).
+fun unwrap_or_default(opt: ?u32, default: u32): u32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+fun checked_div(a: u32, b: u32): ?u32
+    ret some (a /? b)
+end fun
+
+// 42 / 7 = 6, no error.
+debuglog unwrap_or_default(checked_div(@42, @7), @999)

@@ -415,6 +415,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::UnaryOp { dest, op, operand } => {
                 self.compile_unaryop(builder, *dest, *op, operand)?;
             }
+            Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
+                self.compile_binop_checked(builder, *dest, *overflow, *op, lhs, rhs)?;
+            }
+            Instruction::UnaryOpChecked { dest, overflow, op, operand } => {
+                self.compile_unaryop_checked(builder, *dest, *overflow, *op, operand)?;
+            }
             Instruction::Copy { dest, src } => {
                 self.compile_copy(builder, *dest, src)?;
             }

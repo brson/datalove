@@ -1,0 +1,19 @@
+----------
+scriptunit-fragment
+----------
+
+// Test -? operator with signed overflow - should return None.
+// i32::MIN = -2147483648, subtracting 1 overflows.
+fun unwrap_or_default(opt: ?i32, default: i32): i32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+fun checked_sub(a: i32, b: i32): ?i32
+    ret some (a -? b)
+end fun
+
+// -2147483648 - 1 overflows i32, returns None -> default 999.
+debuglog unwrap_or_default(checked_sub(@-2147483648, @1), @999)

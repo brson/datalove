@@ -312,4 +312,202 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.values.insert(dest, result_ptr);
         Ok(())
     }
+
+    /// Compile a checked binary operation (produces result + overflow flag).
+    pub(super) fn compile_binop_checked(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        overflow_dest: ValueId,
+        op: BinOp,
+        lhs: &Operand,
+        rhs: &Operand,
+    ) -> Result<(), AotError> {
+        let dest_ty = &self.func.value_types[dest.0 as usize];
+
+        // Only supported for fixed-width integers.
+        let (is_signed, bits, cl_ty) = match dest_ty {
+            IrType::I8 => (true, 8, cl_types::I8),
+            IrType::I16 => (true, 16, cl_types::I16),
+            IrType::I32 => (true, 32, cl_types::I32),
+            IrType::I64 => (true, 64, cl_types::I64),
+            IrType::U8 => (false, 8, cl_types::I8),
+            IrType::U16 => (false, 16, cl_types::I16),
+            IrType::U32 => (false, 32, cl_types::I32),
+            IrType::U64 => (false, 64, cl_types::I64),
+            _ => {
+                return Err(AotError::Unsupported(format!(
+                    "checked binop not supported for type: {:?}",
+                    dest_ty
+                )));
+            }
+        };
+
+        let lhs_val = self.get_operand_value(builder, lhs)?;
+        let rhs_val = self.get_operand_value(builder, rhs)?;
+
+        let (result, overflow) = match op {
+            BinOp::Add => {
+                let result = builder.ins().iadd(lhs_val, rhs_val);
+                let overflow = if is_signed {
+                    // Signed overflow: (lhs ^ result) & (rhs ^ result) has sign bit set.
+                    let xor1 = builder.ins().bxor(lhs_val, result);
+                    let xor2 = builder.ins().bxor(rhs_val, result);
+                    let and = builder.ins().band(xor1, xor2);
+                    // Extract sign bit.
+                    let shift = builder.ins().iconst(cl_ty, (bits - 1) as i64);
+                    let shifted = builder.ins().ushr(and, shift);
+                    // Reduce to i8 bool.
+                    if cl_ty != cl_types::I8 {
+                        builder.ins().ireduce(cl_types::I8, shifted)
+                    } else {
+                        shifted
+                    }
+                } else {
+                    // Unsigned overflow: result < lhs.
+                    builder.ins().icmp(cl_ir::condcodes::IntCC::UnsignedLessThan, result, lhs_val)
+                };
+                (result, overflow)
+            }
+            BinOp::Sub => {
+                let result = builder.ins().isub(lhs_val, rhs_val);
+                let overflow = if is_signed {
+                    // Signed overflow: (lhs ^ rhs) & (lhs ^ result) has sign bit set.
+                    let xor1 = builder.ins().bxor(lhs_val, rhs_val);
+                    let xor2 = builder.ins().bxor(lhs_val, result);
+                    let and = builder.ins().band(xor1, xor2);
+                    let shift = builder.ins().iconst(cl_ty, (bits - 1) as i64);
+                    let shifted = builder.ins().ushr(and, shift);
+                    if cl_ty != cl_types::I8 {
+                        builder.ins().ireduce(cl_types::I8, shifted)
+                    } else {
+                        shifted
+                    }
+                } else {
+                    // Unsigned underflow: lhs < rhs.
+                    builder.ins().icmp(cl_ir::condcodes::IntCC::UnsignedLessThan, lhs_val, rhs_val)
+                };
+                (result, overflow)
+            }
+            BinOp::Mul => {
+                let result = builder.ins().imul(lhs_val, rhs_val);
+                // Overflow check: if lhs != 0, check result / lhs == rhs.
+                let zero = builder.ins().iconst(cl_ty, 0);
+                let lhs_is_zero = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, lhs_val, zero);
+
+                // Divide result by lhs (if lhs != 0).
+                let quotient = if is_signed {
+                    builder.ins().sdiv(result, lhs_val)
+                } else {
+                    builder.ins().udiv(result, lhs_val)
+                };
+
+                // Check if quotient != rhs (overflow occurred).
+                let not_equal = builder.ins().icmp(cl_ir::condcodes::IntCC::NotEqual, quotient, rhs_val);
+
+                // overflow = lhs_is_zero ? false : not_equal
+                let false_val = builder.ins().iconst(cl_types::I8, 0);
+                let overflow = builder.ins().select(lhs_is_zero, false_val, not_equal);
+
+                (result, overflow)
+            }
+            BinOp::Div => {
+                // Division overflow cases:
+                // - Divide by zero
+                // - Signed: MIN / -1 overflows
+                let zero = builder.ins().iconst(cl_ty, 0);
+                let div_by_zero = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, rhs_val, zero);
+
+                let overflow = if is_signed {
+                    // Check for MIN / -1.
+                    let min_val = match bits {
+                        8 => i8::MIN as i64,
+                        16 => i16::MIN as i64,
+                        32 => i32::MIN as i64,
+                        64 => i64::MIN,
+                        _ => unreachable!(),
+                    };
+                    let minus_one = builder.ins().iconst(cl_ty, -1i64);
+                    let min_const = builder.ins().iconst(cl_ty, min_val);
+                    let is_min = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, lhs_val, min_const);
+                    let is_minus_one = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, rhs_val, minus_one);
+                    let signed_overflow = builder.ins().band(is_min, is_minus_one);
+                    builder.ins().bor(div_by_zero, signed_overflow)
+                } else {
+                    div_by_zero
+                };
+
+                // Perform the division, selecting safe divisor to avoid trap.
+                let one = builder.ins().iconst(cl_ty, 1);
+                let safe_rhs = builder.ins().select(overflow, one, rhs_val);
+                let result = if is_signed {
+                    builder.ins().sdiv(lhs_val, safe_rhs)
+                } else {
+                    builder.ins().udiv(lhs_val, safe_rhs)
+                };
+
+                // Select zero result on overflow.
+                let result = builder.ins().select(overflow, zero, result);
+
+                (result, overflow)
+            }
+            _ => {
+                return Err(AotError::Unsupported(format!(
+                    "checked binop only supports Add/Sub/Mul/Div, got {:?}",
+                    op
+                )));
+            }
+        };
+
+        self.values.insert(dest, result);
+        self.values.insert(overflow_dest, overflow);
+        Ok(())
+    }
+
+    /// Compile a checked unary operation (produces result + overflow flag).
+    pub(super) fn compile_unaryop_checked(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        overflow_dest: ValueId,
+        op: UnaryOp,
+        operand: &Operand,
+    ) -> Result<(), AotError> {
+        // Only negation can overflow for signed integers.
+        if op != UnaryOp::Neg {
+            return Err(AotError::Unsupported(format!(
+                "checked unaryop only supports Neg, got {:?}",
+                op
+            )));
+        }
+
+        let dest_ty = &self.func.value_types[dest.0 as usize];
+
+        // Only supported for signed integers.
+        let (min_val, cl_ty) = match dest_ty {
+            IrType::I8 => (i8::MIN as i64, cl_types::I8),
+            IrType::I16 => (i16::MIN as i64, cl_types::I16),
+            IrType::I32 => (i32::MIN as i64, cl_types::I32),
+            IrType::I64 => (i64::MIN, cl_types::I64),
+            _ => {
+                return Err(AotError::Unsupported(format!(
+                    "checked negation only supported for signed integers, got {:?}",
+                    dest_ty
+                )));
+            }
+        };
+
+        let val = self.get_operand_value(builder, operand)?;
+
+        // Negation overflows only for MIN value.
+        let min_const = builder.ins().iconst(cl_ty, min_val);
+        let overflow = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, val, min_const);
+
+        // Perform negation.
+        let result = builder.ins().ineg(val);
+
+        self.values.insert(dest, result);
+        self.values.insert(overflow_dest, overflow);
+        Ok(())
+    }
 }
