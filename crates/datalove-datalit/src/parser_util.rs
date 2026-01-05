@@ -25,7 +25,7 @@ pub trait TokenStream<'db> {
     /// Consume and return the current token.
     fn next(&mut self) -> Option<TreeToken<'db>>;
 
-    /// Get source Text for error reporting when no specific token is available.
+    /// Get the source Text for error reporting when no current token.
     fn source_text(&self) -> bct::text::Text<'db>;
 }
 
@@ -110,11 +110,12 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
     }
 
     /// Get Text and ByteSpan from current position for error reporting.
+    ///
+    /// Falls back to source_text with empty span if at end of input.
     fn peek_text_span(&self) -> (bct::text::Text<'db>, ByteSpan) {
-        if let Some(token) = self.peek() {
-            self.extract_text_span(token)
-        } else {
-            (self.source_text(), 0..0)
+        match self.peek() {
+            Some(token) => self.extract_text_span(token),
+            None => (self.source_text(), 0..0),
         }
     }
 }

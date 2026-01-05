@@ -18,17 +18,40 @@ pub(super) struct Parser<'db> {
     pub(super) pos: usize,
     pub(super) expr_spans: Vec<ast::ParseSpanEntry>,
     pub(super) had_error: bool,
+    /// Source text for error reporting when no current token.
+    source_text: bct::text::Text<'db>,
 }
 
 impl<'db> Parser<'db> {
     /// Create a new parser with the given tokens.
     pub(super) fn new(db: &'db dyn crate::Db, tokens: Vec<TreeToken<'db>>) -> Self {
+        let source_text = Self::extract_source_text(db, &tokens);
         Parser {
             db,
             tokens,
             pos: 0,
             expr_spans: Vec::new(),
             had_error: false,
+            source_text,
+        }
+    }
+
+    /// Extract source Text from tokens, with fallback to empty text.
+    fn extract_source_text(db: &'db dyn crate::Db, tokens: &[TreeToken<'db>]) -> bct::text::Text<'db> {
+        if let Some(token) = tokens.first() {
+            match token {
+                TreeToken::Token(tok) => tok.text(db).text(db),
+                TreeToken::Branch(_, iter) => {
+                    for inner in iter.clone() {
+                        if let Some(TreeToken::Token(tok)) = inner.without_space(db) {
+                            return tok.text(db).text(db);
+                        }
+                    }
+                    bct::text::Text::new(db, String::new())
+                }
+            }
+        } else {
+            bct::text::Text::new(db, String::new())
         }
     }
 
@@ -144,22 +167,6 @@ impl<'db> TokenStream<'db> for Parser<'db> {
     }
 
     fn source_text(&self) -> bct::text::Text<'db> {
-        if let Some(token) = self.tokens.first() {
-            match token {
-                TreeToken::Token(tok) => {
-                    return tok.text(self.db).text(self.db);
-                }
-                TreeToken::Branch(_, iter) => {
-                    // Try to find a Token inside the branch.
-                    for inner_token in iter.clone() {
-                        if let Some(TreeToken::Token(tok)) = inner_token.without_space(self.db) {
-                            return tok.text(self.db).text(self.db);
-                        }
-                    }
-                }
-            }
-        }
-        // Empty token list - create empty text as fallback.
-        bct::text::Text::new(self.db, String::new())
+        self.source_text
     }
 }

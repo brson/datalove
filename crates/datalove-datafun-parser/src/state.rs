@@ -22,17 +22,45 @@ pub(super) struct Parser<'db> {
     pub(super) tokens: Vec<TreeToken<'db>>,
     pub(super) pos: usize,
     pub(super) had_error: bool,
+    /// Source text for error reporting when no current token.
+    source_text: bct::text::Text<'db>,
 }
 
 impl<'db> Parser<'db> {
     /// Create a new parser with the given tokens.
     pub(super) fn new(db: &'db dyn Db, tokens: Vec<TreeToken<'db>>) -> Self {
+        let source_text = Self::extract_source_text(db, &tokens);
         Parser {
             db,
             tokens,
             pos: 0,
             had_error: false,
+            source_text,
         }
+    }
+
+    /// Extract source Text from tokens, with fallback to empty text.
+    fn extract_source_text(db: &'db dyn Db, tokens: &[TreeToken<'db>]) -> bct::text::Text<'db> {
+        if let Some(token) = tokens.first() {
+            match token {
+                TreeToken::Token(tok) => tok.text(db).text(db),
+                TreeToken::Branch(_, iter) => {
+                    for inner in iter.clone() {
+                        if let Some(TreeToken::Token(tok)) = inner.without_space(db) {
+                            return tok.text(db).text(db);
+                        }
+                    }
+                    bct::text::Text::new(db, String::new())
+                }
+            }
+        } else {
+            bct::text::Text::new(db, String::new())
+        }
+    }
+
+    /// Get the source text for this parser.
+    pub(super) fn source_text(&self) -> bct::text::Text<'db> {
+        self.source_text
     }
 
     /// Emit both a diagnostic and create a StmtParseError node in one call.
@@ -151,21 +179,6 @@ impl<'db> TokenStream<'db> for Parser<'db> {
     }
 
     fn source_text(&self) -> bct::text::Text<'db> {
-        if let Some(token) = self.tokens.first() {
-            match token {
-                TreeToken::Token(tok) => tok.text(self.db).text(self.db),
-                TreeToken::Branch(_, iter) => {
-                    // Try to find a token inside the branch.
-                    for inner in iter.clone() {
-                        if let Some(TreeToken::Token(tok)) = inner.without_space(self.db) {
-                            return tok.text(self.db).text(self.db);
-                        }
-                    }
-                    bct::text::Text::new(self.db, String::new())
-                }
-            }
-        } else {
-            bct::text::Text::new(self.db, String::new())
-        }
+        self.source_text
     }
 }
