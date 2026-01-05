@@ -36,8 +36,9 @@ fn parse_bracer<'db>(
     db: &'db dyn crate::Db,
     bracer: Bracer<'db>,
 ) -> ast::ParseResult<'db> {
-    let tokens = bracer.iter(db).filter_map(|t| t.without_space(db)).collect::<Vec<_>>();
-    parse_from_tokens(db, tokens)
+    let mut parser = Parser::from_branch(db, bracer.iter(db));
+    let expr = parser.parse_expr_full();
+    ast::ParseResult::new(db, expr, parser.take_expr_spans())
 }
 
 /// Parse a datalit expression directly from a vector of tokens.

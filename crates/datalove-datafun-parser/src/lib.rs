@@ -69,12 +69,7 @@ fn parse_bracer_expr<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
 ) -> ast::ExprFun<'db> {
-    // Collect all tokens, filtering spaces.
-    let tokens: Vec<TreeToken<'db>> = bracer.iter(db)
-        .filter_map(|token| token.without_space(db))
-        .collect();
-
-    let mut parser = Parser::new(db, tokens);
+    let mut parser = Parser::from_branch(db, bracer.iter(db));
     let expr = parser.parse_expr_full();
     parser.error_if_not_exhausted();
     expr
