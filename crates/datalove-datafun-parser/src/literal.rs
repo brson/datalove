@@ -633,155 +633,80 @@ impl<'db> Parser<'db> {
     }
 
     /// Helper to parse comma-separated expressions from a branch.
-    ///
-    /// Uses incremental parsing like datalit: parse expr, look for comma, repeat.
     pub(super) fn parse_comma_separated_exprs(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
         let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
-        if all_tokens.is_empty() {
-            return vec![];
-        }
-
         let mut sub = Parser::new(self.db, all_tokens);
-        let mut elements = Vec::new();
-
-        loop {
-            if sub.peek().is_none() {
-                break;
-            }
-            elements.push(sub.parse_expr_full());
-
-            // Look for comma to continue, otherwise stop.
-            if !sub.eat_sigil(Sigil::Comma) {
-                break;
-            }
-
-            // Handle trailing comma: if we're at the end after comma, stop parsing.
-            if sub.peek().is_none() {
-                break;
-            }
-        }
-
+        let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
         elements
     }
 
     /// Helper to parse comma-separated struct fields.
-    ///
-    /// Uses incremental parsing like datalit: parse field, look for comma, repeat.
     fn parse_comma_separated_struct_fields(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprStructField<'db>> {
         let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
-        if all_tokens.is_empty() {
-            return vec![];
-        }
-
         let mut sub = Parser::new(self.db, all_tokens);
-        let mut fields = Vec::new();
-
-        loop {
-            // Try to get name.
-            let name = match sub.eat_name() {
-                Some(n) => n,
-                None => {
-                    if sub.peek().is_none() {
-                        // End of tokens - we're done.
-                        break;
-                    }
-                    // Missing name - emit error and use placeholder.
-                    let ts = sub.peek_text_span();
-                    let error_expr = sub.emit_expr_error(ts,
-                        "expected field name in struct",
-                        "D021",
-                        "expected field name"
-                    );
-                    let error_name = InternedText::new(sub.db, "<error>".S());
-                    fields.push(ast::ExprStructField::new(sub.db, error_name, error_expr));
-                    break;
-                }
-            };
-
-            // Try to get `=`.
-            if !sub.eat_sigil(Sigil::Equals) {
-                // Missing equals - emit error and use placeholder value.
-                let ts = sub.peek_text_span();
-                let error_expr = sub.emit_expr_error(ts,
-                    "expected '=' after field name in struct",
-                    "D022",
-                    "expected '='"
-                );
-                fields.push(ast::ExprStructField::new(sub.db, name, error_expr));
-                break;
-            }
-
-            let value = sub.parse_expr_full();
-            fields.push(ast::ExprStructField::new(sub.db, name, value));
-
-            // Look for comma to continue, otherwise stop.
-            if !sub.eat_sigil(Sigil::Comma) {
-                break;
-            }
-
-            // Handle trailing comma: if we're at the end after comma, stop parsing.
-            if sub.peek().is_none() {
-                break;
-            }
-        }
-
+        let fields = sub.parse_comma_separated(|p| p.parse_struct_field());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
         fields
     }
 
+    /// Parse a single struct field: `name = value`.
+    fn parse_struct_field(&mut self) -> ast::ExprStructField<'db> {
+        let name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                let ts = self.peek_text_span();
+                let error_expr = self.emit_expr_error(ts,
+                    "expected field name in struct",
+                    "D021",
+                    "expected field name"
+                );
+                let error_name = InternedText::new(self.db, "<error>".S());
+                return ast::ExprStructField::new(self.db, error_name, error_expr);
+            }
+        };
+
+        if !self.eat_sigil(Sigil::Equals) {
+            let ts = self.peek_text_span();
+            let error_expr = self.emit_expr_error(ts,
+                "expected '=' after field name in struct",
+                "D022",
+                "expected '='"
+            );
+            return ast::ExprStructField::new(self.db, name, error_expr);
+        }
+
+        let value = self.parse_expr_full();
+        ast::ExprStructField::new(self.db, name, value)
+    }
+
     /// Helper to parse comma-separated map entries.
-    ///
-    /// Uses incremental parsing like datalit: parse entry (key = value), look for comma, repeat.
     fn parse_comma_separated_map_entries(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprMapEntry<'db>> {
         let all_tokens: Vec<_> = iter.filter_map(|t| t.without_space(self.db)).collect();
-        if all_tokens.is_empty() {
-            return vec![];
-        }
-
         let mut sub = Parser::new(self.db, all_tokens);
-        let mut entries = Vec::new();
-
-        loop {
-            if sub.peek().is_none() {
-                break;
-            }
-
-            // Parse key.
-            let key = sub.parse_expr_full();
-
-            // Expect `=`.
-            if !sub.eat_sigil(Sigil::Equals) {
-                // Missing equals - emit error.
-                let ts = sub.peek_text_span();
-                let error_value = sub.emit_expr_error(ts,
-                    "expected '=' between map key and value",
-                    "D023",
-                    "expected '='"
-                );
-                entries.push(ast::ExprMapEntry::new(sub.db, key, error_value));
-                break;
-            }
-
-            // Parse value.
-            let value = sub.parse_expr_full();
-            entries.push(ast::ExprMapEntry::new(sub.db, key, value));
-
-            // Look for comma to continue, otherwise stop.
-            if !sub.eat_sigil(Sigil::Comma) {
-                break;
-            }
-
-            // Handle trailing comma.
-            if sub.peek().is_none() {
-                break;
-            }
-        }
-
+        let entries = sub.parse_comma_separated(|p| p.parse_map_entry());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
         entries
+    }
+
+    /// Parse a single map entry: `key = value`.
+    fn parse_map_entry(&mut self) -> ast::ExprMapEntry<'db> {
+        let key = self.parse_expr_full();
+
+        if !self.eat_sigil(Sigil::Equals) {
+            let ts = self.peek_text_span();
+            let error_value = self.emit_expr_error(ts,
+                "expected '=' between map key and value",
+                "D023",
+                "expected '='"
+            );
+            return ast::ExprMapEntry::new(self.db, key, error_value);
+        }
+
+        let value = self.parse_expr_full();
+        ast::ExprMapEntry::new(self.db, key, value)
     }
 }

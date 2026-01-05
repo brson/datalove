@@ -365,8 +365,6 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse a datafun tuple: (expr1, expr2, ...).
-    ///
-    /// Uses incremental parsing like datalit: parse element, look for comma, repeat.
     pub(super) fn parse_datafun_tuple(&mut self) -> ast::ExprFun<'db> {
         // Consume the ParenOpen branch and get its contents.
         let iter = match self.next() {
@@ -381,41 +379,13 @@ impl<'db> Parser<'db> {
             }
         };
 
-        // Collect all tokens and filter out spaces.
         let all_tokens: Vec<TreeToken<'db>> = iter.filter_map(|t| t.without_space(self.db)).collect();
-        if all_tokens.is_empty() {
-            // Empty tuple.
-            return ast::ExprFun::new(
-                self.db,
-                ast::ExprFunKind::Tuple(ast::ExprTuple::new(self.db, vec![]))
-            );
-        }
-
-        // Use incremental parsing like datalit.
         let mut sub = Parser::new(self.db, all_tokens);
-        let mut elements = vec![];
-
-        loop {
-            if sub.peek().is_none() {
-                break;
-            }
-            elements.push(sub.parse_expr_full());
-
-            // Look for comma to continue, otherwise stop.
-            if !sub.eat_sigil(Sigil::Comma) {
-                break;
-            }
-
-            // Handle trailing comma.
-            if sub.peek().is_none() {
-                break;
-            }
-        }
-
+        let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
 
-        // If there's exactly one element and no trailing comma, treat as grouping (not tuple).
+        // If there's exactly one element, treat as grouping (not tuple).
         if elements.len() == 1 {
             elements.into_iter().next().unwrap()
         } else {

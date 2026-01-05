@@ -578,26 +578,6 @@ impl<'db> Parser<'db> {
         ast::ExprStructField::new(self.db, name, value)
     }
 
-    pub(super) fn parse_comma_separated<T>(&mut self, mut parse_fn: impl FnMut(&mut Self) -> T) -> Vec<T> {
-        let mut items = vec![];
-        if self.pos >= self.tokens.len() {
-            return items;
-        }
-        loop {
-            items.push(parse_fn(self));
-            if self.peek_sigil(Sigil::Comma) {
-                self.eat_sigil(Sigil::Comma);
-                // Handle trailing comma: if we're at the end, stop parsing.
-                if self.pos >= self.tokens.len() {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-        items
-    }
-
     fn split_tokens_by_comma(&self, tokens: &[TreeToken<'db>]) -> Vec<Vec<TreeToken<'db>>> {
         let mut rows = Vec::new();
         let mut current_row = Vec::new();

@@ -120,6 +120,30 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
             None => TextSpan::new(self.source_text(), 0..0),
         }
     }
+
+    /// Parse comma-separated items using the provided parsing function.
+    ///
+    /// Handles trailing commas and empty input. Returns items in order.
+    fn parse_comma_separated<T>(&mut self, mut parse_item: impl FnMut(&mut Self) -> T) -> Vec<T>
+    where
+        Self: Sized,
+    {
+        let mut items = vec![];
+        if self.peek().is_none() {
+            return items;
+        }
+        loop {
+            items.push(parse_item(self));
+            if !self.eat_sigil(Sigil::Comma) {
+                break;
+            }
+            // Handle trailing comma.
+            if self.peek().is_none() {
+                break;
+            }
+        }
+        items
+    }
 }
 
 // Blanket implementation.
