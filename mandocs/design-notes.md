@@ -21,10 +21,11 @@ var x = 0
 loop
   if x = 0
     set x = 1
-  else
-    set x = 2
+  else if x = 10
+    set x = 11
     break
   end if
+  set x = x + 1
 end loop
 
 debuglog x
@@ -34,16 +35,23 @@ debuglog x
 // `x` is an SSA variable
 loop carry (x = 0)
   if x = 0
-    continue (1)
-  else
+    continue (1)    // Next iteration x = 1
+  else if x = 10
     // Extra let binding for clarity.
-    let x_next = 2
-    break (x_next)
-  end if
-end loop bring (x)
+    let x_next = 11
+    break (x_next)  // Loop exit value
+  end 
+  // Continue is required for `loop` with induction vars.
+  continue (x + 1)
+end loop bring (x)  // Binds exit value from `break` to outer scope`s `x`
 
 debuglog x
 ```
+
+`loop` is unconditional, so all loop exits are through `break`.
+
+Hypothetical `while` with fallthrough exit.
+
 
 
 
