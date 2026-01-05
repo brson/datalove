@@ -67,19 +67,14 @@ impl<'db> Parser<'db> {
     /// These are postfix operators that unwrap Option/Result with early return.
     /// Takes the start position of the inner expression for span tracking.
     fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprFun<'db>) -> ast::ExprFun<'db> {
-        let text = self.source_text();
-        // We need to track the start of the original expression.
-        // For now, use position 0 and rely on the operator position.
-        // This isn't ideal but the error will at least point to the operator.
         loop {
             match self.peek() {
                 Some(TreeToken::Token(token)) => {
-                    let (_, op_span) = self.extract_text_span(&TreeToken::Token(*token));
+                    let (text, op_span) = self.extract_text_span(&TreeToken::Token(*token));
                     match token.kind(self.db) {
                         TokenKind::Sigil(Sigil::Question) => {
                             self.next(); // consume ?
                             let end_pos = self.last_byte_end();
-                            // Span from operator to end (best we can do without tracking expr start).
                             let span = op_span.start..end_pos;
                             expr = self.create_expr(
                                 ast::ExprFunKind::TryOption(ast::ExprTryOption::new(self.db, expr)),
