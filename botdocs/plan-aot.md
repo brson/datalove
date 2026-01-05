@@ -178,7 +178,7 @@ Each "unsupported instruction" error becomes the next work item.
 
 **Remaining known issues:**
 1. Wasteful temp stack slots - creates new slot per spill in `get_operand_ptr`
-2. TryReturn/UnitEarlyReturn terminators not implemented
+2. UnitEarlyReturn terminator not implemented
 3. Clone instruction not implemented
 4. ExternalValue/ExternalSlot operand support missing
 5. No aggregate fields in Pack (needs memcpy)
@@ -189,6 +189,8 @@ Each "unsupported instruction" error becomes the next work item.
 - Drop instruction - ✓ Phase 3.7
 - Int/String constants - ✓ Phase 3.7
 - UnitEnd terminator - ✓ Phase 3.8 (with script-level drops)
+- TryReturn terminator - ✓ Phase 3.11
+- Option/Result types - ✓ Phase 3.11
 
 ### Phase 3.6: Module Function Calls ✓ COMPLETE
 
@@ -372,14 +374,55 @@ lib.rs           - Entry point: AotCompiler, three-pass compilation
     ├── collections.rs - ListNew, SetNew, MapNew
     ├── aggregates.rs - Pack, Unpack, Copy
     ├── calls.rs     - Call instruction
+    ├── options.rs   - WrapSome, WrapNone, WrapOk, WrapErr, UnwrapOption, UnwrapResult
     ├── slots.rs     - SlotStore, SlotLoad
     ├── runtime.rs   - DebugLog, Drop
-    └── terminators.rs - Return, Goto, Branch
+    └── terminators.rs - Return, Goto, Branch, TryReturn
 ```
 
 **Remaining scaffolding (left for future use):**
 - `registry`, `slot_vars`, `next_var`, `alloc_var` in FunctionCompiler
   (infrastructure for potential Cranelift Variable-based slot approach)
+
+### Phase 3.11: Option and Result Types ✓ COMPLETE
+
+**Goal:** Support Option<T> and Result<T> types in AOT compilation.
+
+**New files:**
+- `crates/datalove-datafun-aot-cranelift/src/codegen/options.rs`
+  - `compile_wrap_some()`: Create Option::Some(value) with tag=2, payload copy
+  - `compile_wrap_none()`: Create Option::None with tag=1
+  - `compile_wrap_ok()`: Create Result::Ok(value) with tag=1, payload copy
+  - `compile_wrap_err()`: Create Result::Err(error) with tag=2, payload copy
+  - `compile_unwrap_option()`: Read tag, extract payload, return (value, is_some)
+  - `compile_unwrap_result()`: Read tag, extract payload, return (ok, err, is_ok)
+
+**Modified files:**
+- `crates/datalove-datafun-aot-cranelift/src/tydesc_emit.rs`
+  - Added `emit_option_tydesc()`: Emit Option TyDesc with inner type reference
+  - Added `emit_result_tydesc()`: Emit Result TyDesc with ok type reference
+  - Updated `can_emit()` to include Option and Result types
+
+- `crates/datalove-datafun-aot-cranelift/src/codegen/mod.rs`
+  - Added `mod options;`
+  - Added dispatch for WrapSome, WrapNone, WrapOk, WrapErr, UnwrapOption, UnwrapResult
+  - Fixed aggregate return types: Unit returns nothing, other aggregates return pointer
+
+- `crates/datalove-datafun-aot-cranelift/src/codegen/terminators.rs`
+  - Added `TryReturn` terminator (same as Return for functions returning Option/Result)
+
+**New tests:**
+- `018_option_some.world`: Function returns Option<u32> with Some, unwrap via if-option
+- `019_option_none.world`: Function returns Option<u32> with None, unwrap via if-option
+- `020_result_ok.world`: Function returns Result<u32> with Ok, unwrap via try operator (!)
+
+**Memory layout:**
+- Option<T>: tag (u8, None=1, Some=2) + padding + payload at align_up(1, align(T))
+- Result<T>: tag (u8, Ok=1, Err=2) + padding + max(sizeof(T), sizeof(Error)) payload
+
+**Known limitation:**
+- if-result with else clause generates IR with unreachable blocks that have invalid return types
+  (this is an IR lowering issue, not an AOT issue)
 
 ### Phases 4-8: Feature Development (Test-Driven)
 
@@ -443,9 +486,10 @@ datalove-datafun-aot-cranelift/
         ├── collections.rs  # ListNew, SetNew, MapNew
         ├── aggregates.rs   # Pack, Unpack, Copy
         ├── calls.rs        # Call instruction
+        ├── options.rs      # WrapSome, WrapNone, WrapOk, WrapErr, UnwrapOption, UnwrapResult
         ├── slots.rs        # SlotStore, SlotLoad
         ├── runtime.rs      # DebugLog, Drop
-        └── terminators.rs  # Return, Goto, Branch
+        └── terminators.rs  # Return, Goto, Branch, TryReturn
 ```
 
 **Dependencies:**

@@ -34,6 +34,8 @@ mod collections;
 mod constants;
 /// Binary and unary operations.
 mod ops;
+/// Option and Result operations.
+mod options;
 /// Runtime calls (DebugLog, Drop).
 mod runtime;
 /// Mutable slot operations.
@@ -83,14 +85,20 @@ pub fn build_signature_for_func(
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
 
-    // Return type.
+    // Return type: scalars in register, aggregates via pointer, Unit returns nothing.
     let ret_ty = func.infer_return_type();
-    match types::ir_type_to_cranelift(&ret_ty) {
-        CraneliftRepr::Scalar(cl_ty) => {
-            sig.returns.push(cl_ir::AbiParam::new(cl_ty));
+    match &ret_ty {
+        IrType::Unit => {
+            // Unit returns nothing.
         }
-        CraneliftRepr::Aggregate(_) => {
-            // Aggregate returns via pointer (handled later).
+        _ => match types::ir_type_to_cranelift(&ret_ty) {
+            CraneliftRepr::Scalar(cl_ty) => {
+                sig.returns.push(cl_ir::AbiParam::new(cl_ty));
+            }
+            CraneliftRepr::Aggregate(_) => {
+                // Aggregate returns via pointer to stack-allocated value.
+                sig.returns.push(cl_ir::AbiParam::new(PTR_TYPE));
+            }
         }
     }
 
@@ -364,16 +372,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
         }
 
-        // Return slot pointer (caller-allocated).
-        // For now, simple scalar returns go in a register.
+        // Return type: scalars in register, aggregates via pointer, Unit returns nothing.
         let ret_ty = self.func.infer_return_type();
-        match types::ir_type_to_cranelift(&ret_ty) {
-            CraneliftRepr::Scalar(cl_ty) => {
-                sig.returns.push(cl_ir::AbiParam::new(cl_ty));
+        match &ret_ty {
+            IrType::Unit => {
+                // Unit returns nothing.
             }
-            CraneliftRepr::Aggregate(_) => {
-                // Aggregate returns via pointer (first param is return slot).
-                // For now, we'll handle this in later phases.
+            _ => match types::ir_type_to_cranelift(&ret_ty) {
+                CraneliftRepr::Scalar(cl_ty) => {
+                    sig.returns.push(cl_ir::AbiParam::new(cl_ty));
+                }
+                CraneliftRepr::Aggregate(_) => {
+                    // Aggregate returns via pointer to stack-allocated value.
+                    sig.returns.push(cl_ir::AbiParam::new(PTR_TYPE));
+                }
             }
         }
 
@@ -433,6 +445,26 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             Instruction::MapNew { dest, entries } => {
                 self.compile_map_new(builder, *dest, entries)?;
+            }
+
+            // Option/Result instructions.
+            Instruction::WrapSome { dest, inner } => {
+                self.compile_wrap_some(builder, *dest, inner)?;
+            }
+            Instruction::WrapNone { dest } => {
+                self.compile_wrap_none(builder, *dest)?;
+            }
+            Instruction::WrapOk { dest, inner } => {
+                self.compile_wrap_ok(builder, *dest, inner)?;
+            }
+            Instruction::WrapErr { dest, inner } => {
+                self.compile_wrap_err(builder, *dest, inner)?;
+            }
+            Instruction::UnwrapOption { dest, is_some, src } => {
+                self.compile_unwrap_option(builder, *dest, *is_some, src)?;
+            }
+            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
+                self.compile_unwrap_result(builder, *ok_dest, *err_dest, *is_ok, src)?;
             }
 
             // TODO: More instructions in later phases.

@@ -36,7 +36,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     builder.ins().return_(&[]);
                 }
             }
-            Terminator::TryReturn { .. } | Terminator::UnitEnd { .. } | Terminator::UnitEarlyReturn { .. } => {
+            Terminator::TryReturn { value } => {
+                // TryReturn is like Return for functions that return Option/Result.
+                // The value is already wrapped in the appropriate type.
+                if let Some(val_op) = value {
+                    let val = self.get_operand_value(builder, val_op)?;
+                    builder.ins().return_(&[val]);
+                } else {
+                    builder.ins().return_(&[]);
+                }
+            }
+            Terminator::UnitEnd { .. } | Terminator::UnitEarlyReturn { .. } => {
                 return Err(AotError::Unsupported(format!(
                     "terminator not yet implemented: {:?}",
                     term

@@ -1,0 +1,26 @@
+AotAnalysis(
+    sections: [
+        AotSectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    v1, v2, v3 = unwrap_result v0\n    branch v3, block2, block1\nblock1:\n    v4 = err v2\n    unit_early_return v4\nblock2:\n    debuglog v1\n    unit_end\n\nfn get_ok():\nblock0:\n    v0 = const 42u32\n    v1 = ok v0\n    return v1\nexports:\n    get_ok = f0\n    r = v0\n    x = v1\n",
+            ),
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+            output: "@42\n",
+        ),
+    ],
+)

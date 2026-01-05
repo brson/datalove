@@ -13,7 +13,8 @@ use cranelift_module::{DataDescription, DataId, Linkage, Module};
 use datalove_datafun_ir::{IrFunction, IrScriptUnit, IrType};
 use datalove_rtdt::{
     Data as RtData, Error as RtError, Int as RtInt, List as RtList, Map as RtMap,
-    Set as RtSet, String as RtString, TyDesc, TyInfoList, TyInfoMap, TyInfoSet, TyTag,
+    Set as RtSet, String as RtString, TyDesc, TyInfoList, TyInfoMap, TyInfoOption,
+    TyInfoResult, TyInfoSet, TyTag,
 };
 
 use crate::AotError;
@@ -26,6 +27,10 @@ const TYINFO_LIST_ELEMENT_OFFSET: usize = std::mem::offset_of!(TyInfoList, eleme
 const TYINFO_SET_ELEMENT_OFFSET: usize = std::mem::offset_of!(TyInfoSet, element_tydesc);
 const TYINFO_MAP_KEY_OFFSET: usize = std::mem::offset_of!(TyInfoMap, key_tydesc);
 const TYINFO_MAP_VALUE_OFFSET: usize = std::mem::offset_of!(TyInfoMap, value_tydesc);
+
+// Offsets within TyInfo union for Option/Result types.
+const TYINFO_OPTION_INNER_OFFSET: usize = std::mem::offset_of!(TyInfoOption, inner_tydesc);
+const TYINFO_RESULT_OK_OFFSET: usize = std::mem::offset_of!(TyInfoResult, ok_tydesc);
 
 // TyDesc layout computed from runtime types.
 const TYDESC_SIZE: usize = size_of::<TyDesc>();
@@ -63,7 +68,7 @@ impl TyDescEmitter {
             return Ok(id);
         }
 
-        // Handle collection types with element type references.
+        // Handle types with inner type references.
         match ty {
             IrType::List(elem_ty) => {
                 return self.emit_list_tydesc(module, elem_ty);
@@ -73,6 +78,12 @@ impl TyDescEmitter {
             }
             IrType::Map(key_ty, val_ty) => {
                 return self.emit_map_tydesc(module, key_ty, val_ty);
+            }
+            IrType::Option(inner_ty) => {
+                return self.emit_option_tydesc(module, inner_ty);
+            }
+            IrType::Result(ok_ty) => {
+                return self.emit_result_tydesc(module, ok_ty);
             }
             _ => {}
         }
@@ -268,6 +279,126 @@ impl TyDescEmitter {
         Ok(data_id)
     }
 
+    /// Emit a TyDesc for an Option type with inner type reference.
+    fn emit_option_tydesc<M: Module>(
+        &mut self,
+        module: &mut M,
+        inner_ty: &IrType,
+    ) -> Result<DataId, AotError> {
+        let option_ty = IrType::Option(Box::new(inner_ty.clone()));
+
+        // Check cache.
+        if let Some(&id) = self.tydescs.get(&option_ty) {
+            return Ok(id);
+        }
+
+        // First, emit the inner type TyDesc.
+        let inner_tydesc_id = self.emit(module, inner_ty)?;
+
+        // Compute Option layout.
+        let inner_layout = crate::types::ir_type_to_cranelift(inner_ty).layout();
+        let tag_size = 1u32;
+        let payload_offset = crate::types::align_up(tag_size, inner_layout.align);
+        let overall_align = inner_layout.align.max(1);
+        let total_size = crate::types::align_up(payload_offset + inner_layout.size, overall_align);
+
+        // Build base TyDesc bytes.
+        let mut bytes = vec![0u8; TYDESC_SIZE];
+        let tag = TyTag::Option as u8;
+
+        bytes[OFFSET_TYPE_TAG] = tag;
+        bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&total_size.to_le_bytes());
+        bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&overall_align.to_le_bytes());
+
+        // Create unique name.
+        let name = format!("__tydesc_{}", self.counter);
+        self.counter += 1;
+
+        // Declare data.
+        let data_id = module
+            .declare_data(&name, Linkage::Local, false, false)
+            .map_err(|e| AotError::Module(format!("declare option tydesc: {}", e)))?;
+
+        // Define data with relocation to inner tydesc.
+        let mut data_desc = DataDescription::new();
+        data_desc.define(bytes.into_boxed_slice());
+        data_desc.set_align(TYDESC_ALIGN as u64);
+
+        // Add relocation for inner_tydesc pointer in type_info.
+        let inner_gv = module.declare_data_in_data(inner_tydesc_id, &mut data_desc);
+        let inner_offset = OFFSET_TYPE_INFO + TYINFO_OPTION_INNER_OFFSET;
+        data_desc.write_data_addr(inner_offset as u32, inner_gv, 0);
+
+        module
+            .define_data(data_id, &data_desc)
+            .map_err(|e| AotError::Module(format!("define option tydesc: {}", e)))?;
+
+        self.tydescs.insert(option_ty, data_id);
+        Ok(data_id)
+    }
+
+    /// Emit a TyDesc for a Result type with ok type reference.
+    fn emit_result_tydesc<M: Module>(
+        &mut self,
+        module: &mut M,
+        ok_ty: &IrType,
+    ) -> Result<DataId, AotError> {
+        let result_ty = IrType::Result(Box::new(ok_ty.clone()));
+
+        // Check cache.
+        if let Some(&id) = self.tydescs.get(&result_ty) {
+            return Ok(id);
+        }
+
+        // First, emit the ok type TyDesc.
+        let ok_tydesc_id = self.emit(module, ok_ty)?;
+
+        // Compute Result layout.
+        let ok_layout = crate::types::ir_type_to_cranelift(ok_ty).layout();
+        let error_size = size_of::<RtError>() as u32;
+        let error_align = align_of::<RtError>() as u32;
+        let tag_size = 1u32;
+        let max_payload_size = ok_layout.size.max(error_size);
+        let max_payload_align = ok_layout.align.max(error_align);
+        let payload_offset = crate::types::align_up(tag_size, max_payload_align);
+        let overall_align = max_payload_align.max(1);
+        let total_size = crate::types::align_up(payload_offset + max_payload_size, overall_align);
+
+        // Build base TyDesc bytes.
+        let mut bytes = vec![0u8; TYDESC_SIZE];
+        let tag = TyTag::Result as u8;
+
+        bytes[OFFSET_TYPE_TAG] = tag;
+        bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&total_size.to_le_bytes());
+        bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&overall_align.to_le_bytes());
+
+        // Create unique name.
+        let name = format!("__tydesc_{}", self.counter);
+        self.counter += 1;
+
+        // Declare data.
+        let data_id = module
+            .declare_data(&name, Linkage::Local, false, false)
+            .map_err(|e| AotError::Module(format!("declare result tydesc: {}", e)))?;
+
+        // Define data with relocation to ok tydesc.
+        let mut data_desc = DataDescription::new();
+        data_desc.define(bytes.into_boxed_slice());
+        data_desc.set_align(TYDESC_ALIGN as u64);
+
+        // Add relocation for ok_tydesc pointer in type_info.
+        let ok_gv = module.declare_data_in_data(ok_tydesc_id, &mut data_desc);
+        let ok_offset = OFFSET_TYPE_INFO + TYINFO_RESULT_OK_OFFSET;
+        data_desc.write_data_addr(ok_offset as u32, ok_gv, 0);
+
+        module
+            .define_data(data_id, &data_desc)
+            .map_err(|e| AotError::Module(format!("define result tydesc: {}", e)))?;
+
+        self.tydescs.insert(result_ty, data_id);
+        Ok(data_id)
+    }
+
     /// Emit TyDescs for all types upfront.
     ///
     /// Call this before codegen to populate the cache. After this,
@@ -318,6 +449,10 @@ impl TyDescEmitter {
             IrType::List(elem_ty) => self.can_emit(elem_ty),
             IrType::Set(elem_ty) => self.can_emit(elem_ty),
             IrType::Map(key_ty, val_ty) => self.can_emit(key_ty) && self.can_emit(val_ty),
+
+            // Option/Result types - can emit if inner type can be emitted.
+            IrType::Option(inner_ty) => self.can_emit(inner_ty),
+            IrType::Result(ok_ty) => self.can_emit(ok_ty),
 
             _ => false,
         }
