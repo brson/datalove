@@ -459,6 +459,42 @@ pub unsafe extern "C-unwind" fn dtlv_rti_any_destroy_local(
     }
 }
 
+/// Creates an Error from any value (moves inner to heap).
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_error_from_local(
+    rt: LocalRtHandle,
+    inner_in: *const u8,
+    inner_tydesc: *const rtdt::TyDesc,
+    dest_out: *mut u8,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!inner_in.is_null(), "inner_in is null");
+    debug_assert!(!inner_tydesc.is_null(), "inner_tydesc is null");
+    debug_assert!(!dest_out.is_null(), "dest_out is null");
+    debug_assert_aligned(inner_in, inner_tydesc, "error_from_local:inner");
+    unsafe {
+        crate::impls::boxing::error_from_local(rt, inner_in, inner_tydesc, dest_out)
+    }
+}
+
+/// Creates a Data from any value (moves inner to heap).
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_data_from_local(
+    rt: LocalRtHandle,
+    inner_in: *const u8,
+    inner_tydesc: *const rtdt::TyDesc,
+    dest_out: *mut u8,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!inner_in.is_null(), "inner_in is null");
+    debug_assert!(!inner_tydesc.is_null(), "inner_tydesc is null");
+    debug_assert!(!dest_out.is_null(), "dest_out is null");
+    debug_assert_aligned(inner_in, inner_tydesc, "data_from_local:inner");
+    unsafe {
+        crate::impls::boxing::data_from_local(rt, inner_in, inner_tydesc, dest_out)
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_string_create_local(
     rt: LocalRtHandle,

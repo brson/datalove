@@ -36,6 +36,8 @@ mod constants;
 mod ops;
 /// Option and Result operations.
 mod options;
+/// Boxing operations (ErrorFrom, DataFrom).
+mod boxing;
 /// Runtime calls (DebugLog, Drop).
 mod runtime;
 /// Mutable slot operations.
@@ -476,6 +478,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             Instruction::EnumVariant { dest, variant_index, payload } => {
                 self.compile_enum_variant(builder, *dest, *variant_index, payload.as_ref())?;
+            }
+            Instruction::ErrorFrom { dest, inner } => {
+                self.compile_error_from(builder, *dest, inner)?;
+            }
+            Instruction::DataFrom { dest, inner } => {
+                self.compile_data_from(builder, *dest, inner)?;
             }
 
             // TODO: More instructions in later phases.

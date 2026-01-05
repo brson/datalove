@@ -44,8 +44,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             Terminator::UnitEarlyReturn { value } => {
                 // Early return from script (via ret, !, or checked operators).
-                // Output the value via debuglog, then return.
+                // Output the value via debuglog, destroy it, then return.
                 self.compile_debuglog(builder, value)?;
+                self.compile_drop(builder, value)?;
                 builder.ins().return_(&[]);
             }
         }

@@ -58,6 +58,12 @@ pub struct RuntimeImports {
     // Value move function.
     /// `dtlv_rti_move_value_local(rt, src_ref, tydesc, dst_out) -> RtStatus`
     pub move_value: FuncId,
+
+    // Boxing functions.
+    /// `dtlv_rti_error_from_local(rt, inner_in, inner_tydesc, dest_out) -> RtStatus`
+    pub error_from: FuncId,
+    /// `dtlv_rti_data_from_local(rt, inner_in, inner_tydesc, dest_out) -> RtStatus`
+    pub data_from: FuncId,
 }
 
 impl RuntimeImports {
@@ -294,6 +300,26 @@ impl RuntimeImports {
                 .map_err(|e| AotError::Module(format!("declare dtlv_rti_move_value_local: {}", e)))?
         };
 
+        // Boxing functions: error_from, data_from
+        // Signature: (rt, inner_in, inner_tydesc, dest_out) -> u8
+        let boxing_sig = || {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // inner_in
+            sig.params.push(AbiParam::new(PTR_TYPE)); // inner_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // dest_out
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            sig
+        };
+
+        let error_from = module
+            .declare_function("dtlv_rti_error_from_local", Linkage::Import, &boxing_sig())
+            .map_err(|e| AotError::Module(format!("declare dtlv_rti_error_from_local: {}", e)))?;
+
+        let data_from = module
+            .declare_function("dtlv_rti_data_from_local", Linkage::Import, &boxing_sig())
+            .map_err(|e| AotError::Module(format!("declare dtlv_rti_data_from_local: {}", e)))?;
+
         Ok(Self {
             init,
             shutdown,
@@ -315,6 +341,8 @@ impl RuntimeImports {
             int_div,
             int_neg,
             move_value,
+            error_from,
+            data_from,
         })
     }
 }
