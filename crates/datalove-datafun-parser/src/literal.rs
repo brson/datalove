@@ -412,7 +412,7 @@ impl<'db> Parser<'db> {
                 let message = "expected variant name after 'enum'";
                 DiagnosticBuilder::error(self.db, message)
                     .code("P021")
-                    .primary_label(ts.text, ts.span.clone(), "expected variant name")
+                    .primary_label(ts.clone(), "expected variant name")
                     .emit_parse();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
                     self.db,
@@ -626,7 +626,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "unexpected tokens in tensor shape")
                 .code("D030")
-                .primary_label(ts.text, ts.span.clone(), "unexpected")
+                .primary_label(ts.clone(), "unexpected")
                 .emit_parse();
         }
         shape

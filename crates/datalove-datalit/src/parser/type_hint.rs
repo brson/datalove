@@ -296,7 +296,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 DiagnosticBuilder::error(self.db, "expected variant name in enum definition")
                     .code("D011")
-                    .primary_label(ts.text, ts.span, "expected variant name")
+                    .primary_label(ts, "expected variant name")
                     .emit_parse();
                 // Create a placeholder name for the error variant.
                 return ast::TypeHintEnumVariant::new(

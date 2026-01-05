@@ -4,7 +4,7 @@
 //! and ScriptTypeContext for tracking accumulated bindings across script units.
 
 use std::collections::HashMap;
-use bct::text::InternedText;
+use bct::text::{InternedText, TextSpan};
 use salsa::plumbing::AsId;
 
 use datalove_datafun_ast::ast::*;
@@ -70,11 +70,11 @@ impl<'db> TypeContext<'db> {
 
     /// F001: Undefined variable.
     pub fn error_undefined_variable(&self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
-        if let Some((text, span)) = self.get_span(expr) {
+        if let Some(ts) = self.get_span(expr) {
             let msg = format!("cannot find value `{}` in this scope", name.as_str(self.db));
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F001")
-                .primary_label(text, span, "not found in this scope")
+                .primary_label(ts.clone(), "not found in this scope")
                 .emit_type();
         }
         TypeError::UnresolvedName(name.as_str(self.db).to_string())
@@ -82,11 +82,11 @@ impl<'db> TypeContext<'db> {
 
     /// F002: Undefined function.
     pub fn error_undefined_function(&self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
-        if let Some((text, span)) = self.get_span(expr) {
+        if let Some(ts) = self.get_span(expr) {
             let msg = format!("cannot find function `{}` in this scope", name.as_str(self.db));
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F002")
-                .primary_label(text, span, "not found in this scope")
+                .primary_label(ts.clone(), "not found in this scope")
                 .emit_type();
         }
         TypeError::UnresolvedName(name.as_str(self.db).to_string())
@@ -94,10 +94,10 @@ impl<'db> TypeContext<'db> {
 
     /// F011: Cannot synthesize type.
     pub fn error_cannot_synthesize(&self, expr: ExprFun<'db>, message: &str) -> TypeError {
-        if let Some((text, span)) = self.get_span(expr) {
+        if let Some(ts) = self.get_span(expr) {
             datalove_diagnostic::DiagnosticBuilder::error(self.db, message)
                 .code("F011")
-                .primary_label(text, span, "cannot infer type")
+                .primary_label(ts.clone(), "cannot infer type")
                 .emit_type();
         }
         TypeError::CannotSynthesize
@@ -105,11 +105,11 @@ impl<'db> TypeContext<'db> {
 
     /// F016: Type mismatch.
     pub fn error_type_mismatch(&self, expr: ExprFun<'db>, expected: &str, actual: &str, label: &str) -> TypeError {
-        if let Some((text, span)) = self.get_span(expr) {
+        if let Some(ts) = self.get_span(expr) {
             let msg = format!("mismatched types: expected `{}`, found `{}`", expected, actual);
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F016")
-                .primary_label(text, span, label)
+                .primary_label(ts.clone(), label)
                 .emit_type();
         }
         TypeError::TypeMismatch {
@@ -120,7 +120,7 @@ impl<'db> TypeContext<'db> {
 
     /// F045: Function arity mismatch.
     pub fn error_arity_mismatch(&self, expr: ExprFun<'db>, expected: usize, actual: usize) -> TypeError {
-        if let Some((text, span)) = self.get_span(expr) {
+        if let Some(ts) = self.get_span(expr) {
             let msg = format!(
                 "this function takes {} argument{} but {} {} supplied",
                 expected,
@@ -130,7 +130,7 @@ impl<'db> TypeContext<'db> {
             );
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F045")
-                .primary_label(text, span, &format!("expected {} arguments", expected))
+                .primary_label(ts.clone(), &format!("expected {} arguments", expected))
                 .emit_type();
         }
         TypeError::ArityMismatch { expected, actual }
@@ -138,10 +138,10 @@ impl<'db> TypeContext<'db> {
 
     /// F046: Result destructuring requires error binding.
     pub fn error_result_requires_binding(&self, expr: ExprFun<'db>) -> TypeError {
-        if let Some((text, span)) = self.get_span(expr) {
+        if let Some(ts) = self.get_span(expr) {
             datalove_diagnostic::DiagnosticBuilder::error(self.db, "Result destructuring requires an else binding")
                 .code("F046")
-                .primary_label(text, span, "Result type here")
+                .primary_label(ts.clone(), "Result type here")
                 .note("use `if let ok(x) = result { ... } else error(e) { ... }` to handle both cases")
                 .emit_type();
         }
@@ -150,11 +150,11 @@ impl<'db> TypeContext<'db> {
 
     /// F026: Invalid operand type for operator.
     pub fn error_invalid_operand_type(&self, expr: ExprFun<'db>, op: &str, ty: &str) -> TypeError {
-        if let Some((text, span)) = self.get_span(expr) {
+        if let Some(ts) = self.get_span(expr) {
             let msg = format!("invalid operand type `{}` for operator `{}`", ty, op);
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F026")
-                .primary_label(text, span, &format!("operator `{}` cannot be applied to type `{}`", op, ty))
+                .primary_label(ts.clone(), &format!("operator `{}` cannot be applied to type `{}`", op, ty))
                 .emit_type();
         }
         TypeError::InvalidOperandType {
@@ -165,11 +165,11 @@ impl<'db> TypeContext<'db> {
 
     /// F027: Invalid tuple element type.
     pub fn error_invalid_tuple_element(&self, expr: ExprFun<'db>, ty: &str) -> TypeError {
-        if let Some((text, span)) = self.get_span(expr) {
+        if let Some(ts) = self.get_span(expr) {
             let msg = format!("tuple elements must be datalit types, found `{}`", ty);
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F027")
-                .primary_label(text, span, "invalid type for tuple element")
+                .primary_label(ts.clone(), "invalid type for tuple element")
                 .emit_type();
         }
         TypeError::InvalidTupleElement {
@@ -179,11 +179,11 @@ impl<'db> TypeContext<'db> {
 
     /// F047: Try operator used outside function.
     pub fn error_try_outside_function(&self, expr: ExprFun<'db>, operator: &str) -> TypeError {
-        if let Some((text, span)) = self.get_span(expr) {
+        if let Some(ts) = self.get_span(expr) {
             let msg = format!("try operator `{}` can only be used inside a function", operator);
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F047")
-                .primary_label(text, span, "try operator here")
+                .primary_label(ts.clone(), "try operator here")
                 .emit_type();
         }
         TypeError::TryOutsideFunction {
@@ -193,11 +193,11 @@ impl<'db> TypeContext<'db> {
 
     /// F048: Try operator type mismatch.
     pub fn error_try_type_mismatch(&self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
-        if let Some((text, span)) = self.get_span(expr) {
+        if let Some(ts) = self.get_span(expr) {
             let msg = format!("try operator `{}` requires {} type, found `{}`", operator, expected, actual);
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F048")
-                .primary_label(text, span, &format!("expected {}, found `{}`", expected, actual))
+                .primary_label(ts.clone(), &format!("expected {}, found `{}`", expected, actual))
                 .emit_type();
         }
         TypeError::TryTypeMismatch {
@@ -208,11 +208,11 @@ impl<'db> TypeContext<'db> {
 
     /// F049: Try operator return type mismatch.
     pub fn error_try_return_type_mismatch(&self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
-        if let Some((text, span)) = self.get_span(expr) {
+        if let Some(ts) = self.get_span(expr) {
             let msg = format!("try operator `{}` requires function to return {}, found `{}`", operator, expected, actual);
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F049")
-                .primary_label(text, span, "try operator here")
+                .primary_label(ts.clone(), "try operator here")
                 .note(&format!("function must return {} to use `{}` operator", expected, operator))
                 .emit_type();
         }
@@ -223,8 +223,11 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Look up span for a datafun expression.
-    pub fn get_span(&self, expr: ExprFun<'db>) -> Option<(bct::text::Text<'db>, datalove_diagnostic::ByteSpan)> {
-        self.spans.lookup(self.db, expr).map(|entry| entry.to_text_and_span(self.db))
+    pub fn get_span(&self, expr: ExprFun<'db>) -> Option<TextSpan<'db>> {
+        self.spans.lookup(self.db, expr).map(|entry| {
+            let (text, span) = entry.to_text_and_span(self.db);
+            TextSpan::new(text, span)
+        })
     }
 
     pub fn add_variable(&mut self, name: InternedText<'db>, ty: TypeAndHeap<'db>) {

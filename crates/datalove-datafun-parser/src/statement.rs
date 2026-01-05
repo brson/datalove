@@ -308,7 +308,7 @@ impl<'db> Parser<'db> {
                     let ts = sub.peek_text_span();
                     DiagnosticBuilder::error(sub.db, "expected parameter name")
                         .code("P011")
-                        .primary_label(ts.text, ts.span, "expected parameter name")
+                        .primary_label(ts, "expected parameter name")
                         .emit_parse();
                     InternedText::new(sub.db, "<error>".S())
                 }
@@ -320,7 +320,7 @@ impl<'db> Parser<'db> {
                 let ts = sub.peek_text_span();
                 DiagnosticBuilder::error(sub.db, "expected ':' after parameter name")
                     .code("P012")
-                    .primary_label(ts.text, ts.span, "expected ':'")
+                    .primary_label(ts, "expected ':'")
                     .emit_parse();
             }
 
@@ -538,7 +538,7 @@ impl<'db> Parser<'db> {
                     let ts = self.peek_text_span();
                     DiagnosticBuilder::error(self.db, "expected binding name after '|'")
                         .code("P019")
-                        .primary_label(ts.text, ts.span, "expected binding name")
+                        .primary_label(ts, "expected binding name")
                         .emit_parse();
                     InternedText::new(self.db, "<error>".S())
                 }
@@ -548,7 +548,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 DiagnosticBuilder::error(self.db, "expected '|' after binding name")
                     .code("P020")
-                    .primary_label(ts.text, ts.span, "expected '|'")
+                    .primary_label(ts, "expected '|'")
                     .emit_parse();
             }
             Some(binding)
@@ -604,7 +604,7 @@ impl<'db> Parser<'db> {
                         let ts = else_sub.peek_text_span();
                         DiagnosticBuilder::error(else_sub.db, "expected binding name after '|'")
                             .code("P019")
-                            .primary_label(ts.text, ts.span, "expected binding name")
+                            .primary_label(ts, "expected binding name")
                             .emit_parse();
                         InternedText::new(else_sub.db, "<error>".S())
                     }
@@ -614,7 +614,7 @@ impl<'db> Parser<'db> {
                     let ts = else_sub.peek_text_span();
                     DiagnosticBuilder::error(else_sub.db, "expected '|' after binding name")
                         .code("P020")
-                        .primary_label(ts.text, ts.span, "expected '|'")
+                        .primary_label(ts, "expected '|'")
                         .emit_parse();
                 }
                 Some(binding)
@@ -747,7 +747,7 @@ impl<'db> Parser<'db> {
         // (to avoid duplicate errors).
         if consumed < collected_len {
             if !matches!(type_hint.type_hint(self.db), datalit::ast::TypeHint::ParseError(_)) {
-                use bct::text::InternedText;
+                use bct::text::{InternedText, TextSpan};
                 use datalove_diagnostic::DiagnosticBuilder;
 
                 // Get text/span info for the error.
@@ -756,7 +756,7 @@ impl<'db> Parser<'db> {
 
                 DiagnosticBuilder::error(self.db, "unexpected tokens in type hint")
                     .code("D021")
-                    .primary_label(text, 0..1, "unexpected tokens")
+                    .primary_label(TextSpan::new(text, 0..1), "unexpected tokens")
                     .emit_parse();
 
                 let error = datalit::ast::TypeHintParseError::new(

@@ -11,9 +11,9 @@
 use bct::text::{Text, InternedText};
 use salsa::Accumulator;
 use salsa::plumbing::AsId;
-use std::ops::Range;
 
-pub type ByteSpan = Range<usize>;
+// Re-export for convenience.
+pub use bct::text::{TextSpan, ByteSpan};
 
 /// Single span entry for efficient lookup.
 ///
@@ -262,10 +262,10 @@ impl<'db> DiagnosticBuilder<'db> {
     }
 
     /// Add a primary label (the main error location).
-    pub fn primary_label(mut self, text: Text<'db>, span: ByteSpan, msg: &str) -> Self {
+    pub fn primary_label(mut self, ts: TextSpan<'db>, msg: &str) -> Self {
         self.diagnostic.labels.push(DiagnosticLabel {
-            text,
-            span,
+            text: ts.text,
+            span: ts.span,
             message: Some(InternedText::new(self.db, msg.to_string())),
             style: LabelStyle::Primary,
         });
@@ -273,10 +273,10 @@ impl<'db> DiagnosticBuilder<'db> {
     }
 
     /// Add a secondary label (a related location).
-    pub fn secondary_label(mut self, text: Text<'db>, span: ByteSpan, msg: &str) -> Self {
+    pub fn secondary_label(mut self, ts: TextSpan<'db>, msg: &str) -> Self {
         self.diagnostic.labels.push(DiagnosticLabel {
-            text,
-            span,
+            text: ts.text,
+            span: ts.span,
             message: Some(InternedText::new(self.db, msg.to_string())),
             style: LabelStyle::Secondary,
         });
@@ -284,10 +284,10 @@ impl<'db> DiagnosticBuilder<'db> {
     }
 
     /// Add a primary label without a message.
-    pub fn primary_span(mut self, text: Text<'db>, span: ByteSpan) -> Self {
+    pub fn primary_span(mut self, ts: TextSpan<'db>) -> Self {
         self.diagnostic.labels.push(DiagnosticLabel {
-            text,
-            span,
+            text: ts.text,
+            span: ts.span,
             message: None,
             style: LabelStyle::Primary,
         });
@@ -295,10 +295,10 @@ impl<'db> DiagnosticBuilder<'db> {
     }
 
     /// Add a secondary label without a message.
-    pub fn secondary_span(mut self, text: Text<'db>, span: ByteSpan) -> Self {
+    pub fn secondary_span(mut self, ts: TextSpan<'db>) -> Self {
         self.diagnostic.labels.push(DiagnosticLabel {
-            text,
-            span,
+            text: ts.text,
+            span: ts.span,
             message: None,
             style: LabelStyle::Secondary,
         });
@@ -314,14 +314,13 @@ impl<'db> DiagnosticBuilder<'db> {
     /// Add a suggestion with optional replacement text.
     pub fn suggestion(
         mut self,
-        text: Text<'db>,
-        span: ByteSpan,
+        ts: TextSpan<'db>,
         msg: &str,
         replacement: Option<&str>,
     ) -> Self {
         self.diagnostic.suggestions.push(Suggestion {
-            text,
-            span,
+            text: ts.text,
+            span: ts.span,
             message: InternedText::new(self.db, msg.to_string()),
             replacement: replacement.map(|r| InternedText::new(self.db, r.to_string())),
         });

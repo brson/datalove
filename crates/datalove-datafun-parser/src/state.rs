@@ -75,7 +75,7 @@ impl<'db> Parser<'db> {
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code)
-            .primary_label(ts.text, ts.span.clone(), label)
+            .primary_label(ts.clone(), label)
             .emit_parse();
         ast::Statement::ParseError(ast::StmtParseError::new(self.db, ts.text, ts.span, message_text))
     }
@@ -92,7 +92,7 @@ impl<'db> Parser<'db> {
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code)
-            .primary_label(ts.text, ts.span.clone(), label)
+            .primary_label(ts.clone(), label)
             .emit_parse();
         ast::ExprFun::new(
             self.db,
@@ -108,13 +108,11 @@ impl<'db> Parser<'db> {
     /// Get the byte position at start of current token (or end of last token).
     pub(super) fn current_byte_pos(&self) -> usize {
         if let Some(token) = self.peek() {
-            let TextSpan { span, .. } = self.extract_text_span(token);
-            span.start
+            self.extract_text_span(token).start()
         } else if self.pos > 0 {
             // At end of input, return end of last token.
             if let Some(token) = self.tokens.get(self.pos - 1) {
-                let TextSpan { span, .. } = self.extract_text_span(token);
-                span.end
+                self.extract_text_span(token).end()
             } else {
                 0
             }
@@ -127,8 +125,7 @@ impl<'db> Parser<'db> {
     pub(super) fn last_byte_end(&self) -> usize {
         if self.pos > 0 {
             if let Some(token) = self.tokens.get(self.pos - 1) {
-                let TextSpan { span, .. } = self.extract_text_span(token);
-                return span.end;
+                return self.extract_text_span(token).end();
             }
         }
         0
@@ -153,7 +150,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "unexpected token after expression")
                 .code("P021")
-                .primary_label(ts.text, ts.span, "unexpected token")
+                .primary_label(ts, "unexpected token")
                 .emit_parse();
         }
     }

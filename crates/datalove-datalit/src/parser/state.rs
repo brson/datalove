@@ -77,7 +77,7 @@ impl<'db> Parser<'db> {
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code)
-            .primary_label(ts.text, ts.span.clone(), label)
+            .primary_label(ts.clone(), label)
             .emit_parse();
         ast::Expr::ParseError(ast::ExprParseError::new(self.db, ts.text, ts.span, message_text))
     }
@@ -94,7 +94,7 @@ impl<'db> Parser<'db> {
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code)
-            .primary_label(ts.text, ts.span.clone(), label)
+            .primary_label(ts.clone(), label)
             .emit_parse();
         ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, ts.text, ts.span, message_text))
     }
@@ -125,7 +125,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "unexpected token after expression")
                 .code("D021")
-                .primary_label(ts.text, ts.span, "unexpected token")
+                .primary_label(ts, "unexpected token")
                 .emit_parse();
         }
     }
@@ -140,7 +140,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "unexpected token after type")
                 .code("D022")
-                .primary_label(ts.text, ts.span, "unexpected token")
+                .primary_label(ts, "unexpected token")
                 .emit_parse();
         }
     }

@@ -247,7 +247,7 @@ impl<'db> Parser<'db> {
                                 let ts = p.peek_text_span();
                                 DiagnosticBuilder::error(p.db, "expected dimension value in tensor shape")
                                     .code("D023")
-                                    .primary_label(ts.text, ts.span, "expected integer")
+                                    .primary_label(ts, "expected integer")
                                     .emit_parse();
                                 0 // Placeholder dimension.
                             }

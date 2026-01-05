@@ -1,8 +1,8 @@
 use rmx::prelude::*;
-use bct::text::{InternedText, Text};
+use bct::text::{InternedText, TextSpan};
 use crate::ast::*;
 use crate::resolve::ResolvedExpr;
-use datalove_diagnostic::{ByteSpan, DiagnosticBuilder};
+use datalove_diagnostic::DiagnosticBuilder;
 
 /// Type representation (synthesized types, mirrors TypeHint but without parse errors).
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -158,9 +158,9 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Look up the source location for an expression (on-demand).
-    fn get_span(&self, expr: ExprFull<'db>) -> Option<(Text<'db>, ByteSpan)> {
+    fn get_span(&self, expr: ExprFull<'db>) -> Option<TextSpan<'db>> {
         let spans = crate::spans::datalit_spans(self.db, self.source);
-        spans.get_text_and_span(self.db, expr)
+        spans.get_text_span(self.db, expr)
     }
 }
 
@@ -248,10 +248,10 @@ fn synthesize<'db>(
                 Type::U32
             } else {
                 // T001: Integer out of range.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "integer literal out of range")
                         .code("T001")
-                        .primary_label(text, span, "value too large for u32")
+                        .primary_label(ts.clone(), "value too large for u32")
                         .note("integer literals default to u32 type, which has a maximum value of 4,294,967,295")
                         .emit_type();
                 }
@@ -271,10 +271,10 @@ fn synthesize<'db>(
                 Type::U32
             } else {
                 // T001: Hex literal out of range for u32.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "hex literal out of range")
                         .code("T001")
-                        .primary_label(text, span, "value too large for u32")
+                        .primary_label(ts.clone(), "value too large for u32")
                         .note("hex literals default to u32 type; use a type hint for other types")
                         .emit_type();
                 }
@@ -311,10 +311,10 @@ fn synthesize<'db>(
             let elements = l.elements(db);
             if elements.is_empty() {
                 // T013: Cannot synthesize type for empty list.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "cannot infer type for empty list")
                         .code("T013")
-                        .primary_label(text, span, "type annotation required")
+                        .primary_label(ts.clone(), "type annotation required")
                         .note("provide a type hint to specify the element type, e.g., ': @list(@u32) / @list()'")
                         .emit_type();
                 }
@@ -329,11 +329,11 @@ fn synthesize<'db>(
                 let elem_type = synthesize(ctx, *elem)?;
                 if !types_equivalent(db, first_type.ty(db), elem_type.ty(db)) {
                     // T018: List element type mismatch.
-                    if let Some((text, span)) = ctx.get_span(*elem) {
+                    if let Some(ts) = ctx.get_span(*elem) {
                         let msg = format!("mismatched types in list");
                         DiagnosticBuilder::error(db, &msg)
                             .code("T018")
-                            .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                            .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
                                 type_to_string(db, first_type.ty(db)),
                                 type_to_string(db, elem_type.ty(db))))
                             .note("all elements in a list must have the same type")
@@ -346,10 +346,10 @@ fn synthesize<'db>(
                 }
                 if !heaps_compatible(first_type.heap(db), elem_type.heap(db)) {
                     // T033: List element heap mismatch.
-                    if let Some((text, span)) = ctx.get_span(*elem) {
+                    if let Some(ts) = ctx.get_span(*elem) {
                         DiagnosticBuilder::error(db, "heap allocation mismatch in list")
                             .code("T033")
-                            .primary_label(text, span, &format!("expected {}, found {}",
+                            .primary_label(ts.clone(), &format!("expected {}, found {}",
                                 heap_to_string(first_type.heap(db)),
                                 heap_to_string(elem_type.heap(db))))
                             .note("all elements in a list must have compatible heap allocations")
@@ -370,10 +370,10 @@ fn synthesize<'db>(
             let elements = s.elements(db);
             if elements.is_empty() {
                 // T014: Cannot synthesize type for empty set.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "cannot infer type for empty set")
                         .code("T014")
-                        .primary_label(text, span, "type annotation required")
+                        .primary_label(ts.clone(), "type annotation required")
                         .note("provide a type hint to specify the element type, e.g., ': @set(@u32) / @set()'")
                         .emit_type();
                 }
@@ -388,11 +388,11 @@ fn synthesize<'db>(
                 let elem_type = synthesize(ctx, *elem)?;
                 if !types_equivalent(db, first_type.ty(db), elem_type.ty(db)) {
                     // T019: Set element type mismatch.
-                    if let Some((text, span)) = ctx.get_span(*elem) {
+                    if let Some(ts) = ctx.get_span(*elem) {
                         let msg = format!("mismatched types in set");
                         DiagnosticBuilder::error(db, &msg)
                             .code("T019")
-                            .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                            .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
                                 type_to_string(db, first_type.ty(db)),
                                 type_to_string(db, elem_type.ty(db))))
                             .note("all elements in a set must have the same type")
@@ -405,10 +405,10 @@ fn synthesize<'db>(
                 }
                 if !heaps_compatible(first_type.heap(db), elem_type.heap(db)) {
                     // T034: Set element heap mismatch.
-                    if let Some((text, span)) = ctx.get_span(*elem) {
+                    if let Some(ts) = ctx.get_span(*elem) {
                         DiagnosticBuilder::error(db, "heap allocation mismatch in set")
                             .code("T034")
-                            .primary_label(text, span, &format!("expected {}, found {}",
+                            .primary_label(ts.clone(), &format!("expected {}, found {}",
                                 heap_to_string(first_type.heap(db)),
                                 heap_to_string(elem_type.heap(db))))
                             .note("all elements in a set must have compatible heap allocations")
@@ -429,10 +429,10 @@ fn synthesize<'db>(
             let entries = m.entries(db);
             if entries.is_empty() {
                 // T015: Cannot synthesize type for empty map.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "cannot infer type for empty map")
                         .code("T015")
-                        .primary_label(text, span, "type annotation required")
+                        .primary_label(ts.clone(), "type annotation required")
                         .note("provide a type hint to specify the key and value types, e.g., ': @map(@string, @u32) / @map()'")
                         .emit_type();
                 }
@@ -451,11 +451,11 @@ fn synthesize<'db>(
 
                 if !types_equivalent(db, first_key_type.ty(db), key_type.ty(db)) {
                     // T020: Map key type mismatch.
-                    if let Some((text, span)) = ctx.get_span(entry.key(db)) {
+                    if let Some(ts) = ctx.get_span(entry.key(db)) {
                         let msg = format!("mismatched key types in map");
                         DiagnosticBuilder::error(db, &msg)
                             .code("T020")
-                            .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                            .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
                                 type_to_string(db, first_key_type.ty(db)),
                                 type_to_string(db, key_type.ty(db))))
                             .note("all keys in a map must have the same type")
@@ -468,10 +468,10 @@ fn synthesize<'db>(
                 }
                 if !heaps_compatible(first_key_type.heap(db), key_type.heap(db)) {
                     // T035: Map key heap mismatch.
-                    if let Some((text, span)) = ctx.get_span(entry.key(db)) {
+                    if let Some(ts) = ctx.get_span(entry.key(db)) {
                         DiagnosticBuilder::error(db, "heap allocation mismatch in map keys")
                             .code("T035")
-                            .primary_label(text, span, &format!("expected {}, found {}",
+                            .primary_label(ts.clone(), &format!("expected {}, found {}",
                                 heap_to_string(first_key_type.heap(db)),
                                 heap_to_string(key_type.heap(db))))
                             .note("all keys in a map must have compatible heap allocations")
@@ -485,11 +485,11 @@ fn synthesize<'db>(
 
                 if !types_equivalent(db, first_value_type.ty(db), value_type.ty(db)) {
                     // T021: Map value type mismatch.
-                    if let Some((text, span)) = ctx.get_span(entry.value(db)) {
+                    if let Some(ts) = ctx.get_span(entry.value(db)) {
                         let msg = format!("mismatched value types in map");
                         DiagnosticBuilder::error(db, &msg)
                             .code("T021")
-                            .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                            .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
                                 type_to_string(db, first_value_type.ty(db)),
                                 type_to_string(db, value_type.ty(db))))
                             .note("all values in a map must have the same type")
@@ -502,10 +502,10 @@ fn synthesize<'db>(
                 }
                 if !heaps_compatible(first_value_type.heap(db), value_type.heap(db)) {
                     // T036: Map value heap mismatch.
-                    if let Some((text, span)) = ctx.get_span(entry.value(db)) {
+                    if let Some(ts) = ctx.get_span(entry.value(db)) {
                         DiagnosticBuilder::error(db, "heap allocation mismatch in map values")
                             .code("T036")
-                            .primary_label(text, span, &format!("expected {}, found {}",
+                            .primary_label(ts.clone(), &format!("expected {}, found {}",
                                 heap_to_string(first_value_type.heap(db)),
                                 heap_to_string(value_type.heap(db))))
                             .note("all values in a map must have compatible heap allocations")
@@ -546,7 +546,7 @@ fn synthesize<'db>(
         | Expr::None
         | Expr::Er(_) => {
             // T016: Cannot synthesize type for anonymous enum, None, or Er.
-            if let Some((text, span)) = ctx.get_span(expr) {
+            if let Some(ts) = ctx.get_span(expr) {
                 let msg = match expr_and_heap.expr(db) {
                     Expr::None => "cannot infer type for None value",
                     Expr::Er(_) => "cannot infer type for Er value",
@@ -554,7 +554,7 @@ fn synthesize<'db>(
                 };
                 DiagnosticBuilder::error(db, msg)
                     .code("T016")
-                    .primary_label(text, span, "type annotation required")
+                    .primary_label(ts.clone(), "type annotation required")
                     .note("provide a type hint to specify the expected type")
                     .emit_type();
             }
@@ -568,10 +568,10 @@ fn synthesize<'db>(
 
             if elements.is_empty() {
                 // T050: Cannot synthesize type for empty tensor.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "cannot infer type for empty tensor")
                         .code("T050")
-                        .primary_label(text, span, "type annotation required")
+                        .primary_label(ts.clone(), "type annotation required")
                         .note("provide a type hint to specify the element type")
                         .emit_type();
                 }
@@ -582,10 +582,10 @@ fn synthesize<'db>(
             let expected_count = shape.iter().map(|&d| d as usize).product::<usize>();
             if elements.len() != expected_count {
                 // T051: Tensor element count mismatch (synthesis mode).
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "tensor has wrong number of elements")
                         .code("T051")
-                        .primary_label(text, span, &format!("expected {} element(s), found {}",
+                        .primary_label(ts.clone(), &format!("expected {} element(s), found {}",
                             expected_count, elements.len()))
                         .emit_type();
                 }
@@ -603,10 +603,10 @@ fn synthesize<'db>(
                 let elem_type = synthesize(ctx, *elem)?;
                 if !types_equivalent(db, first_type.ty(db), elem_type.ty(db)) {
                     // T052: Tensor element type mismatch.
-                    if let Some((text, span)) = ctx.get_span(*elem) {
+                    if let Some(ts) = ctx.get_span(*elem) {
                         DiagnosticBuilder::error(db, "mismatched types in tensor")
                             .code("T052")
-                            .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                            .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
                                 type_to_string(db, first_type.ty(db)),
                                 type_to_string(db, elem_type.ty(db))))
                             .note("all elements in a tensor must have the same type")
@@ -619,10 +619,10 @@ fn synthesize<'db>(
                 }
                 if !heaps_compatible(first_type.heap(db), elem_type.heap(db)) {
                     // T053: Tensor element heap mismatch.
-                    if let Some((text, span)) = ctx.get_span(*elem) {
+                    if let Some(ts) = ctx.get_span(*elem) {
                         DiagnosticBuilder::error(db, "heap allocation mismatch in tensor")
                             .code("T053")
-                            .primary_label(text, span, &format!("expected {}, found {}",
+                            .primary_label(ts.clone(), &format!("expected {}, found {}",
                                 heap_to_string(first_type.heap(db)),
                                 heap_to_string(elem_type.heap(db))))
                             .note("all elements in a tensor must have compatible heap allocations")
@@ -643,10 +643,10 @@ fn synthesize<'db>(
 
         Expr::ParseError(_) => {
             // T017: Cannot synthesize type for parse error.
-            if let Some((text, span)) = ctx.get_span(expr) {
+            if let Some(ts) = ctx.get_span(expr) {
                 DiagnosticBuilder::error(db, "cannot type-check expression with parse errors")
                     .code("T017")
-                    .primary_label(text, span, "parse error occurred here")
+                    .primary_label(ts.clone(), "parse error occurred here")
                     .note("fix the parse error before type checking")
                     .emit_type();
             }
@@ -685,10 +685,10 @@ fn check<'db>(
 
     if !heaps_compatible(actual_heap, expected_heap) {
         // T037: General heap mismatch.
-        if let Some((text, span)) = ctx.get_span(expr) {
+        if let Some(ts) = ctx.get_span(expr) {
             DiagnosticBuilder::error(db, "heap allocation mismatch")
                 .code("T037")
-                .primary_label(text, span, &format!("expected {}, found {}",
+                .primary_label(ts.clone(), &format!("expected {}, found {}",
                     heap_to_string(expected_heap),
                     heap_to_string(actual_heap)))
                 .note("heap-allocated and stack-allocated values cannot be mixed")
@@ -726,10 +726,10 @@ fn check<'db>(
                 Expr::Data(_) => Ok(()), // data can be used as error payload
                 _ => {
                     // T040: Er payload must be an error expression.
-                    if let Some((text, span)) = ctx.get_span(payload) {
+                    if let Some(ts) = ctx.get_span(payload) {
                         DiagnosticBuilder::error(db, "er payload must be an error expression")
                             .code("T040")
-                            .primary_label(text, span, "expected error expression")
+                            .primary_label(ts.clone(), "expected error expression")
                             .note("use `er error \"message\"` to construct a result error")
                             .emit_type();
                     }
@@ -768,11 +768,11 @@ fn check<'db>(
                 Ok(())
             } else {
                 // T040: Type mismatch - cannot widen from hinted type.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     let msg = format!("mismatched types");
                     DiagnosticBuilder::error(db, &msg)
                         .code("T040")
-                        .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                        .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
                             type_to_string(db, expected_type),
                             type_to_string(db, hinted_type_inner)))
                         .note("type hints on integer literals are respected; widening is only allowed within the same signedness (unsigned→unsigned or signed→signed)")
@@ -792,11 +792,11 @@ fn check<'db>(
             let synthesized = synthesize(ctx, expr_without_hint)?;
             if !types_equivalent(db, synthesized.ty(db), expected_type) {
                 // T022: Type mismatch for primitive literal.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     let msg = format!("mismatched types");
                     DiagnosticBuilder::error(db, &msg)
                         .code("T022")
-                        .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                        .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
                             type_to_string(db, expected_type),
                             type_to_string(db, synthesized.ty(db))))
                         .emit_type();
@@ -816,10 +816,10 @@ fn check<'db>(
                 Ok(())
             } else {
                 // T005: Integer out of range for u8.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "integer literal out of range for type u8")
                         .code("T005")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .note("u8 can represent values from 0 to 255")
                         .emit_type();
                 }
@@ -833,10 +833,10 @@ fn check<'db>(
                 Ok(())
             } else {
                 // T006: Integer out of range for i8.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "integer literal out of range for type i8")
                         .code("T006")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .note("i8 can represent values from -128 to 127")
                         .emit_type();
                 }
@@ -850,10 +850,10 @@ fn check<'db>(
                 Ok(())
             } else {
                 // T007: Integer out of range for u16.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "integer literal out of range for type u16")
                         .code("T007")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .note("u16 can represent values from 0 to 65,535")
                         .emit_type();
                 }
@@ -867,10 +867,10 @@ fn check<'db>(
                 Ok(())
             } else {
                 // T008: Integer out of range for i16.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "integer literal out of range for type i16")
                         .code("T008")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .note("i16 can represent values from -32,768 to 32,767")
                         .emit_type();
                 }
@@ -884,10 +884,10 @@ fn check<'db>(
                 Ok(())
             } else {
                 // T009: Integer out of range for u32.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "integer literal out of range for type u32")
                         .code("T009")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .note("u32 can represent values from 0 to 4,294,967,295")
                         .emit_type();
                 }
@@ -901,10 +901,10 @@ fn check<'db>(
                 Ok(())
             } else {
                 // T010: Integer out of range for i32.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "integer literal out of range for type i32")
                         .code("T010")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .note("i32 can represent values from -2,147,483,648 to 2,147,483,647")
                         .emit_type();
                 }
@@ -918,10 +918,10 @@ fn check<'db>(
                 Ok(())
             } else {
                 // T011: Integer out of range for u64.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "integer literal out of range for type u64")
                         .code("T011")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .note("u64 can represent values from 0 to 18,446,744,073,709,551,615")
                         .emit_type();
                 }
@@ -935,10 +935,10 @@ fn check<'db>(
                 Ok(())
             } else {
                 // T012: Integer out of range for i64.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "integer literal out of range for type i64")
                         .code("T012")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .note("i64 can represent values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807")
                         .emit_type();
                 }
@@ -958,10 +958,10 @@ fn check<'db>(
             if u8::from_str_radix(hex_part, 16).is_ok() {
                 Ok(())
             } else {
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "hex literal out of range for type u8")
                         .code("T005")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .note("u8 can represent hex values from 0x00 to 0xFF")
                         .emit_type();
                 }
@@ -974,10 +974,10 @@ fn check<'db>(
             if u16::from_str_radix(hex_part, 16).is_ok() {
                 Ok(())
             } else {
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "hex literal out of range for type u16")
                         .code("T007")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .note("u16 can represent hex values from 0x0000 to 0xFFFF")
                         .emit_type();
                 }
@@ -990,10 +990,10 @@ fn check<'db>(
             if u32::from_str_radix(hex_part, 16).is_ok() {
                 Ok(())
             } else {
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "hex literal out of range for type u32")
                         .code("T009")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .note("u32 can represent hex values from 0x00000000 to 0xFFFFFFFF")
                         .emit_type();
                 }
@@ -1006,10 +1006,10 @@ fn check<'db>(
             if u64::from_str_radix(hex_part, 16).is_ok() {
                 Ok(())
             } else {
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "hex literal out of range for type u64")
                         .code("T011")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .emit_type();
                 }
                 Err(TypeError::IntOutOfRange)
@@ -1023,10 +1023,10 @@ fn check<'db>(
             if u32::from_str_radix(hex_part, 16).is_ok() {
                 Ok(())
             } else {
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "hex literal out of range for f32 bit pattern")
                         .code("T013")
-                        .primary_label(text, span, "value out of range")
+                        .primary_label(ts.clone(), "value out of range")
                         .note("f32 bit patterns must be 32-bit hex values (0x00000000 to 0xFFFFFFFF)")
                         .emit_type();
                 }
@@ -1041,10 +1041,10 @@ fn check<'db>(
 
             if elements.len() != expected_fields.len() {
                 // T038: Tuple arity mismatch.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "tuple has wrong number of elements")
                         .code("T038")
-                        .primary_label(text, span, &format!("expected {} element(s), found {}",
+                        .primary_label(ts.clone(), &format!("expected {} element(s), found {}",
                             expected_fields.len(), elements.len()))
                         .emit_type();
                 }
@@ -1068,10 +1068,10 @@ fn check<'db>(
 
             if fields.len() != expected_fields.len() {
                 // T039: Struct arity mismatch.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "struct has wrong number of fields")
                         .code("T039")
-                        .primary_label(text, span, &format!("expected {} field(s), found {}",
+                        .primary_label(ts.clone(), &format!("expected {} field(s), found {}",
                             expected_fields.len(), fields.len()))
                         .emit_type();
                 }
@@ -1087,10 +1087,10 @@ fn check<'db>(
 
                 if field_name != expected_name {
                     // T042: Struct field order mismatch.
-                    if let Some((text, span)) = ctx.get_span(expr) {
+                    if let Some(ts) = ctx.get_span(expr) {
                         DiagnosticBuilder::error(db, "struct fields in wrong order")
                             .code("T042")
-                            .primary_label(text, span, &format!("expected field `{}`, found `{}`",
+                            .primary_label(ts.clone(), &format!("expected field `{}`, found `{}`",
                                 expected_name.as_str(db), field_name.as_str(db)))
                             .note("struct fields must appear in the same order as the type definition")
                             .emit_type();
@@ -1114,10 +1114,10 @@ fn check<'db>(
 
             // Check if the hinted type matches the expected type.
             if !types_equivalent(db, hinted_type_inner, expected_type) {
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "mismatched types")
                         .code("T047")
-                        .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                        .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
                             type_to_string(db, expected_type),
                             type_to_string(db, hinted_type_inner)))
                         .note("the type hint on this enum does not match the expected type from context")
@@ -1144,10 +1144,10 @@ fn check<'db>(
                 .find(|v| v.name(db) == variant_name)
                 .ok_or_else(|| {
                     // T044: Enum variant not found.
-                    if let Some((text, span)) = ctx.get_span(expr) {
+                    if let Some(ts) = ctx.get_span(expr) {
                         DiagnosticBuilder::error(db, &format!("variant `{}` not found in enum", variant_name.as_str(db)))
                             .code("T044")
-                            .primary_label(text, span, "variant not defined")
+                            .primary_label(ts.clone(), "variant not defined")
                             .emit_type();
                     }
                     TypeError::VariantNotFound(variant_name.as_str(db).to_string())
@@ -1160,10 +1160,10 @@ fn check<'db>(
                 (None, None) => Ok(()),
                 (Some(_), None) => {
                     // T024: Enum variant payload mismatch (has payload, expected none).
-                    if let Some((text, span)) = ctx.get_span(expr) {
+                    if let Some(ts) = ctx.get_span(expr) {
                         DiagnosticBuilder::error(db, "enum variant payload mismatch")
                             .code("T024")
-                            .primary_label(text, span, "expected no payload, found payload")
+                            .primary_label(ts.clone(), "expected no payload, found payload")
                             .emit_type();
                     }
                     Err(TypeError::TypeMismatch {
@@ -1173,10 +1173,10 @@ fn check<'db>(
                 }
                 (None, Some(_)) => {
                     // T025: Enum variant payload mismatch (no payload, expected payload).
-                    if let Some((text, span)) = ctx.get_span(expr) {
+                    if let Some(ts) = ctx.get_span(expr) {
                         DiagnosticBuilder::error(db, "enum variant payload mismatch")
                             .code("T025")
-                            .primary_label(text, span, "expected payload, found no payload")
+                            .primary_label(ts.clone(), "expected payload, found no payload")
                             .emit_type();
                     }
                     Err(TypeError::TypeMismatch {
@@ -1235,10 +1235,10 @@ fn check<'db>(
             let rank = shape.len() as u32;
             if rank != expected_tensor.rank(db) {
                 // T048: Tensor rank mismatch.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "tensor has wrong rank")
                         .code("T048")
-                        .primary_label(text, span, &format!("expected rank {}, found rank {}",
+                        .primary_label(ts.clone(), &format!("expected rank {}, found rank {}",
                             expected_tensor.rank(db), rank))
                         .emit_type();
                 }
@@ -1252,10 +1252,10 @@ fn check<'db>(
             let expected_count = shape.iter().map(|&d| d as usize).product::<usize>();
             if elements.len() != expected_count {
                 // T049: Tensor element count mismatch.
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "tensor has wrong number of elements")
                         .code("T049")
-                        .primary_label(text, span, &format!("expected {} element(s), found {}",
+                        .primary_label(ts.clone(), &format!("expected {} element(s), found {}",
                             expected_count, elements.len()))
                         .emit_type();
                 }
@@ -1291,11 +1291,11 @@ fn check<'db>(
                 Ok(())
             } else {
                 // T032: General type mismatch (subsumption fallback).
-                if let Some((text, span)) = ctx.get_span(expr) {
+                if let Some(ts) = ctx.get_span(expr) {
                     let msg = format!("mismatched types");
                     DiagnosticBuilder::error(db, &msg)
                         .code("T032")
-                        .primary_label(text, span, &format!("expected `{}`, found `{}`",
+                        .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
                             type_to_string(db, expected_type),
                             type_to_string(db, synthesized.ty(db))))
                         .emit_type();
