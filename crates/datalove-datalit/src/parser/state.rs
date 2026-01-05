@@ -147,13 +147,7 @@ impl<'db> Parser<'db> {
 
     /// Extract Text and ByteSpan from a token.
     pub(super) fn extract_text_span(&self, token: &TreeToken<'db>) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
-        let (text, span) = parser_util::extract_text_span(self.db, token);
-        if text.as_str(self.db).is_empty() {
-            // Fallback to source_text for branches.
-            (self.source_text(), span)
-        } else {
-            (text, span)
-        }
+        parser_util::extract_text_span(self.db, token)
     }
 
     /// Get Text and ByteSpan from current position for error reporting.

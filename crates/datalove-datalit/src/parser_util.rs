@@ -117,14 +117,7 @@ pub fn is_numeric_literal(word: &str) -> bool {
 
 /// Extract Text and ByteSpan from a token for error reporting.
 pub fn extract_text_span<'db>(db: &'db dyn Db, token: &TreeToken<'db>) -> (bct::text::Text<'db>, ByteSpan) {
-    match token {
-        TreeToken::Token(tok) => {
-            let subtext = tok.text(db);
-            (subtext.text(db), subtext.range(db))
-        }
-        TreeToken::Branch(_, _) => {
-            // Branches don't have a direct span; return empty.
-            (bct::text::Text::new(db, String::new()), 0..0)
-        }
-    }
+    // text_span() always returns Some for TreeToken::Token and TreeToken::Branch.
+    // It only returns None for top-level BracerIter (which isn't a TreeToken).
+    token.text_span(db).X()
 }

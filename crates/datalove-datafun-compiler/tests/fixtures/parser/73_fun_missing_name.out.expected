@@ -18,10 +18,10 @@
         {
           "message": "expected function name",
           "span": [
-            0,
-            0
+            4,
+            6
           ],
-          "text": ""
+          "text": "()"
         }
       ],
       "message": "expected function name after 'fun'"

@@ -30,7 +30,7 @@ rmx.features = [
   "rmx-profile-wasm",
 ]
 bct.package = "bcts"
-bct.version = "0.1.0"
+bct.version = "0.2.0"
 salsa.version = "0.25.2"
 
 [profile.release]
