@@ -4,7 +4,9 @@ use datalove_datafun_aot_cranelift::AotCompiler;
 use datalove_datafun_ir::{
     BlockId, ConstValue, IrBlock, IrScriptUnit, IrType, Instruction, Operand, Terminator, ValueId,
 };
+use std::path::Path;
 use std::process::Command;
+use std::sync::OnceLock;
 
 /// Create a simple script unit that logs an i32 constant.
 fn create_debuglog_i32_script(value: i32) -> IrScriptUnit {
@@ -33,26 +35,29 @@ fn create_debuglog_i32_script(value: i32) -> IrScriptUnit {
     }
 }
 
-/// Build the runtime library and return the path to the lib directory.
-fn ensure_runtime_lib() -> std::path::PathBuf {
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-        .unwrap_or_else(|_| ".".to_string());
-    let manifest_path = std::path::PathBuf::from(manifest_dir);
-    let workspace_root = manifest_path.join("../..").canonicalize()
-        .expect("failed to find workspace root");
-    let lib_dir = workspace_root.join("target/debug");
+static RUNTIME_LIB_DIR: OnceLock<std::path::PathBuf> = OnceLock::new();
 
-    // Always rebuild to avoid stale library.
-    let status = Command::new("cargo")
-        .args(["build", "-p", "datalove-rt"])
-        .current_dir(&workspace_root)
-        .status()
-        .expect("failed to run cargo build");
-    if !status.success() {
-        panic!("Failed to build datalove-rt");
-    }
+/// Build the runtime library once and return the path to the lib directory.
+fn ensure_runtime_lib() -> &'static Path {
+    RUNTIME_LIB_DIR.get_or_init(|| {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .unwrap_or_else(|_| ".".to_string());
+        let manifest_path = std::path::PathBuf::from(manifest_dir);
+        let workspace_root = manifest_path.join("../..").canonicalize()
+            .expect("failed to find workspace root");
+        let lib_dir = workspace_root.join("target/debug");
 
-    lib_dir
+        let status = Command::new("cargo")
+            .args(["build", "-p", "datalove-rt"])
+            .current_dir(&workspace_root)
+            .status()
+            .expect("failed to run cargo build");
+        if !status.success() {
+            panic!("Failed to build datalove-rt");
+        }
+
+        lib_dir
+    })
 }
 
 #[test]
