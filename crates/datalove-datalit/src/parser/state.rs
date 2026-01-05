@@ -8,7 +8,7 @@ use bct::{
 };
 
 use crate::ast;
-use crate::parser_util::{TokenStream, TokenStreamExt};
+use crate::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use datalove_diagnostic::DiagnosticBuilder;
 
 /// Parser state for datalit parsing.
@@ -68,8 +68,7 @@ impl<'db> Parser<'db> {
     /// Emit both a diagnostic and create an ExprParseError node in one call.
     pub(super) fn emit_expr_error(
         &mut self,
-        text: bct::text::Text<'db>,
-        span: datalove_diagnostic::ByteSpan,
+        ts: TextSpan<'db>,
         message: &str,
         code: &str,
         label: &str,
@@ -78,16 +77,15 @@ impl<'db> Parser<'db> {
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code)
-            .primary_label(text, span.clone(), label)
+            .primary_label(ts.text, ts.span.clone(), label)
             .emit_parse();
-        ast::Expr::ParseError(ast::ExprParseError::new(self.db, text, span, message_text))
+        ast::Expr::ParseError(ast::ExprParseError::new(self.db, ts.text, ts.span, message_text))
     }
 
     /// Emit both a diagnostic and create a TypeHintParseError node in one call.
     pub(super) fn emit_type_hint_error(
         &mut self,
-        text: bct::text::Text<'db>,
-        span: datalove_diagnostic::ByteSpan,
+        ts: TextSpan<'db>,
         message: &str,
         code: &str,
         label: &str,
@@ -96,9 +94,9 @@ impl<'db> Parser<'db> {
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code)
-            .primary_label(text, span.clone(), label)
+            .primary_label(ts.text, ts.span.clone(), label)
             .emit_parse();
-        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message_text))
+        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, ts.text, ts.span, message_text))
     }
 
     /// Parse a u32 literal from the current position.
@@ -124,10 +122,10 @@ impl<'db> Parser<'db> {
     pub(super) fn error_if_not_exhausted(&mut self) {
         if self.pos < self.tokens.len() && !self.had_error {
             self.had_error = true;
-            let (text, span) = self.peek_text_span();
+            let ts = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "unexpected token after expression")
                 .code("D021")
-                .primary_label(text, span, "unexpected token")
+                .primary_label(ts.text, ts.span, "unexpected token")
                 .emit_parse();
         }
     }
@@ -139,10 +137,10 @@ impl<'db> Parser<'db> {
     pub(super) fn error_if_not_exhausted_type_hint(&mut self) {
         if self.pos < self.tokens.len() && !self.had_error {
             self.had_error = true;
-            let (text, span) = self.peek_text_span();
+            let ts = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "unexpected token after type")
                 .code("D022")
-                .primary_label(text, span, "unexpected token")
+                .primary_label(ts.text, ts.span, "unexpected token")
                 .emit_parse();
         }
     }

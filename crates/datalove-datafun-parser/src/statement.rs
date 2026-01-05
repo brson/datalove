@@ -12,7 +12,7 @@ use datalove_diagnostic::DiagnosticBuilder;
 
 use datalove_datafun_ast::ast;
 use datalove_datalit as datalit;
-use datalove_datalit::parser_util::{TokenStream, TokenStreamExt};
+use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use super::state::Parser;
 
 impl<'db> Parser<'db> {
@@ -34,10 +34,8 @@ impl<'db> Parser<'db> {
             Some("continue") => self.parse_continue(),
             Some("debuglog") => self.parse_debuglog(),
             _ => {
-                let (text, span) = self.peek_text_span();
-                self.emit_stmt_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                self.emit_stmt_error(ts,
                     "unexpected statement",
                     "P001",
                     "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', or 'debuglog'"
@@ -72,10 +70,8 @@ impl<'db> Parser<'db> {
         let name = match self.eat_name() {
             Some(n) => n,
             None => {
-                let (text, span) = self.peek_text_span();
-                return self.emit_stmt_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
                     "expected name after 'let'",
                     "P007",
                     "expected name",
@@ -93,10 +89,8 @@ impl<'db> Parser<'db> {
 
         // Need `=` sigil. If missing, emit error and return parse error.
         if !self.eat_sigil(Sigil::Equals) {
-            let (text, span) = self.peek_text_span();
-            return self.emit_stmt_error(
-                text,
-                span,
+            let ts = self.peek_text_span();
+            return self.emit_stmt_error(ts,
                 "expected '=' after let binding",
                 "D023",
                 "expected '='"
@@ -120,10 +114,8 @@ impl<'db> Parser<'db> {
         let name = match self.eat_name() {
             Some(n) => n,
             None => {
-                let (text, span) = self.peek_text_span();
-                return self.emit_stmt_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
                     "expected name after 'var'",
                     "P008",
                     "expected name",
@@ -141,10 +133,8 @@ impl<'db> Parser<'db> {
 
         // Need `=` sigil.
         if !self.eat_sigil(Sigil::Equals) {
-            let (text, span) = self.peek_text_span();
-            return self.emit_stmt_error(
-                text,
-                span,
+            let ts = self.peek_text_span();
+            return self.emit_stmt_error(ts,
                 "expected '=' after var binding",
                 "D024",
                 "expected '='"
@@ -168,10 +158,8 @@ impl<'db> Parser<'db> {
         let name = match self.eat_name() {
             Some(n) => n,
             None => {
-                let (text, span) = self.peek_text_span();
-                return self.emit_stmt_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
                     "expected name after 'set'",
                     "P009",
                     "expected name",
@@ -181,10 +169,8 @@ impl<'db> Parser<'db> {
 
         // Need `=` sigil.
         if !self.eat_sigil(Sigil::Equals) {
-            let (text, span) = self.peek_text_span();
-            return self.emit_stmt_error(
-                text,
-                span,
+            let ts = self.peek_text_span();
+            return self.emit_stmt_error(ts,
                 "expected '=' after set target",
                 "D025",
                 "expected '='"
@@ -210,10 +196,8 @@ impl<'db> Parser<'db> {
         let name = match self.eat_name() {
             Some(n) => n,
             None => {
-                let (text, span) = self.peek_text_span();
-                return self.emit_stmt_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
                     "expected function name after 'fun'",
                     "P010",
                     "expected function name",
@@ -227,10 +211,8 @@ impl<'db> Parser<'db> {
                 self.parse_fun_params(iter)
             }
             _ => {
-                let (text, span) = self.peek_text_span();
-                return self.emit_stmt_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
                     "expected parameter list",
                     "P002",
                     "expected '(' to start parameter list"
@@ -269,10 +251,9 @@ impl<'db> Parser<'db> {
         }
 
         if !found_end_fun {
-            let text = self.source_text();
+            let ts = TextSpan::new(self.source_text(), 0..0);
             return self.emit_stmt_error(
-                text,
-                0..0,
+                ts,
                 "unterminated function body",
                 "P010",
                 "expected 'end fun' before end of input"
@@ -324,10 +305,10 @@ impl<'db> Parser<'db> {
                 Some(n) => n,
                 None => {
                     sub.had_error = true;
-                    let (text, span) = sub.peek_text_span();
+                    let ts = sub.peek_text_span();
                     DiagnosticBuilder::error(sub.db, "expected parameter name")
                         .code("P011")
-                        .primary_label(text, span, "expected parameter name")
+                        .primary_label(ts.text, ts.span, "expected parameter name")
                         .emit_parse();
                     InternedText::new(sub.db, "<error>".S())
                 }
@@ -336,10 +317,10 @@ impl<'db> Parser<'db> {
             // Need colon.
             if !sub.eat_sigil(Sigil::Colon) {
                 sub.had_error = true;
-                let (text, span) = sub.peek_text_span();
+                let ts = sub.peek_text_span();
                 DiagnosticBuilder::error(sub.db, "expected ':' after parameter name")
                     .code("P012")
-                    .primary_label(text, span, "expected ':'")
+                    .primary_label(ts.text, ts.span, "expected ':'")
                     .emit_parse();
             }
 
@@ -383,10 +364,8 @@ impl<'db> Parser<'db> {
                 let import_space = match self.eat_name() {
                     Some(n) => n,
                     None => {
-                        let (text, span) = self.peek_text_span();
-                        return self.emit_stmt_error(
-                            text,
-                            span,
+                        let ts = self.peek_text_span();
+                        return self.emit_stmt_error(ts,
                             "expected import space name after 'require module'",
                             "P013",
                             "expected import space name",
@@ -396,10 +375,8 @@ impl<'db> Parser<'db> {
 
                 // Need forward slash.
                 if !self.peek_sigil(Sigil::SlashForward) {
-                    let (text, span) = self.peek_text_span();
-                    return self.emit_stmt_error(
-                        text,
-                        span,
+                    let ts = self.peek_text_span();
+                    return self.emit_stmt_error(ts,
                         "expected '/' after import space",
                         "P003",
                         "expected '/' after import space"
@@ -410,10 +387,8 @@ impl<'db> Parser<'db> {
                 let package_alias = match self.eat_name() {
                     Some(n) => n,
                     None => {
-                        let (text, span) = self.peek_text_span();
-                        return self.emit_stmt_error(
-                            text,
-                            span,
+                        let ts = self.peek_text_span();
+                        return self.emit_stmt_error(ts,
                             "expected package name after '/'",
                             "P014",
                             "expected package name",
@@ -423,10 +398,8 @@ impl<'db> Parser<'db> {
 
                 // Need forward slash.
                 if !self.peek_sigil(Sigil::SlashForward) {
-                    let (text, span) = self.peek_text_span();
-                    return self.emit_stmt_error(
-                        text,
-                        span,
+                    let ts = self.peek_text_span();
+                    return self.emit_stmt_error(ts,
                         "expected '/' after package alias",
                         "P004",
                         "expected '/' after package alias"
@@ -437,10 +410,8 @@ impl<'db> Parser<'db> {
                 let module_alias = match self.eat_name() {
                     Some(n) => n,
                     None => {
-                        let (text, span) = self.peek_text_span();
-                        return self.emit_stmt_error(
-                            text,
-                            span,
+                        let ts = self.peek_text_span();
+                        return self.emit_stmt_error(ts,
                             "expected module name after '/'",
                             "P015",
                             "expected module name",
@@ -463,10 +434,8 @@ impl<'db> Parser<'db> {
                 let name = match self.eat_name() {
                     Some(n) => n,
                     None => {
-                        let (text, span) = self.peek_text_span();
-                        return self.emit_stmt_error(
-                            text,
-                            span,
+                        let ts = self.peek_text_span();
+                        return self.emit_stmt_error(ts,
                             "expected data name after 'require data'",
                             "P016",
                             "expected data name",
@@ -491,10 +460,8 @@ impl<'db> Parser<'db> {
                 ))
             }
             _ => {
-                let (text, span) = self.peek_text_span();
-                self.emit_stmt_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                self.emit_stmt_error(ts,
                     "expected 'module' or 'data' after 'require'",
                     "P005",
                     "expected 'module' or 'data'"
@@ -510,10 +477,8 @@ impl<'db> Parser<'db> {
         let module_name = match self.eat_name() {
             Some(n) => n,
             None => {
-                let (text, span) = self.peek_text_span();
-                return self.emit_stmt_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
                     "expected module name after 'import'",
                     "P017",
                     "expected module name",
@@ -523,10 +488,8 @@ impl<'db> Parser<'db> {
 
         // Need dot sigil.
         if !self.peek_sigil(Sigil::Dot) {
-            let (text, span) = self.peek_text_span();
-            return self.emit_stmt_error(
-                text,
-                span,
+            let ts = self.peek_text_span();
+            return self.emit_stmt_error(ts,
                 "expected '.' after module name",
                 "P006",
                 "expected '.' after module name"
@@ -538,10 +501,8 @@ impl<'db> Parser<'db> {
         let item_name = match self.eat_name() {
             Some(n) => n,
             None => {
-                let (text, span) = self.peek_text_span();
-                return self.emit_stmt_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
                     "expected item name after '.'",
                     "P018",
                     "expected item name",
@@ -574,20 +535,20 @@ impl<'db> Parser<'db> {
                 Some(n) => n,
                 None => {
                     self.had_error = true;
-                    let (text, span) = self.peek_text_span();
+                    let ts = self.peek_text_span();
                     DiagnosticBuilder::error(self.db, "expected binding name after '|'")
                         .code("P019")
-                        .primary_label(text, span, "expected binding name")
+                        .primary_label(ts.text, ts.span, "expected binding name")
                         .emit_parse();
                     InternedText::new(self.db, "<error>".S())
                 }
             };
             if !self.eat_sigil(Sigil::Pipe) {
                 self.had_error = true;
-                let (text, span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 DiagnosticBuilder::error(self.db, "expected '|' after binding name")
                     .code("P020")
-                    .primary_label(text, span, "expected '|'")
+                    .primary_label(ts.text, ts.span, "expected '|'")
                     .emit_parse();
             }
             Some(binding)
@@ -640,20 +601,20 @@ impl<'db> Parser<'db> {
                     Some(n) => n,
                     None => {
                         else_sub.had_error = true;
-                        let (text, span) = else_sub.peek_text_span();
+                        let ts = else_sub.peek_text_span();
                         DiagnosticBuilder::error(else_sub.db, "expected binding name after '|'")
                             .code("P019")
-                            .primary_label(text, span, "expected binding name")
+                            .primary_label(ts.text, ts.span, "expected binding name")
                             .emit_parse();
                         InternedText::new(else_sub.db, "<error>".S())
                     }
                 };
                 if !else_sub.eat_sigil(Sigil::Pipe) {
                     else_sub.had_error = true;
-                    let (text, span) = else_sub.peek_text_span();
+                    let ts = else_sub.peek_text_span();
                     DiagnosticBuilder::error(else_sub.db, "expected '|' after binding name")
                         .code("P020")
-                        .primary_label(text, span, "expected '|'")
+                        .primary_label(ts.text, ts.span, "expected '|'")
                         .emit_parse();
                 }
                 Some(binding)

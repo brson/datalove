@@ -22,7 +22,7 @@ impl<'db> Parser<'db> {
     /// This handles the `: type / expr` pattern.
     pub(super) fn parse_lit_expr_full(&mut self) -> ast::ExprFun<'db> {
         // Capture span before parsing for diagnostic reporting.
-        let (text, start_span) = self.peek_text_span();
+        let ts = self.peek_text_span();
 
         // Check for `: type / expr` pattern.
         if self.peek_sigil(Sigil::Colon) {
@@ -30,10 +30,8 @@ impl<'db> Parser<'db> {
             let type_hint = self.parse_type_hint_and_heap();
             // Expect `/` after type hint.
             if !self.eat_sigil(Sigil::SlashForward) {
-                let (text, span) = self.peek_text_span();
-                return self.emit_expr_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                return self.emit_expr_error(ts,
                     "expected '/' after type hint in `: type / expr` pattern",
                     "D021",
                     "expected '/'"
@@ -41,11 +39,11 @@ impl<'db> Parser<'db> {
             }
             let (_heap, expr_kind) = self.parse_lit_expr_and_heap(Some(type_hint));
             // The type_hint is already captured in the expr_kind.
-            return self.create_expr(expr_kind, text, start_span);
+            return self.create_expr(expr_kind, ts);
         }
 
         let (_heap, expr_kind) = self.parse_lit_expr_and_heap(None);
-        self.create_expr(expr_kind, text, start_span)
+        self.create_expr(expr_kind, ts)
     }
 
     /// Parse heap sigil and expression.
@@ -97,11 +95,11 @@ impl<'db> Parser<'db> {
                                 }
                             }
                             // Dot was consumed but no valid decimal follows.
-                            let (text, span) = self.peek_text_span();
+                            let ts = self.peek_text_span();
                             return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
                                 self.db,
-                                text,
-                                span,
+                                ts.text,
+                                ts.span.clone(),
                                 InternedText::new(self.db, "expected decimal digits after '.'".S()),
                             ));
                         }
@@ -118,11 +116,11 @@ impl<'db> Parser<'db> {
                 }
             }
             // Not a negative number - error.
-            let (text, span) = self.peek_text_span();
+            let ts = self.peek_text_span();
             return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
                 self.db,
-                text,
-                span,
+                ts.text,
+                                ts.span.clone(),
                 InternedText::new(self.db, "unexpected minus sign".S()),
             ));
         }
@@ -209,11 +207,11 @@ impl<'db> Parser<'db> {
                                 // Dot was consumed but no valid decimal follows - treat as member access.
                                 // This is a parse error for datalit, but we need to handle it.
                                 // For now, return an error.
-                                let (text, span) = self.peek_text_span();
+                                let ts = self.peek_text_span();
                                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
                                     self.db,
-                                    text,
-                                    span,
+                                    ts.text,
+                                ts.span.clone(),
                                     InternedText::new(self.db, "expected decimal digits after '.'".S()),
                                 ));
                             }
@@ -225,12 +223,12 @@ impl<'db> Parser<'db> {
                             }
                         } else {
                             // Unexpected identifier.
-                            let (text, span) = self.peek_text_span();
+                            let ts = self.peek_text_span();
                             self.next();
                             return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
                                 self.db,
-                                text,
-                                span,
+                                ts.text,
+                                ts.span.clone(),
                                 InternedText::new(self.db, format!("unexpected identifier '{}'", word).S()),
                             ));
                         }
@@ -243,11 +241,11 @@ impl<'db> Parser<'db> {
                         return ast::ExprFunKind::String(ast::ExprString::new(self.db, heap, type_hint, value));
                     }
                     _ => {
-                        let (text, span) = self.peek_text_span();
+                        let ts = self.peek_text_span();
                         return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
                             self.db,
-                            text,
-                            span,
+                            ts.text,
+                                ts.span.clone(),
                             InternedText::new(self.db, "unexpected token".S()),
                         ));
                     }
@@ -266,11 +264,11 @@ impl<'db> Parser<'db> {
                 return self.parse_lit_list(heap, type_hint);
             }
             _ => {
-                let (text, span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
                     self.db,
-                    text,
-                    span,
+                    ts.text,
+                                ts.span.clone(),
                     InternedText::new(self.db, "expected expression".S()),
                 ));
             }
@@ -301,9 +299,9 @@ impl<'db> Parser<'db> {
         let iter = match self.next() {
             Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
             _ => {
-                let (text, span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, text, span,
+                    self.db, ts.text, ts.span.clone(),
                     InternedText::new(self.db, "expected '('".S()),
                 ));
             }
@@ -322,9 +320,9 @@ impl<'db> Parser<'db> {
         let iter = match self.next() {
             Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => iter,
             _ => {
-                let (text, span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, text, span,
+                    self.db, ts.text, ts.span.clone(),
                     InternedText::new(self.db, "expected '{'".S()),
                 ));
             }
@@ -343,9 +341,9 @@ impl<'db> Parser<'db> {
         let iter = match self.next() {
             Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => iter,
             _ => {
-                let (text, span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, text, span,
+                    self.db, ts.text, ts.span.clone(),
                     InternedText::new(self.db, "expected '['".S()),
                 ));
             }
@@ -365,9 +363,9 @@ impl<'db> Parser<'db> {
         let iter = match self.next() {
             Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => iter,
             _ => {
-                let (text, span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, text, span,
+                    self.db, ts.text, ts.span.clone(),
                     InternedText::new(self.db, "expected '{' after 'set'".S()),
                 ));
             }
@@ -387,9 +385,9 @@ impl<'db> Parser<'db> {
         let iter = match self.next() {
             Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => iter,
             _ => {
-                let (text, span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, text, span,
+                    self.db, ts.text, ts.span.clone(),
                     InternedText::new(self.db, "expected '{' after 'map'".S()),
                 ));
             }
@@ -410,16 +408,16 @@ impl<'db> Parser<'db> {
             Some(n) => n,
             None => {
                 self.had_error = true;
-                let (text, span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 let message = "expected variant name after 'enum'";
                 DiagnosticBuilder::error(self.db, message)
                     .code("P021")
-                    .primary_label(text.clone(), span.clone(), "expected variant name")
+                    .primary_label(ts.text, ts.span.clone(), "expected variant name")
                     .emit_parse();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
                     self.db,
-                    text,
-                    span,
+                    ts.text,
+                                ts.span.clone(),
                     InternedText::new(self.db, message.S()),
                 ));
             }
@@ -467,9 +465,9 @@ impl<'db> Parser<'db> {
                 self.parse_tensor_shape(all_tokens)
             }
             _ => {
-                let (text, span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, text, span,
+                    self.db, ts.text, ts.span.clone(),
                     InternedText::new(self.db, "expected '[' for tensor shape".S()),
                 ));
             }
@@ -488,9 +486,9 @@ impl<'db> Parser<'db> {
                     let row_size = *shape.last().unwrap_or(&1) as usize;
                     let (elems, has_error) = self.parse_tensor_data_2d_plus(iter, row_size);
                     if has_error {
-                        let (text, span) = self.peek_text_span();
+                        let ts = self.peek_text_span();
                         return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                            self.db, text, span,
+                            self.db, ts.text, ts.span.clone(),
                             InternedText::new(self.db, format!("expected {} elements per row", row_size).S()),
                         ));
                     }
@@ -498,9 +496,9 @@ impl<'db> Parser<'db> {
                 }
             }
             _ => {
-                let (text, span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, text, span,
+                    self.db, ts.text, ts.span.clone(),
                     InternedText::new(self.db, "expected '[' for tensor data".S()),
                 ));
             }
@@ -625,10 +623,10 @@ impl<'db> Parser<'db> {
         if iter.peek().is_some() {
             self.had_error = true;
             // Emit a diagnostic for unconsumed tokens.
-            let (text, span) = self.peek_text_span();
+            let ts = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "unexpected tokens in tensor shape")
                 .code("D030")
-                .primary_label(text, span, "unexpected")
+                .primary_label(ts.text, ts.span.clone(), "unexpected")
                 .emit_parse();
         }
         shape
@@ -690,10 +688,8 @@ impl<'db> Parser<'db> {
                         break;
                     }
                     // Missing name - emit error and use placeholder.
-                    let (text, span) = sub.peek_text_span();
-                    let error_expr = sub.emit_expr_error(
-                        text,
-                        span,
+                    let ts = sub.peek_text_span();
+                    let error_expr = sub.emit_expr_error(ts,
                         "expected field name in struct",
                         "D021",
                         "expected field name"
@@ -707,10 +703,8 @@ impl<'db> Parser<'db> {
             // Try to get `=`.
             if !sub.eat_sigil(Sigil::Equals) {
                 // Missing equals - emit error and use placeholder value.
-                let (text, span) = sub.peek_text_span();
-                let error_expr = sub.emit_expr_error(
-                    text,
-                    span,
+                let ts = sub.peek_text_span();
+                let error_expr = sub.emit_expr_error(ts,
                     "expected '=' after field name in struct",
                     "D022",
                     "expected '='"
@@ -761,10 +755,8 @@ impl<'db> Parser<'db> {
             // Expect `=`.
             if !sub.eat_sigil(Sigil::Equals) {
                 // Missing equals - emit error.
-                let (text, span) = sub.peek_text_span();
-                let error_value = sub.emit_expr_error(
-                    text,
-                    span,
+                let ts = sub.peek_text_span();
+                let error_value = sub.emit_expr_error(ts,
                     "expected '=' between map key and value",
                     "D023",
                     "expected '='"

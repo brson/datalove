@@ -16,17 +16,15 @@ use super::state::Parser;
 impl<'db> Parser<'db> {
     pub(super) fn parse_expr_full(&mut self) -> ast::ExprFull<'db> {
         // Capture span before parsing.
-        let (text, span) = self.peek_text_span();
+        let ts = self.peek_text_span();
 
         // Check for `: type / expr` pattern.
         let expr_full = if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
             let type_hint = self.parse_type_hint_and_heap();
             if !self.eat_sigil(Sigil::SlashForward) {
-                let (err_text, err_span) = self.peek_text_span();
-                let error_expr = self.emit_expr_error(
-                    err_text,
-                    err_span,
+                let ts = self.peek_text_span();
+                let error_expr = self.emit_expr_error(ts,
                     "expected '/' after type hint",
                     "D012",
                     "expected '/' separator between type hint and expression"
@@ -47,8 +45,8 @@ impl<'db> Parser<'db> {
         use salsa::plumbing::AsId;
         self.expr_spans.push(ast::ParseSpanEntry::new(
             expr_full.as_id(),
-            text.as_id(),
-            span,
+            ts.text.as_id(),
+            ts.span.clone(),
         ));
 
         expr_full
@@ -85,10 +83,8 @@ impl<'db> Parser<'db> {
                                     ast::Heap::Omitted
                                 } else {
                                     // Not a number or keyword - this is an error.
-                                    let (text, span) = self.peek_text_span();
-                                    let error_node = self.emit_expr_error(
-                                        text,
-                                        span,
+                                    let ts = self.peek_text_span();
+                                    let error_node = self.emit_expr_error(ts,
                                         "expected heap sigil @ or # before expression",
                                         "D009",
                                         "expected '@' or '#' before expression"
@@ -97,10 +93,8 @@ impl<'db> Parser<'db> {
                                 }
                             } else {
                                 // No word string - error.
-                                let (text, span) = self.peek_text_span();
-                                let error_node = self.emit_expr_error(
-                                    text,
-                                    span,
+                                let ts = self.peek_text_span();
+                                let error_node = self.emit_expr_error(ts,
                                     "expected heap sigil @ or # before expression",
                                     "D010",
                                     "expected '@' or '#' before expression"
@@ -110,10 +104,8 @@ impl<'db> Parser<'db> {
                         }
                         _ => {
                             // Unknown token kind - error.
-                            let (text, span) = self.peek_text_span();
-                            let error_node = self.emit_expr_error(
-                                text,
-                                span,
+                            let ts = self.peek_text_span();
+                            let error_node = self.emit_expr_error(ts,
                                 "expected heap sigil @ or # before expression",
                                 "D011",
                                 "expected '@' or '#' before expression"
@@ -130,10 +122,8 @@ impl<'db> Parser<'db> {
                 }
                 _ => {
                     // Not a token or branch - error.
-                    let (text, span) = self.peek_text_span();
-                    let error_node = self.emit_expr_error(
-                        text,
-                        span,
+                    let ts = self.peek_text_span();
+                    let error_node = self.emit_expr_error(ts,
                         "expected heap sigil @ or # before expression",
                         "D012",
                         "expected '@' or '#' before expression"
@@ -195,10 +185,8 @@ impl<'db> Parser<'db> {
                 }
             }
             // Not a negative number - this is an error (unexpected minus).
-            let (text, span) = self.peek_text_span();
-            return self.emit_expr_error(
-                text,
-                span,
+            let ts = self.peek_text_span();
+            return self.emit_expr_error(ts,
                 "unexpected minus sign",
                 "D013",
                 "unexpected '-' not followed by number"
@@ -256,10 +244,10 @@ impl<'db> Parser<'db> {
                             Some(dim) => dim,
                             None => {
                                 p.had_error = true;
-                                let (text, span) = p.peek_text_span();
+                                let ts = p.peek_text_span();
                                 DiagnosticBuilder::error(p.db, "expected dimension value in tensor shape")
                                     .code("D023")
-                                    .primary_label(text, span, "expected integer")
+                                    .primary_label(ts.text, ts.span, "expected integer")
                                     .emit_parse();
                                 0 // Placeholder dimension.
                             }
@@ -268,10 +256,8 @@ impl<'db> Parser<'db> {
                     sub_parser.error_if_not_exhausted();
                     shape
                 } else {
-                    let (text, span) = self.peek_text_span();
-                    return self.emit_expr_error(
-                        text,
-                        span,
+                    let ts = self.peek_text_span();
+                    return self.emit_expr_error(ts,
                         "expected shape [...] after tensor keyword",
                         "D010",
                         "expected '[' for tensor shape"
@@ -282,10 +268,8 @@ impl<'db> Parser<'db> {
                 let elements = if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
                     let rank = shape.len();
                     if rank == 0 {
-                        let (text, span) = self.peek_text_span();
-                        return self.emit_expr_error(
-                            text,
-                            span,
+                        let ts = self.peek_text_span();
+                        return self.emit_expr_error(ts,
                             "tensor rank must be at least 1",
                             "D012",
                             "invalid rank"
@@ -329,12 +313,10 @@ impl<'db> Parser<'db> {
 
                             // Validate row size matches the last dimension.
                             if row_elements.len() != row_size {
-                                let (text, span) = self.peek_text_span();
+                                let ts = self.peek_text_span();
                                 let detailed_message = format!("expected {} elements per row but got {}", row_size, row_elements.len());
 
-                                return self.emit_expr_error(
-                                    text,
-                                    span,
+                                return self.emit_expr_error(ts,
                                     &detailed_message,
                                     "D013",
                                     &format!("expected {} elements", row_size)
@@ -347,10 +329,8 @@ impl<'db> Parser<'db> {
                         all_elements
                     }
                 } else {
-                    let (text, span) = self.peek_text_span();
-                    return self.emit_expr_error(
-                        text,
-                        span,
+                    let ts = self.peek_text_span();
+                    return self.emit_expr_error(ts,
                         "expected data [...] after tensor shape",
                         "D011",
                         "expected '[' for tensor data"
@@ -360,15 +340,13 @@ impl<'db> Parser<'db> {
                 return ast::Expr::Tensor(ast::ExprTensor::new(self.db, shape, elements));
             }
             Some("enum") => {
-                let (keyword_text, keyword_span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 self.eat_word("enum");
                 // Enum expression syntax: enum Variant or enum Variant(...).
                 let variant_name = match self.eat_name() {
                     Some(n) => n,
                     None => {
-                        return self.emit_expr_error(
-                            keyword_text,
-                            keyword_span,
+                        return self.emit_expr_error(ts,
                             "expected variant name after enum keyword",
                             "D016",
                             "expected enum variant name"
@@ -394,7 +372,7 @@ impl<'db> Parser<'db> {
                 ));
             }
             Some("map") => {
-                let (keyword_text, keyword_span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 self.eat_word("map");
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
@@ -402,10 +380,8 @@ impl<'db> Parser<'db> {
                     let entries = sub_parser.parse_comma_separated(|p| {
                         let key = p.parse_expr_full();
                         if !p.eat_sigil(Sigil::Equals) {
-                            let (text, span) = p.peek_text_span();
-                            let error_expr = p.emit_expr_error(
-                                text,
-                                span,
+                            let ts = p.peek_text_span();
+                            let error_expr = p.emit_expr_error(ts,
                                 "expected '=' between map key and value",
                                 "D017",
                                 "expected '=' after key"
@@ -425,9 +401,7 @@ impl<'db> Parser<'db> {
                     self.expr_spans.extend(sub_parser.expr_spans);
                     return ast::Expr::Map(ast::ExprMap::new(self.db, entries));
                 } else {
-                    return self.emit_expr_error(
-                        keyword_text,
-                        keyword_span,
+                    return self.emit_expr_error(ts,
                         "expected {} after map keyword",
                         "D016",
                         "expected '{' after 'map'"
@@ -435,7 +409,7 @@ impl<'db> Parser<'db> {
                 }
             }
             Some("set") => {
-                let (keyword_text, keyword_span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 self.eat_word("set");
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     let tokens = iter.filter_map(|t| t.without_space(self.db)).collect::<Vec<_>>();
@@ -446,9 +420,7 @@ impl<'db> Parser<'db> {
                     self.expr_spans.extend(sub_parser.expr_spans);
                     return ast::Expr::Set(ast::ExprSet::new(self.db, elements));
                 } else {
-                    return self.emit_expr_error(
-                        keyword_text,
-                        keyword_span,
+                    return self.emit_expr_error(ts,
                         "expected {} after set keyword",
                         "D017",
                         "expected '{' after 'set'"
@@ -492,16 +464,14 @@ impl<'db> Parser<'db> {
                             }
                         } else {
                             // Not a number, parse error for bare identifiers.
-                            let (text, span) = self.peek_text_span();
+                            let ts = self.peek_text_span();
                             self.next();
                             let _message = InternedText::new(
                                 self.db,
                                 format!("Unexpected identifier: {}", word).S()
                             );
 
-                            self.emit_expr_error(
-                                text,
-                                span,
+                            self.emit_expr_error(ts,
                                 &format!("unexpected identifier '{}'", word),
                                 "D019",
                                 "unexpected identifier"
@@ -517,10 +487,8 @@ impl<'db> Parser<'db> {
                         ast::Expr::String(ast::ExprString::new(self.db, value))
                     }
                     _ => {
-                        let (text, span) = self.peek_text_span();
-                        self.emit_expr_error(
-                            text,
-                            span,
+                        let ts = self.peek_text_span();
+                        self.emit_expr_error(ts,
                             "unexpected token in Parser expression",
                             "D020",
                             "unexpected token"
@@ -562,10 +530,8 @@ impl<'db> Parser<'db> {
                 ast::Expr::List(ast::ExprList::new(self.db, elements))
             }
             _ => {
-                let (text, span) = self.peek_text_span();
-                self.emit_expr_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                self.emit_expr_error(ts,
                     "unexpected tree node in Parser expression",
                     "D018",
                     "unexpected token"
@@ -579,10 +545,8 @@ impl<'db> Parser<'db> {
             Some(n) => n,
             None => {
                 // No name found - emit error and create placeholder.
-                let (text, span) = self.peek_text_span();
-                let error_expr = self.emit_expr_error(
-                    text.clone(),
-                    span.clone(),
+                let ts = self.peek_text_span();
+                let error_expr = self.emit_expr_error(ts.clone(),
                     "expected field name in struct expression",
                     "D018",
                     "expected field name"
@@ -597,10 +561,8 @@ impl<'db> Parser<'db> {
             }
         };
         if !self.eat_sigil(Sigil::Equals) {
-            let (text, span) = self.peek_text_span();
-            let error_expr = self.emit_expr_error(
-                text,
-                span,
+            let ts = self.peek_text_span();
+            let error_expr = self.emit_expr_error(ts,
                 "expected '=' after field name in struct expression",
                 "D018",
                 "expected '=' after field name"

@@ -56,7 +56,7 @@ impl<'db> Parser<'db> {
             Some("data") => { self.eat_word("data"); ast::TypeHint::Data }
             Some("error") => { self.eat_word("error"); ast::TypeHint::Error }
             Some("tuple") => {
-                let (keyword_text, keyword_span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 self.eat_word("tuple");
                 // Check if it's anonymous (starts with () or named (starts with name).
                 if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
@@ -67,9 +67,7 @@ impl<'db> Parser<'db> {
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
                 } else {
-                    self.emit_type_hint_error(
-                        keyword_text,
-                        keyword_span,
+                    self.emit_type_hint_error(ts,
                         "expected () after tuple keyword",
                         "D001",
                         "expected '(' after 'tuple'"
@@ -77,7 +75,7 @@ impl<'db> Parser<'db> {
                 }
             }
             Some("struct") => {
-                let (keyword_text, keyword_span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 self.eat_word("struct");
                 // Check if it's anonymous (starts with {) or named (starts with name).
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
@@ -88,9 +86,7 @@ impl<'db> Parser<'db> {
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
                 } else {
-                    self.emit_type_hint_error(
-                        keyword_text,
-                        keyword_span,
+                    self.emit_type_hint_error(ts,
                         "expected {} after struct keyword",
                         "D002",
                         "expected '{' after 'struct'"
@@ -98,7 +94,7 @@ impl<'db> Parser<'db> {
                 }
             }
             Some("enum") => {
-                let (keyword_text, keyword_span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 self.eat_word("enum");
                 // Check if it's anonymous (starts with {) or named (starts with name).
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
@@ -112,9 +108,7 @@ impl<'db> Parser<'db> {
                         variants,
                     ))
                 } else {
-                    self.emit_type_hint_error(
-                        keyword_text,
-                        keyword_span,
+                    self.emit_type_hint_error(ts,
                         "expected {} after enum keyword",
                         "D003",
                         "expected '{' after 'enum'"
@@ -122,7 +116,7 @@ impl<'db> Parser<'db> {
                 }
             }
             Some("map") => {
-                let (keyword_text, keyword_span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 self.eat_word("map");
                 // Expect angle bracket with key and value types.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
@@ -130,10 +124,8 @@ impl<'db> Parser<'db> {
                     let mut sub_parser = Parser::new(self.db, tokens);
                     let key_type = sub_parser.parse_type_hint_and_heap();
                     if !sub_parser.eat_sigil(Sigil::Comma) {
-                        let (text, span) = sub_parser.peek_text_span();
-                        return self.emit_type_hint_error(
-                            text,
-                            span,
+                        let ts = sub_parser.peek_text_span();
+                        return self.emit_type_hint_error(ts,
                             "expected comma between map key and value types",
                             "D005",
                             "expected ',' between key and value types"
@@ -143,9 +135,7 @@ impl<'db> Parser<'db> {
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::Map(ast::TypeHintMap::new(self.db, key_type, value_type))
                 } else {
-                    self.emit_type_hint_error(
-                        keyword_text,
-                        keyword_span,
+                    self.emit_type_hint_error(ts,
                         "expected <> after map keyword",
                         "D005",
                         "expected '<' after 'map'"
@@ -153,7 +143,7 @@ impl<'db> Parser<'db> {
                 }
             }
             Some("set") => {
-                let (keyword_text, keyword_span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 self.eat_word("set");
                 // Expect angle bracket with element type.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
@@ -163,9 +153,7 @@ impl<'db> Parser<'db> {
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::Set(ast::TypeHintSet::new(self.db, element_type))
                 } else {
-                    self.emit_type_hint_error(
-                        keyword_text,
-                        keyword_span,
+                    self.emit_type_hint_error(ts,
                         "expected <> after set keyword",
                         "D006",
                         "expected '<' after 'set'"
@@ -173,7 +161,7 @@ impl<'db> Parser<'db> {
                 }
             }
             Some("tensor") => {
-                let (keyword_text, keyword_span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 self.eat_word("tensor");
                 // Expect angle bracket with <element_type, rank, optional_layout>.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
@@ -181,10 +169,8 @@ impl<'db> Parser<'db> {
                     let mut sub_parser = Parser::new(self.db, tokens);
                     let element_type = sub_parser.parse_type_hint_and_heap();
                     if !sub_parser.eat_sigil(Sigil::Comma) {
-                        let (text, span) = sub_parser.peek_text_span();
-                        return self.emit_type_hint_error(
-                            text,
-                            span,
+                        let ts = sub_parser.peek_text_span();
+                        return self.emit_type_hint_error(ts,
                             "expected comma between tensor element type and rank",
                             "D009",
                             "expected ',' after element type"
@@ -194,10 +180,8 @@ impl<'db> Parser<'db> {
                     let rank = match sub_parser.parse_u32_literal() {
                         Some(r) => r,
                         None => {
-                            let (text, span) = sub_parser.peek_text_span();
-                            return self.emit_type_hint_error(
-                                text,
-                                span,
+                            let ts = sub_parser.peek_text_span();
+                            return self.emit_type_hint_error(ts,
                                 "expected rank (positive integer)",
                                 "D008",
                                 "expected rank"
@@ -212,9 +196,7 @@ impl<'db> Parser<'db> {
                         rank,
                     ))
                 } else {
-                    self.emit_type_hint_error(
-                        keyword_text,
-                        keyword_span,
+                    self.emit_type_hint_error(ts,
                         "expected <> after tensor keyword",
                         "D009",
                         "expected '<' after 'tensor'"
@@ -245,7 +227,7 @@ impl<'db> Parser<'db> {
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
                 } else {
-                    let (text, span) = self.peek_text_span();
+                    let ts = self.peek_text_span();
                     // Check if this looks like a capitalized type name.
                     let message = if let Some(word) = self.peek_word() {
                         let lower = word.to_lowercase();
@@ -260,9 +242,7 @@ impl<'db> Parser<'db> {
                     } else {
                         "unexpected token in type hint".to_string()
                     };
-                    self.emit_type_hint_error(
-                        text,
-                        span,
+                    self.emit_type_hint_error(ts,
                         &message,
                         "D008",
                         "unexpected token in type hint"
@@ -277,10 +257,8 @@ impl<'db> Parser<'db> {
             Some(n) => n,
             None => {
                 // No name found - emit error and create placeholder.
-                let (text, span) = self.peek_text_span();
-                let error_hint = self.emit_type_hint_error(
-                    text.clone(),
-                    span.clone(),
+                let ts = self.peek_text_span();
+                let error_hint = self.emit_type_hint_error(ts.clone(),
                     "expected field name in struct definition",
                     "D010",
                     "expected field name"
@@ -293,10 +271,8 @@ impl<'db> Parser<'db> {
             }
         };
         if !self.eat_sigil(Sigil::Colon) {
-            let (text, span) = self.peek_text_span();
-            let error_hint = self.emit_type_hint_error(
-                text,
-                span,
+            let ts = self.peek_text_span();
+            let error_hint = self.emit_type_hint_error(ts,
                 "expected ':' after field name in struct definition",
                 "D010",
                 "expected ':' after field name"
@@ -317,10 +293,10 @@ impl<'db> Parser<'db> {
             None => {
                 // No name found - emit error and create placeholder.
                 self.had_error = true;
-                let (text, span) = self.peek_text_span();
+                let ts = self.peek_text_span();
                 DiagnosticBuilder::error(self.db, "expected variant name in enum definition")
                     .code("D011")
-                    .primary_label(text, span, "expected variant name")
+                    .primary_label(ts.text, ts.span, "expected variant name")
                     .emit_parse();
                 // Create a placeholder name for the error variant.
                 return ast::TypeHintEnumVariant::new(
@@ -339,12 +315,12 @@ impl<'db> Parser<'db> {
             // Check for unparsed tokens - this indicates a syntax error.
             if sub_parser.pos < tokens.len() {
                 // There are extra tokens after the payload type.
-                let (text, span) = sub_parser.peek_text_span();
+                let ts = sub_parser.peek_text_span();
                 let message = InternedText::new(
                     self.db,
                     "enum variant payload must be a single type (use a tuple for multiple values)".S()
                 );
-                let error_type = ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, text, span, message));
+                let error_type = ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, ts.text, ts.span, message));
                 return ast::TypeHintEnumVariant::new(
                     self.db,
                     name,

@@ -11,7 +11,7 @@ use salsa::Accumulator;
 
 use datalove_datafun_ast::ast;
 use datalove_datafun_ast::spans::DatafunSpanAccumulator;
-use datalove_datalit::parser_util::{TokenStream, TokenStreamExt};
+use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use datalove_diagnostic::DiagnosticBuilder;
 
 use super::Db;
@@ -66,8 +66,7 @@ impl<'db> Parser<'db> {
     /// Emit both a diagnostic and create a StmtParseError node in one call.
     pub(super) fn emit_stmt_error(
         &mut self,
-        text: bct::text::Text<'db>,
-        span: datalove_diagnostic::ByteSpan,
+        ts: TextSpan<'db>,
         message: &str,
         code: &str,
         label: &str,
@@ -76,16 +75,15 @@ impl<'db> Parser<'db> {
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code)
-            .primary_label(text, span.clone(), label)
+            .primary_label(ts.text, ts.span.clone(), label)
             .emit_parse();
-        ast::Statement::ParseError(ast::StmtParseError::new(self.db, text, span, message_text))
+        ast::Statement::ParseError(ast::StmtParseError::new(self.db, ts.text, ts.span, message_text))
     }
 
     /// Emit both a diagnostic and create an ExprFun with ParseError kind in one call.
     pub(super) fn emit_expr_error(
         &mut self,
-        text: bct::text::Text<'db>,
-        span: datalove_diagnostic::ByteSpan,
+        ts: TextSpan<'db>,
         message: &str,
         code: &str,
         label: &str,
@@ -94,11 +92,11 @@ impl<'db> Parser<'db> {
         let message_text = InternedText::new(self.db, message.S());
         DiagnosticBuilder::error(self.db, message)
             .code(code)
-            .primary_label(text, span.clone(), label)
+            .primary_label(ts.text, ts.span.clone(), label)
             .emit_parse();
         ast::ExprFun::new(
             self.db,
-            ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, text, span, message_text))
+            ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, ts.text, ts.span, message_text))
         )
     }
 
@@ -110,12 +108,12 @@ impl<'db> Parser<'db> {
     /// Get the byte position at start of current token (or end of last token).
     pub(super) fn current_byte_pos(&self) -> usize {
         if let Some(token) = self.peek() {
-            let (_, span) = self.extract_text_span(token);
+            let TextSpan { span, .. } = self.extract_text_span(token);
             span.start
         } else if self.pos > 0 {
             // At end of input, return end of last token.
             if let Some(token) = self.tokens.get(self.pos - 1) {
-                let (_, span) = self.extract_text_span(token);
+                let TextSpan { span, .. } = self.extract_text_span(token);
                 span.end
             } else {
                 0
@@ -129,7 +127,7 @@ impl<'db> Parser<'db> {
     pub(super) fn last_byte_end(&self) -> usize {
         if self.pos > 0 {
             if let Some(token) = self.tokens.get(self.pos - 1) {
-                let (_, span) = self.extract_text_span(token);
+                let TextSpan { span, .. } = self.extract_text_span(token);
                 return span.end;
             }
         }
@@ -137,13 +135,13 @@ impl<'db> Parser<'db> {
     }
 
     /// Create an expression and emit its span as accumulator.
-    pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, text: bct::text::Text<'db>, span: datalove_diagnostic::ByteSpan) -> ast::ExprFun<'db> {
+    pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan<'db>) -> ast::ExprFun<'db> {
         use salsa::plumbing::AsId;
         let expr = ast::ExprFun::new(self.db, kind);
         DatafunSpanAccumulator {
             expr_id: expr.as_id(),
-            text_id: text.as_id(),
-            span,
+            text_id: ts.text.as_id(),
+            span: ts.span,
         }.accumulate(self.db);
         expr
     }
@@ -152,10 +150,10 @@ impl<'db> Parser<'db> {
     pub(super) fn error_if_not_exhausted(&mut self) {
         if self.pos < self.tokens.len() && !self.had_error {
             self.had_error = true;
-            let (text, span) = self.peek_text_span();
+            let ts = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "unexpected token after expression")
                 .code("P021")
-                .primary_label(text, span, "unexpected token")
+                .primary_label(ts.text, ts.span, "unexpected token")
                 .emit_parse();
         }
     }

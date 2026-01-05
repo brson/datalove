@@ -10,7 +10,7 @@ use bct::{
 
 use datalove_datafun_ast::ast;
 use datalove_datalit as datalit;
-use datalove_datalit::parser_util::{TokenStream, TokenStreamExt};
+use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use super::state::Parser;
 
 impl<'db> Parser<'db> {
@@ -54,8 +54,7 @@ impl<'db> Parser<'db> {
             let span = start_pos..end_pos;
             lhs = self.create_expr(
                 ast::ExprFunKind::BinOp(ast::ExprBinOp::new(self.db, op, lhs, rhs)),
-                text,
-                span,
+                TextSpan::new(text, span),
             );
         }
 
@@ -70,7 +69,7 @@ impl<'db> Parser<'db> {
         loop {
             match self.peek() {
                 Some(TreeToken::Token(token)) => {
-                    let (text, op_span) = self.extract_text_span(&TreeToken::Token(*token));
+                    let TextSpan { text, span: op_span } = self.extract_text_span(&TreeToken::Token(*token));
                     match token.kind(self.db) {
                         TokenKind::Sigil(Sigil::Question) => {
                             self.next(); // consume ?
@@ -78,8 +77,7 @@ impl<'db> Parser<'db> {
                             let span = op_span.start..end_pos;
                             expr = self.create_expr(
                                 ast::ExprFunKind::TryOption(ast::ExprTryOption::new(self.db, expr)),
-                                text,
-                                span,
+                                TextSpan::new(text, span),
                             );
                         }
                         TokenKind::Sigil(Sigil::Exclamation) => {
@@ -88,8 +86,7 @@ impl<'db> Parser<'db> {
                             let span = op_span.start..end_pos;
                             expr = self.create_expr(
                                 ast::ExprFunKind::TryResult(ast::ExprTryResult::new(self.db, expr)),
-                                text,
-                                span,
+                                TextSpan::new(text, span),
                             );
                         }
                         _ => break,
@@ -212,14 +209,14 @@ impl<'db> Parser<'db> {
                                 "option" | "result" | "error" | "map" | "set" | "none" | "data" |
                                 "tensor" => {
                                     // Capture span before parsing for diagnostic reporting.
-                                    let (text, start_span) = self.peek_text_span();
+                                    let ts = self.peek_text_span();
                                     let expr_kind = self.parse_lit_expr(datalit::ast::Heap::Omitted, None);
-                                    self.create_expr(expr_kind, text, start_span)
+                                    self.create_expr(expr_kind, ts)
                                 }
                                 // some/ok/er are always keywords - they require a payload expression.
                                 "some" | "ok" | "er" => {
                                     // Capture span before parsing for diagnostic reporting.
-                                    let (text, start_span) = self.peek_text_span();
+                                    let ts = self.peek_text_span();
                                     self.next(); // consume the keyword
                                     let payload = self.parse_expr_primary();
                                     let heap = datalit::ast::Heap::Omitted;
@@ -229,18 +226,18 @@ impl<'db> Parser<'db> {
                                         "er" => ast::ExprFunKind::Er(ast::ExprEr::new(self.db, heap, None, payload)),
                                         _ => unreachable!(),
                                     };
-                                    self.create_expr(expr_kind, text, start_span)
+                                    self.create_expr(expr_kind, ts)
                                 }
                                 num if num.chars().all(|c| char::is_ascii_digit(&c)) => {
                                     // Capture span before parsing for diagnostic reporting.
-                                    let (text, start_span) = self.peek_text_span();
+                                    let ts = self.peek_text_span();
                                     let expr_kind = self.parse_lit_expr(datalit::ast::Heap::Omitted, None);
-                                    self.create_expr(expr_kind, text, start_span)
+                                    self.create_expr(expr_kind, ts)
                                 }
                                 _ => {
                                     // It's a datafun name or function call.
                                     // Capture span before consuming token.
-                                    let (text, start_span) = self.peek_text_span();
+                                    let ts = self.peek_text_span();
                                     self.next(); // consume the token
                                     let name = InternedText::new(self.db, word.S());
 
@@ -257,25 +254,21 @@ impl<'db> Parser<'db> {
                                             ast::ExprFunKind::FunctionCall(
                                                 ast::ExprFunctionCall::new(self.db, name, args)
                                             ),
-                                            text,
-                                            start_span
+                                            ts
                                         )
                                     } else {
                                         // It's just a variable name.
                                         self.create_expr(
                                             ast::ExprFunKind::Name(name),
-                                            text,
-                                            start_span
+                                            ts
                                         )
                                     }
                                 }
                             }
                         } else {
-                            let (text, span) = self.peek_text_span();
+                            let ts = self.peek_text_span();
                             self.next();
-                            self.emit_expr_error(
-                                text,
-                                span,
+                            self.emit_expr_error(ts,
                                 "unexpected token in expression",
                                 "P007",
                                 "unexpected token"
@@ -298,10 +291,8 @@ impl<'db> Parser<'db> {
                         )
                     }
                     _ => {
-                        let (text, span) = self.peek_text_span();
-                        self.emit_expr_error(
-                            text,
-                            span,
+                        let ts = self.peek_text_span();
+                        self.emit_expr_error(ts,
                             "unexpected token in expression",
                             "P010",
                             "unexpected token"
@@ -316,16 +307,14 @@ impl<'db> Parser<'db> {
                     self.parse_datafun_tuple()
                 } else {
                     // Capture span before parsing for diagnostic reporting.
-                    let (text, start_span) = self.peek_text_span();
+                    let ts = self.peek_text_span();
                     let expr_kind = self.parse_lit_expr(datalit::ast::Heap::Omitted, None);
-                    self.create_expr(expr_kind, text, start_span)
+                    self.create_expr(expr_kind, ts)
                 }
             }
             None => {
-                let (text, span) = self.peek_text_span();
-                self.emit_expr_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                self.emit_expr_error(ts,
                     "expected expression",
                     "P008",
                     "expected expression"
@@ -383,10 +372,8 @@ impl<'db> Parser<'db> {
         let iter = match self.next() {
             Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
             _ => {
-                let (text, span) = self.peek_text_span();
-                return self.emit_expr_error(
-                    text,
-                    span,
+                let ts = self.peek_text_span();
+                return self.emit_expr_error(ts,
                     "expected tuple",
                     "P009",
                     "expected '(' to start tuple"

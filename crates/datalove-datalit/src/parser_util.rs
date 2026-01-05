@@ -12,6 +12,40 @@ use datalove_diagnostic::ByteSpan;
 use rmx::prelude::*;
 use salsa::Database as Db;
 
+/// Source text and byte span for error reporting.
+#[derive(Clone)]
+pub struct TextSpan<'db> {
+    pub text: bct::text::Text<'db>,
+    pub span: ByteSpan,
+}
+
+impl<'db> TextSpan<'db> {
+    /// Create a new TextSpan.
+    pub fn new(text: bct::text::Text<'db>, span: ByteSpan) -> Self {
+        TextSpan { text, span }
+    }
+
+    /// Get the start byte offset.
+    pub fn start(&self) -> usize {
+        self.span.start
+    }
+
+    /// Get the end byte offset.
+    pub fn end(&self) -> usize {
+        self.span.end
+    }
+
+    /// Create a new TextSpan with the same text but ending at `end`.
+    pub fn with_end(&self, end: usize) -> Self {
+        TextSpan { text: self.text, span: self.span.start..end }
+    }
+
+    /// Create a new TextSpan with the same text but a different span.
+    pub fn with_span(&self, span: ByteSpan) -> Self {
+        TextSpan { text: self.text, span }
+    }
+}
+
 /// Token stream for parser operations.
 ///
 /// Provides basic peek/next operations over a sequence of tokens.
@@ -104,18 +138,19 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
     }
 
     /// Extract Text and ByteSpan from a token.
-    fn extract_text_span(&self, token: &TreeToken<'db>) -> (bct::text::Text<'db>, ByteSpan) {
+    fn extract_text_span(&self, token: &TreeToken<'db>) -> TextSpan<'db> {
         // text_span() always returns Some for TreeToken::Token and TreeToken::Branch.
-        token.text_span(self.db()).X()
+        let (text, span) = token.text_span(self.db()).X();
+        TextSpan { text, span }
     }
 
     /// Get Text and ByteSpan from current position for error reporting.
     ///
     /// Falls back to source_text with empty span if at end of input.
-    fn peek_text_span(&self) -> (bct::text::Text<'db>, ByteSpan) {
+    fn peek_text_span(&self) -> TextSpan<'db> {
         match self.peek() {
             Some(token) => self.extract_text_span(token),
-            None => (self.source_text(), 0..0),
+            None => TextSpan { text: self.source_text(), span: 0..0 },
         }
     }
 }
