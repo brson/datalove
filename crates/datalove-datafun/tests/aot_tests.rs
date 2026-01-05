@@ -78,13 +78,26 @@ pub enum ExecutionResult {
     Error { message: String, exit_code: Option<i32> },
 }
 
-/// Get the path to the runtime library.
-fn get_runtime_lib_dir() -> std::path::PathBuf {
+/// Build the runtime library and return the path to the lib directory.
+fn ensure_runtime_lib() -> std::path::PathBuf {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
         .unwrap_or_else(|_| ".".to_string());
     let manifest_path = std::path::PathBuf::from(manifest_dir);
-    manifest_path.join("../../target/debug").canonicalize()
-        .expect("failed to find target/debug directory")
+    let workspace_root = manifest_path.join("../..").canonicalize()
+        .expect("failed to find workspace root");
+    let lib_dir = workspace_root.join("target/debug");
+
+    // Always rebuild to avoid stale library.
+    let status = Command::new("cargo")
+        .args(["build", "-p", "datalove-rt"])
+        .current_dir(&workspace_root)
+        .status()
+        .expect("failed to run cargo build");
+    if !status.success() {
+        panic!("Failed to build datalove-rt");
+    }
+
+    lib_dir
 }
 
 /// Analyze a worldfile using AOT compilation.
@@ -415,7 +428,7 @@ fn aot_compile_link_run(
     }
 
     // Find runtime library.
-    let lib_dir = get_runtime_lib_dir();
+    let lib_dir = ensure_runtime_lib();
     let lib_path = lib_dir.join("libdatalove_rt.so");
 
     if !lib_path.exists() {

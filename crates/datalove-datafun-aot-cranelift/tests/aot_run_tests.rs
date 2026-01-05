@@ -33,16 +33,26 @@ fn create_debuglog_i32_script(value: i32) -> IrScriptUnit {
     }
 }
 
-/// Get the path to the runtime library.
-fn get_runtime_lib_dir() -> std::path::PathBuf {
-    // Find the target directory relative to the crate.
+/// Build the runtime library and return the path to the lib directory.
+fn ensure_runtime_lib() -> std::path::PathBuf {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
         .unwrap_or_else(|_| ".".to_string());
     let manifest_path = std::path::PathBuf::from(manifest_dir);
+    let workspace_root = manifest_path.join("../..").canonicalize()
+        .expect("failed to find workspace root");
+    let lib_dir = workspace_root.join("target/debug");
 
-    // Go up to workspace root and into target/debug.
-    manifest_path.join("../../target/debug").canonicalize()
-        .expect("failed to find target/debug directory")
+    // Always rebuild to avoid stale library.
+    let status = Command::new("cargo")
+        .args(["build", "-p", "datalove-rt"])
+        .current_dir(&workspace_root)
+        .status()
+        .expect("failed to run cargo build");
+    if !status.success() {
+        panic!("Failed to build datalove-rt");
+    }
+
+    lib_dir
 }
 
 #[test]
@@ -62,14 +72,7 @@ fn test_link_and_run_debuglog_i32() {
     std::fs::write(&obj_path, &obj_bytes).expect("failed to write object file");
 
     // Find runtime library.
-    let lib_dir = get_runtime_lib_dir();
-    let lib_path = lib_dir.join("libdatalove_rt.so");
-
-    if !lib_path.exists() {
-        eprintln!("Runtime library not found at {:?}, skipping link test", lib_path);
-        eprintln!("Build with: cargo build --package datalove-rt");
-        return;
-    }
+    let lib_dir = ensure_runtime_lib();
 
     // Link with cc.
     let exe_path = dir.path().join("test");
@@ -148,13 +151,7 @@ fn test_link_and_run_debuglog_bool_true() {
     std::fs::write(&obj_path, &obj_bytes).expect("failed to write object file");
 
     // Find runtime library.
-    let lib_dir = get_runtime_lib_dir();
-    let lib_path = lib_dir.join("libdatalove_rt.so");
-
-    if !lib_path.exists() {
-        eprintln!("Runtime library not found, skipping link test");
-        return;
-    }
+    let lib_dir = ensure_runtime_lib();
 
     // Link with cc.
     let exe_path = dir.path().join("test");
@@ -245,13 +242,7 @@ fn test_link_and_run_multiple_debuglogs() {
     std::fs::write(&obj_path, &obj_bytes).expect("failed to write object file");
 
     // Find runtime library.
-    let lib_dir = get_runtime_lib_dir();
-    let lib_path = lib_dir.join("libdatalove_rt.so");
-
-    if !lib_path.exists() {
-        eprintln!("Runtime library not found, skipping link test");
-        return;
-    }
+    let lib_dir = ensure_runtime_lib();
 
     // Link with cc.
     let exe_path = dir.path().join("test");
