@@ -45,7 +45,7 @@ use cranelift_object::{ObjectBuilder, ObjectModule, ObjectProduct};
 use target_lexicon::Triple;
 
 use datalove_datafun_ir::{
-    IrBlock, IrFunction, IrModule, IrModuleId, IrScriptUnit, IrType, Terminator,
+    IrBlock, IrFunction, IrModule, IrModuleId, IrScriptUnit, IrType,
 };
 
 /// Errors during AOT compilation.
@@ -259,25 +259,9 @@ impl AotCompiler {
 
     /// Convert an IrScriptUnit to an IrFunction for compilation.
     fn script_unit_to_function(&self, unit: &IrScriptUnit) -> IrFunction {
-        // Convert UnitEnd terminators to Return.
+        // Keep terminators as-is; compile_terminator handles UnitEnd/UnitEarlyReturn.
         // Note: rt_handle is implicit - codegen adds it to all function signatures.
-        let blocks: Vec<IrBlock> = unit.blocks.iter().map(|block| {
-            let terminator = match &block.terminator {
-                Terminator::UnitEnd { result: _ } => {
-                    // Convert to Return with no value (script body doesn't return).
-                    Terminator::Return { value: None }
-                }
-                Terminator::UnitEarlyReturn { value: _ } => {
-                    Terminator::Return { value: None }
-                }
-                other => other.clone(),
-            };
-            IrBlock {
-                id: block.id,
-                instructions: block.instructions.clone(),
-                terminator,
-            }
-        }).collect();
+        let blocks: Vec<IrBlock> = unit.blocks.iter().cloned().collect();
 
         IrFunction {
             id: datalove_datafun_ir::FuncId(0),

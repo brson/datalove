@@ -36,11 +36,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     builder.ins().return_(&[]);
                 }
             }
-            Terminator::UnitEnd { .. } | Terminator::UnitEarlyReturn { .. } => {
-                return Err(AotError::Unsupported(format!(
-                    "terminator not yet implemented: {:?}",
-                    term
-                )));
+            Terminator::UnitEnd { result } => {
+                // Normal script unit completion.
+                // AOT uses scriptunit-fragment with explicit debuglog, so result is always None.
+                debug_assert!(result.is_none(), "UnitEnd with result not expected in AOT");
+                builder.ins().return_(&[]);
+            }
+            Terminator::UnitEarlyReturn { value } => {
+                // Early return from script (via ret, !, or checked operators).
+                // Output the value via debuglog, then return.
+                self.compile_debuglog(builder, value)?;
+                builder.ins().return_(&[]);
             }
         }
         Ok(())

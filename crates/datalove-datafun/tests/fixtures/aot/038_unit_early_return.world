@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Test UnitEarlyReturn generation via try operator on Ok result.
+// The ! operator generates UnitEarlyReturn in the Err branch (block1).
+// This test always takes the Ok path, but verifies UnitEarlyReturn compiles.
+let input: !u32 = ok @42
+let x: u32 = input!
+debuglog x
+
