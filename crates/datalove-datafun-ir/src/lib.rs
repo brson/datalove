@@ -705,13 +705,13 @@ pub enum Terminator {
     /// Return from function.
     Return { value: Option<Operand> },
 
-    /// Early return from function (from ? or checked operators).
+    /// Early return from function (from ?, !, or checked operators).
     TryReturn { value: Option<Operand> },
 
     /// End of script unit (normal completion).
     UnitEnd { result: Option<Operand> },
 
-    /// Early return from script unit (from ? or checked operators).
+    /// Early return from script unit (from `ret`, !, or checked operators).
     UnitEarlyReturn { value: Operand },
 }
 
