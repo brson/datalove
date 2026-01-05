@@ -95,11 +95,11 @@ impl TyDescEmitter {
                 return self.emit_result_tydesc(module, ok_ty);
             }
             IrType::Tuple(field_types) => {
-                return self.emit_tuple_tydesc(module, field_types);
+                return self.emit_tuple_tydesc(module, ty, field_types);
             }
             IrType::Struct(fields) => {
                 let field_types: Vec<_> = fields.iter().map(|(_, ty)| ty.clone()).collect();
-                return self.emit_tuple_tydesc(module, &field_types);
+                return self.emit_struct_tydesc(module, ty, &field_types);
             }
             _ => {}
         }
@@ -419,12 +419,11 @@ impl TyDescEmitter {
     fn emit_tuple_tydesc<M: Module>(
         &mut self,
         module: &mut M,
+        original_ty: &IrType,
         field_types: &[IrType],
     ) -> Result<DataId, AotError> {
-        let tuple_ty = IrType::Tuple(field_types.to_vec());
-
-        // Check cache.
-        if let Some(&id) = self.tydescs.get(&tuple_ty) {
+        // Check cache using the original type.
+        if let Some(&id) = self.tydescs.get(original_ty) {
             return Ok(id);
         }
 
@@ -436,7 +435,7 @@ impl TyDescEmitter {
         }
 
         // Compute tuple layout (size, align, field offsets).
-        let layout = crate::types::ir_type_to_cranelift(&tuple_ty).layout();
+        let layout = crate::types::ir_type_to_cranelift(original_ty).layout();
         let field_offsets = crate::types::compute_tuple_field_offsets(field_types);
 
         // Create the fields array as a separate data object.
@@ -520,8 +519,19 @@ impl TyDescEmitter {
             .define_data(data_id, &data_desc)
             .map_err(|e| AotError::Module(format!("define tuple tydesc: {}", e)))?;
 
-        self.tydescs.insert(tuple_ty, data_id);
+        self.tydescs.insert(original_ty.clone(), data_id);
         Ok(data_id)
+    }
+
+    /// Emit a TyDesc for a Struct type (same layout as Tuple).
+    fn emit_struct_tydesc<M: Module>(
+        &mut self,
+        module: &mut M,
+        original_ty: &IrType,
+        field_types: &[IrType],
+    ) -> Result<DataId, AotError> {
+        // Struct uses Tuple tag in TyDesc since layout is identical.
+        self.emit_tuple_tydesc(module, original_ty, field_types)
     }
 
     /// Emit TyDescs for all types upfront.

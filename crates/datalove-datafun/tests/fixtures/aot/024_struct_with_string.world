@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Test struct with aggregate (string) field.
+
+let person = @{name = @"Alice", age = @30}
+debuglog person
