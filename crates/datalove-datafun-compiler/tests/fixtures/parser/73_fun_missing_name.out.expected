@@ -30,7 +30,7 @@
       "code": "P001",
       "labels": [
         {
-          "message": "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', or 'continue'",
+          "message": "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', or 'debuglog'",
           "span": [
             7,
             10
