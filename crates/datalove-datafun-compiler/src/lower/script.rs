@@ -23,6 +23,8 @@ use super::LowerError;
 ///
 /// For fragments, caller must first call `analyze_script_functions` to get `func_analyses`.
 /// For expressions, pass an empty map since there are no function definitions.
+///
+/// When `for_aot` is true, emits Drop instructions for script-level bindings at unit end.
 pub fn lower_script_unit<'db>(
     db: &'db dyn salsa::Database,
     tycheck_result: TypecheckResult<'db>,
@@ -31,6 +33,7 @@ pub fn lower_script_unit<'db>(
     script_ctx: ScriptLowerContext,
     kind: ScriptUnitKind<'db>,
     func_analyses: ScriptFunctionAnalyses<'db>,
+    for_aot: bool,
 ) -> Result<IrScriptUnit, LowerError> {
     let expr_types = tycheck_result.expr_types(db);
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
@@ -38,8 +41,9 @@ pub fn lower_script_unit<'db>(
     let result = match kind {
         ScriptUnitKind::Fragment(stmts) => {
             // Analyze script statements for drop schedule.
-            let script_analysis = analyze_script_statements(db, expr_types, call_targets, &stmts);
+            let script_analysis = analyze_script_statements(db, expr_types, call_targets, &stmts, for_aot);
             ctx.set_drop_schedule(script_analysis.schedule, script_analysis.bindings);
+            ctx.set_unit_end_drops(script_analysis.unit_end);
 
             // Lower all statements with index tracking.
             for (idx, stmt) in stmts.iter().enumerate() {
@@ -58,6 +62,9 @@ pub fn lower_script_unit<'db>(
             Some(value_id)
         }
     };
+
+    // Emit drops for script-level bindings at unit end (for AOT).
+    ctx.emit_unit_end_drops();
 
     // Finish the final block with UnitEnd.
     ctx.finish_block(Terminator::UnitEnd {
@@ -83,6 +90,8 @@ pub fn lower_script_unit<'db>(
 /// Used when typechecking with context (non-salsa version).
 ///
 /// Caller must first call `analyze_script_functions` to get `func_analyses`.
+///
+/// When `for_aot` is true, emits Drop instructions for script-level bindings at unit end.
 pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
@@ -91,14 +100,16 @@ pub fn lower_script_fragment_raw<'db>(
     script_ctx: ScriptLowerContext,
     stmts: Vec<Statement<'db>>,
     func_analyses: ScriptFunctionAnalyses<'db>,
+    for_aot: bool,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
     // Analyze script statements for drop schedule.
-    let script_analysis = analyze_script_statements(db, expr_types, call_targets, &stmts);
+    let script_analysis = analyze_script_statements(db, expr_types, call_targets, &stmts, for_aot);
     // Note: script_analysis.errors are for use-after-move etc. We proceed anyway
     // and let lowering handle any issues (or caller can check errors beforehand).
     ctx.set_drop_schedule(script_analysis.schedule, script_analysis.bindings);
+    ctx.set_unit_end_drops(script_analysis.unit_end);
 
     // Lower all statements with index tracking.
     for (idx, stmt) in stmts.iter().enumerate() {
@@ -106,6 +117,9 @@ pub fn lower_script_fragment_raw<'db>(
         lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses)?;
     }
     ctx.current_stmt_idx = None;
+
+    // Emit drops for script-level bindings at unit end (for AOT).
+    ctx.emit_unit_end_drops();
 
     // Fragment units have no result value.
     ctx.finish_block(Terminator::UnitEnd { result: None });
@@ -126,6 +140,10 @@ pub fn lower_script_fragment_raw<'db>(
 /// Lower a script expression unit.
 ///
 /// Like `lower_script_unit` but takes expr_types directly and an expression.
+///
+/// The `for_aot` parameter is accepted for API consistency but has no effect
+/// since expressions don't create script-level bindings that need dropping.
+#[allow(unused_variables)]
 pub fn lower_script_expr<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
@@ -133,6 +151,7 @@ pub fn lower_script_expr<'db>(
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
     expr: ExprFun<'db>,
+    for_aot: bool,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 

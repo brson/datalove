@@ -188,8 +188,8 @@ fn compile_and_run_fragment(
     ctx: &mut datafun::pipeline::ScriptCompilationContext<'_>,
     source: &str,
 ) -> AotSectionResult {
-    // Lower to IR without executing via interpreter.
-    let lower_result = ctx.lower_fragment(source);
+    // Lower to IR for AOT (emits drops for script-level bindings).
+    let lower_result = ctx.lower_fragment_for_aot(source);
 
     // If typecheck or lowering failed, return early.
     if !matches!(&lower_result.typecheck, datafun::pipeline::TypecheckResult::Success) {
@@ -252,8 +252,8 @@ fn compile_and_run_expr(
     ctx: &mut datafun::pipeline::ScriptCompilationContext<'_>,
     source: &str,
 ) -> AotSectionResult {
-    // Lower to IR without executing via interpreter.
-    let lower_result = ctx.lower_expr(source);
+    // Lower to IR for AOT.
+    let lower_result = ctx.lower_expr_for_aot(source);
 
     // If typecheck or lowering failed, return early.
     if !matches!(&lower_result.typecheck, datafun::pipeline::TypecheckResult::Success) {

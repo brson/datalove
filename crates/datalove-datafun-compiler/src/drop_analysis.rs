@@ -749,38 +749,45 @@ pub struct ScriptDropAnalysis {
     pub schedule: DropSchedule,
     /// Information about each binding (indexed by BindingId).
     pub bindings: Vec<BindingInfo>,
+    /// Bindings to drop at unit end (only populated when for_aot=true).
+    pub unit_end: Vec<BindingId>,
 }
 
 /// Analyze script-level statements and compute drop schedule.
 ///
 /// Similar to `analyze_function` but for script units. Key differences:
-/// - Enters `ScriptUnit` scope instead of `Function` scope
-/// - Top-level bindings are NOT scheduled for drops (they're exported)
+/// - Enters `ScriptUnit` scope instead of `Function` scope (unless for_aot=true)
+/// - Top-level bindings are NOT scheduled for drops (they're exported) unless for_aot=true
 /// - Nested scopes (if, loop) get normal drop analysis
+///
+/// When `for_aot` is true:
+/// - Uses `Function` scope so top-level bindings ARE scheduled for drops
+/// - Returns final drops in `unit_end` field for emission before UnitEnd
 pub fn analyze_script_statements<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     stmts: &[Statement<'db>],
+    for_aot: bool,
 ) -> ScriptDropAnalysis {
     let mut ctx = AnalysisCtx::new(db, expr_types, call_targets);
 
-    // Enter script unit scope.
-    ctx.enter_scope(ScopeKind::ScriptUnit);
+    // Enter scope. For AOT, use Function scope so bindings get dropped.
+    // For REPL, use ScriptUnit scope so bindings are exported.
+    let scope_kind = if for_aot { ScopeKind::Function } else { ScopeKind::ScriptUnit };
+    ctx.enter_scope(scope_kind);
 
     // Analyze statements.
     analyze_statements(&mut ctx, stmts, &[]);
 
-    // Exit script unit scope. Top-level bindings are NOT dropped (they're exported).
-    // The exit_scope call still cleans up the scope frame.
-    let _final_drops = ctx.exit_scope();
-    // Note: _final_drops will be empty for ScriptUnit scope because top-level
-    // bindings are exported. Nested scope drops are scheduled during analysis.
+    // Exit scope. For AOT, capture final drops. For REPL, they're empty.
+    let final_drops = ctx.exit_scope();
 
     ScriptDropAnalysis {
         errors: ctx.errors,
         schedule: ctx.schedule,
         bindings: ctx.bindings,
+        unit_end: final_drops,
     }
 }
 

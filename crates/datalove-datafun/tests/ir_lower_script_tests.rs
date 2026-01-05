@@ -62,8 +62,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 };
 
                 // Script tests don't use modules, so use empty func_id_map.
+                // Use for_aot=false since these tests verify REPL behavior with persistent bindings.
                 let func_id_map = HashMap::new();
-                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses) {
+                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, false) {
                     Ok(ir_unit) => {
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

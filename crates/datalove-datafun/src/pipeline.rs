@@ -562,7 +562,50 @@ impl<'db> ScriptCompilationContext<'db> {
         let all_results = typecheck_results.results(self.db);
         let tycheck_result = *all_results.last().unwrap();
 
-        self.lower_fragment_inner(parsed, tycheck_result)
+        self.lower_fragment_inner(parsed, tycheck_result, false)
+    }
+
+    /// Lower a script fragment for AOT compilation.
+    ///
+    /// Like `lower_fragment` but emits Drop instructions for script-level bindings
+    /// at unit end. Use this for AOT compilation where bindings don't persist.
+    pub fn lower_fragment_for_aot(&mut self, source: &str) -> ScriptLowerResult {
+        let src = bct::input::Source::new(self.db, source.to_string());
+        self.last_source = Some(src);
+        let parse_result = datalove_datafun_parser::parse(self.db, src);
+        let parsed = parse_result.parsed(self.db);
+
+        // Collect parse diagnostics.
+        let parse_diags = datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
+        if !parse_diags.is_empty() {
+            let parse_errors: Vec<String> = parse_diags.iter()
+                .map(|d| {
+                    let diag = d.to_diagnostic(self.db);
+                    diag.message.as_str(self.db).to_string()
+                })
+                .collect();
+            return ScriptLowerResult {
+                typecheck: TypecheckResult::ParseError { errors: parse_errors },
+                lowering: LoweringResult::Skipped,
+                ir_unit: None,
+            };
+        }
+
+        // Incremental typecheck with pre-parsed content.
+        let spans = datalove_datafun_parser::datafun_spans(self.db, src);
+        let unit_spec = ScriptUnitSpec::new(self.db, src, spans, ScriptUnitKind::Fragment(parsed));
+        self.accumulated_unit_specs.push(unit_spec);
+        let batch_spec = ScriptBatchSpec::new(
+            self.db,
+            self.accumulated_unit_specs.clone(),
+            self.module_specs.clone(),
+        );
+        self.last_batch_spec = Some(batch_spec);
+        let typecheck_results = type_check_script_units(self.db, batch_spec);
+        let all_results = typecheck_results.results(self.db);
+        let tycheck_result = *all_results.last().unwrap();
+
+        self.lower_fragment_inner(parsed, tycheck_result, true)
     }
 
     /// Lower a script expression without executing (for AOT compilation).
@@ -599,7 +642,48 @@ impl<'db> ScriptCompilationContext<'db> {
         let all_results = typecheck_results.results(self.db);
         let tycheck_result = *all_results.last().unwrap();
 
-        self.lower_expr_inner(expr, tycheck_result)
+        self.lower_expr_inner(expr, tycheck_result, false)
+    }
+
+    /// Lower a script expression for AOT compilation.
+    ///
+    /// Like `lower_expr` but with `for_aot=true` for API consistency.
+    /// Note: Expressions don't create script-level bindings, so the flag has no effect.
+    pub fn lower_expr_for_aot(&mut self, source: &str) -> ScriptLowerResult {
+        let src = bct::input::Source::new(self.db, source.to_string());
+        let expr = datalove_datafun_parser::parse_expr(self.db, src);
+
+        // Collect parse diagnostics.
+        let parse_diags = datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
+        if !parse_diags.is_empty() {
+            let parse_errors: Vec<String> = parse_diags.iter()
+                .map(|d| {
+                    let diag = d.to_diagnostic(self.db);
+                    diag.message.as_str(self.db).to_string()
+                })
+                .collect();
+            return ScriptLowerResult {
+                typecheck: TypecheckResult::ParseError { errors: parse_errors },
+                lowering: LoweringResult::Skipped,
+                ir_unit: None,
+            };
+        }
+
+        // Incremental typecheck.
+        let spans = datalove_datafun_parser::datafun_spans(self.db, src);
+        let unit_spec = ScriptUnitSpec::new(self.db, src, spans, ScriptUnitKind::Expr(expr));
+        self.accumulated_unit_specs.push(unit_spec);
+        let batch_spec = ScriptBatchSpec::new(
+            self.db,
+            self.accumulated_unit_specs.clone(),
+            self.module_specs.clone(),
+        );
+        self.last_batch_spec = Some(batch_spec);
+        let typecheck_results = type_check_script_units(self.db, batch_spec);
+        let all_results = typecheck_results.results(self.db);
+        let tycheck_result = *all_results.last().unwrap();
+
+        self.lower_expr_inner(expr, tycheck_result, true)
     }
 
     /// Lower a fragment to IR without execution.
@@ -607,6 +691,7 @@ impl<'db> ScriptCompilationContext<'db> {
         &mut self,
         parsed: datalove_datafun_ast::ast::ParsedStatements<'db>,
         tycheck_result: UnitTypecheckResultTracked<'db>,
+        for_aot: bool,
     ) -> ScriptLowerResult {
         // Check for typecheck errors.
         let tycheck_errors: Vec<_> = tycheck_result.errors(self.db).into_iter()
@@ -652,6 +737,7 @@ impl<'db> ScriptCompilationContext<'db> {
             self.script_ctx.clone(),
             stmts,
             func_analyses,
+            for_aot,
         ) {
             Ok(unit) => unit,
             Err(e) => {
@@ -682,6 +768,7 @@ impl<'db> ScriptCompilationContext<'db> {
         &mut self,
         expr: datalove_datafun_ast::ast::ExprFun<'db>,
         tycheck_result: UnitTypecheckResultTracked<'db>,
+        for_aot: bool,
     ) -> ScriptLowerResult {
         // Check for typecheck errors.
         let tycheck_errors: Vec<_> = tycheck_result.errors(self.db).into_iter()
@@ -703,6 +790,7 @@ impl<'db> ScriptCompilationContext<'db> {
             &self.func_id_map,
             self.script_ctx.clone(),
             expr,
+            for_aot,
         ) {
             Ok(unit) => unit,
             Err(e) => {
@@ -772,6 +860,7 @@ impl<'db> ScriptCompilationContext<'db> {
         };
 
         // Lower using the typecheck result's expr_types and call_targets.
+        // Use for_aot=false since this is for REPL execution where bindings persist.
         let call_targets = tycheck_result.call_targets(self.db);
         let ir_unit = match lower::lower_script_fragment_raw(
             self.db,
@@ -781,6 +870,7 @@ impl<'db> ScriptCompilationContext<'db> {
             self.script_ctx.clone(),
             stmts,
             func_analyses,
+            false, // for_aot
         ) {
             Ok(unit) => unit,
             Err(e) => {
@@ -855,6 +945,7 @@ impl<'db> ScriptCompilationContext<'db> {
         }
 
         // Lower the expression as a script unit.
+        // Use for_aot=false since this is for REPL execution where bindings persist.
         let ir_unit = match lower::lower_script_expr(
             self.db,
             tycheck_result.expr_types(self.db),
@@ -862,6 +953,7 @@ impl<'db> ScriptCompilationContext<'db> {
             &self.func_id_map,
             self.script_ctx.clone(),
             expr,
+            false, // for_aot
         ) {
             Ok(unit) => unit,
             Err(e) => {

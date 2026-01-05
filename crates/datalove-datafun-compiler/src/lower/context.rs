@@ -153,6 +153,8 @@ pub struct LowerCtx<'db> {
     pub(super) current_stmt_idx: Option<usize>,
     /// Types of external slots from previous script units, keyed by name.
     pub(super) external_slot_types: HashMap<String, IrType>,
+    /// Bindings to drop at unit end (for AOT compilation).
+    pub(super) unit_end_drops: Vec<BindingId>,
 }
 
 /// Empty func_id_map for contexts that don't need module function resolution.
@@ -196,6 +198,7 @@ impl<'db> LowerCtx<'db> {
             next_binding_id: 0,
             current_stmt_idx: None,
             external_slot_types: HashMap::new(),
+            unit_end_drops: Vec::new(),
         }
     }
 
@@ -237,6 +240,7 @@ impl<'db> LowerCtx<'db> {
             next_binding_id: 0,
             current_stmt_idx: None,
             external_slot_types: HashMap::new(),
+            unit_end_drops: Vec::new(),
         }
     }
 
@@ -317,6 +321,7 @@ impl<'db> LowerCtx<'db> {
             next_binding_id: 0,
             current_stmt_idx: None,
             external_slot_types: script_ctx.slot_types,
+            unit_end_drops: Vec::new(),
         }
     }
 
@@ -639,5 +644,19 @@ impl<'db> LowerCtx<'db> {
             }
         }
         result
+    }
+
+    /// Set bindings to drop at unit end (for AOT compilation).
+    pub fn set_unit_end_drops(&mut self, drops: Vec<BindingId>) {
+        self.unit_end_drops = drops;
+    }
+
+    /// Emit drops for unit end (for AOT compilation).
+    pub fn emit_unit_end_drops(&mut self) {
+        for id in std::mem::take(&mut self.unit_end_drops) {
+            if let Some(&operand) = self.binding_to_operand.get(&id) {
+                self.emit(Instruction::Drop { operand });
+            }
+        }
     }
 }
