@@ -429,7 +429,7 @@ fn aot_compile_link_run(
 
     // Find runtime library.
     let lib_dir = ensure_runtime_lib();
-    let lib_path = lib_dir.join("libdatalove_rt.so");
+    let lib_path = lib_dir.join("libdatalove_rt.a");
 
     if !lib_path.exists() {
         return AotSectionResult {
@@ -446,14 +446,13 @@ fn aot_compile_link_run(
         };
     }
 
-    // Link with cc.
+    // Link statically with cc.
     let exe_path = dir.path().join("test");
     let link_output = Command::new("cc")
         .args([
             obj_path.to_str().unwrap(),
-            "-L", lib_dir.to_str().unwrap(),
-            "-ldatalove_rt",
-            "-Wl,-rpath", lib_dir.to_str().unwrap(),
+            lib_path.to_str().unwrap(),
+            "-ldl", "-lpthread", "-lm",
             "-o", exe_path.to_str().unwrap(),
         ])
         .output();
@@ -493,10 +492,7 @@ fn aot_compile_link_run(
     }
 
     // Run the executable.
-    let run_output = match Command::new(&exe_path)
-        .env("LD_LIBRARY_PATH", lib_dir.to_str().unwrap())
-        .output()
-    {
+    let run_output = match Command::new(&exe_path).output() {
         Ok(o) => o,
         Err(e) => {
             return AotSectionResult {
