@@ -24,6 +24,9 @@ pub trait TokenStream<'db> {
 
     /// Consume and return the current token.
     fn next(&mut self) -> Option<TreeToken<'db>>;
+
+    /// Get source Text for error reporting when no specific token is available.
+    fn source_text(&self) -> bct::text::Text<'db>;
 }
 
 /// Extension trait providing shared parsing methods.
@@ -99,6 +102,21 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
     fn peek_owned(&self) -> Option<TreeToken<'db>> {
         self.peek().cloned()
     }
+
+    /// Extract Text and ByteSpan from a token.
+    fn extract_text_span(&self, token: &TreeToken<'db>) -> (bct::text::Text<'db>, ByteSpan) {
+        // text_span() always returns Some for TreeToken::Token and TreeToken::Branch.
+        token.text_span(self.db()).X()
+    }
+
+    /// Get Text and ByteSpan from current position for error reporting.
+    fn peek_text_span(&self) -> (bct::text::Text<'db>, ByteSpan) {
+        if let Some(token) = self.peek() {
+            self.extract_text_span(token)
+        } else {
+            (self.source_text(), 0..0)
+        }
+    }
 }
 
 // Blanket implementation.
@@ -113,11 +131,4 @@ pub fn is_numeric_literal(word: &str) -> bool {
         // Decimal literal: all digits.
         word.chars().all(|c| c.is_ascii_digit())
     }
-}
-
-/// Extract Text and ByteSpan from a token for error reporting.
-pub fn extract_text_span<'db>(db: &'db dyn Db, token: &TreeToken<'db>) -> (bct::text::Text<'db>, ByteSpan) {
-    // text_span() always returns Some for TreeToken::Token and TreeToken::Branch.
-    // It only returns None for top-level BracerIter (which isn't a TreeToken).
-    token.text_span(db).X()
 }

@@ -11,7 +11,7 @@ use salsa::Accumulator;
 
 use datalove_datafun_ast::ast;
 use datalove_datafun_ast::spans::DatafunSpanAccumulator;
-use datalove_datalit::parser_util::{self, TokenStream, TokenStreamExt};
+use datalove_datalit::parser_util::{TokenStream, TokenStreamExt};
 use datalove_diagnostic::DiagnosticBuilder;
 
 use super::Db;
@@ -77,40 +77,6 @@ impl<'db> Parser<'db> {
     /// Check if looking at a colon type hint.
     pub(super) fn peek_colon_type_hint(&self) -> bool {
         self.peek_sigil(Sigil::Colon)
-    }
-
-    /// Get source Text for error reporting from the first token.
-    pub(super) fn source_text(&self) -> bct::text::Text<'db> {
-        if let Some(token) = self.tokens.first() {
-            match token {
-                TreeToken::Token(tok) => tok.text(self.db).text(self.db),
-                TreeToken::Branch(_, iter) => {
-                    // Try to find a token inside the branch.
-                    for inner in iter.clone() {
-                        if let Some(TreeToken::Token(tok)) = inner.without_space(self.db) {
-                            return tok.text(self.db).text(self.db);
-                        }
-                    }
-                    bct::text::Text::new(self.db, String::new())
-                }
-            }
-        } else {
-            bct::text::Text::new(self.db, String::new())
-        }
-    }
-
-    /// Extract Text and ByteSpan from a token.
-    pub(super) fn extract_text_span(&self, token: &TreeToken<'db>) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
-        parser_util::extract_text_span(self.db, token)
-    }
-
-    /// Get Text and ByteSpan from current position for error reporting.
-    pub(super) fn peek_text_span(&self) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
-        if let Some(token) = self.peek() {
-            self.extract_text_span(token)
-        } else {
-            (self.source_text(), 0..0)
-        }
     }
 
     /// Get the byte position at start of current token (or end of last token).
@@ -182,5 +148,24 @@ impl<'db> TokenStream<'db> for Parser<'db> {
             self.pos += 1;
         }
         token
+    }
+
+    fn source_text(&self) -> bct::text::Text<'db> {
+        if let Some(token) = self.tokens.first() {
+            match token {
+                TreeToken::Token(tok) => tok.text(self.db).text(self.db),
+                TreeToken::Branch(_, iter) => {
+                    // Try to find a token inside the branch.
+                    for inner in iter.clone() {
+                        if let Some(TreeToken::Token(tok)) = inner.without_space(self.db) {
+                            return tok.text(self.db).text(self.db);
+                        }
+                    }
+                    bct::text::Text::new(self.db, String::new())
+                }
+            }
+        } else {
+            bct::text::Text::new(self.db, String::new())
+        }
     }
 }

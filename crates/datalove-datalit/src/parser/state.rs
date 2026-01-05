@@ -8,7 +8,7 @@ use bct::{
 };
 
 use crate::ast;
-use crate::parser_util::{self, TokenStream};
+use crate::parser_util::{TokenStream, TokenStreamExt};
 use datalove_diagnostic::DiagnosticBuilder;
 
 /// Parser state for datalit parsing.
@@ -124,41 +124,6 @@ impl<'db> Parser<'db> {
         }
     }
 
-    /// Get source Text for error reporting.
-    pub(super) fn source_text(&self) -> bct::text::Text<'db> {
-        if let Some(token) = self.tokens.first() {
-            match token {
-                TreeToken::Token(tok) => {
-                    return tok.text(self.db).text(self.db);
-                }
-                TreeToken::Branch(_, iter) => {
-                    // Try to find a Token inside the branch.
-                    for inner_token in iter.clone() {
-                        if let Some(TreeToken::Token(tok)) = inner_token.without_space(self.db) {
-                            return tok.text(self.db).text(self.db);
-                        }
-                    }
-                }
-            }
-        }
-        // Empty token list - create empty text as fallback.
-        bct::text::Text::new(self.db, String::new())
-    }
-
-    /// Extract Text and ByteSpan from a token.
-    pub(super) fn extract_text_span(&self, token: &TreeToken<'db>) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
-        parser_util::extract_text_span(self.db, token)
-    }
-
-    /// Get Text and ByteSpan from current position for error reporting.
-    pub(super) fn peek_text_span(&self) -> (bct::text::Text<'db>, datalove_diagnostic::ByteSpan) {
-        if let Some(token) = self.peek() {
-            self.extract_text_span(token)
-        } else {
-            (self.source_text(), 0..0)
-        }
-    }
-
 }
 
 impl<'db> TokenStream<'db> for Parser<'db> {
@@ -176,5 +141,25 @@ impl<'db> TokenStream<'db> for Parser<'db> {
             self.pos += 1;
         }
         token
+    }
+
+    fn source_text(&self) -> bct::text::Text<'db> {
+        if let Some(token) = self.tokens.first() {
+            match token {
+                TreeToken::Token(tok) => {
+                    return tok.text(self.db).text(self.db);
+                }
+                TreeToken::Branch(_, iter) => {
+                    // Try to find a Token inside the branch.
+                    for inner_token in iter.clone() {
+                        if let Some(TreeToken::Token(tok)) = inner_token.without_space(self.db) {
+                            return tok.text(self.db).text(self.db);
+                        }
+                    }
+                }
+            }
+        }
+        // Empty token list - create empty text as fallback.
+        bct::text::Text::new(self.db, String::new())
     }
 }
