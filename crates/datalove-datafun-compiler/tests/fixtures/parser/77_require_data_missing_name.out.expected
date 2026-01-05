@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "expected data name after 'require data'"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P016",
+      "labels": [
+        {
+          "message": "expected data name",
+          "span": [
+            0,
+            0
+          ],
+          "text": ""
+        }
+      ],
+      "message": "expected data name after 'require data'"
+    }
+  ]
+}

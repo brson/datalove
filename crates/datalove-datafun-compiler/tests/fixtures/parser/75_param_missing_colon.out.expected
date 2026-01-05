@@ -1,0 +1,38 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [],
+        "kind": "Fun",
+        "name": "f",
+        "params": [
+          {
+            "mode": "In",
+            "name": "x",
+            "type_hint": {
+              "heap": "Omitted",
+              "type_hint": "I32"
+            }
+          }
+        ],
+        "return_type": null
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P012",
+      "labels": [
+        {
+          "message": "expected ':'",
+          "span": [
+            8,
+            11
+          ],
+          "text": "i32"
+        }
+      ],
+      "message": "expected ':' after parameter name"
+    }
+  ]
+}

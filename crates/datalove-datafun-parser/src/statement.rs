@@ -6,7 +6,9 @@ use rmx::core::iter::Peekable;
 use bct::{
     lexer::Sigil,
     bracer::{BracerIter, TreeToken},
+    text::InternedText,
 };
+use datalove_diagnostic::DiagnosticBuilder;
 
 use datalove_datafun_ast::ast;
 use datalove_datalit as datalit;
@@ -66,7 +68,19 @@ impl<'db> Parser<'db> {
     fn parse_let(&mut self) -> ast::Statement<'db> {
         self.eat_word("let");
 
-        let name = self.need_name();
+        let name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                let (text, span) = self.peek_text_span();
+                return self.emit_stmt_error(
+                    text,
+                    span,
+                    "expected name after 'let'",
+                    "P007",
+                    "expected name",
+                );
+            }
+        };
 
         // Check for type hint: `: type`
         let type_hint = if self.peek_sigil(Sigil::Colon) {
@@ -102,7 +116,19 @@ impl<'db> Parser<'db> {
     fn parse_var(&mut self) -> ast::Statement<'db> {
         self.eat_word("var");
 
-        let name = self.need_name();
+        let name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                let (text, span) = self.peek_text_span();
+                return self.emit_stmt_error(
+                    text,
+                    span,
+                    "expected name after 'var'",
+                    "P008",
+                    "expected name",
+                );
+            }
+        };
 
         // Check for type hint: `: type`
         let type_hint = if self.peek_sigil(Sigil::Colon) {
@@ -138,7 +164,19 @@ impl<'db> Parser<'db> {
     fn parse_set(&mut self) -> ast::Statement<'db> {
         self.eat_word("set");
 
-        let name = self.need_name();
+        let name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                let (text, span) = self.peek_text_span();
+                return self.emit_stmt_error(
+                    text,
+                    span,
+                    "expected name after 'set'",
+                    "P009",
+                    "expected name",
+                );
+            }
+        };
 
         // Need `=` sigil.
         if !self.eat_sigil(Sigil::Equals) {
@@ -168,7 +206,19 @@ impl<'db> Parser<'db> {
     ) -> ast::Statement<'db> {
         self.eat_word("fun");
 
-        let name = self.need_name();
+        let name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                let (text, span) = self.peek_text_span();
+                return self.emit_stmt_error(
+                    text,
+                    span,
+                    "expected function name after 'fun'",
+                    "P010",
+                    "expected function name",
+                );
+            }
+        };
 
         // Parse parameters in parentheses.
         let params = match self.next() {
@@ -269,10 +319,28 @@ impl<'db> Parser<'db> {
                 _ => ast::ParamMode::In,
             };
 
-            let name = sub.need_name();
+            let name = match sub.eat_name() {
+                Some(n) => n,
+                None => {
+                    sub.had_error = true;
+                    let (text, span) = sub.peek_text_span();
+                    DiagnosticBuilder::error(sub.db, "expected parameter name")
+                        .code("P011")
+                        .primary_label(text, span, "expected parameter name")
+                        .emit_parse();
+                    InternedText::new(sub.db, "<error>".S())
+                }
+            };
 
             // Need colon.
-            sub.need_sigil(Sigil::Colon);
+            if !sub.eat_sigil(Sigil::Colon) {
+                sub.had_error = true;
+                let (text, span) = sub.peek_text_span();
+                DiagnosticBuilder::error(sub.db, "expected ':' after parameter name")
+                    .code("P012")
+                    .primary_label(text, span, "expected ':'")
+                    .emit_parse();
+            }
 
             let type_hint = sub.parse_type_hint_and_heap();
 
@@ -311,7 +379,19 @@ impl<'db> Parser<'db> {
                 self.eat_word("module");
 
                 // Parse 3-part path: lib/pkg/module
-                let import_space = self.need_name();
+                let import_space = match self.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        let (text, span) = self.peek_text_span();
+                        return self.emit_stmt_error(
+                            text,
+                            span,
+                            "expected import space name after 'require module'",
+                            "P013",
+                            "expected import space name",
+                        );
+                    }
+                };
 
                 // Need forward slash.
                 if !self.peek_sigil(Sigil::SlashForward) {
@@ -326,7 +406,19 @@ impl<'db> Parser<'db> {
                 }
                 self.eat_sigil(Sigil::SlashForward);
 
-                let package_alias = self.need_name();
+                let package_alias = match self.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        let (text, span) = self.peek_text_span();
+                        return self.emit_stmt_error(
+                            text,
+                            span,
+                            "expected package name after '/'",
+                            "P014",
+                            "expected package name",
+                        );
+                    }
+                };
 
                 // Need forward slash.
                 if !self.peek_sigil(Sigil::SlashForward) {
@@ -341,7 +433,19 @@ impl<'db> Parser<'db> {
                 }
                 self.eat_sigil(Sigil::SlashForward);
 
-                let module_alias = self.need_name();
+                let module_alias = match self.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        let (text, span) = self.peek_text_span();
+                        return self.emit_stmt_error(
+                            text,
+                            span,
+                            "expected module name after '/'",
+                            "P015",
+                            "expected module name",
+                        );
+                    }
+                };
 
                 ast::Statement::Require(ast::StmtRequire::Module(
                     ast::StmtRequireModule::new(
@@ -355,7 +459,19 @@ impl<'db> Parser<'db> {
             Some("data") => {
                 self.eat_word("data");
 
-                let name = self.need_name();
+                let name = match self.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        let (text, span) = self.peek_text_span();
+                        return self.emit_stmt_error(
+                            text,
+                            span,
+                            "expected data name after 'require data'",
+                            "P016",
+                            "expected data name",
+                        );
+                    }
+                };
 
                 // Optional type hint: `: type`
                 let type_hint = if self.peek_sigil(Sigil::Colon) {
@@ -390,7 +506,19 @@ impl<'db> Parser<'db> {
         self.eat_word("import");
 
         // Parse module name.
-        let module_name = self.need_name();
+        let module_name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                let (text, span) = self.peek_text_span();
+                return self.emit_stmt_error(
+                    text,
+                    span,
+                    "expected module name after 'import'",
+                    "P017",
+                    "expected module name",
+                );
+            }
+        };
 
         // Need dot sigil.
         if !self.peek_sigil(Sigil::Dot) {
@@ -406,7 +534,19 @@ impl<'db> Parser<'db> {
         self.eat_sigil(Sigil::Dot);
 
         // Parse item name.
-        let item_name = self.need_name();
+        let item_name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                let (text, span) = self.peek_text_span();
+                return self.emit_stmt_error(
+                    text,
+                    span,
+                    "expected item name after '.'",
+                    "P018",
+                    "expected item name",
+                );
+            }
+        };
 
         ast::Statement::Import(
             ast::StmtImport::new(
@@ -429,8 +569,26 @@ impl<'db> Parser<'db> {
         // Parse optional then binding: |identifier|
         let then_binding = if self.peek_sigil(Sigil::Pipe) {
             self.eat_sigil(Sigil::Pipe);
-            let binding = self.need_name();
-            self.need_sigil(Sigil::Pipe);
+            let binding = match self.eat_name() {
+                Some(n) => n,
+                None => {
+                    self.had_error = true;
+                    let (text, span) = self.peek_text_span();
+                    DiagnosticBuilder::error(self.db, "expected binding name after '|'")
+                        .code("P019")
+                        .primary_label(text, span, "expected binding name")
+                        .emit_parse();
+                    InternedText::new(self.db, "<error>".S())
+                }
+            };
+            if !self.eat_sigil(Sigil::Pipe) {
+                self.had_error = true;
+                let (text, span) = self.peek_text_span();
+                DiagnosticBuilder::error(self.db, "expected '|' after binding name")
+                    .code("P020")
+                    .primary_label(text, span, "expected '|'")
+                    .emit_parse();
+            }
             Some(binding)
         } else {
             None
@@ -477,8 +635,26 @@ impl<'db> Parser<'db> {
             // Parse optional else binding: |identifier|
             let else_binding = if else_sub.peek_sigil(Sigil::Pipe) {
                 else_sub.eat_sigil(Sigil::Pipe);
-                let binding = else_sub.need_name();
-                else_sub.need_sigil(Sigil::Pipe);
+                let binding = match else_sub.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        else_sub.had_error = true;
+                        let (text, span) = else_sub.peek_text_span();
+                        DiagnosticBuilder::error(else_sub.db, "expected binding name after '|'")
+                            .code("P019")
+                            .primary_label(text, span, "expected binding name")
+                            .emit_parse();
+                        InternedText::new(else_sub.db, "<error>".S())
+                    }
+                };
+                if !else_sub.eat_sigil(Sigil::Pipe) {
+                    else_sub.had_error = true;
+                    let (text, span) = else_sub.peek_text_span();
+                    DiagnosticBuilder::error(else_sub.db, "expected '|' after binding name")
+                        .code("P020")
+                        .primary_label(text, span, "expected '|'")
+                        .emit_parse();
+                }
                 Some(binding)
             } else {
                 None

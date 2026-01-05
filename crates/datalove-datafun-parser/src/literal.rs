@@ -88,7 +88,8 @@ impl<'db> Parser<'db> {
                             if let Some(TreeToken::Token(next)) = self.peek() {
                                 if let Some(decimal) = next.word_str(self.db) {
                                     if decimal.chars().all(|c| c.is_ascii_digit()) {
-                                        let decimal_name = self.need_name();
+                                        // Safe: we verified above that peek is a word token.
+                                        let decimal_name = self.eat_name().X();
                                         let float_str = format!("-{}.{}", word, decimal_name.as_str(self.db));
                                         let value = InternedText::new(self.db, float_str.S());
                                         return ast::ExprFunKind::Float(ast::ExprFloat::new(self.db, heap, type_hint, value));
@@ -197,7 +198,8 @@ impl<'db> Parser<'db> {
                                 if let Some(TreeToken::Token(next)) = self.peek() {
                                     if let Some(decimal) = next.word_str(self.db) {
                                         if decimal.chars().all(|c| c.is_ascii_digit()) {
-                                            let decimal_name = self.need_name();
+                                            // Safe: we verified above that peek is a word token.
+                                            let decimal_name = self.eat_name().X();
                                             let float_str = format!("{}.{}", word, decimal_name.as_str(self.db));
                                             let value = InternedText::new(self.db, float_str.S());
                                             return ast::ExprFunKind::Float(ast::ExprFloat::new(self.db, heap, type_hint, value));
@@ -404,7 +406,24 @@ impl<'db> Parser<'db> {
         type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
     ) -> ast::ExprFunKind<'db> {
         self.eat_word("enum");
-        let variant_name = self.need_name();
+        let variant_name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                self.had_error = true;
+                let (text, span) = self.peek_text_span();
+                let message = "expected variant name after 'enum'";
+                DiagnosticBuilder::error(self.db, message)
+                    .code("P021")
+                    .primary_label(text.clone(), span.clone(), "expected variant name")
+                    .emit_parse();
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
+                    self.db,
+                    text,
+                    span,
+                    InternedText::new(self.db, message.S()),
+                ));
+            }
+        };
         let payload = self.parse_optional_enum_payload();
         ast::ExprFunKind::AnonEnum(ast::ExprAnonEnum::new(
             self.db, heap, type_hint, variant_name, payload

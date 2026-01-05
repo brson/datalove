@@ -1,0 +1,33 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "expected variant name after 'enum'"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P021",
+      "labels": [
+        {
+          "message": "expected variant name",
+          "span": [
+            0,
+            0
+          ],
+          "text": ""
+        }
+      ],
+      "message": "expected variant name after 'enum'"
+    }
+  ]
+}

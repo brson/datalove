@@ -74,13 +74,6 @@ impl<'db> Parser<'db> {
         )
     }
 
-    /// Consume a specific sigil or panic.
-    pub(super) fn need_sigil(&mut self, sigil: Sigil) {
-        if !self.eat_sigil(sigil) {
-            panic!("expected sigil {}", sigil.as_str());
-        }
-    }
-
     /// Check if looking at a colon type hint.
     pub(super) fn peek_colon_type_hint(&self) -> bool {
         self.peek_sigil(Sigil::Colon)

@@ -1,0 +1,38 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [],
+        "kind": "Fun",
+        "name": "f",
+        "params": [
+          {
+            "mode": "In",
+            "name": "<error>",
+            "type_hint": {
+              "heap": "Omitted",
+              "type_hint": "I32"
+            }
+          }
+        ],
+        "return_type": null
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P011",
+      "labels": [
+        {
+          "message": "expected parameter name",
+          "span": [
+            6,
+            7
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "expected parameter name"
+    }
+  ]
+}

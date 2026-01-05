@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "expected import space name after 'require module'"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P013",
+      "labels": [
+        {
+          "message": "expected import space name",
+          "span": [
+            15,
+            16
+          ],
+          "text": "/"
+        }
+      ],
+      "message": "expected import space name after 'require module'"
+    }
+  ]
+}

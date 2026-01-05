@@ -1,0 +1,34 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "condition": {
+          "expr": {
+            "heap": "Omitted",
+            "kind": "True",
+            "type_hint": null
+          }
+        },
+        "else_body": [],
+        "kind": "If",
+        "then_body": []
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P019",
+      "labels": [
+        {
+          "message": "expected binding name",
+          "span": [
+            14,
+            15
+          ],
+          "text": "|"
+        }
+      ],
+      "message": "expected binding name after '|'"
+    }
+  ]
+}

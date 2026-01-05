@@ -93,21 +93,6 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
             None
         }
     }
-
-    /// Consume a specific word or panic.
-    fn need_word(&mut self, word: &str) {
-        if !self.eat_word(word) {
-            panic!("expected word '{}'", word);
-        }
-    }
-
-    /// Consume a word and return it as InternedText, panicking if not a word.
-    fn need_name(&mut self) -> InternedText<'db> {
-        match self.eat_name() {
-            Some(name) => name,
-            None => panic!("expected name"),
-        }
-    }
 }
 
 // Blanket implementation.

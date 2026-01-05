@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "expected module name after 'import'"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P017",
+      "labels": [
+        {
+          "message": "expected module name",
+          "span": [
+            7,
+            8
+          ],
+          "text": "."
+        }
+      ],
+      "message": "expected module name after 'import'"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "expected function name after 'fun'"
+      },
+      {
+        "kind": "ParseError",
+        "message": "unexpected statement"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P010",
+      "labels": [
+        {
+          "message": "expected function name",
+          "span": [
+            0,
+            0
+          ],
+          "text": ""
+        }
+      ],
+      "message": "expected function name after 'fun'"
+    },
+    {
+      "code": "P001",
+      "labels": [
+        {
+          "message": "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', or 'continue'",
+          "span": [
+            7,
+            10
+          ],
+          "text": "end"
+        }
+      ],
+      "message": "unexpected statement"
+    }
+  ]
+}

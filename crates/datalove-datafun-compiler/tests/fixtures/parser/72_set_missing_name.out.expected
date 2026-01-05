@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "expected name after 'set'"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P009",
+      "labels": [
+        {
+          "message": "expected name",
+          "span": [
+            4,
+            5
+          ],
+          "text": "="
+        }
+      ],
+      "message": "expected name after 'set'"
+    }
+  ]
+}

@@ -175,7 +175,8 @@ impl<'db> Parser<'db> {
                         if is_float {
                             // Negative float: -number.number
                             self.eat_sigil(Sigil::Dot);
-                            let decimal_word = self.need_name();
+                            // Safe: is_float checked that next token is a word with all digits.
+                            let decimal_word = self.eat_name().X();
                             let float_str = format!("-{}.{}", word, decimal_word.as_str(self.db));
                             let value = InternedText::new(self.db, float_str.S());
                             return ast::Expr::Float(ast::ExprFloat::new(self.db, value));
@@ -473,7 +474,8 @@ impl<'db> Parser<'db> {
                                         if decimal_part.chars().all(|c| c.is_ascii_digit()) {
                                             // It's a float!
                                             self.eat_sigil(Sigil::Dot);
-                                            let decimal_word = self.need_name();
+                                            // Safe: verified above that next token is a word with all digits.
+                                            let decimal_word = self.eat_name().X();
                                             let float_str = format!("{}.{}", word, decimal_word.as_str(self.db));
                                             let value = InternedText::new(self.db, float_str.S());
                                             return ast::Expr::Float(ast::ExprFloat::new(self.db, value));

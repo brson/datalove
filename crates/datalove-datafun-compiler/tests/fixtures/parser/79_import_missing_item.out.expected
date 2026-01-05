@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "expected item name after '.'"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P018",
+      "labels": [
+        {
+          "message": "expected item name",
+          "span": [
+            0,
+            0
+          ],
+          "text": ""
+        }
+      ],
+      "message": "expected item name after '.'"
+    }
+  ]
+}
