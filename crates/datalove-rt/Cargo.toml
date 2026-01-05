@@ -14,7 +14,6 @@ slow_tests = []
 [dependencies]
 datalove-rtdt.path = "../datalove-rtdt"
 libc = "0.2"
-backtrace = "0.3"
 
 [dev-dependencies]
 proptest = "1.5"

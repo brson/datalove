@@ -69,7 +69,7 @@ mod unix_impl {
         size: u32,
         align: u32,
         count: u32,
-        backtrace: Option<backtrace::Backtrace>,
+        backtrace: Option<std::backtrace::Backtrace>,
     }
 
     /// Local allocator state for the Unix platform.
@@ -127,7 +127,7 @@ mod unix_impl {
                 // Track allocation for leak detection.
                 if !ptr.is_null() {
                     let backtrace = if self.leak_check_mode == LeakCheckMode::PanicWithBacktrace {
-                        Some(backtrace::Backtrace::new())
+                        Some(std::backtrace::Backtrace::capture())
                     } else {
                         None
                     };
@@ -340,7 +340,7 @@ mod unix_impl {
                     ));
 
                     if let Some(ref bt) = info.backtrace {
-                        details.push_str(&format!("\n    Backtrace:\n{:?}", bt));
+                        details.push_str(&format!("\n    Backtrace:\n{}", bt));
                     }
                 }
 

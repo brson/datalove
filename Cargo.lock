@@ -1251,7 +1251,6 @@ dependencies = [
 name = "datalove-rt"
 version = "0.1.0"
 dependencies = [
- "backtrace",
  "datalove-rtdt",
  "libc",
  "proptest",
