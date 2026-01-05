@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+// Test reading a mut param (without writing).
+// Mut params should be readable just like ref params.
+fun read_and_add(mut x: int): int
+    ret x + @10
+end fun
+
+fun test(): int
+    var n: int = @42
+    ret read_and_add(n)
+end fun
+
+debuglog test()

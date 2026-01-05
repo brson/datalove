@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+// Test mut param write with linear type (int).
+fun set_to_100(mut x: int): @bool
+    set x = @100
+    ret @true
+end fun
+
+fun test(): int
+    var n: int = @5
+    let _ok = set_to_100(n)
+    ret n
+end fun
+
+debuglog test()
