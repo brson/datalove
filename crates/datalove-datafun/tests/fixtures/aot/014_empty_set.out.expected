@@ -1,0 +1,18 @@
+AotAnalysis(
+    sections: [
+        AotSectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "ParseError",
+                errors: [
+                    "expected <> after set keyword",
+                ],
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

@@ -28,6 +28,20 @@ pub struct RuntimeImports {
     pub string_create: FuncId,
     /// `dtlv_rti_string_push_bytes_local(rt: LocalRtHandle, value_mut: *mut u8, tydesc: *const TyDesc, bytes: *const u8, len: u32) -> RtStatus`
     pub string_push_bytes: FuncId,
+
+    // Collection functions.
+    /// `dtlv_rti_list_create_local(rt, value_out, tydesc) -> RtStatus`
+    pub list_create: FuncId,
+    /// `dtlv_rti_list_push_local(rt, list_value_mut, list_tydesc, element_in, element_tydesc) -> RtStatus`
+    pub list_push: FuncId,
+    /// `dtlv_rti_btreeset_create_local(rt, value_out, tydesc) -> RtStatus`
+    pub set_create: FuncId,
+    /// `dtlv_rti_btreeset_insert_local(rt, set_value_mut, set_tydesc, element_in, element_tydesc, bool_out) -> RtStatus`
+    pub set_insert: FuncId,
+    /// `dtlv_rti_btreemap_create_local(rt, value_out, tydesc) -> RtStatus`
+    pub map_create: FuncId,
+    /// `dtlv_rti_btreemap_insert_local(rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc) -> RtStatus`
+    pub map_insert: FuncId,
 }
 
 impl RuntimeImports {
@@ -126,6 +140,87 @@ impl RuntimeImports {
                 .map_err(|e| AotError::Module(format!("declare dtlv_rti_string_push_bytes_local: {}", e)))?
         };
 
+        // dtlv_rti_list_create_local(rt, value_out, tydesc) -> u8
+        let list_create = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value_out
+            sig.params.push(AbiParam::new(PTR_TYPE)); // tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_list_create_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_list_create_local: {}", e)))?
+        };
+
+        // dtlv_rti_list_push_local(rt, list_value_mut, list_tydesc, element_in, element_tydesc) -> u8
+        let list_push = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // list_value_mut
+            sig.params.push(AbiParam::new(PTR_TYPE)); // list_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // element_in
+            sig.params.push(AbiParam::new(PTR_TYPE)); // element_tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_list_push_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_list_push_local: {}", e)))?
+        };
+
+        // dtlv_rti_btreeset_create_local(rt, value_out, tydesc) -> u8
+        let set_create = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value_out
+            sig.params.push(AbiParam::new(PTR_TYPE)); // tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_btreeset_create_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_btreeset_create_local: {}", e)))?
+        };
+
+        // dtlv_rti_btreeset_insert_local(rt, set_value_mut, set_tydesc, element_in, element_tydesc, bool_out) -> u8
+        let set_insert = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // set_value_mut
+            sig.params.push(AbiParam::new(PTR_TYPE)); // set_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // element_in
+            sig.params.push(AbiParam::new(PTR_TYPE)); // element_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // bool_out
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_btreeset_insert_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_btreeset_insert_local: {}", e)))?
+        };
+
+        // dtlv_rti_btreemap_create_local(rt, value_out, tydesc) -> u8
+        let map_create = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value_out
+            sig.params.push(AbiParam::new(PTR_TYPE)); // tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_btreemap_create_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_btreemap_create_local: {}", e)))?
+        };
+
+        // dtlv_rti_btreemap_insert_local(rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc) -> u8
+        let map_insert = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // map_value_mut
+            sig.params.push(AbiParam::new(PTR_TYPE)); // map_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // key_in
+            sig.params.push(AbiParam::new(PTR_TYPE)); // key_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value_in
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value_tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_btreemap_insert_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_btreemap_insert_local: {}", e)))?
+        };
+
         Ok(Self {
             init,
             shutdown,
@@ -135,6 +230,12 @@ impl RuntimeImports {
             mem_alloc_raw,
             string_create,
             string_push_bytes,
+            list_create,
+            list_push,
+            set_create,
+            set_insert,
+            map_create,
+            map_insert,
         })
     }
 }

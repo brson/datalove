@@ -301,6 +301,43 @@ After: `drop s0` emitted before `unit_end`
 - Script-level Int and String bindings properly destroyed at unit end
 - All 11 AOT test fixtures pass
 
+### Phase 3.9: Collection Type Construction ✓ COMPLETE
+
+**Commit:**
+- (pending) - Collection type construction and destruction
+
+**Modified files:**
+- `crates/datalove-datafun-aot-cranelift/src/runtime.rs`
+  - Added `dtlv_rti_list_create_local`, `dtlv_rti_list_push_local`
+  - Added `dtlv_rti_btreeset_create_local`, `dtlv_rti_btreeset_insert_local`
+  - Added `dtlv_rti_btreemap_create_local`, `dtlv_rti_btreemap_insert_local`
+
+- `crates/datalove-datafun-aot-cranelift/src/tydesc_emit.rs`
+  - Added `emit_list_tydesc`, `emit_set_tydesc`, `emit_map_tydesc` methods
+  - TyDescs for collections include relocations pointing to element type TyDescs
+  - Updated `can_emit` to recursively check collection element types
+
+- `crates/datalove-datafun-aot-cranelift/src/codegen.rs`
+  - Added `compile_list_new` - creates empty list, pushes each element
+  - Added `compile_set_new` - creates empty set, inserts each element
+  - Added `compile_map_new` - creates empty map, inserts each key-value pair
+
+**New test fixtures:**
+- `012_empty_list.world` - empty list
+- `013_list_with_elements.world` - list with elements `[@1, @2, @3]`
+- `014_empty_set.world` - empty set
+- `015_set_with_elements.world` - set with elements `{@10, @20, @30}`
+- `016_empty_map.world` - empty map
+- `017_map_with_entries.world` - map with entries `{@1 = @100, @2 = @200}`
+
+**What works:**
+- `ListNew` instruction: creates empty list, pushes elements via runtime calls
+- `SetNew` instruction: creates empty set, inserts elements via runtime calls
+- `MapNew` instruction: creates empty map, inserts key-value pairs via runtime calls
+- TyDesc emission with relocations for element type pointers
+- Collection destruction via existing `Drop` instruction
+- All 17 AOT test fixtures pass with leak checking
+
 ### Phases 4-8: Feature Development (Test-Driven)
 
 Order TBD based on what the test harness reveals. Expected needs:
@@ -329,13 +366,15 @@ Order TBD based on what the test harness reveals. Expected needs:
 - `UnwrapOption`, `UnwrapResult`
 - `TryReturn` terminator
 
-**Runtime Types** (partial)
+**Runtime Types** ✓ COMPLETE
 - `Int`/`String` constants - ✓
-- Collection operations (List, Set, Map) - not yet
+- Collection construction (List, Set, Map) - ✓
+- Collection destruction via `Drop` - ✓
 
 **Advanced**
 - Cross-unit references
 - Phi nodes for loops
+- Clone instruction
 
 ---
 
