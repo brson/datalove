@@ -3,7 +3,7 @@
 //! Handles lowering of script units (fragments and expressions).
 
 use std::collections::HashMap;
-use datalove_datafun_ast::ast::{Statement, ExprFun};
+use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunKind};
 use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::{TypecheckResult, ResolvedCallTarget};
 use datalove_datafun_ir::{
@@ -362,11 +362,30 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::DebugLog(stmt) => {
-            let value_id = lower_expression(ctx, stmt.value(ctx.db))?;
+            let debug_expr = stmt.value(ctx.db);
+            let value_id = lower_expression(ctx, debug_expr)?;
             ctx.emit(Instruction::DebugLog {
                 operand: Operand::Value(value_id),
             });
-            // Note: no drop - debuglog borrows, does not consume.
+            // Check if expression is a temporary that needs dropping.
+            // Simple name expressions that resolve to Value bindings don't need drops
+            // (they're tracked separately). All other expressions produce temporaries.
+            let needs_drop = match debug_expr.expr(ctx.db) {
+                ExprFunKind::Name(name) => {
+                    // Check if this name resolves to a Value (not Slot/Param/External).
+                    let name_str = name.text(ctx.db);
+                    !matches!(ctx.lookup_var(name_str), Some(Operand::Value(_)))
+                }
+                _ => true,
+            };
+            if needs_drop {
+                let expr_type = ctx.expr_type(debug_expr);
+                if !expr_type.is_copy() {
+                    ctx.emit(Instruction::Drop {
+                        operand: Operand::Value(value_id),
+                    });
+                }
+            }
             Ok(())
         }
         Statement::ParseError(_) => {

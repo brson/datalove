@@ -42,6 +42,18 @@ pub struct RuntimeImports {
     pub map_create: FuncId,
     /// `dtlv_rti_btreemap_insert_local(rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc) -> RtStatus`
     pub map_insert: FuncId,
+
+    // Int (bigint) arithmetic functions.
+    /// `dtlv_rti_int_add(rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> RtStatus`
+    pub int_add: FuncId,
+    /// `dtlv_rti_int_sub(rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> RtStatus`
+    pub int_sub: FuncId,
+    /// `dtlv_rti_int_mul(rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> RtStatus`
+    pub int_mul: FuncId,
+    /// `dtlv_rti_int_div_checked(rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> RtStatus`
+    pub int_div: FuncId,
+    /// `dtlv_rti_int_neg(rt, a_in, a_tydesc, result_out, result_tydesc) -> RtStatus`
+    pub int_neg: FuncId,
 }
 
 impl RuntimeImports {
@@ -221,6 +233,50 @@ impl RuntimeImports {
                 .map_err(|e| AotError::Module(format!("declare dtlv_rti_btreemap_insert_local: {}", e)))?
         };
 
+        // Int (bigint) binary operations: (rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> u8
+        let int_binop_sig = || {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // a_in
+            sig.params.push(AbiParam::new(PTR_TYPE)); // a_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // b_in
+            sig.params.push(AbiParam::new(PTR_TYPE)); // b_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // result_out
+            sig.params.push(AbiParam::new(PTR_TYPE)); // result_tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            sig
+        };
+
+        let int_add = module
+            .declare_function("dtlv_rti_int_add", Linkage::Import, &int_binop_sig())
+            .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_add: {}", e)))?;
+
+        let int_sub = module
+            .declare_function("dtlv_rti_int_sub", Linkage::Import, &int_binop_sig())
+            .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_sub: {}", e)))?;
+
+        let int_mul = module
+            .declare_function("dtlv_rti_int_mul", Linkage::Import, &int_binop_sig())
+            .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_mul: {}", e)))?;
+
+        let int_div = module
+            .declare_function("dtlv_rti_int_div_checked", Linkage::Import, &int_binop_sig())
+            .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_div_checked: {}", e)))?;
+
+        // Int (bigint) unary operation: (rt, a_in, a_tydesc, result_out, result_tydesc) -> u8
+        let int_neg = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // a_in
+            sig.params.push(AbiParam::new(PTR_TYPE)); // a_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // result_out
+            sig.params.push(AbiParam::new(PTR_TYPE)); // result_tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_int_neg", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_neg: {}", e)))?
+        };
+
         Ok(Self {
             init,
             shutdown,
@@ -236,6 +292,11 @@ impl RuntimeImports {
             set_insert,
             map_create,
             map_insert,
+            int_add,
+            int_sub,
+            int_mul,
+            int_div,
+            int_neg,
         })
     }
 }

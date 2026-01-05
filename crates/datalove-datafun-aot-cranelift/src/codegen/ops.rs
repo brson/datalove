@@ -6,6 +6,7 @@ use cranelift_module::Module;
 
 use datalove_datafun_ir::{BinOp, IrType, Operand, UnaryOp, ValueId};
 
+use crate::types::PTR_TYPE;
 use crate::AotError;
 
 use super::FunctionCompiler;
@@ -23,12 +24,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Get the type of the result to determine how to compile.
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
-        // Check for runtime types that need special handling.
+        // Int (bigint) operations require runtime calls.
+        // We require both operands to also be Int (widening from fixed-width not yet supported).
         if matches!(dest_ty, IrType::Int) {
-            return Err(AotError::Unsupported(format!(
-                "BinOp with Int (bigint) result type - requires runtime call: {:?}",
-                op
-            )));
+            let lhs_ty = self.get_operand_type(lhs)?;
+            let rhs_ty = self.get_operand_type(rhs)?;
+
+            if matches!(lhs_ty, IrType::Int) && matches!(rhs_ty, IrType::Int) {
+                return self.compile_int_binop(builder, dest, op, lhs, rhs);
+            } else {
+                return Err(AotError::Unsupported(format!(
+                    "Int BinOp with widening from fixed-width types not yet supported: {:?} {:?} {:?}",
+                    lhs_ty, op, rhs_ty
+                )));
+            }
         }
 
         let lhs_val = self.get_operand_value(builder, lhs)?;
@@ -159,8 +168,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         op: UnaryOp,
         operand: &Operand,
     ) -> Result<(), AotError> {
-        let val = self.get_operand_value(builder, operand)?;
         let dest_ty = &self.func.value_types[dest.0 as usize];
+
+        // Int (bigint) negation requires runtime call.
+        if matches!(dest_ty, IrType::Int) && matches!(op, UnaryOp::Neg) {
+            return self.compile_int_neg(builder, dest, operand);
+        }
+
+        let val = self.get_operand_value(builder, operand)?;
         let is_float = matches!(dest_ty, IrType::F32);
 
         let cl_val = match op {
@@ -182,6 +197,119 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         self.values.insert(dest, cl_val);
+        Ok(())
+    }
+
+    /// Compile a binary operation on Int (bigint) via runtime call.
+    fn compile_int_binop(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        op: BinOp,
+        lhs: &Operand,
+        rhs: &Operand,
+    ) -> Result<(), AotError> {
+        // Get runtime imports and handle.
+        let runtime = self.runtime.ok_or_else(|| {
+            AotError::Codegen("Int BinOp requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            AotError::Codegen("Int BinOp requires runtime handle".into())
+        })?;
+
+        // Select the runtime function based on the operation.
+        let func_id = match op {
+            BinOp::Add => runtime.int_add,
+            BinOp::Sub => runtime.int_sub,
+            BinOp::Mul => runtime.int_mul,
+            BinOp::Div => runtime.int_div,
+            _ => {
+                return Err(AotError::Unsupported(format!(
+                    "Int binop not yet supported: {:?}",
+                    op
+                )));
+            }
+        };
+
+        // Get pointers to operands.
+        let lhs_ptr = self.get_operand_ptr(builder, lhs)?;
+        let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
+
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            AotError::Codegen("no frame slot for Int BinOp result".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let result_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Get Int TyDesc.
+        let int_tydesc_id = self.tydesc_emitter.get(&IrType::Int).ok_or_else(|| {
+            AotError::Codegen("TyDesc not found for Int".into())
+        })?;
+        let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
+        let int_tydesc_ptr = builder.ins().global_value(PTR_TYPE, int_tydesc_gv);
+
+        // Call runtime function: (rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> status
+        let func_ref = self.module.declare_func_in_func(func_id, builder.func);
+        builder.ins().call(func_ref, &[
+            rt_handle,
+            lhs_ptr,
+            int_tydesc_ptr,
+            rhs_ptr,
+            int_tydesc_ptr,
+            result_ptr,
+            int_tydesc_ptr,
+        ]);
+
+        // Store pointer to result.
+        self.values.insert(dest, result_ptr);
+        Ok(())
+    }
+
+    /// Compile Int (bigint) negation via runtime call.
+    fn compile_int_neg(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        operand: &Operand,
+    ) -> Result<(), AotError> {
+        // Get runtime imports and handle.
+        let runtime = self.runtime.ok_or_else(|| {
+            AotError::Codegen("Int Neg requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            AotError::Codegen("Int Neg requires runtime handle".into())
+        })?;
+
+        // Get pointer to operand.
+        let operand_ptr = self.get_operand_ptr(builder, operand)?;
+
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            AotError::Codegen("no frame slot for Int Neg result".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let result_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Get Int TyDesc.
+        let int_tydesc_id = self.tydesc_emitter.get(&IrType::Int).ok_or_else(|| {
+            AotError::Codegen("TyDesc not found for Int".into())
+        })?;
+        let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
+        let int_tydesc_ptr = builder.ins().global_value(PTR_TYPE, int_tydesc_gv);
+
+        // Call runtime function: (rt, a_in, a_tydesc, result_out, result_tydesc) -> status
+        let func_ref = self.module.declare_func_in_func(runtime.int_neg, builder.func);
+        builder.ins().call(func_ref, &[
+            rt_handle,
+            operand_ptr,
+            int_tydesc_ptr,
+            result_ptr,
+            int_tydesc_ptr,
+        ]);
+
+        // Store pointer to result.
+        self.values.insert(dest, result_ptr);
         Ok(())
     }
 }

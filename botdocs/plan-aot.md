@@ -180,7 +180,7 @@ Each "unsupported instruction" error becomes the next work item.
 1. Wasteful temp stack slots - creates new slot per spill in `get_operand_ptr`
 2. UnitEarlyReturn terminator not implemented
 3. No aggregate fields in Pack (needs memcpy)
-4. BinOp with bigint not implemented
+4. Int BinOp widening (u32->Int) not implemented - operands must already be Int
 5. Parameter passing modes (In/Ref/Mut/Out) not implemented
 
 **Not applicable for AOT:**

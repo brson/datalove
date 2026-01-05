@@ -1,0 +1,26 @@
+----------
+scriptunit-fragment
+----------
+
+// Test Int (bigint) arithmetic operations in function context.
+
+fun add_ints(a: int, b: int): int
+    ret a + b
+end fun
+
+fun sub_ints(a: int, b: int): int
+    ret a - b
+end fun
+
+fun mul_ints(a: int, b: int): int
+    ret a * b
+end fun
+
+fun neg_int(a: int): int
+    ret -a
+end fun
+
+debuglog add_ints(@10, @32)
+debuglog sub_ints(@100, @42)
+debuglog mul_ints(@7, @6)
+debuglog neg_int(@42)

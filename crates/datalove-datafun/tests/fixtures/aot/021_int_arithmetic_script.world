@@ -1,0 +1,24 @@
+----------
+scriptunit-fragment
+----------
+
+// Test Int (bigint) arithmetic operations in script context.
+
+// Addition.
+let a: int = @10
+let b: int = @32
+debuglog (a + b)
+
+// Subtraction.
+let c: int = @100
+let d: int = @42
+debuglog (c - d)
+
+// Multiplication.
+let e: int = @7
+let f: int = @6
+debuglog (e * f)
+
+// Negation.
+let g: int = @42
+debuglog (-g)

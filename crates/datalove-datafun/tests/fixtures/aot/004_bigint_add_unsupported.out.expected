@@ -8,11 +8,11 @@ AotAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 32u32\n    v2 = add v0, v1\n    debuglog v2\n    unit_end\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 32u32\n    v2 = add v0, v1\n    debuglog v2\n    drop v2\n    unit_end\n",
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Error",
-                message: "unsupported: BinOp with Int (bigint) result type - requires runtime call: Add",
+                message: "unsupported: Int BinOp with widening from fixed-width types not yet supported: U32 Add U32",
             )),
             output: "",
         ),
