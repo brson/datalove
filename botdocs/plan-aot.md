@@ -184,7 +184,36 @@ Each "unsupported instruction" error becomes the next work item.
 5. No aggregate fields in Pack (needs memcpy)
 6. Int/String constants require runtime calls
 7. BinOp with bigint not implemented
-8. External/Module function calls need FunctionRegistry integration
+8. Parameter passing modes (In/Ref/Mut/Out) not implemented
+
+### Phase 3.6: Module Function Calls ✓ COMPLETE
+
+**Commit:**
+- (pending) - Module function calls via three-pass compilation
+
+**Modified files:**
+- `crates/datalove-datafun-aot-cranelift/src/codegen.rs`
+  - Added `module_funcs` and `registry` fields to FunctionCompiler
+  - Added `set_module_funcs()` method
+  - Implemented `FuncRef::Module` case in `resolve_func_ref`
+- `crates/datalove-datafun-aot-cranelift/src/lib.rs`
+  - Implemented three-pass compilation in `compile_script_unit_with_types`
+  - Pass 1: Declare local functions
+  - Pass 2: Declare module functions (named `__mod_{module_id}_{func_name}`)
+  - Pass 3a: Compile local functions with both maps
+  - Pass 3b: Compile module functions with both maps
+- `crates/datalove-datafun-ir/src/registry.rs`
+  - Added `iter_module_functions_with_ids()` method
+
+**New test:**
+- `crates/datalove-datafun/tests/fixtures/aot/007_module_function_call.world`
+  - Module with `identity(x: u32): u32` function
+  - Script calls module function, output verified as `@42`
+
+**What works:**
+- Full pipeline: module function call → AOT → link → execute → correct output
+- Three-pass compilation handles mutual recursion between local and module functions
+- Module functions get unique names `__mod_0_identity` etc.
 
 ### Phases 4-8: Feature Development (Test-Driven)
 
@@ -195,12 +224,13 @@ Order TBD based on what the test harness reveals. Expected needs:
 - `Operand::Slot` support - ✓
 - Mutable variable support - ✓
 
-**Function Calls** (partially done)
-- `Call` instruction - ✓ implemented for local functions
+**Function Calls** (mostly done)
+- `Call` instruction - ✓ implemented for local and module functions
 - rt_handle threading - ✓ implicit first param
-- Two-pass compilation for mutual recursion
-- External/Module function calls via FunctionRegistry
-- Parameter passing modes (In/Ref/Mut/Out)
+- Two-pass compilation for local functions - ✓
+- Three-pass compilation for module functions - ✓
+- External script unit calls - not needed (single script units only)
+- Parameter passing modes (In/Ref/Mut/Out) - not yet implemented
 
 **Option/Result Types**
 - `WrapSome`, `WrapOk`, `WrapErr`

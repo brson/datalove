@@ -56,6 +56,11 @@ impl FunctionRegistry {
         self.module_functions.values()
     }
 
+    /// Iterate over all module functions with their IDs.
+    pub fn iter_module_functions_with_ids(&self) -> impl Iterator<Item = ((IrModuleId, FuncId), &IrFunction)> {
+        self.module_functions.iter().map(|((m, f), func)| ((*m, *f), func))
+    }
+
     /// Iterate over all unit functions.
     pub fn iter_unit_functions(&self) -> impl Iterator<Item = &IrFunction> {
         self.unit_functions.iter().flat_map(|v| v.iter())

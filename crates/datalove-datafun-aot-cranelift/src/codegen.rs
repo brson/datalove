@@ -15,8 +15,9 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_module::{FuncId, Linkage, Module};
 
 use datalove_datafun_ir::{
-    BinOp, BlockId, ConstValue, FuncRef, IrFunction, IrType, Instruction,
-    Operand, ParamId, SlotDest, SlotId, Terminator, UnaryOp, ValueId,
+    BinOp, BlockId, ConstValue, FuncRef, FunctionRegistry, IrFunction,
+    IrModuleId, IrType, Instruction, Operand, ParamId, SlotDest, SlotId,
+    Terminator, UnaryOp, ValueId,
 };
 
 use crate::layout::FrameLayout;
@@ -76,6 +77,11 @@ pub struct FunctionCompiler<'a, M: Module> {
     param_values: HashMap<ParamId, cl_ir::Value>,
     /// Mapping from local IR FuncId to Cranelift FuncId.
     local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId>,
+    /// Mapping from module function (IrModuleId, FuncId) to Cranelift FuncId.
+    module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::FuncId), FuncId>,
+    /// Function registry for looking up module functions.
+    #[allow(dead_code)]
+    registry: Option<&'a FunctionRegistry>,
     /// Cranelift variables for mutable slots (SlotId).
     #[allow(dead_code)]
     slot_vars: HashMap<SlotId, Variable>,
@@ -114,6 +120,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             blocks: HashMap::new(),
             param_values: HashMap::new(),
             local_funcs: HashMap::new(),
+            module_funcs: HashMap::new(),
+            registry: None,
             slot_vars: HashMap::new(),
             frame_slot: None,
             next_var: 0,
@@ -147,6 +155,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             blocks: HashMap::new(),
             param_values: HashMap::new(),
             local_funcs: HashMap::new(),
+            module_funcs: HashMap::new(),
+            registry: None,
             slot_vars: HashMap::new(),
             frame_slot: None,
             next_var: 0,
@@ -165,6 +175,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         module: &'a mut M,
         runtime: RuntimeImports,
         tydesc_emitter: TyDescEmitter,
+        registry: Option<&'a FunctionRegistry>,
     ) -> Self {
         let layout = FrameLayout::compute(
             &func.param_types,
@@ -181,6 +192,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             blocks: HashMap::new(),
             param_values: HashMap::new(),
             local_funcs: HashMap::new(),
+            module_funcs: HashMap::new(),
+            registry,
             slot_vars: HashMap::new(),
             frame_slot: None,
             next_var: 0,
@@ -498,10 +511,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 )))
             }
             FuncRef::Module { module, func } => {
-                Err(AotError::Unsupported(format!(
-                    "module function call (module={:?}, func={:?}) not yet implemented",
-                    module, func
-                )))
+                // Look up in module_funcs (pre-declared in three-pass compilation).
+                self.module_funcs.get(&(*module, *func)).copied().ok_or_else(|| {
+                    AotError::Unsupported(format!(
+                        "module function ({:?}, {:?}) not pre-compiled",
+                        module, func
+                    ))
+                })
             }
         }
     }
@@ -523,6 +539,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Use this for two-pass compilation where all functions are declared first.
     pub fn set_local_funcs(&mut self, local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId>) {
         self.local_funcs = local_funcs;
+    }
+
+    /// Set all module function mappings at once.
+    ///
+    /// Use this for three-pass compilation where all module functions are declared first.
+    pub fn set_module_funcs(&mut self, module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::FuncId), FuncId>) {
+        self.module_funcs = module_funcs;
     }
 
     /// Compile a SlotStore instruction.

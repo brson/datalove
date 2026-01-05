@@ -20,7 +20,7 @@ use cranelift_object::{ObjectBuilder, ObjectModule, ObjectProduct};
 use target_lexicon::Triple;
 
 use datalove_datafun_ir::{
-    IrBlock, IrFunction, IrModule, IrScriptUnit, IrType, Terminator,
+    IrBlock, IrFunction, IrModule, IrModuleId, IrScriptUnit, IrType, Terminator,
 };
 
 /// Errors during AOT compilation.
@@ -129,7 +129,8 @@ impl AotCompiler {
     /// - `main()` - Entry point that initializes runtime, runs body, cleans up
     pub fn compile_script_unit(&mut self, unit: &IrScriptUnit) -> Result<ObjectProduct, AotError> {
         let types = tydesc_emit::collect_types_from_script_unit(unit);
-        self.compile_script_unit_with_types(unit, types)
+        let empty_registry = datalove_datafun_ir::FunctionRegistry::new();
+        self.compile_script_unit_with_types(unit, types, &empty_registry)
     }
 
     /// Compile an IR script unit with pre-collected world types.
@@ -144,11 +145,12 @@ impl AotCompiler {
         &mut self,
         unit: &IrScriptUnit,
         world_funcs: impl Iterator<Item = &'a IrFunction>,
+        registry: &datalove_datafun_ir::FunctionRegistry,
     ) -> Result<ObjectProduct, AotError> {
         // Collect types from world functions and the script unit.
         let mut types = tydesc_emit::collect_types_from_script_unit(unit);
         tydesc_emit::collect_types_from_functions(world_funcs, &mut types);
-        self.compile_script_unit_with_types(unit, types)
+        self.compile_script_unit_with_types(unit, types, registry)
     }
 
     /// Compile an IR script unit with pre-collected types.
@@ -156,6 +158,7 @@ impl AotCompiler {
         &mut self,
         unit: &IrScriptUnit,
         types: std::collections::HashSet<IrType>,
+        registry: &datalove_datafun_ir::FunctionRegistry,
     ) -> Result<ObjectProduct, AotError> {
         let obj_builder = ObjectBuilder::new(
             self.isa.clone(),
@@ -173,7 +176,7 @@ impl AotCompiler {
         let mut tydesc_emitter = tydesc_emit::TyDescEmitter::new();
         tydesc_emitter.emit_all(&mut obj_module, types)?;
 
-        // === Two-pass compilation for local functions ===
+        // === Three-pass compilation for local and module functions ===
 
         // Pass 1: Declare all local functions to get Cranelift FuncIds.
         let mut local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId> = HashMap::new();
@@ -185,7 +188,18 @@ impl AotCompiler {
             local_funcs.insert(func.id, cl_func_id);
         }
 
-        // Pass 2: Compile all local functions with the pre-declared FuncIds.
+        // Pass 2: Declare all module functions to get Cranelift FuncIds.
+        let mut module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::FuncId), FuncId> = HashMap::new();
+        for ((module_id, func_id), ir_func) in registry.iter_module_functions_with_ids() {
+            let name = format!("__mod_{}_{}", module_id.0, ir_func.name);
+            let sig = codegen::build_signature_for_func(ir_func, self.isa.as_ref());
+            let cl_func_id = obj_module
+                .declare_function(&name, Linkage::Local, &sig)
+                .map_err(|e| AotError::Module(format!("declare module function {}: {}", name, e)))?;
+            module_funcs.insert((module_id, func_id), cl_func_id);
+        }
+
+        // Pass 3a: Compile all local functions with pre-declared FuncIds.
         for func in &unit.functions {
             let cl_func_id = local_funcs[&func.id];
             let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
@@ -194,23 +208,45 @@ impl AotCompiler {
                 &mut obj_module,
                 runtime.clone(),
                 tydesc_emitter.clone(),
+                Some(registry),
             );
             compiler.set_local_funcs(local_funcs.clone());
+            compiler.set_module_funcs(module_funcs.clone());
+            compiler.compile_predeclared(cl_func_id)?;
+        }
+
+        // Pass 3b: Compile all module functions with pre-declared FuncIds.
+        for ((module_id, func_id), &cl_func_id) in &module_funcs {
+            let ir_func = registry.get_module_function(*module_id, *func_id)
+                .ok_or_else(|| AotError::Module(format!("module function not found: {:?}, {:?}", module_id, func_id)))?;
+
+            let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
+                ir_func,
+                self.isa.as_ref(),
+                &mut obj_module,
+                runtime.clone(),
+                tydesc_emitter.clone(),
+                Some(registry),
+            );
+            compiler.set_local_funcs(local_funcs.clone());
+            compiler.set_module_funcs(module_funcs.clone());
             compiler.compile_predeclared(cl_func_id)?;
         }
 
         // Convert script unit to a function with rt_handle as first param.
         let body_func = self.script_unit_to_function(unit);
 
-        // Compile the body function with pre-populated local_funcs.
+        // Compile the body function with pre-populated local_funcs and module_funcs.
         let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
             &body_func,
             self.isa.as_ref(),
             &mut obj_module,
             runtime,
             tydesc_emitter,
+            Some(registry),
         );
         compiler.set_local_funcs(local_funcs);
+        compiler.set_module_funcs(module_funcs);
         let body_func_id = compiler.compile()?;
 
         // Generate the entry point.
