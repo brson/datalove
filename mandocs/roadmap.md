@@ -16,13 +16,14 @@ The MVP is a working bare datafun language with:
 
 # in progress
 
+- loop induction variables / ssa phis
+- dual interp/aot tests
 - human docs
 
 
 # on deck
 
 - field access
-- loop induction variables / ssa phis
 - aot
 - jit
 - serialized ir bundles
