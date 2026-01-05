@@ -57,6 +57,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 // Get field offsets.
                 let field_types: Vec<_> = match dest_ty {
+                    IrType::Unit => Vec::new(),  // Unit is empty tuple.
                     IrType::Tuple(tys) => tys.clone(),
                     IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
                     _ => {

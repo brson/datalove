@@ -1,15 +1,22 @@
-AotAnalysis(
+DualAnalysis(
     sections: [
-        AotSectionResult(
+        DualSectionResult(
             section_type: "scriptunit-fragment",
-            name: None,
             typecheck: TypecheckResult(
                 status: "Success",
             ),
-            lowering: LoweringResult(
+            interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"Alice\"\n    v1 = const 30u32\n    v2 = pack Struct0 {v0, v1}\n    debuglog v2\n    drop v2\n    unit_end\nexports:\n    person = v2\n",
+                ir: "scriptunit:\nblock0:\n    v0 = pack () {}\n    debuglog v0\n    unit_end\n",
             ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = pack () {}\n    debuglog v0\n    unit_end\n",
+            ),
+            ir_match: true,
+            interp_output: "@()\n",
+            aot_output: "@()\n",
+            output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",
             )),
@@ -20,7 +27,6 @@ AotAnalysis(
                 status: "Success",
                 exit_code: 0,
             )),
-            output: "@{name = @\"Alice\", age = @30}\n",
         ),
     ],
 )

@@ -21,9 +21,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), AotError> {
         let cl_val = match value {
             ConstValue::Unit => {
-                // Unit is zero-sized, no actual value needed.
-                // We'll use a dummy i8 value.
-                builder.ins().iconst(cl_types::I8, 0)
+                // Unit is zero-sized, but we need a valid address for debuglog.
+                // Store the frame address like other aggregates.
+                let frame_slot = self.frame_slot.ok_or_else(|| {
+                    AotError::Codegen("no frame slot for Unit constant".into())
+                })?;
+                let dest_offset = self.layout.value_offset(dest.0);
+                let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                self.values.insert(dest, base);
+                return Ok(());
             }
             ConstValue::Bool(b) => {
                 builder.ins().iconst(cl_types::I8, *b as i64)

@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let xs = @set { @10, @20, @30 }
+debuglog xs

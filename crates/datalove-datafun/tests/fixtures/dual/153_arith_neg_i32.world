@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let a: int = @42
+debuglog (-a)

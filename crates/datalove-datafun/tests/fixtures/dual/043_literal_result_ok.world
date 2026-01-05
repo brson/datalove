@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let x: !u32 = ok @42
+debuglog x

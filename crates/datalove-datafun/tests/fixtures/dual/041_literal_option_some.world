@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let x: ?u32 = some @42
+debuglog x

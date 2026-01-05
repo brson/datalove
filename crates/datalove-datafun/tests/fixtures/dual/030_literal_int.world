@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let x: int = @123456789012345678901234567890
+debuglog x

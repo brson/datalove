@@ -102,7 +102,10 @@ impl FrameLayout {
             max_align = max_align.max(align);
         }
 
-        let frame_size = align_up(offset, max_align);
+        // Ensure frame_size is at least 1 so we always have a valid frame slot.
+        // This is needed for zero-size types like Unit that still need a valid
+        // address for debuglog.
+        let frame_size = align_up(offset, max_align).max(1);
 
         Self {
             params,
@@ -136,7 +139,8 @@ mod tests {
     #[test]
     fn test_empty_frame() {
         let layout = FrameLayout::compute(&[], &[], &[]);
-        assert_eq!(layout.frame_size, 0);
+        // Frame size is always at least 1 for debuglog of zero-size types.
+        assert_eq!(layout.frame_size, 1);
         assert_eq!(layout.frame_align, 1);
     }
 

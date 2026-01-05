@@ -1,0 +1,5 @@
+----------
+scriptunit-fragment
+----------
+
+debuglog @{name = @"Bob", age = @30}

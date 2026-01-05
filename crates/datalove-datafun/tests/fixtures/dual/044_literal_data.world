@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let x: data = @data @42
+debuglog x

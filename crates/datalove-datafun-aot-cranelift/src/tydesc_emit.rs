@@ -14,8 +14,8 @@ use datalove_datafun_ir::{IrFunction, IrScriptUnit, IrType};
 use datalove_rtdt::{
     Data as RtData, Error as RtError, Int as RtInt, List as RtList, Map as RtMap,
     Set as RtSet, String as RtString, Tensor as RtTensor, TyDesc, TyInfoEnum, TyInfoEnumVariant,
-    TyInfoList, TyInfoMap, TyInfoOption, TyInfoResult, TyInfoSet, TyInfoTensor, TyInfoTuple,
-    TyInfoTupleField, TyTag,
+    TyInfoList, TyInfoMap, TyInfoOption, TyInfoResult, TyInfoSet, TyInfoStruct, TyInfoStructField,
+    TyInfoTensor, TyInfoTuple, TyInfoTupleField, TyTag,
 };
 
 use crate::AotError;
@@ -45,6 +45,17 @@ const TYINFO_TUPLE_FIELDS_OFFSET: usize = std::mem::offset_of!(TyInfoTuple, fiel
 const TYINFO_TUPLE_FIELD_SIZE: usize = size_of::<TyInfoTupleField>();
 const TYINFO_TUPLE_FIELD_OFFSET_OFFSET: usize = std::mem::offset_of!(TyInfoTupleField, offset);
 const TYINFO_TUPLE_FIELD_TYDESC_OFFSET: usize = std::mem::offset_of!(TyInfoTupleField, tydesc);
+
+// Offsets within TyInfo union for Struct type.
+const TYINFO_STRUCT_FIELDS_OFFSET: usize = std::mem::offset_of!(TyInfoStruct, fields);
+const TYINFO_STRUCT_NUM_FIELDS_OFFSET: usize = std::mem::offset_of!(TyInfoStruct, num_fields);
+
+// TyInfoStructField layout.
+const TYINFO_STRUCT_FIELD_SIZE: usize = size_of::<TyInfoStructField>();
+const TYINFO_STRUCT_FIELD_NAME_OFFSET: usize = std::mem::offset_of!(TyInfoStructField, name);
+const TYINFO_STRUCT_FIELD_NAME_LEN_OFFSET: usize = std::mem::offset_of!(TyInfoStructField, name_len);
+const TYINFO_STRUCT_FIELD_OFFSET_OFFSET: usize = std::mem::offset_of!(TyInfoStructField, offset);
+const TYINFO_STRUCT_FIELD_TYDESC_OFFSET: usize = std::mem::offset_of!(TyInfoStructField, tydesc);
 
 // Offsets within TyInfo union for Enum type.
 const TYINFO_ENUM_VARIANTS_OFFSET: usize = std::mem::offset_of!(TyInfoEnum, variants);
@@ -95,6 +106,10 @@ impl TyDescEmitter {
 
         // Handle types with inner type references.
         match ty {
+            IrType::Unit => {
+                // Unit is an empty tuple.
+                return self.emit_tuple_tydesc(module, ty, &[]);
+            }
             IrType::List(elem_ty) => {
                 return self.emit_list_tydesc(module, elem_ty);
             }
@@ -117,8 +132,7 @@ impl TyDescEmitter {
                 return self.emit_tuple_tydesc(module, ty, field_types);
             }
             IrType::Struct(fields) => {
-                let field_types: Vec<_> = fields.iter().map(|(_, ty)| ty.clone()).collect();
-                return self.emit_struct_tydesc(module, ty, &field_types);
+                return self.emit_struct_tydesc(module, ty, fields);
             }
             IrType::Enum(variants) => {
                 return self.emit_enum_tydesc(module, ty, variants);
@@ -574,6 +588,14 @@ impl TyDescEmitter {
         let num_fields_offset = OFFSET_TYPE_INFO + TYINFO_TUPLE_NUM_FIELDS_OFFSET;
         bytes[num_fields_offset..num_fields_offset + 4].copy_from_slice(&num_fields.to_le_bytes());
 
+        // For empty tuple, write a non-null dangling pointer for the fields array.
+        // Rust's slice::from_raw_parts requires non-null even for size 0.
+        if fields_data_id.is_none() {
+            let dangling: u64 = align_of::<TyInfoTupleField>() as u64;
+            let fields_ptr_offset = OFFSET_TYPE_INFO + TYINFO_TUPLE_FIELDS_OFFSET;
+            bytes[fields_ptr_offset..fields_ptr_offset + 8].copy_from_slice(&dangling.to_le_bytes());
+        }
+
         // Create unique name.
         let name = format!("__tydesc_{}", self.counter);
         self.counter += 1;
@@ -589,6 +611,7 @@ impl TyDescEmitter {
         data_desc.set_align(TYDESC_ALIGN as u64);
 
         // Add relocation for fields pointer if we have fields.
+        // Empty tuple already has dangling pointer written in bytes above.
         if let Some(fields_id) = fields_data_id {
             let fields_gv = module.declare_data_in_data(fields_id, &mut data_desc);
             let fields_ptr_offset = (OFFSET_TYPE_INFO + TYINFO_TUPLE_FIELDS_OFFSET) as u32;
@@ -603,15 +626,150 @@ impl TyDescEmitter {
         Ok(data_id)
     }
 
-    /// Emit a TyDesc for a Struct type (same layout as Tuple).
+    /// Emit a TyDesc for a Struct type with field names.
     fn emit_struct_tydesc<M: Module>(
         &mut self,
         module: &mut M,
         original_ty: &IrType,
-        field_types: &[IrType],
+        fields: &[(String, IrType)],
     ) -> Result<DataId, AotError> {
-        // Struct uses Tuple tag in TyDesc since layout is identical.
-        self.emit_tuple_tydesc(module, original_ty, field_types)
+        // Check cache using the original type.
+        if let Some(&id) = self.tydescs.get(original_ty) {
+            return Ok(id);
+        }
+
+        // First, emit all field type TyDescs.
+        let mut field_tydesc_ids = Vec::with_capacity(fields.len());
+        for (_, field_ty) in fields {
+            let tydesc_id = self.emit(module, field_ty)?;
+            field_tydesc_ids.push(tydesc_id);
+        }
+
+        // Compute struct layout (size, align, field offsets).
+        let layout = crate::types::ir_type_to_cranelift(original_ty).layout();
+        let field_types: Vec<_> = fields.iter().map(|(_, ty)| ty.clone()).collect();
+        let field_offsets = crate::types::compute_tuple_field_offsets(&field_types);
+
+        // Create the fields array as a separate data object.
+        let fields_data_id = if fields.is_empty() {
+            // No fields array needed for empty struct.
+            None
+        } else {
+            // First, create static data for each field name.
+            let mut name_data_ids = Vec::with_capacity(fields.len());
+            for (name, _) in fields {
+                let name_bytes = name.as_bytes();
+                let name_name = format!("__struct_field_name_{}", self.counter);
+                self.counter += 1;
+
+                let name_id = module
+                    .declare_data(&name_name, Linkage::Local, false, false)
+                    .map_err(|e| AotError::Module(format!("declare struct field name: {}", e)))?;
+
+                let mut name_desc = DataDescription::new();
+                name_desc.define(name_bytes.to_vec().into_boxed_slice());
+                name_desc.set_align(1);
+
+                module
+                    .define_data(name_id, &name_desc)
+                    .map_err(|e| AotError::Module(format!("define struct field name: {}", e)))?;
+
+                name_data_ids.push(name_id);
+            }
+
+            // Build the TyInfoStructField array.
+            let fields_size = TYINFO_STRUCT_FIELD_SIZE * fields.len();
+            let mut fields_bytes = vec![0u8; fields_size];
+
+            for (i, ((name, _), &offset)) in fields.iter().zip(field_offsets.iter()).enumerate() {
+                let field_base = i * TYINFO_STRUCT_FIELD_SIZE;
+
+                // Write name_len.
+                let name_len = name.len() as u32;
+                fields_bytes[field_base + TYINFO_STRUCT_FIELD_NAME_LEN_OFFSET..
+                             field_base + TYINFO_STRUCT_FIELD_NAME_LEN_OFFSET + 4]
+                    .copy_from_slice(&name_len.to_le_bytes());
+
+                // Write offset.
+                fields_bytes[field_base + TYINFO_STRUCT_FIELD_OFFSET_OFFSET..
+                             field_base + TYINFO_STRUCT_FIELD_OFFSET_OFFSET + 4]
+                    .copy_from_slice(&offset.to_le_bytes());
+
+                // name pointer and tydesc pointer will be added as relocations.
+            }
+
+            let fields_name = format!("__tydesc_struct_fields_{}", self.counter);
+            self.counter += 1;
+
+            let fields_id = module
+                .declare_data(&fields_name, Linkage::Local, false, false)
+                .map_err(|e| AotError::Module(format!("declare struct fields: {}", e)))?;
+
+            let mut fields_desc = DataDescription::new();
+            fields_desc.define(fields_bytes.into_boxed_slice());
+            fields_desc.set_align(align_of::<TyInfoStructField>() as u64);
+
+            // Add relocations for name pointers.
+            for (i, &name_id) in name_data_ids.iter().enumerate() {
+                let name_gv = module.declare_data_in_data(name_id, &mut fields_desc);
+                let name_offset = (i * TYINFO_STRUCT_FIELD_SIZE + TYINFO_STRUCT_FIELD_NAME_OFFSET) as u32;
+                fields_desc.write_data_addr(name_offset, name_gv, 0);
+            }
+
+            // Add relocations for each field's tydesc pointer.
+            for (i, &tydesc_id) in field_tydesc_ids.iter().enumerate() {
+                let field_gv = module.declare_data_in_data(tydesc_id, &mut fields_desc);
+                let tydesc_offset = (i * TYINFO_STRUCT_FIELD_SIZE + TYINFO_STRUCT_FIELD_TYDESC_OFFSET) as u32;
+                fields_desc.write_data_addr(tydesc_offset, field_gv, 0);
+            }
+
+            module
+                .define_data(fields_id, &fields_desc)
+                .map_err(|e| AotError::Module(format!("define struct fields: {}", e)))?;
+
+            Some(fields_id)
+        };
+
+        // Build base TyDesc bytes.
+        let mut bytes = vec![0u8; TYDESC_SIZE];
+        let tag = TyTag::Struct as u8;
+        let num_fields = fields.len() as u32;
+
+        bytes[OFFSET_TYPE_TAG] = tag;
+        bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&layout.size.to_le_bytes());
+        bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&layout.align.to_le_bytes());
+
+        // Write num_fields in type_info.
+        let num_fields_offset = OFFSET_TYPE_INFO + TYINFO_STRUCT_NUM_FIELDS_OFFSET;
+        bytes[num_fields_offset..num_fields_offset + 4].copy_from_slice(&num_fields.to_le_bytes());
+
+        // Create unique name.
+        let name = format!("__tydesc_{}", self.counter);
+        self.counter += 1;
+
+        // Declare data.
+        let data_id = module
+            .declare_data(&name, Linkage::Local, false, false)
+            .map_err(|e| AotError::Module(format!("declare struct tydesc: {}", e)))?;
+
+        // Define data with relocation to fields array.
+        let mut data_desc = DataDescription::new();
+        data_desc.define(bytes.into_boxed_slice());
+        data_desc.set_align(TYDESC_ALIGN as u64);
+
+        // Add relocation for fields pointer if we have fields.
+        if let Some(fields_id) = fields_data_id {
+            let fields_gv = module.declare_data_in_data(fields_id, &mut data_desc);
+            let fields_ptr_offset = (OFFSET_TYPE_INFO + TYINFO_STRUCT_FIELDS_OFFSET) as u32;
+            data_desc.write_data_addr(fields_ptr_offset, fields_gv, 0);
+        }
+
+        module
+            .define_data(data_id, &data_desc)
+            .map_err(|e| AotError::Module(format!("define struct tydesc: {}", e)))?;
+
+        self.tydescs.insert(original_ty.clone(), data_id);
+        Ok(data_id)
     }
 
     /// Emit a TyDesc for an Enum type with variant info.
@@ -838,8 +996,7 @@ impl TyDescEmitter {
         let mut bytes = vec![0u8; TYDESC_SIZE];
 
         let (tag, size, align) = match ty {
-            // Unit is empty tuple.
-            IrType::Unit => (TyTag::Tuple as u8, 0u32, 1u32),
+            // Unit is handled by emit_tuple_tydesc, not here.
             IrType::Bool => (TyTag::Bool as u8, size_of::<bool>() as u32, align_of::<bool>() as u32),
             IrType::U8 => (TyTag::U8 as u8, size_of::<u8>() as u32, align_of::<u8>() as u32),
             IrType::I8 => (TyTag::I8 as u8, size_of::<i8>() as u32, align_of::<i8>() as u32),

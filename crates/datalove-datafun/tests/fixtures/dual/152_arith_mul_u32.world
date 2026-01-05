@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+let a: int = @7
+let b: int = @6
+debuglog (a * b)

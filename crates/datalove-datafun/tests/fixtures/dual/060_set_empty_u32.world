@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let xs = : @set<@u32> / @set {}
+debuglog xs

@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+fun unwrap_or_default(opt: ?u32, default: u32): u32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+fun checked_sub(a: u32, b: u32): ?u32
+    ret some (a -? b)
+end fun
+
+debuglog unwrap_or_default(checked_sub(@10, @20), @999)

@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let xs = @[@"hello", @"world"]
+debuglog xs

@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let x: i16 = @-32768
+debuglog x

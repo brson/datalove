@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let m = : @map<@u32, @u32> / @map {}
+debuglog m

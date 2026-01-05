@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let x: bool = false
+debuglog x

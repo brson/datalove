@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let x = : @int / @0xFFFFFFFFFFFFFFFF
+debuglog x
