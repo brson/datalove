@@ -178,13 +178,17 @@ Each "unsupported instruction" error becomes the next work item.
 
 **Remaining known issues:**
 1. Wasteful temp stack slots - creates new slot per spill in `get_operand_ptr`
-2. TryReturn/UnitEnd/UnitEarlyReturn terminators not implemented
-3. Drop, Clone instructions not implemented
+2. TryReturn/UnitEarlyReturn terminators not implemented
+3. Clone instruction not implemented
 4. ExternalValue/ExternalSlot operand support missing
 5. No aggregate fields in Pack (needs memcpy)
-6. Int/String constants require runtime calls
-7. BinOp with bigint not implemented
-8. Parameter passing modes (In/Ref/Mut/Out) not implemented
+6. BinOp with bigint not implemented
+7. Parameter passing modes (In/Ref/Mut/Out) not implemented
+
+**Resolved in later phases:**
+- Drop instruction - ✓ Phase 3.7
+- Int/String constants - ✓ Phase 3.7
+- UnitEnd terminator - ✓ Phase 3.8 (with script-level drops)
 
 ### Phase 3.6: Module Function Calls ✓ COMPLETE
 
@@ -215,6 +219,88 @@ Each "unsupported instruction" error becomes the next work item.
 - Three-pass compilation handles mutual recursion between local and module functions
 - Module functions get unique names `__mod_0_identity` etc.
 
+### Phase 3.7: Linear Type Construction and Destruction ✓ COMPLETE
+
+**Commits:**
+- `d121550` - AOT linear type construction and destruction
+- `9e4d9cc` - Bless test expected outputs
+
+**Modified files:**
+- `crates/datalove-datafun-aot-cranelift/src/codegen.rs`
+  - Added `Drop` instruction: calls `dtlv_rti_any_destroy_local(rt_handle, tydesc, value_ptr)`
+  - Added `Const` for `Int` type: calls `dtlv_rti_int_from_i64(rt_handle, i64_value, dest_ptr)`
+  - Added `Const` for `String` type: emits inline data, calls `dtlv_rti_string_from_utf8_unchecked(rt_handle, ptr, len, dest_ptr)`
+- `crates/datalove-datafun-aot-cranelift/src/runtime.rs`
+  - Added `dtlv_rti_any_destroy_local` import
+  - Added `dtlv_rti_int_from_i64` import
+  - Added `dtlv_rti_string_from_utf8_unchecked` import
+- `crates/datalove-datafun-aot-cranelift/src/tydesc_emit.rs`
+  - Added `Int` and `String` TyDesc emission
+- `crates/datalove-datafun/tests/fixtures/aot/010_function_with_drops.world` - New test
+- `crates/datalove-datafun/tests/fixtures/aot/011_function_returns_string.world` - New test
+
+**Features implemented:**
+- Linear type destruction via `Drop` instruction calling runtime
+- `Int` constant construction via runtime call
+- `String` constant construction: inline data emission + runtime call
+- TyDesc emission for `Int` and `String` types
+
+**What works:**
+- Functions with linear types (Int, String) that require destruction
+- Precise drops within function bodies (already via drop_analysis)
+- Function return values for linear types
+
+**Known issue addressed later:**
+- Script-level bindings (not in functions) leaked because `UnitEnd` didn't emit drops
+
+### Phase 3.8: Precise Drop Analysis for AOT Script-Level Bindings ✓ COMPLETE
+
+**Commit:**
+- `39d08b3` - Add precise drop analysis for AOT script-level bindings
+
+**Problem:**
+Script-level linear types leaked because `UnitEnd` didn't emit drops. The interpreter uses dynamic init-flag tracking for REPL incremental compilation, but AOT handles only a single script unit where all bindings should be cleaned up.
+
+**Solution:**
+Leverage existing `drop_analysis` module with a `for_aot` parameter instead of runtime tracking.
+
+**Modified files:**
+- `crates/datalove-datafun-compiler/src/drop_analysis.rs`
+  - Added `for_aot: bool` parameter to `analyze_script_statements`
+  - Added `unit_end: Vec<BindingId>` field to `ScriptDropAnalysis`
+  - When `for_aot=true`, uses `ScopeKind::Function` so top-level bindings are included in drops
+
+- `crates/datalove-datafun-compiler/src/lower/context.rs`
+  - Added `unit_end_drops: Vec<BindingId>` field to `LowerCtx`
+  - Added `set_unit_end_drops()` and `emit_unit_end_drops()` methods
+
+- `crates/datalove-datafun-compiler/src/lower/script.rs`
+  - Added `for_aot: bool` parameter to `lower_script_fragment_raw`, `lower_script_unit`, `lower_script_expr`
+  - Calls `ctx.emit_unit_end_drops()` before `UnitEnd` terminator
+
+- `crates/datalove-datafun/src/pipeline.rs`
+  - Added `lower_fragment_for_aot()` and `lower_expr_for_aot()` public methods
+  - REPL methods use `for_aot=false`, AOT methods use `for_aot=true`
+
+- `crates/datalove-datafun/tests/aot_tests.rs`
+  - Changed to use `lower_fragment_for_aot()` and `lower_expr_for_aot()`
+
+- `crates/datalove-datafun/tests/ir_lower_script_tests.rs`
+  - Updated to pass `for_aot=false` (tests REPL behavior)
+
+**Re-enabled tests:**
+- `008_int_const.world` - Int constant with proper cleanup
+- `009_string_const.world` - String constant with proper cleanup
+
+**IR output change:**
+Before: no drops at unit end
+After: `drop s0` emitted before `unit_end`
+
+**What works:**
+- Full pipeline with leak checking passes: `DATALOVE_LEAK_CHECK=panic-backtrace just test`
+- Script-level Int and String bindings properly destroyed at unit end
+- All 11 AOT test fixtures pass
+
 ### Phases 4-8: Feature Development (Test-Driven)
 
 Order TBD based on what the test harness reveals. Expected needs:
@@ -224,7 +310,7 @@ Order TBD based on what the test harness reveals. Expected needs:
 - `Operand::Slot` support - ✓
 - Mutable variable support - ✓
 
-**Function Calls** (mostly done)
+**Function Calls** ✓ COMPLETE
 - `Call` instruction - ✓ implemented for local and module functions
 - rt_handle threading - ✓ implicit first param
 - Two-pass compilation for local functions - ✓
@@ -232,17 +318,22 @@ Order TBD based on what the test harness reveals. Expected needs:
 - External script unit calls - not needed (single script units only)
 - Parameter passing modes (In/Ref/Mut/Out) - not yet implemented
 
+**Linear Types** ✓ COMPLETE
+- `Drop` instruction - ✓ calls `dtlv_rti_any_destroy_local`
+- `Int` constants via `dtlv_rti_int_from_i64` - ✓
+- `String` constants via `dtlv_rti_string_from_utf8_unchecked` - ✓
+- Script-level drops via `for_aot` drop analysis - ✓
+
 **Option/Result Types**
 - `WrapSome`, `WrapOk`, `WrapErr`
 - `UnwrapOption`, `UnwrapResult`
 - `TryReturn` terminator
 
-**Runtime Types**
-- `Int`/`String` constants via runtime calls
-- Collection operations (List, Set, Map)
+**Runtime Types** (partial)
+- `Int`/`String` constants - ✓
+- Collection operations (List, Set, Map) - not yet
 
 **Advanced**
-- Drop scheduling
 - Cross-unit references
 - Phi nodes for loops
 
