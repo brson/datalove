@@ -180,10 +180,12 @@ Each "unsupported instruction" error becomes the next work item.
 1. Wasteful temp stack slots - creates new slot per spill in `get_operand_ptr`
 2. UnitEarlyReturn terminator not implemented
 3. Clone instruction not implemented
-4. ExternalValue/ExternalSlot operand support missing
-5. No aggregate fields in Pack (needs memcpy)
-6. BinOp with bigint not implemented
-7. Parameter passing modes (In/Ref/Mut/Out) not implemented
+4. No aggregate fields in Pack (needs memcpy)
+5. BinOp with bigint not implemented
+6. Parameter passing modes (In/Ref/Mut/Out) not implemented
+
+**Not applicable for AOT:**
+- ExternalValue/ExternalSlot operands - these are for REPL cross-unit references; AOT does whole-world compilation
 
 **Resolved in later phases:**
 - Drop instruction - ✓ Phase 3.7
