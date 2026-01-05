@@ -40,7 +40,7 @@ loop carry (x = 0)
     // Extra let binding for clarity.
     let x_next = 11
     break (x_next)  // Loop exit value
-  end 
+  end if
   // Continue is required for `loop` with induction vars.
   continue (x + 1)
 end loop bring (x)  // Binds exit value from `break` to outer scope`s `x`
