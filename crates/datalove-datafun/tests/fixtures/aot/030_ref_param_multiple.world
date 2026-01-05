@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Test function with multiple ref params.
+fun add_refs(ref a: int, ref b: int): int
+    ret a + b
+end fun
+
+let x: int = @10
+let y: int = @20
+let z: int = @30
+
+debuglog add_refs(x, y)
+debuglog add_refs(x, z)
+debuglog add_refs(y, z)
+// Can reuse all values since they're borrowed
+debuglog add_refs(x, x)
