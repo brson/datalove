@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+// Test out param with linear type (int).
+fun init_int(out x: int): @bool
+    set x = @100
+    ret @true
+end fun
+
+fun test(): int
+    var n: int = @0
+    let _ok = init_int(n)
+    ret n
+end fun
+
+debuglog test()

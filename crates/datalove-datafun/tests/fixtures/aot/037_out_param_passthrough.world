@@ -1,0 +1,21 @@
+----------
+scriptunit-fragment
+----------
+
+// Test passing out param to out param (out->out).
+fun inner(out x: @u32): @bool
+    set x = @99
+    ret @true
+end fun
+
+fun outer(out y: @u32): @bool
+    ret inner(y)
+end fun
+
+fun test(): @u32
+    var n: @u32 = @0
+    let _ok = outer(n)
+    ret n
+end fun
+
+debuglog test()

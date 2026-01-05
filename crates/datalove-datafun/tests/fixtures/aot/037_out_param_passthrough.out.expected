@@ -1,0 +1,16 @@
+AotAnalysis(
+    sections: [
+        AotSectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Error",
+                message: "Drop analysis errors: outer: OutParamNotInitialized { binding: BindingId(0), name: \"y\" }; ReadUninitializedOutParam { binding: BindingId(0), name: \"y\" }",
+            ),
+            output: "",
+        ),
+    ],
+)
