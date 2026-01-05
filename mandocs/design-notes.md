@@ -6,6 +6,46 @@ Datalove on various language design topics.
 
 
 
+### Loop induction variables
+
+Datalove's surface syntax is designed to map obviously to SSA IR's
+and the machine-level register/stack/heap model.
+
+Without loop induction variables:
+
+```
+// This is a "memory" or "alloca" IR value and,
+// barring optimizations, a stack slot at runtime.
+var x = 0
+
+loop
+  if x = 0
+    set x = 1
+  else
+    set x = 2
+    break
+  end if
+end loop
+
+debuglog x
+```
+
+```
+// `x` is an SSA variable
+loop carry (x = 0)
+  if x = 0
+    continue (1)
+  else
+    // Extra let binding for clarity.
+    let x_next = 2
+    break (x_next)
+  end if
+end loop bring (x)
+
+debuglog x
+```
+
+
 
 
 
