@@ -53,3 +53,5 @@ The MVP is a working bare datafun language with:
 - improve runtime implementation unsafety
 - type declarations
 - heap genericity and clone method
+- simple multithreading
+- deterministic builds - compiler pipeline is already deterministic
