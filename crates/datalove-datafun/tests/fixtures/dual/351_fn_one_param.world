@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+fun add_one(n: int): int
+    ret n + :int/@1
+end fun
+
+debuglog add_one(:int/@4)

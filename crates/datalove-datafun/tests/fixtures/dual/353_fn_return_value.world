@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+fun get_ten(): u32
+    ret 10
+end fun
+
+let x: u32 = get_ten()
+debuglog x

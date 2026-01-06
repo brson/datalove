@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    store s0, v0\n    v1 = const false\n    store s1, v1\n    goto block1\nblock1:\n    v2 = load s1\n    branch v2, block3, block4\nblock3:\n    goto block2\nblock4:\n    goto block5\nblock5:\n    v3 = const 0u32\n    v4 = eq s0, v3\n    branch v4, block7, block8\nblock7:\n    v5 = const 10u32\n    store s0, v5\n    goto block9\nblock8:\n    goto block9\nblock9:\n    v6 = const 10u32\n    v7 = eq s0, v6\n    branch v7, block10, block11\nblock10:\n    v8 = const 20u32\n    store s0, v8\n    goto block12\nblock11:\n    goto block12\nblock12:\n    v9 = const 20u32\n    v10 = eq s0, v9\n    branch v10, block13, block14\nblock13:\n    v11 = const 30u32\n    store s0, v11\n    v12 = const true\n    store s1, v12\n    goto block15\nblock14:\n    goto block15\nblock15:\n    goto block1\nblock2:\n    v13 = load s0\n    debuglog v13\n    unit_end\nexports:\n    x = s0\n    done = s1\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    store s0, v0\n    v1 = const false\n    store s1, v1\n    goto block1\nblock1:\n    v2 = load s1\n    branch v2, block3, block4\nblock3:\n    goto block2\nblock4:\n    goto block5\nblock5:\n    v3 = const 0u32\n    v4 = eq s0, v3\n    branch v4, block7, block8\nblock7:\n    v5 = const 10u32\n    store s0, v5\n    goto block9\nblock8:\n    goto block9\nblock9:\n    v6 = const 10u32\n    v7 = eq s0, v6\n    branch v7, block10, block11\nblock10:\n    v8 = const 20u32\n    store s0, v8\n    goto block12\nblock11:\n    goto block12\nblock12:\n    v9 = const 20u32\n    v10 = eq s0, v9\n    branch v10, block13, block14\nblock13:\n    v11 = const 30u32\n    store s0, v11\n    v12 = const true\n    store s1, v12\n    goto block15\nblock14:\n    goto block15\nblock15:\n    goto block1\nblock2:\n    v13 = load s0\n    debuglog v13\n    unit_end\nexports:\n    x = s0\n    done = s1\n",
+            ),
+            ir_match: true,
+            interp_output: "@30\n",
+            aot_output: "@30\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

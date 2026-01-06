@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+fun get_five(): u32
+    ret 5
+end fun
+
+debuglog get_five()

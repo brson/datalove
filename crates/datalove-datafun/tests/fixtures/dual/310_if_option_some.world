@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+let opt: ?u32 = some 42
+if opt |val|
+    debuglog val
+end if

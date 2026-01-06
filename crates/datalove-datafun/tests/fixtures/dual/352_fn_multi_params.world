@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+fun add(a: int, b: int): int
+    ret a + b
+end fun
+
+debuglog add(:int/@10, :int/@20)

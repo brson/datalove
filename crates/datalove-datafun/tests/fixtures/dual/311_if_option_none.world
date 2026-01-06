@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+let opt: ?u32 = none
+if opt |val|
+    debuglog val
+else
+    debuglog 0
+end if
