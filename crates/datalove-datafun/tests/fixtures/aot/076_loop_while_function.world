@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// While loop in function context
+fun count_up(n: u32): u32
+    var sum: u32 = @0
+    var i: u32 = @0
+    loop while i .< n
+        set sum = sum + i
+        set i = i + @1
+    end loop
+    ret sum
+end fun
+debuglog count_up(@6)

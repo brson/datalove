@@ -482,6 +482,19 @@ pub fn check_statement<'db>(
                 bring_types: bring_types.clone(),
             });
 
+            // Type check while condition (if present).
+            // Condition is checked after carries are bound so it can use carry variables.
+            if let Some(condition) = stmt.condition(db) {
+                let bool_type = TypeAndHeap::new(
+                    db,
+                    datalit::ast::Heap::Omitted,
+                    Type::Datalit(datalit::tycheck::Type::Bool),
+                );
+                if let Err(e) = check_expr(ctx, condition, bool_type) {
+                    ctx.add_error(e);
+                }
+            }
+
             // Type check loop body.
             for body_stmt in body {
                 check_statement(ctx, body_stmt);

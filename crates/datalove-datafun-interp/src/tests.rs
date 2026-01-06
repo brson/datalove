@@ -1,6 +1,6 @@
 use crate::*;
 use datalove_rt::rtdt;
-use datalove_datafun_ir::{IrType, IrBlock, Terminator, FuncRef, FuncId, ParamId, TypeRef, SlotId, SlotDest, BinOp, UnaryOp};
+use datalove_datafun_ir::{IrType, IrBlock, Terminator, FuncRef, FuncId, ParamId, TypeRef, SlotId, SlotDest, BinOp, UnaryOp, ValueId};
 
 #[test]
 fn test_tydesc_table_primitives() {

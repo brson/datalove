@@ -146,16 +146,19 @@ pub struct BringBinding<'db> {
     pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
 }
 
-/// Unconditional loop statement with optional carry/bring.
+/// Loop statement with optional carry/bring and while condition.
 ///
 /// Basic: `loop ... end loop`
+/// With while: `loop while cond ... end loop`
 /// With carry: `loop carry (x = 0) ... end loop`
 /// With bring: `loop ... end loop bring (result)`
-/// Full: `loop carry (x = 0) ... end loop bring (result)`
+/// Full: `loop carry (x = 0) while cond ... end loop bring (result)`
 #[salsa::tracked]
 pub struct StmtLoop<'db> {
     #[returns(ref)]
     pub carries: Vec<CarryBinding<'db>>,
+    /// Optional while condition, checked at the start of each iteration.
+    pub condition: Option<ExprFun<'db>>,
     #[returns(ref)]
     pub body: Vec<Statement<'db>>,
     #[returns(ref)]

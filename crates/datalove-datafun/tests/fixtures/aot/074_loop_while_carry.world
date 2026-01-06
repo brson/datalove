@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// While loop with carry - cleaner iteration pattern
+var sum = :int/@0
+loop carry (i = :int/@0) while i .< :int/@5
+    set sum = sum + i
+    continue(i + :int/@1)
+end loop
+debuglog sum

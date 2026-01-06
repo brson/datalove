@@ -18,6 +18,7 @@ use super::LowerError;
 
 /// Context for a single loop during lowering.
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct LoopLowerContext {
     /// Header block (target for continue).
     pub header: BlockId,

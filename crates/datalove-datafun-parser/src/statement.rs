@@ -669,6 +669,14 @@ impl<'db> Parser<'db> {
             vec![]
         };
 
+        // Check for optional `while condition` clause.
+        let condition = if self.peek_word() == Some("while") {
+            self.eat_word("while");
+            Some(self.parse_expr_full())
+        } else {
+            None
+        };
+
         // Parse body until we hit "end loop".
         let mut body = vec![];
         let mut brings = vec![];
@@ -692,7 +700,7 @@ impl<'db> Parser<'db> {
             }
         }
 
-        ast::Statement::Loop(ast::StmtLoop::new(self.db, carries, body, brings))
+        ast::Statement::Loop(ast::StmtLoop::new(self.db, carries, condition, body, brings))
     }
 
     /// Parse carry bindings: `(name: type = expr, ...)`.

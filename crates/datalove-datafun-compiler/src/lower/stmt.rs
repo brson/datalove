@@ -5,8 +5,7 @@
 
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun};
-use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode};
-use crate::ir_ext::IrTypeExt;
+use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode, ConstValue, ValueId};
 use super::context::LowerCtx;
 use super::expr::lower_expression;
 use super::LowerError;
@@ -517,7 +516,7 @@ fn lower_if_result<'db>(
     Ok(())
 }
 
-/// Lower a loop statement with optional carry/bring.
+/// Lower a loop statement with optional carry/bring and while condition.
 pub fn lower_loop<'db>(
     ctx: &mut LowerCtx<'db>,
     loop_stmt: ast::StmtLoop<'db>,
@@ -527,6 +526,7 @@ pub fn lower_loop<'db>(
 
     let carries = loop_stmt.carries(ctx.db);
     let brings = loop_stmt.brings(ctx.db);
+    let condition = loop_stmt.condition(ctx.db);
 
     let loop_header = ctx.fresh_block();
     let loop_exit = ctx.fresh_block();
@@ -580,6 +580,60 @@ pub fn lower_loop<'db>(
         bring_param_values.push(bring_value);
     }
 
+    // Handle while condition if present.
+    // Creates: if cond goto body_block else goto while_false_block (which drops carries).
+    let body_block = if let Some(cond_expr) = condition {
+        let body_block = ctx.fresh_block();
+        let while_false_block = ctx.fresh_block();
+
+        // Lower the condition expression.
+        let cond_value = lower_expression(ctx, cond_expr)?;
+
+        // Pass carry values to while_false_block so it can drop them.
+        let carry_args: Vec<Operand> = carry_param_values.iter()
+            .map(|v| Operand::Value(*v))
+            .collect();
+
+        ctx.finish_block(Terminator::Branch {
+            cond: Operand::Value(cond_value),
+            then_block: body_block,
+            then_args: Vec::new(),
+            else_block: while_false_block,
+            else_args: carry_args,
+        });
+
+        // Build while_false_block: receives carries, drops them, goes to exit.
+        ctx.start_block(while_false_block);
+        let while_false_carries: Vec<ValueId> = carry_types.iter().map(|ty| {
+            let v = ctx.fresh_value(ty.clone());
+            ctx.current_block_params.push(v);
+            v
+        }).collect();
+
+        // Drop the carry values.
+        for carry_value in &while_false_carries {
+            ctx.emit(Instruction::Drop { operand: Operand::Value(*carry_value) });
+        }
+
+        // Create default bring values if any.
+        let exit_args: Vec<Operand> = bring_types.iter().map(|ty| {
+            let default_val = ctx.fresh_value(ty.clone());
+            let const_val = default_const_for_type(ty);
+            ctx.emit(Instruction::Const { dest: default_val, value: const_val });
+            Operand::Value(default_val)
+        }).collect();
+
+        ctx.finish_block(Terminator::Goto {
+            target: loop_exit,
+            args: exit_args,
+        });
+
+        ctx.start_block(body_block);
+        Some(body_block)
+    } else {
+        None
+    };
+
     // Push loop context for break/continue.
     ctx.loop_stack.push(LoopLowerContext {
         header: loop_header,
@@ -623,5 +677,31 @@ pub fn lower_loop<'db>(
         ctx.bind_var(&bring_name, Operand::Value(bring_param_values[i]));
     }
 
+    let _ = body_block; // Silence unused warning.
     Ok(())
+}
+
+/// Create a default constant value for a type (used for while-false exit with brings).
+fn default_const_for_type(ty: &IrType) -> ConstValue {
+    match ty {
+        IrType::Unit => ConstValue::Unit,
+        IrType::Bool => ConstValue::Bool(false),
+        IrType::U8 => ConstValue::U8(0),
+        IrType::U16 => ConstValue::U16(0),
+        IrType::U32 => ConstValue::U32(0),
+        IrType::U64 => ConstValue::U64(0),
+        IrType::I8 => ConstValue::I8(0),
+        IrType::I16 => ConstValue::I16(0),
+        IrType::I32 => ConstValue::I32(0),
+        IrType::I64 => ConstValue::I64(0),
+        IrType::Int => ConstValue::Int { limbs: vec![], negative: false },
+        IrType::F32 => ConstValue::F32(0.0),
+        IrType::String => ConstValue::String(String::new()),
+        // For complex types, use Unit as placeholder.
+        // This is only valid if the while-false path is never taken.
+        IrType::Option(_) | IrType::Result(_) | IrType::List(_) |
+        IrType::Set(_) | IrType::Map(_, _) | IrType::Tuple(_) |
+        IrType::Struct(_) | IrType::Enum(_) | IrType::Error |
+        IrType::Data | IrType::Tensor(..) => ConstValue::Unit,
+    }
 }

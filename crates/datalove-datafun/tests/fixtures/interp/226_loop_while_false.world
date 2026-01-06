@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// While loop with immediately false condition - never executes body
+var x = :int/@42
+loop while false
+    set x = :int/@0
+end loop
+
+----------
+scriptunit-expr
+----------
+
+x

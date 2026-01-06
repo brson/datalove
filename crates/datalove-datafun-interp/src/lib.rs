@@ -61,7 +61,7 @@ pub use datalove_rt::c::DebugOutputMode;
 use datalove_rt::rtdt;
 use datalove_datafun_ir::{
     IrFunction, IrScriptUnit, IrBlock, IrType, Instruction, Terminator,
-    ValueId, BlockId, Operand, SlotDest, ConstValue, ParamMode,
+    BlockId, Operand, SlotDest, ConstValue, ParamMode,
 };
 
 /// Result of executing a script unit.

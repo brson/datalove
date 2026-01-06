@@ -524,14 +524,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::DataFrom { dest, inner } => {
                 self.compile_data_from(builder, *dest, inner)?;
             }
-
-            // TODO: More instructions in later phases.
-            _ => {
-                return Err(AotError::Unsupported(format!(
-                    "instruction not yet implemented: {:?}",
-                    inst
-                )));
-            }
         }
         Ok(())
     }
