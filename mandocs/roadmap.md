@@ -55,3 +55,4 @@ The MVP is a working bare datafun language with:
 - heap genericity and clone method
 - simple multithreading
 - deterministic builds - compiler pipeline is already deterministic
+- wasm-component backend
