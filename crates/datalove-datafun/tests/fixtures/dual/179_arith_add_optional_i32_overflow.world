@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Optional add (+?) with signed i32 - overflow case.
+fun add_opt(a: i32, b: i32): ?i32
+    ret some (a +? b)
+end fun
+
+fun unwrap(opt: ?i32, default: i32): i32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+// MAX_VALUE + 1 overflows i32, should return None -> default 999.
+debuglog unwrap(add_opt(@2147483647, @1), @999)

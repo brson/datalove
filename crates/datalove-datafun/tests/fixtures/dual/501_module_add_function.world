@@ -1,0 +1,16 @@
+----------
+module local/test/math
+----------
+
+fun add(a: u32, b: u32): u32
+    ret a +! b
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/math
+import math.add
+
+debuglog add(@10, @32)

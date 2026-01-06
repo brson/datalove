@@ -1,0 +1,51 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "module",
+            name: Some("local/test/greet"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "fn greeting():\nblock0:\n    v0 = const \"hello world\"\n    return v0\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "fn greeting():\nblock0:\n    v0 = const \"hello world\"\n    return v0\n",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call m0.f0()\n    debuglog v0\n    drop v0\n    unit_end\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call m0.f0()\n    debuglog v0\n    drop v0\n    unit_end\n",
+            ),
+            ir_match: true,
+            interp_output: "@\"hello world\"\n",
+            aot_output: "@\"hello world\"\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

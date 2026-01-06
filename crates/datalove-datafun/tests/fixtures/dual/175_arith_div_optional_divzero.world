@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+// Optional div (/?) returning Option - division by zero returns None.
+fun div_opt(a: u32, b: u32): ?u32
+    ret some (a /? b)
+end fun
+
+fun unwrap(opt: ?u32, default: u32): u32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+debuglog unwrap(div_opt(@100, @0), @999)

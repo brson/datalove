@@ -1,0 +1,30 @@
+----------
+module local/test/mutual
+----------
+
+fun is_even(n: u32): bool
+    if n == @0
+        ret true
+    end if
+    ret is_odd(n -! @1)
+end fun
+
+fun is_odd(n: u32): bool
+    if n == @0
+        ret false
+    end if
+    ret is_even(n -! @1)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/mutual
+import mutual.is_even
+import mutual.is_odd
+
+debuglog is_even(@4)
+debuglog is_odd(@4)
+debuglog is_even(@5)
+debuglog is_odd(@5)

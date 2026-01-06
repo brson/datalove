@@ -1,0 +1,24 @@
+----------
+module local/test/optmath
+----------
+
+fun safe_div(a: u32, b: u32): ?u32
+    ret some (a /? b)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/optmath
+import optmath.safe_div
+
+fun unwrap(opt: ?u32, default: u32): u32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+debuglog unwrap(safe_div(@100, @5), @999)
+debuglog unwrap(safe_div(@100, @0), @999)

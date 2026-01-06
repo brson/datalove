@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Optional neg (-?) returning Option - overflow case (MIN_VALUE).
+fun neg_opt(a: i32): ?i32
+    ret some (-? a)
+end fun
+
+fun unwrap(opt: ?i32, default: i32): i32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+// -(-2147483648) overflows i32, should return None -> default 999.
+debuglog unwrap(neg_opt(@-2147483648), @999)

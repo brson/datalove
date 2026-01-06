@@ -1,0 +1,27 @@
+----------
+module local/test/base
+----------
+
+fun double(x: u32): u32
+    ret x +! x
+end fun
+
+----------
+module local/test/derived
+----------
+
+require module local/test/base
+import base.double
+
+fun quadruple(x: u32): u32
+    ret double(double(x))
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/derived
+import derived.quadruple
+
+debuglog quadruple(@10)

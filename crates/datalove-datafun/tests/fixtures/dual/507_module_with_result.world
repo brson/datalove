@@ -1,0 +1,17 @@
+----------
+module local/test/resmath
+----------
+
+fun checked_add(a: u32, b: u32): !u32
+    ret ok (a +! b)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/resmath
+import resmath.checked_add
+
+debuglog checked_add(@10, @20)
+debuglog checked_add(@4294967295, @1)

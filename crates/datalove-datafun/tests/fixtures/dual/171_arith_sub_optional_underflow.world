@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Optional sub (-?) returning Option - underflow case returns None.
+fun sub_opt(a: u32, b: u32): ?u32
+    ret some (a -? b)
+end fun
+
+fun unwrap(opt: ?u32, default: u32): u32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+// 10 - 20 underflows for u32, should return None -> default 999.
+debuglog unwrap(sub_opt(@10, @20), @999)

@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Optional mul (*?) returning Option - overflow case returns None.
+fun mul_opt(a: u32, b: u32): ?u32
+    ret some (a *? b)
+end fun
+
+fun unwrap(opt: ?u32, default: u32): u32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+// Large multiplication that overflows u32.
+debuglog unwrap(mul_opt(@1000000, @5000), @999)

@@ -1,0 +1,16 @@
+----------
+module local/test/greet
+----------
+
+fun greeting(): string
+    ret "hello world"
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/greet
+import greet.greeting
+
+debuglog greeting()
