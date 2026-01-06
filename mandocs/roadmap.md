@@ -46,6 +46,7 @@ The MVP is a working bare datafun language with:
 
 # future
 
+- cleanup and specify bidirectional typechecking
 - comptime/const execution
 - named types
 - improve runtime implementation unsafety
