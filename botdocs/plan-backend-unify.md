@@ -74,14 +74,11 @@ pub fn struct_field_offsets(fields: &[(String, IrType)]) -> Vec<u32>;
 ```rust
 pub enum BinOpCategory {
     Arithmetic,        // Add, Sub, Mul
-    ArithmeticChecked, // Div, Mod (may error)
+    ArithmeticChecked, // Div (may error)
     Comparison,        // Lt, Le, Gt, Ge, Eq, Ne -> Bool
-    Logical,           // And, Or (Bool only)
-    Bitwise,           // BitAnd, BitOr, BitXor
-    Shift,             // Shl, Shr
 }
 
-pub enum UnaryOpCategory { Negate, LogicalNot, BitwiseNot }
+pub enum UnaryOpCategory { Negate }
 pub enum TypeClass { SignedInt, UnsignedInt, BigInt, Float, Bool }
 
 pub struct BinOpSemantics {
