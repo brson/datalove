@@ -674,3 +674,68 @@ pub(crate) unsafe fn int_cmp_impl(
     }
 }
 
+/// Widen a fixed-width integer to Int.
+pub(crate) unsafe fn int_from_fixed_impl(
+    rt: &mut RtLocal,
+    src_in: *const u8,
+    src_tydesc: *const rtdt::TyDesc,
+    result_out: *mut u8,
+) -> RtStatus {
+    unsafe {
+        let type_tag = (*src_tydesc).type_tag;
+        let result = &mut *(result_out as *mut rtdt::Int);
+
+        // Extract magnitude and sign from the fixed-width integer.
+        let (magnitude, is_negative): (u64, bool) = match type_tag {
+            rtdt::TyTag::U8 => (*(src_in as *const u8) as u64, false),
+            rtdt::TyTag::U16 => (*(src_in as *const u16) as u64, false),
+            rtdt::TyTag::U32 => (*(src_in as *const u32) as u64, false),
+            rtdt::TyTag::U64 => (*(src_in as *const u64), false),
+            rtdt::TyTag::I8 => {
+                let v = *(src_in as *const i8);
+                (v.unsigned_abs() as u64, v < 0)
+            }
+            rtdt::TyTag::I16 => {
+                let v = *(src_in as *const i16);
+                (v.unsigned_abs() as u64, v < 0)
+            }
+            rtdt::TyTag::I32 => {
+                let v = *(src_in as *const i32);
+                (v.unsigned_abs() as u64, v < 0)
+            }
+            rtdt::TyTag::I64 => {
+                let v = *(src_in as *const i64);
+                (v.unsigned_abs(), v < 0)
+            }
+            _ => {
+                // Not a fixed-width integer type - shouldn't happen.
+                return RtStatus::Error;
+            }
+        };
+
+        // Initialize the Int struct.
+        if magnitude == 0 {
+            result.data = std::ptr::null();
+            result.size_and_sign = 0;
+            result.capacity = 0;
+        } else if magnitude <= u32::MAX as u64 {
+            // Single limb.
+            let limb_ptr = rt.alloc.alloc(4, 4, 1) as *mut u32;
+            *limb_ptr = magnitude as u32;
+            result.data = limb_ptr as *const u32;
+            result.size_and_sign = if is_negative { -1 } else { 1 };
+            result.capacity = 1;
+        } else {
+            // Two limbs.
+            let limb_ptr = rt.alloc.alloc(4, 4, 2) as *mut u32;
+            *limb_ptr = magnitude as u32;
+            *limb_ptr.add(1) = (magnitude >> 32) as u32;
+            result.data = limb_ptr as *const u32;
+            result.size_and_sign = if is_negative { -2 } else { 2 };
+            result.capacity = 2;
+        }
+
+        RtStatus::Ok
+    }
+}
+

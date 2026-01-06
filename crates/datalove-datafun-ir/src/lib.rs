@@ -562,6 +562,9 @@ pub enum Instruction {
         operand: Operand,
     },
 
+    /// Widen a fixed-width integer to Int (bigint).
+    Widen { dest: ValueId, src: Operand },
+
     /// Function call.
     Call {
         dest: ValueId,

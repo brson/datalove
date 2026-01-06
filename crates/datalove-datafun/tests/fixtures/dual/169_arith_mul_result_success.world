@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Checked mul (*!) returning Result - success case.
+fun mul_checked(a: u32, b: u32): !u32
+    ret ok (a *! b)
+end fun
+
+debuglog mul_checked(@7, @6)

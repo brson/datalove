@@ -404,11 +404,33 @@ fn lower_binop<'db>(
 ) -> Result<ValueId, LowerError> {
     // Use lower_operand for borrowing semantics - operands are read by
     // reference, not consumed.
-    let lhs = lower_operand(ctx, binop.lhs(ctx.db))?;
-    let rhs = lower_operand(ctx, binop.rhs(ctx.db))?;
+    let mut lhs = lower_operand(ctx, binop.lhs(ctx.db))?;
+    let mut rhs = lower_operand(ctx, binop.rhs(ctx.db))?;
 
     let ast_op = binop.op(ctx.db);
     let result_type = ctx.expr_type(expr);
+
+    // Check if we need to widen fixed-width operands to Int.
+    // This happens for bare arithmetic (+, -, *) on fixed-width ints.
+    let lhs_type = ctx.expr_type(binop.lhs(ctx.db));
+    let rhs_type = ctx.expr_type(binop.rhs(ctx.db));
+    let needs_widening = matches!(result_type, IrType::Int)
+        && is_fixed_width_int(&lhs_type)
+        && is_fixed_width_int(&rhs_type);
+
+    if needs_widening {
+        // Emit Widen instructions for both operands.
+        let lhs_widened = ctx.fresh_value(IrType::Int);
+        ctx.emit(Instruction::Widen { dest: lhs_widened, src: lhs });
+        ctx.record_expr_temp(lhs_widened, IrType::Int);
+        lhs = Operand::Value(lhs_widened);
+
+        let rhs_widened = ctx.fresh_value(IrType::Int);
+        ctx.emit(Instruction::Widen { dest: rhs_widened, src: rhs });
+        ctx.record_expr_temp(rhs_widened, IrType::Int);
+        rhs = Operand::Value(rhs_widened);
+    }
+
     let dest = ctx.fresh_value(result_type);
 
     let op = match ast_op {
@@ -867,4 +889,19 @@ fn lower_try_result<'db>(
     // Continue block: ok_dest has the unwrapped Ok value.
     ctx.start_block(continue_block);
     Ok(ok_dest)
+}
+
+/// Check if a type is a fixed-width integer (u8, u16, u32, u64, i8, i16, i32, i64).
+fn is_fixed_width_int(ty: &IrType) -> bool {
+    matches!(
+        ty,
+        IrType::U8
+            | IrType::U16
+            | IrType::U32
+            | IrType::U64
+            | IrType::I8
+            | IrType::I16
+            | IrType::I32
+            | IrType::I64
+    )
 }

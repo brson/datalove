@@ -56,6 +56,8 @@ pub struct RuntimeImports {
     pub int_div: FuncId,
     /// `dtlv_rti_int_neg(rt, a_in, a_tydesc, result_out, result_tydesc) -> RtStatus`
     pub int_neg: FuncId,
+    /// `dtlv_rti_int_from_fixed(rt, src_in, src_tydesc, result_out, result_tydesc) -> RtStatus`
+    pub int_from_fixed: FuncId,
     /// `dtlv_rti_cmp_local(rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtOrdering`
     pub int_cmp: FuncId,
 
@@ -295,7 +297,7 @@ impl RuntimeImports {
             .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_div_checked: {}", e)))?;
 
         // Int (bigint) unary operation: (rt, a_in, a_tydesc, result_out, result_tydesc) -> u8
-        let int_neg = {
+        let int_unary_sig = || {
             let mut sig = cl_ir::Signature::new(call_conv);
             sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
             sig.params.push(AbiParam::new(PTR_TYPE)); // a_in
@@ -303,10 +305,16 @@ impl RuntimeImports {
             sig.params.push(AbiParam::new(PTR_TYPE)); // result_out
             sig.params.push(AbiParam::new(PTR_TYPE)); // result_tydesc
             sig.returns.push(AbiParam::new(cl_types::I8));
-            module
-                .declare_function("dtlv_rti_int_neg", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_neg: {}", e)))?
+            sig
         };
+
+        let int_neg = module
+            .declare_function("dtlv_rti_int_neg", Linkage::Import, &int_unary_sig())
+            .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_neg: {}", e)))?;
+
+        let int_from_fixed = module
+            .declare_function("dtlv_rti_int_from_fixed", Linkage::Import, &int_unary_sig())
+            .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_from_fixed: {}", e)))?;
 
         // Int (bigint) comparison: (rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtOrdering (u8)
         let int_cmp = {
@@ -376,6 +384,7 @@ impl RuntimeImports {
             int_mul,
             int_div,
             int_neg,
+            int_from_fixed,
             int_cmp,
             move_value,
             error_from,

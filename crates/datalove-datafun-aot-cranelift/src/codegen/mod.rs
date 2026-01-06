@@ -498,6 +498,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::UnaryOpChecked { dest, overflow, op, operand } => {
                 self.compile_unaryop_checked(builder, *dest, *overflow, *op, operand)?;
             }
+            Instruction::Widen { dest, src } => {
+                self.compile_widen(builder, *dest, src)?;
+            }
             Instruction::Copy { dest, src } => {
                 self.compile_copy(builder, *dest, src)?;
             }

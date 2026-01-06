@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Try operator chained - second Option is none, early return.
+fun test(): ?@u32
+    let a: ?@u32 = some @10
+    let b: ?@u32 = @none
+    let x: @u32 = a?
+    let y: @u32 = b?
+    ret some y
+end fun
+
+debuglog test()

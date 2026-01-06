@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Simplified: try operator with ?int return.
+fun test(): ?int
+    let a: ?int = some :int/@10
+    let x: int = a?
+    ret some x
+end fun
+
+debuglog test()

@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Try operator with Option - none case.
+fun test(): ?@u32
+    let input: ?@u32 = @none
+    let x: @u32 = input?
+    ret some x
+end fun
+
+debuglog test()

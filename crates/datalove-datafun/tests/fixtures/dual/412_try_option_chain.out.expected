@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 10u32\n    v1 = some v0\n    v2 = const 20u32\n    v3 = some v2\n    v4, v5 = unwrap_option v1\n    branch v5, block2, block1\nblock1:\n    v6 = none\n    return v6\nblock2:\n    v7, v8 = unwrap_option v3\n    branch v8, block4, block3\nblock3:\n    v9 = none\n    return v9\nblock4:\n    v10 = some v7\n    return v10\nexports:\n    test = f0\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 10u32\n    v1 = some v0\n    v2 = const 20u32\n    v3 = some v2\n    v4, v5 = unwrap_option v1\n    branch v5, block2, block1\nblock1:\n    v6 = none\n    return v6\nblock2:\n    v7, v8 = unwrap_option v3\n    branch v8, block4, block3\nblock3:\n    v9 = none\n    return v9\nblock4:\n    v10 = some v7\n    return v10\nexports:\n    test = f0\n",
+            ),
+            ir_match: true,
+            interp_output: "some @20\n",
+            aot_output: "some @20\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

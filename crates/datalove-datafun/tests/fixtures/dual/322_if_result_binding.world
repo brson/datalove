@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+// If-let with Result - error binding test.
+fun test(): @u32
+    let res: !@u32 = er @error @123
+    if res |val|
+        ret val
+    else |err|
+        // Error binding available but can't use as u32
+        ret @888
+    end if
+end fun
+
+debuglog test()

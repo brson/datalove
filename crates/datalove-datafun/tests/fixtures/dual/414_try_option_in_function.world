@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// Try operator used in helper function.
+fun extract(input: ?@u32): ?@u32
+    let x: @u32 = input?
+    ret some x
+end fun
+
+fun test(): ?@u32
+    ret extract(some @99)
+end fun
+
+debuglog test()

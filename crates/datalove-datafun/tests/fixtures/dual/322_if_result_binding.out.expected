@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 123u32\n    v1 = error_from v0\n    v2 = err v1\n    v3, v4, v5 = unwrap_result v2\n    branch v5, block1, block2\nblock1:\n    return v3\nblock2:\n    v6 = const 888u32\n    drop v4\n    return v6\nexports:\n    test = f0\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 123u32\n    v1 = error_from v0\n    v2 = err v1\n    v3, v4, v5 = unwrap_result v2\n    branch v5, block1, block2\nblock1:\n    return v3\nblock2:\n    v6 = const 888u32\n    drop v4\n    return v6\nexports:\n    test = f0\n",
+            ),
+            ir_match: true,
+            interp_output: "@888\n",
+            aot_output: "@888\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

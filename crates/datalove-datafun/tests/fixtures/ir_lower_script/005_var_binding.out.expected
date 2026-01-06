@@ -4,8 +4,12 @@ block0:
     v0 = const 1u32
     store s0, v0
     v1 = const 1u32
-    v2 = add s0, v1
-    store s0, v2
+    v2 = widen s0
+    v3 = widen v1
+    v4 = add v2, v3
+    drop v2
+    drop v3
+    store s0, v4
     unit_end
 exports:
     x = s0

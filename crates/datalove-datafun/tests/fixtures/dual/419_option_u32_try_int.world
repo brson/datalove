@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Try ?@u32 then return ?int.
+fun test(): ?int
+    let a: ?@u32 = some @10
+    let x: @u32 = a?
+    let y: int = x + @0
+    ret some y
+end fun
+
+debuglog test()

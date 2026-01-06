@@ -443,6 +443,25 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_div_checked(
     }
 }
 
+/// Widen a fixed-width integer to Int (bigint).
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_int_from_fixed(
+    rt: LocalRtHandle,
+    src_in: *const u8,
+    src_tydesc: *const rtdt::TyDesc,
+    result_out: *mut u8,
+    _result_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!src_in.is_null(), "src_in is null");
+    debug_assert!(!result_out.is_null(), "result_out is null");
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::int_math::int_from_fixed_impl(rt_ref, src_in, src_tydesc, result_out)
+    }
+}
+
 /// Destroys any type of value, freeing allocations recursively.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_any_destroy_local(

@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Test Option<int> return type.
+fun test(): ?int
+    let x: int = @42
+    ret some x
+end fun
+
+debuglog test()

@@ -1055,6 +1055,18 @@ impl IrInterpreter {
                 }
                 // Note: no mark_dropped - we're borrowing, not consuming.
             }
+            Instruction::Widen { dest, src } => {
+                // Widen a fixed-width integer to Int.
+                let src_val = self.read_operand(src, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest)?;
+                // Cast dest to Int buffer and call widen_to_int.
+                unsafe {
+                    let int_buf = &mut *(dest_slot.ptr as *mut datalove_rt::rtdt::Int);
+                    self.widen_to_int(&src_val, int_buf)?;
+                }
+                frame.mark_value_initialized(*dest);
+                // Source is borrowed (read), not consumed.
+            }
             Instruction::Nop => {}
         }
         Ok(())

@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f1()\n    debuglog v0\n    unit_end\n\nfn extract(p0):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block2, block1\nblock1:\n    v3 = none\n    return v3\nblock2:\n    v4 = some v1\n    return v4\nfn test():\nblock0:\n    v0 = const 99u32\n    v1 = some v0\n    v2 = call f0(v1)\n    return v2\nexports:\n    extract = f0\n    test = f1\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f1()\n    debuglog v0\n    unit_end\n\nfn extract(p0):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block2, block1\nblock1:\n    v3 = none\n    return v3\nblock2:\n    v4 = some v1\n    return v4\nfn test():\nblock0:\n    v0 = const 99u32\n    v1 = some v0\n    v2 = call f0(v1)\n    return v2\nexports:\n    extract = f0\n    test = f1\n",
+            ),
+            ir_match: true,
+            interp_output: "some @99\n",
+            aot_output: "some @99\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

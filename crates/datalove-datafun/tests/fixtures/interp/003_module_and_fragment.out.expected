@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn double(p0):\nblock0:\n    v0 = add p0, p0\n    return v0\n",
+                ir: "fn double(p0):\nblock0:\n    v0 = widen p0\n    v1 = widen p0\n    v2 = add v0, v1\n    drop v0\n    drop v1\n    return v2\n",
             ),
             output: "",
         ),

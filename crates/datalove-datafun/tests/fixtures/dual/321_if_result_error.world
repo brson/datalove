@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// If-let with Result - error case.
+fun test(): @u32
+    let res: !@u32 = er @error @1
+    if res |val|
+        ret val
+    else |err|
+        ret @999
+    end if
+end fun
+
+debuglog test()

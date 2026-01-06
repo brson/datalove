@@ -236,6 +236,9 @@ impl fmt::Display for Instruction {
             Instruction::UnaryOpChecked { dest, overflow, op, operand } => {
                 write!(f, "{}, {} = {}.checked {}", dest, overflow, op, operand)
             }
+            Instruction::Widen { dest, src } => {
+                write!(f, "{} = widen {}", dest, src)
+            }
             Instruction::Call { dest, func, args } => {
                 write!(f, "{} = call {}(", dest, func)?;
                 for (i, arg) in args.iter().enumerate() {
