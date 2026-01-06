@@ -8,9 +8,9 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0int\n    v1 = const 1int\n    v2 = const 10int\n    goto block1(v0, v1, v2)\nblock1(v3, v4, v5):\n    v6 = const 0int\n    v7 = eq v5, v6\n    drop v6\n    branch v7, block3, block4\nblock3:\n    drop v3\n    drop v4\n    drop v5\n    goto block2\nblock4:\n    goto block5\nblock5:\n    v8 = add v3, v4\n    v9 = const 1int\n    v10 = sub v5, v9\n    drop v9\n    drop v3\n    drop v4\n    drop v5\n    goto block1(v4, v8, v10)\nblock7:\n    goto block1(v3, v4, v5)\nblock2:\n    unit_end\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0int\n    v1 = const 1int\n    v2 = const 10int\n    goto block1(v0, v1, v2)\nblock1(v3, v4, v5):\n    v6 = const 0int\n    v7 = eq v5, v6\n    drop v6\n    branch v7, block3, block4\nblock3:\n    drop v3\n    drop v4\n    drop v5\n    goto block2\nblock4:\n    goto block5\nblock5:\n    v8 = add v3, v4\n    v9 = const 1int\n    v10 = sub v5, v9\n    drop v9\n    drop v3\n    drop v5\n    goto block1(v4, v8, v10)\nblock7:\n    goto block1(v3, v4, v5)\nblock2:\n    unit_end\n",
             ),
-            output: "Error: UninitializedValue(ValueId(4))",
+            output: "(fragment executed)",
         ),
         SectionResult(
             section_type: "scriptunit-expr",

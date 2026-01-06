@@ -833,22 +833,64 @@ fn analyze_statements<'db>(
             }
             Statement::Break(stmt) => {
                 // Analyze break values (they're consumed/moved into bring bindings).
+                // This marks carries as Moved if they appear in break args.
                 for value in stmt.values(ctx.db) {
                     ctx.analyze_expr_moves(*value, true);
                 }
-                // Drops before break - only bindings defined in loop body (excludes carries).
-                let drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
+
+                // Drops before break:
+                // 1. Regular bindings defined in loop body
+                let mut drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
+
+                // 2. Carries that were NOT moved by break args (still Live, not passed to bring)
+                for frame in ctx.scope_stack.iter().rev() {
+                    if frame.kind == ScopeKind::Loop {
+                        for &carry_id in &frame.carry_bindings {
+                            if frame.current_state.get(&carry_id) == Some(&BindingState::Live) {
+                                let info = &ctx.bindings[carry_id.0 as usize];
+                                if !info.ty.is_copy() {
+                                    drops.push(carry_id);
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+
                 if !drops.is_empty() {
                     ctx.schedule.before_break.insert(i, drops);
                 }
             }
             Statement::Continue(stmt) => {
                 // Analyze continue values (they're passed as carry values to next iteration).
-                for value in stmt.values(ctx.db) {
+                let continue_values = stmt.values(ctx.db);
+                for value in continue_values {
                     ctx.analyze_expr_moves(*value, true);
                 }
-                // Drops before continue - only bindings defined in loop body (excludes carries).
-                let drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
+
+                // Drops before continue:
+                // 1. Regular bindings defined in loop body
+                let mut drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
+
+                // 2. If new values provided, old carries are replaced and need dropping.
+                //    If no values provided, carries pass through (not dropped).
+                if !continue_values.is_empty() {
+                    for frame in ctx.scope_stack.iter().rev() {
+                        if frame.kind == ScopeKind::Loop {
+                            for &carry_id in &frame.carry_bindings {
+                                // Old carry is being replaced - drop it if non-copy and still live.
+                                if frame.current_state.get(&carry_id) == Some(&BindingState::Live) {
+                                    let info = &ctx.bindings[carry_id.0 as usize];
+                                    if !info.ty.is_copy() {
+                                        drops.push(carry_id);
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
                 if !drops.is_empty() {
                     ctx.schedule.before_continue.insert(i, drops);
                 }

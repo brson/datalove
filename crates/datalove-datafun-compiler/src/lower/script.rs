@@ -351,7 +351,6 @@ fn lower_statement_for_script<'db>(
             let loop_ctx = ctx.loop_stack.last()
                 .ok_or(LowerError::BreakOutsideLoop)?;
             let break_target = loop_ctx.exit;
-            let carry_values = loop_ctx.carry_values.clone();
 
             // Lower break values and build args for the exit block.
             let break_values = break_stmt.values(ctx.db);
@@ -362,12 +361,8 @@ fn lower_statement_for_script<'db>(
             }
 
             // Emit drops for all scopes up to the loop.
+            // This now includes carries that were NOT passed as break args.
             ctx.emit_before_break_drops(stmt_idx);
-
-            // Drop carry values (block params) - they're not tracked by drop analysis.
-            for carry_value in carry_values {
-                ctx.emit(Instruction::Drop { operand: Operand::Value(carry_value) });
-            }
 
             ctx.finish_block(Terminator::Goto { target: break_target, args: break_args });
             // Start unreachable block for code after break.
@@ -384,7 +379,6 @@ fn lower_statement_for_script<'db>(
             // Lower continue values (new carry values) and build args.
             let continue_values = continue_stmt.values(ctx.db);
             let mut continue_args = Vec::new();
-            let has_new_values = !continue_values.is_empty();
 
             if continue_values.is_empty() {
                 // No values provided - use current carry values.
@@ -400,15 +394,8 @@ fn lower_statement_for_script<'db>(
             }
 
             // Emit drops for current loop iteration.
+            // This now includes old carries when new values are provided.
             ctx.emit_before_continue_drops(stmt_idx);
-
-            // If new values were provided, drop the OLD carry values.
-            // (If no values provided, the carry values are being reused.)
-            if has_new_values {
-                for carry_value in old_carry_values {
-                    ctx.emit(Instruction::Drop { operand: Operand::Value(carry_value) });
-                }
-            }
 
             ctx.finish_block(Terminator::Goto { target: continue_target, args: continue_args });
             // Start unreachable block for code after continue.

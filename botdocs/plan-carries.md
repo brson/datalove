@@ -48,6 +48,7 @@ Key commit: `7ab51cf` - "Add while condition to loop syntax"
 | 227 | while in function |
 | 228 | while + break |
 | 229 | while + bring (in function) |
+| 230 | carry + bring with bigint (in function) |
 | 231 | nested while loops |
 | 232 | while type error (non-bool condition) |
 
@@ -125,9 +126,13 @@ AOT tests work because they use explicit type hints like `bring (name: u32)`.
 Test 076 originally used `int` (bigint) but caused infinite loop/timeout in AOT.
 Changed to `u32` to work around. Pre-existing AOT bigint issue, not while-specific.
 
-### 3. While + carry + bring with bigint
-Drop analysis reports UseAfterMove for bigint carry values in break/continue paths.
-Works with native types (u32). Interp test for this combo was removed.
+### 3. While + carry + bring with bigint - FIXED
+~~Drop analysis reports UseAfterMove for bigint carry values in break/continue paths.~~
+**Fixed:** The issue was in lowering, not drop analysis. When `break(carry_value)` was called,
+the lowering code dropped ALL carry values including the one being passed as a break argument.
+Fix: skip dropping carry values that appear in break_args (stmt.rs lines 127-139).
+
+Test 230 added to verify the fix works with int type in function context.
 
 ### 4. LoopLowerContext unused fields
 `carry_types`, `bring_values`, `bring_types` fields are set but never read.
@@ -136,7 +141,7 @@ Suppressed with `#[allow(dead_code)]` - may be useful for future validation.
 ## Future Work
 
 - Loop labels for nested break/continue (explicitly out of scope)
-- Fix bigint drop analysis for carry+bring combo
+- Bring bindings in script unit context (currently only works in functions)
 
 ---
 

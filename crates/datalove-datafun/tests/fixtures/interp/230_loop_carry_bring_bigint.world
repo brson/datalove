@@ -1,0 +1,21 @@
+----------
+scriptunit-fragment
+----------
+
+// Bring only - in function like test 229
+fun count_to(limit: int): int
+    var i = :int/@1
+    loop while i .< limit
+        set i = i + :int/@1
+        if i >= limit
+            break(i)
+        end if
+    end loop bring (final: int)
+    ret final
+end fun
+
+----------
+scriptunit-expr
+----------
+
+count_to(:int/@5)
