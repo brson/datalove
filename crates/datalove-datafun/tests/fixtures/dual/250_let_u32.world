@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+let x: u32 = 42
+let y: u32 = x
+debuglog y

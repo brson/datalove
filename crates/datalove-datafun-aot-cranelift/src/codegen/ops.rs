@@ -43,8 +43,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let lhs_val = self.get_operand_value(builder, lhs)?;
         let rhs_val = self.get_operand_value(builder, rhs)?;
 
-        let is_signed = matches!(dest_ty, IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64);
-        let is_float = matches!(dest_ty, IrType::F32);
+        // For comparison ops, check operand type since dest is bool.
+        // For arithmetic ops, check dest type.
+        let lhs_ty = self.get_operand_type(lhs)?;
+        let is_comparison = matches!(
+            op,
+            BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne
+        );
+        let type_to_check = if is_comparison { &lhs_ty } else { dest_ty };
+
+        let is_signed = matches!(
+            type_to_check,
+            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64
+        );
+        let is_float = matches!(type_to_check, IrType::F32);
 
         let cl_val = if is_float {
             match op {

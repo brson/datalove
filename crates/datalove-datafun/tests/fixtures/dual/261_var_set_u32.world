@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+var x: u32 = 10
+set x = 20
+debuglog x

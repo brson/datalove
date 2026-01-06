@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+var x: u32 = 0
+if false
+    set x = 1
+else
+    set x = 2
+end if
+debuglog x

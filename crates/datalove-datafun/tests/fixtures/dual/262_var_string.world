@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+var x: string = "first"
+set x = "second"
+debuglog x
