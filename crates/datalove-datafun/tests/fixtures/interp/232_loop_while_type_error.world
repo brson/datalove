@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Error: while condition must be bool, not int
+loop while :int/@1
+    break
+end loop

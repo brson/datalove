@@ -1,0 +1,20 @@
+----------
+scriptunit-fragment
+----------
+
+// While loop with early break
+var sum = :int/@0
+var i = :int/@0
+loop while i .< :int/@100
+    if i >= :int/@5
+        break
+    end if
+    set sum = sum + i
+    set i = i + :int/@1
+end loop
+
+----------
+scriptunit-expr
+----------
+
+sum

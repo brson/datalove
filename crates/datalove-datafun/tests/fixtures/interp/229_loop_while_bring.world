@@ -1,0 +1,21 @@
+----------
+scriptunit-fragment
+----------
+
+// While loop with bring in function context
+fun count_until(limit: int): int
+    var i = :int/@0
+    loop while i .< limit
+        set i = i + :int/@1
+        if i >= limit
+            break(i)
+        end if
+    end loop bring (final_i: int)
+    ret final_i
+end fun
+
+----------
+scriptunit-expr
+----------
+
+count_until(:int/@5)
