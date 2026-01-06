@@ -2,12 +2,13 @@
 scriptunit-fragment
 ----------
 
-// Test mut param read - just write without read.
-fun set_to_100(mut x: int): @bool
-    set x = @100
+// Test mut param read-modify-write with int type.
+fun add_ten(mut x: int): @bool
+    let ten: int = @10
+    set x = x + ten
     ret @true
 end fun
 
 var n: int = @32
-let _ok = set_to_100(n)
+let _ok = add_ten(n)
 debuglog n

@@ -429,6 +429,20 @@ impl IrInterpreter {
                 }
                 Terminator::UnitEarlyReturn { value } => {
                     let val = self.read_operand(value, frame, frames)?;
+                    // Debuglog the value (borrow, not consume).
+                    let rt_handle = self.runtime.handle();
+                    unsafe {
+                        let status = datalove_rt::c::dtlv_rti_debuglog_local(
+                            rt_handle,
+                            val.ptr,
+                            val.tydesc,
+                        );
+                        if status != datalove_rt::c::RtStatus::Ok {
+                            return Err(InterpError::RuntimeError(
+                                "debuglog failed".to_string(),
+                            ));
+                        }
+                    }
                     // Write to ret_dest (Result<(), Error> type).
                     unsafe { self.move_value(&val, ret_dest)?; }
                     match value {

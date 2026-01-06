@@ -200,10 +200,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     pub(super) fn emit_static_bytes(&mut self, bytes: &[u8]) -> Result<cranelift_module::DataId, AotError> {
         use cranelift_module::DataDescription;
 
-        // Generate unique name for this data.
+        // Generate unique name for this data, including function name for uniqueness.
         let id = self.static_data_counter;
         self.static_data_counter += 1;
-        let name = format!("__string_bytes_{}", id);
+        let name = format!("__string_bytes_{}_{}", self.func.name, id);
 
         let data_id = self.module
             .declare_data(&name, Linkage::Local, false, false)

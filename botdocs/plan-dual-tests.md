@@ -3,6 +3,66 @@
 ## Overview
 Design a complete test suite for `dual_tests` that validates interpreter/AOT parity across all language features. Tests organized by feature category, with each feature tested in three contexts where applicable.
 
+## Current Progress
+
+**Total dual tests: 105**
+
+### Completed Categories
+- [x] 001-009: Debuglog Basics (4 tests)
+- [x] 010-049: Literals & Primitives (28 tests)
+- [x] 050-099: Collections (12 tests)
+- [x] 100-149: Aggregates (9 tests)
+- [x] 150-199: Arithmetic Operators (9 tests)
+- [x] 200-249: Comparison Operators (8 tests)
+- [x] 250-299: Variables & Bindings (8 tests)
+- [x] 300-349: Control Flow (9 tests)
+- [x] 350-399: Functions (10 tests)
+- [x] 400-449: Try Operators (3 tests)
+- [x] 450-499: Type Conversions (5 tests)
+
+### Not Yet Started
+- [ ] 500-549: Modules & Imports
+- [ ] 550-599: Linear Type Semantics
+- [ ] 600-649: Combinations
+
+---
+
+## Known Issues and Resolutions
+
+### 1. Mutual Recursion in scriptunit-fragment
+**Status:** EXPECTED BEHAVIOR - scripts use backward name resolution
+**Issue:** Forward references in scriptunit-fragment don't work
+**Resolution:** Scripts use one-pass compilation with backward name resolution only. Mutual recursion is supported in modules (see aot test `081_mutual_recursion_module.world`). This is not a bug.
+
+### 2. Try Operator Error Path
+**Status:** FIXED
+**Issue:** Output mismatch on try operator early return with error
+**Fix:** Added `debuglog` call to interpreter's `UnitEarlyReturn` handler in `datalove-datafun-interp/src/lib.rs` to match AOT behavior. Both now output the error value via debuglog before early return.
+**Test:** `401_try_result_error.world` now passes.
+
+### 3. Mut Param Read-Modify-Write with Linear Types
+**Status:** FIXED - tests now use proper int coercion
+**Issue:** Patterns like `set x = x + @10` where `x: mut int` fail typecheck
+**Fix:** Use `let ten: int = @10` to coerce the literal, then `set x = x + ten`.
+**Tests:** `363_param_mut_read.world` and `366_param_mut_passthrough.world` now properly exercise read-modify-write.
+
+### 4. AOT Duplicate String Symbol Bug
+**Status:** FIXED
+**Issue:** When module and script both use string constants, got "Duplicate definition of identifier: __string_bytes_0"
+**Fix:** Changed `emit_static_bytes` in `datalove-datafun-aot-cranelift/src/codegen/constants.rs` to include function name in symbol: `format!("__string_bytes_{}_{}", self.func.name, id)`
+**Test:** `081_mutual_recursion_module.world` now passes.
+
+### 5. Missing Test Coverage
+**Status:** TODO
+**Tests not yet created:**
+- Optional arithmetic operators (`+?`, `-?`, `*?`, `/?`)
+- If-let with Result binding (`320-322`)
+- Module-level tests (`500-549`)
+- Linear semantics tests (`550-599`)
+- Complex combination tests (`600-649`)
+
+---
+
 ## Test Contexts
 Each feature should be tested in up to three contexts:
 1. **Script** (`_script`) - Direct code in scriptunit-fragment
@@ -23,10 +83,10 @@ Examples:
 ### 001-009: Debuglog Basics
 Foundation tests ensuring debuglog works for output capture.
 ```
-001_debuglog_i32.world          # Already exists as 001_simple_debuglog
-002_debuglog_bool.world
-003_debuglog_string.world
-004_debuglog_multiple.world
+001_simple_debuglog.world       # DONE
+002_debuglog_bool.world         # DONE
+003_debuglog_string.world       # DONE
+004_debuglog_multiple.world     # DONE
 ```
 
 ### 010-049: Literals & Primitives
@@ -34,43 +94,43 @@ Test all primitive types and literal forms.
 
 **Scalars (Copy types):**
 ```
-010_literal_bool_true.world
-011_literal_bool_false.world
-012_literal_u8.world
-013_literal_u16.world
-014_literal_u32.world
-015_literal_u64.world
-016_literal_i8.world
-017_literal_i16.world
-018_literal_i32.world
-019_literal_i64.world
-020_literal_f32.world
+010_literal_bool_true.world     # DONE
+011_literal_bool_false.world    # DONE
+012_literal_u8.world            # DONE
+013_literal_u16.world           # DONE
+014_literal_u32.world           # DONE
+015_literal_u64.world           # DONE
+016_literal_i8.world            # DONE
+017_literal_i16.world           # DONE
+018_literal_i32.world           # DONE
+019_literal_i64.world           # DONE
+020_literal_f32.world           # DONE
 ```
 
 **Hex literals:**
 ```
-021_literal_hex_u32.world
-022_literal_hex_u64.world
-023_literal_hex_i32.world
-024_literal_hex_int.world
-025_literal_hex_f32_bits.world
+021_literal_hex_u32.world       # DONE
+022_literal_hex_u64.world       # DONE
+023_literal_hex_i32.world       # DONE
+024_literal_hex_int.world       # DONE
+025_literal_hex_f32_bits.world  # DONE
 ```
 
 **Linear types:**
 ```
-030_literal_int.world           # Bigint
-031_literal_string.world
-032_literal_string_escape.world
+030_literal_int.world           # DONE
+031_literal_string.world        # DONE
+032_literal_string_escape.world # TODO
 ```
 
 **Special types:**
 ```
-040_literal_unit.world
-041_literal_option_some.world
-042_literal_option_none.world
-043_literal_result_ok.world
-044_literal_data.world
-045_literal_error.world
+040_literal_unit.world          # DONE
+041_literal_option_some.world   # DONE
+042_literal_option_none.world   # DONE
+043_literal_result_ok.world     # DONE
+044_literal_data.world          # DONE
+045_literal_error.world         # DONE
 ```
 
 ### 050-099: Collections
@@ -78,38 +138,38 @@ Test list, set, map with various element types.
 
 **Lists:**
 ```
-050_list_empty_u32.world
-051_list_u32_elements.world
-052_list_string_elements.world
-053_list_nested.world
-054_list_in_sfn.world
-055_list_in_mfn.world
+050_list_empty_u32.world        # DONE
+051_list_u32_elements.world     # DONE
+052_list_string_elements.world  # DONE
+053_list_nested.world           # TODO
+054_list_in_sfn.world           # TODO
+055_list_in_mfn.world           # TODO
 ```
 
 **Sets:**
 ```
-060_set_empty_u32.world
-061_set_u32_elements.world
-062_set_string_elements.world
-063_set_in_sfn.world
-064_set_in_mfn.world
+060_set_empty_u32.world         # DONE
+061_set_u32_elements.world      # DONE
+062_set_string_elements.world   # TODO
+063_set_in_sfn.world            # TODO
+064_set_in_mfn.world            # TODO
 ```
 
 **Maps:**
 ```
-070_map_empty.world
-071_map_u32_u32.world
-072_map_string_string.world
-073_map_string_u32.world
-074_map_in_sfn.world
-075_map_in_mfn.world
+070_map_empty.world             # DONE
+071_map_u32_u32.world           # DONE
+072_map_string_string.world     # TODO
+073_map_string_u32.world        # TODO
+074_map_in_sfn.world            # TODO
+075_map_in_mfn.world            # TODO
 ```
 
 **Tensors:**
 ```
-080_tensor_1d_f32.world
-081_tensor_2d_f32.world
-082_tensor_in_sfn.world
+080_tensor_1d_u32.world         # DONE
+081_tensor_2d_u32.world         # DONE
+082_tensor_in_sfn.world         # TODO
 ```
 
 ### 100-149: Aggregates
@@ -117,323 +177,246 @@ Test tuples, structs, enums.
 
 **Tuples:**
 ```
-100_tuple_empty.world
-101_tuple_pair_u32.world
-102_tuple_mixed_types.world
-103_tuple_nested.world
-104_tuple_with_string.world
-105_tuple_in_sfn.world
-106_tuple_in_mfn.world
+100_tuple_pair_u32.world        # DONE
+101_tuple_mixed_types.world     # DONE
+102_tuple_with_string.world     # DONE
+103_tuple_nested.world          # TODO
+104_tuple_empty.world           # TODO
+105_tuple_in_sfn.world          # TODO
+106_tuple_in_mfn.world          # TODO
 ```
 
 **Structs:**
 ```
-110_struct_single_field.world
-111_struct_two_fields.world
-112_struct_with_string.world
-113_struct_nested.world
-114_struct_in_sfn.world
-115_struct_in_mfn.world
+110_struct_single_field.world   # DONE
+111_struct_two_fields.world     # DONE
+112_struct_with_int.world       # DONE
+113_struct_nested.world         # TODO
+114_struct_in_sfn.world         # TODO
+115_struct_in_mfn.world         # TODO
 ```
 
 **Enums:**
 ```
-120_enum_no_payload.world
-121_enum_u32_payload.world
-122_enum_string_payload.world
-123_enum_mixed_payloads.world
-124_enum_in_sfn.world
-125_enum_in_mfn.world
+120_enum_no_payload.world       # DONE
+121_enum_u32_payload.world      # DONE
+122_enum_string_payload.world   # DONE
+123_enum_mixed_payloads.world   # TODO
+124_enum_in_sfn.world           # TODO
+125_enum_in_mfn.world           # TODO
 ```
 
 ### 150-199: Arithmetic Operators
 
 **Bare arithmetic (widening to int):**
 ```
-150_arith_add_u32.world
-151_arith_sub_u32.world
-152_arith_mul_u32.world
-153_arith_add_i32.world
-154_arith_sub_i32.world
-155_arith_mul_i32.world
-156_arith_neg_i32.world
-157_arith_add_f32.world
-158_arith_mixed_widening.world
+150_arith_add_u32.world         # DONE
+151_arith_sub_u32.world         # DONE
+152_arith_mul_u32.world         # DONE
+153_arith_neg_i32.world         # DONE
+154-158                         # TODO
 ```
 
 **Checked arithmetic (+!, -!, *!, /!) returning Result:**
 ```
-160_arith_add_checked_success.world
-161_arith_add_checked_overflow.world
-162_arith_sub_checked_success.world
-163_arith_sub_checked_underflow.world
-164_arith_mul_checked_success.world
-165_arith_mul_checked_overflow.world
-166_arith_div_checked_success.world
-167_arith_div_checked_divzero.world
-168_arith_neg_checked_success.world
-169_arith_neg_checked_overflow.world
+160_arith_add_checked_success.world    # DONE
+161_arith_add_checked_overflow.world   # DONE
+162_arith_sub_checked_underflow.world  # DONE
+163_arith_mul_checked_overflow.world   # DONE
+164_arith_div_checked_divzero.world    # DONE
+165-169                                # TODO
 ```
 
 **Optional arithmetic (+?, -?, *?, /?) returning Option:**
 ```
-170_arith_add_optional_success.world
-171_arith_add_optional_overflow.world
-172_arith_sub_optional_success.world
-173_arith_sub_optional_underflow.world
-174_arith_mul_optional_success.world
-175_arith_mul_optional_overflow.world
-176_arith_div_optional_success.world
-177_arith_div_optional_divzero.world
-178_arith_neg_optional_success.world
-179_arith_neg_optional_overflow.world
+170-179                         # TODO - all
 ```
 
 **Arithmetic in functions:**
 ```
-180_arith_checked_in_sfn.world
-181_arith_checked_in_mfn.world
-182_arith_optional_in_sfn.world
-183_arith_optional_in_mfn.world
+180-183                         # TODO - all
 ```
 
 ### 200-249: Comparison Operators
 ```
-200_cmp_eq_u32.world
-201_cmp_ne_u32.world
-202_cmp_lt_u32.world
-203_cmp_le_u32.world
-204_cmp_gt_u32.world
-205_cmp_ge_u32.world
-206_cmp_eq_i32.world
-207_cmp_lt_i32_negative.world
-208_cmp_eq_bool.world
-209_cmp_eq_string.world
-210_cmp_in_sfn.world
-211_cmp_in_mfn.world
+200_cmp_eq_u32.world            # DONE
+201_cmp_ne_u32.world            # DONE
+202_cmp_lt_u32.world            # DONE
+203_cmp_le_u32.world            # DONE
+204_cmp_gt_u32.world            # DONE
+205_cmp_ge_u32.world            # DONE
+206_cmp_eq_i32.world            # DONE
+207_cmp_lt_i32_negative.world   # DONE
+208_cmp_eq_bool.world           # TODO
+209_cmp_eq_string.world         # TODO
+210_cmp_in_sfn.world            # TODO
+211_cmp_in_mfn.world            # TODO
 ```
 
 ### 250-299: Variables & Bindings
 
 **Let bindings:**
 ```
-250_let_u32.world
-251_let_string.world
-252_let_with_type.world
-253_let_in_sfn.world
-254_let_in_mfn.world
+250_let_u32.world               # DONE
+251_let_string.world            # DONE
+252_let_with_type.world         # TODO
+253_let_in_sfn.world            # TODO
+254_let_in_mfn.world            # TODO
 ```
 
 **Var bindings and mutation:**
 ```
-260_var_u32.world
-261_var_set_u32.world
-262_var_string.world
-263_var_in_sfn.world
-264_var_in_mfn.world
+260_var_u32.world               # DONE
+261_var_set_u32.world           # DONE
+262_var_string.world            # DONE
+263_var_in_sfn.world            # TODO
+264_var_in_mfn.world            # TODO
 ```
 
 **Shadowing:**
 ```
-270_shadow_let_let.world
-271_shadow_var_var.world
-272_shadow_let_var.world
-273_shadow_var_let.world
-274_shadow_let_arg.world
-275_shadow_var_arg.world
-276_shadow_crossunit.world
+270_shadow_let_let.world        # DONE
+271_shadow_var_var.world        # DONE
+272_shadow_let_var.world        # DONE
+273_shadow_var_let.world        # DONE
+274_shadow_let_arg.world        # TODO
+275_shadow_var_arg.world        # TODO
+276_shadow_crossunit.world      # TODO
 ```
 
 ### 300-349: Control Flow
 
 **If/else:**
 ```
-300_if_bool_simple.world
-301_if_else_branch.world
-302_if_nested.world
-303_if_in_sfn.world
-304_if_in_mfn.world
+300_if_true.world               # DONE
+301_if_else.world               # DONE
+302_if_nested.world             # DONE
+303_if_in_sfn.world             # TODO
+304_if_in_mfn.world             # TODO
 ```
 
 **If-let with Option:**
 ```
-310_if_option_some.world
-311_if_option_none.world
-312_if_option_binding.world
-313_if_option_nested.world
+310_if_option_some.world        # DONE
+311_if_option_none.world        # DONE
+312_if_option_binding.world     # TODO
+313_if_option_nested.world      # TODO
 ```
 
 **If-let with Result:**
 ```
-320_if_result_ok.world
-321_if_result_error.world
-322_if_result_binding.world
+320_if_result_ok.world          # TODO
+321_if_result_error.world       # TODO
+322_if_result_binding.world     # TODO
 ```
 
 **Loops:**
 ```
-330_loop_break.world
-331_loop_continue.world
-332_loop_counter.world
-333_loop_nested.world
-334_loop_in_sfn.world
-335_loop_in_mfn.world
+330_loop_break.world            # DONE
+331_loop_continue.world         # DONE
+332_loop_counter.world          # DONE
+333_loop_simple.world           # DONE
+334_loop_in_sfn.world           # TODO
+335_loop_in_mfn.world           # TODO
 ```
 
 ### 350-399: Functions
 
 **Basic functions:**
 ```
-350_fn_no_params.world
-351_fn_one_param.world
-352_fn_multi_params.world
-353_fn_return_value.world
-354_fn_void.world
-355_fn_early_return.world
+350_fn_no_params.world          # DONE
+351_fn_one_param.world          # DONE
+352_fn_multi_params.world       # DONE
+353_fn_return_value.world       # DONE
+354_fn_call_chain.world         # DONE
+355_fn_nested_calls.world       # DONE
+356_fn_void.world               # TODO
+357_fn_early_return.world       # TODO
 ```
 
 **Parameter modes:**
 ```
-360_param_in_copy.world
-361_param_in_linear.world
-362_param_ref_read.world
-363_param_ref_passthrough.world
-364_param_mut_write.world
-365_param_mut_read.world
-366_param_mut_passthrough.world
-367_param_out_basic.world
-368_param_out_string.world
+360_param_ref_basic.world       # DONE
+361_param_ref_linear.world      # DONE
+362_param_mut_basic.world       # DONE
+363_param_mut_read.world        # DONE (read-modify-write with int)
+364_param_out_basic.world       # DONE
+365_param_ref_passthrough.world # DONE
+366_param_mut_passthrough.world # DONE (passthrough with read-modify-write)
+367_param_out_string.world      # TODO
+368_param_out_linear.world      # TODO
 ```
 
 **Recursion:**
 ```
-370_recursion_simple.world
-371_recursion_factorial.world
-372_recursion_fibonacci.world
-373_recursion_mutual.world
+370_recursion_simple.world      # DONE
+371_recursion_factorial.world   # DONE
+372_recursion_fibonacci.world   # DONE
+373_recursion_mutual.world      # N/A - forward refs not supported in scripts
 ```
 
 ### 400-449: Try Operators
 
-**Try with Option (?):**
-```
-400_try_option_some_sfn.world
-401_try_option_none_sfn.world
-```
-
 **Try with Result (!):**
 ```
-410_try_result_ok_script.world
-411_try_result_error_script.world
-412_try_result_ok_sfn.world
-413_try_result_error_sfn.world
-414_try_result_ok_mfn.world
-415_try_result_error_mfn.world
+400_try_result_ok.world         # DONE
+401_try_result_error.world      # DONE
+402_try_result_in_function.world # DONE
+403-409                         # TODO
+```
+
+**Try with Option (?):**
+```
+410-415                         # TODO - all
 ```
 
 ### 450-499: Type Conversions
 
 **Error wrapping:**
 ```
-450_error_from_u32.world
-451_error_from_string.world
-452_error_from_bool.world
-453_error_from_int.world
-454_error_from_tuple.world
-455_error_in_sfn.world
-456_error_in_mfn.world
+450_error_from_u32.world        # DONE
+451_error_from_bool.world       # DONE
+452_error_from_string.world     # TODO
+453_error_from_int.world        # TODO
+454_error_from_tuple.world      # TODO
+455_error_in_sfn.world          # TODO
+456_error_in_mfn.world          # TODO
 ```
 
 **Data wrapping:**
 ```
-460_data_from_u32.world
-461_data_from_string.world
-462_data_from_bool.world
-463_data_from_int.world
-464_data_from_tuple.world
-465_data_in_sfn.world
-466_data_in_mfn.world
+452_data_from_u32.world         # DONE
+453_data_from_bool.world        # DONE
+454_data_from_string.world      # DONE
+460-466                         # TODO - remaining
 ```
 
 ### 500-549: Modules & Imports
-
-**Basic modules:**
-```
-500_module_function_call.world
-501_module_two_functions.world
-502_module_chain_calls.world
-```
-
-**Cross-module:**
-```
-510_import_function.world
-511_import_chain.world
-512_import_multiple_modules.world
-```
-
-**Cross-unit (script fragments):**
-```
-520_crossunit_value.world
-521_crossunit_slot.world
-522_crossunit_function.world
-523_crossunit_var_mutation.world
-```
+**Status:** NOT STARTED
 
 ### 550-599: Linear Type Semantics
-
-**Move semantics:**
-```
-550_move_string_once.world
-551_move_list_once.world
-552_move_conditional.world
-553_move_in_loop.world
-```
-
-**Drop behavior:**
-```
-560_drop_string_scope.world
-561_drop_list_scope.world
-562_drop_in_function.world
-```
+**Status:** NOT STARTED
 
 ### 600-649: Combinations
+**Status:** NOT STARTED
 
-**Collections with linear elements:**
-```
-600_list_of_strings.world
-601_set_of_strings.world
-602_map_string_keys.world
-603_map_string_values.world
-604_nested_list_strings.world
-```
-
-**Aggregates with linear fields:**
-```
-610_tuple_with_list.world
-611_struct_with_string.world
-612_struct_with_list.world
-613_enum_with_string_payload.world
-```
-
-**Complex expressions:**
-```
-620_chain_function_calls.world
-621_nested_conditionals.world
-622_loop_with_collections.world
-```
+---
 
 ## Implementation Strategy
 
-### Phase 1: Core Features (001-199)
+### Phase 1: Core Features (001-199) - MOSTLY COMPLETE
 Debuglog, literals, collections, aggregates, arithmetic. ~100 tests.
+**Remaining:** Optional arithmetic, some function context tests
 
-### Phase 2: Control Flow & Functions (200-399)
+### Phase 2: Control Flow & Functions (200-399) - MOSTLY COMPLETE
 Comparisons, variables, control flow, functions. ~100 tests.
+**Remaining:** If-let with Result, function context tests
 
-### Phase 3: Advanced Features (400-549)
+### Phase 3: Advanced Features (400-549) - PARTIAL
 Try operators, conversions, modules. ~75 tests.
+**Remaining:** Most try operator tests, module tests
 
-### Phase 4: Combinations (550-649)
+### Phase 4: Combinations (550-649) - NOT STARTED
 Linear semantics, complex combinations. ~50 tests.
 
 ## Files to Create
@@ -443,8 +426,11 @@ Linear semantics, complex combinations. ~50 tests.
 ## Execution
 ```bash
 # Run all dual tests
-cargo test --test dual_tests
+cargo test -p datalove-datafun --test dual_tests
 
 # Bless new expected outputs
-BLESS=1 cargo test --test dual_tests
+BLESS=1 cargo test -p datalove-datafun --test dual_tests
+
+# Run specific test
+cargo test -p datalove-datafun --test dual_tests -- 370_
 ```

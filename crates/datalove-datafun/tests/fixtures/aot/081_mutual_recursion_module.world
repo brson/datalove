@@ -1,0 +1,33 @@
+----------
+module local/test/math
+----------
+
+// Mutual recursion works within a single module.
+// Modules support forward references for functions.
+
+fun is_even(n: u32): !bool
+    if n == @0
+        ret ok @true
+    else
+        ret is_odd(n -! @1)
+    end if
+end fun
+
+fun is_odd(n: u32): !bool
+    if n == @0
+        ret ok @false
+    else
+        ret is_even(n -! @1)
+    end if
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/math
+import math.is_even
+import math.is_odd
+
+debuglog is_even(@6)
+debuglog is_odd(@6)
