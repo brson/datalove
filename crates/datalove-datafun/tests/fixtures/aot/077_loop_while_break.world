@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+// While loop with early break - exits via break before condition false
+var sum = :int/@0
+var i = :int/@0
+loop while i .< :int/@100
+    if i >= :int/@5
+        break
+    end if
+    set sum = sum + i
+    set i = i + :int/@1
+end loop
+// sum of 0+1+2+3+4 = 10
+debuglog sum

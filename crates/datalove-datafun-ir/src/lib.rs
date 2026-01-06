@@ -673,12 +673,18 @@ pub enum Instruction {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Terminator {
     /// Unconditional jump with block arguments.
+    ///
+    /// Args are MOVED into the target block's parameters (ownership transfer).
+    /// Used for loop continue with new carry values.
     Goto {
         target: BlockId,
         args: Vec<Operand>,
     },
 
     /// Conditional branch with block arguments.
+    ///
+    /// Args for the taken branch are MOVED into the target block's parameters.
+    /// Used for loop exit (break with bring values) and while condition checks.
     Branch {
         cond: Operand,
         then_block: BlockId,
@@ -702,7 +708,17 @@ pub enum Terminator {
 pub struct IrBlock {
     pub id: BlockId,
     /// Block parameters (SSA values defined at block entry).
-    /// Used for loop carry/bring values instead of Phi nodes.
+    ///
+    /// Used for loop carry/bring values instead of Phi nodes. Each parameter
+    /// has a fixed frame location. When control transfers via Goto or Branch,
+    /// the terminator's args are MOVED into these parameter locations.
+    ///
+    /// Semantics:
+    /// - Parameters define fresh values at each block entry
+    /// - Incoming args are consumed (ownership transferred)
+    /// - Interpreter: `pass_block_args()` copies data and marks source dropped
+    /// - AOT scalars: pure SSA (Cranelift block param is the value)
+    /// - AOT aggregates: memcpy from source pointer to local frame location
     pub params: Vec<ValueId>,
     pub instructions: Vec<Instruction>,
     pub terminator: Terminator,

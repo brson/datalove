@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Error: while condition must be bool, not int
+fun test_type_error(): u32
+    loop while @1
+        break
+    end loop
+    ret @0
+end fun
+debuglog test_type_error()

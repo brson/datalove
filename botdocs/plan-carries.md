@@ -76,6 +76,49 @@ The following interp while tests don't have AOT equivalents:
 - nested while loops
 - while type error
 
+## Carry/Bring Semantics
+
+### IR Level
+
+Block parameters (carries/brings) are ValueIds with fixed frame locations. The semantics are:
+
+- **Carry bindings** define ValueIds at loop header block entry
+- **Bring bindings** define ValueIds at loop exit block entry
+- **`continue(values...)`** moves values INTO the carry locations (ownership transfer)
+- **`break(values...)`** moves values INTO the bring locations (ownership transfer)
+
+The IR represents this via `Goto { target, args }` and `Branch` terminators - args are moved to target block params.
+
+### Interpreter Implementation
+
+The interpreter implements move semantics directly:
+
+1. **Block params have fixed frame locations** (computed at frame creation from `value_types`)
+2. **`pass_block_args()`** performs the move: reads source operand, writes to dest's frame location via `move_value()`, marks source dropped
+3. Each iteration gets a "fresh" value at the carry location - the move overwrites the previous iteration's data
+
+See `crates/datalove-datafun-interp/src/lib.rs:452-491` for `pass_block_args()`.
+
+### AOT Implementation
+
+AOT handles scalars and aggregates differently:
+
+**Scalars (bool, u8-u64, i8-i64, f32):**
+- Cranelift block param IS the value (pure SSA)
+- No frame location needed - register holds the value
+- Goto/Branch pass values directly to target block params
+
+**Aggregates (Int, String, List, etc.):**
+- Cranelift block param is PTR_TYPE (pointer to source)
+- On block entry, `memcpy` from source pointer to the value's fixed frame location
+- This prevents aliasing when source and dest overlap (loop carry with same value)
+
+The memcpy on block entry ensures value semantics match the IR even when the source frame location may be reused across iterations.
+
+See `crates/datalove-datafun-aot-cranelift/src/codegen/mod.rs:354-385` for aggregate block param handling.
+
+---
+
 ## Known Issues / Hacks
 
 ### 1. Bring bindings require type hints in interp tests

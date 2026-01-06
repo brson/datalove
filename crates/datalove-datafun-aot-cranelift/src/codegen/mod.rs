@@ -23,6 +23,19 @@
 //!
 //! All function parameters are passed by pointer. The implicit `rt_handle`
 //! is threaded as the first parameter to all functions.
+//!
+//! # Block parameters (loop carries/brings)
+//!
+//! Block parameters implement loop carry/bring values. The representation differs
+//! by value type:
+//!
+//! - **Scalars**: Cranelift block param IS the value. Pure SSA semantics - the
+//!   value flows directly through Goto/Branch instructions.
+//!
+//! - **Aggregates**: Cranelift block param is a pointer to the source data.
+//!   On block entry, we memcpy to the value's fixed frame location. This is
+//!   necessary to prevent aliasing when the same frame location is both source
+//!   and destination (common in loop carry scenarios).
 
 /// Tuple/struct packing and unpacking.
 mod aggregates;
@@ -384,10 +397,44 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.switch_to_block(cl_block);
 
                 // Map block params to IR ValueIds.
-                // The block params were added when creating the block.
+                //
+                // Block params implement loop carries/brings. The IR semantics specify
+                // that Goto/Branch MOVE their args INTO the target block's param locations.
+                // Each block param conceptually gets a "fresh" value each time the block
+                // is entered.
+                //
+                // Scalars: Cranelift block param IS the value - pure SSA semantics.
+                //
+                // Aggregates: Cranelift block param is a POINTER to the source data.
+                // We must memcpy to a local frame location to:
+                // 1. Ensure value semantics (each iteration sees independent data)
+                // 2. Prevent aliasing when source and dest overlap (loop carry case)
                 let cl_params = builder.block_params(cl_block).to_vec();
                 for (ir_value_id, &cl_param) in ir_block.params.iter().zip(cl_params.iter()) {
-                    self.values.insert(*ir_value_id, cl_param);
+                    let param_ty = self.func.value_types.get(ir_value_id.0 as usize)
+                        .cloned()
+                        .unwrap_or(IrType::Unit);
+                    let repr = types::ir_type_to_cranelift(&param_ty);
+
+                    match repr {
+                        CraneliftRepr::Scalar(_) => {
+                            // Scalar: block param IS the value (pure SSA).
+                            self.values.insert(*ir_value_id, cl_param);
+                        }
+                        CraneliftRepr::Aggregate(layout) => {
+                            // Aggregate: block param is PTR to source. Copy to local frame.
+                            let frame_slot = self.frame_slot.expect("aggregate block param requires frame slot");
+                            let dest_offset = self.layout.value_offset(ir_value_id.0);
+                            let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+                            // memcpy from incoming pointer to local frame location.
+                            let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
+                            builder.call_memcpy(self.isa.frontend_config(), dest_addr, cl_param, size);
+
+                            // Use local address for this value.
+                            self.values.insert(*ir_value_id, dest_addr);
+                        }
+                    }
                 }
 
                 // Don't seal yet - wait until all blocks are compiled for loop back-edges.

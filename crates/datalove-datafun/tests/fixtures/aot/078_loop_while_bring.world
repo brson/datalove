@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// While loop with bring at script level - break with value
+var i = :int/@0
+loop while i .< :int/@10
+    set i = i + :int/@1
+    if i >= :int/@5
+        break(i)
+    end if
+end loop bring (final_i: int)
+// Should be 5 when break fires
+debuglog final_i

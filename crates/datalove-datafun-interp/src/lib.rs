@@ -463,6 +463,14 @@ impl IrInterpreter {
     }
 
     /// Pass block arguments to the target block's parameters.
+    ///
+    /// Implements move semantics for block parameters (loop carries/brings):
+    /// 1. Read source operand value
+    /// 2. Copy data into the target block param's fixed frame location
+    /// 3. Mark source as dropped (ownership transferred)
+    ///
+    /// Each block param has a pre-allocated frame location. This function
+    /// moves values INTO those locations - the previous contents are overwritten.
     fn pass_block_args(
         &mut self,
         blocks: &[IrBlock],

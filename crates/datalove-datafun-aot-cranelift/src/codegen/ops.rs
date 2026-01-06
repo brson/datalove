@@ -24,12 +24,23 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Get the type of the result to determine how to compile.
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
-        // Int (bigint) operations require runtime calls.
+        // Check operand types for Int operations.
+        let lhs_ty = self.get_operand_type(lhs)?;
+        let rhs_ty = self.get_operand_type(rhs)?;
+
+        // Int (bigint) comparisons require runtime calls.
+        // Comparison result is Bool, but operands are Int.
+        let is_comparison = matches!(
+            op,
+            BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne
+        );
+        if is_comparison && matches!(lhs_ty, IrType::Int) && matches!(rhs_ty, IrType::Int) {
+            return self.compile_int_cmp(builder, dest, op, lhs, rhs);
+        }
+
+        // Int (bigint) arithmetic operations require runtime calls.
         // We require both operands to also be Int (widening from fixed-width not yet supported).
         if matches!(dest_ty, IrType::Int) {
-            let lhs_ty = self.get_operand_type(lhs)?;
-            let rhs_ty = self.get_operand_type(rhs)?;
-
             if matches!(lhs_ty, IrType::Int) && matches!(rhs_ty, IrType::Int) {
                 return self.compile_int_binop(builder, dest, op, lhs, rhs);
             } else {
@@ -45,11 +56,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // For comparison ops, check operand type since dest is bool.
         // For arithmetic ops, check dest type.
-        let lhs_ty = self.get_operand_type(lhs)?;
-        let is_comparison = matches!(
-            op,
-            BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne
-        );
         let type_to_check = if is_comparison { &lhs_ty } else { dest_ty };
 
         let is_signed = matches!(
@@ -322,6 +328,97 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Store pointer to result.
         self.values.insert(dest, result_ptr);
+        Ok(())
+    }
+
+    /// Compile Int (bigint) comparison via runtime call.
+    ///
+    /// Calls `dtlv_rti_cmp_local` which returns `RtOrdering`:
+    /// - 1 = Less
+    /// - 2 = Equal
+    /// - 3 = Greater
+    fn compile_int_cmp(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        op: BinOp,
+        lhs: &Operand,
+        rhs: &Operand,
+    ) -> Result<(), AotError> {
+        // Get runtime imports and handle.
+        let runtime = self.runtime.ok_or_else(|| {
+            AotError::Codegen("Int comparison requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            AotError::Codegen("Int comparison requires runtime handle".into())
+        })?;
+
+        // Get pointers to operands.
+        let lhs_ptr = self.get_operand_ptr(builder, lhs)?;
+        let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
+
+        // Get Int TyDesc.
+        let int_tydesc_id = self.tydesc_emitter.get(&IrType::Int).ok_or_else(|| {
+            AotError::Codegen("TyDesc not found for Int".into())
+        })?;
+        let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
+        let int_tydesc_ptr = builder.ins().global_value(PTR_TYPE, int_tydesc_gv);
+
+        // Call runtime function: (rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtOrdering
+        let func_ref = self.module.declare_func_in_func(runtime.int_cmp, builder.func);
+        let call = builder.ins().call(func_ref, &[
+            rt_handle,
+            lhs_ptr,
+            int_tydesc_ptr,
+            rhs_ptr,
+            int_tydesc_ptr,
+        ]);
+        let ordering = builder.inst_results(call)[0];
+
+        // RtOrdering values: Less=1, Equal=2, Greater=3
+        let less = builder.ins().iconst(cl_types::I8, 1);
+        let equal = builder.ins().iconst(cl_types::I8, 2);
+        let greater = builder.ins().iconst(cl_types::I8, 3);
+
+        // Convert ordering to boolean based on comparison operator.
+        let result = match op {
+            BinOp::Lt => {
+                // ordering == Less
+                builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, ordering, less)
+            }
+            BinOp::Le => {
+                // ordering == Less || ordering == Equal
+                let is_less = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, ordering, less);
+                let is_equal = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, ordering, equal);
+                builder.ins().bor(is_less, is_equal)
+            }
+            BinOp::Gt => {
+                // ordering == Greater
+                builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, ordering, greater)
+            }
+            BinOp::Ge => {
+                // ordering == Greater || ordering == Equal
+                let is_greater = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, ordering, greater);
+                let is_equal = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, ordering, equal);
+                builder.ins().bor(is_greater, is_equal)
+            }
+            BinOp::Eq => {
+                // ordering == Equal
+                builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, ordering, equal)
+            }
+            BinOp::Ne => {
+                // ordering != Equal
+                builder.ins().icmp(cl_ir::condcodes::IntCC::NotEqual, ordering, equal)
+            }
+            _ => {
+                return Err(AotError::Unsupported(format!(
+                    "Int comparison: unexpected op {:?}",
+                    op
+                )));
+            }
+        };
+
+        self.values.insert(dest, result);
         Ok(())
     }
 

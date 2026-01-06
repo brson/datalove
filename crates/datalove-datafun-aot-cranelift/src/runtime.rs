@@ -56,6 +56,8 @@ pub struct RuntimeImports {
     pub int_div: FuncId,
     /// `dtlv_rti_int_neg(rt, a_in, a_tydesc, result_out, result_tydesc) -> RtStatus`
     pub int_neg: FuncId,
+    /// `dtlv_rti_cmp_local(rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtOrdering`
+    pub int_cmp: FuncId,
 
     // Value move function.
     /// `dtlv_rti_move_value_local(rt, src_ref, tydesc, dst_out) -> RtStatus`
@@ -306,6 +308,20 @@ impl RuntimeImports {
                 .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_neg: {}", e)))?
         };
 
+        // Int (bigint) comparison: (rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtOrdering (u8)
+        let int_cmp = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // a_ref
+            sig.params.push(AbiParam::new(PTR_TYPE)); // a_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // b_ref
+            sig.params.push(AbiParam::new(PTR_TYPE)); // b_tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8)); // RtOrdering
+            module
+                .declare_function("dtlv_rti_cmp_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_cmp_local: {}", e)))?
+        };
+
         // dtlv_rti_move_value_local(ptr, ptr, ptr, ptr) -> u8
         let move_value = {
             let mut sig = cl_ir::Signature::new(call_conv);
@@ -360,6 +376,7 @@ impl RuntimeImports {
             int_mul,
             int_div,
             int_neg,
+            int_cmp,
             move_value,
             error_from,
             data_from,

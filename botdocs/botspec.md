@@ -315,6 +315,13 @@ end fun
 - Goto/Branch terminators pass args to target blocks
 - Typechecker validates arity and types of break/continue values
 
+**Carry/bring value semantics:**
+- Carry/bring bindings define IR values with fixed frame locations
+- `continue(values...)` and `break(values...)` MOVE their arguments INTO the carry/bring locations
+- Interpreter: `pass_block_args()` copies data into block param frame locations, marks source dropped
+- AOT scalars: pure SSA (Cranelift block param IS the value, no frame location)
+- AOT aggregates: block param is pointer to source, memcpy to local frame location on block entry
+
 ### 2.7 Operator Argument Semantics
 
 All binary operators and unary operators treat their operands as **immutable references** (`ref`), not by-value (`in`).

@@ -672,9 +672,12 @@ pub fn lower_loop<'db>(
     }
 
     // Bind bring names in scope after the loop.
+    // Also record binding-to-operand mapping so drops work correctly.
     for (i, bring) in brings.iter().enumerate() {
         let bring_name = bring.name(ctx.db).text(ctx.db).to_string();
-        ctx.bind_var(&bring_name, Operand::Value(bring_param_values[i]));
+        let operand = Operand::Value(bring_param_values[i]);
+        ctx.bind_var(&bring_name, operand);
+        ctx.record_binding_operand(operand);
     }
 
     let _ = body_block; // Silence unused warning.
