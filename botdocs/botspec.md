@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2026-01-03
+Last verified: 2026-01-05
 
 ## Overview
 
@@ -113,8 +113,10 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 | `if` | `if cond ... end if` | Implemented (in function bodies) |
 | `if` with binding | `if opt \|value\| ... end if` | Implemented (option/result unwrap) |
 | `loop` | `loop ... end loop` | Implemented (in function bodies) |
-| `break` | `break` | Implemented (exits innermost loop) |
-| `continue` | `continue` | Implemented (jumps to loop start) |
+| `loop carry` | `loop carry (i = 0) ... end loop` | Implemented (loop with iteration state) |
+| `loop bring` | `loop ... end loop bring (x)` | Implemented (loop that produces values) |
+| `break` | `break` or `break(values...)` | Implemented (exits loop, optionally with bring values) |
+| `continue` | `continue` or `continue(values...)` | Implemented (next iteration, optionally with new carries) |
 
 ### 2.2 Expressions
 
@@ -215,13 +217,15 @@ All parameters are passed by reference (pointer to caller's data). The mode dete
 
 ### 2.6 Loop Statements
 
+#### Basic Loop
+
 Unconditional loop with break/continue control flow:
 
 ```
 fun count_to_three(): !u32
-    let n: u32 = @0
+    var n: u32 = @0
     loop
-        let n = n +! @1
+        set n = n +! @1
         if n >= @3
             break
         end if
@@ -230,17 +234,86 @@ fun count_to_three(): !u32
 end fun
 ```
 
+#### Loop with Carry (Iteration State)
+
+Carries pass explicit iteration state via block parameters. Mnemonic: "continue and carry".
+
+```
+fun factorial(n: u32): u32
+    loop carry (acc: u32 = @1, i = n)
+        if i <= @1
+            break
+        end if
+        continue(acc * i, i - @1)
+    end loop
+    ret acc
+end fun
+```
+
+**Carry syntax:**
+- `loop carry (name: type = init, ...)` - declare carries with initial values
+- Type annotations optional (inferred from init expression)
+- Carry bindings are visible inside the loop body
+- `continue(values...)` passes new values to next iteration
+- Plain `continue` not allowed - must provide values (prevents accidental reuse)
+
+**Static analysis:** Loops with carries must not fall through. Every path must explicitly `break`, `continue(...)`, or `ret`. This prevents accidentally forgetting to update carry values.
+
+#### Loop with Bring (Exit Values)
+
+Brings capture values when the loop exits via break. Mnemonic: "break and bring".
+
+```
+fun find_first_over(threshold: u32): u32
+    var x: u32 = @0
+    loop
+        set x = x + @1
+        if x .> threshold
+            break(x)
+        end if
+    end loop bring (found: u32)
+    ret found
+end fun
+```
+
+**Bring syntax:**
+- `end loop bring (name: type, ...)` - declare bindings assigned on break
+- Type annotations required (cannot infer without seeing break values first)
+- Bring bindings are visible after the loop
+- `break(values...)` provides values for bring bindings
+- `break` without values when loop has brings is a typecheck error
+
+**Static analysis:** Loops with only brings (no carries) can fall through - it just means "keep looping until we break".
+
+#### Combined Carry and Bring
+
+```
+fun factorial(n: u32): u32
+    loop carry (acc: u32 = @1, i = n)
+        if i <= @1
+            break(acc)
+        end if
+        continue(acc * i, i - @1)
+    end loop bring (result: u32)
+    ret result
+end fun
+```
+
 **Behavior:**
 - `loop ... end loop` repeats indefinitely until `break` or `ret`
 - `break` exits the innermost loop
+- `break(values...)` exits and assigns bring bindings
 - `continue` jumps to the start of the innermost loop
+- `continue(values...)` jumps with new carry values
 - `break`/`continue` outside a loop is a typecheck error
 - Nested loops supported; break/continue affect only the innermost loop
+- No loop labels - only innermost loop can be targeted
 
 **Implementation notes:**
-- CFG builder creates loop header and exit blocks
-- Loop stack tracks nesting for break/continue targets
-- Typechecker tracks loop depth to validate break/continue placement
+- Uses SSA block parameters (not Phi nodes) for carries/brings
+- Loop header block has params for carries; exit block has params for brings
+- Goto/Branch terminators pass args to target blocks
+- Typechecker validates arity and types of break/continue values
 
 ### 2.7 Operator Argument Semantics
 

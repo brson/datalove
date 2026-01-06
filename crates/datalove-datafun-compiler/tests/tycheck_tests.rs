@@ -196,6 +196,11 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "actual": actual
             })
         }
+        TypeError::LoopBodyFallthrough => {
+            json!({
+                "kind": "LoopBodyFallthrough"
+            })
+        }
     }
 }
 

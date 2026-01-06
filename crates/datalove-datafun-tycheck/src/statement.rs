@@ -487,6 +487,13 @@ pub fn check_statement<'db>(
                 check_statement(ctx, body_stmt);
             }
 
+            // For loops with carries, the body must not fall through.
+            // Every path must explicitly break, continue, or return.
+            // (Loops with only brings can fallthrough - it just means "keep looping".)
+            if !carries.is_empty() && !must_diverge(db, body) {
+                ctx.add_error(TypeError::LoopBodyFallthrough);
+            }
+
             // Pop loop context.
             ctx.loop_contexts.pop();
 
@@ -572,5 +579,45 @@ pub fn check_statement<'db>(
         Statement::ParseError(_) => {
             // Skip parse errors.
         }
+    }
+}
+
+/// Check if a statement list must diverge (all paths end in break/continue/return).
+///
+/// Used to validate that loops with carry/bring don't have fall-through paths.
+fn must_diverge<'db>(db: &'db dyn salsa::Database, stmts: &[Statement<'db>]) -> bool {
+    for stmt in stmts {
+        if stmt_must_diverge(db, stmt) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Check if a single statement must diverge.
+fn stmt_must_diverge<'db>(db: &'db dyn salsa::Database, stmt: &Statement<'db>) -> bool {
+    match stmt {
+        Statement::Break(_) | Statement::Continue(_) | Statement::Ret(_) => true,
+
+        Statement::If(if_stmt) => {
+            // Both branches must diverge for the if to diverge.
+            let then_body = if_stmt.then_body(db);
+            let else_body = if_stmt.else_body(db);
+
+            if let Some(else_stmts) = else_body {
+                must_diverge(db, then_body) && must_diverge(db, else_stmts)
+            } else {
+                // No else branch means the "fall through" path doesn't diverge.
+                false
+            }
+        }
+
+        // Loops don't count as diverging for this analysis.
+        // A loop might break or might loop forever, but either way
+        // we can't say it "must diverge" from the caller's perspective.
+        Statement::Loop(_) => false,
+
+        // Other statements don't diverge.
+        _ => false,
     }
 }

@@ -76,6 +76,8 @@ pub enum TypeError {
     BreakArityMismatch { expected: usize, actual: usize },
     /// Continue has wrong number of values for loop's carry bindings.
     ContinueArityMismatch { expected: usize, actual: usize },
+    /// Loop with carry/bring has paths that fall through without break/continue.
+    LoopBodyFallthrough,
 }
 
 impl From<datalove_datalit::tycheck::TypeError> for TypeError {

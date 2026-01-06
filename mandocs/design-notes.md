@@ -41,7 +41,7 @@ loop carry (x = 0)   // `x` is an SSA variable
     let x_next = 11  // Extra binding for clarity
     break (x_next)   // Loop exit value
   end if
-  continue (x + 1)   // Continue is required for `loop` with induction vars.
+  continue (x + 1)   // Continue is required for `loop` with carries
 end loop bring (x)   // Binds exit value from `break` to outer scope`s `x`
 
 debuglog x
