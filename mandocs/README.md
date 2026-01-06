@@ -28,7 +28,9 @@ through a Rustic linear-typing lens.
 
 Datalove is built from three cleanly-scoped strict sublanguages of increasing power:
 
-### Datalove Literals ("Datalit")
+
+
+### Datalove Literals
 
 The tiny and comprehensible foundation of Datalove, a strongly-typed and
 declarative pure-data language for expressing typical data structures.
@@ -60,7 +62,7 @@ existential runtime-typed data and error types.
 
 
 
-### Datalove Functions ("Datafun")
+### Datalove Functions
 
 A simple pure-functional language that feels like an imperative language, built
 on the datalit type system.
@@ -86,13 +88,14 @@ end fun
 
 
 
-### Datalove
+### Datalove with Side Effects
 
 The complete language with I/O-bearing procedures,
 owned native pointers, objects with identity,
 and stack unwinding.
 
-TODO
+> This language is not implemented yet,
+  and mostly not discussed here.
 
 
 
