@@ -325,7 +325,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let entry_block = self.blocks[&BlockId(0)];
         builder.append_block_params_for_function_params(entry_block);
         builder.switch_to_block(entry_block);
-        builder.seal_block(entry_block);
+        // Don't seal yet - wait until all blocks are compiled for loop back-edges.
 
         // Extract block parameters.
         // Layout: [rt_handle, user_param_0, user_param_1, ...]
@@ -357,8 +357,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     self.values.insert(*ir_value_id, cl_param);
                 }
 
-                // Seal after all predecessors are known (for now, seal immediately).
-                builder.seal_block(cl_block);
+                // Don't seal yet - wait until all blocks are compiled for loop back-edges.
             }
 
             // Compile instructions.
@@ -369,6 +368,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // Compile terminator.
             self.compile_terminator(&mut builder, &ir_block.terminator)?;
         }
+
+        // Seal all blocks now that all predecessors are known (required for loops).
+        builder.seal_all_blocks();
 
         // Finalize function.
         builder.finalize();

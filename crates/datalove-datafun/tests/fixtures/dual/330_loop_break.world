@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+var x: u32 = 0
+var done: bool = false
+loop
+    if done
+        break
+    end if
+    set x = 5
+    set done = true
+end loop
+debuglog x
