@@ -29,10 +29,12 @@ of maintaining the compiler and understanding the language.</p>
 <p>Provide the core features necessary,
 avoid bloating the compiler with extra language features.
 Syntactic niceties added with careful deliberation.</p>
-<h2><a href="#mechanical-sympathy" aria-hidden="true" class="anchor" id="user-content-mechanical-sympathy"></a>Mechanical sympathy</h2>
+<h2><a href="#mechanical-and-machine-model-sympathy" aria-hidden="true" class="anchor" id="user-content-mechanical-and-machine-model-sympathy"></a>Mechanical and machine-model sympathy</h2>
 <p>Inline values, no implicit boxing.
 Threads are simple and directly supported by the OS:
 No green threads. No async/await state machines.</p>
+<p>Syntax lowers trivially to SSA-based IRs
+to minimize analysis-based reconstruction.</p>
 <h2><a href="#numerical-correctness" aria-hidden="true" class="anchor" id="user-content-numerical-correctness"></a>Numerical correctness</h2>
 <p>Overflow must be handled,
 early-return checked operations and widening to ease the burden.</p>
