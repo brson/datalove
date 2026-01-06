@@ -6,6 +6,7 @@ use cranelift_module::Module;
 
 use datalove_datafun_ir::Terminator;
 
+use crate::types::{self, PTR_TYPE};
 use crate::AotError;
 
 use super::FunctionCompiler;
@@ -41,8 +42,27 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             Terminator::Return { value } => {
                 if let Some(val_op) = value {
-                    let val = self.get_operand_value(builder, val_op)?;
-                    builder.ins().return_(&[val]);
+                    // Check if we're using sret convention.
+                    if let Some(sret_ptr) = self.sret_param {
+                        // Aggregate return: copy value to sret location.
+                        // The return value is a pointer to stack-allocated data.
+                        let src_ptr = self.get_operand_value(builder, val_op)?;
+
+                        // Get the size of the return type.
+                        let ret_ty = &self.func.return_type;
+                        let size = types::ir_type_size(ret_ty);
+
+                        // Use memcpy to copy the data to sret location.
+                        let size_val = builder.ins().iconst(PTR_TYPE, size as i64);
+                        builder.call_memcpy(self.isa.frontend_config(), sret_ptr, src_ptr, size_val);
+
+                        // Return void.
+                        builder.ins().return_(&[]);
+                    } else {
+                        // Scalar return: return value in register.
+                        let val = self.get_operand_value(builder, val_op)?;
+                        builder.ins().return_(&[val]);
+                    }
                 } else {
                     builder.ins().return_(&[]);
                 }

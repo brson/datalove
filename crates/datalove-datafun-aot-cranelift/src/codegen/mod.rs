@@ -71,6 +71,7 @@ use crate::AotError;
 /// Build a Cranelift function signature for an IR function.
 ///
 /// All functions have an implicit rt_handle as first parameter.
+/// For aggregate returns, an sret (structure return) pointer is the second parameter.
 /// User-visible parameters follow, all passed by pointer.
 pub fn build_signature_for_func(
     func: &IrFunction,
@@ -82,29 +83,46 @@ pub fn build_signature_for_func(
     // Implicit rt_handle as first param (pointer to runtime).
     sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
 
+    // For aggregate returns, add sret pointer as second param.
+    // Caller allocates space and passes pointer; callee writes result there.
+    let ret_ty = &func.return_type;
+    let has_sret = match ret_ty {
+        IrType::Unit => false,
+        _ => matches!(types::ir_type_to_cranelift(ret_ty), CraneliftRepr::Aggregate(_)),
+    };
+    if has_sret {
+        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
+    }
+
     // User parameters are passed by pointer.
     for _ in &func.param_types {
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
 
-    // Return type: scalars in register, aggregates via pointer, Unit returns nothing.
-    let ret_ty = &func.return_type;
-    match &ret_ty {
+    // Return type: scalars in register, Unit/aggregates return nothing (aggregates use sret).
+    match ret_ty {
         IrType::Unit => {
             // Unit returns nothing.
         }
-        _ => match types::ir_type_to_cranelift(&ret_ty) {
+        _ => match types::ir_type_to_cranelift(ret_ty) {
             CraneliftRepr::Scalar(cl_ty) => {
                 sig.returns.push(cl_ir::AbiParam::new(cl_ty));
             }
             CraneliftRepr::Aggregate(_) => {
-                // Aggregate returns via pointer to stack-allocated value.
-                sig.returns.push(cl_ir::AbiParam::new(PTR_TYPE));
+                // Aggregate uses sret convention - no return value.
             }
         }
     }
 
     sig
+}
+
+/// Check if a return type uses sret (structure return) convention.
+pub fn uses_sret(ret_ty: &IrType) -> bool {
+    match ret_ty {
+        IrType::Unit => false,
+        _ => matches!(types::ir_type_to_cranelift(ret_ty), CraneliftRepr::Aggregate(_)),
+    }
 }
 
 /// Compiles a single IR function to Cranelift IR.
@@ -144,6 +162,8 @@ pub struct FunctionCompiler<'a, M: Module> {
     tydesc_emitter: TyDescEmitter,
     /// Runtime handle (implicit first parameter to all functions).
     rt_handle_param: Option<cl_ir::Value>,
+    /// Sret pointer (implicit second parameter for aggregate returns).
+    sret_param: Option<cl_ir::Value>,
     /// Counter for unique static data names (e.g., string bytes).
     static_data_counter: u32,
 }
@@ -178,6 +198,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             runtime: None,
             tydesc_emitter: TyDescEmitter::new(),
             rt_handle_param: None,
+            sret_param: None,
             static_data_counter: 0,
         }
     }
@@ -214,6 +235,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             runtime: Some(runtime),
             tydesc_emitter: TyDescEmitter::new(),
             rt_handle_param: None,
+            sret_param: None,
             static_data_counter: 0,
         }
     }
@@ -252,6 +274,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             runtime: Some(runtime),
             tydesc_emitter,
             rt_handle_param: None,
+            sret_param: None,
             static_data_counter: 0,
         }
     }
@@ -328,15 +351,25 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Don't seal yet - wait until all blocks are compiled for loop back-edges.
 
         // Extract block parameters.
-        // Layout: [rt_handle, user_param_0, user_param_1, ...]
+        // Layout: [rt_handle, sret? (if aggregate return), user_param_0, user_param_1, ...]
         let param_values: Vec<_> = builder.block_params(entry_block).to_vec();
 
         // First param is always rt_handle (implicit).
         self.rt_handle_param = Some(param_values[0]);
 
-        // User params start at index 1.
+        // Check if this function uses sret.
+        let has_sret = uses_sret(&self.func.return_type);
+        let user_param_start = if has_sret {
+            // Second param is sret pointer.
+            self.sret_param = Some(param_values[1]);
+            2
+        } else {
+            1
+        };
+
+        // User params start after implicit params.
         // Store them for lookup by ParamId.
-        for (i, &val) in param_values[1..].iter().enumerate() {
+        for (i, &val) in param_values[user_param_start..].iter().enumerate() {
             let param_id = ParamId(i as u32);
             // Track param values for get_operand_value.
             self.param_values.insert(param_id, val);
@@ -389,37 +422,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Build the Cranelift function signature.
     ///
     /// All functions have an implicit rt_handle as first parameter.
+    /// For aggregate returns, an sret pointer is the second parameter.
     /// User-visible parameters follow.
     fn build_signature(&self) -> cl_ir::Signature {
-        let call_conv = self.isa.default_call_conv();
-        let mut sig = cl_ir::Signature::new(call_conv);
-
-        // Implicit rt_handle as first param (pointer to runtime).
-        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
-
-        // User parameters are passed by pointer.
-        for _ in &self.func.param_types {
-            sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
-        }
-
-        // Return type: scalars in register, aggregates via pointer, Unit returns nothing.
-        let ret_ty = &self.func.return_type;
-        match ret_ty {
-            IrType::Unit => {
-                // Unit returns nothing.
-            }
-            _ => match types::ir_type_to_cranelift(&ret_ty) {
-                CraneliftRepr::Scalar(cl_ty) => {
-                    sig.returns.push(cl_ir::AbiParam::new(cl_ty));
-                }
-                CraneliftRepr::Aggregate(_) => {
-                    // Aggregate returns via pointer to stack-allocated value.
-                    sig.returns.push(cl_ir::AbiParam::new(PTR_TYPE));
-                }
-            }
-        }
-
-        sig
+        // Use the public function to keep consistency.
+        build_signature_for_func(self.func, self.isa)
     }
 
     /// Compile a single instruction.

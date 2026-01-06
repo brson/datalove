@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Try operator inside a function that returns Result.
+fun get_value(): !@u32
+    let input: !@u32 = ok @99
+    ret ok input!
+end fun
+
+debuglog get_value()

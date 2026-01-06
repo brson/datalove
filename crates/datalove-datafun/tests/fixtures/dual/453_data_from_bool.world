@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// Create Data from bool.
+let d: data = @data @true
+debuglog d

@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// Create Data from string.
+let d: data = @data "hello data"
+debuglog d

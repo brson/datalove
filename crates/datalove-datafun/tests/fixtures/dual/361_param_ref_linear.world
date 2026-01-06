@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Test ref param with linear type (int).
+fun read_int(ref x: int): int
+    ret x + :int/@0
+end fun
+
+let val: int = @42
+debuglog read_int(val)
+debuglog read_int(val)

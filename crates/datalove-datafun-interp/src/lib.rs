@@ -616,13 +616,31 @@ impl IrInterpreter {
             Instruction::SlotLoad { dest, slot } => {
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest)?;
-                // Move value from slot (consuming). Used for contexts where the
-                // slot value is being consumed (function args, return, etc.).
-                // For borrowing contexts (binop/unaryop), use Operand::Slot directly.
-                unsafe { self.move_value(&slot_val, dest_slot)?; }
+                // Check if type is Copy (primitive scalars).
+                let tag = unsafe { (*slot_val.tydesc).type_tag };
+                let is_copy = matches!(
+                    tag,
+                    rtdt::TyTag::Bool
+                        | rtdt::TyTag::U8
+                        | rtdt::TyTag::I8
+                        | rtdt::TyTag::U16
+                        | rtdt::TyTag::I16
+                        | rtdt::TyTag::U32
+                        | rtdt::TyTag::I32
+                        | rtdt::TyTag::U64
+                        | rtdt::TyTag::I64
+                        | rtdt::TyTag::F32
+                        | rtdt::TyTag::F64
+                );
+                if is_copy {
+                    // Copy types: just copy the bytes, slot remains valid.
+                    unsafe { self.copy_value(&slot_val, dest_slot)?; }
+                } else {
+                    // Non-copy types: move value out, slot becomes invalid.
+                    unsafe { self.move_value(&slot_val, dest_slot)?; }
+                    frame.mark_slot_dropped(*slot);
+                }
                 frame.mark_value_initialized(*dest);
-                // Mark slot as dropped since we moved the value out.
-                frame.mark_slot_dropped(*slot);
             }
             Instruction::Pack { dest, ty: _, fields } => {
                 let field_vals: Vec<Value> = fields.iter()

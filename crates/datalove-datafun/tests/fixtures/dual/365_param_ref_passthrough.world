@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+// Test ref param passthrough to another function.
+fun inner(ref x: int): int
+    ret x + x
+end fun
+
+fun outer(ref x: int): int
+    ret inner(x)
+end fun
+
+let val: int = @11
+debuglog outer(val)
+debuglog val

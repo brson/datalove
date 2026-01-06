@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Fibonacci using checked arithmetic.
+fun fib(n: @u32): !@u32
+    if n .< @2
+        ret ok n
+    else
+        ret ok (fib(n -! @1)! +! fib(n -! @2)!)
+    end if
+end fun
+
+debuglog fib(@10)

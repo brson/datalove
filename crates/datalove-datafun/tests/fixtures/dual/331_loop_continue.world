@@ -1,0 +1,19 @@
+----------
+scriptunit-fragment
+----------
+
+var x: u32 = 0
+var skip_once: bool = true
+var done: bool = false
+loop
+    if done
+        break
+    end if
+    if skip_once
+        set skip_once = false
+        continue
+    end if
+    set x = 10
+    set done = true
+end loop
+debuglog x

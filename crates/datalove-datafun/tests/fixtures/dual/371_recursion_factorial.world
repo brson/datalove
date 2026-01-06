@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Factorial using checked arithmetic.
+fun factorial(n: @u32): !@u32
+    if n .< @2
+        ret ok @1
+    else
+        ret ok (n *! factorial(n -! @1)!)
+    end if
+end fun
+
+debuglog factorial(@5)

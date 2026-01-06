@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Test mut param read - just write without read.
+fun set_to_100(mut x: int): @bool
+    set x = @100
+    ret @true
+end fun
+
+var n: int = @32
+let _ok = set_to_100(n)
+debuglog n

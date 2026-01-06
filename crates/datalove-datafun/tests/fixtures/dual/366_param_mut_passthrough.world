@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+// Test mut param passthrough - simple write.
+fun inner(mut x: int): @bool
+    set x = @100
+    ret @true
+end fun
+
+fun outer(mut x: int): @bool
+    ret inner(x)
+end fun
+
+var n: int = @5
+let _ok = outer(n)
+debuglog n
