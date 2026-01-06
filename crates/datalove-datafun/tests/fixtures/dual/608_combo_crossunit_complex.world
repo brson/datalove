@@ -1,0 +1,31 @@
+----------
+module local/test/utils
+----------
+
+fun add_one(x: u32): u32
+    ret x +! @1
+end fun
+
+fun is_even(x: u32): bool
+    let half = x /! @2
+    ret (half *! @2) == x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/utils
+import utils.add_one
+import utils.is_even
+
+fun process(x: u32): u32
+    if is_even(x)
+        ret add_one(x)
+    end if
+    ret x
+end fun
+
+debuglog process(@4)
+debuglog process(@5)
+debuglog process(@10)

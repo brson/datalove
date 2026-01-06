@@ -1,0 +1,29 @@
+----------
+scriptunit-fragment
+----------
+
+// Combination: Option and Result together.
+fun safe_divide(a: u32, b: u32): !?u32
+    if b == @0
+        ret ok none
+    end if
+    ret ok some (a /! b)
+end fun
+
+fun unwrap_result(r: !?u32): ?u32
+    if r |opt|
+        ret opt
+    else |e|
+        ret none
+    end if
+end fun
+
+fun unwrap_opt(opt: ?u32, default: u32): u32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+debuglog unwrap_opt(unwrap_result(safe_divide(@100, @5)), @999)
+debuglog unwrap_opt(unwrap_result(safe_divide(@100, @0)), @999)

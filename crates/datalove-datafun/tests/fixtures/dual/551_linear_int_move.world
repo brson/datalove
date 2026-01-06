@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Test that int (bigint) is moved when passed to function.
+fun consume_int(x: int): u32
+    // Int is consumed here.
+    let _sink = x
+    ret @42
+end fun
+
+let x: int = @12345
+debuglog consume_int(x)

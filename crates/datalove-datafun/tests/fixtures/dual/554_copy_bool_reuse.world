@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Test that bool (copy type) can be used multiple times.
+fun use_bool(b: bool): bool
+    ret b
+end fun
+
+let b: bool = true
+debuglog use_bool(b)
+debuglog use_bool(b)
+debuglog b

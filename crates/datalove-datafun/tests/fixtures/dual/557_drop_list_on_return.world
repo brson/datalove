@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Test that list is dropped when function returns different value.
+fun test_drop(): u32
+    let lst: [@u32] = [@1, @2, @3]
+    let _sink = lst
+    ret @42
+end fun
+
+debuglog test_drop()

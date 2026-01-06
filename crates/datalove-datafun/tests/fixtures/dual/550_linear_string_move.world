@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Test that string is moved (consumed) when passed to function.
+fun get_length(s: string): u32
+    // String is consumed here.
+    let _sink = s
+    ret @5
+end fun
+
+let s: string = "hello"
+debuglog get_length(s)

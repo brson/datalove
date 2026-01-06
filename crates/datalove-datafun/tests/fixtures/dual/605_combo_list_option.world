@@ -1,0 +1,19 @@
+----------
+scriptunit-fragment
+----------
+
+// Combination: List and option together.
+fun get_opt(): ?u32
+    ret some @42
+end fun
+
+fun unwrap(opt: ?u32, default: u32): u32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+let lst: [@u32] = [@1, @2, @3]
+debuglog lst
+debuglog unwrap(get_opt(), @999)

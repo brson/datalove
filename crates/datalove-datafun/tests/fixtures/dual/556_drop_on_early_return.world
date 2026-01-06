@@ -1,0 +1,19 @@
+----------
+scriptunit-fragment
+----------
+
+// Test that linear types are dropped on early return.
+fun test_drop(a: i8, b: i8): ?i8
+    let s: string = "should be dropped"
+    ret some (a +? b)
+end fun
+
+fun unwrap(opt: ?i8, default: i8): i8
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+// Overflow case: 127 + 1 overflows i8, string should be dropped.
+debuglog unwrap(test_drop(@127, @1), @99)

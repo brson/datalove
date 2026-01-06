@@ -1,0 +1,56 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "module",
+            name: Some("local/test/fib"),
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "local/test/fib: TryReturnTypeMismatch { operator: \"SubChecked\", return_type: \"@?u32\" }",
+                    "local/test/fib: TryReturnTypeMismatch { operator: \"SubChecked\", return_type: \"@?u32\" }",
+                    "local/test/fib: UnresolvedName(\"a\")",
+                ],
+            ),
+            interp_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    v1 = call m0.f0(v0)\n    v2 = const 999u32\n    v3 = call f0(v1, v2)\n    debuglog v3\n    v4 = const 1u32\n    v5 = call m0.f0(v4)\n    v6 = const 999u32\n    v7 = call f0(v5, v6)\n    debuglog v7\n    v8 = const 5u32\n    v9 = call m0.f0(v8)\n    v10 = const 999u32\n    v11 = call f0(v9, v10)\n    debuglog v11\n    v12 = const 10u32\n    v13 = call m0.f0(v12)\n    v14 = const 999u32\n    v15 = call f0(v13, v14)\n    debuglog v15\n    unit_end\n\nfn unwrap(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nexports:\n    unwrap = f0\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    v1 = call m0.f0(v0)\n    v2 = const 999u32\n    v3 = call f0(v1, v2)\n    debuglog v3\n    v4 = const 1u32\n    v5 = call m0.f0(v4)\n    v6 = const 999u32\n    v7 = call f0(v5, v6)\n    debuglog v7\n    v8 = const 5u32\n    v9 = call m0.f0(v8)\n    v10 = const 999u32\n    v11 = call f0(v9, v10)\n    debuglog v11\n    v12 = const 10u32\n    v13 = call m0.f0(v12)\n    v14 = const 999u32\n    v15 = call f0(v13, v14)\n    debuglog v15\n    unit_end\n\nfn unwrap(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nexports:\n    unwrap = f0\n",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Error",
+                message: "unsupported: module function (IrModuleId(0), FuncId(0)) not pre-compiled",
+            )),
+            link: Some(LinkResult(
+                status: "Skipped",
+                reason: "AOT compile failed",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Skipped",
+                reason: "AOT compile failed",
+            )),
+        ),
+    ],
+)

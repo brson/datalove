@@ -1,0 +1,37 @@
+----------
+module local/test/ops
+----------
+
+fun safe_add(a: u32, b: u32): ?u32
+    ret some (a +? b)
+end fun
+
+fun safe_mul(a: u32, b: u32): ?u32
+    ret some (a *? b)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/ops
+import ops.safe_add
+import ops.safe_mul
+
+fun pipeline(a: u32, b: u32, c: u32): ?u32
+    let sum = safe_add(a, b)?
+    let product = safe_mul(sum, c)?
+    ret some product
+end fun
+
+fun unwrap(opt: ?u32, default: u32): u32
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+// (2 + 3) * 4 = 20
+debuglog unwrap(pipeline(@2, @3, @4), @999)
+// (10 + 20) * 2 = 60
+debuglog unwrap(pipeline(@10, @20, @2), @999)

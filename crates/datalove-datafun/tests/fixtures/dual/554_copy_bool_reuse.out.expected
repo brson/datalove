@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const true\n    v1 = call f0(v0)\n    debuglog v1\n    v2 = call f0(v0)\n    debuglog v2\n    debuglog v0\n    unit_end\n\nfn use_bool(p0):\nblock0:\n    v0 = copy p0\n    return v0\nexports:\n    use_bool = f0\n    b = v0\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const true\n    v1 = call f0(v0)\n    debuglog v1\n    v2 = call f0(v0)\n    debuglog v2\n    debuglog v0\n    unit_end\n\nfn use_bool(p0):\nblock0:\n    v0 = copy p0\n    return v0\nexports:\n    use_bool = f0\n    b = v0\n",
+            ),
+            ir_match: true,
+            interp_output: "@true\n@true\n@true\n",
+            aot_output: "@true\n@true\n@true\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)
