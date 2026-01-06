@@ -45,56 +45,31 @@ Two places where const evaluation applies:
 
 ### Constness Analysis
 
-Add a new analysis pass after typechecking:
+**All Datafun functions are const by construction.** There is no I/O in the language - all functions are pure and side-effect free. The only constraint for const evaluation is **termination**.
 
-```rust
-enum Constness {
-    Const,       // Fully evaluable at compile time
-    Runtime,     // Requires runtime execution
-}
+No special constness analysis pass is needed. Any function can be const-evaluated if:
+- It terminates (either provable via loop analysis, or enforced via step limit)
 
-fn analyze_constness(func: &IrFunction) -> Constness
-```
-
-A function is const if:
-- All operations are const-evaluable (no I/O, no external calls)
-- All called functions are const
-- No use of `var` bindings (could be relaxed with more analysis)
-- Terminates (loop analysis ensures no infinite loops)
-
-### Const-Evaluable Operations
-
-| Operation | Const? | Notes |
-|-----------|--------|-------|
-| Const literals | Yes | Scalars, Int, String |
-| Binary ops | Yes | Arithmetic, comparison, bitwise |
-| Unary ops | Yes | Neg, Not, BitNot |
-| Pack/Unpack | Yes | Tuple/struct construction |
-| WrapSome/WrapOk/WrapErr | Yes | Option/Result construction |
-| ListNew/SetNew/MapNew | Yes | Collection construction |
-| Call (const func) | Yes | Recursive const eval |
-| Call (non-const) | No | Runtime dependency |
-| DebugLog | No | I/O side effect |
-| SlotStore/SlotLoad | Maybe | Pure if no external mutation |
+All IR operations are const-evaluable:
+- Const literals, binary/unary ops, pack/unpack
+- Option/Result construction, collection construction
+- Function calls (recursive const eval)
+- SlotStore/SlotLoad (local mutation within pure function)
+- DebugLog can be ignored or collected during const eval
 
 ### Implementation Strategy
 
-**Phase 1: Infrastructure**
-- Add `Constness` analysis to tycheck
-- Mark functions as `const` or not
-- Extend IR with const-eval result caching
-
-**Phase 2: Basic Const Eval**
+**Phase 1: Basic Const Eval**
 - Create `ConstEvaluator` struct wrapping `IrInterpreter`
 - Execute const functions in isolated environment
 - Convert results back to `ConstValue` for IR emission
 
-**Phase 3: Const Declarations**
+**Phase 2: Const Declarations**
 - Add `const` statement to parser and AST
 - Evaluate const declarations during compilation
 - Substitute const values at use sites
 
-**Phase 4: Comptime Parameters**
+**Phase 3: Comptime Parameters**
 - Add `comptime` parameter mode
 - Specialize functions at call sites with known const args
 - Monomorphization of comptime-parameterized functions
@@ -206,8 +181,7 @@ let zeros = make_zeroes(@100)
 
 ## Next Steps
 
-1. Prototype constness analysis on existing functions
-2. Add step-limited evaluation wrapper around interpreter
-3. Design const declaration syntax and parsing
-4. Implement basic const evaluation pipeline
-5. Add comptime parameter mode
+1. Add step-limited evaluation wrapper around interpreter
+2. Design const declaration syntax and parsing
+3. Implement basic const evaluation pipeline
+4. Add comptime parameter mode
