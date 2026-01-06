@@ -1,0 +1,16 @@
+AnalysisOutput(
+    analysis: ModuleGraphAnalysis(
+        functions: [
+            FunctionAnalysis(
+                module_path: "local/test/division",
+                function_name: "unsafe_div",
+                termination: FunctionTerminationAnalysis(
+                    loops: [],
+                ),
+                refinement: FunctionRefinementAnalysis(
+                    warnings: [],
+                ),
+            ),
+        ],
+    ),
+)

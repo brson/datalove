@@ -8,20 +8,21 @@
 //! This is informational, not an error.
 
 use rmx::prelude::*;
+use serde::{Serialize, Deserialize};
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, StmtLoop, StmtContinue,
     ExprFun, ExprFunKind, BinOp,
 };
 
 /// Result of termination analysis for a function.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FunctionTerminationAnalysis {
     /// Analyses for each loop in the function.
     pub loops: Vec<LoopTerminationAnalysis>,
 }
 
 /// Result of termination analysis for a single loop.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LoopTerminationAnalysis {
     /// Index of the loop in the function's statement list (for identification).
     pub loop_index: usize,
@@ -30,7 +31,7 @@ pub struct LoopTerminationAnalysis {
 }
 
 /// Termination status for a loop.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TerminationStatus {
     /// Loop provably terminates.
     Terminates {

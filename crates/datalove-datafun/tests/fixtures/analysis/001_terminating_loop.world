@@ -1,0 +1,15 @@
+----------
+module local/test/terminating
+----------
+
+fun countdown(n: int): int
+  var total: int = :int/@0
+  loop carry (i = n)
+    if i == :int/@0
+      break
+    end if
+    set total = total + i
+    continue(i - :int/@1)
+  end loop
+  ret total
+end fun

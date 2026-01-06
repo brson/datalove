@@ -10,19 +10,20 @@
 
 use rmx::prelude::*;
 use rmx::std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, ExprFun, ExprFunKind, BinOp,
 };
 
 /// Result of refinement analysis for a function.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FunctionRefinementAnalysis {
     /// Warnings about potentially unsafe operations.
     pub warnings: Vec<RefinementWarning>,
 }
 
 /// Warning about a potentially unsafe operation.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RefinementWarning {
     /// Description of the warning.
     pub message: String,

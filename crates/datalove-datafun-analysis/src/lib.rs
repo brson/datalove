@@ -5,6 +5,7 @@
 //! - `refinement`: Refinement type checking (division by zero, etc.)
 
 use rmx::std::collections::BTreeMap;
+use serde::{Serialize, Deserialize};
 use datalove_datafun_tycheck::ParsedModuleGraph;
 
 #[cfg(feature = "termination")]
@@ -21,14 +22,14 @@ pub use termination::{analyze_function_termination, FunctionTerminationAnalysis}
 pub use refinement::{analyze_function_refinement, FunctionRefinementAnalysis};
 
 /// Result of analyzing an entire module graph.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ModuleGraphAnalysis {
     /// Per-function analysis results.
     pub functions: Vec<FunctionAnalysis>,
 }
 
 /// Analysis results for a single function.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FunctionAnalysis {
     /// Module path (e.g., "sys/std/u32").
     pub module_path: String,

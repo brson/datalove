@@ -14,5 +14,6 @@ all = ["termination", "refinement"]
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
+serde = { version = "1", features = ["derive"] }
 datalove-datafun-ast = { path = "../datalove-datafun-ast" }
 datalove-datafun-tycheck = { path = "../datalove-datafun-tycheck" }

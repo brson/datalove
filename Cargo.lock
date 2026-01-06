@@ -1071,6 +1071,7 @@ dependencies = [
  "datalove-datafun-tycheck",
  "rustmax",
  "salsa",
+ "serde",
 ]
 
 [[package]]

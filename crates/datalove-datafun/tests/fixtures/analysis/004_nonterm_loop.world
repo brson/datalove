@@ -1,0 +1,13 @@
+----------
+module local/test/nonterm
+----------
+
+fun unknown_term(n: int): int
+  loop carry (i = n)
+    if i == :int/@0
+      break
+    end if
+    continue(i + :int/@1)
+  end loop
+  ret :int/@0
+end fun
