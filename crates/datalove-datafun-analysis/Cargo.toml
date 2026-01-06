@@ -1,0 +1,18 @@
+[package]
+name = "datalove-datafun-analysis"
+description = "Prototype: termination detection and refinement types for datafun"
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = []
+termination = []
+refinement = []
+all = ["termination", "refinement"]
+
+[dependencies]
+rmx.workspace = true
+bct.workspace = true
+salsa.workspace = true
+datalove-datafun-ast = { path = "../datalove-datafun-ast" }
+datalove-datafun-tycheck = { path = "../datalove-datafun-tycheck" }

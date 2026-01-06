@@ -75,6 +75,8 @@ pub struct CompiledModules<'db> {
     pub env: ScriptEnvironment,
     /// Per-module lowering results (IR dumps or errors).
     pub module_lowering_results: BTreeMap<String, Vec<String>>,
+    /// Prototype analysis results (empty if analysis disabled).
+    pub analysis: datalove_datafun_analysis::ModuleGraphAnalysis,
 }
 
 /// Pipeline for compiling worldfile modules to IR.
@@ -82,6 +84,8 @@ pub struct ModuleCompilationPipeline<'db> {
     db: &'db dyn salsa::Database,
     pkglib_system: BTreeMap<String, Package>,
     pkglib_local: BTreeMap<String, Package>,
+    /// Enable prototype analysis passes (termination, refinement).
+    enable_analysis: bool,
 }
 
 impl<'db> ModuleCompilationPipeline<'db> {
@@ -91,7 +95,14 @@ impl<'db> ModuleCompilationPipeline<'db> {
             db,
             pkglib_system: BTreeMap::new(),
             pkglib_local: BTreeMap::new(),
+            enable_analysis: false,
         }
+    }
+
+    /// Enable prototype analysis passes (termination detection, refinement types).
+    pub fn enable_analysis(&mut self, enable: bool) -> &mut Self {
+        self.enable_analysis = enable;
+        self
     }
 
     /// Add a module section to the pipeline.
@@ -165,6 +176,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
                     func_id_map: HashMap::new(),
                     env: ScriptEnvironment::new(),
                     module_lowering_results: BTreeMap::new(),
+                    analysis: Default::default(),
                 };
             }
         };
@@ -245,6 +257,17 @@ impl<'db> ModuleCompilationPipeline<'db> {
             }
         }
 
+        // Phase 2.5 (optional): Run prototype analysis passes.
+        let analysis = if self.enable_analysis {
+            datalove_datafun_analysis::analyze_module_graph(
+                self.db,
+                &parsed_graph,
+                &path_to_errors,
+            )
+        } else {
+            Default::default()
+        };
+
         // Phase 3: Lower all functions.
         let mut env = ScriptEnvironment::new();
         let mut module_lowering_results: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -316,6 +339,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
             func_id_map,
             env,
             module_lowering_results,
+            analysis,
         }
     }
 }

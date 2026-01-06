@@ -19,6 +19,7 @@ The MVP is a working bare datafun language with:
 - carrying and bringing loop
 - dual interp/aot tests
 - human docs
+- termination detection and refinement types
 
 
 # on deck
@@ -52,5 +53,3 @@ The MVP is a working bare datafun language with:
 - improve runtime implementation unsafety
 - type declarations
 - heap genericity and clone method
-- termination detection via induction variables
-- refinement types via induction variables
