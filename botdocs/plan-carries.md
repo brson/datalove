@@ -67,14 +67,10 @@ Key commit: `7ab51cf` - "Add while condition to loop syntax"
 | 074 | while + carry |
 | 075 | while false |
 | 076 | while in function |
-
-## Missing AOT Tests
-
-The following interp while tests don't have AOT equivalents:
-- while + break
-- while + bring
-- nested while loops
-- while type error
+| 077 | while + break |
+| 078 | while + bring |
+| 079 | nested while loops |
+| 080 | while type error |
 
 ## Carry/Bring Semantics
 
@@ -141,7 +137,6 @@ Suppressed with `#[allow(dead_code)]` - may be useful for future validation.
 
 - Loop labels for nested break/continue (explicitly out of scope)
 - Fix bigint drop analysis for carry+bring combo
-- Add missing AOT while tests
 
 ---
 
