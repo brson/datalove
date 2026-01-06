@@ -27,7 +27,6 @@ The MVP is a working bare datafun language with:
   - into news feed entries
 - "bringing" ifs
 - field access
-- aot
 - jit
 - serialized ir bundles
 - clone
@@ -47,8 +46,10 @@ The MVP is a working bare datafun language with:
 
 # future
 
+- comptime/const execution
 - named types
 - improve runtime implementation unsafety
 - type declarations
 - heap genericity and clone method
-- aot
+- termination detection via induction variables
+- refinement types via induction variables
