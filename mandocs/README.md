@@ -30,6 +30,19 @@ through a Rustic linear-typing lens.
 
 
 
+---
+
+### 4 Things to know about Datalove
+
+<div>
+<!-- todo four description boxes here -->
+</div>
+
+---
+
+
+
+
 Datalove is built from three cleanly-scoped strict sublanguages of increasing power:
 [Datalove Literals](#user-content-datalove-literals),
 [Datalove Functions](#user-content-datalove-functions),
