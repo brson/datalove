@@ -555,6 +555,7 @@ impl DocsCommand {
                 options.extension.strikethrough = true;
                 options.extension.autolink = true;
                 options.extension.header_ids = Some("user-content-".to_string());
+                options.render.unsafe_ = true; // Allow raw HTML in markdown.
                 let html = comrak::markdown_to_html(&markdown, &options);
 
                 // Extract title from first heading or filename.

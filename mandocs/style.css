@@ -262,3 +262,34 @@ th {
 .token.type-colon { color: var(--syn-type-colon); }
 .token.punctuation { color: var(--syn-punctuation); }
 
+/* Four things grid */
+.four-things-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    margin: 2rem 0;
+}
+
+.thing-box {
+    background: var(--code-bg);
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    padding: 1rem 1.25rem;
+}
+
+.thing-box h4 {
+    color: var(--accent);
+    margin: 0 0 0.5rem 0;
+    font-size: 1.1rem;
+}
+
+.thing-box p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+    .four-things-grid {
+        grid-template-columns: 1fr;
+    }
+}
