@@ -23,6 +23,8 @@ The MVP is a working bare datafun language with:
 
 # on deck
 
+- "design-log" from design-notes
+  - into news feed entries
 - "bringing" ifs
 - field access
 - aot
