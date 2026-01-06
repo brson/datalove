@@ -7,10 +7,12 @@ for efficient data modeling and transformation.
 
 Datalove is built around one core idea:
 first let us define a simple but complete language
-for writing, typing, serializing, and transforming a variety
+for writing, typing, serializing, and transforming a sufficient variety
 of modern pure data types.
 Let's do that really well.
 Then we'll add I/O to it &mdash; carefully.
+
+<!--
 
 As a Rust programmer who sometimes
 scripts and prototypes in Python,
@@ -20,13 +22,19 @@ facilities for expressing simple data structures.
 Datalove is most usefully compared to Python, JavaScript, and Julia,
 through a Rustic linear-typing lens.
 
-> Datalove is under active design and development.
-> There is currently no recommended way to install or test.
+-->
+
+> Datalove is a testbed for my personal compiler and language design experiments.
+> There is no recommended way to install or test.
 
 
 
 
 Datalove is built from three cleanly-scoped strict sublanguages of increasing power:
+[Datalove Literals](#user-content-datalove-literals),
+[Datalove Functions](#user-content-datalove-functions),
+and [Datalove with Side Effects](#user-content-datalove-with-side-effects).
+
 
 
 
@@ -115,4 +123,3 @@ and stack unwinding.
 - [Compiler Guide](todo.md)
 - [Testing](testing-tower.md)
 - [Influences](influences.md)
-
