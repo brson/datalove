@@ -16,8 +16,8 @@ The MVP is a working bare datafun language with:
 
 # in progress
 
-- carrying and bringing loop
-- dual interp/aot tests
+- plan-backend-unify
+- loop while carry with bring redesign
 - human docs
 - termination detection and refinement types
 
