@@ -6,7 +6,65 @@ Datalove on various language design topics.
 
 
 
-### Loop induction variables
+
+
+### 2026-01-05 - Name resolution and mutual recursion
+
+Within a module
+name resolution is bidirectional.
+Top-level names may only be declared once,
+and they may be mutually recursive.
+
+```datalove
+// Pretend this is a module.
+
+fun is_even(n: u32): !bool
+    if n == @0
+        ret ok @true
+    else
+        ret is_odd(n -! @1)  // Forward reference OK in modules.
+    end if
+end fun
+
+fun is_odd(n: u32): !bool
+    if n == @0
+        ret ok @false
+    else
+        ret is_even(n -! @1)
+    end if
+end fun
+```
+
+Within a script
+name resolution is one-directional.
+Names may only refer to previous declarations.
+
+```datalove
+// Pretend this is a script.
+
+// In scripts, `is_odd` must be defined before `is_even` can call it.
+
+fun is_odd(n: u32): !bool
+    if n == @0
+        ret ok @false
+    else
+        ret is_even(n -! @1)  // ERROR: `is_even` not yet defined.
+    end if
+end fun
+
+fun is_even(n: u32): !bool
+    if n == @0
+        ret ok @true
+    else
+        ret is_odd(n -! @1)  // OK: `is_odd` already defined.
+    end if
+end fun
+```
+
+
+
+
+### 2026-01-05 - Loop induction variables
 
 Datalove's surface syntax is designed to map obviously to SSA IR's
 and the machine-level register/stack/heap model.
@@ -136,7 +194,8 @@ debuglog (a, b, c)
 
 
 
-### `if` statements with brings
+
+### 2026-01-05 - `if` statements with _brings_
 
 In the same spirit as `loop` with `carry` and `bring`.
 
@@ -473,7 +532,3 @@ typealias Contact: {
   age: int,
 }
 ```
-
-
-
-
