@@ -18,21 +18,20 @@ The MVP is a working bare datafun language with:
 
 # in progress
 
+- module hashes and salsa verification
 - plan-backend-unify
-- loop while carry with bring redesign
 - human docs
 - termination detection and refinement types
 
 
 # on deck
 
+- serialized ir bundles loading
 - "design-log" from design-notes
   - into news feed entries
 - "bringing" ifs
 - field access
 - jit
-- serialized ir bundles loading
-- module hashes and salsa verification
 - clone
 - destructuring
 - generics

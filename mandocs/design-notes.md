@@ -5,6 +5,22 @@ Datalove on various language design topics.
 
 
 
+### 2026-01-07 - Module content hashes and memoization
+
+The module graph forms a DAG.
+We use this to create strong content hashes
+for every module instantiation.
+
+This can be used as a key for various caching purposes.
+We specifically use it to verify correct memoization:
+Functions on modules should only rerun if their
+module's content hash has changed.
+
+This content hash includes
+the source code of a module,
+and the configuration of that module
+including which modules the requires/import demands are bound to.
+
 
 
 
