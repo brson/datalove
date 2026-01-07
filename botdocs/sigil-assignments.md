@@ -2,12 +2,15 @@
 
 Current lexer sigils and their uses in the language.
 
+Sigils are defined in the `bcts` crate (`lexer.rs`).
+
 ## Single-Character Sigils
 
 ### Punctuation
 - `.` - Dot
   - Member access in import statements: `import u32.negate`
   - Part of comparison operators: `.<`, `.>`
+  - Decimal point in float literals: `3.14`
 
 - `,` - Comma
   - Separating items in lists, tuples, function parameters, etc.
@@ -48,18 +51,21 @@ Current lexer sigils and their uses in the language.
 
 - `/` - SlashForward
   - Total division (panics on overflow/zero)
-  - Path separator in module paths: `sys/std/u32`
-  - OVERLOAD: also in type hints
-  - OVERLOAD: also in require statements.
+  - Path separator in require statements: `require module sys/std/u32`
+  - Type hint / expression separator: `: u32 / @42`
 
 ### Structural
 - `:` - Colon
   - Type hint separator: `let x: u32`
   - Function parameter types: `fun foo(x: u32)`
   - Function return types: `fun foo(): u32`
+  - Struct field type separator: `struct { x: u32 }`
 
 - `=` - Equals
   - Assignment in let statements: `let x = value`
+  - Struct field assignment: `{ x = @1 }`
+  - Map entry assignment: `map { @1 = @10 }`
+  - Carry binding: `loop carry (x = @0)`
 
 - `|` - Pipe
   - Binding delimiter in if statements: `if condition |x|`
@@ -69,22 +75,28 @@ Current lexer sigils and their uses in the language.
   - Function parameters: `fun foo(a: u32, b: u32)`
   - Function calls: `foo(1, 2)`
   - Tuples: `(1, 2, 3)`
+  - Tuple type hints: `tuple (u32, u32)`
   - Expression grouping
+  - Carry/bring clauses: `loop carry (x = @0)`
 
 - `{` `}` - BraceOpen, BraceClose
   - Maps: `@map { @1 = @10, @2 = @20 }`
   - Sets: `@set { @1, @2, @3 }`
-  - Structs: `@struct { x = @1, y = @2 }`
+  - Structs: `@struct { x = @1, y = @2 }` or `@{ x = @1 }`
+  - Enum type hints: `enum { A, B(u32) }`
+  - Anonymous struct type hints: `struct { x: u32 }`
 
 - `[` `]` - BracketOpen, BracketClose
   - Lists: `@[1, 2, 3]`
   - List types: `[u32]`
+  - Tensor shape: `tensor [2, 3] [...]`
+  - Tensor data: `tensor [...] [1, 2, 3, 4]`
 
 - `<` `>` - AngleOpen, AngleClose
   - Type parameters for collections
   - Map types: `map <key_type, value_type>`
   - Set types: `set <element_type>`
-  - List types (verbose): `list <element_type>` (alternative to `[element_type]`)
+  - Tensor types: `tensor <element_type, rank>`
 
 ## Two-Character Sigils
 
@@ -92,8 +104,7 @@ Current lexer sigils and their uses in the language.
 Return Option on overflow/error instead of panicking.
 
 - `+?` - PlusQuestion: Optional addition
-- `-?` - MinusQuestion: Optional subtraction
-  - OVERLOAD: Also unary optional negation: `-?expr`
+- `-?` - MinusQuestion: Optional subtraction / unary optional negation
 - `*?` - StarQuestion: Optional multiplication
 - `/?` - SlashQuestion: Optional division
 
@@ -101,8 +112,7 @@ Return Option on overflow/error instead of panicking.
 Return Result on overflow/error instead of panicking.
 
 - `+!` - PlusExclamation: Checked addition
-- `-!` - MinusExclamation: Checked subtraction
-  - OVERLOAD: Also unary checked negation: `-!expr`
+- `-!` - MinusExclamation: Checked subtraction / unary checked negation
 - `*!` - StarExclamation: Checked multiplication
 - `/!` - SlashExclamation: Checked division
 
