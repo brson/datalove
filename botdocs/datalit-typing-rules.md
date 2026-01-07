@@ -5,7 +5,7 @@ It follows a bidirectional typing discipline based on Dunfield & Krishnaswami (2
 
 ## Core Principles
 
-- **Bidirectional**: Expressions either synthesize (⇒) or check (⇐) against types
+- **Bidirectional**: Expressions either synthesize (=>) or check (<=) against types
 - **Explicit heaps**: `@` for local, `#` for global, omitted for inferred (defaults to local)
 - **Structural typing**: Anonymous types (tuples, structs, enums) are compatible by structure
 - **Nominal typing**: Named types (`struct Foo`, `enum Bar`, `tuple Pair`) are distinct even with same structure
@@ -13,44 +13,49 @@ It follows a bidirectional typing discipline based on Dunfield & Krishnaswami (2
 
 ## Type Equivalence
 
-Two types are equivalent (T ≡ T') when:
+Two types are equivalent (T = T') when:
 
 ### Primitives
-- `@bool ≡ @bool`
-- `@u32 ≡ @u32`
-- `@f32 ≡ @f32`
-- `@int ≡ @int` (arbitrary precision integers)
-- `@string ≡ @string`
+- `@bool = @bool`
+- `@u8 = @u8`, `@i8 = @i8`
+- `@u16 = @u16`, `@i16 = @i16`
+- `@u32 = @u32`, `@i32 = @i32`
+- `@u64 = @u64`, `@i64 = @i64`
+- `@f32 = @f32`
+- `@int = @int` (arbitrary precision integers)
+- `@string = @string`
+- `@data = @data`
+- `@error = @error`
 
 ### Tuples (structural)
-- `(T1, T2, ..., Tn) ≡ (T1', T2', ..., Tn')` iff Ti ≡ Ti' for all i
+- `(T1, T2, ..., Tn) = (T1', T2', ..., Tn')` iff Ti = Ti' for all i
 - Order matters
 - Length must match
 
 Examples:
 ```
-(@u32, @bool) ≡ (@u32, @bool)  ✓
-(@u32, @bool) ≡ (@bool, @u32)  ✗ (different order)
-(@u32, @bool) ≡ (@u32)         ✗ (different length)
+(@u32, @bool) = (@u32, @bool)  ok
+(@u32, @bool) = (@bool, @u32)  FAIL (different order)
+(@u32, @bool) = (@u32)         FAIL (different length)
 ```
 
 ### Anonymous Structs (structural)
-- `{f1: T1, f2: T2, ...} ≡ {f1: T1', f2: T2', ...}` iff:
+- `{f1: T1, f2: T2, ...} = {f1: T1', f2: T2', ...}` iff:
   - Same field names
   - Same field order (field order must be correct)
-  - Ti ≡ Ti' for all i
+  - Ti = Ti' for all i
 
 Examples:
 ```
-{x: @u32, y: @bool} ≡ {x: @u32, y: @bool}  ✓
-{x: @u32, y: @bool} ≡ {y: @bool, x: @u32}  ✗ (different order)
-{x: @u32} ≡ {x: @u32, y: @bool}            ✗ (different fields)
+{x: @u32, y: @bool} = {x: @u32, y: @bool}  ok
+{x: @u32, y: @bool} = {y: @bool, x: @u32}  FAIL (different order)
+{x: @u32} = {x: @u32, y: @bool}            FAIL (different fields)
 ```
 
 ### Named Types (nominal)
-- `@struct Point{x: T1, y: T2} ≢ @struct Vec2{x: T1, y: T2}` even if fields match
-- `@tuple Pair(T1, T2) ≢ @tuple Point(T1, T2)` even if elements match
-- `@enum Result{...} ≢ @enum Option{...}` even if variants match
+- `@struct Point{x: T1, y: T2} != @struct Vec2{x: T1, y: T2}` even if fields match
+- `@tuple Pair(T1, T2) != @tuple Point(T1, T2)` even if elements match
+- `@enum Result{...} != @enum Option{...}` even if variants match
 
 ### Anonymous Enums (structural)
 - Enum types are equivalent if they have the same set of variants (order-independent)
@@ -59,248 +64,293 @@ Examples:
 
 Examples:
 ```
-@enum{Foo, Bar(@u32)} ≡ @enum{Bar(@u32), Foo}  ✓ (order doesn't matter for enums)
-@enum{Foo} ≡ @enum{Bar}                        ✗ (different variant names)
+@enum{Foo, Bar(@u32)} = @enum{Bar(@u32), Foo}  ok (order doesn't matter for enums)
+@enum{Foo} = @enum{Bar}                        FAIL (different variant names)
 ```
 
 ### Collections
-- `[@T] ≡ [@T']` iff T ≡ T'
-- `@map<K, V> ≡ @map<K', V'>` iff K ≡ K' and V ≡ V'
-- `@set<T> ≡ @set<T'>` iff T ≡ T'
+- `[@T] = [@T']` iff T = T'
+- `@map<K, V> = @map<K', V'>` iff K = K' and V = V'
+- `@set<T> = @set<T'>` iff T = T'
 
 ### Option and Result
-- `@?T ≡ @?T'` iff T ≡ T'
-- `@!T ≡ @!T'` iff T ≡ T'
+- `@?T = @?T'` iff T = T'
+- `@!T = @!T'` iff T = T'
 
-### Error type
-- `@error ≡ @error`
+### Tensor
+- `@tensor<T, R> = @tensor<T', R'>` iff T = T' and R = R' (same element type and rank)
 
-## Subtyping
+### Data and Error types
+- `@data = @data`
+- `@error = @error`
 
-**Conservative approach**: Minimal implicit conversions.
+## Numeric Widening
 
-### Option/Result implicit wrapping
+Datalove supports automatic numeric widening for fixed-size integer types.
 
-Values can be implicitly wrapped in Option or Result types:
+### Widening Chains
+
+Unsigned integers can widen along this chain:
+```
+u8 -> u16 -> u32 -> u64 -> int
+```
+
+Signed integers can widen along this chain:
+```
+i8 -> i16 -> i32 -> i64 -> int
+```
+
+**No cross-widening**: Unsigned types cannot widen to signed types and vice versa.
 
 Examples:
-```
-: @?@u32 / @42    ✓ (implicit Some wrapping)
-: @?@u32 / @none  ✓ (explicit none)
-: @!@u32 / @42    ✓ (implicit Ok wrapping)
-```
+```datalove
+let a: @u8 = @10
+let b: @u16 = a         // OK: u8 widens to u16
+let c: @u32 = b         // OK: u16 widens to u32
+let d: @int = c         // OK: u32 widens to int
 
-### Anonymous to named coercion
-
-Anonymous types can be coerced to named types with matching structure:
-
-Examples:
-```
-: @struct Point{x: @u32, y: @u32} / {x = @1, y = @2}  ✓ (anon struct → named struct)
-: @tuple Pair(@u32, @u32) / (@1, @2)                  ✓ (anon tuple → named tuple)
-: @enum Result{Ok: @u32, Err} / @enum Ok(@42)         ✓ (anon enum → named enum)
+let e: @i32 = c         // ERROR: u32 cannot widen to i32 (cross-widening)
 ```
 
-## Synthesis Rules (e ⇒ T)
+## Synthesis Rules (e => T)
 
 Synthesis rules determine what type an expression produces.
 
 ### Rule: Syn-TypedExpr
 ```
 e : ExprFull with type_hint = Some(T)
-e.expr ⇐ T
-────────────────────────────────────
-e ⇒ T
+e.expr <= T
+------------------------------------
+e => T
 ```
 
 Example:
 ```
-: @u32 / @42 ⇒ @u32
+: @u32 / @42 => @u32
 ```
 
 ### Rule: Syn-Bool
 ```
-─────────────────
-@true ⇒ @bool
+-----------------
+@true => @bool
 
-─────────────────
-@false ⇒ @bool
+-----------------
+@false => @bool
 ```
 
 ### Rule: Syn-Int
 ```
 n : integer literal (as string)
 n fits in u32 range
-────────────────────────────────
-@n ⇒ @u32
+--------------------------------
+@n => @u32
 
 n : integer literal (as string)
 n does not fit in u32 range
-────────────────────────────────
-@n ⇒ IntOutOfRange error
+--------------------------------
+@n => IntOutOfRange error
 ```
 
-**Note**: Integer literals without type context default to `@u32`. If the value doesn't fit in u32 range, it's a type error. Use explicit type hints for arbitrary precision integers.
+**Note**: Integer literals without type context default to `@u32`. If the value doesn't fit in u32 range, it's a type error. Use explicit type hints for other integer types.
 
 Examples:
 ```
-@42 ⇒ @u32                           ✓
-@99999999999999999999 ⇒ error        ✗ (IntOutOfRange)
-: @int / @99999999999999999999 ⇒ @int  ✓ (explicit type hint)
+@42 => @u32                           ok
+@99999999999999999999 => error        FAIL (IntOutOfRange)
+: @int / @99999999999999999999 => @int  ok (explicit type hint)
+: @i32 / @-42 => @i32                   ok (explicit type hint)
 ```
 
 ### Rule: Syn-Float
 ```
 f : float literal (contains decimal point)
-────────────────────────────────────
-@f ⇒ @f32
+------------------------------------
+@f => @f32
 ```
 
 Example:
 ```
-@1.0 ⇒ @f32
-@3.14159 ⇒ @f32
+@1.0 => @f32
+@3.14159 => @f32
+```
+
+### Rule: Syn-Hex
+```
+h : hex literal (0x...)
+h fits in u32 range (unsigned)
+--------------------------------
+@h => @u32
+
+h does not fit in u32 range
+--------------------------------
+@h => IntOutOfRange error
+```
+
+**Note**: Hex literals default to `@u32`. Use type hints for other types.
+
+Example:
+```
+@0xFF => @u32
+@0xFFFFFFFFFF => error  FAIL (out of range for u32)
+: @u64 / @0xFFFFFFFFFF => @u64  ok (explicit type hint)
 ```
 
 ### Rule: Syn-String
 ```
 s : string literal
-────────────────────
-"s" ⇒ @string
+--------------------
+"s" => @string
 ```
 
 Example:
 ```
-"hello" ⇒ @string
-```
-
-### Rule: Syn-NamedTuple (resolved)
-```
-@tuple Point(T1, T2, ...) is defined
-∀i. ei ⇐ Ti
-───────────────────────────────────────
-@tuple Point(e1, e2, ...) ⇒ @tuple Point(T1, T2, ...)
-```
-
-Example:
-```
-Type hint: @tuple Pair(@u32, @bool)
-Expression: @tuple Pair(@1, @true) ⇒ @tuple Pair(@u32, @bool)
-```
-
-### Rule: Syn-NamedStruct (resolved)
-```
-@struct Point{f1: T1, f2: T2, ...} is defined
-∀i. fields contain fi with value ei where ei ⇐ Ti
-All fields present
-──────────────────────────────────────────────────
-@struct Point{f1 = e1, f2 = e2, ...} ⇒ @struct Point{f1: T1, f2: T2, ...}
-```
-
-Example:
-```
-Type hint: @struct Vec2{x: @f32, y: @f32}
-Expression: @struct Vec2{x = @1.0, y = @2.0} ⇒ @struct Vec2{x: @f32, y: @f32}
-```
-
-### Rule: Syn-NamedEnum (resolved)
-```
-@enum Result{Ok: T, Err: E, ...} is defined
-variant is Ok with payload type T
-e ⇐ T
-────────────────────────────────────────
-@enum Result.Ok(e) ⇒ @enum Result{Ok: T, Err: E, ...}
-```
-
-Example:
-```
-Type hint: @enum Result{Ok: @u32, Err: @string}
-Expression: @enum Result.Ok(@42) ⇒ @enum Result{Ok: @u32, Err: @string}
+"hello" => @string
 ```
 
 ### Rule: Syn-AnonTuple
 ```
-∀i. ei ⇒ Ti
-───────────────────────────────────
-@(e1, e2, ..., en) ⇒ @(T1, T2, ..., Tn)
+for all i: ei => Ti
+-----------------------------------
+@(e1, e2, ..., en) => @(T1, T2, ..., Tn)
 ```
 
 **Note**: Anonymous tuples can be synthesized by synthesizing each element independently.
 
 Example:
 ```
-@(@true, @42, @3.14) ⇒ @(bool, u32, f32)
+@(@true, @42, @3.14) => @(bool, u32, f32)
 ```
 
 ### Rule: Syn-AnonStruct
 ```
-∀i. ei ⇒ Ti (for field fi = ei)
-───────────────────────────────────────────
-@{f1 = e1, f2 = e2, ...} ⇒ @{f1: T1, f2: T2, ...}
+for all i: ei => Ti (for field fi = ei)
+-------------------------------------------
+@{f1 = e1, f2 = e2, ...} => @{f1: T1, f2: T2, ...}
 ```
 
 **Note**: Anonymous structs can be synthesized by synthesizing each field value independently.
 
 Example:
 ```
-@{x = @42, y = @3.14} ⇒ @{x: u32, y: f32}
+@{x = @42, y = @3.14} => @{x: u32, y: f32}
 ```
 
 ### Rule: Syn-List
 ```
-n ≥ 1
-e1 ⇒ T
-∀i ∈ [2..n]. ei ⇒ T' where T ≡ T'
-───────────────────────────────────
-@[e1, e2, ..., en] ⇒ @[T]
+n >= 1
+e1 => T
+for all i in [2..n]: ei => T' where T = T'
+-------------------------------------------
+@[e1, e2, ..., en] => @[T]
 ```
 
 **Note**: Lists can be synthesized by synthesizing all elements and ensuring they have the same type. The first element determines the expected type. Empty lists cannot be synthesized.
 
 Example:
 ```
-@[@1, @2, @3] ⇒ @[u32]
-@[] ⇒ error (CannotSynthesize - no way to infer element type)
+@[@1, @2, @3] => @[u32]
+@[] => error (CannotSynthesize - no way to infer element type)
 ```
 
 ### Rule: Syn-Set
 ```
-n ≥ 1
-e1 ⇒ T
-∀i ∈ [2..n]. ei ⇒ T' where T ≡ T'
-───────────────────────────────────
-@set{e1, e2, ..., en} ⇒ @set<T>
+n >= 1
+e1 => T
+for all i in [2..n]: ei => T' where T = T'
+-------------------------------------------
+@set{e1, e2, ..., en} => @set<T>
 ```
 
 **Note**: Sets can be synthesized by synthesizing all elements and ensuring they have the same type. Empty sets cannot be synthesized.
 
 Example:
 ```
-@set{@true, @false} ⇒ @set<bool>
-@set{} ⇒ error (CannotSynthesize)
+@set{@true, @false} => @set<bool>
+@set{} => error (CannotSynthesize)
 ```
 
 ### Rule: Syn-Map
 ```
-n ≥ 1
-k1 ⇒ K, v1 ⇒ V
-∀i ∈ [2..n]. ki ⇒ K' where K ≡ K'
-∀i ∈ [2..n]. vi ⇒ V' where V ≡ V'
-────────────────────────────────────────
-@map{k1 = v1, k2 = v2, ...} ⇒ @map<K, V>
+n >= 1
+k1 => K, v1 => V
+for all i in [2..n]: ki => K' where K = K'
+for all i in [2..n]: vi => V' where V = V'
+--------------------------------------------
+@map{k1 = v1, k2 = v2, ...} => @map<K, V>
 ```
 
-**Note**: Maps can be synthesized by synthesizing all keys and values and ensuring keys have the same type and values have the same type. Empty maps cannot be synthesized.
+**Note**: Maps can be synthesized by synthesizing all keys and values. Empty maps cannot be synthesized.
 
 Example:
 ```
-@map{@1 = @10, @2 = @20} ⇒ @map<u32, u32>
-@map{} ⇒ error (CannotSynthesize)
+@map{@1 = @10, @2 = @20} => @map<u32, u32>
+@map{} => error (CannotSynthesize)
+```
+
+### Rule: Syn-Tensor
+```
+shape = [d1, d2, ..., dn]
+elements.len() == d1 * d2 * ... * dn
+all elements synthesize to same type T
+-----------------------------------------
+@tensor[d1, d2, ...]{e1, e2, ...} => @tensor<T, n>
+```
+
+**Note**: Tensors can be synthesized if non-empty and all elements have the same type. Rank is the length of the shape vector.
+
+### Rule: Syn-Some
+```
+e => T
+---------------------------
+@some(e) => @?T
+```
+
+**Note**: Explicit `some` constructor synthesizes an Option type.
+
+Example:
+```
+@some(@42) => @?@u32
+```
+
+### Rule: Syn-Ok
+```
+e => T
+---------------------------
+@ok(e) => @!T
+```
+
+**Note**: Explicit `ok` constructor synthesizes a Result type.
+
+Example:
+```
+@ok(@42) => @!@u32
+```
+
+### Rule: Syn-Data
+```
+---------------------------
+@data "..." => @data
+```
+
+**Note**: Data literals synthesize as `@data` type.
+
+### Rule: Syn-Error
+```
+msg : string literal
+------------------------
+@error msg => @error
+```
+
+**Note**: Error values always synthesize as `@error` type.
+
+Example:
+```
+@error "oops" => @error
 ```
 
 ### Rule: Syn-None
 ```
-─────────────────
+-----------------
 Cannot synthesize type for @none (needs context)
 ```
 
@@ -308,7 +358,7 @@ Cannot synthesize type for @none (needs context)
 
 ### Rule: Syn-AnonEnum
 ```
-─────────────────
+-----------------
 Cannot synthesize type for anonymous enums (needs context)
 ```
 
@@ -316,226 +366,152 @@ Cannot synthesize type for anonymous enums (needs context)
 
 Example:
 ```
-@enum Foo(@42) ⇒ error (CannotSynthesize)
-: @enum{Foo: @u32, Bar} / @enum Foo(@42) ⇒ @enum{Foo: @u32, Bar}  ✓ (with type hint)
+@enum Foo(@42) => error (CannotSynthesize)
+: @enum{Foo: @u32, Bar} / @enum Foo(@42) => @enum{Foo: @u32, Bar}  ok (with type hint)
 ```
 
-### Rule: Syn-Error
+### Rule: Syn-Er
 ```
-msg : string literal
-────────────────────────
-@error msg ⇒ @error
-```
-
-**Note**: Error values always synthesize as `@error` type.
-
-Example:
-```
-@error "oops" ⇒ @error
+-----------------
+Cannot synthesize type for @er (needs context)
 ```
 
-## Checking Rules (e ⇐ T)
+**Note**: Explicit `er` constructor cannot be synthesized - requires Result type context.
+
+## Checking Rules (e <= T)
 
 Checking rules verify an expression against an expected type.
 
 ### Rule: Check-Subsume
 ```
-e ⇒ T'
-T' ≡ T
-───────────
-e ⇐ T
+e => T'
+T' = T
+-----------
+e <= T
 ```
 
 This is the key rule that allows synthesizing expressions to be checked.
 
-### Rule: Check-Int
+### Rule: Check-Int (all integer types)
 ```
 n : integer literal (as string)
-n fits in u32 range
-────────────────────────────────
-@n ⇐ @u32
+n fits in u8 range
+--------------------------------
+@n <= @u8
 
-n : integer literal (as string)
-────────────────────────────────
-@n ⇐ @int
+n fits in i8 range
+--------------------------------
+@n <= @i8
+
+... (similarly for u16, i16, u32, i32, u64, i64)
+
+any integer literal
+--------------------------------
+@n <= @int
 ```
 
 Examples:
 ```
-@42 ⇐ @u32     ✓
-@42 ⇐ @int     ✓
-@-1 ⇐ @u32     ✗ (negative, out of range for u32)
-@-1 ⇐ @int     ✓
-@99999999999999999999 ⇐ @int ✓
-@99999999999999999999 ⇐ @u32 ✗ (out of range)
+@42 <= @u32     ok
+@42 <= @int     ok
+@-1 <= @u32     FAIL (negative, out of range for u32)
+@-1 <= @i32     ok
+@-1 <= @int     ok
+@99999999999999999999 <= @int ok
+@99999999999999999999 <= @u32 FAIL (out of range)
+```
+
+### Rule: Check-TypedInt
+```
+@n has type hint T_hint
+@n <= T_hint  (validates literal fits in hinted type)
+T_hint = T_expected OR can_widen(T_hint, T_expected)
+------------------------------------------------
+: T_hint / @n <= T_expected
+```
+
+**Note**: When an integer literal has a type hint, the hint is respected. The hinted type must either match or widen to the expected type.
+
+Example:
+```
+: @u8 / @10 <= @u32    ok (u8 widens to u32)
+: @u32 / @10 <= @u8    FAIL (u32 cannot narrow to u8)
 ```
 
 ### Rule: Check-Float
 ```
 f : float literal
-────────────────────────────────
-@f ⇐ @f32
+--------------------------------
+@f <= @f32
 ```
 
-Example:
+### Rule: Check-Hex (all types)
 ```
-@3.14 ⇐ @f32  ✓
+h : hex literal (0x...)
+h fits in u8 range
+--------------------------------
+@h <= @u8
+
+... (similarly for u16, u32, u64, int)
+
+h fits in 32 bits
+--------------------------------
+@h <= @f32  (as bit pattern)
 ```
+
+**Note**: Hex literals can check against any integer type. For f32, they are interpreted as IEEE 754 bit patterns.
 
 ### Rule: Check-AnonTuple
 ```
 (T1, T2, ..., Tn) is expected type
 length matches
-∀i. ei ⇐ Ti
-──────────────────────────────────
-(e1, e2, ..., en) ⇐ (T1, T2, ..., Tn)
-```
-
-Example:
-```
-: (@u32, @bool) / (@42, @true)
-                   ↑
-              (@42, @true) ⇐ (@u32, @bool)  ✓
-```
-
-### Rule: Check-NamedTuple (coercion)
-```
-@tuple Point(T1, T2, ..., Tn) is expected type
-length matches
-∀i. ei ⇐ Ti
-──────────────────────────────────
-(e1, e2, ..., en) ⇐ @tuple Point(T1, T2, ..., Tn)
-```
-
-**Note**: Anonymous tuples can be coerced to named tuples.
-
-Example:
-```
-: @tuple Pair(@u32, @bool) / (@42, @true)
-                              ↑
-                         (@42, @true) ⇐ @tuple Pair(@u32, @bool)  ✓
-```
-
-### Rule: Check-NamedTuple (exact match)
-```
-@tuple Point(T1, T2, ..., Tn) is expected type
-names match
-length matches
-∀i. ei ⇐ Ti
-──────────────────────────────────
-@tuple Point(e1, e2, ..., en) ⇐ @tuple Point(T1, T2, ..., Tn)
+for all i: ei <= Ti
+----------------------------------
+(e1, e2, ..., en) <= (T1, T2, ..., Tn)
 ```
 
 ### Rule: Check-AnonStruct
 ```
 {f1: T1, f2: T2, ...} is expected type
 fields match (same names, same order)
-∀i. ei ⇐ Ti
-─────────────────────────────────────────
-{f1 = e1, f2 = e2, ...} ⇐ {f1: T1, f2: T2, ...}
-```
-
-Example:
-```
-: {x: @u32, y: @bool} / {x = @42, y = @true}
-                         ↑
-                    {x = @42, y = @true} ⇐ {x: @u32, y: @bool}  ✓
-```
-
-### Rule: Check-NamedStruct (coercion)
-```
-@struct Point{f1: T1, f2: T2, ...} is expected type
-fields match (same names, same order)
-∀i. ei ⇐ Ti
-─────────────────────────────────────────
-{f1 = e1, f2 = e2, ...} ⇐ @struct Point{f1: T1, f2: T2, ...}
-```
-
-**Note**: Anonymous structs can be coerced to named structs.
-
-Example:
-```
-: @struct Point{x: @u32, y: @bool} / {x = @42, y = @true}
-                                      ↑
-                                 {x = @42, y = @true} ⇐ @struct Point{x: @u32, y: @bool}  ✓
-```
-
-### Rule: Check-NamedStruct (exact match)
-```
-@struct Point{f1: T1, f2: T2, ...} is expected type
-names match
-fields match (same names, same order)
-∀i. ei ⇐ Ti
-─────────────────────────────────────────
-@struct Point{f1 = e1, f2 = e2, ...} ⇐ @struct Point{f1: T1, f2: T2, ...}
+for all i: ei <= Ti
+-----------------------------------------
+{f1 = e1, f2 = e2, ...} <= {f1: T1, f2: T2, ...}
 ```
 
 ### Rule: Check-AnonEnum
 ```
 @enum{V1, V2: T2, ...} is expected type
 variant Vi exists
-If Vi has payload type Ti, then e ⇐ Ti
+If Vi has payload type Ti, then e <= Ti
 If Vi has no payload, then expression has no payload
-──────────────────────────────────────────────────
-@enum Vi(...) ⇐ @enum{V1, V2: T2, ...}
+------------------------------------------------------
+@enum Vi(...) <= @enum{V1, V2: T2, ...}
 ```
 
-Example:
+### Rule: Check-TypedAnonEnum
 ```
-: @enum{Foo, Bar: @u32} / @enum Bar(@42)
-                          ↑
-                     @enum Bar(@42) ⇐ @enum{Foo, Bar: @u32}  ✓
-```
-
-### Rule: Check-NamedEnum (coercion)
-```
-@enum Result{V1, V2: T2, ...} is expected type
-variant Vi exists in the named enum
-If Vi has payload type Ti, then e ⇐ Ti
-If Vi has no payload, then expression has no payload
-──────────────────────────────────────────────────
-@enum Vi(...) ⇐ @enum Result{V1, V2: T2, ...}
+@enum Vi(...) has direct enum type hint T_hint
+T_hint = T_expected
+@enum Vi(...) without hint <= T_expected
+------------------------------------------------------
+: T_hint / @enum Vi(...) <= T_expected
 ```
 
-**Note**: Anonymous enum constructors (without enum name prefix) can be coerced to named enums.
-
-Example:
-```
-: @enum Result{Ok: @u32, Err} / @enum Ok(@42)
-                                 ↑
-                            @enum Ok(@42) ⇐ @enum Result{Ok: @u32, Err}  ✓
-```
-
-### Rule: Check-NamedEnum (exact match)
-```
-@enum Result{V1, V2: T2, ...} is expected type
-enum names match
-variant Vi exists
-If Vi has payload type Ti, then e ⇐ Ti
-If Vi has no payload, then expression has no payload
-──────────────────────────────────────────────────
-@enum Result.Vi(...) ⇐ @enum Result{V1, V2: T2, ...}
-```
+**Note**: When an anonymous enum expression has a type hint, the hinted type must match the expected type exactly.
 
 ### Rule: Check-List
 ```
 [@T] is expected type
-∀ei ∈ elements. ei ⇐ T
-──────────────────────────
-[e1, e2, ...] ⇐ [@T]
-```
-
-Example:
-```
-: [@u32] / [@1, @2, @3]
-           ↑
-      [@1, @2, @3] ⇐ [@u32]  ✓
+for all ei in elements: ei <= T
+------------------------------
+[e1, e2, ...] <= [@T]
 ```
 
 ### Rule: Check-EmptyList
 ```
-───────────
-[] ⇐ [@T]
+-----------
+[] <= [@T]
 ```
 
 Empty lists check against any list type.
@@ -543,69 +519,68 @@ Empty lists check against any list type.
 ### Rule: Check-Map
 ```
 @map<K, V> is expected type
-∀(ki, vi) ∈ entries. ki ⇐ K ∧ vi ⇐ V
-──────────────────────────────────────
-@map{k1 = v1, k2 = v2, ...} ⇐ @map<K, V>
-```
-
-Example:
-```
-: @map<@u32, @string> / @map{@1 = "one", @2 = "two"}
-                        ↑
-                   @map{@1 = "one", @2 = "two"} ⇐ @map<@u32, @string>  ✓
+for all (ki, vi) in entries: ki <= K and vi <= V
+------------------------------------------------
+@map{k1 = v1, k2 = v2, ...} <= @map<K, V>
 ```
 
 ### Rule: Check-Set
 ```
 @set<T> is expected type
-∀ei ∈ elements. ei ⇐ T
-──────────────────────────
-@set{e1, e2, ...} ⇐ @set<T>
+for all ei in elements: ei <= T
+------------------------------
+@set{e1, e2, ...} <= @set<T>
 ```
 
-Example:
+### Rule: Check-Tensor
 ```
-: @set<@u32> / @set{@1, @2, @3}
-               ↑
-          @set{@1, @2, @3} ⇐ @set<@u32>  ✓
+@tensor<T, R> is expected type
+rank matches R
+element count matches product of shape dimensions
+for all ei: ei <= T
+-----------------------------------------------
+@tensor[d1, ...]{e1, ...} <= @tensor<T, R>
 ```
 
 ### Rule: Check-None
 ```
-──────────────
-@none ⇐ @?T
+--------------
+@none <= @?T
 ```
 
 `@none` checks against any option type.
 
-### Rule: Check-Option (implicit wrapping)
+### Rule: Check-Some
 ```
-e ⇐ T
-──────────────
-e ⇐ @?T
+e <= T
+--------------
+@some(e) <= @?T
 ```
 
-**Note**: This allows implicit wrapping in Some. Values that successfully check against type T can also check against @?T.
+**Note**: Explicit `some` constructor checks payload against inner type.
 
-**CRITICAL IMPLEMENTATION NOTE**: This rule MUST be checked BEFORE Check-Subsume in the implementation. Otherwise, synthesizable expressions (like string literals, booleans) will match Check-Subsume first and fail to coerce to Option types. See `crates/datalove-datalit/src/tycheck.rs` lines 499-520.
-
-Example:
+### Rule: Check-Ok
 ```
-: @?@u32 / @42
-           ↑
-      @42 ⇐ @u32  ✓
-      @42 ⇐ @?@u32  ✓ (implicit Some wrapping)
-
-: @?@string / "hello"
-              ↑
-      "hello" ⇐ @string  ✓
-      "hello" ⇐ @?@string  ✓ (implicit Some wrapping)
+e <= T
+--------------
+@ok(e) <= @!T
 ```
+
+**Note**: Explicit `ok` constructor checks payload against inner type.
+
+### Rule: Check-Er
+```
+e is error expression or data expression
+--------------
+@er(e) <= @!T
+```
+
+**Note**: Explicit `er` constructor for Results. Payload must be an error or data expression.
 
 ### Rule: Check-ResultErr (implicit Err wrapping)
 ```
-──────────────────────
-@error "msg" ⇐ @!T
+----------------------
+@error "msg" <= @!T
 ```
 
 **Note**: Error expressions can check against any Result type as implicit Err wrapping.
@@ -613,39 +588,21 @@ Example:
 Example:
 ```
 : @!@u32 / @error "failed"
-           ↑
-      @error "failed" ⇐ @error  ✓
-      @error "failed" ⇐ @!@u32  ✓ (implicit Err wrapping)
+           |
+      @error "failed" <= @error  ok
+      @error "failed" <= @!@u32  ok (implicit Err wrapping)
 ```
 
-### Rule: Check-Result (implicit Ok wrapping)
+### Rule: Check-Data
 ```
-e ⇐ T
-──────────────
-e ⇐ @!T
-```
-
-**Note**: This allows implicit wrapping in Ok. Values that successfully check against type T can also check against @!T.
-
-**CRITICAL IMPLEMENTATION NOTE**: This rule MUST be checked BEFORE Check-Subsume in the implementation, just like Check-Option. See `crates/datalove-datalit/src/tycheck.rs` lines 499-520.
-
-Example:
-```
-: @!@u32 / @42
-           ↑
-      @42 ⇐ @u32  ✓
-      @42 ⇐ @!@u32  ✓ (implicit Ok wrapping)
-
-: @!@string / "success"
-              ↑
-      "success" ⇐ @string  ✓
-      "success" ⇐ @!@string  ✓ (implicit Ok wrapping)
+----------------------
+@data "..." <= @data
 ```
 
 ### Rule: Check-Error
 ```
-──────────────────────
-@error "msg" ⇐ @error
+----------------------
+@error "msg" <= @error
 ```
 
 ## Heap Checking
@@ -663,48 +620,68 @@ Each type and expression has an associated heap:
 Local heap values can flow to local heap types:
 e has local heap
 T has local heap
-─────────────────
+-----------------
 e : T is valid
 
 Global heap values can flow to global heap types:
 e has global heap
 T has global heap
-─────────────────
+-----------------
 e : T is valid
 
-Omitted heap is compatible with local heap:
+Omitted heap is compatible with any heap:
 e has omitted heap
-T has local heap
-─────────────────
-e : T is valid
-
-e has local heap
-T has omitted heap
-─────────────────
-e : T is valid
+-----------------
+e : T is valid (for any heap on T)
 ```
 
 Different heaps (local vs global) never unify. They are not compatible.
 
 Examples:
 ```
-: @u32 / @42   ✓ (both local heap)
-: #u32 / #42   ✓ (both global heap)
-: @u32 / 42    ✓ (omitted → local)
-: @u32 / #42   ✗ (heap mismatch)
-: #u32 / @42   ✗ (heap mismatch)
+: @u32 / @42   ok (both local heap)
+: #u32 / #42   ok (both global heap)
+: @u32 / 42    ok (omitted -> local)
+: @u32 / #42   FAIL (heap mismatch)
+: #u32 / @42   FAIL (heap mismatch)
 ```
 
-## Error Type
+## Type Error Codes
 
-The `@error` type represents error values:
+The type checker produces the following error codes:
 
-```
-────────────────────
-@error "msg" ⇐ @error
-```
-
-This is distinct from the `@!T` (result) type. The `@error` type is for errors without associated success types.
+- **T001**: Integer/hex literal out of range (synthesis)
+- **T005-T012**: Integer out of range for specific types (u8, i8, u16, i16, u32, i32, u64, i64)
+- **T013**: Cannot infer type for empty list / hex out of range for f32
+- **T014**: Cannot infer type for empty set
+- **T015**: Cannot infer type for empty map
+- **T016**: Cannot synthesize type for anonymous enum, None, or Er
+- **T017**: Cannot type-check expression with parse errors
+- **T018**: List element type mismatch
+- **T019**: Set element type mismatch
+- **T020**: Map key type mismatch
+- **T021**: Map value type mismatch
+- **T022**: Type mismatch for primitive literal
+- **T024**: Enum variant payload mismatch (has payload, expected none)
+- **T025**: Enum variant payload mismatch (no payload, expected payload)
+- **T032**: General type mismatch (subsumption fallback)
+- **T033**: List element heap mismatch
+- **T034**: Set element heap mismatch
+- **T035**: Map key heap mismatch
+- **T036**: Map value heap mismatch
+- **T037**: General heap mismatch
+- **T038**: Tuple arity mismatch
+- **T039**: Struct arity mismatch
+- **T040**: Type hint mismatch / er payload must be error
+- **T042**: Struct field order mismatch
+- **T044**: Enum variant not found
+- **T047**: Anonymous enum type hint mismatch
+- **T048**: Tensor rank mismatch
+- **T049**: Tensor element count mismatch
+- **T050**: Cannot infer type for empty tensor
+- **T051**: Tensor element count mismatch (synthesis)
+- **T052**: Tensor element type mismatch
+- **T053**: Tensor element heap mismatch
 
 ## Design Decisions Summary
 
@@ -713,18 +690,9 @@ This is distinct from the `@!T` (result) type. The `@error` type is for errors w
 Empty collections can check against any element type:
 
 ```
-[] ⇐ [@T]           ✓ for any T
-@set{} ⇐ @set<T>    ✓ for any T
-@map{} ⇐ @map<K, V> ✓ for any K, V
-```
-
-In nested contexts, inner empty collections can infer type from neighbors:
-
-```
-[
-  [@true],
-  []        ; inferred as [@bool]
-]
+[] <= [@T]           ok for any T
+@set{} <= @set<T>    ok for any T
+@map{} <= @map<K, V> ok for any K, V
 ```
 
 ### 2. Field order in anonymous structs
@@ -732,32 +700,33 @@ In nested contexts, inner empty collections can infer type from neighbors:
 Field order must be correct:
 
 ```
-{x: @u32, y: @bool} ≢ {y: @bool, x: @u32}
+{x: @u32, y: @bool} != {y: @bool, x: @u32}
 ```
 
-This differs from many languages but simplifies implementation.
-
-### 3. Anonymous to named coercion
-
-Anonymous types (tuples, structs, enums) can be coerced to named types with matching structure. This is a key feature for ergonomic data construction.
-
-### 4. Default numeric types
+### 3. Default numeric types
 
 Bare numeric literals default to concrete types:
-- Integer literals → `@u32` (with range check)
-- Float literals → `@f32`
+- Integer literals -> `@u32` (with range check)
+- Float literals -> `@f32`
+- Hex literals -> `@u32` (with range check)
 
 Use explicit type hints for other numeric types:
 ```
 : @int / @99999999999999999999  ; arbitrary precision
-: @i64 / @-42                     ; signed 64-bit (future)
+: @i64 / @-42                   ; signed 64-bit
+: @u8 / @255                    ; unsigned 8-bit
 ```
 
-### 5. Option and Result implicit wrapping
+### 4. Explicit Option/Result constructors
 
-Values can be implicitly wrapped in Option/Result types. This is the only way to construct Some and Ok values (no explicit constructors).
+Option and Result values use explicit constructors:
+- `@none` for Option's None
+- `@some(x)` for Option's Some
+- `@ok(x)` for Result's Ok
+- `@er(@error "msg")` for Result's Err
+- `@error "msg"` can implicitly check against `@!T`
 
-### 6. Anonymous composite type synthesis
+### 5. Anonymous composite type synthesis
 
 Anonymous composite types can be synthesized when all their components can be synthesized:
 - **Tuples**: `@(@true, @42)` synthesizes as `@(bool, u32)`
@@ -766,79 +735,31 @@ Anonymous composite types can be synthesized when all their components can be sy
 - **Sets**: `@set{@true, @false}` synthesizes as `@set<bool>`
 - **Maps**: `@map{@1 = @10}` synthesizes as `@map<u32, u32>`
 
-For collections (lists, sets, maps), all elements/keys/values must have the same type. The first element determines the expected type for the rest. Empty collections cannot be synthesized (they need type context).
+For collections (lists, sets, maps), all elements/keys/values must have the same type. The first element determines the expected type for the rest. Empty collections cannot be synthesized.
 
-## Numeric Widening
+### 6. Data and Error types
 
-Datalove supports automatic numeric widening for fixed-size integer types.
-
-### Widening Chains
-
-Unsigned integers can widen along this chain:
-```
-u8 → u16 → u32 → u64 → int
-```
-
-Signed integers can widen along this chain:
-```
-i8 → i16 → i32 → i64 → int
-```
-
-**No cross-widening**: Unsigned types cannot widen to signed types and vice versa.
-
-Examples:
-```datalove
-let a: @u8 = @10
-let b: @u16 = a         // OK: u8 widens to u16
-let c: @u32 = b         // OK: u16 widens to u32
-let d: @int = c         // OK: u32 widens to int
-
-let e: @i32 = c         // ERROR: u32 cannot widen to i32 (cross-widening)
-```
-
-### Bare Math Operator Widening
-
-In Datafun, bare arithmetic operators (`+`, `-`, `*`) on fixed-size integers automatically widen the result to `int`:
-
-```datalove
-let a: @u32 = @10
-let b: @u32 = @20
-let c = a * b           // c has type @int (widened)
-```
-
-This behavior differs from checked operators (`+!`, `-!`, etc.) which return `Result<T>` and optional operators (`+?`, `-?`, etc.) which return `Option<T>`.
-
-### Widening Rules
-
-**Rule: Widen-Assign**
-```
-e ⇒ T1
-can_widen_to(T1, T2)
-────────────────────
-e ⇐ T2
-```
-
-Widening is attempted after exact type matching fails but before Option/Result coercion.
-
-**Rule: Widen-BinOp**
-```
-e1 ⇒ T where T is fixed int type
-e2 ⇒ T where T is fixed int type
-op ∈ {+, -, *}
-────────────────────────────────
-e1 op e2 ⇒ @int
-```
-
-Bare arithmetic on fixed integers widens to `int`.
+- `@data` type represents opaque data values
+- `@error` type represents error values with messages
+- Error expressions can implicitly wrap into Result types
 
 ## Implementation Notes
 
 ### Bidirectional algorithm structure
 
 ```rust
-fn synthesize(expr: ExprFull) -> Result<Type, TypeError>
-fn check(expr: ExprFull, expected: Type) -> Result<(), TypeError>
+fn synthesize(ctx, expr: ExprFull) -> Result<TypeAndHeap, TypeError>
+fn check(ctx, expr: ExprFull, expected: TypeAndHeap) -> Result<(), TypeError>
 ```
+
+### Type representation
+
+The `Type` enum in `crates/datalove-datalit/src/tycheck.rs` includes:
+- Primitives: Bool, U8, I8, U16, I16, U32, I32, U64, I64, F32, Int, String
+- Composites: AnonTuple, AnonStruct, AnonEnum
+- Collections: List, Map, Set
+- Wrappers: Option, Result
+- Special: Tensor, Data, Error
 
 ### Interaction with name resolution
 
@@ -850,24 +771,3 @@ Before typechecking:
 Typechecker needs:
 - Resolution results to look up types for named structs, tuples, enums
 - Type definitions from the type hint in `: type / expr` syntax
-
-### Error messages
-
-Typechecker produces clear errors:
-- "Expected type `@u32`, but expression has type `@bool`" (TypeMismatch)
-- "Cannot synthesize type for expression (add type annotation)" (CannotSynthesize)
-- "Integer literal out of range for type `@u32`" (IntOutOfRange)
-- "Heap mismatch: expected `@`, got `#`" (HeapMismatch)
-- "Field order mismatch" (FieldOrderMismatch)
-- "Variant not found" (VariantNotFound)
-- "Arity mismatch: expected N fields, got M" (ArityMismatch)
-
-## Future Extensions
-
-Features to consider adding later:
-
-1. **More numeric types**: `@f64`
-2. **Type variables and generics**: User-defined generic types
-3. **Type aliases**: `type Point = {x: @f32, y: @f32}`
-4. **Refinement types**: `@u32{x | x > 0}` (positive integers)
-5. **Gradual typing**: Mix of static and dynamic checking
