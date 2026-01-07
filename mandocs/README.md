@@ -30,24 +30,28 @@ through a Rustic linear-typing lens.
 
 
 
-### 4 Things to know about Datalove
+<br>
+
+### 4 things to remember about Datalove
 
 <div class="four-things-grid">
   <div class="thing-box">
-    <h4>Simple Types</h4>
-    <p>A clean, orthogonal type system built from familiar primitives: tuples, structs, enums, lists, sets, maps, and tensors.</p>
+    <p>Simple and complete <em>syntax and machine representation</em>
+       of common data types for <em>interchange and transformation.</em></p>
   </div>
   <div class="thing-box">
-    <h4>Pure Functions</h4>
-    <p>Imperative-feeling syntax with pure functional semantics. No hidden state, no surprises.</p>
+    <p>Simple but sophisticated <em>linear type system</em>
+       with <em>pure functions</em> and <em>verifiably total</em> functions
+       that read like imperative functions.</p>
   </div>
   <div class="thing-box">
-    <h4>Static Typing</h4>
-    <p>Strongly and statically typed with ergonomic inference. Catch errors at compile time, not runtime.</p>
+    <p>Novel statement- and line-oriented lexical structure.</p>
   </div>
   <div class="thing-box">
-    <h4>Data First</h4>
-    <p>Designed for data transformation. Serialize, query, and reshape structured data with ease.</p>
+    <p>Modern compilation and execution architecture with
+       <em>rapid recompilation</em> and <em>script</em> iteration,
+       interactive / <em>REPL</em>,
+       <em>AOT</em>-render to <em>staticly-linked</em> binaries.</p>
   </div>
 </div>
 

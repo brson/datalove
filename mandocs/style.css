@@ -267,7 +267,7 @@ th {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 1.5rem;
-    margin: 4rem 0;
+    margin: 2rem 0 4rem 0;
 }
 
 .thing-box {
@@ -277,15 +277,15 @@ th {
     padding: 1rem 1.25rem;
 }
 
-.thing-box h4 {
-    color: var(--accent);
-    margin: 0 0 0.5rem 0;
-    font-size: 1.1rem;
-}
-
 .thing-box p {
     margin: 0;
-    line-height: 1.5;
+    line-height: 2;
+}
+
+.thing-box p em {
+    color: var(--accent);
+    font-weight: bold;
+    font-style: normal;
 }
 
 @media (max-width: 600px) {
