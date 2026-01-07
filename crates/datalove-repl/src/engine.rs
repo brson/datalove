@@ -43,9 +43,10 @@ impl<'db> Engine<'db> {
         let pipeline = ModuleCompilationPipeline::new(db);
         let compiled = pipeline.compile();
 
-        // Check for resolution errors.
-        if let Some(err) = &compiled.resolution_error {
-            bail!("Module resolution error: {}", err);
+        // Check for errors.
+        if compiled.has_errors() {
+            let errors = compiled.all_errors();
+            bail!("Module compilation failed: {}", errors.join("; "));
         }
 
         // Create script compilation context.

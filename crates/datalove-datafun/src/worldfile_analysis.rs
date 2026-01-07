@@ -56,9 +56,8 @@ pub fn analyze_worldfile(
 ) -> AnyResult<Analysis> {
     let mut results = Vec::new();
 
-    // Build pipeline and add modules.
-    let mut pipeline = ModuleCompilationPipeline::new(db);
-    pipeline.add_modules_from_sections(&parsed.sections);
+    // Build pipeline from sections (using consolidated constructor).
+    let pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
 
     // Compile modules (typecheck, drop analysis, lower).
     let compiled = pipeline.compile();

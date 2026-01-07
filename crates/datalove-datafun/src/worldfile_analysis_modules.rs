@@ -14,7 +14,7 @@ use serde::{Serialize, Deserialize};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 
 use crate::pipeline::{
-    ModuleCompilationPipeline, TypecheckResult, LoweringResult,
+    ModuleCompilationPipeline, TypecheckResult, LoweringResult, is_lowering_error,
 };
 
 /// Result of analyzing a module-only worldfile with IR interpreter.
@@ -54,9 +54,8 @@ pub fn analyze_modules_worldfile(
         }
     }
 
-    // Build pipeline and add modules.
-    let mut pipeline = ModuleCompilationPipeline::new(db);
-    pipeline.add_modules_from_sections(&parsed.sections);
+    // Build pipeline from sections (using consolidated constructor).
+    let pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
 
     // Verify local/test/main module exists.
     let local_lib = pipeline.pkglib_local().get("test")
@@ -77,11 +76,8 @@ pub fn analyze_modules_worldfile(
         });
     }
 
-    // Check for typecheck errors.
-    let all_typecheck_errors: Vec<String> = compiled.path_to_errors.values()
-        .flatten()
-        .cloned()
-        .collect();
+    // Check for typecheck errors using consolidated helper.
+    let all_typecheck_errors = compiled.all_typecheck_errors();
     if !all_typecheck_errors.is_empty() {
         return Ok(ModulesAnalysis {
             typecheck: TypecheckResult::Error { errors: all_typecheck_errors },
@@ -90,11 +86,8 @@ pub fn analyze_modules_worldfile(
         });
     }
 
-    // Check for drop analysis errors.
-    let all_drop_errors: Vec<String> = compiled.drop_analysis_errors.values()
-        .flatten()
-        .cloned()
-        .collect();
+    // Check for drop analysis errors using consolidated helper.
+    let all_drop_errors = compiled.all_drop_analysis_errors();
     if !all_drop_errors.is_empty() {
         return Ok(ModulesAnalysis {
             typecheck: TypecheckResult::Success,
@@ -108,7 +101,7 @@ pub fn analyze_modules_worldfile(
     // Check for lowering errors.
     let lowering_errors: Vec<String> = compiled.module_lowering_results.values()
         .flatten()
-        .filter(|s| s.starts_with("Error") || s.starts_with("Drop analysis error") || s.starts_with("Missing drop analysis"))
+        .filter(|s| is_lowering_error(s))
         .cloned()
         .collect();
     if !lowering_errors.is_empty() {

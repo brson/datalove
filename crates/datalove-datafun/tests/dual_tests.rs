@@ -216,9 +216,8 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         })
         .unwrap();
 
-    // Build pipeline and add modules (we need to do this twice for two contexts).
-    let mut pipeline = datafun::pipeline::ModuleCompilationPipeline::new(&db);
-    pipeline.add_modules_from_sections(&parsed.sections);
+    // Build pipeline and add modules (use consolidated constructor).
+    let pipeline = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
     let compiled = pipeline.compile();
 
     // Check for resolution errors.
@@ -298,9 +297,8 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     let interp_output = interp_ctx.get_debug_buffer();
     interp_ctx.destroy_all();
 
-    // Build pipeline again for AOT context.
-    let mut pipeline2 = datafun::pipeline::ModuleCompilationPipeline::new(&db);
-    pipeline2.add_modules_from_sections(&parsed.sections);
+    // Build pipeline again for AOT context (necessary because script_context consumes compiled).
+    let pipeline2 = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
     let compiled2 = pipeline2.compile();
 
     // Run AOT pipeline.
