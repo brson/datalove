@@ -5,7 +5,7 @@
 
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun};
-use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode, ConstValue, ValueId};
+use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode, ValueId};
 use super::context::LowerCtx;
 use super::expr::lower_expression;
 use super::LowerError;
@@ -605,13 +605,14 @@ pub fn lower_loop<'db>(
             ctx.emit(Instruction::Drop { operand: Operand::Value(*carry_value) });
         }
 
-        // Create default bring values if any.
-        let exit_args: Vec<Operand> = bring_types.iter().map(|ty| {
-            let default_val = ctx.fresh_value(ty.clone());
-            let const_val = default_const_for_type(ty);
-            ctx.emit(Instruction::Const { dest: default_val, value: const_val });
-            Operand::Value(default_val)
-        }).collect();
+        // Lower else_break expressions for bring values.
+        // Type checker ensures else_break values match bring_types when brings are present.
+        let else_break = loop_stmt.else_break(ctx.db).unwrap_or_default();
+        let mut exit_args: Vec<Operand> = Vec::with_capacity(else_break.len());
+        for expr in &else_break {
+            let value = lower_expression(ctx, *expr)?;
+            exit_args.push(Operand::Value(value));
+        }
 
         ctx.finish_block(Terminator::Goto {
             target: loop_exit,
@@ -672,29 +673,4 @@ pub fn lower_loop<'db>(
 
     let _ = body_block; // Silence unused warning.
     Ok(())
-}
-
-/// Create a default constant value for a type (used for while-false exit with brings).
-fn default_const_for_type(ty: &IrType) -> ConstValue {
-    match ty {
-        IrType::Unit => ConstValue::Unit,
-        IrType::Bool => ConstValue::Bool(false),
-        IrType::U8 => ConstValue::U8(0),
-        IrType::U16 => ConstValue::U16(0),
-        IrType::U32 => ConstValue::U32(0),
-        IrType::U64 => ConstValue::U64(0),
-        IrType::I8 => ConstValue::I8(0),
-        IrType::I16 => ConstValue::I16(0),
-        IrType::I32 => ConstValue::I32(0),
-        IrType::I64 => ConstValue::I64(0),
-        IrType::Int => ConstValue::Int { limbs: vec![], negative: false },
-        IrType::F32 => ConstValue::F32(0.0),
-        IrType::String => ConstValue::String(String::new()),
-        // For complex types, use Unit as placeholder.
-        // This is only valid if the while-false path is never taken.
-        IrType::Option(_) | IrType::Result(_) | IrType::List(_) |
-        IrType::Set(_) | IrType::Map(_, _) | IrType::Tuple(_) |
-        IrType::Struct(_) | IrType::Enum(_) | IrType::Error |
-        IrType::Data | IrType::Tensor(..) => ConstValue::Unit,
-    }
 }

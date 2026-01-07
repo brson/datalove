@@ -1,0 +1,28 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn test_zero_iter():\nblock0:\n    goto block1\nblock1:\n    v1 = const false\n    branch v1, block3, block4\nblock4:\n    v2 = const 100int\n    goto block2(v2)\nblock3:\n    v3 = const 1int\n    goto block2(v3)\nblock5:\n    goto block1\nblock2(v0):\n    return v0\nexports:\n    test_zero_iter = f0\n",
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call unit0.f0()\n    unit_end v0\n",
+            ),
+            output: "@100",
+        ),
+    ],
+)

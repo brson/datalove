@@ -495,6 +495,41 @@ pub fn check_statement<'db>(
                 }
             }
 
+            // Validate and type check else break clause.
+            // - When loop while has brings, else break is required (to provide bring values).
+            // - When loop while has only carries, else break is NOT allowed (carries are implicitly dropped).
+            if stmt.condition(db).is_some() {
+                let has_carries = !carries.is_empty();
+                let has_brings = !brings.is_empty();
+
+                match (has_carries, has_brings, stmt.else_break(db)) {
+                    // Has brings but no else break - error.
+                    (_, true, None) => {
+                        ctx.add_error(TypeError::LoopWhileMissingElseBreak);
+                    }
+                    // No brings, and has else break - error.
+                    (_, false, Some(_)) => {
+                        ctx.add_error(TypeError::ElseBreakNotAllowed);
+                    }
+                    // Has brings and else break - type check values.
+                    (_, true, Some(else_break_values)) => {
+                        let expected = bring_types.len();
+                        let actual = else_break_values.len();
+                        if expected != actual {
+                            ctx.add_error(TypeError::ElseBreakArityMismatch { expected, actual });
+                        } else {
+                            for (value, expected_ty) in else_break_values.iter().zip(bring_types.iter()) {
+                                if let Err(e) = check_expr(ctx, *value, *expected_ty) {
+                                    ctx.add_error(e);
+                                }
+                            }
+                        }
+                    }
+                    // No brings, no else break - OK.
+                    (_, false, None) => {}
+                }
+            }
+
             // Type check loop body.
             for body_stmt in body {
                 check_statement(ctx, body_stmt);

@@ -78,6 +78,12 @@ pub enum TypeError {
     ContinueArityMismatch { expected: usize, actual: usize },
     /// Loop with carry/bring has paths that fall through without break/continue.
     LoopBodyFallthrough,
+    /// Loop while with bring requires else break clause.
+    LoopWhileMissingElseBreak,
+    /// Else break not allowed on loop while with carries but no brings.
+    ElseBreakNotAllowed,
+    /// Else break has wrong number of values for loop's bring bindings.
+    ElseBreakArityMismatch { expected: usize, actual: usize },
 }
 
 impl From<datalove_datalit::tycheck::TypeError> for TypeError {

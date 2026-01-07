@@ -201,6 +201,23 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "kind": "LoopBodyFallthrough"
             })
         }
+        TypeError::LoopWhileMissingElseBreak => {
+            json!({
+                "kind": "LoopWhileMissingElseBreak"
+            })
+        }
+        TypeError::ElseBreakNotAllowed => {
+            json!({
+                "kind": "ElseBreakNotAllowed"
+            })
+        }
+        TypeError::ElseBreakArityMismatch { expected, actual } => {
+            json!({
+                "kind": "ElseBreakArityMismatch",
+                "expected": expected,
+                "actual": actual
+            })
+        }
     }
 }
 

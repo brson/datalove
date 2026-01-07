@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn count_to(p0):\nblock0:\n    v0 = const 1int\n    store s0, v0\n    goto block1\nblock1:\n    v2 = lt s0, p0\n    branch v2, block3, block4\nblock4:\n    v3 = load s0\n    goto block2(v3)\nblock3:\n    v4 = const 1int\n    v5 = add s0, v4\n    drop v4\n    drop s0\n    store s0, v5\n    v6 = ge s0, p0\n    branch v6, block5, block6\nblock5:\n    v7 = load s0\n    goto block2(v7)\nblock6:\n    drop s0\n    goto block7\nblock7:\n    goto block1\nblock2(v1):\n    drop p0\n    return v1\nexports:\n    count_to = f0\n",
+                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn factorial(p0):\nblock0:\n    v0 = const 1int\n    v1 = move p0\n    goto block1(v0, v1)\nblock1(v2, v3):\n    v5 = const 1int\n    v6 = gt v3, v5\n    drop v5\n    branch v6, block3, block4(v2, v3)\nblock4(v7, v8):\n    drop v7\n    drop v8\n    goto block2(v2)\nblock3:\n    v9 = mul v2, v3\n    v10 = const 1int\n    v11 = sub v3, v10\n    drop v10\n    drop v2\n    drop v3\n    goto block1(v9, v11)\nblock5:\n    goto block1(v2, v3)\nblock2(v4):\n    return v4\nexports:\n    factorial = f0\n",
             ),
             output: "(fragment executed)",
         ),
@@ -22,7 +22,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call unit0.f0(v0)\n    unit_end v1\n",
             ),
-            output: "Error: UninitializedSlot(SlotId(0))",
+            output: "Error: UninitializedValue(ValueId(2))",
         ),
     ],
 )

@@ -49,6 +49,7 @@
                     "kind": "Break"
                   }
                 ],
+                "else_break": null,
                 "kind": "Loop"
               },
               {
@@ -81,6 +82,7 @@
                 ]
               }
             ],
+            "else_break": null,
             "kind": "Loop"
           },
           {

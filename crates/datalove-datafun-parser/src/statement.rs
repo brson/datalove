@@ -677,6 +677,36 @@ impl<'db> Parser<'db> {
             None
         };
 
+        // Check for optional `else break (...)` clause after while condition.
+        let else_break = if condition.is_some() && self.peek_word() == Some("else") {
+            self.eat_word("else");
+            if self.peek_word() == Some("break") {
+                self.eat_word("break");
+                // Parse optional (values...).
+                let values = match self.peek() {
+                    Some(TreeToken::Branch(Sigil::ParenOpen, _)) => {
+                        if let Some(TreeToken::Branch(Sigil::ParenOpen, iter)) = self.next() {
+                            self.parse_else_break_values(iter)
+                        } else {
+                            vec![]
+                        }
+                    }
+                    _ => vec![], // else break without values
+                };
+                Some(values)
+            } else {
+                let ts = self.peek_text_span();
+                DiagnosticBuilder::error(self.db, "expected 'break' after 'else' in loop while")
+                    .code("P034")
+                    .primary_label(ts, "expected 'break'")
+                    .emit_parse();
+                self.had_error = true;
+                None
+            }
+        } else {
+            None
+        };
+
         // Parse body until we hit "end loop".
         let mut body = vec![];
         let mut brings = vec![];
@@ -700,7 +730,7 @@ impl<'db> Parser<'db> {
             }
         }
 
-        ast::Statement::Loop(ast::StmtLoop::new(self.db, carries, condition, body, brings))
+        ast::Statement::Loop(ast::StmtLoop::new(self.db, carries, condition, else_break, body, brings))
     }
 
     /// Parse carry bindings: `(name: type = expr, ...)`.
@@ -820,6 +850,11 @@ impl<'db> Parser<'db> {
         };
 
         ast::BringBinding::new(self.db, name, type_hint)
+    }
+
+    /// Parse else break values: `(expr1, expr2, ...)`.
+    fn parse_else_break_values(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
+        self.parse_comma_separated_exprs(iter)
     }
 
     fn parse_break(&mut self) -> ast::Statement<'db> {

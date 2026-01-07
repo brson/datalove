@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Full loop with carry, while, else break, and bring
+// Factorial example with proper else break handling
+fun factorial(n: int): int
+    loop carry (acc = :int/@1, i = n) while i .> :int/@1 else break (acc)
+        continue(acc * i, i - :int/@1)
+    end loop bring (res: int)
+    ret res
+end fun
+
+----------
+scriptunit-expr
+----------
+
+factorial(:int/@5)

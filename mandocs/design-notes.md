@@ -190,6 +190,17 @@ it must always be paired with `else break`
 to handle the termination condition,
 including the zero-iteration case.
 
+```datalove
+loop carry (
+  x = 0,
+) while x != 10
+  if x = 0
+    continue (1)
+  end if
+  continue (x + 1)   // `continue` is required
+end loop
+```
+
 A more feature-complete example (w/ nonsense logic):
 
 ```datalove

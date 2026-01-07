@@ -5,7 +5,7 @@ scriptunit-fragment
 // Bring only - in function like test 229
 fun count_to(limit: int): int
     var i = :int/@1
-    loop while i .< limit
+    loop while i .< limit else break (i)
         set i = i + :int/@1
         if i >= limit
             break(i)

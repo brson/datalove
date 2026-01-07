@@ -115,6 +115,7 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 | `loop` | `loop ... end loop` | Implemented (in function bodies) |
 | `loop carry` | `loop carry (i = 0) ... end loop` | Implemented (loop with iteration state) |
 | `loop bring` | `loop ... end loop bring (x)` | Implemented (loop that produces values) |
+| `loop while` | `loop while cond ... end loop` | Implemented (conditional loop) |
 | `break` | `break` or `break(values...)` | Implemented (exits loop, optionally with bring values) |
 | `continue` | `continue` or `continue(values...)` | Implemented (next iteration, optionally with new carries) |
 
@@ -298,6 +299,70 @@ fun factorial(n: u32): u32
     ret result
 end fun
 ```
+
+#### Loop While (Conditional Loop)
+
+Conditional loop that checks condition at start of each iteration:
+
+```
+fun count_while(): u32
+    var n: u32 = @0
+    loop while n .< @10
+        set n = n + @1
+    end loop
+    ret n
+end fun
+```
+
+**Loop while with carries:**
+
+When `loop while` has carries but no brings, carries are implicitly dropped when the condition is initially false:
+
+```
+fun sum_to(limit: u32): u32
+    var total: u32 = @0
+    loop carry (i: u32 = @0) while i .< limit
+        set total = total + i
+        continue(i + @1)
+    end loop
+    ret total
+end fun
+```
+
+**Loop while with brings (requires else break):**
+
+When `loop while` has brings, an `else break` clause is required to provide bring values when the condition is initially false:
+
+```
+fun first_over(threshold: u32): u32
+    var x: u32 = @0
+    loop while x .<= threshold else break (x)
+        set x = x + @1
+        if x .> @100
+            break(x)
+        end if
+    end loop bring (result: u32)
+    ret result
+end fun
+```
+
+**Full combined form:**
+
+```
+fun factorial(n: u32): u32
+    loop carry (acc: u32 = @1, i = n) while i .> @1 else break (acc)
+        continue(acc * i, i - @1)
+    end loop bring (result: u32)
+    ret result
+end fun
+```
+
+**Loop while syntax:**
+- `loop while condition` - basic conditional loop
+- `loop carry (...) while condition` - carries only, implicit drop when false
+- `loop while condition else break (values) ... end loop bring (...)` - brings require else break
+- `else break` is NOT allowed without brings (type error)
+- `else break (values)` must match bring types and arity
 
 **Behavior:**
 - `loop ... end loop` repeats indefinitely until `break` or `ret`

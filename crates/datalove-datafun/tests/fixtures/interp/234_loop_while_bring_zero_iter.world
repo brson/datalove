@@ -1,0 +1,19 @@
+----------
+scriptunit-fragment
+----------
+
+// Loop where while condition is initially false
+// else break provides the bring values directly
+fun test_zero_iter(): int
+    loop while @false else break (:int/@100)
+        break(:int/@1)
+    end loop bring (res: int)
+    ret res
+end fun
+
+----------
+scriptunit-expr
+----------
+
+// Should be 100 from else break (since condition is false)
+test_zero_iter()

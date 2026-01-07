@@ -152,13 +152,16 @@ pub struct BringBinding<'db> {
 /// With while: `loop while cond ... end loop`
 /// With carry: `loop carry (x = 0) ... end loop`
 /// With bring: `loop ... end loop bring (result)`
-/// Full: `loop carry (x = 0) while cond ... end loop bring (result)`
+/// With else break: `loop carry (x = 0) while cond else break (values) ... end loop bring (result)`
 #[salsa::tracked]
 pub struct StmtLoop<'db> {
     #[returns(ref)]
     pub carries: Vec<CarryBinding<'db>>,
     /// Optional while condition, checked at the start of each iteration.
     pub condition: Option<ExprFun<'db>>,
+    /// Whether else break clause is present (None = absent, Some = present).
+    /// Empty vec means `else break` without values; non-empty means `else break (values)`.
+    pub else_break: Option<Vec<ExprFun<'db>>>,
     #[returns(ref)]
     pub body: Vec<Statement<'db>>,
     #[returns(ref)]
