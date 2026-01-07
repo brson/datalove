@@ -1,8 +1,51 @@
-//! Shared compiler pipeline for IR3 worldfile analysis.
+//! Datafun module compilation pipeline.
 //!
-//! Provides common infrastructure for compiling module sections to IR,
-//! used by both `worldfile_analysis_ir3` (mixed worldfiles with script units)
-//! and `worldfile_analysis_modules_ir3` (module-only worldfiles).
+//! This module provides a two-stage compilation API:
+//!
+//! 1. **Module compilation** via [`ModuleCompilationPipeline`] - compiles module definitions
+//!    (functions, types) through parsing, typechecking, drop analysis, and IR lowering.
+//!
+//! 2. **Script execution** via [`ScriptCompilationContext`] - incrementally compiles and
+//!    executes script units (expressions, statements) against compiled modules.
+//!
+//! # Compilation phases
+//!
+//! Module compilation runs three phases:
+//! - **Phase 1**: Build module graph, resolve imports, typecheck all modules
+//! - **Phase 2**: Run drop analysis on all functions (determines ownership/lifetimes)
+//! - **Phase 3**: Lower all functions to IR
+//!
+//! # Usage
+//!
+//! ```ignore
+//! // Create pipeline and add modules.
+//! let mut pipeline = ModuleCompilationPipeline::new(&db);
+//! pipeline.add_module("local", "mypackage", "main", source);
+//!
+//! // Or load from worldfile sections:
+//! let pipeline = ModuleCompilationPipeline::from_sections(&db, &sections);
+//!
+//! // Compile modules.
+//! let compiled = pipeline.compile();
+//! if compiled.has_errors() {
+//!     eprintln!("{}", compiled.all_errors().join("\n"));
+//!     return;
+//! }
+//!
+//! // Create script context for execution.
+//! let mut ctx = compiled.script_context(&db, DebugOutputMode::Stderr);
+//!
+//! // Evaluate script units incrementally.
+//! let result = ctx.eval_fragment("let x = 42");
+//! let result = ctx.eval_expr("x + 1");
+//! ```
+//!
+//! # Key types
+//!
+//! - [`ModuleCompilationPipeline`] - configures and runs module compilation
+//! - [`CompiledModules`] - compilation results with error checking helpers
+//! - [`ScriptCompilationContext`] - incremental script evaluation with shared state
+//! - [`TypecheckResult`], [`LoweringResult`] - serializable result summaries
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
