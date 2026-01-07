@@ -9,9 +9,11 @@ The MVP is a working bare datafun language with:
 - type aliases
 - generic functions for built-in generic types
 - repl, script runner
+- pipeline tools
 - interpreter, jit, aot
 - compute-only core library
 - core->runtime calls
+- decent diagnostics
 
 
 # in progress
@@ -29,7 +31,8 @@ The MVP is a working bare datafun language with:
 - "bringing" ifs
 - field access
 - jit
-- serialized ir bundles
+- serialized ir bundles loading
+- module hashes and salsa verification
 - clone
 - destructuring
 - generics
@@ -39,6 +42,11 @@ The MVP is a working bare datafun language with:
 - boolean ops - and or xor not
 - clean up demo files in style of learn x in y minutes
 - datafun ast roundtrip
+- script unit undo / redo
+- analysis caching
+- sourceless tokens and whitespace-free tokens
+- sourceless parsing
+- separate parsing from analysis
 
 
 ----------
