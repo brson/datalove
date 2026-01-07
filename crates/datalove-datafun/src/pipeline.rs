@@ -99,6 +99,19 @@ impl<'db> ModuleCompilationPipeline<'db> {
         }
     }
 
+    /// Create a new pipeline from worldfile sections.
+    ///
+    /// Convenience constructor that creates a pipeline and adds all module
+    /// sections from the provided sections list.
+    pub fn from_sections(
+        db: &'db dyn salsa::Database,
+        sections: &[datalove_datafun_pkg::package_load_worldfile::WorldfileSection],
+    ) -> Self {
+        let mut pipeline = Self::new(db);
+        pipeline.add_modules_from_sections(sections);
+        pipeline
+    }
+
     /// Enable prototype analysis passes (termination detection, refinement types).
     pub fn enable_analysis(&mut self, enable: bool) -> &mut Self {
         self.enable_analysis = enable;
@@ -135,6 +148,49 @@ impl<'db> ModuleCompilationPipeline<'db> {
                 self.add_module(library, package, module, source);
             }
         }
+    }
+
+    /// Load the sys library from the specified directory.
+    ///
+    /// Loads all modules from the sys library into the pipeline.
+    /// This is typically used by the CLI and REPL to provide standard library functions.
+    pub async fn load_sys_library_from_dir(
+        &mut self,
+        sys_dir: std::path::PathBuf,
+    ) -> AnyResult<()> {
+        use datalove_datafun_pkg::package_load;
+
+        let config = package_load::PackageWorldConfig {
+            dir_pkglib_system: sys_dir,
+            dir_pkglib_local: None,
+        };
+
+        let package_world_raw = package_load::load_world(config).await?;
+
+        // Add all sys modules to the pipeline.
+        for (pkg_name, pkg) in &package_world_raw.pkglib_system {
+            for (mod_name, pkg_module) in &pkg.modules {
+                self.add_module("sys", pkg_name, mod_name, &pkg_module.text);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Load the sys library from the default location.
+    ///
+    /// Finds the sys/ directory relative to CARGO_MANIFEST_DIR and loads it.
+    /// This is a convenience method for CLI and REPL usage.
+    pub async fn load_sys_library_default(&mut self) -> AnyResult<()> {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_path = std::path::PathBuf::from(manifest_dir);
+        let parent = manifest_path.parent()
+            .ok_or_else(|| anyhow!("Failed to get parent directory"))?;
+        let grandparent = parent.parent()
+            .ok_or_else(|| anyhow!("Failed to get grandparent directory"))?;
+        let sys_dir = grandparent.join("sys");
+
+        self.load_sys_library_from_dir(sys_dir).await
     }
 
     /// Get reference to local packages (for validation).
@@ -418,6 +474,77 @@ pub struct ScriptCompilationContext<'db> {
 }
 
 impl<'db> CompiledModules<'db> {
+    /// Check if compilation succeeded without errors.
+    ///
+    /// Returns true only if there are no resolution, typecheck, drop analysis, or lowering errors.
+    pub fn is_successful(&self) -> bool {
+        self.resolution_error.is_none()
+            && self.path_to_errors.values().all(|errors| errors.is_empty())
+            && self.drop_analysis_errors.is_empty()
+            && !self.has_lowering_errors()
+    }
+
+    /// Check if there are any errors.
+    ///
+    /// Returns true if there are resolution, typecheck, drop analysis, or lowering errors.
+    pub fn has_errors(&self) -> bool {
+        !self.is_successful()
+    }
+
+    /// Get all errors as a flat vector of error strings.
+    ///
+    /// Collects resolution, typecheck, drop analysis, and lowering errors.
+    pub fn all_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+
+        if let Some(err) = &self.resolution_error {
+            errors.push(format!("Resolution error: {}", err));
+        }
+
+        for error_list in self.path_to_errors.values() {
+            errors.extend(error_list.iter().cloned());
+        }
+
+        for (func_name, error_list) in &self.drop_analysis_errors {
+            for error in error_list {
+                errors.push(format!("Drop analysis error in {}: {}", func_name, error));
+            }
+        }
+
+        for error_list in self.module_lowering_results.values() {
+            for error in error_list {
+                if error.starts_with("Error") || error.starts_with("Drop analysis error") || error.starts_with("Missing drop analysis") {
+                    errors.push(error.clone());
+                }
+            }
+        }
+
+        errors
+    }
+
+    /// Check if there are any lowering errors in the module results.
+    fn has_lowering_errors(&self) -> bool {
+        self.module_lowering_results.values()
+            .flatten()
+            .any(|s| s.starts_with("Error") || s.starts_with("Drop analysis error") || s.starts_with("Missing drop analysis"))
+    }
+
+    /// Get all typecheck errors as a flat vector.
+    pub fn all_typecheck_errors(&self) -> Vec<String> {
+        self.path_to_errors.values()
+            .flatten()
+            .cloned()
+            .collect()
+    }
+
+    /// Get all drop analysis errors as a flat vector.
+    pub fn all_drop_analysis_errors(&self) -> Vec<String> {
+        self.drop_analysis_errors.values()
+            .flatten()
+            .cloned()
+            .collect()
+    }
+
     /// Create a script compilation context from compiled modules.
     ///
     /// Consumes the compiled modules and returns a context for incrementally

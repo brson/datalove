@@ -317,22 +317,16 @@ impl ScriptCommand {
         // Load sys library unless --no-sys.
         let mut pipeline = ModuleCompilationPipeline::new(&db);
         if !self.no_sys {
-            self.load_sys_library(&db, &mut pipeline)?;
+            rmx::futures::executor::block_on(pipeline.load_sys_library_default())?;
         }
 
         // Compile modules (typecheck, drop analysis, lower to IR).
         let compiled = pipeline.compile();
 
-        // Check for resolution errors.
-        if let Some(err) = &compiled.resolution_error {
-            bail!("Module resolution error: {}", err);
-        }
-
-        // Check for typecheck errors in modules.
-        for (path, errors) in &compiled.path_to_errors {
-            if !errors.is_empty() {
-                bail!("Typecheck error in module {}: {}", path, errors.join("; "));
-            }
+        // Check for errors using consolidated helper methods.
+        if compiled.has_errors() {
+            let errors = compiled.all_errors();
+            bail!("Compilation failed with {} error(s):\n{}", errors.len(), errors.join("\n"));
         }
 
         // Create script compilation context with Stderr mode for debuglog output.
@@ -387,42 +381,6 @@ impl ScriptCommand {
 
         // Cleanup.
         ctx.destroy_all();
-
-        Ok(())
-    }
-
-    fn load_sys_library(
-        &self,
-        _db: &datalove_datafun::Database,
-        pipeline: &mut datalove_datafun::pipeline::ModuleCompilationPipeline<'_>,
-    ) -> AnyResult<()> {
-        use datalove_datafun as datafun;
-
-        // Find sys/ directory relative to the binary's location.
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let manifest_path = rmx::std::path::PathBuf::from(manifest_dir);
-        let parent = manifest_path.parent()
-            .ok_or_else(|| anyhow!("Failed to get parent directory"))?;
-        let grandparent = parent.parent()
-            .ok_or_else(|| anyhow!("Failed to get grandparent directory"))?;
-        let sys_dir = grandparent.join("sys");
-
-        // Load package world from sys/ directory.
-        let config = datafun::package_load::PackageWorldConfig {
-            dir_pkglib_system: sys_dir,
-            dir_pkglib_local: None,
-        };
-
-        let package_world_raw = rmx::futures::executor::block_on(
-            datafun::package_load::load_world(config)
-        )?;
-
-        // Add all sys modules to the pipeline.
-        for (pkg_name, pkg) in &package_world_raw.pkglib_system {
-            for (mod_name, pkg_module) in &pkg.modules {
-                pipeline.add_module("sys", pkg_name, mod_name, &pkg_module.text);
-            }
-        }
 
         Ok(())
     }

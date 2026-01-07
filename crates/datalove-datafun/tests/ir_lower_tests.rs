@@ -21,9 +21,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
         .map_err(|e| format!("Failed to parse worldfile: {}", e))?;
 
-    // Build pipeline and add modules.
-    let mut pipeline = ModuleCompilationPipeline::new(&db);
-    pipeline.add_modules_from_sections(&parsed.sections);
+    // Build pipeline from sections.
+    let pipeline = ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
 
     // Verify local/test/main module exists.
     let local_lib = pipeline.pkglib_local().get("test")
@@ -35,16 +34,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Compile modules (typecheck, drop analysis, lower).
     let compiled = pipeline.compile();
 
-    // Check for resolution errors.
+    // Check for errors using consolidated helper methods.
     if let Some(err) = &compiled.resolution_error {
         return Ok(format!("Resolution error: {}\n", err));
     }
 
-    // Check for typecheck errors.
-    let all_typecheck_errors: Vec<String> = compiled.path_to_errors.values()
-        .flatten()
-        .cloned()
-        .collect();
+    let all_typecheck_errors = compiled.all_typecheck_errors();
     if !all_typecheck_errors.is_empty() {
         return Ok(format!("Typecheck error: {}\n", all_typecheck_errors.join("; ")));
     }
