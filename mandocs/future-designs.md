@@ -1,3 +1,5 @@
+# Bitwise operators
+
 Shift operators are logical.
 For arithmetic right shift use divide by 2.
 
@@ -13,3 +15,4 @@ bitxor
 & | ~ ^
 
 to use `|` we would need to change the `if expr |arg|` syntax.
+
