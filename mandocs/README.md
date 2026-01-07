@@ -75,7 +75,7 @@ It includes booleans, fixed integers and bigints, floats;
 anonymous tuples, structs, and enums;
 strings, lists, maps and sets, tensors;
 option and result;
-existential runtime-typed data and error types.
+dynamically-typed data and error types.
 
 ```datalove
 {
@@ -129,9 +129,8 @@ end fun
 The complete language with I/O-bearing procedures,
 owned native pointers, objects with identity,
 and stack unwinding.
-
-> This language is not implemented yet,
-  and mostly not discussed here.
+_This language is not implemented yet,
+and mostly not discussed in the documentation._
 
 
 
