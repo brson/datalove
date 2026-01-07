@@ -1,6 +1,16 @@
 # Datalove Principles
 
 
+## Simple and complete syntax and representation for data types
+
+
+
+
+## Restrictive type systems enable better compilers
+
+
+
+
 ## Modern compiler and execution architecture
 
 Full memoization for efficient recompilation and compiler queries (LSPs).
@@ -41,3 +51,22 @@ early-return checked operations and widening to ease the burden.
 
 
 
+---
+
+2026/01/06 values sketch
+
+consistent and understandable data syntax, representation, and transformation
+machine sympathy / codegen sympathy
+type-system simplicity / compilation simplicity
+restrictive type systems to enable advanced compiler featurues
+statement-oriented readability
+memoization, determinism, reprodicibility
+linear types
+numerical correctness
+interactive execution / repl
+rapid iteration / fast startup
+prototyping and scripting
+declarative / imperative, code as data - datalit, token trees
+flexible execution modes - repl, script, aot, webcomponents, pipelines
+
+  
