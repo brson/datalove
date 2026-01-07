@@ -64,16 +64,12 @@ end fun
 
 
 
-### 2026-01-05 - Loop induction variables
+### Unconditional and conditional loops
 
-Datalove's surface syntax is designed to map obviously to SSA IR's
-and the machine-level register/stack/heap model.
-
-Without loop induction variables:
+Unconditional loops are spelled `loop`.
+They require a `break` or `ret` to exit.
 
 ```datalove
-// This is a "memory" or "alloca" IR value and,
-// barring optimizations, a stack slot at runtime.
 var x = 0
 
 loop
@@ -89,54 +85,7 @@ end loop
 debuglog x
 ```
 
-With loop induction variables:
-
-```datalove
-loop carry (x = 0)   // `x` is an SSA variable
-  if x = 0
-    continue (1)     // Next iteration x = 1
-  else if x = 10
-    let x_next = 11  // Extra binding for clarity
-    break (x_next)   // Loop exit value
-  end if
-  continue (x + 1)   // Continue is required for `loop` with carries
-end loop bring (x)   // Binds exit value from `break` to outer scope`s `x`
-
-debuglog x
-```
-
-`carry` names per-iteration bindings that must be
-re-received each time through the loop.
-`bring` names post-iteration outer-scope bindings.
-
-We call these two types of bindings "carries" and "brings".
-
-`bring`'s end-of-loop location forces the new outer-scope bindings to
-be visually scanned immediately before they come into scope
-(vs expression-based assignment, `let x = loop ...`).
-
-`loop` is unconditional, so all loop exits are through `break`.
-
-We can augment loops further with `while` conditions:
-
-```datalove
-loop carry (
-  x = 0,
-) while x != 10 else break (x)
-  if x = 0
-    continue (1)
-  end if
-  continue (x + 1)   // `continue` is required
-end loop bring (x)
-
-debuglog x
-```
-
-`while` must always be paired with `else break`
-to handle the termination condition,
-including the zero-iteration case.
-
-`while` loop without carries still has light syntax:
+Conditional loops with `loop while`:
 
 ```datalove
 var x = 0
@@ -153,6 +102,93 @@ end loop
 
 debuglog x
 ```
+
+
+
+### 2026-01-05 - Explicit data flow with `carry` and `bring`
+
+Datalove's surface syntax is designed to map obviously to SSA IR's
+and the machine-level register/stack/heap model.
+The `carry` and `bring` keywords create explicit data flow
+into and out of loops, which simplifies lowering and
+enables advanced features through verification of `total` loops.
+
+Unconditional loop with _carries_ and _brings_:
+
+```datalove
+loop carry (x = 0)   // `x` is an SSA variable / loop induction variable
+  if x = 0
+    continue (1)     // Next iteration x = 1
+  else if x = 10
+    let x_next = 11  // Extra binding for clarity
+    break (x_next)   // Loop exit value
+  end if
+  continue (x + 1)   // Fallthrough not allowed in unconditional `loop` with carries
+end loop bring (x)   // Binds exit value from `break` to outer scope`s `x`
+
+debuglog x
+```
+
+`carry` names per-iteration bindings that
+are initialized on entry, and must be
+re-received each time through the loop via `continue`.
+`bring` names post-iteration outer-scope bindings
+and must be invoked with `break`.
+
+> Mnemonic help: "continue and carry ; break and bring".
+
+We call these two types of bindings "carries" and "brings";
+their operation and semantics is similar to `in`-mode function arguments.
+
+`bring`'s end-of-loop syntactic position forces the new outer-scope bindings to
+be visually scanned immediately before they come into scope
+(vs expression-based assignment, `let x = loop ...`).
+
+`carry` and `bring` don't need to be paired:
+loops with only carries and only brings are valid:
+
+```datalove
+loop carry (x = 0)
+  if x = 0
+    continue (1)
+  else
+    break
+  end if
+end loop
+
+set x = 0
+
+loop
+  if x = 0
+    set x = x + 1
+    continue
+  else
+    break (x)
+  end if
+end loop bring (y)
+
+debuglog y
+```
+
+In conditional loops the `carry` comes before `while`:
+
+```datalove
+loop carry (
+  x = 0,
+) while x != 10 else break (x)
+  if x = 0
+    continue (1)
+  end if
+  continue (x + 1)   // `continue` is required
+end loop bring (x)
+
+debuglog x
+```
+
+When a `while` loop has brings
+it must always be paired with `else break`
+to handle the termination condition,
+including the zero-iteration case.
 
 A more feature-complete example (w/ nonsense logic):
 
@@ -210,7 +246,7 @@ else
   break (3)
 end if bring (y)
 
-debuglog (y)
+debuglog y
 ```
 
 To avoid ambiguity between `break` targets with nested constructs,
@@ -246,7 +282,7 @@ loop
   end if
 end loop bring (x)
 
-debuglog (x)
+debuglog x
 ```
 
 
