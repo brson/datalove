@@ -2,8 +2,8 @@
 
 ## Summary
 
-Successfully implemented per-module parse caching and verified it with invasive query logging.
-Discovered and documented a significant limitation with Salsa accumulators.
+Successfully implemented per-module caching for both parsing and typechecking.
+Verified with invasive query logging. Fixed Salsa accumulator limitation using side table pattern.
 
 ## What We Built
 
@@ -125,6 +125,8 @@ Change c:   parse a (cached), parse b (cached), parse c (executes)
 
 ## Test Coverage
 
+### Parse Caching Tests
+
 | Test | Verifies |
 |------|----------|
 | `test_query_log_per_module_caching` | Only changed module re-parses in graph |
@@ -133,6 +135,15 @@ Change c:   parse a (cached), parse b (cached), parse c (executes)
 | `test_parse_module_no_change_still_cached` | No changes = fully cached |
 | `test_datafun_spans_caching_fixed` | Verifies span caching works after fix |
 | `test_salsa_events_on_change` | Salsa event logging works |
+
+### Typecheck Caching Tests
+
+| Test | Verifies |
+|------|----------|
+| `test_typecheck_records_all_modules` | Typecheck logging records all modules |
+| `test_typecheck_per_module_caching` | Only changed module re-typechecks |
+| `test_typecheck_no_change_fully_cached` | No changes = fully cached |
+| `test_typecheck_with_import_caching` | Import relationships preserve caching |
 
 ## Fixed Issues (2026-01-08)
 
@@ -152,23 +163,26 @@ Implemented the side table pattern (following datalit):
 
 1. **Graph-level vs module-level granularity** - graph re-runs loop, inner calls cached
 
+## Verified Working (2026-01-08)
+
+### Typecheck Per-Module Caching - VERIFIED
+
+- `typecheck_module` is a `#[salsa::tracked]` function with query logging
+- Tests verify only changed modules re-typecheck
+- Import relationships don't break caching (resolved imports are stable)
+
 ## Potential Next Steps
 
-1. **Add typecheck per-module caching**
-   - Create `typecheck_module` tracked function
-   - Add query logging to typecheck path
-   - Verify only changed modules re-typecheck
-
-3. **Benchmark incremental performance**
+1. **Benchmark incremental performance**
    - Measure actual parse/typecheck times with caching
    - Compare cached vs uncached runs
    - Profile large module graphs
 
-4. **Hash-based verification**
+2. **Hash-based verification**
    - Assert that modules with unchanged content hashes are cached
    - Assert that changed hashes trigger recomputation
    - Tie `module_content_hashes` to actual caching behavior
 
-5. **Consider durability for hot-reload**
+3. **Consider durability for hot-reload**
    - Salsa durability levels for edit-time vs compile-time inputs
    - Optimize for interactive development workflows

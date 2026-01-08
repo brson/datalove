@@ -765,4 +765,149 @@ mod tests {
         assert!(!entries_a2.is_empty(), "Second call also has entries (not empty)");
         assert_eq!(entries_a1, entries_a2, "Entries should be identical");
     }
+
+    // ========================================================================
+    // Typecheck Per-Module Caching Tests
+    // ========================================================================
+
+    use datalove_datafun_tycheck::typecheck_module_graph;
+
+    #[test]
+    fn test_typecheck_records_all_modules() {
+        // Verify typecheck logging records all modules on first run.
+        let db = Database::default();
+
+        let (graph, ids) = build_graph(&db, &[
+            ("b", "fun helper(): @i32\n  ret @1\nend fun"),
+            ("a", "fun main(): @i32\n  ret @2\nend fun"),
+        ]);
+        let mut requires = BTreeMap::new();
+        requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
+
+        let parsed = parse_module_graph(&db, graph, requires);
+
+        enable_query_logging();
+        let _result = typecheck_module_graph(&db, parsed);
+        let log = disable_query_logging();
+
+        let typechecked = get_executed_modules(&log, "typecheck");
+        eprintln!("Typechecked modules: {:?}", typechecked);
+        assert_eq!(typechecked.len(), 2, "should typecheck both modules");
+        assert!(typechecked.contains(&"a".to_string()), "should typecheck a");
+        assert!(typechecked.contains(&"b".to_string()), "should typecheck b");
+    }
+
+    #[test]
+    fn test_typecheck_per_module_caching() {
+        // Verify only changed module re-typechecks when source mutated.
+        let mut db = Database::default();
+
+        // Create modules with Sources we can mutate.
+        let source_b = bct::input::Source::new(&db, "fun helper(): @i32\n  ret @1\nend fun".to_string());
+        let source_a = bct::input::Source::new(&db, "fun main(): @i32\n  ret @2\nend fun".to_string());
+
+        let mut builder = ModuleGraphBuilder::new(&db);
+        let id_b = builder.add_module("b".to_string(), source_b);
+        let id_a = builder.add_module("a".to_string(), source_a);
+        let graph = builder.build();
+
+        let mut requires = BTreeMap::new();
+        requires.insert(id_a, vec![("b".to_string(), id_b)]);
+
+        // First run: both modules should typecheck.
+        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
+        enable_query_logging();
+        let _result1 = typecheck_module_graph(&db, parsed1);
+        let log1 = disable_query_logging();
+
+        let first_tc = get_executed_modules(&log1, "typecheck");
+        eprintln!("First run typechecked: {:?}", first_tc);
+        assert_eq!(first_tc.len(), 2, "first run should typecheck both modules");
+
+        // Mutate only B's source.
+        source_b.set_text(&mut db).to("fun helper(): @i32\n  ret @999\nend fun".to_string());
+
+        // Second run: only B should re-typecheck.
+        let parsed2 = parse_module_graph(&db, graph, requires);
+        enable_query_logging();
+        let _result2 = typecheck_module_graph(&db, parsed2);
+        let log2 = disable_query_logging();
+
+        let second_tc = get_executed_modules(&log2, "typecheck");
+        eprintln!("Second run typechecked: {:?}", second_tc);
+
+        // Per-module caching: only B should re-typecheck.
+        assert_eq!(second_tc.len(), 1, "only changed module should re-typecheck");
+        assert!(second_tc.contains(&"b".to_string()), "b should re-typecheck");
+        assert!(!second_tc.contains(&"a".to_string()), "a should be cached");
+    }
+
+    #[test]
+    fn test_typecheck_no_change_fully_cached() {
+        // Verify no re-typecheck when nothing changes.
+        let db = Database::default();
+
+        let source_a = bct::input::Source::new(&db, "fun main(): @i32\n  ret @1\nend fun".to_string());
+        let mut builder = ModuleGraphBuilder::new(&db);
+        let _id_a = builder.add_module("a".to_string(), source_a);
+        let graph = builder.build();
+
+        // First run.
+        let parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new());
+        let _result1 = typecheck_module_graph(&db, parsed1);
+
+        // Second run with no changes.
+        let parsed2 = parse_module_graph(&db, graph, BTreeMap::new());
+        enable_query_logging();
+        let _result2 = typecheck_module_graph(&db, parsed2);
+        let log = disable_query_logging();
+
+        let typechecked = get_executed_modules(&log, "typecheck");
+        eprintln!("No change, second run: {:?}", typechecked);
+        assert_eq!(typechecked.len(), 0, "no changes = fully cached");
+    }
+
+    #[test]
+    fn test_typecheck_with_import_caching() {
+        // Verify caching works when modules have imports.
+        let mut db = Database::default();
+
+        // B exports a function, A imports it.
+        let source_b = bct::input::Source::new(&db, "fun helper(): @i32\n  ret @1\nend fun".to_string());
+        let source_a = bct::input::Source::new(&db,
+            "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret helper()\nend fun".to_string());
+
+        let mut builder = ModuleGraphBuilder::new(&db);
+        let id_b = builder.add_module("test/b".to_string(), source_b);
+        let id_a = builder.add_module("test/a".to_string(), source_a);
+        let graph = builder.build();
+
+        let mut requires = BTreeMap::new();
+        requires.insert(id_a, vec![("b".to_string(), id_b)]);
+
+        // First run.
+        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
+        enable_query_logging();
+        let _result1 = typecheck_module_graph(&db, parsed1);
+        let log1 = disable_query_logging();
+
+        let first_tc = get_executed_modules(&log1, "typecheck");
+        eprintln!("With imports, first run: {:?}", first_tc);
+        assert_eq!(first_tc.len(), 2);
+
+        // Change only A (the importing module).
+        source_a.set_text(&mut db).to(
+            "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret @42\nend fun".to_string());
+
+        // Second run: only A should re-typecheck.
+        let parsed2 = parse_module_graph(&db, graph, requires);
+        enable_query_logging();
+        let _result2 = typecheck_module_graph(&db, parsed2);
+        let log2 = disable_query_logging();
+
+        let second_tc = get_executed_modules(&log2, "typecheck");
+        eprintln!("With imports, second run after A change: {:?}", second_tc);
+        assert_eq!(second_tc.len(), 1, "only A should re-typecheck");
+        assert!(second_tc.contains(&"test/a".to_string()), "a should re-typecheck");
+    }
 }
