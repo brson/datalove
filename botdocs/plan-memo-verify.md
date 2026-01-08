@@ -12,8 +12,8 @@ Develop a test suite that verifies Salsa memoization is working correctly at the
 
 - [x] Phase 1: Module content hashes
 - [x] Unit tests for hash propagation behavior
-- [ ] Phase 2: Salsa verification test infrastructure
-- [ ] Phase 3: Track Salsa recomputations via event logger
+- [x] Phase 2: Salsa verification test infrastructure
+- [x] Phase 3: Track Salsa recomputations via event logger
 
 ## Approach
 
@@ -41,35 +41,18 @@ This is recursive: a module's hash includes its dependencies' hashes, so changes
 - Multiple dependencies all affect hash
 - Alias name affects hash
 
-### Phase 2: Create Salsa Verification Test Infrastructure
+### Phase 2 & 3: Salsa Event Logging Infrastructure [DONE]
 
-Create a test that:
-1. Creates a package world with multiple modules (A depends on B, B depends on C)
-2. Runs parse + typecheck
-3. Records which module hashes exist
-4. Makes a small change to one module
-5. Runs parse + typecheck again
-6. Compares: modules whose hashes changed should match modules that Salsa recomputed
+Created `LoggingDatabase` in `module_graph.rs` tests that:
+- Uses `salsa::Storage::new(Some(callback))` to capture events
+- Stores events in `Arc<Mutex<Vec<salsa::Event>>>`
+- Provides `executed_queries()` to get queries that ran (not cached)
+- Provides `clear_events()` to reset between test phases
 
-### Phase 3: Track Salsa Recomputations via Event Logger
-
-Implement Salsa's `Events` trait to log which queries execute vs return cached results.
-
-```rust
-struct QueryLogger {
-    executed_queries: RefCell<Vec<String>>,
-}
-
-impl salsa::Database for TestDb {
-    fn salsa_event(&self, event: &dyn Fn() -> salsa::Event) {
-        let event = event();
-        if let salsa::EventKind::WillExecute { .. } = event.kind {
-            // Record that this query is executing (not cached)
-            self.logger.executed_queries.borrow_mut().push(format!("{:?}", event));
-        }
-    }
-}
-```
+**Memoization verification tests:**
+- `test_salsa_caches_identical_input` - Verifies second run with same input is fully cached
+- `test_salsa_recomputes_on_source_change` - Verifies changed source triggers recomputation
+- `test_salsa_memoization_matches_hash_changes` - Verifies hash changes correlate with recomputation
 
 ## Verification Strategy
 

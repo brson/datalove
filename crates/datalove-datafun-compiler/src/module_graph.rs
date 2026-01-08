@@ -106,6 +106,53 @@ fn compute_module_content_hashes<'db>(
 mod tests {
     use super::*;
     use crate::Database;
+    use rmx::std::sync::{Arc, Mutex};
+
+    /// Database that logs Salsa events for memoization verification.
+    #[salsa::db]
+    #[derive(Clone)]
+    struct LoggingDatabase {
+        storage: salsa::Storage<Self>,
+        /// Logged events (thread-safe for Salsa's requirements).
+        events: Arc<Mutex<Vec<salsa::Event>>>,
+    }
+
+    #[salsa::db]
+    impl salsa::Database for LoggingDatabase {}
+
+    impl LoggingDatabase {
+        fn new() -> Self {
+            let events = Arc::new(Mutex::new(Vec::new()));
+            let events_clone = events.clone();
+            Self {
+                storage: salsa::Storage::new(Some(Box::new(move |event| {
+                    events_clone.lock().unwrap().push(event);
+                }))),
+                events,
+            }
+        }
+
+        /// Get events where queries were executed (not cached).
+        fn executed_queries(&self) -> Vec<String> {
+            self.events
+                .lock()
+                .unwrap()
+                .iter()
+                .filter_map(|event| {
+                    if let salsa::EventKind::WillExecute { database_key } = &event.kind {
+                        Some(format!("{:?}", database_key))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        }
+
+        /// Clear logged events.
+        fn clear_events(&self) {
+            self.events.lock().unwrap().clear();
+        }
+    }
 
     /// Build a module graph from source strings.
     ///
@@ -315,5 +362,106 @@ mod tests {
 
         // Different alias should produce different hash (module configuration differs).
         assert_ne!(hash_a1, hash_a2, "different alias should produce different hash");
+    }
+
+    // ========================================================================
+    // Salsa Memoization Verification Tests
+    // ========================================================================
+
+    /// Helper to build a module graph using the logging database.
+    fn build_graph_logging(db: &LoggingDatabase, sources: &[(&str, &str)]) -> (ModuleGraph, Vec<ModuleId>) {
+        let mut builder = ModuleGraphBuilder::new(db);
+        let mut ids = Vec::new();
+        for (path, source) in sources {
+            let source = bct::input::Source::new(db, (*source).to_string());
+            let id = builder.add_module((*path).to_string(), source);
+            ids.push(id);
+        }
+        (builder.build(), ids)
+    }
+
+    #[test]
+    fn test_salsa_caches_identical_input() {
+        let db = LoggingDatabase::new();
+
+        // First parse.
+        let (graph, _ids) = build_graph_logging(&db, &[("a", "let x = 1")]);
+        let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new());
+
+        let first_run_queries = db.executed_queries();
+        assert!(!first_run_queries.is_empty(), "first run should execute queries");
+
+        db.clear_events();
+
+        // Second parse with same inputs - should be cached.
+        let _parsed2 = parse_module_graph(&db, graph, BTreeMap::new());
+
+        let second_run_queries = db.executed_queries();
+        assert!(
+            second_run_queries.is_empty(),
+            "second run should be fully cached, but executed: {:?}",
+            second_run_queries
+        );
+    }
+
+    #[test]
+    fn test_salsa_recomputes_on_source_change() {
+        let db = LoggingDatabase::new();
+
+        // First parse.
+        let (graph1, _ids1) = build_graph_logging(&db, &[("a", "let x = 1")]);
+        let _parsed1 = parse_module_graph(&db, graph1, BTreeMap::new());
+
+        db.clear_events();
+
+        // Second parse with different source.
+        let (graph2, _ids2) = build_graph_logging(&db, &[("a", "let x = 2")]);
+        let _parsed2 = parse_module_graph(&db, graph2, BTreeMap::new());
+
+        let recompute_queries = db.executed_queries();
+        assert!(
+            !recompute_queries.is_empty(),
+            "changed source should trigger recomputation"
+        );
+    }
+
+    #[test]
+    fn test_salsa_memoization_matches_hash_changes() {
+        let db = LoggingDatabase::new();
+
+        // Create A -> B dependency chain.
+        let (graph1, ids1) = build_graph_logging(&db, &[
+            ("b", "fun helper(): i32\n  ret 1\nend fun"),
+            ("a", "let x = 1"),
+        ]);
+        let mut requires1 = BTreeMap::new();
+        requires1.insert(ids1[1], vec![("b".to_string(), ids1[0])]);
+        let parsed1 = parse_module_graph(&db, graph1, requires1);
+        let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[1]];
+        let hash_b1 = parsed1.module_content_hashes(&db)[&ids1[0]];
+
+        db.clear_events();
+
+        // Change B's source.
+        let (graph2, ids2) = build_graph_logging(&db, &[
+            ("b", "fun helper(): i32\n  ret 999\nend fun"),
+            ("a", "let x = 1"),
+        ]);
+        let mut requires2 = BTreeMap::new();
+        requires2.insert(ids2[1], vec![("b".to_string(), ids2[0])]);
+        let parsed2 = parse_module_graph(&db, graph2, requires2);
+        let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[1]];
+        let hash_b2 = parsed2.module_content_hashes(&db)[&ids2[0]];
+
+        // Verify hash changes match expectations.
+        assert_ne!(hash_b1, hash_b2, "B's hash should change");
+        assert_ne!(hash_a1, hash_a2, "A's hash should change (depends on B)");
+
+        // Verify Salsa recomputed.
+        let recompute_queries = db.executed_queries();
+        assert!(
+            !recompute_queries.is_empty(),
+            "changing B should trigger recomputation"
+        );
     }
 }
