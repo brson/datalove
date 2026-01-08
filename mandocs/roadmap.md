@@ -20,7 +20,6 @@ The MVP is a working bare datafun language with:
 
 - module hashes and salsa verification
 - human docs
-- serialized ir bundles loading
 
 
 # on deck
