@@ -25,6 +25,7 @@ The MVP is a working bare datafun language with:
 
 # on deck
 
+- working heap types, and default syntax everywhere
 - f64
 - "design-log" from design-notes
   - into news feed entries
@@ -56,7 +57,6 @@ The MVP is a working bare datafun language with:
 - named types
 - improve runtime implementation unsafety
 - type declarations
-- heap genericity and clone method
 - simple multithreading
 - deterministic builds - compiler pipeline is already deterministic
 - wasm-component backend
