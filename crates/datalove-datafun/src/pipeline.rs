@@ -79,7 +79,6 @@ pub struct ModuleCompilationPipeline<'db> {
     db: &'db dyn salsa::Database,
     pkglib_system: BTreeMap<String, Package>,
     pkglib_local: BTreeMap<String, Package>,
-    enable_analysis: bool,
 }
 
 impl<'db> ModuleCompilationPipeline<'db> {
@@ -89,7 +88,6 @@ impl<'db> ModuleCompilationPipeline<'db> {
             db,
             pkglib_system: BTreeMap::new(),
             pkglib_local: BTreeMap::new(),
-            enable_analysis: false,
         }
     }
 
@@ -101,12 +99,6 @@ impl<'db> ModuleCompilationPipeline<'db> {
         let mut pipeline = Self::new(db);
         pipeline.add_modules_from_sections(sections);
         pipeline
-    }
-
-    /// Enable prototype analysis passes (termination, refinement).
-    pub fn enable_analysis(&mut self, enable: bool) -> &mut Self {
-        self.enable_analysis = enable;
-        self
     }
 
     /// Add a module to the pipeline.
@@ -208,7 +200,6 @@ impl<'db> ModuleCompilationPipeline<'db> {
                     func_id_map: HashMap::new(),
                     env: ScriptEnvironment::new(),
                     module_lowering_results: BTreeMap::new(),
-                    analysis: Default::default(),
                 };
             }
         };
@@ -285,17 +276,6 @@ impl<'db> ModuleCompilationPipeline<'db> {
             }
         }
 
-        // Phase 2.5: Optional prototype analysis.
-        let analysis = if self.enable_analysis {
-            datalove_datafun_analysis::analyze_module_graph(
-                self.db,
-                &parsed_graph,
-                &path_to_errors,
-            )
-        } else {
-            Default::default()
-        };
-
         // Phase 3: Lower to IR.
         let mut env = ScriptEnvironment::new();
         let mut module_lowering_results: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -362,7 +342,6 @@ impl<'db> ModuleCompilationPipeline<'db> {
             func_id_map,
             env,
             module_lowering_results,
-            analysis,
         }
     }
 }
@@ -382,7 +361,6 @@ pub struct CompiledModules<'db> {
     pub func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     pub env: ScriptEnvironment,
     pub module_lowering_results: BTreeMap<String, Vec<String>>,
-    pub analysis: datalove_datafun_analysis::ModuleGraphAnalysis,
 }
 
 impl<'db> CompiledModules<'db> {

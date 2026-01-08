@@ -19,7 +19,6 @@ datalove-datafun-interp.path = "../datalove-datafun-interp"
 datalove-datafun-pkg.path = "../datalove-datafun-pkg"
 datalove-rt.path = "../datalove-rt"
 datalove-diagnostic.path = "../datalove-diagnostic"
-datalove-datafun-analysis = { path = "../datalove-datafun-analysis", features = ["all"] }
 datalove-datafun-aot-cranelift.path = "../datalove-datafun-aot-cranelift"
 tempfile = "3"
 
@@ -67,9 +66,4 @@ harness = false
 [[test]]
 name = "dual_tests"
 path = "tests/dual_tests.rs"
-harness = false
-
-[[test]]
-name = "analysis_tests"
-path = "tests/analysis_tests.rs"
 harness = false
