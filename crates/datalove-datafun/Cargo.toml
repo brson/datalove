@@ -10,6 +10,8 @@ rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+datalove-ct.path = "../datalove-ct"
 datalove-datafun-ast.path = "../datalove-datafun-ast"
 datalove-datafun-parser.path = "../datalove-datafun-parser"
 datalove-datafun-ir.path = "../datalove-datafun-ir"
@@ -27,6 +29,7 @@ datalove-exampletest.path = "../datalove-exampletest"
 datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"
 ron = "0.8"
+serde_json = "1"
 
 [[test]]
 name = "tycheck_world_tests"
@@ -71,4 +74,9 @@ harness = false
 [[test]]
 name = "ir_serial_tests"
 path = "tests/ir_serial_tests.rs"
+harness = false
+
+[[test]]
+name = "module_memo_tests"
+path = "tests/module_memo_tests.rs"
 harness = false

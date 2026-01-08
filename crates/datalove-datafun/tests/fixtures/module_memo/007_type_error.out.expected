@@ -1,0 +1,61 @@
+{
+  "steps": [
+    {
+      "action": "add",
+      "module": "local/test/a",
+      "source_hash": "527eb9f5165b60da",
+      "results": {
+        "local/test/a": {
+          "parsed": true,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": true,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": true
+        }
+      }
+    },
+    {
+      "action": "add",
+      "module": "local/test/b",
+      "source_hash": "e56668a61eaee8c5",
+      "results": {
+        "local/test/a": {
+          "parsed": true,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": true,
+          "hash_changed": false,
+          "expected": {
+            "parsed": false,
+            "typechecked": false,
+            "hash_changed": false
+          },
+          "correct": false
+        },
+        "local/test/b": {
+          "parsed": true,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": false,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": true
+        }
+      }
+    }
+  ],
+  "summary": {
+    "total_steps": 2,
+    "all_correct": false
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "steps": [
+    {
+      "action": "add",
+      "module": "local/test/a",
+      "source_hash": "ed73ad6c23077c83",
+      "results": {
+        "local/test/a": {
+          "parsed": true,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": true,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": true
+        }
+      }
+    }
+  ],
+  "summary": {
+    "total_steps": 1,
+    "all_correct": true
+  }
+}

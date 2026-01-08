@@ -1,0 +1,88 @@
+{
+  "steps": [
+    {
+      "action": "add",
+      "module": "local/test/a",
+      "source_hash": "527eb9f5165b60da",
+      "results": {
+        "local/test/a": {
+          "parsed": true,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": true,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": true
+        }
+      }
+    },
+    {
+      "action": "redefine",
+      "module": "local/test/a",
+      "source_hash": "7e360aaf264f8ae2",
+      "results": {
+        "local/test/a": {
+          "parsed": true,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": true,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": true
+        }
+      }
+    },
+    {
+      "action": "redefine",
+      "module": "local/test/a",
+      "source_hash": "844a8f2f41261d20",
+      "results": {
+        "local/test/a": {
+          "parsed": true,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": true,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": true
+        }
+      }
+    },
+    {
+      "action": "redefine",
+      "module": "local/test/a",
+      "source_hash": "c2f01de52b994f77",
+      "results": {
+        "local/test/a": {
+          "parsed": true,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": true,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": true
+        }
+      }
+    }
+  ],
+  "summary": {
+    "total_steps": 4,
+    "all_correct": true
+  }
+}
