@@ -18,7 +18,6 @@ The MVP is a working bare datafun language with:
 
 # in progress
 
-- boolean ops - and or xor not
 - module hashes and salsa verification
 - human docs
 
