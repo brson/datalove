@@ -580,19 +580,23 @@ mod tests {
 
         // First run: both modules should be parsed.
         enable_query_logging();
-        let _parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
+        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
         let log1 = disable_query_logging();
 
         let first_parsed = get_executed_modules(&log1, "parse");
         eprintln!("First run parsed: {:?}", first_parsed);
         assert_eq!(first_parsed.len(), 2, "first run should parse both modules");
 
+        // Capture content hashes after first run.
+        let hash_a1 = parsed1.module_content_hashes(&db)[&id_a];
+        let hash_b1 = parsed1.module_content_hashes(&db)[&id_b];
+
         // Mutate only B's source text.
         source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".to_string());
 
         // Second run: only B should be re-parsed, A should be cached.
         enable_query_logging();
-        let _parsed2 = parse_module_graph(&db, graph, requires);
+        let parsed2 = parse_module_graph(&db, graph, requires);
         let log2 = disable_query_logging();
 
         let second_parsed = get_executed_modules(&log2, "parse");
@@ -601,6 +605,13 @@ mod tests {
         assert_eq!(second_parsed.len(), 1, "only changed module should re-parse");
         assert!(second_parsed.contains(&"b".to_string()), "b should re-parse");
         assert!(!second_parsed.contains(&"a".to_string()), "a should be cached");
+
+        // Verify content hashes: B changed, A's hash also changes (transitive dependency).
+        // Note: A's hash changes because A depends on B, even though A wasn't re-parsed.
+        let hash_a2 = parsed2.module_content_hashes(&db)[&id_a];
+        let hash_b2 = parsed2.module_content_hashes(&db)[&id_b];
+        assert_ne!(hash_b1, hash_b2, "B's hash should change (source changed)");
+        assert_ne!(hash_a1, hash_a2, "A's hash changes transitively (depends on B)");
     }
 
     #[test]
@@ -824,6 +835,10 @@ mod tests {
         eprintln!("First run typechecked: {:?}", first_tc);
         assert_eq!(first_tc.len(), 2, "first run should typecheck both modules");
 
+        // Capture content hashes after first run.
+        let hash_a1 = parsed1.module_content_hashes(&db)[&id_a];
+        let hash_b1 = parsed1.module_content_hashes(&db)[&id_b];
+
         // Mutate only B's source.
         source_b.set_text(&mut db).to("fun helper(): @i32\n  ret @999\nend fun".to_string());
 
@@ -840,6 +855,13 @@ mod tests {
         assert_eq!(second_tc.len(), 1, "only changed module should re-typecheck");
         assert!(second_tc.contains(&"b".to_string()), "b should re-typecheck");
         assert!(!second_tc.contains(&"a".to_string()), "a should be cached");
+
+        // Verify content hashes: B changed, A's hash also changes (transitive dependency).
+        // Note: A's hash changes because A depends on B, even though A wasn't re-typechecked.
+        let hash_a2 = parsed2.module_content_hashes(&db)[&id_a];
+        let hash_b2 = parsed2.module_content_hashes(&db)[&id_b];
+        assert_ne!(hash_b1, hash_b2, "B's hash should change (source changed)");
+        assert_ne!(hash_a1, hash_a2, "A's hash changes transitively (depends on B)");
     }
 
     #[test]
@@ -849,12 +871,15 @@ mod tests {
 
         let source_a = bct::input::Source::new(&db, "fun main(): @i32\n  ret @1\nend fun".to_string());
         let mut builder = ModuleGraphBuilder::new(&db);
-        let _id_a = builder.add_module("a".to_string(), source_a);
+        let id_a = builder.add_module("a".to_string(), source_a);
         let graph = builder.build();
 
         // First run.
         let parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new());
         let _result1 = typecheck_module_graph(&db, parsed1);
+
+        // Capture content hash after first run.
+        let hash_a1 = parsed1.module_content_hashes(&db)[&id_a];
 
         // Second run with no changes.
         let parsed2 = parse_module_graph(&db, graph, BTreeMap::new());
@@ -865,6 +890,10 @@ mod tests {
         let typechecked = get_executed_modules(&log, "typecheck");
         eprintln!("No change, second run: {:?}", typechecked);
         assert_eq!(typechecked.len(), 0, "no changes = fully cached");
+
+        // Verify content hash unchanged.
+        let hash_a2 = parsed2.module_content_hashes(&db)[&id_a];
+        assert_eq!(hash_a1, hash_a2, "hash unchanged = not re-typechecked");
     }
 
     #[test]
@@ -895,6 +924,10 @@ mod tests {
         eprintln!("With imports, first run: {:?}", first_tc);
         assert_eq!(first_tc.len(), 2);
 
+        // Capture content hashes after first run.
+        let hash_a1 = parsed1.module_content_hashes(&db)[&id_a];
+        let hash_b1 = parsed1.module_content_hashes(&db)[&id_b];
+
         // Change only A (the importing module).
         source_a.set_text(&mut db).to(
             "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret @42\nend fun".to_string());
@@ -909,5 +942,11 @@ mod tests {
         eprintln!("With imports, second run after A change: {:?}", second_tc);
         assert_eq!(second_tc.len(), 1, "only A should re-typecheck");
         assert!(second_tc.contains(&"test/a".to_string()), "a should re-typecheck");
+
+        // Verify content hashes correlate with re-typecheck.
+        let hash_a2 = parsed2.module_content_hashes(&db)[&id_a];
+        let hash_b2 = parsed2.module_content_hashes(&db)[&id_b];
+        assert_ne!(hash_a1, hash_a2, "A's hash changed = A re-typechecked");
+        assert_eq!(hash_b1, hash_b2, "B's hash unchanged = B not re-typechecked");
     }
 }
