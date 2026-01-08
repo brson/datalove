@@ -350,6 +350,7 @@ impl<'db> Parser<'db> {
         let args = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
+        self.merge_spans_from(&mut sub);
         args
     }
 
@@ -372,6 +373,7 @@ impl<'db> Parser<'db> {
         let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
+        self.merge_spans_from(&mut sub);
 
         // If there's exactly one element, treat as grouping (not tuple).
         if elements.len() == 1 {

@@ -26,10 +26,10 @@ Discovered and documented a significant limitation with Salsa accumulators.
 
 ### Key Changes
 
-**`parse_module` signature (was returning tuple, now single value):**
+**`parse_module` returns full `ParseResult` with spans:**
 ```rust
 #[salsa::tracked]
-pub fn parse_module<'db>(db: &'db dyn Database, module: Module) -> ParsedStatements<'db> {
+pub fn parse_module<'db>(db: &'db dyn Database, module: Module) -> ParseResult<'db> {
     let module_path = module.id(db).path(db);
     let source = module.source(db);
 
@@ -37,16 +37,20 @@ pub fn parse_module<'db>(db: &'db dyn Database, module: Module) -> ParsedStateme
     let parse_result = datalove_datafun_parser::parse(db, source);
     log_query("parse", module_path, QueryPhase::End);
 
-    parse_result.parsed(db)
+    parse_result  // Contains both parsed statements and spans
 }
 ```
 
-**Spans retrieved separately in `parse_module_graph`:**
+**Spans extracted from `ParseResult` in `parse_module_graph`:**
 ```rust
 for module in graph.iter_modules(db) {
-    let parsed = parse_module(db, module);
-    // Get spans separately - not memoized due to accumulator pattern issues.
-    let spans = datalove_datafun_parser::datafun_spans(db, source);
+    let parse_result = parse_module(db, module);
+    let parsed = parse_result.parsed(db);
+    // Convert ParseSpanEntry to SpanMapEntry for DatafunSpans.
+    let span_entries = parse_result.expr_spans(db).iter()
+        .map(|e| SpanMapEntry { ... })
+        .collect();
+    let spans = DatafunSpans::new(db, span_entries);
     parsed_statements.push((module_id, parsed, spans));
 }
 ```
@@ -127,22 +131,30 @@ Change c:   parse a (cached), parse b (cached), parse c (executes)
 | `test_parse_module_direct_caching` | Single module caches correctly |
 | `test_parse_module_two_modules_direct` | Two modules cache independently |
 | `test_parse_module_no_change_still_cached` | No changes = fully cached |
-| `test_datafun_spans_known_caching_issue` | Documents accumulator bug |
+| `test_datafun_spans_caching_fixed` | Verifies span caching works after fix |
 | `test_salsa_events_on_change` | Salsa event logging works |
 
-## Known Issues
+## Fixed Issues (2026-01-08)
 
-1. **datafun_spans accumulator bug** - documented in test, workaround in place
-2. **Graph-level vs module-level granularity** - graph re-runs loop, inner calls cached
+### datafun_spans Accumulator Bug - FIXED
+
+Implemented the side table pattern (following datalit):
+- Added `ParseSpanEntry` to ast.rs and `expr_spans` field to `ParseResult`
+- Parser accumulates spans in a Vec instead of using Salsa accumulators
+- Sub-parsers call `merge_spans_from()` to propagate spans to parent
+- `parse_module` returns full `ParseResult` (both statements and spans)
+- `datafun_spans()` reads from `ParseResult.expr_spans`
+- `DatafunSpanAccumulator` removed
+
+**Key insight:** Accumulators are global to a tracked function call, but when the function is cached, `accumulated()` returns empty. The side table pattern embeds spans directly in the return value, avoiding this issue.
+
+## Remaining Known Issues
+
+1. **Graph-level vs module-level granularity** - graph re-runs loop, inner calls cached
 
 ## Potential Next Steps
 
-1. **Fix datafun_spans properly**
-   - Include spans in `ParseResult` struct
-   - Remove accumulator usage for spans
-   - Follow datalit's pattern
-
-2. **Add typecheck per-module caching**
+1. **Add typecheck per-module caching**
    - Create `typecheck_module` tracked function
    - Add query logging to typecheck path
    - Verify only changed modules re-typecheck

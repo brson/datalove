@@ -108,9 +108,9 @@ fn parse_bracer<'db>(
             }
         });
 
-    let statements = parse_statements(db, lines);
+    let (statements, expr_spans) = parse_statements(db, lines);
     let parsed = ast::ParsedStatements::new(db, statements);
-    ast::ParseResult::new(db, parsed)
+    ast::ParseResult::new(db, parsed, expr_spans)
 }
 
 /// Check if a token acts as a line separator.
@@ -125,11 +125,14 @@ fn is_line_separator<'db>(db: &'db dyn Db, token: Token<'db>) -> bool {
 }
 
 /// Parse statements from lines, creating a Parser for each line.
+///
+/// Returns statements and accumulated expression spans.
 fn parse_statements<'db>(
     db: &'db dyn Db,
     lines: impl Iterator<Item = Vec<TreeToken<'db>>>,
-) -> Vec<ast::Statement<'db>> {
+) -> (Vec<ast::Statement<'db>>, Vec<ast::ParseSpanEntry>) {
     let mut statements = vec![];
+    let mut all_spans = vec![];
     let mut line_iter = lines.enumerate().peekable();
 
     while let Some((_line_num, line)) = line_iter.next() {
@@ -140,9 +143,10 @@ fn parse_statements<'db>(
         let mut parser = Parser::new(db, line);
         let statement = parser.parse_statement(&mut line_iter);
         statements.push(statement);
+        all_spans.extend(parser.take_expr_spans());
     }
 
-    statements
+    (statements, all_spans)
 }
 
 /// Tracked wrapper for parser tests that only need the ParsedStatements.
@@ -180,15 +184,13 @@ pub fn parse_for_diagnostics<'db>(
 
 // Re-export span types from AST crate.
 pub use datalove_datafun_ast::spans::{
-    DatafunSpanAccumulator,
     SpanMapEntry,
     DatafunSpans,
 };
 
 /// Extract datafun expression spans from a parsed source.
 ///
-/// This retrieves spans accumulated during parsing. Call this after parsing
-/// to get span information for error reporting.
+/// Reads spans from the ParseResult side table (no accumulators).
 #[salsa::tracked]
 pub fn datafun_spans<'db>(
     db: &'db dyn Db,
@@ -196,16 +198,12 @@ pub fn datafun_spans<'db>(
 ) -> DatafunSpans<'db> {
     use datalove_diagnostic::SpanEntry;
 
-    // Trigger parsing to accumulate spans.
-    parse_for_diagnostics(db, source);
-
-    // Retrieve accumulated spans.
-    let accumulated = parse_for_diagnostics::accumulated::<DatafunSpanAccumulator>(db, source);
-
-    let entries: Vec<SpanMapEntry> = accumulated.iter()
-        .map(|acc| SpanMapEntry {
-            expr_id: acc.expr_id,
-            entry: SpanEntry::new(acc.text_id, acc.span.clone()),
+    let parse_result = parse(db, source);
+    let entries: Vec<SpanMapEntry> = parse_result.expr_spans(db)
+        .iter()
+        .map(|e| SpanMapEntry {
+            expr_id: e.expr_id,
+            entry: SpanEntry::new(e.text_id, e.span.clone()),
         })
         .collect();
 

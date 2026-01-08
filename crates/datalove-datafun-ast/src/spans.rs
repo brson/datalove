@@ -4,17 +4,8 @@
 //! is in datalove-datafun-compiler since it depends on the parser.
 
 use rmx::prelude::*;
-use datalove_diagnostic::{SpanEntry, ByteSpan};
+use datalove_diagnostic::SpanEntry;
 use crate::ast::ExprFun;
-
-/// Salsa accumulator for datafun expression spans.
-/// Emitted during parsing to record source locations.
-#[salsa::accumulator]
-pub struct DatafunSpanAccumulator {
-    pub expr_id: salsa::Id,
-    pub text_id: salsa::Id,
-    pub span: ByteSpan,
-}
 
 /// Entry pairing expression ID with span.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]

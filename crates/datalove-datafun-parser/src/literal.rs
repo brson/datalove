@@ -443,6 +443,7 @@ impl<'db> Parser<'db> {
                 let expr = sub.parse_expr_full();
                 sub.error_if_not_exhausted();
                 self.had_error |= sub.had_error;
+                self.merge_spans_from(&mut sub);
                 Some(expr)
             }
             _ => None
@@ -612,6 +613,7 @@ impl<'db> Parser<'db> {
         let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
+        self.merge_spans_from(&mut sub);
         elements
     }
 
@@ -621,6 +623,7 @@ impl<'db> Parser<'db> {
         let fields = sub.parse_comma_separated(|p| p.parse_struct_field());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
+        self.merge_spans_from(&mut sub);
         fields
     }
 
@@ -660,6 +663,7 @@ impl<'db> Parser<'db> {
         let entries = sub.parse_comma_separated(|p| p.parse_map_entry());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
+        self.merge_spans_from(&mut sub);
         entries
     }
 

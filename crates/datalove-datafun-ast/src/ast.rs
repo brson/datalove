@@ -4,6 +4,20 @@ use bct::text::{InternedText, Text};
 use datalove_diagnostic::ByteSpan;
 use crate::datalit;
 
+/// Span entry for a parsed expression, using salsa IDs for storage.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct ParseSpanEntry {
+    pub expr_id: salsa::Id,
+    pub text_id: salsa::Id,
+    pub span: ByteSpan,
+}
+
+impl ParseSpanEntry {
+    pub fn new(expr_id: salsa::Id, text_id: salsa::Id, span: ByteSpan) -> Self {
+        ParseSpanEntry { expr_id, text_id, span }
+    }
+}
+
 /// Result of parsing a source text into statements.
 #[salsa::tracked]
 pub struct ParsedStatements<'db> {
@@ -11,11 +25,12 @@ pub struct ParsedStatements<'db> {
     pub statements: Vec<Statement<'db>>,
 }
 
-/// Parse result containing only the ParsedStatements.
-/// Spans are now accessed via accumulators instead of being stored in this struct.
+/// Parse result containing parsed statements and span side table.
 #[salsa::tracked]
 pub struct ParseResult<'db> {
     pub parsed: ParsedStatements<'db>,
+    #[returns(ref)]
+    pub expr_spans: Vec<ParseSpanEntry>,
 }
 
 #[derive(Clone, Hash)]

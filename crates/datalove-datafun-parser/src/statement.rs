@@ -61,6 +61,7 @@ impl<'db> Parser<'db> {
         let mut sub = Parser::new(self.db, line_tokens);
         let stmt = sub.parse_statement(remaining_lines);
         self.had_error |= sub.had_error;
+        self.merge_spans_from(&mut sub);
         stmt
     }
 
@@ -739,6 +740,7 @@ impl<'db> Parser<'db> {
         let bindings = sub.parse_comma_separated(|p| p.parse_carry_binding());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
+        self.merge_spans_from(&mut sub);
         bindings
     }
 

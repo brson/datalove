@@ -7,10 +7,8 @@ use bct::{
     bracer::{BracerIter, TreeToken},
     text::InternedText,
 };
-use salsa::Accumulator;
 
 use datalove_datafun_ast::ast;
-use datalove_datafun_ast::spans::DatafunSpanAccumulator;
 use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use datalove_diagnostic::DiagnosticBuilder;
 
@@ -40,6 +38,8 @@ pub(super) struct Parser<'db> {
     pub(super) had_error: bool,
     /// Source text for error reporting when no current token.
     source_text: bct::text::Text<'db>,
+    /// Accumulated expression spans (side table pattern).
+    expr_spans: Vec<ast::ParseSpanEntry>,
 }
 
 impl<'db> Parser<'db> {
@@ -51,6 +51,7 @@ impl<'db> Parser<'db> {
             source: TokenSource::Vec { tokens, pos: 0 },
             had_error: false,
             source_text,
+            expr_spans: Vec::new(),
         }
     }
 
@@ -66,6 +67,7 @@ impl<'db> Parser<'db> {
             },
             had_error: false,
             source_text,
+            expr_spans: Vec::new(),
         };
         // Prime the buffer.
         parser.fill_iter_buffer();
@@ -229,16 +231,26 @@ impl<'db> Parser<'db> {
         }
     }
 
-    /// Create an expression and emit its span as accumulator.
+    /// Create an expression and record its span in the side table.
     pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan<'db>) -> ast::ExprFun<'db> {
         use salsa::plumbing::AsId;
         let expr = ast::ExprFun::new(self.db, kind);
-        DatafunSpanAccumulator {
-            expr_id: expr.as_id(),
-            text_id: ts.text.as_id(),
-            span: ts.span,
-        }.accumulate(self.db);
+        self.expr_spans.push(ast::ParseSpanEntry::new(
+            expr.as_id(),
+            ts.text.as_id(),
+            ts.span,
+        ));
         expr
+    }
+
+    /// Take the accumulated expression spans (consumes them).
+    pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseSpanEntry> {
+        rmx::std::mem::take(&mut self.expr_spans)
+    }
+
+    /// Merge spans from a sub-parser into this parser.
+    pub(super) fn merge_spans_from(&mut self, sub: &mut Self) {
+        self.expr_spans.append(&mut sub.expr_spans);
     }
 
     /// Emit error if tokens remain unconsumed after a successful parse.

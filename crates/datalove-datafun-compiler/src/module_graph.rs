@@ -25,20 +25,19 @@ pub use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
-use datalove_datafun_ast::ast::ParsedStatements;
+use datalove_datafun_ast::ast::ParseResult;
 
 /// Parse a single module with logging.
 ///
 /// This is a tracked function so Salsa can cache per-module.
 /// The logging only fires when the function actually executes.
 ///
-/// Note: Returns only ParsedStatements. Spans are retrieved separately via
-/// `datafun_spans` because the accumulator pattern breaks Salsa memoization.
+/// Returns the full ParseResult containing both parsed statements and spans.
 #[salsa::tracked]
 pub fn parse_module<'db>(
     db: &'db dyn salsa::Database,
     module: Module,
-) -> ParsedStatements<'db> {
+) -> ParseResult<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
     let source = module.source(db);
@@ -47,7 +46,7 @@ pub fn parse_module<'db>(
     let parse_result = datalove_datafun_parser::parse(db, source);
     log_query("parse", module_path, QueryPhase::End);
 
-    parse_result.parsed(db)
+    parse_result
 }
 
 /// Parse all modules in a graph with resolved requires.
@@ -60,13 +59,23 @@ pub fn parse_module_graph<'db>(
     graph: ModuleGraph,
     resolved_requires_str: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
 ) -> ParsedModuleGraph<'db> {
+    use datalove_diagnostic::SpanEntry;
+    use datalove_datafun_parser::{DatafunSpans, SpanMapEntry};
+
     let mut parsed_statements = Vec::new();
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
-        let source = module.source(db);
-        let parsed = parse_module(db, module);
-        // Get spans separately - not memoized due to accumulator pattern issues.
-        let spans = datalove_datafun_parser::datafun_spans(db, source);
+        let parse_result = parse_module(db, module);
+        let parsed = parse_result.parsed(db);
+        // Convert ParseSpanEntry to SpanMapEntry for DatafunSpans.
+        let span_entries: Vec<SpanMapEntry> = parse_result.expr_spans(db)
+            .iter()
+            .map(|e| SpanMapEntry {
+                expr_id: e.expr_id,
+                entry: SpanEntry::new(e.text_id, e.span.clone()),
+            })
+            .collect();
+        let spans = DatafunSpans::new(db, span_entries);
         parsed_statements.push((module_id, parsed, spans));
     }
 
@@ -730,10 +739,9 @@ mod tests {
     }
 
     #[test]
-    fn test_datafun_spans_known_caching_issue() {
-        // Documents that datafun_spans has broken caching due to accumulator pattern.
-        // When parse_for_diagnostics is cached, accumulated values are empty.
-        // This is a known issue - spans should be refactored to be part of ParseResult.
+    fn test_datafun_spans_caching_fixed() {
+        // Verifies that datafun_spans caching is now correct after the side table fix.
+        // Previously accumulators broke caching; now spans are in ParseResult.
         let mut db = Database::default();
 
         let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
@@ -751,10 +759,10 @@ mod tests {
         let id_a2 = salsa::plumbing::AsId::as_id(&spans_a2);
         let entries_a2: Vec<_> = spans_a2.entries(&db).iter().map(|e| e.expr_id).collect();
 
-        // KNOWN ISSUE: A's spans get different ID because accumulators aren't preserved.
-        // When parse_for_diagnostics is cached, accumulated() returns empty.
-        assert_ne!(id_a1, id_a2, "KNOWN ISSUE: A gets different ID due to accumulator bug");
+        // FIX VERIFIED: A's spans have same ID because side table pattern works.
+        assert_eq!(id_a1, id_a2, "A should have same ID (cached correctly)");
         assert!(!entries_a1.is_empty(), "First call has entries");
-        assert!(entries_a2.is_empty(), "KNOWN ISSUE: Second call has empty entries");
+        assert!(!entries_a2.is_empty(), "Second call also has entries (not empty)");
+        assert_eq!(entries_a1, entries_a2, "Entries should be identical");
     }
 }
