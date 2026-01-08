@@ -1034,6 +1034,7 @@ dependencies = [
  "pulldown-cmark",
  "rustmax",
  "salsa",
+ "tempfile",
  "tera",
 ]
 

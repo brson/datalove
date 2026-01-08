@@ -1,0 +1,5 @@
+fun identity(x: u32): u32
+    ret x
+end fun
+
+debuglog(identity(@12))
