@@ -8,11 +8,18 @@ Develop a test suite that verifies Salsa memoization is working correctly at the
 
 > The module graph forms a DAG. We use this to create strong content hashes for every module instantiation. This content hash includes the source code of a module, and the configuration of that module including which modules the requires/import demands are bound to.
 
+## Progress
+
+- [x] Phase 1: Module content hashes
+- [x] Unit tests for hash propagation behavior
+- [ ] Phase 2: Salsa verification test infrastructure
+- [ ] Phase 3: Track Salsa recomputations via event logger
+
 ## Approach
 
-### Phase 1: Add Module Content Hashes to ParsedModuleGraph
+### Phase 1: Add Module Content Hashes to ParsedModuleGraph [DONE]
 
-Add a new field `module_content_hashes: BTreeMap<ModuleId, u64>` to `ParsedModuleGraph`.
+Added `module_content_hashes: BTreeMap<ModuleId, u64>` field to `ParsedModuleGraph`.
 
 Each module's content hash is computed as:
 ```
@@ -20,6 +27,19 @@ hash(module_source, sorted([(alias, dep_content_hash) for each resolved_require]
 ```
 
 This is recursive: a module's hash includes its dependencies' hashes, so changes propagate up the DAG.
+
+**Implementation:**
+- `crates/datalove-datafun-tycheck/src/lib.rs` - Added field to `ParsedModuleGraph`
+- `crates/datalove-datafun-compiler/src/module_graph.rs` - Added `compute_module_content_hashes()` function
+
+**Unit tests** in `module_graph.rs` verify:
+- Hash changes when source changes
+- Identical source produces identical hash
+- Dependent hash changes when dependency changes
+- Unrelated module hash unchanged
+- Transitive dependency changes propagate
+- Multiple dependencies all affect hash
+- Alias name affects hash
 
 ### Phase 2: Create Salsa Verification Test Infrastructure
 
@@ -49,104 +69,6 @@ impl salsa::Database for TestDb {
         }
     }
 }
-```
-
-## Files to Modify
-
-### 1. `crates/datalove-datafun-tycheck/src/lib.rs`
-
-Add to `ParsedModuleGraph`:
-```rust
-#[salsa::tracked]
-pub struct ParsedModuleGraph<'db> {
-    // ... existing fields ...
-
-    /// Recursive content hashes for each module.
-    /// Hash includes: source text + sorted dependency hashes.
-    #[returns(ref)]
-    pub module_content_hashes: BTreeMap<ModuleId, u64>,
-}
-```
-
-### 2. `crates/datalove-datafun-compiler/src/module_graph.rs`
-
-Update `parse_module_graph()` to compute content hashes:
-
-```rust
-fn compute_module_content_hashes<'db>(
-    db: &'db dyn salsa::Database,
-    graph: &ModuleGraph,
-    resolved_requires: &BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
-) -> BTreeMap<ModuleId, u64> {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    let mut hashes = BTreeMap::new();
-
-    // Process in dependency order (graph.iter_modules is already sorted)
-    for module in graph.iter_modules(db) {
-        let module_id = module.id(db);
-        let source = module.source(db);
-
-        let mut hasher = DefaultHasher::new();
-
-        // Hash source text
-        source.text(db).hash(&mut hasher);
-
-        // Hash resolved requires with their content hashes (sorted for determinism)
-        if let Some(requires) = resolved_requires.get(&module_id) {
-            let mut dep_hashes: Vec<_> = requires.iter()
-                .filter_map(|(alias, target_id)| {
-                    hashes.get(target_id).map(|h| (alias.clone(), *h))
-                })
-                .collect();
-            dep_hashes.sort_by(|a, b| a.0.cmp(&b.0));
-            dep_hashes.hash(&mut hasher);
-        }
-
-        hashes.insert(module_id, hasher.finish());
-    }
-
-    hashes
-}
-```
-
-### 3. `crates/datalove-datafun/tests/salsa_memoization_tests.rs` (new file)
-
-Create test suite:
-
-```rust
-//! Tests for verifying Salsa memoization behavior.
-
-/// Test: changing a leaf module only recomputes that module.
-fn test_leaf_change_only_recomputes_leaf() { ... }
-
-/// Test: changing a dependency recomputes all dependents.
-fn test_dependency_change_recomputes_dependents() { ... }
-
-/// Test: changing unrelated module doesn't affect others.
-fn test_unrelated_change_isolated() { ... }
-```
-
-### 4. `crates/datalove-datafun/Cargo.toml`
-
-Add test entry:
-```toml
-[[test]]
-name = "salsa_memoization_tests"
-path = "tests/salsa_memoization_tests.rs"
-harness = false
-```
-
-## Test Fixture Structure
-
-```
-tests/fixtures/salsa_memoization/
-├── base.world           # Worldfile with A -> B -> C dependency chain
-├── modules/
-│   ├── a.dfm            # Module A (depends on B)
-│   ├── b.dfm            # Module B (depends on C)
-│   └── c.dfm            # Module C (leaf)
 ```
 
 ## Verification Strategy

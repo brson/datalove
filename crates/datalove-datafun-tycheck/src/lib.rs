@@ -333,6 +333,15 @@ pub struct ParsedModuleGraph<'db> {
     /// import resolution instead of re-parsing require statements.
     #[returns(ref)]
     pub resolved_requires: BTreeMap<ModuleId, Vec<(InternedText<'db>, ModuleId)>>,
+
+    /// Recursive content hashes for each module.
+    ///
+    /// Each module's hash incorporates its source text and the content hashes of
+    /// its resolved dependencies (sorted by alias for determinism). This enables
+    /// verification that Salsa memoization is working correctly: if a module's
+    /// content hash is unchanged, its typecheck result should be cached.
+    #[returns(ref)]
+    pub module_content_hashes: BTreeMap<ModuleId, u64>,
 }
 
 impl<'db> ParsedModuleGraph<'db> {
