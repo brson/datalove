@@ -14,15 +14,17 @@ The MVP is a working bare datafun language with:
 - compute-only core library
 - core->runtime calls
 - decent diagnostics
-
-
+- heap types, examples omit
+- field access
+- match for enums
 
 
 # in progress
 
 - module hashes and salsa verification
 - human docs
-- "bringing" ifs
+
+
 
 
 # on deck
@@ -60,3 +62,9 @@ The MVP is a working bare datafun language with:
 - simple multithreading
 - deterministic builds - compiler pipeline is already deterministic
 - wasm-component backend
+
+
+
+## backburner
+
+- if with brings - complexity, need to proove usefulness of brings with loop first
