@@ -21,7 +21,7 @@ Datalit types are:
 - [Big integers](#user-content-big-integers),
   `int`
 - [Floating point numbers](#user-content-floating-point-numbers),
-  `f32`
+  `f32`, `f64`
 - [Anynomous tuples](#user-content-anynymous-tuples)
 - [Anonymous structs](#user-content-anonymous-structs)
 - [Anonymous enums (ADTs)](#user-content-anonymous-enums)

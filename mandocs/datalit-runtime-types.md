@@ -22,7 +22,7 @@ TODO: In the runtime pointers to ZSTs are represented as ...
 `bool`,
 `u8`, `u32`, `u64`, `u128`,
 `i8`, `i32`, `i64`, `i128`,
-and `f32`
+`f32`, and `f64`
 have their obvious machine representation.
 
 
