@@ -45,6 +45,9 @@ pub struct I64(pub i64);
 #[repr(transparent)]
 pub struct F32(pub f32);
 
+#[repr(transparent)]
+pub struct F64(pub f64);
+
 
 // ## Bigints
 
