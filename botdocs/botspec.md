@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2026-01-05
+Last verified: 2026-01-07
 
 ## Overview
 
@@ -131,10 +131,27 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 | Unary negation | `-x` | Implemented (int only) |
 | Unary optional | `-?x` | Implemented (signed fixed ints) |
 | Unary result | `-!x` | Implemented (signed fixed ints) |
+| Logical not | `not x` | Implemented (bool only) |
+| Logical and/or/xor | `a and b` | Implemented (bool only) |
 | Try option | `expr?` | Implemented (early-return on none) |
 | Try result | `expr!` | Implemented (early-return on error) |
 
 ### 2.3 Operators
+
+#### Precedence (Highest to Lowest)
+
+| Level | Operators | Description |
+|-------|-----------|-------------|
+| 1 | `()` | Parenthesized grouping |
+| 2 | `-` `-?` `-!` `not` | Unary prefix |
+| 3 | `?` `!` | Postfix try |
+| 4 | `*` `/` `*!` `/!` `*?` `/?` | Multiplicative |
+| 5 | `+` `-` `+!` `-!` `+?` `-?` | Additive |
+| 6 | `.<` `.>` `<=` `>=` `==` `!=` | Comparison |
+| 7 | `and` | Logical AND |
+| 8 | `or` `xor` | Logical OR/XOR |
+
+See `botdocs/op-precedence.md` for detailed reference.
 
 #### Bare Arithmetic (`+ - * /`)
 
@@ -190,6 +207,21 @@ These operators early-return `none` on overflow/div0. `-?` disallowed for unsign
 
 **Tycheck:** Returns `bool` for any numeric operands.
 **Interpreter:** Implemented for all numeric types.
+
+#### Logical Operators (`and` `or` `xor` `not`)
+
+| Op | Type | Description |
+|----|------|-------------|
+| `and` | Binary | Logical AND |
+| `or` | Binary | Logical OR |
+| `xor` | Binary | Logical XOR |
+| `not` | Unary prefix | Logical NOT |
+
+All require `bool` operands and return `bool`.
+
+**Tycheck:** Implemented.
+**Interpreter:** Implemented.
+**AOT:** Implemented.
 
 ### 2.4 Function Definitions
 
