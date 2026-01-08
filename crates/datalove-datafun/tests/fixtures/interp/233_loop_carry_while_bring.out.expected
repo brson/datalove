@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn factorial(p0):\nblock0:\n    v0 = const 1int\n    v1 = move p0\n    goto block1(v0, v1)\nblock1(v2, v3):\n    v5 = const 1int\n    v6 = gt v3, v5\n    drop v5\n    branch v6, block3, block4(v2, v3)\nblock4(v7, v8):\n    drop v7\n    drop v8\n    goto block2(v2)\nblock3:\n    v9 = mul v2, v3\n    v10 = const 1int\n    v11 = sub v3, v10\n    drop v10\n    drop v2\n    drop v3\n    goto block1(v9, v11)\nblock5:\n    goto block1(v2, v3)\nblock2(v4):\n    return v4\nexports:\n    factorial = f0\n",
+                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn factorial(p0):\nblock0:\n    v0 = const 1int\n    v1 = move p0\n    goto block1(v0, v1)\nblock1(v2, v3):\n    v5 = const 1int\n    v6 = gt v3, v5\n    drop v5\n    branch v6, block3, block4(v2, v3)\nblock4(v7, v8):\n    drop v8\n    goto block2(v7)\nblock3:\n    v9 = mul v2, v3\n    v10 = const 1int\n    v11 = sub v3, v10\n    drop v10\n    drop v2\n    drop v3\n    goto block1(v9, v11)\nblock5:\n    goto block1(v2, v3)\nblock2(v4):\n    return v4\nexports:\n    factorial = f0\n",
             ),
             output: "(fragment executed)",
         ),
@@ -22,7 +22,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call unit0.f0(v0)\n    unit_end v1\n",
             ),
-            output: "Error: UninitializedValue(ValueId(2))",
+            output: "@120",
         ),
     ],
 )

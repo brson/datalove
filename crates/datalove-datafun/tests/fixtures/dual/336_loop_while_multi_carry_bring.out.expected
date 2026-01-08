@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n\nfn multi_carry(p0):\nblock0:\n    v0 = const 0int\n    v1 = const 10int\n    goto block1(v0, v1)\nblock1(v2, v3):\n    v6 = lt v2, p0\n    branch v6, block3, block4(v2, v3)\nblock4(v7, v8):\n    goto block2(v7, v8)\nblock3:\n    v9 = const 1int\n    v10 = add v2, v9\n    drop v9\n    v11 = const 1int\n    v12 = sub v3, v11\n    drop v11\n    drop v2\n    drop v3\n    goto block1(v10, v12)\nblock5:\n    goto block1(v2, v3)\nblock2(v4, v5):\n    v13 = pack Tuple2 {v4, v5}\n    drop p0\n    return v13\nexports:\n    multi_carry = f0\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n\nfn multi_carry(p0):\nblock0:\n    v0 = const 0int\n    v1 = const 10int\n    goto block1(v0, v1)\nblock1(v2, v3):\n    v6 = lt v2, p0\n    branch v6, block3, block4(v2, v3)\nblock4(v7, v8):\n    goto block2(v7, v8)\nblock3:\n    v9 = const 1int\n    v10 = add v2, v9\n    drop v9\n    v11 = const 1int\n    v12 = sub v3, v11\n    drop v11\n    drop v2\n    drop v3\n    goto block1(v10, v12)\nblock5:\n    goto block1(v2, v3)\nblock2(v4, v5):\n    v13 = pack Tuple2 {v4, v5}\n    drop p0\n    return v13\nexports:\n    multi_carry = f0\n",
+            ),
+            ir_match: true,
+            interp_output: "@(@5, @5)\n",
+            aot_output: "@(@5, @5)\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

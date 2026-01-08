@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// Loop with multiple carries and brings.
+// Counts up x while counting down y, returns both when x reaches limit.
+fun multi_carry(limit: int): (int, int)
+    loop carry (x = :int/@0, y = :int/@10) while x .< limit else break (x, y)
+        continue(x + :int/@1, y - :int/@1)
+    end loop bring (final_x: int, final_y: int)
+    ret (final_x, final_y)
+end fun
+
+// x counts 0..5, y counts 10..5, returns (5, 5).
+debuglog multi_carry(:int/@5)

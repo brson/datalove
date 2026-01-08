@@ -592,7 +592,7 @@ pub fn lower_loop<'db>(
             else_args: carry_args,
         });
 
-        // Build while_false_block: receives carries, drops them, goes to exit.
+        // Build while_false_block: receives carries, evaluates else_break, drops carries, goes to exit.
         ctx.start_block(while_false_block);
         let while_false_carries: Vec<ValueId> = carry_types.iter().map(|ty| {
             let v = ctx.fresh_value(ty.clone());
@@ -600,9 +600,10 @@ pub fn lower_loop<'db>(
             v
         }).collect();
 
-        // Drop the carry values.
-        for carry_value in &while_false_carries {
-            ctx.emit(Instruction::Drop { operand: Operand::Value(*carry_value) });
+        // Rebind carry names to while_false_block params for else_break evaluation.
+        for (i, carry) in carries.iter().enumerate() {
+            let carry_name = carry.name(ctx.db).text(ctx.db).to_string();
+            ctx.bind_var(&carry_name, Operand::Value(while_false_carries[i]));
         }
 
         // Lower else_break expressions for bring values.
@@ -614,10 +615,27 @@ pub fn lower_loop<'db>(
             exit_args.push(Operand::Value(value));
         }
 
+        // Drop carry values that weren't consumed by else_break expressions.
+        // A carry is consumed if it appears directly in exit_args.
+        for carry_value in &while_false_carries {
+            let was_consumed = exit_args.iter().any(|arg| {
+                matches!(arg, Operand::Value(v) if *v == *carry_value)
+            });
+            if !was_consumed {
+                ctx.emit(Instruction::Drop { operand: Operand::Value(*carry_value) });
+            }
+        }
+
         ctx.finish_block(Terminator::Goto {
             target: loop_exit,
             args: exit_args,
         });
+
+        // Restore carry bindings to loop header values for the body block.
+        for (i, carry) in carries.iter().enumerate() {
+            let carry_name = carry.name(ctx.db).text(ctx.db).to_string();
+            ctx.bind_var(&carry_name, Operand::Value(carry_param_values[i]));
+        }
 
         ctx.start_block(body_block);
         Some(body_block)
