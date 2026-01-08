@@ -30,18 +30,18 @@ The MVP is a working bare datafun language with:
 # on deck
 
 - working heap types, and default syntax everywhere
-- "design-log" from design-notes
-  - into news feed entries
 - field access
 - jit
 - clone
-- destructuring
+- match
 - generics
 - type aliases
 - runtime calls
+- script unit undo / redo
+- "design-log" from design-notes
+  - into news feed entries
 - clean up demo files in style of learn x in y minutes
 - datafun ast roundtrip
-- script unit undo / redo
 - analysis caching
 - sourceless tokens and whitespace-free tokens
 - sourceless parsing

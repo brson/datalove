@@ -5,10 +5,57 @@ Datalove on various language design topics.
 
 
 
+### 2026-01-08 - Field projections
+
+Datalove structs and tuples support
+reading and writing of fields.
+
+```datalove
+let a: { x: int, y: int) = (1, 2)
+let b = a.x   // this is a move, `a` is partially destructured
+let c = a.y   // another move
+
+let a: (int, int) = (1, 2)
+let b = a.0
+```
+
+Copy-types copy their projections;
+move types move.
+
+Partial moves:
+ompiler must track which struct fields have been moved,
+deny any further uses of the field or aggregate type,
+handle precise partial destruction at later drop points.
+
+The kind of projection depends on the destination:
+if the destination is a `ref`, `mut`, or `out` params,
+or operator operands,
+then the projections become ref projections,
+the aggregate remains fully constructed after
+the call.
+
+#### Reinitialization
+
+previously-deinitialized struct fields _can_
+be projected into `out` params, after which
+they become reinitialized; potentially making
+the aggregate fully-constructed again
+and able to be used in aggregate.
+
+Within loops,
+what happens with moved projections of outer fields?
+
+todo todo
+
+
+
+
 ### 2026-01-07 - Logic operators
 
 Booleans support `and`, `or`, `xor`, and `not`.
 todo say more
+
+
 
 
 ### 2026-01-07 - Module content hashes and memoization
