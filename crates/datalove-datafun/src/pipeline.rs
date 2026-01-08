@@ -1241,13 +1241,15 @@ pub mod aot {
                 .expect("failed to find workspace root");
             let lib_dir = workspace_root.join("target/debug");
 
-            let status = Command::new("cargo")
-                .args(["build", "-p", "datalove-rt"])
+            // Build quietly to avoid polluting test output.
+            let output = Command::new("cargo")
+                .args(["build", "-p", "datalove-rt", "--quiet"])
                 .current_dir(&workspace_root)
-                .status()
+                .output()
                 .expect("failed to run cargo build");
-            if !status.success() {
-                panic!("Failed to build datalove-rt");
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                panic!("Failed to build datalove-rt: {}", stderr);
             }
 
             lib_dir
@@ -1342,15 +1344,9 @@ pub mod aot {
         let obj_path = dir.path().join("script.o");
         std::fs::write(&obj_path, obj_bytes).map_err(LinkError::WriteObject)?;
 
-        let lib_path = find_runtime_lib().ok_or_else(|| {
-            let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
-            let manifest_path = PathBuf::from(manifest_dir);
-            let workspace_root = manifest_path.join("../..").canonicalize().unwrap_or_default();
-            LinkError::RuntimeNotFound {
-                debug_path: workspace_root.join("target/debug/libdatalove_rt.a"),
-                release_path: workspace_root.join("target/release/libdatalove_rt.a"),
-            }
-        })?;
+        // Build runtime if needed, just like link_object_to_executable.
+        let lib_dir = ensure_runtime_lib();
+        let lib_path = lib_dir.join("libdatalove_rt.a");
 
         let output = Command::new("cc")
             .args([
