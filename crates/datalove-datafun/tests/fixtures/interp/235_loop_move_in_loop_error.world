@@ -1,0 +1,23 @@
+----------
+scriptunit-fragment
+----------
+
+// Error test: moving an outer-scoped non-copy variable inside a loop.
+// This is an error because the loop could iterate multiple times,
+// and on subsequent iterations the variable would be in Moved state.
+
+var a: int = :int/@4
+var b: int = :int/@5
+
+loop
+    if a == b
+        break
+    end if
+    set a = b
+end loop
+
+----------
+scriptunit-expr
+----------
+
+a

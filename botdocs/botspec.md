@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2026-01-07
+Last verified: 2026-01-08
 
 ## Overview
 
@@ -510,6 +510,42 @@ i8 -> i16 -> i32 -> i64 -> int
 | bool, u8-u64, i8-i64, f32 | int, string, list, map, set, data, error |
 
 Linear types have move semantics; copy types can be freely duplicated.
+
+### 3.5 Move Semantics
+
+**Use after move:** A linear value can only be used once. After being consumed (passed to an `in` parameter, assigned to a variable, etc.), subsequent uses are compile-time errors.
+
+```
+let x: int = 42
+let y = x        // x is moved into y
+let z = x        // ERROR: use of moved value: x
+```
+
+**Move in loop:** Moving an outer-scoped linear value inside a loop body is a compile-time error. The loop could iterate multiple times, but the value can only be moved once.
+
+```
+var a: int = 4
+var b: int = 5
+loop
+    set a = b    // ERROR: cannot move 'b' in loop
+end loop
+```
+
+**Solution - use carry bindings:** For mutable state across loop iterations, use `loop carry`:
+
+```
+loop carry (a = :int/@4, b = :int/@5)
+    if a == b
+        break
+    end if
+    continue(b, a)   // explicit state passing
+end loop
+```
+
+**Exceptions:**
+- Copy types (fixed-width integers, bool, f32) can be used freely in loops
+- Carry bindings are designed for loop iteration state and follow different rules
+- Binary operators borrow their operands (don't consume), so `a + b` doesn't move `a` or `b`
 
 ---
 

@@ -104,6 +104,14 @@ pub enum AnalysisError {
         binding: BindingId,
         name: String,
     },
+    /// Moving an outer-scoped value inside a loop body.
+    ///
+    /// This is an error because the loop could iterate multiple times,
+    /// and on subsequent iterations the variable would be in Moved state.
+    MoveInLoop {
+        binding: BindingId,
+        name: String,
+    },
 }
 
 /// Drop schedule computed by analysis.
@@ -344,11 +352,6 @@ impl<'db> AnalysisCtx<'db> {
 
     /// Mark a binding as moved.
     fn mark_moved(&mut self, id: BindingId) {
-        // ScriptUnit bindings are never moved - they're exported.
-        if self.bindings[id.0 as usize].is_script_unit {
-            return;
-        }
-
         // Borrowed params (Ref/Mut) cannot be moved - caller retains ownership.
         if self.bindings[id.0 as usize].is_borrowed() {
             let name = self.bindings[id.0 as usize].name.clone();
@@ -361,6 +364,9 @@ impl<'db> AnalysisCtx<'db> {
             let name = self.bindings[id.0 as usize].name.clone();
             self.errors.push(AnalysisError::DoubleMove { binding: id, name });
         } else {
+            // Track the move for error detection.
+            // Note: ScriptUnit bindings are tracked for error detection (e.g., move in loop)
+            // but are NOT scheduled for drops since they're exported.
             self.set_state(id, BindingState::Moved);
         }
     }
@@ -1185,6 +1191,20 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLoop<'db>, stmt_idx: 
         ctx.analyze_expr_moves(init, true);
     }
 
+    // Capture outer-scope non-copy bindings that are Live before entering the loop.
+    // If any of these become Moved during loop body analysis, that's an error
+    // because the loop could iterate multiple times.
+    let outer_live_bindings: Vec<BindingId> = ctx.scope_stack.last()
+        .map(|frame| {
+            frame.current_state.iter()
+                .filter(|(id, state)| {
+                    **state == BindingState::Live && !ctx.bindings[id.0 as usize].ty.is_copy()
+                })
+                .map(|(id, _)| *id)
+                .collect()
+        })
+        .unwrap_or_default();
+
     ctx.enter_scope(ScopeKind::Loop);
 
     // Register carry bindings. Mark them as carry bindings so they're excluded from drops.
@@ -1204,6 +1224,15 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLoop<'db>, stmt_idx: 
     }
 
     analyze_statements(ctx, stmt.body(ctx.db), &[]);
+
+    // Check for outer-scope bindings that were moved inside the loop body.
+    // This is an error because the loop could iterate multiple times.
+    for id in &outer_live_bindings {
+        if ctx.get_state(*id) == Some(BindingState::Moved) {
+            let name = ctx.bindings[id.0 as usize].name.clone();
+            ctx.errors.push(AnalysisError::MoveInLoop { binding: *id, name });
+        }
+    }
 
     // Drops at end of loop iteration - excludes carry bindings.
     let loop_drops = ctx.exit_scope();

@@ -35,6 +35,8 @@ pub enum LowerError {
     ParseError,
     BreakOutsideLoop,
     ContinueOutsideLoop,
+    /// Drop analysis error (use-after-move, move-in-loop, etc.)
+    DropAnalysisError(String),
 }
 
 impl std::fmt::Display for LowerError {
@@ -48,6 +50,7 @@ impl std::fmt::Display for LowerError {
             LowerError::ParseError => write!(f, "parse error in source"),
             LowerError::BreakOutsideLoop => write!(f, "break outside of loop"),
             LowerError::ContinueOutsideLoop => write!(f, "continue outside of loop"),
+            LowerError::DropAnalysisError(msg) => write!(f, "{}", msg),
         }
     }
 }

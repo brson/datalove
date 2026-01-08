@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "Drop analysis errors: count_to: UseAfterMove { binding: BindingId(2), name: \"next\" }",
+                message: "cannot move \'b\' in loop - value would be invalid on next iteration",
             ),
             output: "",
         ),
@@ -20,7 +20,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "function not found: count_to",
+                message: "variable not found: a",
             ),
             output: "",
         ),

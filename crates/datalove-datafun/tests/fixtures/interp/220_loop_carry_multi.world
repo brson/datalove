@@ -7,7 +7,8 @@ loop carry (a = :int/@0, b = :int/@1, count = :int/@10)
     if count == :int/@0
         break
     end if
-    continue(b, a + b, count - :int/@1)
+    let next = a + b
+    continue(b, next, count - :int/@1)
 end loop
 
 ----------

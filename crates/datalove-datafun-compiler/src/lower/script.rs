@@ -10,11 +10,34 @@ use datalove_datafun_ir::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
     ExportBinding, BlockId, IrModuleId, FuncId,
 };
-use crate::drop_analysis::{ScriptFunctionAnalyses, analyze_script_statements};
+use crate::drop_analysis::{ScriptFunctionAnalyses, analyze_script_statements, AnalysisError};
 use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
 use super::expr::lower_expression;
 use super::func::lower_function_body;
 use super::LowerError;
+
+/// Format analysis errors into a single error message.
+fn format_analysis_errors(errors: &[AnalysisError]) -> String {
+    errors.iter()
+        .map(|e| match e {
+            AnalysisError::UseAfterMove { name, .. } =>
+                format!("use of moved value: {}", name),
+            AnalysisError::DoubleMove { name, .. } =>
+                format!("value moved twice: {}", name),
+            AnalysisError::CannotMoveRefParam { name, .. } =>
+                format!("cannot move borrowed value: {}", name),
+            AnalysisError::CannotMutFromRef { name, .. } =>
+                format!("cannot get mutable reference from immutable: {}", name),
+            AnalysisError::ReadUninitializedOutParam { name, .. } =>
+                format!("read of uninitialized out parameter: {}", name),
+            AnalysisError::OutParamNotInitialized { name, .. } =>
+                format!("out parameter not initialized: {}", name),
+            AnalysisError::MoveInLoop { name, .. } =>
+                format!("cannot move '{}' in loop - value would be invalid on next iteration", name),
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
 
 /// Lower a script unit.
 ///
@@ -42,6 +65,14 @@ pub fn lower_script_unit<'db>(
         ScriptUnitKind::Fragment(stmts) => {
             // Analyze script statements for drop schedule.
             let script_analysis = analyze_script_statements(db, expr_types, call_targets, &stmts, for_aot);
+
+            // Check for drop analysis errors (use-after-move, move-in-loop, etc.)
+            if !script_analysis.errors.is_empty() {
+                return Err(LowerError::DropAnalysisError(
+                    format_analysis_errors(&script_analysis.errors)
+                ));
+            }
+
             ctx.set_drop_schedule(script_analysis.schedule, script_analysis.bindings);
             ctx.set_unit_end_drops(script_analysis.unit_end);
 
@@ -106,8 +137,14 @@ pub fn lower_script_fragment_raw<'db>(
 
     // Analyze script statements for drop schedule.
     let script_analysis = analyze_script_statements(db, expr_types, call_targets, &stmts, for_aot);
-    // Note: script_analysis.errors are for use-after-move etc. We proceed anyway
-    // and let lowering handle any issues (or caller can check errors beforehand).
+
+    // Check for drop analysis errors (use-after-move, move-in-loop, etc.)
+    if !script_analysis.errors.is_empty() {
+        return Err(LowerError::DropAnalysisError(
+            format_analysis_errors(&script_analysis.errors)
+        ));
+    }
+
     ctx.set_drop_schedule(script_analysis.schedule, script_analysis.bindings);
     ctx.set_unit_end_drops(script_analysis.unit_end);
 
