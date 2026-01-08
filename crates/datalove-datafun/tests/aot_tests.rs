@@ -13,12 +13,11 @@
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
+
 use std::path::Path;
-use std::process::Command;
-use std::sync::OnceLock;
 
 use datalove_datafun as datafun;
-use datalove_datafun_aot_cranelift::AotCompiler;
+use datafun::pipeline::aot as pipeline_aot;
 use datalove_datafun_ir::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 
@@ -77,31 +76,6 @@ pub enum ExecutionResult {
     Success { exit_code: i32 },
     Skipped { reason: String },
     Error { message: String, exit_code: Option<i32> },
-}
-
-static RUNTIME_LIB_DIR: OnceLock<std::path::PathBuf> = OnceLock::new();
-
-/// Build the runtime library once and return the path to the lib directory.
-fn ensure_runtime_lib() -> &'static Path {
-    RUNTIME_LIB_DIR.get_or_init(|| {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-            .unwrap_or_else(|_| ".".to_string());
-        let manifest_path = std::path::PathBuf::from(manifest_dir);
-        let workspace_root = manifest_path.join("../..").canonicalize()
-            .expect("failed to find workspace root");
-        let lib_dir = workspace_root.join("target/debug");
-
-        let status = Command::new("cargo")
-            .args(["build", "-p", "datalove-rt"])
-            .current_dir(&workspace_root)
-            .status()
-            .expect("failed to run cargo build");
-        if !status.success() {
-            panic!("Failed to build datalove-rt");
-        }
-
-        lib_dir
-    })
 }
 
 /// Analyze a worldfile using AOT compilation.
@@ -328,7 +302,7 @@ fn compile_and_run_expr(
     )
 }
 
-/// AOT compile, link, and run an IR unit.
+/// AOT compile, link, and run an IR unit using pipeline::aot utilities.
 fn aot_compile_link_run(
     section_type: &str,
     typecheck: datafun::pipeline::TypecheckResult,
@@ -336,32 +310,13 @@ fn aot_compile_link_run(
     ir_unit: datalove_datafun_ir::IrScriptUnit,
     registry: &FunctionRegistry,
 ) -> AotSectionResult {
-    // Create AOT compiler.
-    let mut compiler = match AotCompiler::new_for_host() {
-        Ok(c) => c,
-        Err(e) => {
-            return AotSectionResult {
-                section_type: section_type.to_string(),
-                name: None,
-                typecheck,
-                lowering,
-                aot_compile: Some(AotCompileResult::Error {
-                    message: format!("Failed to create AOT compiler: {}", e),
-                }),
-                link: None,
-                execution: None,
-                output: String::new(),
-            };
-        }
-    };
-
-    // Compile to object file with world types from module functions.
-    let product = match compiler.compile_script_unit_with_world_types(
+    // Compile to object bytes.
+    let obj_bytes = match pipeline_aot::compile_script_to_object_with_world(
         &ir_unit,
         registry.iter_all_functions(),
         registry,
     ) {
-        Ok(p) => p,
+        Ok(b) => b,
         Err(e) => {
             return AotSectionResult {
                 section_type: section_type.to_string(),
@@ -378,27 +333,9 @@ fn aot_compile_link_run(
         }
     };
 
-    let obj_bytes = match product.emit() {
-        Ok(b) => b,
-        Err(e) => {
-            return AotSectionResult {
-                section_type: section_type.to_string(),
-                name: None,
-                typecheck,
-                lowering,
-                aot_compile: Some(AotCompileResult::Error {
-                    message: format!("Failed to emit object: {}", e),
-                }),
-                link: None,
-                execution: None,
-                output: String::new(),
-            };
-        }
-    };
-
-    // Write object to temp file.
-    let dir = match tempfile::tempdir() {
-        Ok(d) => d,
+    // Link to executable.
+    let (exe_path, _dir) = match pipeline_aot::link_object_to_executable(&obj_bytes) {
+        Ok(r) => r,
         Err(e) => {
             return AotSectionResult {
                 section_type: section_type.to_string(),
@@ -407,119 +344,27 @@ fn aot_compile_link_run(
                 lowering,
                 aot_compile: Some(AotCompileResult::Success),
                 link: Some(LinkResult::Error {
-                    message: format!("Failed to create temp dir: {}", e),
+                    message: format!("{}", e),
                 }),
                 execution: None,
                 output: String::new(),
             };
         }
     };
-
-    let obj_path = dir.path().join("test.o");
-    if let Err(e) = std::fs::write(&obj_path, &obj_bytes) {
-        return AotSectionResult {
-            section_type: section_type.to_string(),
-            name: None,
-            typecheck,
-            lowering,
-            aot_compile: Some(AotCompileResult::Success),
-            link: Some(LinkResult::Error {
-                message: format!("Failed to write object file: {}", e),
-            }),
-            execution: None,
-            output: String::new(),
-        };
-    }
-
-    // Find runtime library.
-    let lib_dir = ensure_runtime_lib();
-    let lib_path = lib_dir.join("libdatalove_rt.a");
-
-    if !lib_path.exists() {
-        return AotSectionResult {
-            section_type: section_type.to_string(),
-            name: None,
-            typecheck,
-            lowering,
-            aot_compile: Some(AotCompileResult::Success),
-            link: Some(LinkResult::Skipped {
-                reason: format!("Runtime library not found at {:?}", lib_path),
-            }),
-            execution: None,
-            output: String::new(),
-        };
-    }
-
-    // Link statically with cc.
-    let exe_path = dir.path().join("test");
-    let link_output = Command::new("cc")
-        .args([
-            obj_path.to_str().unwrap(),
-            lib_path.to_str().unwrap(),
-            "-ldl", "-lpthread", "-lm",
-            "-o", exe_path.to_str().unwrap(),
-        ])
-        .output();
-
-    let link_output = match link_output {
-        Ok(o) => o,
-        Err(e) => {
-            return AotSectionResult {
-                section_type: section_type.to_string(),
-                name: None,
-                typecheck,
-                lowering,
-                aot_compile: Some(AotCompileResult::Success),
-                link: Some(LinkResult::Error {
-                    message: format!("Failed to run linker: {}", e),
-                }),
-                execution: None,
-                output: String::new(),
-            };
-        }
-    };
-
-    if !link_output.status.success() {
-        let stderr = String::from_utf8_lossy(&link_output.stderr);
-        return AotSectionResult {
-            section_type: section_type.to_string(),
-            name: None,
-            typecheck,
-            lowering,
-            aot_compile: Some(AotCompileResult::Success),
-            link: Some(LinkResult::Error {
-                message: format!("Linker failed: {}", stderr),
-            }),
-            execution: None,
-            output: String::new(),
-        };
-    }
 
     // Run the executable.
-    let run_output = match Command::new(&exe_path).output() {
-        Ok(o) => o,
-        Err(e) => {
-            return AotSectionResult {
-                section_type: section_type.to_string(),
-                name: None,
-                typecheck,
-                lowering,
-                aot_compile: Some(AotCompileResult::Success),
-                link: Some(LinkResult::Success),
-                execution: Some(ExecutionResult::Error {
-                    message: format!("Failed to run executable: {}", e),
-                    exit_code: None,
-                }),
-                output: String::new(),
-            };
-        }
-    };
-
-    let exit_code = run_output.status.code().unwrap_or(-1);
-    let stderr = String::from_utf8_lossy(&run_output.stderr).to_string();
-
-    if !run_output.status.success() {
-        return AotSectionResult {
+    match pipeline_aot::run_executable(&exe_path) {
+        Ok(output) => AotSectionResult {
+            section_type: section_type.to_string(),
+            name: None,
+            typecheck,
+            lowering,
+            aot_compile: Some(AotCompileResult::Success),
+            link: Some(LinkResult::Success),
+            execution: Some(ExecutionResult::Success { exit_code: output.exit_code }),
+            output: output.stderr,
+        },
+        Err(pipeline_aot::ExecError::ExitCode { code, stderr }) => AotSectionResult {
             section_type: section_type.to_string(),
             name: None,
             typecheck,
@@ -527,22 +372,24 @@ fn aot_compile_link_run(
             aot_compile: Some(AotCompileResult::Success),
             link: Some(LinkResult::Success),
             execution: Some(ExecutionResult::Error {
-                message: format!("Exit code: {}", exit_code),
-                exit_code: Some(exit_code),
+                message: format!("Exit code: {}", code),
+                exit_code: Some(code),
             }),
             output: stderr,
-        };
-    }
-
-    AotSectionResult {
-        section_type: section_type.to_string(),
-        name: None,
-        typecheck,
-        lowering,
-        aot_compile: Some(AotCompileResult::Success),
-        link: Some(LinkResult::Success),
-        execution: Some(ExecutionResult::Success { exit_code }),
-        output: stderr,
+        },
+        Err(pipeline_aot::ExecError::Exec(e)) => AotSectionResult {
+            section_type: section_type.to_string(),
+            name: None,
+            typecheck,
+            lowering,
+            aot_compile: Some(AotCompileResult::Success),
+            link: Some(LinkResult::Success),
+            execution: Some(ExecutionResult::Error {
+                message: format!("Failed to run executable: {}", e),
+                exit_code: None,
+            }),
+            output: String::new(),
+        },
     }
 }
 

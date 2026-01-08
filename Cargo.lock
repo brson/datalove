@@ -1082,6 +1082,7 @@ dependencies = [
  "cranelift-frontend",
  "cranelift-module",
  "cranelift-object",
+ "datalove-datafun",
  "datalove-datafun-ir",
  "datalove-rt",
  "datalove-rtdt",
