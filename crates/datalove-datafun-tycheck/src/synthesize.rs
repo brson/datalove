@@ -352,14 +352,26 @@ fn synthesize_binop<'db>(
         ));
     }
 
-    // Check that operands are numeric types.
     let operand_ty = lhs_ty.ty(db);
-    if !is_numeric_type(operand_ty) {
-        return Err(ctx.error_invalid_operand_type(
-            expr,
-            &format!("{:?}", op),
-            &type_to_string(db, operand_ty)
-        ));
+
+    // Boolean logic operators require bool operands.
+    if matches!(op, BinOp::And | BinOp::Or | BinOp::Xor) {
+        if !is_bool_type(operand_ty) {
+            return Err(ctx.error_invalid_operand_type(
+                expr,
+                &format!("{:?}", op),
+                &type_to_string(db, operand_ty)
+            ));
+        }
+    } else {
+        // All other operators require numeric types.
+        if !is_numeric_type(operand_ty) {
+            return Err(ctx.error_invalid_operand_type(
+                expr,
+                &format!("{:?}", op),
+                &type_to_string(db, operand_ty)
+            ));
+        }
     }
 
     // Determine result type based on operator.
@@ -525,6 +537,12 @@ fn synthesize_binop<'db>(
             let bool_ty = Type::Datalit(datalit::tycheck::Type::Bool);
             TypeAndHeap::new(db, datalit::ast::Heap::Omitted, bool_ty)
         }
+
+        // Boolean logic operators: bool -> bool.
+        And | Or | Xor => {
+            let bool_ty = Type::Datalit(datalit::tycheck::Type::Bool);
+            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, bool_ty)
+        }
     };
 
     Ok(result_ty)
@@ -542,15 +560,26 @@ fn synthesize_unaryop<'db>(
 
     // Synthesize type for operand.
     let operand_ty = ctx.synthesize_expr(operand)?;
-
-    // Check that operand is a numeric type.
     let operand_type = operand_ty.ty(db);
-    if !is_numeric_type(operand_type) {
-        return Err(ctx.error_invalid_operand_type(
-            expr,
-            &format!("{:?}", op),
-            &type_to_string(db, operand_type)
-        ));
+
+    // Boolean not requires bool operand.
+    if matches!(op, UnaryOp::Not) {
+        if !is_bool_type(operand_type) {
+            return Err(ctx.error_invalid_operand_type(
+                expr,
+                &format!("{:?}", op),
+                &type_to_string(db, operand_type)
+            ));
+        }
+    } else {
+        // All other unary operators require numeric types.
+        if !is_numeric_type(operand_type) {
+            return Err(ctx.error_invalid_operand_type(
+                expr,
+                &format!("{:?}", op),
+                &type_to_string(db, operand_type)
+            ));
+        }
     }
 
     // Determine result type based on operator.
@@ -635,6 +664,12 @@ fn synthesize_unaryop<'db>(
             }
             // Return element type directly (wrapping happens at function boundary).
             operand_ty
+        }
+
+        // Boolean not: bool -> bool.
+        UnaryOp::Not => {
+            let bool_ty = Type::Datalit(datalit::tycheck::Type::Bool);
+            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, bool_ty)
         }
     };
 

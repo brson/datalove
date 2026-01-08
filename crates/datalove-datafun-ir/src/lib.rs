@@ -495,6 +495,12 @@ pub enum BinOp {
     BitXor,
     Shl,
     Shr,
+    /// Boolean logic AND.
+    LogicAnd,
+    /// Boolean logic OR.
+    LogicOr,
+    /// Boolean logic XOR.
+    LogicXor,
 }
 
 /// Unary operator.
@@ -503,6 +509,8 @@ pub enum UnaryOp {
     Neg,
     Not,
     BitNot,
+    /// Boolean logic NOT.
+    LogicNot,
 }
 
 /// Parameter passing mode.

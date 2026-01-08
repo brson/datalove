@@ -216,6 +216,9 @@ pub enum BinOp {
     Ge,
     Eq,
     Ne,
+    And,
+    Or,
+    Xor,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -223,6 +226,7 @@ pub enum UnaryOp {
     Neg,
     NegOptional,
     NegResult,
+    Not,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -646,6 +650,9 @@ impl BinOp {
             crate::ast::BinOp::Ge => BinOp::Ge,
             crate::ast::BinOp::Eq => BinOp::Eq,
             crate::ast::BinOp::Ne => BinOp::Ne,
+            crate::ast::BinOp::And => BinOp::And,
+            crate::ast::BinOp::Or => BinOp::Or,
+            crate::ast::BinOp::Xor => BinOp::Xor,
         }
     }
 }
@@ -656,6 +663,7 @@ impl UnaryOp {
             crate::ast::UnaryOp::Neg => UnaryOp::Neg,
             crate::ast::UnaryOp::NegOptional => UnaryOp::NegOptional,
             crate::ast::UnaryOp::NegResult => UnaryOp::NegResult,
+            crate::ast::UnaryOp::Not => UnaryOp::Not,
         }
     }
 }

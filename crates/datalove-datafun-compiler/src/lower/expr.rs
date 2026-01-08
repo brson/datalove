@@ -444,6 +444,10 @@ fn lower_binop<'db>(
         ast::BinOp::Le => BinOp::Le,
         ast::BinOp::Gt => BinOp::Gt,
         ast::BinOp::Ge => BinOp::Ge,
+        // Boolean logic operators.
+        ast::BinOp::And => BinOp::LogicAnd,
+        ast::BinOp::Or => BinOp::LogicOr,
+        ast::BinOp::Xor => BinOp::LogicXor,
         // Checked result ops - emit BinOpChecked with early return on overflow.
         ast::BinOp::AddChecked => {
             return lower_checked_result_binop(ctx, BinOp::Add, lhs, rhs, dest);
@@ -510,6 +514,15 @@ fn lower_unaryop<'db>(
         }
         ast::UnaryOp::NegResult => {
             lower_checked_result_unaryop(ctx, UnaryOp::Neg, operand, dest)
+        }
+        ast::UnaryOp::Not => {
+            ctx.emit(Instruction::UnaryOp {
+                dest,
+                op: UnaryOp::LogicNot,
+                operand,
+            });
+            ctx.emit_expr_temp_drops();
+            Ok(dest)
         }
     }
 }

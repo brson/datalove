@@ -152,13 +152,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     };
                     builder.ins().icmp(cc, lhs_val, rhs_val)
                 }
-                BinOp::And => {
+                BinOp::And | BinOp::LogicAnd => {
                     // Logical AND - both operands are booleans.
                     builder.ins().band(lhs_val, rhs_val)
                 }
-                BinOp::Or => {
+                BinOp::Or | BinOp::LogicOr => {
                     // Logical OR.
                     builder.ins().bor(lhs_val, rhs_val)
+                }
+                BinOp::LogicXor => {
+                    // Logical XOR - boolean exclusive or.
+                    builder.ins().bxor(lhs_val, rhs_val)
                 }
                 BinOp::BitAnd => builder.ins().band(lhs_val, rhs_val),
                 BinOp::BitOr => builder.ins().bor(lhs_val, rhs_val),
@@ -204,7 +208,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     builder.ins().ineg(val)
                 }
             }
-            UnaryOp::Not => {
+            UnaryOp::Not | UnaryOp::LogicNot => {
                 // Logical NOT on boolean (i8).
                 let one = builder.ins().iconst(cl_types::I8, 1);
                 builder.ins().bxor(val, one)

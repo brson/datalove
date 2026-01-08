@@ -101,20 +101,26 @@ impl<'db> Parser<'db> {
     /// Get operator precedence (higher number = higher precedence).
     fn binop_precedence(op: ast::BinOp) -> u8 {
         match op {
-            // Comparison operators (lowest precedence).
+            // Logical or/xor (lowest precedence).
+            ast::BinOp::Or | ast::BinOp::Xor => 1,
+
+            // Logical and.
+            ast::BinOp::And => 2,
+
+            // Comparison operators.
             ast::BinOp::Eq | ast::BinOp::Ne |
             ast::BinOp::Lt | ast::BinOp::Gt |
-            ast::BinOp::Le | ast::BinOp::Ge => 1,
+            ast::BinOp::Le | ast::BinOp::Ge => 3,
 
             // Addition and subtraction (all variants).
             ast::BinOp::Add | ast::BinOp::Sub |
             ast::BinOp::AddChecked | ast::BinOp::SubChecked |
-            ast::BinOp::AddOptional | ast::BinOp::SubOptional => 2,
+            ast::BinOp::AddOptional | ast::BinOp::SubOptional => 4,
 
             // Multiplication and division (highest precedence).
             ast::BinOp::Mul | ast::BinOp::Div |
             ast::BinOp::MulChecked | ast::BinOp::DivChecked |
-            ast::BinOp::MulOptional | ast::BinOp::DivOptional => 3,
+            ast::BinOp::MulOptional | ast::BinOp::DivOptional => 5,
         }
     }
 
@@ -123,6 +129,16 @@ impl<'db> Parser<'db> {
         match self.peek() {
             Some(TreeToken::Token(token)) => {
                 match token.kind(self.db) {
+                    // Keyword operators (logical).
+                    TokenKind::Word => {
+                        match token.word_str(self.db) {
+                            Some("and") => Some(ast::BinOp::And),
+                            Some("or") => Some(ast::BinOp::Or),
+                            Some("xor") => Some(ast::BinOp::Xor),
+                            _ => None,
+                        }
+                    }
+
                     // Two-character operators.
                     TokenKind::Sigil(Sigil::PlusExclamation) => Some(ast::BinOp::AddChecked),
                     TokenKind::Sigil(Sigil::MinusExclamation) => Some(ast::BinOp::SubChecked),
@@ -168,12 +184,18 @@ impl<'db> Parser<'db> {
 
     /// Parse primary expression (literals, names, parenthesized expressions).
     pub(super) fn parse_expr_primary(&mut self) -> ast::ExprFun<'db> {
-        // Check for unary operators (-, -?, or -!).
+        // Check for unary operators (-, -?, -!, not).
         if let Some(TreeToken::Token(token)) = self.peek() {
             let unary_op = match token.kind(self.db) {
                 TokenKind::Sigil(Sigil::Minus) => Some(ast::UnaryOp::Neg),
                 TokenKind::Sigil(Sigil::MinusQuestion) => Some(ast::UnaryOp::NegOptional),
                 TokenKind::Sigil(Sigil::MinusExclamation) => Some(ast::UnaryOp::NegResult),
+                TokenKind::Word => {
+                    match token.word_str(self.db) {
+                        Some("not") => Some(ast::UnaryOp::Not),
+                        _ => None,
+                    }
+                }
                 _ => None,
             };
 

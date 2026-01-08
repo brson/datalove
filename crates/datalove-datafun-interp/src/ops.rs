@@ -475,12 +475,16 @@ impl IrInterpreter {
                 let a = *(lhs.ptr as *const bool);
                 let b = *(rhs.ptr as *const bool);
                 match op {
-                    BinOp::And => {
+                    BinOp::And | BinOp::LogicAnd => {
                         *(dest.ptr as *mut bool) = a && b;
                         return Ok(());
                     }
-                    BinOp::Or => {
+                    BinOp::Or | BinOp::LogicOr => {
                         *(dest.ptr as *mut bool) = a || b;
+                        return Ok(());
+                    }
+                    BinOp::LogicXor => {
+                        *(dest.ptr as *mut bool) = a ^ b;
                         return Ok(());
                     }
                     BinOp::Eq => {
@@ -522,7 +526,7 @@ impl IrInterpreter {
                             *($dest.ptr as *mut $ty) = !a;
                             return Ok(());
                         }
-                        UnaryOp::Not => {}
+                        UnaryOp::Not | UnaryOp::LogicNot => {}
                     }
                 }
             };
@@ -538,7 +542,7 @@ impl IrInterpreter {
                             *($dest.ptr as *mut $ty) = !a;
                             return Ok(());
                         }
-                        _ => {}
+                        UnaryOp::Neg | UnaryOp::Not | UnaryOp::LogicNot => {}
                     }
                 }
             };
@@ -567,7 +571,7 @@ impl IrInterpreter {
             }
 
             // Boolean not.
-            if tag == rtdt::TyTag::Bool && op == UnaryOp::Not {
+            if tag == rtdt::TyTag::Bool && (op == UnaryOp::Not || op == UnaryOp::LogicNot) {
                 let a = *(src.ptr as *const bool);
                 *(dest.ptr as *mut bool) = !a;
                 return Ok(());

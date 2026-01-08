@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const true\n    v1 = const true\n    v2 = logic_or v0, v1\n    debuglog v2\n    v3 = const true\n    v4 = const false\n    v5 = logic_or v3, v4\n    debuglog v5\n    v6 = const false\n    v7 = const true\n    v8 = logic_or v6, v7\n    debuglog v8\n    v9 = const false\n    v10 = const false\n    v11 = logic_or v9, v10\n    debuglog v11\n    unit_end\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const true\n    v1 = const true\n    v2 = logic_or v0, v1\n    debuglog v2\n    v3 = const true\n    v4 = const false\n    v5 = logic_or v3, v4\n    debuglog v5\n    v6 = const false\n    v7 = const true\n    v8 = logic_or v6, v7\n    debuglog v8\n    v9 = const false\n    v10 = const false\n    v11 = logic_or v9, v10\n    debuglog v11\n    unit_end\n",
+            ),
+            ir_match: true,
+            interp_output: "@true\n@true\n@true\n@false\n",
+            aot_output: "@true\n@true\n@true\n@false\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

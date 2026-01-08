@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+debuglog (true and true)
+debuglog (true and false)
+debuglog (false and true)
+debuglog (false and false)

@@ -196,6 +196,9 @@ impl fmt::Display for BinOp {
             BinOp::BitXor => "bitxor",
             BinOp::Shl => "shl",
             BinOp::Shr => "shr",
+            BinOp::LogicAnd => "logic_and",
+            BinOp::LogicOr => "logic_or",
+            BinOp::LogicXor => "logic_xor",
         };
         write!(f, "{}", s)
     }
@@ -207,6 +210,7 @@ impl fmt::Display for UnaryOp {
             UnaryOp::Neg => "neg",
             UnaryOp::Not => "not",
             UnaryOp::BitNot => "bitnot",
+            UnaryOp::LogicNot => "logic_not",
         };
         write!(f, "{}", s)
     }

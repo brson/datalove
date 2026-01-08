@@ -5,6 +5,12 @@ Datalove on various language design topics.
 
 
 
+### 2026-01-07 - Logic operators
+
+Booleans support `and`, `or`, `xor`, and `not`.
+todo say more
+
+
 ### 2026-01-07 - Module content hashes and memoization
 
 The module graph forms a DAG.
@@ -595,3 +601,14 @@ typealias Contact: {
   age: int,
 }
 ```
+
+
+
+
+---
+
+
+
+## Wanted
+
+- operator precedence

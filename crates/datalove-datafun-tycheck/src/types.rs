@@ -81,6 +81,11 @@ pub fn is_unsigned_int_type<'db>(ty: &Type<'db>) -> bool {
     }
 }
 
+/// Check if a type is boolean.
+pub fn is_bool_type<'db>(ty: &Type<'db>) -> bool {
+    matches!(ty, Type::Datalit(datalit::tycheck::Type::Bool))
+}
+
 /// Convert a datalit type hint to a datafun type.
 pub fn convert_type_hint<'db>(
     db: &'db dyn crate::Db,

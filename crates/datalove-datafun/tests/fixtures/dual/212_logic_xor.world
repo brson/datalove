@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+debuglog (true xor true)
+debuglog (true xor false)
+debuglog (false xor true)
+debuglog (false xor false)

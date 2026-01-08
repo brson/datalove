@@ -303,6 +303,11 @@ pub enum BinOp {
     Ge,  // >=
     Eq,  // ==
     Ne,  // !=
+
+    // Logical operators (boolean)
+    And,  // and
+    Or,   // or
+    Xor,  // xor
 }
 
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
@@ -311,6 +316,7 @@ pub enum UnaryOp {
     Neg,          // - (bare, for bigints)
     NegOptional,  // -?
     NegResult,    // -!
+    Not,          // not (boolean)
 }
 
 #[salsa::tracked]
