@@ -23,9 +23,13 @@ pub struct SpanMapEntry {
     pub entry: SpanEntry,
 }
 
-/// Tracked struct for datafun expression spans.
-#[salsa::tracked]
+/// Interned struct for datafun expression spans.
+///
+/// Using `interned` instead of `tracked` ensures identical entries get the same
+/// salsa ID, which is critical for memoization of functions that return this type.
+#[salsa::interned]
 pub struct DatafunSpans<'db> {
+    #[returns(ref)]
     pub entries: Vec<SpanMapEntry>,
 }
 

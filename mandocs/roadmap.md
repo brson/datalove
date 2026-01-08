@@ -16,6 +16,8 @@ The MVP is a working bare datafun language with:
 - decent diagnostics
 
 
+
+
 # in progress
 
 - module hashes and salsa verification
@@ -34,7 +36,6 @@ The MVP is a working bare datafun language with:
 - destructuring
 - generics
 - type aliases
-- memoization tests
 - runtime calls
 - clean up demo files in style of learn x in y minutes
 - datafun ast roundtrip
