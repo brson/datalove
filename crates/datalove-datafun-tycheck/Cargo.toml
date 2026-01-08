@@ -9,6 +9,7 @@ edition.workspace = true
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
+datalove-ct.path = "../datalove-ct"
 datalove-datafun-ast.path = "../datalove-datafun-ast"
 datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"

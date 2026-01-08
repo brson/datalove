@@ -5,6 +5,7 @@
 
 use std::collections::{HashMap, BTreeMap};
 use bct::text::InternedText;
+use datalove_ct::query_log::{log_query, QueryPhase};
 
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
@@ -34,6 +35,7 @@ pub use crate::{
     ModuleExports,
     ModuleImports,
     ModuleGraphTypecheckResult,
+    SingleModuleTypecheckResult,
 };
 
 /// Typecheck multiple script units together, with bindings shared across units.
@@ -435,9 +437,85 @@ pub fn type_check_with_module_graph<'db>(
 ///
 /// This is the core typechecking function that works with the package-agnostic
 /// ModuleGraph abstraction. Modules are processed in dependency order.
-/// Function-level imports are resolved on the fly from `require module` and `import` statements.
+use bct::module_graph::Module;
+
+use crate::ResolvedImport;
+
+/// Typecheck a single module with logging.
 ///
-/// Takes a `ParsedModuleGraph` which contains pre-parsed scripts for each module.
+/// This is a tracked function so Salsa can observe per-module execution.
+/// The logging only fires when the function actually executes.
+///
+/// Takes resolved imports from the caller (resolved using exports from pass 1).
+#[salsa::tracked]
+pub fn typecheck_module<'db>(
+    db: &'db dyn crate::Db,
+    module: Module,
+    parsed: ParsedStatements<'db>,
+    spans: DatafunSpans<'db>,
+    resolved_imports: Vec<ResolvedImport<'db>>,
+) -> SingleModuleTypecheckResult<'db> {
+    let module_id = module.id(db);
+    let module_path = module_id.path(db);
+
+    log_query("typecheck", module_path, QueryPhase::Start);
+
+    // Create type context for this module.
+    let mut ctx = TypeContext::new(db, spans);
+
+    // Add imported functions to context.
+    for import in &resolved_imports {
+        let local_name = import.local_name(db);
+        let func_type = import.func_type(db);
+        let source_module = import.source_module(db);
+
+        if let Some(func_ast) = import.func_ast(db) {
+            ctx.add_imported_function(local_name, func_type, func_ast, source_module);
+        } else {
+            ctx.add_function(local_name, func_type);
+        }
+    }
+
+    // Collect all function signatures from this module.
+    for statement in parsed.statements(db) {
+        if let Statement::Fun(stmt) = statement {
+            collect_function_signature(&mut ctx, &stmt, Some(module_id));
+        }
+    }
+
+    // Type check all statements.
+    for statement in parsed.statements(db) {
+        check_statement(&mut ctx, statement);
+    }
+
+    // Collect exports for this module.
+    let exports = collect_module_exports(db, parsed);
+
+    // Build imports list for result.
+    let imports: Vec<_> = resolved_imports.iter()
+        .map(|imp| (imp.local_name(db), imp.source_module(db), imp.source_name(db)))
+        .collect();
+
+    log_query("typecheck", module_path, QueryPhase::End);
+
+    SingleModuleTypecheckResult::new(
+        db,
+        module_id,
+        ctx.errors.clone(),
+        exports,
+        imports,
+        ctx.expr_types.clone(),
+        ctx.call_targets.clone(),
+    )
+}
+
+/// Typecheck a module graph using a two-pass approach.
+///
+/// Pass 1: Collect exports (function signatures) from all modules.
+/// Pass 2: Typecheck each module with full import context available.
+///
+/// This structure allows per-module typechecking to be cached by Salsa,
+/// since all imports can be resolved before typechecking begins.
 #[salsa::tracked]
 pub fn typecheck_module_graph<'db>(
     db: &'db dyn crate::Db,
@@ -445,23 +523,12 @@ pub fn typecheck_module_graph<'db>(
 ) -> ModuleGraphTypecheckResult<'db> {
     let graph = parsed_graph.graph(db);
 
-    let mut module_errors: BTreeMap<ModuleId, Vec<TypeError>> = BTreeMap::new();
-    let mut module_exports_map: BTreeMap<ModuleId, ModuleExports<'db>> = BTreeMap::new();
-    let mut module_imports_map: BTreeMap<ModuleId, ModuleImports<'db>> = BTreeMap::new();
-    let mut combined_expr_types: Vec<Option<TypeAndHeap<'db>>> = Vec::new();
-    let mut combined_call_targets: Vec<Option<ResolvedCallTarget<'db>>> = Vec::new();
-
-    // Build a map from module path to ModuleId for quick lookup.
-    let mut path_to_id: HashMap<String, ModuleId> = HashMap::new();
-    for module in graph.iter_modules(db) {
-        let id = module.id(db);
-        path_to_id.insert(id.path(db).clone(), id);
-    }
-
     // Build maps for parsed statements, spans, and function ASTs from pre-parsed modules.
     let mut module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = HashMap::new();
     let mut module_spans: HashMap<ModuleId, DatafunSpans<'db>> = HashMap::new();
     let mut module_function_asts: HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> = HashMap::new();
+    let mut module_to_module_obj: HashMap<ModuleId, Module> = HashMap::new();
+
     for (module_id, parsed, spans) in parsed_graph.parsed_statements(db) {
         let mut funcs = HashMap::new();
         for statement in parsed.statements(db) {
@@ -474,23 +541,42 @@ pub fn typecheck_module_graph<'db>(
         module_function_asts.insert(*module_id, funcs);
     }
 
-    // Process each module in dependency order.
+    for module in graph.iter_modules(db) {
+        module_to_module_obj.insert(module.id(db), module);
+    }
+
+    // ========================================================================
+    // PASS 1: Collect exports from all modules (just function signatures).
+    // ========================================================================
+    let mut all_exports: HashMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>> = HashMap::new();
+
+    for module in graph.iter_modules(db) {
+        let module_id = module.id(db);
+        let parsed = module_parsed.get(&module_id)
+            .copied()
+            .expect("module should have been parsed");
+        let exports = collect_module_exports(db, parsed);
+        all_exports.insert(module_id, exports);
+    }
+
+    // ========================================================================
+    // PASS 2: Typecheck each module with full import context.
+    // ========================================================================
+    let mut module_errors: BTreeMap<ModuleId, Vec<TypeError>> = BTreeMap::new();
+    let mut module_exports_map: BTreeMap<ModuleId, ModuleExports<'db>> = BTreeMap::new();
+    let mut module_imports_map: BTreeMap<ModuleId, ModuleImports<'db>> = BTreeMap::new();
+    let mut combined_expr_types: Vec<Option<TypeAndHeap<'db>>> = Vec::new();
+    let mut combined_call_targets: Vec<Option<ResolvedCallTarget<'db>>> = Vec::new();
+
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
 
-        // Get the pre-parsed statements and spans.
         let parsed = module_parsed.get(&module_id)
             .copied()
-            .expect("module should have been parsed in first pass");
+            .expect("module should have been parsed");
         let spans = module_spans.get(&module_id)
             .copied()
-            .expect("module should have spans from first pass");
-
-        // Create type context for this module.
-        let mut ctx = TypeContext::new(db, spans);
-
-        // Track imports for this module.
-        let mut module_import_functions: Vec<(InternedText<'db>, ModuleId, InternedText<'db>)> = Vec::new();
+            .expect("module should have spans");
 
         // Build module alias map from pre-resolved requires.
         let resolved_requires = parsed_graph.get_requires(db, module_id);
@@ -498,88 +584,75 @@ pub fn typecheck_module_graph<'db>(
             .map(|(alias, target_id)| (*alias, *target_id))
             .collect();
 
-        // Resolve function imports from import statements.
+        // Resolve imports for this module using pass 1 exports.
+        let mut resolved_imports: Vec<ResolvedImport<'db>> = Vec::new();
+        let mut import_errors: Vec<TypeError> = Vec::new();
+
         for statement in parsed.statements(db) {
             if let Statement::Import(import) = statement {
                 let module_name = import.module_name(db);
                 let item_name = import.item_name(db);
 
-                // Look up the module in the alias map.
                 if let Some(&source_module_id) = alias_map.get(&module_name) {
-                    // Look up the module exports.
-                    if let Some(exports) = module_exports_map.get(&source_module_id) {
-                        // Look up the function in the exports.
-                        let func_opt = exports.functions(db).iter()
+                    // Look up the function in pass 1 exports.
+                    if let Some(exports) = all_exports.get(&source_module_id) {
+                        let func_opt = exports.iter()
                             .find(|(name, _)| *name == item_name)
                             .map(|(_, func_type)| *func_type);
 
                         if let Some(func_type) = func_opt {
-                            // Look up the function AST from the source module.
-                            if let Some(source_funcs) = module_function_asts.get(&source_module_id) {
-                                if let Some(&func_ast) = source_funcs.get(&item_name) {
-                                    ctx.add_imported_function(item_name, func_type, func_ast, source_module_id);
-                                } else {
-                                    // Fallback: add just the type (shouldn't happen in well-formed code).
-                                    ctx.add_function(item_name, func_type);
-                                }
-                            } else {
-                                ctx.add_function(item_name, func_type);
-                            }
-                            module_import_functions.push((item_name, source_module_id, item_name));
+                            // Look up the function AST.
+                            let func_ast = module_function_asts
+                                .get(&source_module_id)
+                                .and_then(|funcs| funcs.get(&item_name))
+                                .copied();
+
+                            resolved_imports.push(ResolvedImport::new(
+                                db,
+                                item_name,
+                                func_type,
+                                func_ast,
+                                source_module_id,
+                                item_name,
+                            ));
                         } else {
-                            ctx.add_error(TypeError::UnresolvedName(
+                            import_errors.push(TypeError::UnresolvedName(
                                 format!("{}.{}", module_name.as_str(db), item_name.as_str(db))
                             ));
                         }
                     } else {
-                        ctx.add_error(TypeError::UnresolvedName(
-                            format!("module {} (not typechecked yet)", module_name.as_str(db))
+                        import_errors.push(TypeError::UnresolvedName(
+                            format!("module {} (exports not found)", module_name.as_str(db))
                         ));
                     }
                 } else {
-                    ctx.add_error(TypeError::UnresolvedName(
+                    import_errors.push(TypeError::UnresolvedName(
                         format!("module {} (not required)", module_name.as_str(db))
                     ));
                 }
             }
         }
 
-        // First pass: collect all function signatures from this module.
-        for statement in parsed.statements(db) {
-            if let Statement::Fun(stmt) = statement {
-                collect_function_signature(&mut ctx, &stmt, Some(module_id));
-            }
+        // Call the tracked typecheck function.
+        let result = typecheck_module(db, module, parsed, spans, resolved_imports);
+
+        // Collect errors (import errors + typecheck errors).
+        let mut errors = import_errors;
+        errors.extend(result.errors(db).iter().cloned());
+        if !errors.is_empty() {
+            module_errors.insert(module_id, errors);
         }
 
-        // Second pass: type check all statements.
-        for statement in parsed.statements(db) {
-            check_statement(&mut ctx, statement);
-        }
-
-        // Collect errors for this module.
-        if !ctx.errors.is_empty() {
-            module_errors.insert(module_id, ctx.errors.clone());
-        }
-
-        // Collect exports for this module.
-        let exports_functions = collect_module_exports(db, parsed);
-        let exports = ModuleExports::new(db, module_id, exports_functions);
+        // Build exports.
+        let exports = ModuleExports::new(db, module_id, result.exports(db).clone());
         module_exports_map.insert(module_id, exports);
 
-        // Collect imports for this module.
-        let imports = ModuleImports::new(db, module_id, module_import_functions);
+        // Build imports.
+        let imports = ModuleImports::new(db, module_id, result.imports(db).clone());
         module_imports_map.insert(module_id, imports);
 
-        // Analyze all functions in this module.
-        let errors = ctx
-            .errors
-            .iter()
-            .map(|e| TypeErrorEntry::new(db, e.clone()))
-            .collect();
-        let _module_typecheck_result = TypecheckResult::new(db, parsed, errors, ctx.expr_types.clone(), ctx.call_targets.clone());
-
-        // Merge this module's expr_types into combined.
-        let new_types = &ctx.expr_types;
+        // Merge expr_types.
+        let new_types = result.expr_types(db);
         if new_types.len() > combined_expr_types.len() {
             combined_expr_types.resize(new_types.len(), None);
         }
@@ -589,8 +662,8 @@ pub fn typecheck_module_graph<'db>(
             }
         }
 
-        // Merge this module's call_targets into combined.
-        let new_targets = &ctx.call_targets;
+        // Merge call_targets.
+        let new_targets = result.call_targets(db);
         if new_targets.len() > combined_call_targets.len() {
             combined_call_targets.resize(new_targets.len(), None);
         }

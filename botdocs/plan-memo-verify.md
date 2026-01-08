@@ -14,6 +14,7 @@ Develop a test suite that verifies Salsa memoization is working correctly at the
 - [x] Unit tests for hash propagation behavior
 - [x] Phase 2: Salsa verification test infrastructure
 - [x] Phase 3: Track Salsa recomputations via event logger
+- [x] Phase 4: Invasive per-module query logging
 
 ## Approach
 
@@ -53,6 +54,32 @@ Created `LoggingDatabase` in `module_graph.rs` tests that:
 - `test_salsa_caches_identical_input` - Verifies second run with same input is fully cached
 - `test_salsa_recomputes_on_source_change` - Verifies changed source triggers recomputation
 - `test_salsa_memoization_matches_hash_changes` - Verifies hash changes correlate with recomputation
+
+### Phase 4: Invasive Per-Module Query Logging [DONE]
+
+Created new crate `datalove-ct` with thread-local query logging infrastructure.
+
+**Files created:**
+- `crates/datalove-ct/Cargo.toml`
+- `crates/datalove-ct/src/lib.rs`
+- `crates/datalove-ct/src/query_log.rs`
+
+**API:**
+```rust
+pub fn enable_query_logging();
+pub fn disable_query_logging() -> Vec<QueryLogEntry>;
+pub fn log_query(query: &'static str, module_path: &str, phase: QueryPhase);
+pub fn get_executed_modules(entries: &[QueryLogEntry], query: &str) -> Vec<String>;
+```
+
+**Instrumented queries:**
+- `parse_module_graph()` - logs "parse" for each module
+- `typecheck_module_graph()` - logs "typecheck" for each module
+
+**Tests using query log:**
+- `test_query_log_records_all_modules_parsed` - All modules logged on first run
+- `test_query_log_second_run_still_logs_iteration` - Cached runs don't log (no loop execution)
+- `test_query_log_change_one_module_logs_all` - Changed input re-runs loop for all modules
 
 ## Verification Strategy
 

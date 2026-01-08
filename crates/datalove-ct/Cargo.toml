@@ -1,0 +1,11 @@
+[package]
+name = "datalove-ct"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+rmx.workspace = true
+salsa.workspace = true
+bct.workspace = true

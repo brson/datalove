@@ -244,6 +244,50 @@ pub struct ScriptUnitsTypecheckResultTracked<'db> {
 // Module Graph Typecheck Result Types
 // ============================================================================
 
+/// A resolved import for a module.
+///
+/// Contains all information needed to add an imported function to the type context.
+#[salsa::tracked]
+pub struct ResolvedImport<'db> {
+    /// Local name for the imported function.
+    pub local_name: InternedText<'db>,
+    /// Type of the imported function.
+    pub func_type: TypeFunction<'db>,
+    /// AST of the imported function (for inlining).
+    pub func_ast: Option<StmtFun<'db>>,
+    /// Module the function was imported from.
+    pub source_module: ModuleId,
+    /// Original name in the source module.
+    pub source_name: InternedText<'db>,
+}
+
+/// Result of typechecking a single module.
+#[salsa::tracked]
+pub struct SingleModuleTypecheckResult<'db> {
+    /// Module that was typechecked.
+    pub module_id: ModuleId,
+
+    /// Type errors encountered.
+    #[returns(ref)]
+    pub errors: Vec<TypeError>,
+
+    /// Exported function signatures.
+    #[returns(ref)]
+    pub exports: Vec<(InternedText<'db>, TypeFunction<'db>)>,
+
+    /// Imported functions: (local_name, source_module_id, source_name).
+    #[returns(ref)]
+    pub imports: Vec<(InternedText<'db>, ModuleId, InternedText<'db>)>,
+
+    /// Expression types for this module.
+    #[returns(ref)]
+    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+
+    /// Resolved call targets for this module.
+    #[returns(ref)]
+    pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+}
+
 /// Exported function signatures from a module.
 #[salsa::tracked]
 pub struct ModuleExports<'db> {

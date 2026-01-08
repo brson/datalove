@@ -1039,6 +1039,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-ct"
+version = "0.1.0"
+dependencies = [
+ "bcts",
+ "rustmax",
+ "salsa",
+]
+
+[[package]]
 name = "datalove-datafun"
 version = "0.1.0"
 dependencies = [
@@ -1096,6 +1105,7 @@ name = "datalove-datafun-compiler"
 version = "0.1.0"
 dependencies = [
  "bcts",
+ "datalove-ct",
  "datalove-datafun-aot-cranelift",
  "datalove-datafun-ast",
  "datalove-datafun-interp",
@@ -1161,6 +1171,7 @@ name = "datalove-datafun-tycheck"
 version = "0.1.0"
 dependencies = [
  "bcts",
+ "datalove-ct",
  "datalove-datafun-ast",
  "datalove-datalit",
  "datalove-diagnostic",

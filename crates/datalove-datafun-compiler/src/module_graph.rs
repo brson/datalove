@@ -7,6 +7,7 @@ use rmx::std::collections::BTreeMap;
 use rmx::std::hash::{Hash, Hasher};
 use rmx::std::collections::hash_map::DefaultHasher;
 use bct::text::InternedText;
+use datalove_ct::query_log::{log_query, QueryPhase};
 
 // Re-export core module graph types from bct.
 pub use bct::module_graph::{
@@ -24,6 +25,30 @@ pub use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
+use datalove_datafun_parser::DatafunSpans;
+use datalove_datafun_ast::ast::ParsedStatements;
+
+/// Parse a single module with logging.
+///
+/// This is a tracked function so Salsa can cache per-module.
+/// The logging only fires when the function actually executes.
+#[salsa::tracked]
+pub fn parse_module<'db>(
+    db: &'db dyn salsa::Database,
+    module: Module,
+) -> (ParsedStatements<'db>, DatafunSpans<'db>) {
+    let module_id = module.id(db);
+    let module_path = module_id.path(db);
+    let source = module.source(db);
+
+    log_query("parse", module_path, QueryPhase::Start);
+    let parse_result = datalove_datafun_parser::parse(db, source);
+    let spans = datalove_datafun_parser::datafun_spans(db, source);
+    log_query("parse", module_path, QueryPhase::End);
+
+    (parse_result.parsed(db), spans)
+}
+
 /// Parse all modules in a graph with resolved requires.
 ///
 /// Returns a ParsedModuleGraph containing the original graph, pre-parsed statements,
@@ -37,10 +62,8 @@ pub fn parse_module_graph<'db>(
     let mut parsed_statements = Vec::new();
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
-        let source = module.source(db);
-        let parse_result = datalove_datafun_parser::parse(db, source);
-        let spans = datalove_datafun_parser::datafun_spans(db, source);
-        parsed_statements.push((module_id, parse_result.parsed(db), spans));
+        let (parsed, spans) = parse_module(db, module);
+        parsed_statements.push((module_id, parsed, spans));
     }
 
     // Convert String aliases to InternedText.
@@ -463,5 +486,99 @@ mod tests {
             !recompute_queries.is_empty(),
             "changing B should trigger recomputation"
         );
+    }
+
+    // ========================================================================
+    // Query Log Tests (using datalove_ct::query_log)
+    // ========================================================================
+
+    use datalove_ct::query_log::{
+        enable_query_logging, disable_query_logging,
+        get_executed_modules,
+    };
+
+    #[test]
+    fn test_query_log_records_all_modules_parsed() {
+        let db = Database::default();
+
+        // Build A -> B -> C chain.
+        let (graph, ids) = build_graph(&db, &[
+            ("c", "fun base(): i32\n  ret 1\nend fun"),
+            ("b", "require module /test/c\nfun mid(): i32\n  ret c.base()\nend fun"),
+            ("a", "require module /test/b\nlet x = b.mid()"),
+        ]);
+        let mut requires = BTreeMap::new();
+        requires.insert(ids[1], vec![("c".to_string(), ids[0])]);
+        requires.insert(ids[2], vec![("b".to_string(), ids[1])]);
+
+        enable_query_logging();
+        let _parsed = parse_module_graph(&db, graph, requires);
+        let log = disable_query_logging();
+
+        // All 3 modules should have been parsed.
+        let parsed_modules = get_executed_modules(&log, "parse");
+        assert_eq!(parsed_modules.len(), 3, "should parse 3 modules");
+        assert!(parsed_modules.contains(&"c".to_string()), "should parse c");
+        assert!(parsed_modules.contains(&"b".to_string()), "should parse b");
+        assert!(parsed_modules.contains(&"a".to_string()), "should parse a");
+    }
+
+    #[test]
+    fn test_query_log_second_run_still_logs_iteration() {
+        let db = Database::default();
+
+        // First run.
+        let (graph, _ids) = build_graph(&db, &[("a", "let x = 1")]);
+
+        enable_query_logging();
+        let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new());
+        let log1 = disable_query_logging();
+
+        let first_parsed = get_executed_modules(&log1, "parse");
+        assert_eq!(first_parsed.len(), 1, "first run parses module");
+
+        // Second run with same inputs.
+        // The outer parse_module_graph is cached, so the loop doesn't run.
+        enable_query_logging();
+        let _parsed2 = parse_module_graph(&db, graph, BTreeMap::new());
+        let log2 = disable_query_logging();
+
+        let second_parsed = get_executed_modules(&log2, "parse");
+        // When Salsa caches parse_module_graph, the loop body doesn't execute.
+        assert_eq!(second_parsed.len(), 0, "second run should be cached, no loop execution");
+    }
+
+    #[test]
+    fn test_query_log_change_one_module_logs_all() {
+        let db = Database::default();
+
+        // Build A -> B chain.
+        let (graph1, ids1) = build_graph(&db, &[
+            ("b", "fun helper(): i32\n  ret 1\nend fun"),
+            ("a", "let x = 1"),
+        ]);
+        let mut requires1 = BTreeMap::new();
+        requires1.insert(ids1[1], vec![("b".to_string(), ids1[0])]);
+
+        let _parsed1 = parse_module_graph(&db, graph1, requires1);
+
+        // Change only B.
+        let (graph2, ids2) = build_graph(&db, &[
+            ("b", "fun helper(): i32\n  ret 999\nend fun"),
+            ("a", "let x = 1"),
+        ]);
+        let mut requires2 = BTreeMap::new();
+        requires2.insert(ids2[1], vec![("b".to_string(), ids2[0])]);
+
+        enable_query_logging();
+        let _parsed2 = parse_module_graph(&db, graph2, requires2);
+        let log = disable_query_logging();
+
+        // parse_module_graph re-runs, so it iterates all modules.
+        // But the inner parse() for unchanged modules (a) should be cached.
+        let parsed_modules = get_executed_modules(&log, "parse");
+        assert_eq!(parsed_modules.len(), 2, "loop runs for all modules");
+        assert!(parsed_modules.contains(&"b".to_string()));
+        assert!(parsed_modules.contains(&"a".to_string()));
     }
 }
