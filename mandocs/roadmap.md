@@ -19,9 +19,7 @@ The MVP is a working bare datafun language with:
 # in progress
 
 - module hashes and salsa verification
-- plan-backend-unify
 - human docs
-- termination detection and refinement types
 
 
 # on deck
