@@ -1287,32 +1287,15 @@ pub mod aot {
     // --- Linking ---
 
     /// Link object to executable in temp directory.
-    pub fn link_object_to_executable(
+    ///
+    /// Returns the executable path and the TempDir. Caller must keep the TempDir
+    /// alive to prevent the executable from being deleted.
+    pub fn link_object_to_temp_executable(
         obj_bytes: &[u8],
     ) -> Result<(PathBuf, tempfile::TempDir), LinkError> {
         let dir = tempfile::tempdir().map_err(LinkError::TempDir)?;
-        let obj_path = dir.path().join("script.o");
-        std::fs::write(&obj_path, obj_bytes).map_err(LinkError::WriteObject)?;
-
-        let lib_dir = ensure_runtime_lib();
-        let lib_path = lib_dir.join("libdatalove_rt.a");
-
         let exe_path = dir.path().join("script");
-        let output = Command::new("cc")
-            .args([
-                obj_path.to_str().unwrap(),
-                lib_path.to_str().unwrap(),
-                "-ldl", "-lpthread", "-lm",
-                "-o", exe_path.to_str().unwrap(),
-            ])
-            .output()
-            .map_err(LinkError::LinkerExec)?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(LinkError::LinkerFailed(stderr));
-        }
-
+        link_object_to_path(obj_bytes, &exe_path)?;
         Ok((exe_path, dir))
     }
 
@@ -1322,7 +1305,6 @@ pub mod aot {
         let obj_path = dir.path().join("script.o");
         std::fs::write(&obj_path, obj_bytes).map_err(LinkError::WriteObject)?;
 
-        // Build runtime if needed, just like link_object_to_executable.
         let lib_dir = ensure_runtime_lib();
         let lib_path = lib_dir.join("libdatalove_rt.a");
 
@@ -1368,7 +1350,7 @@ pub mod aot {
     /// Compile, link, and run.
     pub fn compile_link_run(unit: &IrScriptUnit) -> AnyResult<ExecOutput> {
         let obj_bytes = compile_script_to_object(unit)?;
-        let (exe_path, _dir) = link_object_to_executable(&obj_bytes)
+        let (exe_path, _dir) = link_object_to_temp_executable(&obj_bytes)
             .map_err(|e| anyhow!("{}", e))?;
         run_executable(&exe_path).map_err(|e| anyhow!("{}", e))
     }
@@ -1380,7 +1362,7 @@ pub mod aot {
         registry: &FunctionRegistry,
     ) -> AnyResult<ExecOutput> {
         let obj_bytes = compile_script_to_object_with_world(unit, world_funcs, registry)?;
-        let (exe_path, _dir) = link_object_to_executable(&obj_bytes)
+        let (exe_path, _dir) = link_object_to_temp_executable(&obj_bytes)
             .map_err(|e| anyhow!("{}", e))?;
         run_executable(&exe_path).map_err(|e| anyhow!("{}", e))
     }

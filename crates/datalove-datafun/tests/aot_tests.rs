@@ -334,7 +334,7 @@ fn aot_compile_link_run(
     };
 
     // Link to executable.
-    let (exe_path, _dir) = match pipeline_aot::link_object_to_executable(&obj_bytes) {
+    let (exe_path, _dir) = match pipeline_aot::link_object_to_temp_executable(&obj_bytes) {
         Ok(r) => r,
         Err(e) => {
             return AotSectionResult {
