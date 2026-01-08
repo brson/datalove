@@ -197,7 +197,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
             Ok(graph) => graph,
             Err(e) => {
                 let empty_graph = datalove_datafun_compiler::module_graph::ModuleGraphBuilder::new(self.db).build();
-                let empty_parsed = parse_module_graph(self.db, empty_graph.clone());
+                let empty_parsed = parse_module_graph(self.db, empty_graph.clone(), BTreeMap::new());
                 return CompiledModules {
                     resolution_error: Some(format!("Package resolution failed: {:?}", e)),
                     module_graph: empty_graph,
@@ -213,8 +213,9 @@ impl<'db> ModuleCompilationPipeline<'db> {
             }
         };
 
-        let module_graph = datalove_datafun_pkg::to_module_graph(self.db, package_world, pkg_graph);
-        let parsed_graph = parse_module_graph(self.db, module_graph.clone());
+        let graph_with_requires = datalove_datafun_pkg::to_module_graph(self.db, package_world, pkg_graph);
+        let module_graph = graph_with_requires.graph;
+        let parsed_graph = parse_module_graph(self.db, module_graph.clone(), graph_with_requires.resolved_requires);
 
         let graph_typecheck = typecheck_module_graph(self.db, parsed_graph);
         let combined_expr_types = graph_typecheck.expr_types(self.db);

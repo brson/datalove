@@ -556,8 +556,9 @@ impl TypecheckStdCommand {
         };
 
         // Convert to package-agnostic ModuleGraph, parse, and typecheck.
-        let module_graph = datafun::to_module_graph(&db, package_world, pkg_graph);
-        let parsed_graph = datafun::module_graph::parse_module_graph(&db, module_graph);
+        let graph_with_requires = datafun::to_module_graph(&db, package_world, pkg_graph);
+        let module_graph = graph_with_requires.graph;
+        let parsed_graph = datafun::module_graph::parse_module_graph(&db, module_graph, graph_with_requires.resolved_requires);
         let typecheck_result = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed_graph);
 
         // Report typecheck errors.

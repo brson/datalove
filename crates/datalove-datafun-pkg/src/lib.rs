@@ -19,4 +19,4 @@ pub use package::{
     Package, PackageModule, PackageName, ModuleName,
     PackageWorld, import_from_loader, package_world_map,
 };
-pub use package_resolve::{resolve_package_world_with_imports, to_module_graph};
+pub use package_resolve::{resolve_package_world_with_imports, to_module_graph, ModuleGraphWithRequires};

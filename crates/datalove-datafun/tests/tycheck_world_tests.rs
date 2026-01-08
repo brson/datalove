@@ -235,8 +235,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let pkg_graph = result.ok().X();
 
     // Convert to package-agnostic ModuleGraph, parse, and typecheck.
-    let module_graph = datalove_datafun::to_module_graph(&db, package_world, pkg_graph);
-    let parsed_graph = datalove_datafun::module_graph::parse_module_graph(&db, module_graph);
+    let graph_with_requires = datalove_datafun::to_module_graph(&db, package_world, pkg_graph);
+    let module_graph = graph_with_requires.graph;
+    let parsed_graph = datalove_datafun::module_graph::parse_module_graph(&db, module_graph, graph_with_requires.resolved_requires);
     let typecheck_result = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed_graph);
 
     // Collect accumulated type diagnostics with spans.

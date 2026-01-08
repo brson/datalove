@@ -325,6 +325,14 @@ pub struct ParsedModuleGraph<'db> {
     /// Order matches graph.iter_modules() order.
     #[returns(ref)]
     pub parsed_statements: Vec<(ModuleId, ParsedStatements<'db>, DatafunSpans<'db>)>,
+
+    /// Resolved module requires from package resolution.
+    ///
+    /// Maps each module to its resolved require aliases: (alias, target_module_id).
+    /// This is populated by the package resolver and used by the typechecker for
+    /// import resolution instead of re-parsing require statements.
+    #[returns(ref)]
+    pub resolved_requires: BTreeMap<ModuleId, Vec<(InternedText<'db>, ModuleId)>>,
 }
 
 impl<'db> ParsedModuleGraph<'db> {
@@ -340,6 +348,17 @@ impl<'db> ParsedModuleGraph<'db> {
         self.parsed_statements(db).iter()
             .find(|(id, _, _)| *id == module_id)
             .map(|(_, _, spans)| *spans)
+    }
+
+    /// Get the resolved require aliases for a module.
+    ///
+    /// Returns a slice of (alias, target_module_id) pairs representing what
+    /// `require module` statements in this module resolved to.
+    pub fn get_requires(&self, db: &'db dyn Db, module_id: ModuleId) -> &[(InternedText<'db>, ModuleId)] {
+        self.resolved_requires(db)
+            .get(&module_id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 }
 

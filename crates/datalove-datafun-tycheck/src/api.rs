@@ -492,8 +492,11 @@ pub fn typecheck_module_graph<'db>(
         // Track imports for this module.
         let mut module_import_functions: Vec<(InternedText<'db>, ModuleId, InternedText<'db>)> = Vec::new();
 
-        // Build module alias map from require module statements.
-        let alias_map = build_module_alias_map_for_graph(db, parsed, &path_to_id);
+        // Build module alias map from pre-resolved requires.
+        let resolved_requires = parsed_graph.get_requires(db, module_id);
+        let alias_map: HashMap<InternedText<'db>, ModuleId> = resolved_requires.iter()
+            .map(|(alias, target_id)| (*alias, *target_id))
+            .collect();
 
         // Resolve function imports from import statements.
         for statement in parsed.statements(db) {

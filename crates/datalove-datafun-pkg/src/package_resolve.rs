@@ -13,7 +13,7 @@ use bct::package_resolve2::{
     ValidationError,
     resolve_package_world,
 };
-use bct::module_graph::{ModuleGraph, ModuleGraphBuilder};
+use bct::module_graph::{ModuleGraph, ModuleGraphBuilder, ModuleId};
 
 use crate::package::PackageWorld;
 
@@ -34,15 +34,23 @@ pub fn resolve_package_world_with_imports<'db>(
     resolve_package_world(db, package_world_map, import_demand_map)
 }
 
-/// Convert a PackageWorldModuleGraph to a ModuleGraph.
+/// Result of converting PackageWorldModuleGraph to ModuleGraph.
+pub struct ModuleGraphWithRequires {
+    /// The module graph with modules in dependency order.
+    pub graph: ModuleGraph,
+    /// Resolved require aliases per module: (alias, target_module_id).
+    pub resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+}
+
+/// Convert a PackageWorldModuleGraph to a ModuleGraph with resolved requires.
 ///
 /// This bridges the package system with the core compiler's module abstraction.
-/// Function-level imports are handled by the typechecker, not this conversion.
+/// Returns the module graph plus resolved require aliases for use by the typechecker.
 pub fn to_module_graph(
     db: &dyn salsa::Database,
     package_world: PackageWorld,
     graph: PackageWorldModuleGraph<'_>,
-) -> ModuleGraph {
+) -> ModuleGraphWithRequires {
     // Build a mapping from PackageModule to its module path string.
     let mut pkg_module_to_path: HashMap<bct::package2::PackageModule, String> = HashMap::new();
 
@@ -61,22 +69,56 @@ pub fn to_module_graph(
     let sorted_modules = topological_sort_modules(db, graph)
         .unwrap_or_else(|_| graph.map(db).keys().copied().collect());
 
-    // Build ModuleGraph.
+    // Build ModuleGraph and collect path → ModuleId mapping.
     let mut builder = ModuleGraphBuilder::new(db);
+    let mut path_to_module_id: HashMap<String, ModuleId> = HashMap::new();
 
-    // Add all modules in dependency order.
     for pkg_module in &sorted_modules {
         let path = pkg_module_to_path.get(pkg_module)
             .cloned()
             .unwrap_or_else(|| pkg_module.name(db).to_string());
         let source = pkg_module.text(db);
-        builder.add_module(path, source);
+        let module_id = builder.add_module(path.clone(), source);
+        path_to_module_id.insert(path, module_id);
     }
 
-    // Note: Function-level imports are resolved by the typechecker.
-    // The ModuleGraph.imports field will be empty here.
+    let module_graph = builder.build();
 
-    builder.build()
+    // Extract resolved requires from PackageWorldModuleGraph.
+    let mut resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>> = BTreeMap::new();
+
+    for (pkg_module, demands) in graph.map(db).iter() {
+        let source_path = pkg_module_to_path.get(pkg_module);
+        let source_module_id = source_path.and_then(|p| path_to_module_id.get(p));
+
+        if let (Some(_source_path), Some(&source_id)) = (source_path, source_module_id) {
+            let mut requires = Vec::new();
+
+            for (demand, resolved) in demands {
+                // demand is (ImportSpace, PackageAlias, ModuleAlias).
+                // The module alias is the third element.
+                let (_import_space, _package_alias, module_alias) = demand;
+
+                if let ResolvedPackageModule::Resolved(target_pkg_module) = resolved {
+                    // Get the target module's path and ModuleId.
+                    if let Some(target_path) = pkg_module_to_path.get(target_pkg_module) {
+                        if let Some(&target_id) = path_to_module_id.get(target_path) {
+                            requires.push((module_alias.clone(), target_id));
+                        }
+                    }
+                }
+            }
+
+            if !requires.is_empty() {
+                resolved_requires.insert(source_id, requires);
+            }
+        }
+    }
+
+    ModuleGraphWithRequires {
+        graph: module_graph,
+        resolved_requires,
+    }
 }
 
 /// Topologically sort modules so dependencies come before dependents.
