@@ -1,0 +1,19 @@
+----------
+module local/test/recur
+----------
+
+fun factorial(n: u32): u32
+    if n <= @1
+        ret @1
+    end if
+    ret n *! factorial(n -! @1)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/recur
+import recur.factorial
+
+debuglog factorial(@5)

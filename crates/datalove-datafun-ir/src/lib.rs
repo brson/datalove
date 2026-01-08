@@ -796,3 +796,25 @@ pub struct IrScriptUnit {
     /// Names exported to later units.
     pub exports: Vec<(String, ExportBinding)>,
 }
+
+// ============================================================================
+// RON Serialization Helpers
+// ============================================================================
+
+impl IrScriptUnit {
+    /// Serialize to RON format for storage or transmission.
+    pub fn to_ron(&self) -> Result<String, ron::Error> {
+        let config = ron::ser::PrettyConfig::new()
+            .struct_names(true)
+            .enumerate_arrays(false);
+        ron::ser::to_string_pretty(self, config)
+    }
+
+    /// Deserialize from RON format.
+    ///
+    /// Note: The `SymbolTable.name_to_func` field is not restored as it is only
+    /// needed during lowering. Execution uses `FuncRef` IDs directly.
+    pub fn from_ron(s: &str) -> Result<Self, ron::error::SpannedError> {
+        ron::from_str(s)
+    }
+}

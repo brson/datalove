@@ -1129,6 +1129,7 @@ name = "datalove-datafun-ir"
 version = "0.1.0"
 dependencies = [
  "datalove-datalit",
+ "ron",
  "salsa",
  "serde",
 ]

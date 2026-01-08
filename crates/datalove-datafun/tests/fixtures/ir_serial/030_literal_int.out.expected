@@ -1,0 +1,33 @@
+IrSerialAnalysis(
+    sections: [
+        IrSerialSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 123456789012345678901234567890int\n    debuglog v0\n    drop v0\n    unit_end\nexports:\n    x = v0\n",
+            ),
+            direct_interp_output: "@123456789012345678901234567890\n",
+            direct_aot_output: "@123456789012345678901234567890\n",
+            serialized_ir_size: 1078,
+            serialized_registry_size: 69,
+            deser_success: true,
+            deser_interp_output: "@123456789012345678901234567890\n",
+            deser_aot_output: "@123456789012345678901234567890\n",
+            interp_output_match: true,
+            aot_output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

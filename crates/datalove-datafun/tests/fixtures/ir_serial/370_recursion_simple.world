@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Simple recursion: count down to 0 using checked arithmetic.
+fun countdown(n: @u32): !@u32
+    if n == @0
+        ret ok @0
+    else
+        ret countdown(n -! @1)
+    end if
+end fun
+
+debuglog countdown(@5)

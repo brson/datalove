@@ -1,0 +1,16 @@
+----------
+module local/test/utils
+----------
+
+fun identity(x: u32): u32
+    ret x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/utils
+import utils.identity
+
+debuglog identity(@42)

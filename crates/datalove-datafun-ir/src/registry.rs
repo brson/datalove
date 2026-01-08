@@ -3,12 +3,14 @@
 //! Used by both the interpreter and AOT compiler to store and look up
 //! module functions and script unit functions.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use crate::{IrFunction, FuncId, IrModuleId};
 
 /// Registry of functions from modules and previous script units.
 ///
 /// Immutable after setup - can be borrowed while frames are mutated.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct FunctionRegistry {
     /// Functions from each unit, indexed by unit number.
     unit_functions: Vec<Vec<IrFunction>>,
@@ -75,5 +77,20 @@ impl FunctionRegistry {
 impl Default for FunctionRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl FunctionRegistry {
+    /// Serialize to RON format.
+    pub fn to_ron(&self) -> Result<String, ron::Error> {
+        let config = ron::ser::PrettyConfig::new()
+            .struct_names(true)
+            .enumerate_arrays(false);
+        ron::ser::to_string_pretty(self, config)
+    }
+
+    /// Deserialize from RON format.
+    pub fn from_ron(s: &str) -> Result<Self, ron::error::SpannedError> {
+        ron::from_str(s)
     }
 }
