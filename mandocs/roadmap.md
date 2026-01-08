@@ -20,13 +20,13 @@ The MVP is a working bare datafun language with:
 
 - module hashes and salsa verification
 - human docs
+- "bringing" ifs
 
 
 # on deck
 
 - "design-log" from design-notes
   - into news feed entries
-- "bringing" ifs
 - field access
 - jit
 - clone
