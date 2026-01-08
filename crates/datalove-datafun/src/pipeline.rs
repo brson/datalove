@@ -1256,28 +1256,6 @@ pub mod aot {
         })
     }
 
-    /// Find runtime library without building.
-    pub fn find_runtime_lib() -> Option<PathBuf> {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-            .unwrap_or_else(|_| ".".to_string());
-        let manifest_path = PathBuf::from(manifest_dir);
-        let workspace_root = match manifest_path.join("../..").canonicalize() {
-            Ok(p) => p,
-            Err(_) => return None,
-        };
-
-        let debug_path = workspace_root.join("target/debug/libdatalove_rt.a");
-        let release_path = workspace_root.join("target/release/libdatalove_rt.a");
-
-        if debug_path.exists() {
-            Some(debug_path)
-        } else if release_path.exists() {
-            Some(release_path)
-        } else {
-            None
-        }
-    }
-
     // --- Compilation ---
 
     /// Compile IR to object bytes.
