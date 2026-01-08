@@ -25,6 +25,7 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
         Type::U64 => json!(format!("{}u64", heap_str)),
         Type::I64 => json!(format!("{}i64", heap_str)),
         Type::F32 => json!(format!("{}f32", heap_str)),
+        Type::F64 => json!(format!("{}f64", heap_str)),
         Type::Int => json!(format!("{}int", heap_str)),
         Type::String => json!(format!("{}string", heap_str)),
         Type::Data => json!(format!("{}data", heap_str)),

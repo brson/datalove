@@ -89,6 +89,8 @@ pub enum IrType {
     Int,
     /// 32-bit float.
     F32,
+    /// 64-bit float.
+    F64,
     /// UTF-8 string.
     String,
     /// Dynamic data value.
@@ -130,6 +132,7 @@ impl std::fmt::Display for IrType {
             IrType::I64 => write!(f, "i64"),
             IrType::Int => write!(f, "int"),
             IrType::F32 => write!(f, "f32"),
+            IrType::F64 => write!(f, "f64"),
             IrType::String => write!(f, "string"),
             IrType::Data => write!(f, "data"),
             IrType::Error => write!(f, "error"),
@@ -192,6 +195,7 @@ impl IrType {
             TypeHint::U64 => IrType::U64,
             TypeHint::I64 => IrType::I64,
             TypeHint::F32 => IrType::F32,
+            TypeHint::F64 => IrType::F64,
             TypeHint::Int => IrType::Int,
             TypeHint::String => IrType::String,
             TypeHint::Data => IrType::Data,
@@ -278,6 +282,7 @@ impl IrType {
             DlType::U64 => IrType::U64,
             DlType::I64 => IrType::I64,
             DlType::F32 => IrType::F32,
+            DlType::F64 => IrType::F64,
             DlType::Int => IrType::Int,
             DlType::String => IrType::String,
             DlType::Data => IrType::Data,
@@ -351,7 +356,7 @@ impl IrType {
             IrType::Unit | IrType::Bool => true,
             IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64 => true,
             IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 => true,
-            IrType::F32 => true,
+            IrType::F32 | IrType::F64 => true,
 
             // Heap-allocated types are never copy.
             IrType::Int | IrType::String | IrType::Data | IrType::Error => false,
@@ -470,6 +475,8 @@ pub enum ConstValue {
     Int { limbs: Vec<u32>, negative: bool },
     /// 32-bit float.
     F32(f32),
+    /// 64-bit float.
+    F64(f64),
     /// String literal.
     String(String),
 }

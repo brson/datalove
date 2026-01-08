@@ -1,0 +1,36 @@
+{
+  "ast": {
+    "expr": {
+      "expr": "True",
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "F64"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T022",
+      "labels": [
+        {
+          "message": "expected `f64`, found `bool`",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "bool",
+      "expected": "f64",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

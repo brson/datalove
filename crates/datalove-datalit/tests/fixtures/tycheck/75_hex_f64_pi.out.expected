@@ -1,0 +1,19 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Hex": {
+          "value": "0x400921FB54442D18"
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": {
+      "heap": "Local",
+      "type_hint": "F64"
+    }
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": "@f64"
+}

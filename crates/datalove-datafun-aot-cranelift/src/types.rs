@@ -71,6 +71,7 @@ pub fn ir_type_to_cranelift(ty: &IrType) -> CraneliftRepr {
         IrType::U64 => CraneliftRepr::Scalar(cl_types::I64),
         IrType::I64 => CraneliftRepr::Scalar(cl_types::I64),
         IrType::F32 => CraneliftRepr::Scalar(cl_types::F32),
+        IrType::F64 => CraneliftRepr::Scalar(cl_types::F64),
 
         // Runtime types with fixed layouts from rtdt.
         IrType::Int => CraneliftRepr::Aggregate(TypeLayout {

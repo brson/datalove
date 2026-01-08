@@ -22,6 +22,7 @@ pub fn is_numeric_type<'db>(ty: &Type<'db>) -> bool {
                 datalit::tycheck::Type::U64 |
                 datalit::tycheck::Type::I64 |
                 datalit::tycheck::Type::F32 |
+                datalit::tycheck::Type::F64 |
                 datalit::tycheck::Type::Int
             )
         }
@@ -32,7 +33,7 @@ pub fn is_numeric_type<'db>(ty: &Type<'db>) -> bool {
 pub fn is_float_type<'db>(ty: &Type<'db>) -> bool {
     match ty {
         Type::Datalit(datalit_ty) => {
-            matches!(datalit_ty, datalit::tycheck::Type::F32)
+            matches!(datalit_ty, datalit::tycheck::Type::F32 | datalit::tycheck::Type::F64)
         }
         _ => false,
     }
@@ -209,6 +210,10 @@ pub fn check_hex_fits_type(value_str: &str, ty: &datalit::tycheck::Type<'_>) -> 
         datalit::tycheck::Type::F32 if !is_negative => {
             // Hex must fit in 32 bits for f32 bit pattern.
             u32::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        datalit::tycheck::Type::F64 if !is_negative => {
+            // Hex must fit in 64 bits for f64 bit pattern.
+            u64::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
         }
         _ if is_negative => Err(TypeError::IntOutOfRange), // Unsigned type with negative value.
         _ => Ok(()), // Non-integer types.

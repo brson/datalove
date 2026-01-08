@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 3.141592653589793f64\n    debuglog v0\n    unit_end\nexports:\n    x = v0\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 3.141592653589793f64\n    debuglog v0\n    unit_end\nexports:\n    x = v0\n",
+            ),
+            ir_match: true,
+            interp_output: "<unsupported-type>\n",
+            aot_output: "<unsupported-type>\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

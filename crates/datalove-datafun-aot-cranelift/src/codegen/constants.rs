@@ -61,6 +61,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ConstValue::F32(v) => {
                 builder.ins().f32const(*v)
             }
+            ConstValue::F64(v) => {
+                builder.ins().f64const(*v)
+            }
             ConstValue::Int { limbs, negative } => {
                 // Int is an aggregate type - write directly to frame.
                 return self.compile_int_const(builder, dest, limbs, *negative);

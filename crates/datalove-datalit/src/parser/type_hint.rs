@@ -51,6 +51,7 @@ impl<'db> Parser<'db> {
             Some("u64") => { self.eat_word("u64"); ast::TypeHint::U64 }
             Some("i64") => { self.eat_word("i64"); ast::TypeHint::I64 }
             Some("f32") => { self.eat_word("f32"); ast::TypeHint::F32 }
+            Some("f64") => { self.eat_word("f64"); ast::TypeHint::F64 }
             Some("int") => { self.eat_word("int"); ast::TypeHint::Int }
             Some("string") => { self.eat_word("string"); ast::TypeHint::String }
             Some("data") => { self.eat_word("data"); ast::TypeHint::Data }
@@ -225,7 +226,7 @@ impl<'db> Parser<'db> {
                         match lower.as_str() {
                             "int" | "bool" | "string" | "data" | "error" |
                             "u8" | "i8" | "u16" | "i16" | "u32" | "i32" |
-                            "u64" | "i64" | "f32" => {
+                            "u64" | "i64" | "f32" | "f64" => {
                                 format!("unknown type '{}', did you mean '{}'?", word, lower)
                             }
                             _ => format!("unknown type '{}'", word)

@@ -126,6 +126,11 @@ pub fn parse_hex_const(hex_str: &str, ty: &IrType) -> Result<ConstValue, ()> {
             let bits = u32::from_str_radix(hex_str, 16).map_err(|_| ())?;
             Ok(ConstValue::F32(f32::from_bits(bits)))
         }
+        IrType::F64 => {
+            // Hex value represents the bit pattern of the float.
+            let bits = u64::from_str_radix(hex_str, 16).map_err(|_| ())?;
+            Ok(ConstValue::F64(f64::from_bits(bits)))
+        }
         _ => Err(()),
     }
 }

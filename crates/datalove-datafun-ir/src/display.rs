@@ -117,6 +117,7 @@ impl fmt::Display for ConstValue {
                 }
             }
             ConstValue::F32(n) => write!(f, "{}f32", n),
+            ConstValue::F64(n) => write!(f, "{}f64", n),
             ConstValue::String(s) => write!(f, "{:?}", s),
         }
     }

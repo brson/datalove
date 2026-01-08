@@ -607,6 +607,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         TypeHint::U64 => (gen_uint_expr(db, rng, config, 0u64, u64::MAX), heap),
         TypeHint::I64 => (gen_int_expr(db, rng, config, i64::MIN, i64::MAX), heap),
         TypeHint::F32 => (gen_f32_expr(db, rng, config), heap),
+        TypeHint::F64 => (gen_f64_expr(db, rng, config), heap),
         TypeHint::Int => (gen_int_expr(db, rng, config, i64::MIN, i64::MAX), heap),
         TypeHint::String => (gen_string_expr(db, rng), heap),
         TypeHint::AnonTuple(th) => {
@@ -968,6 +969,105 @@ fn gen_f32_expr<'db, R: Rng>(
         NumericStrategy::SmallNonNegative => {
             // Small positive floats 0.0..255.0.
             let val = rng.gen_range(0.0f32..=255.0);
+            let value_str = format!("{:.1}", val);
+            Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)))
+        }
+    }
+}
+
+/// Special f64 values represented as hex bit patterns.
+///
+/// Note: NaN is excluded because NaN != NaN in IEEE semantics, which breaks
+/// property tests that assume clone == original.
+const F64_HEX_SPECIAL: &[(&str, &str)] = &[
+    ("0x7FF0000000000000", "+inf"),
+    ("0xFFF0000000000000", "-inf"),
+    ("0x7FEFFFFFFFFFFFFF", "f64::MAX"),
+    ("0xFFEFFFFFFFFFFFFF", "f64::MIN"),
+    ("0x0010000000000000", "smallest positive normal"),
+    ("0x8010000000000000", "smallest negative normal"),
+    ("0x0000000000000001", "smallest positive subnormal"),
+    ("0x8000000000000001", "smallest negative subnormal"),
+    ("0x8000000000000000", "-0.0"),
+];
+
+/// Generate a f64 expression.
+///
+/// Uses hex literals for special values (infinity, MIN, MAX, subnormals) that
+/// cannot be represented via decimal float syntax. NaN is excluded because
+/// NaN != NaN breaks property tests.
+fn gen_f64_expr<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &AstGenConfig,
+) -> Expr<'db> {
+    match &config.numeric_strategy {
+        NumericStrategy::CornerCases => {
+            // Mix of decimal floats and hex for special values.
+            let decimal_choices = vec![
+                "0.0".to_string(),
+                "-0.0".to_string(),
+                "1.0".to_string(),
+                "-1.0".to_string(),
+                "123.456789012345".to_string(),
+                "-123.456789012345".to_string(),
+            ];
+
+            // 50% chance of hex special value, 50% decimal.
+            if rng.gen_bool(0.5) {
+                let (hex, _desc) = F64_HEX_SPECIAL[rng.gen_range(0..F64_HEX_SPECIAL.len())];
+                Expr::Hex(ExprHex::new(db, InternedText::new(db, hex)))
+            } else {
+                let value_str = &decimal_choices[rng.gen_range(0..decimal_choices.len())];
+                Expr::Float(ExprFloat::new(db, InternedText::new(db, value_str)))
+            }
+        }
+        NumericStrategy::Random => {
+            // 20% chance of special values via hex.
+            if rng.gen_bool(0.2) {
+                let (hex, _desc) = F64_HEX_SPECIAL[rng.gen_range(0..F64_HEX_SPECIAL.len())];
+                Expr::Hex(ExprHex::new(db, InternedText::new(db, hex)))
+            } else {
+                // Random finite floats.
+                loop {
+                    let val = rng.r#gen::<f64>();
+                    if val.is_finite() {
+                        let value_str = val.to_string();
+                        break Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)));
+                    }
+                }
+            }
+        }
+        NumericStrategy::Mixed => {
+            if rng.gen_bool(0.3) {
+                // 30% corner cases: mix of decimal and hex special values.
+                let decimal_choices = vec![
+                    "0.0".to_string(),
+                    "1.0".to_string(),
+                    "-1.0".to_string(),
+                ];
+
+                if rng.gen_bool(0.5) {
+                    let (hex, _desc) = F64_HEX_SPECIAL[rng.gen_range(0..F64_HEX_SPECIAL.len())];
+                    Expr::Hex(ExprHex::new(db, InternedText::new(db, hex)))
+                } else {
+                    let value_str = &decimal_choices[rng.gen_range(0..decimal_choices.len())];
+                    Expr::Float(ExprFloat::new(db, InternedText::new(db, value_str)))
+                }
+            } else {
+                // 70% random finite floats.
+                loop {
+                    let val = rng.r#gen::<f64>();
+                    if val.is_finite() {
+                        let value_str = val.to_string();
+                        break Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)));
+                    }
+                }
+            }
+        }
+        NumericStrategy::SmallNonNegative => {
+            // Small positive floats 0.0..255.0.
+            let val = rng.gen_range(0.0f64..=255.0);
             let value_str = format!("{:.1}", val);
             Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)))
         }

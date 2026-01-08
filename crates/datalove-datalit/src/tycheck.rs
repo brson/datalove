@@ -18,6 +18,7 @@ pub enum Type<'db> {
     U64,
     I64,
     F32,
+    F64,
     Int,
     String,
     AnonTuple(TypeAnonTuple<'db>),
@@ -950,6 +951,7 @@ fn check<'db>(
 
         // Rule: Check-Float
         (Expr::Float(_), Type::F32) => Ok(()),
+        (Expr::Float(_), Type::F64) => Ok(()),
 
         // Rule: Check-Hex - hex literals can check against integer types or f32 (bit pattern).
         (Expr::Hex(h), Type::U8) => {
@@ -1028,6 +1030,23 @@ fn check<'db>(
                         .code("T013")
                         .primary_label(ts.clone(), "value out of range")
                         .note("f32 bit patterns must be 32-bit hex values (0x00000000 to 0xFFFFFFFF)")
+                        .emit_type();
+                }
+                Err(TypeError::IntOutOfRange)
+            }
+        }
+        // Hex as f64 bit pattern - any 64-bit hex value is valid.
+        (Expr::Hex(h), Type::F64) => {
+            let value_str = h.value(db).as_str(db);
+            let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
+            if u64::from_str_radix(hex_part, 16).is_ok() {
+                Ok(())
+            } else {
+                if let Some(ts) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "hex literal out of range for f64 bit pattern")
+                        .code("T014")
+                        .primary_label(ts.clone(), "value out of range")
+                        .note("f64 bit patterns must be 64-bit hex values (0x0000000000000000 to 0xFFFFFFFFFFFFFFFF)")
                         .emit_type();
                 }
                 Err(TypeError::IntOutOfRange)
@@ -1328,6 +1347,7 @@ pub fn convert_type_hint<'db>(
         TypeHint::U64 => Type::U64,
         TypeHint::I64 => Type::I64,
         TypeHint::F32 => Type::F32,
+        TypeHint::F64 => Type::F64,
         TypeHint::Int => Type::Int,
         TypeHint::String => Type::String,
         TypeHint::Data => Type::Data,
@@ -1434,6 +1454,7 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
         (Type::U64, Type::U64) => true,
         (Type::I64, Type::I64) => true,
         (Type::F32, Type::F32) => true,
+        (Type::F64, Type::F64) => true,
         (Type::Int, Type::Int) => true,
         (Type::String, Type::String) => true,
         (Type::Data, Type::Data) => true,
@@ -1570,6 +1591,7 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
         Type::U64 => "u64".to_string(),
         Type::I64 => "i64".to_string(),
         Type::F32 => "f32".to_string(),
+        Type::F64 => "f64".to_string(),
         Type::Int => "int".to_string(),
         Type::String => "string".to_string(),
         Type::Data => "data".to_string(),

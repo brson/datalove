@@ -303,6 +303,16 @@ impl<'db> TyDescTable<'db> {
                     },
                 })
             }
+            Type::F64 => {
+                Box::new(rtdt::TyDesc {
+                    type_tag: rtdt::TyTag::F64,
+                    size: 8,
+                    align: 8,
+                    type_info: rtdt::TyInfo {
+                        nothing: rtdt::TyInfoNothing,
+                    },
+                })
+            }
             Type::Int => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::Int,

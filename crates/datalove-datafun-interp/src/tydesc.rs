@@ -118,6 +118,12 @@ impl IrTyDescTable {
                 align: 4,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
             }),
+            IrType::F64 => Box::new(TyDesc {
+                type_tag: rtdt::TyTag::F64,
+                size: 8,
+                align: 8,
+                type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
+            }),
             IrType::String => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::String,
                 size: std::mem::size_of::<rtdt::String>() as u32,

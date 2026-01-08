@@ -358,7 +358,7 @@ pub enum HeapSerde {
 /// Serializable type.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TypeSerde {
-    Bool, U8, I8, U16, I16, U32, I32, U64, I64, F32, Int, String,
+    Bool, U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, Int, String,
     AnonTuple { fields: Vec<TypeAndHeapSerde> },
     AnonStruct { fields: Vec<(String, TypeAndHeapSerde)> },
     AnonEnum { variants: Vec<(String, Option<TypeAndHeapSerde>)> },
@@ -461,6 +461,7 @@ fn datalit_type_inner_to_serde<'db>(
         Type::U64 => TypeSerde::U64,
         Type::I64 => TypeSerde::I64,
         Type::F32 => TypeSerde::F32,
+        Type::F64 => TypeSerde::F64,
         Type::Int => TypeSerde::Int,
         Type::String => TypeSerde::String,
         Type::AnonTuple(t) => TypeSerde::AnonTuple {

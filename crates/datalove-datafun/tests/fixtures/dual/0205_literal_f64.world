@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let x = : @f64 / @0x400921FB54442D18
+debuglog x

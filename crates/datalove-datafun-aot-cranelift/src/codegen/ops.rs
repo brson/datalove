@@ -62,7 +62,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             type_to_check,
             IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64
         );
-        let is_float = matches!(type_to_check, IrType::F32);
+        let is_float = matches!(type_to_check, IrType::F32 | IrType::F64);
 
         let cl_val = if is_float {
             match op {
@@ -198,7 +198,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         let val = self.get_operand_value(builder, operand)?;
-        let is_float = matches!(dest_ty, IrType::F32);
+        let is_float = matches!(dest_ty, IrType::F32 | IrType::F64);
 
         let cl_val = match op {
             UnaryOp::Neg => {

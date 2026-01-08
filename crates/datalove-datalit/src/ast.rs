@@ -57,6 +57,7 @@ pub enum TypeHint<'db> {
     U64,
     I64,
     F32,
+    F64,
     Int,
     String,
     AnonTuple(TypeHintAnonTuple<'db>),

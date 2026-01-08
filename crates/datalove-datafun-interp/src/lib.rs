@@ -1176,6 +1176,9 @@ impl IrInterpreter {
                 ConstValue::F32(n) => {
                     *(dest.ptr as *mut f32) = *n;
                 }
+                ConstValue::F64(n) => {
+                    *(dest.ptr as *mut f64) = *n;
+                }
                 ConstValue::String(s) => {
                     let rt_handle = self.runtime.handle();
                     let status = datalove_rt::c::dtlv_rti_string_create_local(

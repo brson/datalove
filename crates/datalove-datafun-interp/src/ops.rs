@@ -470,6 +470,55 @@ impl IrInterpreter {
                 }
             }
 
+            // F64 operations.
+            if tag == rtdt::TyTag::F64 {
+                let a = *(lhs.ptr as *const f64);
+                let b = *(rhs.ptr as *const f64);
+                match op {
+                    BinOp::Add => {
+                        *(dest.ptr as *mut f64) = a + b;
+                        return Ok(());
+                    }
+                    BinOp::Sub => {
+                        *(dest.ptr as *mut f64) = a - b;
+                        return Ok(());
+                    }
+                    BinOp::Mul => {
+                        *(dest.ptr as *mut f64) = a * b;
+                        return Ok(());
+                    }
+                    BinOp::Div => {
+                        *(dest.ptr as *mut f64) = a / b;
+                        return Ok(());
+                    }
+                    BinOp::Lt => {
+                        *(dest.ptr as *mut bool) = a < b;
+                        return Ok(());
+                    }
+                    BinOp::Le => {
+                        *(dest.ptr as *mut bool) = a <= b;
+                        return Ok(());
+                    }
+                    BinOp::Gt => {
+                        *(dest.ptr as *mut bool) = a > b;
+                        return Ok(());
+                    }
+                    BinOp::Ge => {
+                        *(dest.ptr as *mut bool) = a >= b;
+                        return Ok(());
+                    }
+                    BinOp::Eq => {
+                        *(dest.ptr as *mut bool) = a == b;
+                        return Ok(());
+                    }
+                    BinOp::Ne => {
+                        *(dest.ptr as *mut bool) = a != b;
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+            }
+
             // Boolean operations.
             if tag == rtdt::TyTag::Bool {
                 let a = *(lhs.ptr as *const bool);
@@ -567,6 +616,13 @@ impl IrInterpreter {
             if tag == rtdt::TyTag::F32 && op == UnaryOp::Neg {
                 let a = *(src.ptr as *const f32);
                 *(dest.ptr as *mut f32) = -a;
+                return Ok(());
+            }
+
+            // F64 negation.
+            if tag == rtdt::TyTag::F64 && op == UnaryOp::Neg {
+                let a = *(src.ptr as *const f64);
+                *(dest.ptr as *mut f64) = -a;
                 return Ok(());
             }
 
