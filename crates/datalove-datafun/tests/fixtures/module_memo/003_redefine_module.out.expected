@@ -26,9 +26,9 @@
       "source_hash": "601940bd441d6e54",
       "results": {
         "local/test/a": {
-          "parsed": true,
+          "parsed": false,
           "parse_ok": true,
-          "typechecked": true,
+          "typechecked": false,
           "typecheck_ok": true,
           "hash_changed": false,
           "expected": {
@@ -36,7 +36,7 @@
             "typechecked": false,
             "hash_changed": false
           },
-          "correct": false
+          "correct": true
         },
         "local/test/b": {
           "parsed": true,
@@ -72,9 +72,9 @@
           "correct": true
         },
         "local/test/b": {
-          "parsed": true,
+          "parsed": false,
           "parse_ok": true,
-          "typechecked": true,
+          "typechecked": false,
           "typecheck_ok": true,
           "hash_changed": false,
           "expected": {
@@ -82,13 +82,13 @@
             "typechecked": false,
             "hash_changed": false
           },
-          "correct": false
+          "correct": true
         }
       }
     }
   ],
   "summary": {
     "total_steps": 3,
-    "all_correct": false
+    "all_correct": true
   }
 }

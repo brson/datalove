@@ -26,9 +26,9 @@
       "source_hash": "7a9a36c6dc2246c9",
       "results": {
         "local/test/a": {
-          "parsed": true,
+          "parsed": false,
           "parse_ok": true,
-          "typechecked": true,
+          "typechecked": false,
           "typecheck_ok": true,
           "hash_changed": false,
           "expected": {
@@ -36,7 +36,7 @@
             "typechecked": false,
             "hash_changed": false
           },
-          "correct": false
+          "correct": true
         },
         "local/test/b": {
           "parsed": true,
@@ -56,6 +56,6 @@
   ],
   "summary": {
     "total_steps": 2,
-    "all_correct": false
+    "all_correct": true
   }
 }

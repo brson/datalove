@@ -4,16 +4,17 @@
 //! incrementally and tracking parse/typecheck/hash changes after each step.
 
 use rmx::prelude::*;
-use rmx::std::collections::BTreeMap;
+use rmx::std::collections::{BTreeMap, BTreeSet};
 use rmx::std::hash::{Hash, Hasher};
 use rmx::std::collections::hash_map::DefaultHasher;
 use serde::{Serialize, Deserialize};
 use salsa::Setter;
 
 use bct::input::Source;
+use bct::module_graph::Module;
 use datalove_datafun_compiler::Database;
 use datalove_datafun_compiler::module_graph::{
-    ModuleGraphBuilder, ModuleId,
+    ModuleGraph, ModuleId,
     parse_module_graph,
 };
 use datalove_ct::query_log::{enable_query_logging, disable_query_logging, get_executed_modules};
@@ -64,11 +65,18 @@ pub struct Summary {
 }
 
 /// Internal state for tracking modules across steps.
+///
+/// Stores salsa input objects (`Module`, which contains `ModuleId` and `Source`)
+/// so they can be reused across incremental steps. This is critical for salsa
+/// memoization to work - reusing the same object identity allows salsa to
+/// detect what actually changed and cache appropriately.
 struct MemoState {
-    /// Source objects keyed by module path.
-    sources: BTreeMap<String, Source>,
-    /// Module IDs keyed by module path.
-    module_ids: BTreeMap<String, ModuleId>,
+    /// Module objects keyed by module path.
+    ///
+    /// These are salsa inputs that must be reused (not recreated) for
+    /// memoization to work. When a module is redefined, we mutate the
+    /// underlying Source's text via `set_text()`.
+    modules: BTreeMap<String, Module>,
     /// Previous content hashes.
     prev_hashes: BTreeMap<String, u64>,
     /// Previous source text hashes (to detect source changes).
@@ -78,8 +86,7 @@ struct MemoState {
 impl MemoState {
     fn new() -> Self {
         Self {
-            sources: BTreeMap::new(),
-            module_ids: BTreeMap::new(),
+            modules: BTreeMap::new(),
             prev_hashes: BTreeMap::new(),
             prev_source_hashes: BTreeMap::new(),
         }
@@ -128,7 +135,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
         let source_hash_str = format!("{:016x}", source_hash);
 
         // Determine action: add or redefine.
-        let is_redefine = state.sources.contains_key(&module_path);
+        let is_redefine = state.modules.contains_key(&module_path);
         let action = if is_redefine { "redefine" } else { "add" };
 
         // Track which modules had source changes this step.
@@ -136,27 +143,35 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             .map(|&prev| prev != source_hash)
             .unwrap_or(true); // New module counts as "changed"
 
-        // Update or create source.
+        // Update or create module.
+        // Key for salsa memoization: reuse existing Module objects rather than
+        // creating new ones. When redefining, mutate the Source's text.
         if is_redefine {
-            let existing_source = state.sources.get(&module_path).unwrap();
+            let existing_module = state.modules.get(&module_path).unwrap();
+            let existing_source = existing_module.source(&db);
             existing_source.set_text(&mut db).to(source.clone());
         } else {
             let new_source = Source::new(&db, source.clone());
-            state.sources.insert(module_path.clone(), new_source);
+            let module_id = ModuleId::new(&db, module_path.clone());
+            let module = Module::new(&db, module_id, new_source);
+            state.modules.insert(module_path.clone(), module);
         }
 
         // Update source hash tracking.
         state.prev_source_hashes.insert(module_path.clone(), source_hash);
 
-        // Rebuild the module graph with all current modules.
-        let mut builder = ModuleGraphBuilder::new(&db);
-        let mut new_module_ids = BTreeMap::new();
-        for (path, src) in &state.sources {
-            let id = builder.add_module(path.clone(), *src);
-            new_module_ids.insert(path.clone(), id);
-        }
-        let graph = builder.build();
-        state.module_ids = new_module_ids;
+        // Build the module graph from existing Module objects.
+        // We create a new ModuleGraph each time, but reuse the same Module
+        // objects so salsa can cache per-module parsing/typechecking.
+        let modules: Vec<Module> = state.modules.values().copied().collect();
+        let module_by_id: BTreeMap<ModuleId, Module> = state.modules.values()
+            .map(|m| (m.id(&db), *m))
+            .collect();
+        let dependencies: BTreeMap<ModuleId, BTreeSet<ModuleId>> =
+            state.modules.values()
+            .map(|m| (m.id(&db), BTreeSet::new()))
+            .collect();
+        let graph = ModuleGraph::new(&db, modules, module_by_id, dependencies);
 
         // Empty requires for now (no import tracking in v1).
         let requires = BTreeMap::new();
@@ -179,7 +194,8 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
 
         // Build results for all current modules.
         let mut results = BTreeMap::new();
-        for (path, &id) in &state.module_ids {
+        for (path, module) in &state.modules {
+            let id = module.id(&db);
             let parsed = parsed_modules.contains(path);
             let typechecked = typechecked_modules.contains(path);
 
