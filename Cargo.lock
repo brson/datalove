@@ -240,9 +240,9 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bcts"
-version = "0.3.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c9b86f2b020b2c601318ebaae101a4db5099781fb23e9aafacf89e1a2820600"
+checksum = "47045d12c9f183a3182377011aaada14eb0af86f470ccdbc8d4fc6905cca63a6"
 dependencies = [
  "enum-iterator",
  "memchr",
