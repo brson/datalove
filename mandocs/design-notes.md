@@ -19,12 +19,48 @@ the content hash,
 
 We test the changes in these values
 after discreet actions:
-add-module,
-remove-module,
-change-module-text,
-change-module-type,
 
-todo
+- add-module - adds a module that doesn't already exist
+- remove-module - removes a module that exists
+- change-module-ws - replace an existing module source that changes the whitespace,
+  (but not the newlines in the whitespace)
+- change-module-ast - replace an existing module with source
+  that produces a different ast does not change the typechecking
+- change-module-ty - replace an existing module with source
+  that changes the ast and produces a different typecheck result
+
+This table indicates whether we expect recalculation
+of the directly changed module, or its transitive dependents,
+after each of the actions has been taken.
+
+| action            | direct-ast | direct-ty | direct-hash | depend-ast | depend-ty | depend-hash |
+|-------------------|------------|-----------|-------------|------------|-----------|-------------|
+| add-module        | y          | y         | y           | n/a        | n/a       | n/a         |
+| remove-module     | y*         | y*        | y*          | y          | y         | y           |
+| change-module-ws  | y          | n         | y           | n          | n         | y           |
+| change-module-ast | y          | y         | y           | n          | n         | y           |
+| change-module-ty  | y          | y         | y           | n          | y         | y           |
+
+> *: removed
+
+Our test suite is a worldfile variant with the following sections:
+`module`, `module-add`, `module-change-ws`, `module-change-ast`, `module-change-ty`.
+
+Each contains the source of a module with its canonical lib/pkg/module path.
+The test harness first loads all `module` sections into the module world,
+parses and typechecks.
+
+Then for each of the action sections in turn:
+
+- merge the module into the module world (or remove it)
+- run the parser and typechecker, calculate content hashes
+- for each module that remains, calculate `changed_ast`, `changed_ty`, `changed_hash`,
+- compare the results to our expected results based on the table above
+- add the observed change analysis plus their expected results to the "actual" output
+
+The pass/fail-ness of the test is determined by the blessed "expected" files;
+the calculated analysis is just to help guide is to a fully-working memoization system.
+
 
 
 
