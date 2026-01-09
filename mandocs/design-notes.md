@@ -5,6 +5,29 @@ Datalove on various language design topics.
 
 
 
+### 2026-01-08 - Module memoization tests
+
+We focus our memoization testing at module granularity
+because module-level memoization is impactful
+and easy to reason about in tests.
+
+We care about testing the changing
+over time of three module-level values:
+the ast,
+the typecheck results.
+the content hash,
+
+We test the changes in these values
+after discreet actions:
+add-module,
+remove-module,
+change-module-text,
+change-module-type,
+
+todo
+
+
+
 ### 2026-01-08 - Field projections
 
 Datalove structs and tuples support
