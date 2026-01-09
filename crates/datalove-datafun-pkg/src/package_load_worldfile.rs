@@ -13,7 +13,42 @@ pub struct WorldfileWithScript {
 /// A section in a worldfile.
 #[derive(Debug, Clone)]
 pub enum WorldfileSection {
+    /// Initial module definition.
     Module {
+        library: String,
+        package: String,
+        module: String,
+        source: String,
+    },
+    /// Add a new module (for memoization tests).
+    ModuleAdd {
+        library: String,
+        package: String,
+        module: String,
+        source: String,
+    },
+    /// Remove an existing module (for memoization tests).
+    ModuleRemove {
+        library: String,
+        package: String,
+        module: String,
+    },
+    /// Change module with whitespace-only changes (for memoization tests).
+    ModuleChangeWs {
+        library: String,
+        package: String,
+        module: String,
+        source: String,
+    },
+    /// Change module with AST changes but same types (for memoization tests).
+    ModuleChangeAst {
+        library: String,
+        package: String,
+        module: String,
+        source: String,
+    },
+    /// Change module with type-level changes (for memoization tests).
+    ModuleChangeTy {
         library: String,
         package: String,
         module: String,
@@ -206,12 +241,65 @@ fn parse_worldfile_to_sections(content: &str) -> AnyResult<Vec<WorldfileSection>
             sections.push(WorldfileSection::ScriptFragment { source });
         } else if header_line == "scriptunit-expr" {
             sections.push(WorldfileSection::ScriptExpr { source });
+        } else if let Some(path) = header_line.strip_prefix("module-remove ") {
+            let parts: Vec<&str> = path.split('/').collect();
+            if parts.len() != 3 {
+                bail!("module-remove path must be 'module-remove library/package/module', got '{header_line}'");
+            }
+            sections.push(WorldfileSection::ModuleRemove {
+                library: S(parts[0]),
+                package: S(parts[1]),
+                module: S(parts[2]),
+            });
+        } else if let Some(path) = header_line.strip_prefix("module-add ") {
+            let parts: Vec<&str> = path.split('/').collect();
+            if parts.len() != 3 {
+                bail!("module-add path must be 'module-add library/package/module', got '{header_line}'");
+            }
+            sections.push(WorldfileSection::ModuleAdd {
+                library: S(parts[0]),
+                package: S(parts[1]),
+                module: S(parts[2]),
+                source,
+            });
+        } else if let Some(path) = header_line.strip_prefix("module-change-ws ") {
+            let parts: Vec<&str> = path.split('/').collect();
+            if parts.len() != 3 {
+                bail!("module-change-ws path must be 'module-change-ws library/package/module', got '{header_line}'");
+            }
+            sections.push(WorldfileSection::ModuleChangeWs {
+                library: S(parts[0]),
+                package: S(parts[1]),
+                module: S(parts[2]),
+                source,
+            });
+        } else if let Some(path) = header_line.strip_prefix("module-change-ast ") {
+            let parts: Vec<&str> = path.split('/').collect();
+            if parts.len() != 3 {
+                bail!("module-change-ast path must be 'module-change-ast library/package/module', got '{header_line}'");
+            }
+            sections.push(WorldfileSection::ModuleChangeAst {
+                library: S(parts[0]),
+                package: S(parts[1]),
+                module: S(parts[2]),
+                source,
+            });
+        } else if let Some(path) = header_line.strip_prefix("module-change-ty ") {
+            let parts: Vec<&str> = path.split('/').collect();
+            if parts.len() != 3 {
+                bail!("module-change-ty path must be 'module-change-ty library/package/module', got '{header_line}'");
+            }
+            sections.push(WorldfileSection::ModuleChangeTy {
+                library: S(parts[0]),
+                package: S(parts[1]),
+                module: S(parts[2]),
+                source,
+            });
         } else if let Some(path) = header_line.strip_prefix("module ") {
             let parts: Vec<&str> = path.split('/').collect();
             if parts.len() != 3 {
                 bail!("module path must be 'module library/package/module', got '{header_line}'");
             }
-
             sections.push(WorldfileSection::Module {
                 library: S(parts[0]),
                 package: S(parts[1]),
@@ -219,7 +307,7 @@ fn parse_worldfile_to_sections(content: &str) -> AnyResult<Vec<WorldfileSection>
                 source,
             });
         } else {
-            bail!("unknown section type '{header_line}' (expected 'module', 'scriptunit-fragment', or 'scriptunit-expr')");
+            bail!("unknown section type '{header_line}' (expected 'module', 'module-add', 'module-remove', 'module-change-ws', 'module-change-ast', 'module-change-ty', 'scriptunit-fragment', or 'scriptunit-expr')");
         }
     }
 

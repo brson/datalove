@@ -45,6 +45,8 @@ after each of the actions has been taken.
 
 Our test suite is a worldfile variant with the following sections:
 `module`, `module-add`, `module-change-ws`, `module-change-ast`, `module-change-ty`.
+Note that the test must trust the user that they have got the "change-*" semantics correct -
+it just knows its changing a module.
 
 Each contains the source of a module with its canonical lib/pkg/module path.
 The test harness first loads all `module` sections into the module world,

@@ -45,6 +45,13 @@ pub fn analyze_modules_worldfile(
     for section in &parsed.sections {
         match section {
             WorldfileSection::Module { .. } => {}
+            WorldfileSection::ModuleAdd { .. }
+            | WorldfileSection::ModuleRemove { .. }
+            | WorldfileSection::ModuleChangeWs { .. }
+            | WorldfileSection::ModuleChangeAst { .. }
+            | WorldfileSection::ModuleChangeTy { .. } => {
+                bail!("module action sections not allowed in module-only worldfile (use memo tests)");
+            }
             WorldfileSection::ScriptFragment { .. } => {
                 bail!("scriptunit-fragment section not allowed in module-only worldfile");
             }

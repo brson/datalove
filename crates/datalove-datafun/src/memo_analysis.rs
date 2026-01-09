@@ -4,7 +4,8 @@
 //! incrementally and tracking parse/typecheck/hash changes after each step.
 
 use rmx::prelude::*;
-use rmx::std::collections::{BTreeMap, BTreeSet};
+use rmx::std::collections::BTreeMap;
+use rmx::std::collections::BTreeSet;
 use rmx::std::hash::{Hash, Hasher};
 use rmx::std::collections::hash_map::DefaultHasher;
 use serde::{Serialize, Deserialize};
@@ -20,6 +21,38 @@ use datalove_datafun_compiler::module_graph::{
 use datalove_ct::query_log::{enable_query_logging, disable_query_logging, get_executed_modules};
 use datalove_datafun_tycheck::typecheck_module_graph;
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
+use datalove_datafun_pkg::package_load::{PackageWorld as RawPackageWorld, Package, PackageModule};
+
+/// Action types for memoization testing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Action {
+    /// Add a new module (initial load).
+    Add,
+    /// Add a new module after initial load.
+    ModuleAdd,
+    /// Remove an existing module.
+    ModuleRemove,
+    /// Change module with whitespace-only changes.
+    ModuleChangeWs,
+    /// Change module with AST changes but same types.
+    ModuleChangeAst,
+    /// Change module with type-level changes.
+    ModuleChangeTy,
+}
+
+impl Action {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Action::Add => "add",
+            Action::ModuleAdd => "module-add",
+            Action::ModuleRemove => "module-remove",
+            Action::ModuleChangeWs => "module-change-ws",
+            Action::ModuleChangeAst => "module-change-ast",
+            Action::ModuleChangeTy => "module-change-ty",
+        }
+    }
+}
 
 /// Complete memoization analysis result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,6 +73,8 @@ pub struct StepResult {
 /// Per-module result within a step.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleResult {
+    pub is_direct: bool,
+    pub is_dependent: bool,
     pub parsed: bool,
     pub parse_ok: bool,
     pub typechecked: bool,
@@ -77,19 +112,38 @@ struct MemoState {
     /// memoization to work. When a module is redefined, we mutate the
     /// underlying Source's text via `set_text()`.
     modules: BTreeMap<String, Module>,
+    /// Raw module sources keyed by path.
+    raw_sources: BTreeMap<String, String>,
     /// Previous content hashes.
     prev_hashes: BTreeMap<String, u64>,
-    /// Previous source text hashes (to detect source changes).
-    prev_source_hashes: BTreeMap<String, u64>,
+    /// Reverse dependency graph: module -> modules that depend on it.
+    dependents: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl MemoState {
     fn new() -> Self {
         Self {
             modules: BTreeMap::new(),
+            raw_sources: BTreeMap::new(),
             prev_hashes: BTreeMap::new(),
-            prev_source_hashes: BTreeMap::new(),
+            dependents: BTreeMap::new(),
         }
+    }
+
+    /// Get all dependents of a module (transitive).
+    fn get_dependents(&self, path: &str) -> BTreeSet<String> {
+        let mut result = BTreeSet::new();
+        let mut queue = vec![path.to_string()];
+        while let Some(current) = queue.pop() {
+            if let Some(deps) = self.dependents.get(&current) {
+                for dep in deps {
+                    if result.insert(dep.clone()) {
+                        queue.push(dep.clone());
+                    }
+                }
+            }
+        }
+        result
     }
 }
 
@@ -100,134 +154,415 @@ fn hash_string(s: &str) -> u64 {
     hasher.finish()
 }
 
-/// Parse worldfile content into module sections.
-fn parse_module_sections(content: &str) -> AnyResult<Vec<(String, String, String, String)>> {
+/// Parsed worldfile section with action type.
+struct ParsedSection {
+    action: Action,
+    path: String,
+    #[allow(dead_code)]
+    library: String,
+    #[allow(dead_code)]
+    package: String,
+    #[allow(dead_code)]
+    module: String,
+    source: Option<String>,
+}
+
+/// Parse worldfile content into sections.
+fn parse_sections(content: &str) -> AnyResult<Vec<ParsedSection>> {
     let reader = std::io::Cursor::new(content);
     let parsed = datalove_datafun_pkg::package_load_worldfile::parse_worldfile_sections(reader)?;
 
-    let mut modules = Vec::new();
+    let mut sections = Vec::new();
     for section in parsed.sections {
-        match section {
+        let parsed_section = match section {
             WorldfileSection::Module { library, package, module, source } => {
                 let path = format!("{}/{}/{}", library, package, module);
-                modules.push((path, library, package, source));
+                ParsedSection {
+                    action: Action::Add,
+                    path,
+                    library,
+                    package,
+                    module,
+                    source: Some(source),
+                }
             }
-            _ => bail!("module_memo only supports module sections, not script sections"),
+            WorldfileSection::ModuleAdd { library, package, module, source } => {
+                let path = format!("{}/{}/{}", library, package, module);
+                ParsedSection {
+                    action: Action::ModuleAdd,
+                    path,
+                    library,
+                    package,
+                    module,
+                    source: Some(source),
+                }
+            }
+            WorldfileSection::ModuleRemove { library, package, module } => {
+                let path = format!("{}/{}/{}", library, package, module);
+                ParsedSection {
+                    action: Action::ModuleRemove,
+                    path,
+                    library,
+                    package,
+                    module,
+                    source: None,
+                }
+            }
+            WorldfileSection::ModuleChangeWs { library, package, module, source } => {
+                let path = format!("{}/{}/{}", library, package, module);
+                ParsedSection {
+                    action: Action::ModuleChangeWs,
+                    path,
+                    library,
+                    package,
+                    module,
+                    source: Some(source),
+                }
+            }
+            WorldfileSection::ModuleChangeAst { library, package, module, source } => {
+                let path = format!("{}/{}/{}", library, package, module);
+                ParsedSection {
+                    action: Action::ModuleChangeAst,
+                    path,
+                    library,
+                    package,
+                    module,
+                    source: Some(source),
+                }
+            }
+            WorldfileSection::ModuleChangeTy { library, package, module, source } => {
+                let path = format!("{}/{}/{}", library, package, module);
+                ParsedSection {
+                    action: Action::ModuleChangeTy,
+                    path,
+                    library,
+                    package,
+                    module,
+                    source: Some(source),
+                }
+            }
+            WorldfileSection::ScriptFragment { .. } | WorldfileSection::ScriptExpr { .. } => {
+                bail!("module_memo only supports module sections, not script sections");
+            }
+        };
+        sections.push(parsed_section);
+    }
+    Ok(sections)
+}
+
+/// Build raw PackageWorld from current state.
+fn build_raw_package_world(state: &MemoState) -> RawPackageWorld {
+    let mut pkglib_system = BTreeMap::new();
+    let mut pkglib_local = BTreeMap::new();
+
+    for (path, source) in &state.raw_sources {
+        let parts: Vec<&str> = path.split('/').collect();
+        if parts.len() != 3 {
+            continue;
+        }
+        let library = parts[0];
+        let package_name = parts[1];
+        let module_name = parts[2];
+
+        let pkglib = match library {
+            "sys" => &mut pkglib_system,
+            "local" => &mut pkglib_local,
+            _ => continue,
+        };
+
+        let package = pkglib.entry(package_name.to_string())
+            .or_insert_with(|| Package {
+                name: package_name.to_string(),
+                modules: BTreeMap::new(),
+            });
+
+        let pkg_module = PackageModule {
+            name: module_name.to_string(),
+            path: path.clone().into(),
+            text: source.clone(),
+        };
+        package.modules.insert(module_name.to_string(), pkg_module);
+    }
+
+    RawPackageWorld {
+        pkglib_system,
+        pkglib_local,
+    }
+}
+
+/// Extract dependency edges (as path -> path) from the pipeline.
+fn extract_dependencies(
+    db: &Database,
+    state: &MemoState,
+) -> BTreeMap<String, BTreeSet<String>> {
+    // Build PackageWorld from raw state.
+    let raw_package_world = build_raw_package_world(state);
+    let package_world = datalove_datafun_pkg::import_from_loader(db, raw_package_world);
+
+    // Run resolution to get dependencies.
+    let resolution = crate::package_resolve::resolve_package_world_with_imports(db, package_world);
+    let pkg_graph = match resolution.result(db) {
+        Ok(graph) => graph,
+        Err(_) => return BTreeMap::new(),
+    };
+
+    // Get module graph with resolved requires - we only need the dependency info.
+    let graph_with_requires = datalove_datafun_pkg::to_module_graph(db, package_world, pkg_graph);
+    let resolved_requires = graph_with_requires.resolved_requires;
+
+    // Convert ModuleId-based dependencies to path-based.
+    let mut deps: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for (source_id, requires) in &resolved_requires {
+        let source_path = source_id.path(db).clone();
+        let target_paths: BTreeSet<String> = requires.iter()
+            .map(|(_, target_id)| target_id.path(db).clone())
+            .collect();
+        deps.insert(source_path, target_paths);
+    }
+    deps
+}
+
+/// Calculate expected behavior based on action and module relationship.
+fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> ExpectedBehavior {
+    // Based on design table:
+    // | action            | direct-ast | direct-ty | direct-hash | depend-ast | depend-ty | depend-hash |
+    // |-------------------|------------|-----------|-------------|------------|-----------|-------------|
+    // | add-module        | y          | y         | y           | n/a        | n/a       | n/a         |
+    // | remove-module     | y*         | y*        | y*          | y          | y         | y           |
+    // | change-module-ws  | y          | n         | y           | n          | n         | y           |
+    // | change-module-ast | y          | y         | y           | n          | n         | y           |
+    // | change-module-ty  | y          | y         | y           | n          | y         | y           |
+
+    if is_direct {
+        match action {
+            Action::Add | Action::ModuleAdd => ExpectedBehavior {
+                parsed: true,
+                typechecked: true,
+                hash_changed: true,
+            },
+            Action::ModuleRemove => ExpectedBehavior {
+                parsed: true,
+                typechecked: true,
+                hash_changed: true,
+            },
+            Action::ModuleChangeWs => ExpectedBehavior {
+                parsed: true,
+                typechecked: false,
+                hash_changed: true,
+            },
+            Action::ModuleChangeAst => ExpectedBehavior {
+                parsed: true,
+                typechecked: true,
+                hash_changed: true,
+            },
+            Action::ModuleChangeTy => ExpectedBehavior {
+                parsed: true,
+                typechecked: true,
+                hash_changed: true,
+            },
+        }
+    } else if is_dependent {
+        match action {
+            Action::Add | Action::ModuleAdd => ExpectedBehavior {
+                parsed: false,
+                typechecked: false,
+                hash_changed: false,
+            },
+            Action::ModuleRemove => ExpectedBehavior {
+                parsed: true,
+                typechecked: true,
+                hash_changed: true,
+            },
+            Action::ModuleChangeWs => ExpectedBehavior {
+                parsed: false,
+                typechecked: false,
+                hash_changed: true,
+            },
+            Action::ModuleChangeAst => ExpectedBehavior {
+                parsed: false,
+                typechecked: false,
+                hash_changed: true,
+            },
+            Action::ModuleChangeTy => ExpectedBehavior {
+                parsed: false,
+                typechecked: true,
+                hash_changed: true,
+            },
+        }
+    } else {
+        ExpectedBehavior {
+            parsed: false,
+            typechecked: false,
+            hash_changed: false,
         }
     }
-    Ok(modules)
 }
 
 /// Analyze memoization behavior for a worldfile.
-///
-/// Processes module sections sequentially, tracking which modules are
-/// parsed, typechecked, and have hash changes after each step.
 pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
-    let sections = parse_module_sections(content)?;
+    let sections = parse_sections(content)?;
 
     let mut db = Database::default();
     let mut state = MemoState::new();
     let mut steps = Vec::new();
     let mut all_correct = true;
 
-    for (module_path, _library, _package, source) in sections {
-        let source_hash = hash_string(&source);
-        let source_hash_str = format!("{:016x}", source_hash);
+    for section in sections {
+        let source_hash_str = section.source.as_ref()
+            .map(|s| format!("{:016x}", hash_string(s)))
+            .unwrap_or_else(|| "removed".to_string());
 
-        // Determine action: add or redefine.
-        let is_redefine = state.modules.contains_key(&module_path);
-        let action = if is_redefine { "redefine" } else { "add" };
+        // Apply action to state.
+        match section.action {
+            Action::Add | Action::ModuleAdd => {
+                let source = section.source.as_ref()
+                    .ok_or_else(|| anyhow!("Add action requires source"))?;
+                state.raw_sources.insert(section.path.clone(), source.clone());
 
-        // Track which modules had source changes this step.
-        let source_changed = state.prev_source_hashes.get(&module_path)
-            .map(|&prev| prev != source_hash)
-            .unwrap_or(true); // New module counts as "changed"
+                // Create new Module for salsa.
+                let new_source = Source::new(&db, source.clone());
+                let module_id = ModuleId::new(&db, section.path.clone());
+                let module = Module::new(&db, module_id, new_source);
+                state.modules.insert(section.path.clone(), module);
+            }
+            Action::ModuleRemove => {
+                state.raw_sources.remove(&section.path);
+                state.modules.remove(&section.path);
+            }
+            Action::ModuleChangeWs | Action::ModuleChangeAst | Action::ModuleChangeTy => {
+                let source = section.source.as_ref()
+                    .ok_or_else(|| anyhow!("Change action requires source"))?;
+                state.raw_sources.insert(section.path.clone(), source.clone());
 
-        // Update or create module.
-        // Key for salsa memoization: reuse existing Module objects rather than
-        // creating new ones. When redefining, mutate the Source's text.
-        if is_redefine {
-            let existing_module = state.modules.get(&module_path).unwrap();
-            let existing_source = existing_module.source(&db);
-            existing_source.set_text(&mut db).to(source.clone());
-        } else {
-            let new_source = Source::new(&db, source.clone());
-            let module_id = ModuleId::new(&db, module_path.clone());
-            let module = Module::new(&db, module_id, new_source);
-            state.modules.insert(module_path.clone(), module);
+                // Update existing Module's source via set_text for salsa memoization.
+                if let Some(module) = state.modules.get(&section.path) {
+                    let existing_source = module.source(&db);
+                    existing_source.set_text(&mut db).to(source.clone());
+                }
+            }
         }
 
-        // Update source hash tracking.
-        state.prev_source_hashes.insert(module_path.clone(), source_hash);
+        // Update dependency info from pipeline (just for tracking, not memoization).
+        let path_deps = extract_dependencies(&db, &state);
+        state.dependents.clear();
+        for (source_path, target_paths) in &path_deps {
+            for target_path in target_paths {
+                state.dependents
+                    .entry(target_path.clone())
+                    .or_default()
+                    .insert(source_path.clone());
+            }
+        }
 
-        // Build the module graph from existing Module objects.
-        // We create a new ModuleGraph each time, but reuse the same Module
-        // objects so salsa can cache per-module parsing/typechecking.
+        // Identify dependents of the changed module.
+        let dependents = state.get_dependents(&section.path);
+
+        // Build ModuleGraph from tracked Module objects (for memoization).
         let modules: Vec<Module> = state.modules.values().copied().collect();
         let module_by_id: BTreeMap<ModuleId, Module> = state.modules.values()
             .map(|m| (m.id(&db), *m))
             .collect();
-        let dependencies: BTreeMap<ModuleId, BTreeSet<ModuleId>> =
-            state.modules.values()
-            .map(|m| (m.id(&db), BTreeSet::new()))
-            .collect();
+
+        // Build dependency map using our ModuleIds.
+        let mut dependencies: BTreeMap<ModuleId, BTreeSet<ModuleId>> = BTreeMap::new();
+        for (source_path, target_paths) in &path_deps {
+            if let Some(source_module) = state.modules.get(source_path) {
+                let source_id = source_module.id(&db);
+                let target_ids: BTreeSet<ModuleId> = target_paths.iter()
+                    .filter_map(|p| state.modules.get(p).map(|m| m.id(&db)))
+                    .collect();
+                dependencies.insert(source_id, target_ids);
+            }
+        }
+        // Ensure all modules have an entry.
+        for module in &modules {
+            dependencies.entry(module.id(&db)).or_default();
+        }
+
         let graph = ModuleGraph::new(&db, modules, module_by_id, dependencies);
 
-        // Empty requires for now (no import tracking in v1).
-        let requires = BTreeMap::new();
+        // Build resolved requires for parse_module_graph.
+        let mut resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>> = BTreeMap::new();
+        for (source_path, target_paths) in &path_deps {
+            if let Some(source_module) = state.modules.get(source_path) {
+                let source_id = source_module.id(&db);
+                let requires: Vec<(String, ModuleId)> = target_paths.iter()
+                    .filter_map(|p| {
+                        state.modules.get(p).map(|m| {
+                            // Use the last component of path as alias.
+                            let alias = p.split('/').last().unwrap_or(p).to_string();
+                            (alias, m.id(&db))
+                        })
+                    })
+                    .collect();
+                resolved_requires.insert(source_id, requires);
+            }
+        }
 
         // Run parse with logging.
         enable_query_logging();
-        let parsed_graph = parse_module_graph(&db, graph.clone(), requires.clone());
+        let parsed_graph = parse_module_graph(&db, graph.clone(), resolved_requires.clone());
         let parse_log = disable_query_logging();
-        let parsed_modules = get_executed_modules(&parse_log, "parse");
+        let parsed_modules: BTreeSet<String> = get_executed_modules(&parse_log, "parse").into_iter().collect();
 
         // Run typecheck with logging.
         enable_query_logging();
         let typecheck_result = typecheck_module_graph(&db, parsed_graph);
         let typecheck_log = disable_query_logging();
-        let typechecked_modules = get_executed_modules(&typecheck_log, "typecheck");
+        let typechecked_modules: BTreeSet<String> = get_executed_modules(&typecheck_log, "typecheck").into_iter().collect();
 
         // Get content hashes and errors.
-        let current_hashes = parsed_graph.module_content_hashes(&db);
-        let module_errors = typecheck_result.module_errors(&db);
+        let current_hashes: BTreeMap<String, u64> = parsed_graph.module_content_hashes(&db)
+            .iter()
+            .map(|(id, hash)| (id.path(&db).clone(), *hash))
+            .collect();
+        let module_errors: BTreeMap<String, Vec<String>> = typecheck_result.module_errors(&db)
+            .iter()
+            .map(|(id, errors)| {
+                let path = id.path(&db).clone();
+                let error_strings: Vec<String> = errors.iter()
+                    .map(|e| format!("{:?}", e))
+                    .collect();
+                (path, error_strings)
+            })
+            .collect();
 
         // Build results for all current modules.
         let mut results = BTreeMap::new();
-        for (path, module) in &state.modules {
-            let id = module.id(&db);
+
+        // Handle removed module specially.
+        if section.action == Action::ModuleRemove {
+            let expected = expected_behavior(section.action, true, false);
+            results.insert(section.path.clone(), ModuleResult {
+                is_direct: true,
+                is_dependent: false,
+                parsed: true,
+                parse_ok: false,
+                typechecked: true,
+                typecheck_ok: false,
+                hash_changed: true,
+                expected: expected.clone(),
+                correct: true,
+            });
+        }
+
+        for path in state.raw_sources.keys() {
+            let is_direct = path == &section.path;
+            let is_dependent = dependents.contains(path);
+
             let parsed = parsed_modules.contains(path);
             let typechecked = typechecked_modules.contains(path);
 
-            // Check for errors.
-            let errors = module_errors.get(&id).map(|e| e.clone()).unwrap_or_default();
+            let errors = module_errors.get(path).cloned().unwrap_or_default();
             let typecheck_ok = errors.is_empty();
-
-            // Parse errors would show as the module being parsed but with issues.
-            // For now, assume parse succeeded if module was added to graph.
             let parse_ok = true;
 
-            // Check hash change.
-            let current_hash = current_hashes.get(&id).copied().unwrap_or(0);
+            let current_hash = current_hashes.get(path).copied().unwrap_or(0);
             let prev_hash = state.prev_hashes.get(path).copied();
             let hash_changed = prev_hash.map(|p| p != current_hash).unwrap_or(true);
 
-            // Compute expected behavior.
-            // Simple rule: if this module's source changed, expect all true.
-            // Otherwise, expect all false.
-            let this_source_changed = if path == &module_path {
-                source_changed
-            } else {
-                false
-            };
+            let expected = expected_behavior(section.action, is_direct, is_dependent);
 
-            let expected = ExpectedBehavior {
-                parsed: this_source_changed,
-                typechecked: this_source_changed,
-                hash_changed: this_source_changed,
-            };
-
-            // Check correctness.
             let correct = parsed == expected.parsed
                 && typechecked == expected.typechecked
                 && hash_changed == expected.hash_changed;
@@ -237,6 +572,8 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             }
 
             results.insert(path.clone(), ModuleResult {
+                is_direct,
+                is_dependent,
                 parsed,
                 parse_ok,
                 typechecked,
@@ -246,13 +583,12 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
                 correct,
             });
 
-            // Update prev_hashes for next iteration.
             state.prev_hashes.insert(path.clone(), current_hash);
         }
 
         steps.push(StepResult {
-            action: action.to_string(),
-            module: module_path,
+            action: section.action.as_str().to_string(),
+            module: section.path,
             source_hash: source_hash_str,
             results,
         });

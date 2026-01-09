@@ -23,11 +23,26 @@
       }
     },
     {
-      "action": "add",
-      "module": "local/test/a",
-      "source_hash": "ed73ad6c23077c83",
+      "action": "module-add",
+      "module": "local/test/b",
+      "source_hash": "17420a5cab30ff45",
       "results": {
         "local/test/a": {
+          "is_direct": false,
+          "is_dependent": false,
+          "parsed": false,
+          "parse_ok": true,
+          "typechecked": false,
+          "typecheck_ok": true,
+          "hash_changed": false,
+          "expected": {
+            "parsed": false,
+            "typechecked": false,
+            "hash_changed": false
+          },
+          "correct": true
+        },
+        "local/test/b": {
           "is_direct": true,
           "is_dependent": false,
           "parsed": true,

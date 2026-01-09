@@ -86,7 +86,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 output.push('\n');
                 unit_index += 1;
             }
-            WorldfileSection::Module { .. } => {
+            WorldfileSection::Module { .. }
+            | WorldfileSection::ModuleAdd { .. }
+            | WorldfileSection::ModuleRemove { .. }
+            | WorldfileSection::ModuleChangeWs { .. }
+            | WorldfileSection::ModuleChangeAst { .. }
+            | WorldfileSection::ModuleChangeTy { .. } => {
                 // Skip module sections in script unit tests.
             }
         }

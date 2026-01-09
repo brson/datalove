@@ -2,10 +2,10 @@
   "steps": [
     {
       "action": "add",
-      "module": "local/test/a",
-      "source_hash": "527eb9f5165b60da",
+      "module": "local/test/b",
+      "source_hash": "46cac3f5acbcf6cb",
       "results": {
-        "local/test/a": {
+        "local/test/b": {
           "is_direct": true,
           "is_dependent": false,
           "parsed": true,
@@ -24,10 +24,25 @@
     },
     {
       "action": "add",
-      "module": "local/test/b",
-      "source_hash": "e56668a61eaee8c5",
+      "module": "local/test/a",
+      "source_hash": "08582e618213dd7c",
       "results": {
         "local/test/a": {
+          "is_direct": true,
+          "is_dependent": false,
+          "parsed": true,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": true,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": true
+        },
+        "local/test/b": {
           "is_direct": false,
           "is_dependent": false,
           "parsed": false,
@@ -41,6 +56,28 @@
             "hash_changed": false
           },
           "correct": true
+        }
+      }
+    },
+    {
+      "action": "module-change-ty",
+      "module": "local/test/b",
+      "source_hash": "525270841af9738b",
+      "results": {
+        "local/test/a": {
+          "is_direct": false,
+          "is_dependent": true,
+          "parsed": false,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": false,
+          "hash_changed": false,
+          "expected": {
+            "parsed": false,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": false
         },
         "local/test/b": {
           "is_direct": true,
@@ -48,7 +85,7 @@
           "parsed": true,
           "parse_ok": true,
           "typechecked": true,
-          "typecheck_ok": false,
+          "typecheck_ok": true,
           "hash_changed": true,
           "expected": {
             "parsed": true,
@@ -61,7 +98,7 @@
     }
   ],
   "summary": {
-    "total_steps": 2,
-    "all_correct": true
+    "total_steps": 3,
+    "all_correct": false
   }
 }

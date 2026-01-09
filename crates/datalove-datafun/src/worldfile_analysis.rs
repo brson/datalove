@@ -128,6 +128,13 @@ pub fn analyze_worldfile(
             WorldfileSection::Module { .. } => {
                 // Already handled above.
             }
+            WorldfileSection::ModuleAdd { .. }
+            | WorldfileSection::ModuleRemove { .. }
+            | WorldfileSection::ModuleChangeWs { .. }
+            | WorldfileSection::ModuleChangeAst { .. }
+            | WorldfileSection::ModuleChangeTy { .. } => {
+                // Module action sections are for memo tests only.
+            }
             WorldfileSection::ScriptFragment { source } => {
                 // Clear debug buffer before execution.
                 ctx.clear_debug_buffer();

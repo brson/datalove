@@ -23,9 +23,9 @@
       }
     },
     {
-      "action": "add",
+      "action": "module-change-ast",
       "module": "local/test/a",
-      "source_hash": "ed73ad6c23077c83",
+      "source_hash": "5cae640058ba00ba",
       "results": {
         "local/test/a": {
           "is_direct": true,

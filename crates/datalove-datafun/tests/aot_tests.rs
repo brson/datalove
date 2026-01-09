@@ -156,8 +156,13 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
     // Process script units via AOT.
     for section in &parsed.sections {
         match section {
-            WorldfileSection::Module { .. } => {
-                // Already handled above.
+            WorldfileSection::Module { .. }
+            | WorldfileSection::ModuleAdd { .. }
+            | WorldfileSection::ModuleRemove { .. }
+            | WorldfileSection::ModuleChangeWs { .. }
+            | WorldfileSection::ModuleChangeAst { .. }
+            | WorldfileSection::ModuleChangeTy { .. } => {
+                // Already handled above (or not relevant for AOT tests).
             }
             WorldfileSection::ScriptFragment { source } => {
                 let result = compile_and_run_fragment(&mut ctx, source);

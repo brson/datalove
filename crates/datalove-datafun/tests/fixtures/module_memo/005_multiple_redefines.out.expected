@@ -6,6 +6,8 @@
       "source_hash": "527eb9f5165b60da",
       "results": {
         "local/test/a": {
+          "is_direct": true,
+          "is_dependent": false,
           "parsed": true,
           "parse_ok": true,
           "typechecked": true,
@@ -21,11 +23,13 @@
       }
     },
     {
-      "action": "redefine",
+      "action": "add",
       "module": "local/test/a",
       "source_hash": "7e360aaf264f8ae2",
       "results": {
         "local/test/a": {
+          "is_direct": true,
+          "is_dependent": false,
           "parsed": true,
           "parse_ok": true,
           "typechecked": true,
@@ -41,11 +45,13 @@
       }
     },
     {
-      "action": "redefine",
+      "action": "add",
       "module": "local/test/a",
       "source_hash": "844a8f2f41261d20",
       "results": {
         "local/test/a": {
+          "is_direct": true,
+          "is_dependent": false,
           "parsed": true,
           "parse_ok": true,
           "typechecked": true,
@@ -61,11 +67,13 @@
       }
     },
     {
-      "action": "redefine",
+      "action": "add",
       "module": "local/test/a",
       "source_hash": "c2f01de52b994f77",
       "results": {
         "local/test/a": {
+          "is_direct": true,
+          "is_dependent": false,
           "parsed": true,
           "parse_ok": true,
           "typechecked": true,

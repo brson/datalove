@@ -25,7 +25,7 @@
     {
       "action": "add",
       "module": "local/test/b",
-      "source_hash": "e56668a61eaee8c5",
+      "source_hash": "601940bd441d6e54",
       "results": {
         "local/test/a": {
           "is_direct": false,
@@ -48,6 +48,43 @@
           "parsed": true,
           "parse_ok": true,
           "typechecked": true,
+          "typecheck_ok": true,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": true
+        }
+      }
+    },
+    {
+      "action": "module-remove",
+      "module": "local/test/b",
+      "source_hash": "removed",
+      "results": {
+        "local/test/a": {
+          "is_direct": false,
+          "is_dependent": false,
+          "parsed": false,
+          "parse_ok": true,
+          "typechecked": false,
+          "typecheck_ok": true,
+          "hash_changed": false,
+          "expected": {
+            "parsed": false,
+            "typechecked": false,
+            "hash_changed": false
+          },
+          "correct": true
+        },
+        "local/test/b": {
+          "is_direct": true,
+          "is_dependent": false,
+          "parsed": true,
+          "parse_ok": false,
+          "typechecked": true,
           "typecheck_ok": false,
           "hash_changed": true,
           "expected": {
@@ -61,7 +98,7 @@
     }
   ],
   "summary": {
-    "total_steps": 2,
+    "total_steps": 3,
     "all_correct": true
   }
 }

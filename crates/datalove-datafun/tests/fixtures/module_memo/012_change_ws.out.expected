@@ -23,9 +23,9 @@
       }
     },
     {
-      "action": "add",
+      "action": "module-change-ws",
       "module": "local/test/a",
-      "source_hash": "ed73ad6c23077c83",
+      "source_hash": "d4b041715d466b61",
       "results": {
         "local/test/a": {
           "is_direct": true,
@@ -37,16 +37,16 @@
           "hash_changed": true,
           "expected": {
             "parsed": true,
-            "typechecked": true,
+            "typechecked": false,
             "hash_changed": true
           },
-          "correct": true
+          "correct": false
         }
       }
     }
   ],
   "summary": {
     "total_steps": 2,
-    "all_correct": true
+    "all_correct": false
   }
 }

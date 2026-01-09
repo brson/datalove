@@ -6,6 +6,8 @@
       "source_hash": "527eb9f5165b60da",
       "results": {
         "local/test/a": {
+          "is_direct": true,
+          "is_dependent": false,
           "parsed": true,
           "parse_ok": true,
           "typechecked": true,
@@ -26,6 +28,8 @@
       "source_hash": "17420a5cab30ff45",
       "results": {
         "local/test/a": {
+          "is_direct": false,
+          "is_dependent": false,
           "parsed": false,
           "parse_ok": true,
           "typechecked": false,
@@ -39,6 +43,8 @@
           "correct": true
         },
         "local/test/b": {
+          "is_direct": true,
+          "is_dependent": false,
           "parsed": true,
           "parse_ok": true,
           "typechecked": true,
