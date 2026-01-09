@@ -27,16 +27,18 @@ pub fn parse<'db>(
     source: Source,
 ) -> ast::ParseResult<'db> {
     let chunk = source_map::basic_source_map(db, source);
+    let source_text = chunk.text(db);
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
-    parse_bracer(db, bracer)
+    parse_bracer(db, bracer, source_text)
 }
 
 fn parse_bracer<'db>(
     db: &'db dyn crate::Db,
     bracer: Bracer<'db>,
+    source_text: bct::text::Text<'db>,
 ) -> ast::ParseResult<'db> {
-    let mut parser = Parser::from_branch(db, bracer.iter(db));
+    let mut parser = Parser::from_branch(db, bracer.iter(db), source_text);
     let expr = parser.parse_expr_full();
     ast::ParseResult::new(db, expr, parser.take_expr_spans())
 }
@@ -45,8 +47,9 @@ fn parse_bracer<'db>(
 pub fn parse_from_tokens<'db>(
     db: &'db dyn crate::Db,
     tokens: Vec<TreeToken<'db>>,
+    source_text: bct::text::Text<'db>,
 ) -> ast::ParseResult<'db> {
-    let mut parser = Parser::new(db, tokens);
+    let mut parser = Parser::new(db, tokens, source_text);
     let expr = parser.parse_expr_full();
     ast::ParseResult::new(db, expr, parser.take_expr_spans())
 }
@@ -57,8 +60,9 @@ pub fn parse_from_tokens<'db>(
 pub fn parse_type_hint_and_heap_from_tokens<'db>(
     db: &'db dyn crate::Db,
     tokens: Vec<TreeToken<'db>>,
+    source_text: bct::text::Text<'db>,
 ) -> (ast::TypeHintAndHeap<'db>, usize) {
-    let mut parser = Parser::new(db, tokens);
+    let mut parser = Parser::new(db, tokens, source_text);
     let type_hint = parser.parse_type_hint_and_heap();
     let consumed = parser.pos();
     (type_hint, consumed)

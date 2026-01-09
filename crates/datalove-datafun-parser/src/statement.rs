@@ -58,7 +58,7 @@ impl<'db> Parser<'db> {
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
     ) -> ast::Statement<'db> {
         let line_tokens: Vec<_> = line.into_iter().filter_map(|t| t.without_space(self.db)).collect();
-        let mut sub = Parser::new(self.db, line_tokens);
+        let mut sub = Parser::new(self.db, line_tokens, self.source_text());
         let stmt = sub.parse_statement(remaining_lines);
         self.had_error |= sub.had_error;
         self.merge_spans_from(&mut sub);
@@ -271,7 +271,7 @@ impl<'db> Parser<'db> {
     }
 
     fn parse_fun_params(&mut self, iter: BracerIter<'db>) -> Vec<ast::FunParam<'db>> {
-        let mut sub = Parser::from_branch(self.db, iter);
+        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
         let params = sub.parse_comma_separated(|p| p.parse_fun_param());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
@@ -576,7 +576,7 @@ impl<'db> Parser<'db> {
             // Consume the "else" line and parse any binding.
             let (_, else_line) = remaining_lines.next().X();
             let else_tokens: Vec<_> = else_line.into_iter().filter_map(|t| t.without_space(self.db)).collect();
-            let mut else_sub = Parser::new(self.db, else_tokens);
+            let mut else_sub = Parser::new(self.db, else_tokens, self.source_text());
             else_sub.eat_word("else");
 
             // Parse optional else binding: |identifier|
@@ -736,7 +736,7 @@ impl<'db> Parser<'db> {
 
     /// Parse carry bindings: `(name: type = expr, ...)`.
     fn parse_carry_bindings(&mut self, iter: BracerIter<'db>) -> Vec<ast::CarryBinding<'db>> {
-        let mut sub = Parser::from_branch(self.db, iter);
+        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
         let bindings = sub.parse_comma_separated(|p| p.parse_carry_binding());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
@@ -787,7 +787,7 @@ impl<'db> Parser<'db> {
     fn parse_end_loop_bring(&mut self, end_line: Vec<TreeToken<'db>>) -> Vec<ast::BringBinding<'db>> {
         // Create sub-parser for the "end loop [bring (...)]" line.
         let line_tokens: Vec<_> = end_line.into_iter().filter_map(|t| t.without_space(self.db)).collect();
-        let mut sub = Parser::new(self.db, line_tokens);
+        let mut sub = Parser::new(self.db, line_tokens, self.source_text());
 
         // Consume "end loop".
         sub.eat_word("end");
@@ -821,7 +821,7 @@ impl<'db> Parser<'db> {
 
     /// Parse bring bindings: `(name: type, ...)`.
     fn parse_bring_bindings(&mut self, iter: BracerIter<'db>) -> Vec<ast::BringBinding<'db>> {
-        let mut sub = Parser::from_branch(self.db, iter);
+        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
         let bindings = sub.parse_comma_separated(|p| p.parse_bring_binding());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
@@ -939,6 +939,7 @@ impl<'db> Parser<'db> {
         let (type_hint, consumed) = datalit::parser::parse_type_hint_and_heap_from_tokens(
             self.db,
             collected,
+            self.source_text(),
         );
 
         // Check for unconsumed tokens - this indicates a parse error in the type hint.

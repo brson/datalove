@@ -48,9 +48,10 @@ pub fn parse<'db>(
     source: Source,
 ) -> ast::ParseResult<'db> {
     let chunk = source_map::basic_source_map(db, source);
+    let source_text = chunk.text(db);
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
-    parse_bracer(db, bracer)
+    parse_bracer(db, bracer, source_text)
 }
 
 /// Parse a Source as a single expression.
@@ -60,16 +61,18 @@ pub fn parse_expr<'db>(
     source: Source,
 ) -> ast::ExprFun<'db> {
     let chunk = source_map::basic_source_map(db, source);
+    let source_text = chunk.text(db);
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
-    parse_bracer_expr(db, bracer)
+    parse_bracer_expr(db, bracer, source_text)
 }
 
 fn parse_bracer_expr<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
+    source_text: bct::text::Text<'db>,
 ) -> ast::ExprFun<'db> {
-    let mut parser = Parser::from_branch(db, bracer.iter(db));
+    let mut parser = Parser::from_branch(db, bracer.iter(db), source_text);
     let expr = parser.parse_expr_full();
     parser.error_if_not_exhausted();
     expr
@@ -78,6 +81,7 @@ fn parse_bracer_expr<'db>(
 fn parse_bracer<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
+    source_text: bct::text::Text<'db>,
 ) -> ast::ParseResult<'db> {
     // Get line iterator - newlines inside balanced braces don't count as line breaks.
     // First split on newlines, then filter spaces from each line.
@@ -108,7 +112,7 @@ fn parse_bracer<'db>(
             }
         });
 
-    let (statements, expr_spans) = parse_statements(db, lines);
+    let (statements, expr_spans) = parse_statements(db, lines, source_text);
     let parsed = ast::ParsedStatements::new(db, statements);
     ast::ParseResult::new(db, parsed, expr_spans)
 }
@@ -130,6 +134,7 @@ fn is_line_separator<'db>(db: &'db dyn Db, token: Token<'db>) -> bool {
 fn parse_statements<'db>(
     db: &'db dyn Db,
     lines: impl Iterator<Item = Vec<TreeToken<'db>>>,
+    source_text: bct::text::Text<'db>,
 ) -> (Vec<ast::Statement<'db>>, Vec<ast::ParseSpanEntry>) {
     let mut statements = vec![];
     let mut all_spans = vec![];
@@ -140,7 +145,7 @@ fn parse_statements<'db>(
             continue;
         }
 
-        let mut parser = Parser::new(db, line);
+        let mut parser = Parser::new(db, line, source_text);
         let statement = parser.parse_statement(&mut line_iter);
         statements.push(statement);
         all_spans.extend(parser.take_expr_spans());

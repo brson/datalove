@@ -346,7 +346,7 @@ impl<'db> Parser<'db> {
     }
 
     pub(super) fn parse_function_call_args(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
-        let mut sub = Parser::from_branch(self.db, iter);
+        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
         let args = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
@@ -369,7 +369,7 @@ impl<'db> Parser<'db> {
             }
         };
 
-        let mut sub = Parser::from_branch(self.db, iter);
+        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
         let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;

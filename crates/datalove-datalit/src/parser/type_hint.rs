@@ -62,7 +62,7 @@ impl<'db> Parser<'db> {
                 // Check if it's anonymous (starts with () or named (starts with name).
                 if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
                     // Anonymous tuple with explicit keyword.
-                    let mut sub_parser = Parser::from_branch(self.db, iter);
+                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
@@ -80,7 +80,7 @@ impl<'db> Parser<'db> {
                 // Check if it's anonymous (starts with {) or named (starts with name).
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     // Anonymous struct with explicit keyword.
-                    let mut sub_parser = Parser::from_branch(self.db, iter);
+                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
@@ -98,7 +98,7 @@ impl<'db> Parser<'db> {
                 // Check if it's anonymous (starts with {) or named (starts with name).
                 if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     // Anonymous enum.
-                    let mut sub_parser = Parser::from_branch(self.db, iter);
+                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let variants = sub_parser.parse_comma_separated(|p| p.parse_type_hint_enum_variant());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonEnum(ast::TypeHintAnonEnum::new(
@@ -118,7 +118,7 @@ impl<'db> Parser<'db> {
                 self.eat_word("map");
                 // Expect angle bracket with key and value types.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
-                    let mut sub_parser = Parser::from_branch(self.db, iter);
+                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let key_type = sub_parser.parse_type_hint_and_heap();
                     if !sub_parser.eat_sigil(Sigil::Comma) {
                         let ts = sub_parser.peek_text_span();
@@ -144,7 +144,7 @@ impl<'db> Parser<'db> {
                 self.eat_word("set");
                 // Expect angle bracket with element type.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
-                    let mut sub_parser = Parser::from_branch(self.db, iter);
+                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let element_type = sub_parser.parse_type_hint_and_heap();
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::Set(ast::TypeHintSet::new(self.db, element_type))
@@ -161,7 +161,7 @@ impl<'db> Parser<'db> {
                 self.eat_word("tensor");
                 // Expect angle bracket with <element_type, rank, optional_layout>.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
-                    let mut sub_parser = Parser::from_branch(self.db, iter);
+                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let element_type = sub_parser.parse_type_hint_and_heap();
                     if !sub_parser.eat_sigil(Sigil::Comma) {
                         let ts = sub_parser.peek_text_span();
@@ -202,19 +202,19 @@ impl<'db> Parser<'db> {
                 // Check for branches: parentheses for tuples, brackets for lists, braces for structs.
                 if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
                     // Anonymous tuple.
-                    let mut sub_parser = Parser::from_branch(self.db, iter);
+                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
                 } else if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
                     // List type.
-                    let mut sub_parser = Parser::from_branch(self.db, iter);
+                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let element_type = sub_parser.parse_type_hint_and_heap();
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
                 } else if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     // Anonymous struct.
-                    let mut sub_parser = Parser::from_branch(self.db, iter);
+                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
@@ -300,7 +300,7 @@ impl<'db> Parser<'db> {
         };
         let payload = if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
             // Parse a single type as payload.
-            let mut sub_parser = Parser::from_branch(self.db, iter);
+            let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
             let payload_type = sub_parser.parse_type_hint_and_heap();
 
             // Check for unparsed tokens - this indicates a syntax error.

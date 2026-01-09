@@ -44,11 +44,7 @@ pub(super) struct Parser<'db> {
 
 impl<'db> Parser<'db> {
     /// Create a new parser with the given tokens (Vec-backed).
-    pub(super) fn new(db: &'db dyn Db, tokens: Vec<TreeToken<'db>>) -> Self {
-        let source_text = tokens.first()
-            .and_then(|t| t.text_span(db))
-            .map(|ts| ts.text)
-            .unwrap_or_else(|| bct::text::Text::new(db, String::new()));
+    pub(super) fn new(db: &'db dyn Db, tokens: Vec<TreeToken<'db>>, source_text: bct::text::Text<'db>) -> Self {
         Parser {
             db,
             source: TokenSource::Vec { tokens, pos: 0 },
@@ -59,10 +55,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Create a new parser from a BracerIter (iterator-backed, zero allocation).
-    pub(super) fn from_branch(db: &'db dyn Db, iter: BracerIter<'db>) -> Self {
-        let source_text = iter.text_span()
-            .map(|ts| ts.text)
-            .unwrap_or_else(|| bct::text::Text::new(db, String::new()));
+    pub(super) fn from_branch(db: &'db dyn Db, iter: BracerIter<'db>, source_text: bct::text::Text<'db>) -> Self {
         let mut parser = Parser {
             db,
             source: TokenSource::Iter {
