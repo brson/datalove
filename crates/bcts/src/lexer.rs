@@ -1,0 +1,625 @@
+use rmx::prelude::*;
+
+use rmx::itertools::Itertools;
+use rmx::std::ops::Range;
+use rmx::std::{iter, mem};
+use rmx::std::collections::BTreeMap;
+
+use crate::input::Source;
+use crate::text::{Text, SubText};
+use crate::chunk::{Chunk, RangeKind};
+use crate::source_map::{
+    basic_source_map,
+};
+
+#[salsa::tracked]
+pub struct ChunkLex<'db> {
+    chunk: Chunk<'db>,
+    #[returns(ref)]
+    pub tokens: Vec<Token<'db>>,
+}
+
+#[salsa::tracked]
+#[derive(Debug)]
+pub struct Token<'db> {
+    pub text: SubText<'db>,
+    pub kind: TokenKind,
+}
+
+#[derive(Copy, Clone, Debug, Hash, salsa::Update)]
+#[derive(Eq, PartialEq)]
+pub enum TokenKind {
+    Word,
+    Sigil(Sigil),
+    String,
+    Whitespace,
+    Comment,
+    Error,
+}
+
+#[derive(Copy, Clone, Debug, Hash, salsa::Update)]
+#[derive(Eq, PartialEq)]
+#[derive(enum_iterator::Sequence)]
+pub enum Sigil {
+    // Three-character sigils (must come before two-character variants).
+    PlusQuestionEquals,
+    MinusQuestionEquals,
+    StarQuestionEquals,
+    SlashQuestionEquals,
+    PlusBarEquals,
+    MinusBarEquals,
+    StarBarEquals,
+    SlashBarEquals,
+
+    // Two-character sigils (must come before single-character variants).
+    ColonDash,
+    PlusQuestion,
+    MinusQuestion,
+    StarQuestion,
+    SlashQuestion,
+    PlusBar,
+    MinusBar,
+    StarBar,
+    SlashBar,
+    PlusExclamation,
+    MinusExclamation,
+    StarExclamation,
+    SlashExclamation,
+    PlusPercent,
+    MinusPercent,
+    StarPercent,
+    SlashPercent,
+    PlusEquals,
+    MinusEquals,
+    StarEquals,
+    SlashEquals,
+    DotLess,
+    DotGreater,
+    LessEquals,
+    GreaterEquals,
+    EqualsEquals,
+    ExclamationEquals,
+
+    // Single-character sigils.
+    Dot,
+    Comma,
+    Semicolon,
+    Plus,
+    Minus,
+    Star,
+    SlashForward,
+    Equals,
+    AngleOpen,
+    AngleClose,
+    Pipe,
+    Question,
+    Exclamation,
+    Colon,
+    Hash,
+    At,
+    ParenOpen,
+    ParenClose,
+    BraceOpen,
+    BraceClose,
+    BracketOpen,
+    BracketClose,
+}
+
+#[salsa::tracked]
+pub fn lex_chunk<'db>(
+    db: &'db dyn crate::Db,
+    chunk: Chunk<'db>,
+) -> ChunkLex<'db> {
+    let mut tokens = Vec::new();
+    let chunk_text = chunk.text(db);
+
+    for range in chunk.ranges(db) {
+        match range {
+            (range, RangeKind::Comment) => {
+                tokens.push(Token::new(
+                    db,
+                    chunk_text.sub(db, range),
+                    TokenKind::Comment,
+                ));
+            }
+            (range, RangeKind::String) => {
+                tokens.push(Token::new(
+                    db,
+                    chunk_text.sub(db, range),
+                    TokenKind::String,
+                ));
+            }
+            (range, RangeKind::Error) => {
+                tokens.push(Token::new(
+                    db,
+                    chunk_text.sub(db, range),
+                    TokenKind::Error,
+                ));
+            }
+            (range, RangeKind::Unknown) => {
+                let mut tokenizer = Tokenizer {
+                    db,
+                    chunk,
+                    range,
+                    chunk_text: chunk_text.C(),
+                };
+
+                tokens.extend(
+                    iter::from_fn(|| tokenizer.next())
+                );
+            }
+        }
+    }
+
+    return ChunkLex::new(db, chunk, tokens);
+
+    struct Tokenizer<'db> {
+        db: &'db dyn crate::Db,
+        chunk: Chunk<'db>,
+        chunk_text: Text<'db>,
+        range: Range<usize>,
+    }
+
+    #[derive(Eq, PartialEq, Debug, Copy, Clone)]
+    enum NextToken {
+        Whitespace,
+        Word,
+        Sigil,
+        Error,
+    }
+
+    impl<'db> Tokenizer<'db> {
+        fn next(&mut self) -> Option<Token<'db>> {
+            match self.peek_token() {
+                None => None,
+                Some(NextToken::Whitespace) => Some(self.eat_whitespace()),
+                Some(NextToken::Word) => Some(self.eat_word()),
+                Some(NextToken::Sigil) => Some(self.eat_sigil()),
+                Some(NextToken::Error) => Some(self.eat_error()),
+            }
+        }
+
+        fn peek_token(&self) -> Option<NextToken> {
+            self.peek().map(Self::token_start)
+        }
+
+        fn token_start(ch: char) -> NextToken {
+            match ch {
+                _ if ch.is_whitespace() => NextToken::Whitespace,
+                _ if Self::is_word_start(ch) => NextToken::Word,
+                _ if Self::is_sigil_start(ch) => NextToken::Sigil,
+                _ => NextToken::Error,
+            }
+        }
+
+        fn is_word_start(ch: char) -> bool {
+            ch.is_alphanumeric() || ch == '_'
+        }
+
+        fn eat_word(&mut self) -> Token<'db> {
+            assert_eq!(self.peek_token(), Some(NextToken::Word));
+
+            let is_word_char = Self::is_word_start;
+
+            let start = self.range.start;
+            while let Some(ch) = self.peek() {
+                if is_word_char(ch) {
+                    self.eat_char(ch);
+                } else {
+                    break;
+                }
+            }
+            assert!(start < self.range.start);
+            Token::new(
+                self.db,
+                self.chunk_text.sub(self.db, start .. self.range.start),
+                TokenKind::Word,
+            )
+        }
+
+        fn is_sigil_start(ch: char) -> bool {
+            enum_iterator::all::<Sigil>().map(|s| s.start_char()).any(|c| c == ch)
+        }
+
+        fn eat_sigil(&mut self) -> Token<'db> {
+            assert_eq!(self.peek_token(), Some(NextToken::Sigil));
+
+            let all_sigils = enum_iterator::all::<Sigil>();
+            let text = &self.chunk.text(self.db).as_str(self.db)[self.range.C()];
+
+            for sigil in all_sigils {
+                let sigil_str = sigil.as_str();
+                if text.starts_with(sigil_str) {
+                    let range_start = self.range.start;
+                    self.range.start = range_start.checked_add(sigil_str.len()).X();
+                    return Token::new(
+                        self.db,
+                        self.chunk_text.sub(self.db, range_start .. self.range.start),
+                        TokenKind::Sigil(sigil),
+                    )
+                    
+                }
+            }
+
+            self.eat_error_from(self.peek().X())
+        }
+
+        fn eat_error(&mut self) -> Token<'db> {
+            self.eat_error_from(self.peek().X())
+        }
+
+        fn eat_error_from(&mut self, start_ch: char) -> Token<'db> {
+            assert_eq!(self.peek_token(), Some(NextToken::Whitespace));
+
+            let token_start = Self::token_start(start_ch);
+            let start = self.range.start.checked_sub(1).X();
+            while let Some(ch) = self.peek() {
+                let next_token_start = Self::token_start(ch);
+                let recover = match (token_start, next_token_start) {
+                    (NextToken::Whitespace, _) => unreachable!(),
+                    (NextToken::Word, _) => unreachable!(),
+                    (NextToken::Sigil, NextToken::Error) => false,
+                    (NextToken::Sigil, NextToken::Whitespace) => true,
+                    (NextToken::Sigil, NextToken::Word) => true,
+                    (NextToken::Sigil, NextToken::Sigil) => true,
+                    (NextToken::Error, NextToken::Error) => false,
+                    (NextToken::Error, NextToken::Whitespace) => true,
+                    (NextToken::Error, NextToken::Word) => true,
+                    (NextToken::Error, NextToken::Sigil) => true,
+                };
+                if !recover {
+                    self.eat_char(ch);
+                } else {
+                    break;
+                }
+            }
+            assert!(start < self.range.start);
+            Token::new(
+                self.db,
+                self.chunk_text.sub(self.db, start .. self.range.start),
+                TokenKind::Error,
+            )
+        }
+
+        fn eat_whitespace(&mut self) -> Token<'db> {
+            assert_eq!(self.peek_token(), Some(NextToken::Whitespace));
+
+            let start = self.range.start;
+            while let Some(ch) = self.peek() {
+                if ch.is_whitespace() {
+                    self.eat_char(ch);
+                } else {
+                    break;
+                }
+            }
+            assert!(start < self.range.start);
+            Token::new(
+                self.db,
+                self.chunk_text.sub(self.db, start .. self.range.start),
+                TokenKind::Whitespace,
+            )
+        }
+
+        fn eat_char(&mut self, ch: char) {
+            assert!(self.peek() == Some(ch));
+            self.range.start = self.range.start.checked_add(ch.len_utf8()).X();
+            assert!(self.range.start <= self.range.end);
+        }
+
+        fn peek(&self) -> Option<char> {
+            self.chunk.text(self.db).as_str(self.db)[self.range.C()].chars().next()
+        }
+    }
+}
+
+impl<'db> ChunkLex<'db> {
+    #[cfg(test)]
+    fn debug_str(&self, db: &'db dyn crate::Db) -> String {
+        #[allow(unstable_name_collisions)] // intersperse
+        self.tokens(db).iter().map(|token| {
+            token.debug_str(db)
+        }).intersperse(" ").collect()
+    }
+}
+
+impl<'db> Token<'db> {
+    pub fn without_space(self, db: &'db dyn crate::Db) -> Option<Self> {
+        match self.kind(db) {
+            TokenKind::Whitespace => None,
+            TokenKind::Comment => None,
+            _ => Some(self),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn debug_str(&self, db: &'db dyn crate::Db) -> &'db str {
+        match self.kind(db) {
+            TokenKind::Word | TokenKind::String => {
+                self.text(db).as_str(db)
+            }
+            TokenKind::Sigil(s) => s.as_str(),
+            TokenKind::Whitespace => "ws",
+            TokenKind::Comment => "cmt",
+            TokenKind::Error => "err",
+        }
+    }
+
+    pub fn is_close_sigil(&self, db: &'db dyn crate::Db) -> bool {
+        match self.kind(db) {
+            TokenKind::Sigil(s) => s.is_close_sigil(),
+            _ => false,
+        }
+    }
+
+    pub fn word_str(&self, db: &'db dyn crate::Db) -> Option<&'db str> {
+        if self.kind(db) != TokenKind::Word {
+            return None;
+        }
+        Some(self.text(db).as_str(db))
+    }
+}
+
+impl Sigil {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            // Three-character sigils.
+            Sigil::PlusQuestionEquals => "+?=",
+            Sigil::MinusQuestionEquals => "-?=",
+            Sigil::StarQuestionEquals => "*?=",
+            Sigil::SlashQuestionEquals => "/?=",
+            Sigil::PlusBarEquals => "+|=",
+            Sigil::MinusBarEquals => "-|=",
+            Sigil::StarBarEquals => "*|=",
+            Sigil::SlashBarEquals => "/|=",
+
+            // Two-character sigils.
+            Sigil::ColonDash => ":-",
+            Sigil::PlusQuestion => "+?",
+            Sigil::MinusQuestion => "-?",
+            Sigil::StarQuestion => "*?",
+            Sigil::SlashQuestion => "/?",
+            Sigil::PlusBar => "+|",
+            Sigil::MinusBar => "-|",
+            Sigil::StarBar => "*|",
+            Sigil::SlashBar => "/|",
+            Sigil::PlusExclamation => "+!",
+            Sigil::MinusExclamation => "-!",
+            Sigil::StarExclamation => "*!",
+            Sigil::SlashExclamation => "/!",
+            Sigil::PlusPercent => "+%",
+            Sigil::MinusPercent => "-%",
+            Sigil::StarPercent => "*%",
+            Sigil::SlashPercent => "/%",
+            Sigil::PlusEquals => "+=",
+            Sigil::MinusEquals => "-=",
+            Sigil::StarEquals => "*=",
+            Sigil::SlashEquals => "/=",
+            Sigil::DotLess => ".<",
+            Sigil::DotGreater => ".>",
+            Sigil::LessEquals => "<=",
+            Sigil::GreaterEquals => ">=",
+            Sigil::EqualsEquals => "==",
+            Sigil::ExclamationEquals => "!=",
+
+            // Single-character sigils.
+            Sigil::Dot => ".",
+            Sigil::Comma => ",",
+            Sigil::Semicolon => ";",
+            Sigil::Plus => "+",
+            Sigil::Minus => "-",
+            Sigil::Star => "*",
+            Sigil::SlashForward => "/",
+            Sigil::Equals => "=",
+            Sigil::AngleOpen => "<",
+            Sigil::AngleClose => ">",
+            Sigil::Pipe => "|",
+            Sigil::Question => "?",
+            Sigil::Exclamation => "!",
+            Sigil::Colon => ":",
+            Sigil::Hash => "#",
+            Sigil::At => "@",
+            Sigil::ParenOpen => "(",
+            Sigil::ParenClose => ")",
+            Sigil::BraceOpen => "{",
+            Sigil::BraceClose => "}",
+            Sigil::BracketOpen => "[",
+            Sigil::BracketClose => "]",
+        }
+    }
+
+    fn start_char(&self) -> char {
+        self.as_str().chars().next().X()
+    }
+
+    pub fn close_sigil(&self) -> Sigil {
+        match self {
+            Sigil::ParenOpen => Sigil::ParenClose,
+            Sigil::BraceOpen => Sigil::BraceClose,
+            Sigil::BracketOpen => Sigil::BracketClose,
+            Sigil::AngleOpen => Sigil::AngleClose,
+            _ => bug!(),
+        }
+    }
+
+    fn is_close_sigil(&self) -> bool {
+        matches!(self, Sigil::ParenClose | Sigil::BraceClose | Sigil::BracketClose | Sigil::AngleClose)
+    }
+}
+
+#[test]
+fn test_lex_chunk() {
+    fn dbglex(s: &str) -> String {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S(s));
+        let chunk = basic_source_map(db, source);
+        let chunk_lex = lex_chunk(db, chunk);
+        chunk_lex.debug_str(db)
+    }
+
+    assert_eq!(
+        dbglex(" "),
+        "ws",
+    );
+    assert_eq!(
+        dbglex("a"),
+        "a",
+    );
+    assert_eq!(
+        dbglex("a b"),
+        "a ws b",
+    );
+    assert_eq!(
+        dbglex("a:-b"),
+        "a :- b",
+    );
+    assert_eq!(
+        dbglex("a :- b \n c"),
+        "a ws :- ws b ws c",
+    );
+    assert_eq!(
+        dbglex("a//"),
+        "a cmt",
+    );
+    assert_eq!(
+        dbglex("a//\n"),
+        "a cmt ws",
+    );
+    assert_eq!(
+        dbglex("a//\nd"),
+        "a cmt ws d",
+    );
+    assert_eq!(
+        dbglex("(){}){"),
+        "( ) { } ) {",
+    );
+    assert_eq!(
+        dbglex("a / b / c"),
+        "a ws / ws b ws / ws c",
+    );
+    assert_eq!(
+        dbglex("a/b/c"),
+        "a / b / c",
+    );
+    assert_eq!(
+        dbglex("a<b>c[d]e|f:g=h"),
+        "a < b > c [ d ] e | f : g = h",
+    );
+    assert_eq!(
+        dbglex("a?b!c"),
+        "a ? b ! c",
+    );
+    assert_eq!(
+        dbglex("?!"),
+        "? !",
+    );
+    assert_eq!(
+        dbglex("a#b"),
+        "a # b",
+    );
+
+    // Basic arithmetic operators.
+    assert_eq!(
+        dbglex("a+b-c*d/e"),
+        "a + b - c * d / e",
+    );
+    assert_eq!(
+        dbglex("a + b - c * d / e"),
+        "a ws + ws b ws - ws c ws * ws d ws / ws e",
+    );
+
+    // Question variants.
+    assert_eq!(
+        dbglex("a+?b-?c*?d/?e"),
+        "a +? b -? c *? d /? e",
+    );
+    assert_eq!(
+        dbglex("+? -? *? /?"),
+        "+? ws -? ws *? ws /?",
+    );
+
+    // Bar variants.
+    assert_eq!(
+        dbglex("a+|b-|c*|d/|e"),
+        "a +| b -| c *| d /| e",
+    );
+    assert_eq!(
+        dbglex("+| -| *| /|"),
+        "+| ws -| ws *| ws /|",
+    );
+
+    // Exclamation variants.
+    assert_eq!(
+        dbglex("a+!b-!c*!d/!e"),
+        "a +! b -! c *! d /! e",
+    );
+    assert_eq!(
+        dbglex("+! -! *! /!"),
+        "+! ws -! ws *! ws /!",
+    );
+
+    // Percent variants.
+    assert_eq!(
+        dbglex("a+%b-%c*%d/%e"),
+        "a +% b -% c *% d /% e",
+    );
+    assert_eq!(
+        dbglex("+% -% *% /%"),
+        "+% ws -% ws *% ws /%",
+    );
+
+    // Assignment operators.
+    assert_eq!(
+        dbglex("a+=b-=c*=d/=e"),
+        "a += b -= c *= d /= e",
+    );
+    assert_eq!(
+        dbglex("+= -= *= /="),
+        "+= ws -= ws *= ws /=",
+    );
+
+    // Question-equals variants.
+    assert_eq!(
+        dbglex("a+?=b-?=c*?=d/?=e"),
+        "a +?= b -?= c *?= d /?= e",
+    );
+    assert_eq!(
+        dbglex("+?= -?= *?= /?="),
+        "+?= ws -?= ws *?= ws /?=",
+    );
+
+    // Bar-equals variants.
+    assert_eq!(
+        dbglex("a+|=b-|=c*|=d/|=e"),
+        "a +|= b -|= c *|= d /|= e",
+    );
+    assert_eq!(
+        dbglex("+|= -|= *|= /|="),
+        "+|= ws -|= ws *|= ws /|=",
+    );
+
+    // Comparison operators.
+    assert_eq!(
+        dbglex("a.<b.>c<=d>=e==f!=g"),
+        "a .< b .> c <= d >= e == f != g",
+    );
+    assert_eq!(
+        dbglex(".< .> <= >= == !="),
+        ".< ws .> ws <= ws >= ws == ws !=",
+    );
+
+    // Mixed complex expressions.
+    assert_eq!(
+        dbglex("x+=1+?y"),
+        "x += 1 +? y",
+    );
+    assert_eq!(
+        dbglex("a+b+?c+|d+=e+?=f+|=g"),
+        "a + b +? c +| d += e +?= f +|= g",
+    );
+    assert_eq!(
+        dbglex("a+b+?c+|d+!e"),
+        "a + b +? c +| d +! e",
+    );
+}
+
+

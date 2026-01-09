@@ -1,0 +1,19 @@
+[package]
+name = "bcts"
+version = "0.4.0"
+license = "Apache-2.0 OR MIT"
+authors = ["Brian Anderson <andersrb@gmail.com>"]
+description = "Incremental compiler infrastructure using Salsa"
+repository = "https://github.com/brson/bcts"
+documentation = "https://docs.rs/bcts"
+edition = "2024"
+
+[lib]
+doctest = false
+
+[dependencies]
+rmx.workspace = true
+salsa.workspace = true
+serde.workspace = true
+memchr.workspace = true
+enum-iterator.workspace = true
