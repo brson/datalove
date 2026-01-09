@@ -105,10 +105,10 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
         self.peek().cloned()
     }
 
-    /// Extract Text and ByteSpan from a token.
+    /// Extract TextSpan from a token, using source_text for the text.
     fn extract_text_span(&self, token: &TreeToken<'db>) -> TextSpan<'db> {
-        // text_span() always returns Some for TreeToken::Token and TreeToken::Branch.
-        token.text_span(self.db()).X()
+        let ts = token.text_span(self.db()).X();
+        TextSpan::new(self.source_text(), ts.span)
     }
 
     /// Get Text and ByteSpan from current position for error reporting.
