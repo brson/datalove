@@ -1,0 +1,104 @@
+{
+  "steps": [
+    {
+      "action": "add",
+      "module": "local/test/b",
+      "source_hash": "46cac3f5acbcf6cb",
+      "results": {
+        "local/test/b": {
+          "is_direct": true,
+          "is_dependent": false,
+          "parsed": true,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": true,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": true
+        }
+      }
+    },
+    {
+      "action": "add",
+      "module": "local/test/a",
+      "source_hash": "08582e618213dd7c",
+      "results": {
+        "local/test/a": {
+          "is_direct": true,
+          "is_dependent": false,
+          "parsed": true,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": true,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": true
+        },
+        "local/test/b": {
+          "is_direct": false,
+          "is_dependent": false,
+          "parsed": false,
+          "parse_ok": true,
+          "typechecked": false,
+          "typecheck_ok": true,
+          "hash_changed": false,
+          "expected": {
+            "parsed": false,
+            "typechecked": false,
+            "hash_changed": false
+          },
+          "correct": true
+        }
+      }
+    },
+    {
+      "action": "module-remove",
+      "module": "local/test/b",
+      "source_hash": "removed",
+      "results": {
+        "local/test/a": {
+          "is_direct": false,
+          "is_dependent": true,
+          "parsed": false,
+          "parse_ok": true,
+          "typechecked": true,
+          "typecheck_ok": false,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": false
+        },
+        "local/test/b": {
+          "is_direct": true,
+          "is_dependent": false,
+          "parsed": true,
+          "parse_ok": false,
+          "typechecked": true,
+          "typecheck_ok": false,
+          "hash_changed": true,
+          "expected": {
+            "parsed": true,
+            "typechecked": true,
+            "hash_changed": true
+          },
+          "correct": true
+        }
+      }
+    }
+  ],
+  "summary": {
+    "total_steps": 3,
+    "all_correct": false
+  }
+}

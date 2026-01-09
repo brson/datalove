@@ -412,6 +412,9 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             .map(|s| format!("{:016x}", hash_string(s)))
             .unwrap_or_else(|| "removed".to_string());
 
+        // Capture dependents BEFORE applying the action (important for remove).
+        let dependents_before = state.get_dependents(&section.path);
+
         // Apply action to state.
         match section.action {
             Action::Add | Action::ModuleAdd => {
@@ -454,8 +457,12 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             }
         }
 
-        // Identify dependents of the changed module.
-        let dependents = state.get_dependents(&section.path);
+        // Use dependents from before the action (for remove) or after (for changes).
+        let dependents = if section.action == Action::ModuleRemove {
+            dependents_before
+        } else {
+            state.get_dependents(&section.path)
+        };
 
         // Build ModuleGraph from tracked Module objects (for memoization).
         let modules: Vec<Module> = state.modules.values().copied().collect();
