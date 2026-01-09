@@ -106,3 +106,7 @@ loc:
 
 doc:
     cargo run -p datalove-cli -- docs
+
+# Show module memoization test results table.
+memo-table:
+    python3 scripts/memo-table.py
