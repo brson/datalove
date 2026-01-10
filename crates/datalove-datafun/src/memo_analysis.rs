@@ -147,6 +147,52 @@ impl MemoState {
     }
 }
 
+/// Topologically sort paths by dependencies.
+///
+/// Returns paths in dependency order: dependencies come before dependents.
+fn topological_sort(
+    paths: &BTreeSet<String>,
+    path_deps: &BTreeMap<String, BTreeSet<String>>,
+) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut visited = BTreeSet::new();
+    let mut visiting = BTreeSet::new();
+
+    fn visit(
+        path: &str,
+        path_deps: &BTreeMap<String, BTreeSet<String>>,
+        visited: &mut BTreeSet<String>,
+        visiting: &mut BTreeSet<String>,
+        result: &mut Vec<String>,
+    ) {
+        if visited.contains(path) {
+            return;
+        }
+        if visiting.contains(path) {
+            // Cycle detected; skip to avoid infinite loop.
+            return;
+        }
+        visiting.insert(path.to_string());
+
+        // Visit dependencies first.
+        if let Some(deps) = path_deps.get(path) {
+            for dep in deps {
+                visit(dep, path_deps, visited, visiting, result);
+            }
+        }
+
+        visiting.remove(path);
+        visited.insert(path.to_string());
+        result.push(path.to_string());
+    }
+
+    for path in paths {
+        visit(path, path_deps, &mut visited, &mut visiting, &mut result);
+    }
+
+    result
+}
+
 /// Hash a string using DefaultHasher.
 fn hash_string(s: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
@@ -465,7 +511,12 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
         };
 
         // Build ModuleGraph from tracked Module objects (for memoization).
-        let modules: Vec<Module> = state.modules.values().copied().collect();
+        // Must be in dependency order (dependencies first) for hash computation.
+        let all_paths: BTreeSet<String> = state.modules.keys().cloned().collect();
+        let sorted_paths = topological_sort(&all_paths, &path_deps);
+        let modules: Vec<Module> = sorted_paths.iter()
+            .filter_map(|p| state.modules.get(p).copied())
+            .collect();
         let module_by_id: BTreeMap<ModuleId, Module> = state.modules.values()
             .map(|m| (m.id(&db), *m))
             .collect();

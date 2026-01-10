@@ -71,7 +71,7 @@
           "parse_ok": true,
           "typechecked": true,
           "typecheck_ok": true,
-          "hash_changed": false,
+          "hash_changed": true,
           "expected": {
             "parsed": false,
             "typechecked": false,
