@@ -30,7 +30,7 @@ use datalove_datafun_ir::{IrModuleId, FuncId, IrType, IrScriptUnit};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_compiler::drop_analysis;
 use datalove_datafun_tycheck::{
-    typecheck_module_graph, type_check_script_units,
+    typecheck_module_graph, type_check_script_units, create_batch_spec,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
     UnitTypecheckResultTracked,
 };
@@ -516,10 +516,11 @@ impl<'db> ScriptCompilationContext<'db> {
         }
 
         let spans = datalove_datafun_parser::datafun_spans(self.db, src);
-        let unit_spec = ScriptUnitSpec::new( src, spans, ScriptUnitKind::Fragment(parsed));
+        let unit_spec = ScriptUnitSpec::new(src, spans, ScriptUnitKind::Fragment(parsed));
         self.accumulated_unit_specs.push(unit_spec);
-        let batch_spec = ScriptBatchSpec::new(
+        let batch_spec = create_batch_spec(
             self.db,
+            src,
             self.accumulated_unit_specs.clone(),
             self.module_specs.clone(),
         );
@@ -534,6 +535,7 @@ impl<'db> ScriptCompilationContext<'db> {
     /// Compile and execute a script expression.
     pub fn eval_expr(&mut self, source: &str) -> ScriptUnitResult {
         let src = bct::input::Source::new(self.db, source.to_string());
+        self.last_source = Some(src);
         let expr = datalove_datafun_parser::parse_expr(self.db, src);
 
         let parse_diags = datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
@@ -553,13 +555,15 @@ impl<'db> ScriptCompilationContext<'db> {
         }
 
         let spans = datalove_datafun_parser::datafun_spans(self.db, src);
-        let unit_spec = ScriptUnitSpec::new( src, spans, ScriptUnitKind::Expr(expr));
+        let unit_spec = ScriptUnitSpec::new(src, spans, ScriptUnitKind::Expr(expr));
         self.accumulated_unit_specs.push(unit_spec);
-        let batch_spec = ScriptBatchSpec::new(
+        let batch_spec = create_batch_spec(
             self.db,
+            src,
             self.accumulated_unit_specs.clone(),
             self.module_specs.clone(),
         );
+        self.last_batch_spec = Some(batch_spec);
         let typecheck_results = type_check_script_units(self.db, batch_spec);
         let all_results = typecheck_results.results(self.db);
         let tycheck_result = *all_results.last().unwrap();
@@ -611,10 +615,11 @@ impl<'db> ScriptCompilationContext<'db> {
         }
 
         let spans = datalove_datafun_parser::datafun_spans(self.db, src);
-        let unit_spec = ScriptUnitSpec::new( src, spans, ScriptUnitKind::Fragment(parsed));
+        let unit_spec = ScriptUnitSpec::new(src, spans, ScriptUnitKind::Fragment(parsed));
         self.accumulated_unit_specs.push(unit_spec);
-        let batch_spec = ScriptBatchSpec::new(
+        let batch_spec = create_batch_spec(
             self.db,
+            src,
             self.accumulated_unit_specs.clone(),
             self.module_specs.clone(),
         );
@@ -628,6 +633,7 @@ impl<'db> ScriptCompilationContext<'db> {
 
     fn lower_expr_impl(&mut self, source: &str, for_aot: bool) -> ScriptLowerResult {
         let src = bct::input::Source::new(self.db, source.to_string());
+        self.last_source = Some(src);
         let expr = datalove_datafun_parser::parse_expr(self.db, src);
 
         let parse_diags = datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
@@ -646,10 +652,11 @@ impl<'db> ScriptCompilationContext<'db> {
         }
 
         let spans = datalove_datafun_parser::datafun_spans(self.db, src);
-        let unit_spec = ScriptUnitSpec::new( src, spans, ScriptUnitKind::Expr(expr));
+        let unit_spec = ScriptUnitSpec::new(src, spans, ScriptUnitKind::Expr(expr));
         self.accumulated_unit_specs.push(unit_spec);
-        let batch_spec = ScriptBatchSpec::new(
+        let batch_spec = create_batch_spec(
             self.db,
+            src,
             self.accumulated_unit_specs.clone(),
             self.module_specs.clone(),
         );

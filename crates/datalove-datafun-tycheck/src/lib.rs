@@ -192,10 +192,10 @@ impl<'db> ModuleSpec<'db> {
     }
 }
 
-/// Spec for a batch of script units (the "input" to typechecking).
+/// Spec for a batch of script units.
 ///
-/// Interned because it's the input to a tracked function for memoization.
-#[salsa::interned]
+/// Tracked type - must be created inside a tracked function.
+#[salsa::tracked]
 pub struct ScriptBatchSpec<'db> {
     #[returns(ref)]
     pub units: Vec<ScriptUnitSpec<'db>>,
@@ -431,6 +431,7 @@ impl<'db> ParsedModuleGraph<'db> {
 
 // Re-export public API functions.
 pub use api::{
+    create_batch_spec,
     type_check_script_units,
     type_check_single_script,
     type_check_script_with_context,

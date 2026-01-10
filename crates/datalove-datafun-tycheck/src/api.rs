@@ -27,6 +27,7 @@ pub use crate::{
     ScriptBatchSpec,
     ScriptUnitInput,
     ModuleInfo,
+    ModuleSpec,
     ScriptUnitBatch,
     UnitTypecheckResultTracked,
     ScriptUnitsTypecheckResultTracked,
@@ -37,6 +38,21 @@ pub use crate::{
     ModuleGraphTypecheckResult,
     SingleModuleTypecheckResult,
 };
+
+/// Create a ScriptBatchSpec inside a tracked function.
+///
+/// ScriptBatchSpec is a tracked type, so it must be created inside a tracked function.
+/// The Source parameter serves as the memoization key.
+#[salsa::tracked]
+pub fn create_batch_spec<'db>(
+    db: &'db dyn crate::Db,
+    key: bct::input::Source,
+    unit_specs: Vec<ScriptUnitSpec<'db>>,
+    module_specs: Vec<ModuleSpec<'db>>,
+) -> ScriptBatchSpec<'db> {
+    let _ = key; // Used as memoization key.
+    ScriptBatchSpec::new(db, unit_specs, module_specs)
+}
 
 /// Typecheck multiple script units together, with bindings shared across units.
 ///
@@ -254,7 +270,7 @@ pub fn type_check_single_script<'db>(
     parsed: ParsedStatements<'db>,
 ) -> UnitTypecheckResultTracked<'db> {
     let unit_spec = ScriptUnitSpec::new(source, spans, ScriptUnitKind::Fragment(parsed));
-    let batch_spec = ScriptBatchSpec::new(db, vec![unit_spec], vec![]);
+    let batch_spec = create_batch_spec(db, source, vec![unit_spec], vec![]);
     let results = type_check_script_units(db, batch_spec);
     results.results(db)[0]
 }
