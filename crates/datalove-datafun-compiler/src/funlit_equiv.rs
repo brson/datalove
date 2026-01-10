@@ -41,7 +41,7 @@ pub fn extract_expr_from_parsed<'db>(
     }
     match &statements[0] {
         ast::Statement::Ret(ret) => {
-            ret.value(db).ok_or_else(|| ConversionError::InvalidScriptStructure(
+            ret.value.ok_or_else(|| ConversionError::InvalidScriptStructure(
                 "bare ret statement has no value".to_string()
             ))
         }
@@ -63,180 +63,180 @@ pub fn datafun_expr_to_datalit_serde<'db>(
     // Get heap and type_hint from the expression kind.
     let (heap, type_hint, expr_serde) = match kind {
         ast::ExprFunKind::True(e) => (
-            e.heap(db),
-            e.type_hint(db),
+            e.heap,
+            e.type_hint,
             datalit::ast_serde::Expr::True,
         ),
         ast::ExprFunKind::False(e) => (
-            e.heap(db),
-            e.type_hint(db),
+            e.heap,
+            e.type_hint,
             datalit::ast_serde::Expr::False,
         ),
         ast::ExprFunKind::None(e) => (
-            e.heap(db),
-            e.type_hint(db),
+            e.heap,
+            e.type_hint,
             datalit::ast_serde::Expr::None,
         ),
         ast::ExprFunKind::Int(e) => (
-            e.heap(db),
-            e.type_hint(db),
+            e.heap,
+            e.type_hint,
             datalit::ast_serde::Expr::Int(datalit::ast_serde::ExprInt {
-                value: e.value(db).as_str(db).to_string(),
+                value: e.value.as_str(db).to_string(),
             }),
         ),
         ast::ExprFunKind::Float(e) => (
-            e.heap(db),
-            e.type_hint(db),
+            e.heap,
+            e.type_hint,
             datalit::ast_serde::Expr::Float(datalit::ast_serde::ExprFloat {
-                value: e.value(db).as_str(db).to_string(),
+                value: e.value.as_str(db).to_string(),
             }),
         ),
         ast::ExprFunKind::Hex(e) => (
-            e.heap(db),
-            e.type_hint(db),
+            e.heap,
+            e.type_hint,
             datalit::ast_serde::Expr::Hex(datalit::ast_serde::ExprHex {
-                value: e.value(db).as_str(db).to_string(),
+                value: e.value.as_str(db).to_string(),
             }),
         ),
         ast::ExprFunKind::String(e) => (
-            e.heap(db),
-            e.type_hint(db),
+            e.heap,
+            e.type_hint,
             datalit::ast_serde::Expr::String(datalit::ast_serde::ExprString {
-                value: e.value(db).as_str(db).to_string(),
+                value: e.value.as_str(db).to_string(),
             }),
         ),
         ast::ExprFunKind::List(e) => {
-            let elements = e.elements(db).iter()
+            let elements = e.elements.iter()
                 .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.heap(db),
-                e.type_hint(db),
+                e.heap,
+                e.type_hint,
                 datalit::ast_serde::Expr::List(datalit::ast_serde::ExprList { elements }),
             )
         }
         ast::ExprFunKind::Set(e) => {
-            let elements = e.elements(db).iter()
+            let elements = e.elements.iter()
                 .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.heap(db),
-                e.type_hint(db),
+                e.heap,
+                e.type_hint,
                 datalit::ast_serde::Expr::Set(datalit::ast_serde::ExprSet { elements }),
             )
         }
         ast::ExprFunKind::Map(e) => {
-            let entries = e.entries(db).iter()
+            let entries = e.entries.iter()
                 .map(|entry| {
-                    let key = datafun_expr_to_datalit_serde(db, entry.key(db))?;
-                    let value = datafun_expr_to_datalit_serde(db, entry.value(db))?;
+                    let key = datafun_expr_to_datalit_serde(db, entry.key)?;
+                    let value = datafun_expr_to_datalit_serde(db, entry.value)?;
                     Ok(datalit::ast_serde::ExprMapEntry { key, value })
                 })
                 .collect::<Result<Vec<_>, ConversionError>>()?;
             (
-                e.heap(db),
-                e.type_hint(db),
+                e.heap,
+                e.type_hint,
                 datalit::ast_serde::Expr::Map(datalit::ast_serde::ExprMap { entries }),
             )
         }
         ast::ExprFunKind::Tensor(e) => {
-            let elements = e.elements(db).iter()
+            let elements = e.elements.iter()
                 .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.heap(db),
-                e.type_hint(db),
+                e.heap,
+                e.type_hint,
                 datalit::ast_serde::Expr::Tensor(datalit::ast_serde::ExprTensor {
-                    shape: e.shape(db).clone(),
+                    shape: e.shape.clone(),
                     elements,
                 }),
             )
         }
         ast::ExprFunKind::AnonTuple(e) => {
-            let elements = e.elements(db).iter()
+            let elements = e.elements.iter()
                 .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.heap(db),
-                e.type_hint(db),
+                e.heap,
+                e.type_hint,
                 datalit::ast_serde::Expr::AnonTuple(datalit::ast_serde::ExprAnonTuple { elements }),
             )
         }
         ast::ExprFunKind::AnonStruct(e) => {
-            let fields = e.fields(db).iter()
+            let fields = e.fields.iter()
                 .map(|field| {
-                    let value = datafun_expr_to_datalit_serde(db, field.value(db))?;
+                    let value = datafun_expr_to_datalit_serde(db, field.value)?;
                     Ok(datalit::ast_serde::ExprStructField {
-                        name: field.name(db).as_str(db).to_string(),
+                        name: field.name.as_str(db).to_string(),
                         value,
                     })
                 })
                 .collect::<Result<Vec<_>, ConversionError>>()?;
             (
-                e.heap(db),
-                e.type_hint(db),
+                e.heap,
+                e.type_hint,
                 datalit::ast_serde::Expr::AnonStruct(datalit::ast_serde::ExprAnonStruct { fields }),
             )
         }
         ast::ExprFunKind::AnonEnum(e) => {
-            let payload = e.payload(db)
+            let payload = e.payload
                 .map(|p| datafun_expr_to_datalit_serde(db, p))
                 .transpose()?
                 .map(Box::new);
             (
-                e.heap(db),
-                e.type_hint(db),
+                e.heap,
+                e.type_hint,
                 datalit::ast_serde::Expr::AnonEnum(datalit::ast_serde::ExprAnonEnum {
-                    variant_name: e.variant_name(db).as_str(db).to_string(),
+                    variant_name: e.variant_name.as_str(db).to_string(),
                     payload,
                 }),
             )
         }
         ast::ExprFunKind::Some(e) => {
-            let payload = datafun_expr_to_datalit_serde(db, e.payload(db))?;
+            let payload = datafun_expr_to_datalit_serde(db, e.payload)?;
             (
-                e.heap(db),
-                e.type_hint(db),
+                e.heap,
+                e.type_hint,
                 datalit::ast_serde::Expr::Some(datalit::ast_serde::ExprSome {
                     payload: Box::new(payload),
                 }),
             )
         }
         ast::ExprFunKind::Ok(e) => {
-            let payload = datafun_expr_to_datalit_serde(db, e.payload(db))?;
+            let payload = datafun_expr_to_datalit_serde(db, e.payload)?;
             (
-                e.heap(db),
-                e.type_hint(db),
+                e.heap,
+                e.type_hint,
                 datalit::ast_serde::Expr::Ok(datalit::ast_serde::ExprOk {
                     payload: Box::new(payload),
                 }),
             )
         }
         ast::ExprFunKind::Er(e) => {
-            let payload = datafun_expr_to_datalit_serde(db, e.payload(db))?;
+            let payload = datafun_expr_to_datalit_serde(db, e.payload)?;
             (
-                e.heap(db),
-                e.type_hint(db),
+                e.heap,
+                e.type_hint,
                 datalit::ast_serde::Expr::Er(datalit::ast_serde::ExprEr {
                     payload: Box::new(payload),
                 }),
             )
         }
         ast::ExprFunKind::Data(e) => {
-            let value = datafun_expr_to_datalit_serde(db, e.value(db))?;
+            let value = datafun_expr_to_datalit_serde(db, e.value)?;
             (
-                e.heap(db),
-                e.type_hint(db),
+                e.heap,
+                e.type_hint,
                 datalit::ast_serde::Expr::Data(datalit::ast_serde::ExprData {
                     value: Box::new(value),
                 }),
             )
         }
         ast::ExprFunKind::Error(e) => {
-            let value = datafun_expr_to_datalit_serde(db, e.value(db))?;
+            let value = datafun_expr_to_datalit_serde(db, e.value)?;
             (
-                e.heap(db),
-                e.type_hint(db),
+                e.heap,
+                e.type_hint,
                 datalit::ast_serde::Expr::Error(datalit::ast_serde::ExprError {
                     value: Box::new(value),
                 }),
@@ -247,14 +247,14 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 datalit::ast::Heap::Omitted,
                 None,
                 datalit::ast_serde::Expr::ParseError(datalit::ast_serde::ExprParseError {
-                    message: e.message(db).as_str(db).to_string(),
+                    message: e.message.as_str(db).to_string(),
                 }),
             )
         }
 
         // Datafun Tuple (no type hint) - convert to AnonTuple.
         ast::ExprFunKind::Tuple(e) => {
-            let elements = e.elements(db).iter()
+            let elements = e.elements.iter()
                 .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
                 .collect::<Result<Vec<_>, _>>()?;
             (
@@ -266,17 +266,17 @@ pub fn datafun_expr_to_datalit_serde<'db>(
 
         // UnaryOp Neg - convert to negative integer literal if possible.
         ast::ExprFunKind::UnaryOp(e) => {
-            match e.op(db) {
+            match e.op {
                 ast::UnaryOp::Neg => {
                     // Try to convert -N to a single negative integer.
-                    let operand = e.operand(db);
+                    let operand = e.operand;
                     match operand.expr(db) {
                         ast::ExprFunKind::Int(int_expr) => {
-                            let value_str = int_expr.value(db).as_str(db);
+                            let value_str = int_expr.value.as_str(db);
                             let neg_value = format!("-{}", value_str);
                             (
-                                int_expr.heap(db),
-                                int_expr.type_hint(db),
+                                int_expr.heap,
+                                int_expr.type_hint,
                                 datalit::ast_serde::Expr::Int(datalit::ast_serde::ExprInt {
                                     value: neg_value,
                                 }),

@@ -90,81 +90,79 @@ impl<'db> Parser<'db> {
                                         let decimal_name = self.eat_name().X();
                                         let float_str = format!("-{}.{}", word, decimal_name.as_str(self.db));
                                         let value = InternedText::new(self.db, float_str.S());
-                                        return ast::ExprFunKind::Float(ast::ExprFloat::new(self.db, heap, type_hint, value));
+                                        return ast::ExprFunKind::Float(ast::ExprFloat { heap, type_hint, value });
                                     }
                                 }
                             }
                             // Dot was consumed but no valid decimal follows.
                             let ts = self.peek_text_span();
-                            return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                                self.db,
-                                ts.text,
-                                ts.span.clone(),
-                                InternedText::new(self.db, "expected decimal digits after '.'".S()),
-                            ));
+                            return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                                text: ts.text,
+                                span: ts.span.clone(),
+                                message: InternedText::new(self.db, "expected decimal digits after '.'".S()),
+                            });
                         }
                         if is_hex {
                             let hex_str = format!("-{}", word);
                             let value = InternedText::new(self.db, hex_str.S());
-                            return ast::ExprFunKind::Hex(ast::ExprHex::new(self.db, heap, type_hint, value));
+                            return ast::ExprFunKind::Hex(ast::ExprHex { heap, type_hint, value });
                         } else {
                             let int_str = format!("-{}", word);
                             let value = InternedText::new(self.db, int_str.S());
-                            return ast::ExprFunKind::Int(ast::ExprInt::new(self.db, heap, type_hint, value));
+                            return ast::ExprFunKind::Int(ast::ExprInt { heap, type_hint, value });
                         }
                     }
                 }
             }
             // Not a negative number - error.
             let ts = self.peek_text_span();
-            return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                self.db,
-                ts.text,
-                                ts.span.clone(),
-                InternedText::new(self.db, "unexpected minus sign".S()),
-            ));
+            return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                text: ts.text,
+                span: ts.span.clone(),
+                message: InternedText::new(self.db, "unexpected minus sign".S()),
+            });
         }
 
         // Check for keywords.
         match self.peek_word() {
             Some("true") => {
                 self.eat_word("true");
-                return ast::ExprFunKind::True(ast::ExprLit::new(self.db, heap, type_hint));
+                return ast::ExprFunKind::True(ast::ExprLit { heap, type_hint });
             }
             Some("false") => {
                 self.eat_word("false");
-                return ast::ExprFunKind::False(ast::ExprLit::new(self.db, heap, type_hint));
+                return ast::ExprFunKind::False(ast::ExprLit { heap, type_hint });
             }
             Some("none") => {
                 self.eat_word("none");
-                return ast::ExprFunKind::None(ast::ExprLit::new(self.db, heap, type_hint));
+                return ast::ExprFunKind::None(ast::ExprLit { heap, type_hint });
             }
             Some("some") => {
                 self.eat_word("some");
                 let payload = self.parse_expr_primary();
-                return ast::ExprFunKind::Some(ast::ExprSome::new(self.db, heap, type_hint, payload));
+                return ast::ExprFunKind::Some(ast::ExprSome { heap, type_hint, payload });
             }
             Some("ok") => {
                 self.eat_word("ok");
                 let payload = self.parse_expr_primary();
-                return ast::ExprFunKind::Ok(ast::ExprOk::new(self.db, heap, type_hint, payload));
+                return ast::ExprFunKind::Ok(ast::ExprOk { heap, type_hint, payload });
             }
             Some("er") => {
                 self.eat_word("er");
                 let payload = self.parse_expr_primary();
-                return ast::ExprFunKind::Er(ast::ExprEr::new(self.db, heap, type_hint, payload));
+                return ast::ExprFunKind::Er(ast::ExprEr { heap, type_hint, payload });
             }
             Some("data") => {
                 self.eat_word("data");
                 // Parse any datafun expression (superset of datalit).
                 let value = self.parse_expr_primary();
-                return ast::ExprFunKind::Data(ast::ExprData::new(self.db, heap, type_hint, value));
+                return ast::ExprFunKind::Data(ast::ExprData { heap, type_hint, value });
             }
             Some("error") => {
                 self.eat_word("error");
                 // Parse any datafun expression (superset of datalit).
                 let value = self.parse_expr_primary();
-                return ast::ExprFunKind::Error(ast::ExprError::new(self.db, heap, type_hint, value));
+                return ast::ExprFunKind::Error(ast::ExprError { heap, type_hint, value });
             }
             Some("tensor") => {
                 return self.parse_lit_tensor(heap, type_hint);
@@ -200,7 +198,7 @@ impl<'db> Parser<'db> {
                                             let decimal_name = self.eat_name().X();
                                             let float_str = format!("{}.{}", word, decimal_name.as_str(self.db));
                                             let value = InternedText::new(self.db, float_str.S());
-                                            return ast::ExprFunKind::Float(ast::ExprFloat::new(self.db, heap, type_hint, value));
+                                            return ast::ExprFunKind::Float(ast::ExprFloat { heap, type_hint, value });
                                         }
                                     }
                                 }
@@ -208,29 +206,27 @@ impl<'db> Parser<'db> {
                                 // This is a parse error for datalit, but we need to handle it.
                                 // For now, return an error.
                                 let ts = self.peek_text_span();
-                                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                                    self.db,
-                                    ts.text,
-                                ts.span.clone(),
-                                    InternedText::new(self.db, "expected decimal digits after '.'".S()),
-                                ));
+                                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                                    text: ts.text,
+                                    span: ts.span.clone(),
+                                    message: InternedText::new(self.db, "expected decimal digits after '.'".S()),
+                                });
                             }
                             let value = InternedText::new(self.db, word.S());
                             if is_hex {
-                                return ast::ExprFunKind::Hex(ast::ExprHex::new(self.db, heap, type_hint, value));
+                                return ast::ExprFunKind::Hex(ast::ExprHex { heap, type_hint, value });
                             } else {
-                                return ast::ExprFunKind::Int(ast::ExprInt::new(self.db, heap, type_hint, value));
+                                return ast::ExprFunKind::Int(ast::ExprInt { heap, type_hint, value });
                             }
                         } else {
                             // Unexpected identifier.
                             let ts = self.peek_text_span();
                             self.next();
-                            return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                                self.db,
-                                ts.text,
-                                ts.span.clone(),
-                                InternedText::new(self.db, format!("unexpected identifier '{}'", word).S()),
-                            ));
+                            return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                                text: ts.text,
+                                span: ts.span.clone(),
+                                message: InternedText::new(self.db, format!("unexpected identifier '{}'", word).S()),
+                            });
                         }
                     }
                     TokenKind::String => {
@@ -238,16 +234,15 @@ impl<'db> Parser<'db> {
                         let text_str = token.text(self.db).as_str(self.db).S();
                         self.next();
                         let value = InternedText::new(self.db, text_str);
-                        return ast::ExprFunKind::String(ast::ExprString::new(self.db, heap, type_hint, value));
+                        return ast::ExprFunKind::String(ast::ExprString { heap, type_hint, value });
                     }
                     _ => {
                         let ts = self.peek_text_span();
-                        return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                            self.db,
-                            ts.text,
-                                ts.span.clone(),
-                            InternedText::new(self.db, "unexpected token".S()),
-                        ));
+                        return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                            text: ts.text,
+                            span: ts.span.clone(),
+                            message: InternedText::new(self.db, "unexpected token".S()),
+                        });
                     }
                 }
             }
@@ -265,12 +260,11 @@ impl<'db> Parser<'db> {
             }
             _ => {
                 let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db,
-                    ts.text,
-                                ts.span.clone(),
-                    InternedText::new(self.db, "expected expression".S()),
-                ));
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                    text: ts.text,
+                    span: ts.span.clone(),
+                    message: InternedText::new(self.db, "expected expression".S()),
+                });
             }
         }
     }
@@ -300,15 +294,15 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
             _ => {
                 let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, ts.text, ts.span.clone(),
-                    InternedText::new(self.db, "expected '('".S()),
-                ));
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                    text: ts.text, span: ts.span.clone(),
+                    message: InternedText::new(self.db, "expected '('".S()),
+                });
             }
         };
 
         let elements = self.parse_comma_separated_exprs(inner);
-        ast::ExprFunKind::AnonTuple(ast::ExprAnonTuple::new(self.db, heap, type_hint, elements))
+        ast::ExprFunKind::AnonTuple(ast::ExprAnonTuple { heap, type_hint, elements })
     }
 
     /// Parse anonymous struct: { name = expr, ... }
@@ -321,15 +315,15 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
             _ => {
                 let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, ts.text, ts.span.clone(),
-                    InternedText::new(self.db, "expected '{'".S()),
-                ));
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                    text: ts.text, span: ts.span.clone(),
+                    message: InternedText::new(self.db, "expected '{'".S()),
+                });
             }
         };
 
         let fields = self.parse_comma_separated_struct_fields(inner);
-        ast::ExprFunKind::AnonStruct(ast::ExprAnonStruct::new(self.db, heap, type_hint, fields))
+        ast::ExprFunKind::AnonStruct(ast::ExprAnonStruct { heap, type_hint, fields })
     }
 
     /// Parse list: [expr, expr, ...]
@@ -342,15 +336,15 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner,
             _ => {
                 let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, ts.text, ts.span.clone(),
-                    InternedText::new(self.db, "expected '['".S()),
-                ));
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                    text: ts.text, span: ts.span.clone(),
+                    message: InternedText::new(self.db, "expected '['".S()),
+                });
             }
         };
 
         let elements = self.parse_comma_separated_exprs(inner);
-        ast::ExprFunKind::List(ast::ExprList::new(self.db, heap, type_hint, elements))
+        ast::ExprFunKind::List(ast::ExprList { heap, type_hint, elements })
     }
 
     /// Parse set: set { expr, expr, ... }
@@ -364,15 +358,15 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
             _ => {
                 let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, ts.text, ts.span.clone(),
-                    InternedText::new(self.db, "expected '{' after 'set'".S()),
-                ));
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                    text: ts.text, span: ts.span.clone(),
+                    message: InternedText::new(self.db, "expected '{' after 'set'".S()),
+                });
             }
         };
 
         let elements = self.parse_comma_separated_exprs(inner);
-        ast::ExprFunKind::Set(ast::ExprSet::new(self.db, heap, type_hint, elements))
+        ast::ExprFunKind::Set(ast::ExprSet { heap, type_hint, elements })
     }
 
     /// Parse map: map { key = value, ... }
@@ -386,15 +380,15 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
             _ => {
                 let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, ts.text, ts.span.clone(),
-                    InternedText::new(self.db, "expected '{' after 'map'".S()),
-                ));
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                    text: ts.text, span: ts.span.clone(),
+                    message: InternedText::new(self.db, "expected '{' after 'map'".S()),
+                });
             }
         };
 
         let entries = self.parse_comma_separated_map_entries(inner);
-        ast::ExprFunKind::Map(ast::ExprMap::new(self.db, heap, type_hint, entries))
+        ast::ExprFunKind::Map(ast::ExprMap { heap, type_hint, entries })
     }
 
     /// Parse anonymous enum: enum Variant or enum Variant(payload)
@@ -414,18 +408,17 @@ impl<'db> Parser<'db> {
                     .code("P021")
                     .primary_label(ts.clone(), "expected variant name")
                     .emit_parse();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db,
-                    ts.text,
-                                ts.span.clone(),
-                    InternedText::new(self.db, message.S()),
-                ));
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                    text: ts.text,
+                    span: ts.span.clone(),
+                    message: InternedText::new(self.db, message.S()),
+                });
             }
         };
         let payload = self.parse_optional_enum_payload();
-        ast::ExprFunKind::AnonEnum(ast::ExprAnonEnum::new(
-            self.db, heap, type_hint, variant_name, payload
-        ))
+        ast::ExprFunKind::AnonEnum(ast::ExprAnonEnum {
+            heap, type_hint, variant_name, payload
+        })
     }
 
     /// Parse optional enum payload: (expr)
@@ -465,10 +458,10 @@ impl<'db> Parser<'db> {
             }
             _ => {
                 let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, ts.text, ts.span.clone(),
-                    InternedText::new(self.db, "expected '[' for tensor shape".S()),
-                ));
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                    text: ts.text, span: ts.span.clone(),
+                    message: InternedText::new(self.db, "expected '[' for tensor shape".S()),
+                });
             }
         };
 
@@ -486,24 +479,24 @@ impl<'db> Parser<'db> {
                     let (elems, has_error) = self.parse_tensor_data_2d_plus(inner, row_size);
                     if has_error {
                         let ts = self.peek_text_span();
-                        return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                            self.db, ts.text, ts.span.clone(),
-                            InternedText::new(self.db, format!("expected {} elements per row", row_size).S()),
-                        ));
+                        return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                            text: ts.text, span: ts.span.clone(),
+                            message: InternedText::new(self.db, format!("expected {} elements per row", row_size).S()),
+                        });
                     }
                     elems
                 }
             }
             _ => {
                 let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
-                    self.db, ts.text, ts.span.clone(),
-                    InternedText::new(self.db, "expected '[' for tensor data".S()),
-                ));
+                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                    text: ts.text, span: ts.span.clone(),
+                    message: InternedText::new(self.db, "expected '[' for tensor data".S()),
+                });
             }
         };
 
-        ast::ExprFunKind::Tensor(ast::ExprTensor::new(self.db, heap, type_hint, shape, elements))
+        ast::ExprFunKind::Tensor(ast::ExprTensor { heap, type_hint, shape, elements })
     }
 
     /// Parse tensor data for 2D+ tensors: comma-separated rows, space-separated elements.
@@ -639,7 +632,7 @@ impl<'db> Parser<'db> {
                     "expected field name"
                 );
                 let error_name = InternedText::new(self.db, "<error>".S());
-                return ast::ExprStructField::new(self.db, error_name, error_expr);
+                return ast::ExprStructField { name: error_name, value: error_expr };
             }
         };
 
@@ -650,11 +643,11 @@ impl<'db> Parser<'db> {
                 "D022",
                 "expected '='"
             );
-            return ast::ExprStructField::new(self.db, name, error_expr);
+            return ast::ExprStructField { name, value: error_expr };
         }
 
         let value = self.parse_expr_full();
-        ast::ExprStructField::new(self.db, name, value)
+        ast::ExprStructField { name, value }
     }
 
     /// Helper to parse comma-separated map entries.
@@ -678,10 +671,10 @@ impl<'db> Parser<'db> {
                 "D023",
                 "expected '='"
             );
-            return ast::ExprMapEntry::new(self.db, key, error_value);
+            return ast::ExprMapEntry { key, value: error_value };
         }
 
         let value = self.parse_expr_full();
-        ast::ExprMapEntry::new(self.db, key, value)
+        ast::ExprMapEntry { key, value }
     }
 }

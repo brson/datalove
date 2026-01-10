@@ -22,7 +22,7 @@ fn extract_let_value<'db>(
         return Err(format!("expected 1 statement, got {}", statements.len()));
     }
     match &statements[0] {
-        datalove_datafun_ast::ast::Statement::Let(stmt) => Ok(stmt.value(db)),
+        datalove_datafun_ast::ast::Statement::Let(stmt) => Ok(stmt.value),
         other => Err(format!("expected Let statement, got {:?}", std::mem::discriminant(other))),
     }
 }

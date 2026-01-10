@@ -68,9 +68,9 @@ pub fn lower_function_body<'db>(
     let mut params: Vec<ParamId> = Vec::new();
     let mut param_modes = Vec::new();
     for p in func.params(ctx.db) {
-        let param_name = p.name(ctx.db).text(ctx.db).to_string();
-        let param_type = IrType::from_type_hint(ctx.db, &p.type_hint(ctx.db));
-        let mode = match p.mode(ctx.db) {
+        let param_name = p.name.text(ctx.db).to_string();
+        let param_type = IrType::from_type_hint(ctx.db, &p.type_hint);
+        let mode = match p.mode {
             ast::ParamMode::In => ParamMode::In,
             ast::ParamMode::Out => ParamMode::Out,
             ast::ParamMode::Ref => ParamMode::Ref,

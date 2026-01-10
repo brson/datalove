@@ -145,53 +145,53 @@ fn test_max_collection_size_enforced() {
     fn check_collection_size(db: &dyn salsa::Database, expr: &Expr, max_size: usize) {
         match expr {
             Expr::List(list) => {
-                let elements = list.elements(db);
+                let elements = list.elements.clone();
                 assert!(elements.len() <= max_size,
                     "List has {} elements, max is {}", elements.len(), max_size);
                 for elem in elements {
-                    check_collection_size(db, &elem.expr(db).expr(db), max_size);
+                    check_collection_size(db, &elem.expr(db).expr.clone(), max_size);
                 }
             }
             Expr::Map(map) => {
-                let entries = map.entries(db);
+                let entries = map.entries.clone();
                 assert!(entries.len() <= max_size,
                     "Map has {} entries, max is {}", entries.len(), max_size);
                 for entry in entries {
-                    check_collection_size(db, &entry.key(db).expr(db).expr(db), max_size);
-                    check_collection_size(db, &entry.value(db).expr(db).expr(db), max_size);
+                    check_collection_size(db, &entry.key.expr(db).expr.clone(), max_size);
+                    check_collection_size(db, &entry.value.expr(db).expr.clone(), max_size);
                 }
             }
             Expr::Set(set) => {
-                let elements = set.elements(db);
+                let elements = set.elements.clone();
                 assert!(elements.len() <= max_size,
                     "Set has {} elements, max is {}", elements.len(), max_size);
                 for elem in elements {
-                    check_collection_size(db, &elem.expr(db).expr(db), max_size);
+                    check_collection_size(db, &elem.expr(db).expr.clone(), max_size);
                 }
             }
             Expr::Tensor(tensor) => {
-                let elements = tensor.elements(db);
+                let elements = tensor.elements.clone();
                 assert!(elements.len() <= max_size,
                     "Tensor has {} elements, max is {}", elements.len(), max_size);
                 for elem in elements {
-                    check_collection_size(db, &elem.expr(db).expr(db), max_size);
+                    check_collection_size(db, &elem.expr(db).expr.clone(), max_size);
                 }
             }
             Expr::AnonTuple(tuple) => {
-                for elem in tuple.elements(db) {
-                    check_collection_size(db, &elem.expr(db).expr(db), max_size);
+                for elem in tuple.elements.clone() {
+                    check_collection_size(db, &elem.expr(db).expr.clone(), max_size);
                 }
             }
             Expr::AnonStruct(st) => {
-                for field in st.fields(db) {
-                    check_collection_size(db, &field.value(db).expr(db).expr(db), max_size);
+                for field in st.fields.clone() {
+                    check_collection_size(db, &field.value.expr(db).expr.clone(), max_size);
                 }
             }
             Expr::Data(d) => {
-                check_collection_size(db, &d.value(db).expr(db).expr(db), max_size);
+                check_collection_size(db, &d.value.expr(db).expr.clone(), max_size);
             }
             Expr::Error(e) => {
-                check_collection_size(db, &e.value(db).expr(db).expr(db), max_size);
+                check_collection_size(db, &e.value.expr(db).expr.clone(), max_size);
             }
             _ => {}
         }
@@ -199,7 +199,7 @@ fn test_max_collection_size_enforced() {
 
     for seed in 0..100 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
-        check_collection_size(&db, &expr_full.expr(&db).expr(&db), config.max_collection_size);
+        check_collection_size(&db, &expr_full.expr(&db).expr.clone(), config.max_collection_size);
     }
 }
 
@@ -232,7 +232,7 @@ fn test_heap_annotation_preservation() {
             match (th, expr) {
                 (TypeHint::List(th_list), Expr::List(list)) => {
                     let expected_heap = th_list.element_type.heap(db);
-                    for elem in list.elements(db) {
+                    for elem in list.elements.clone() {
                         if let Some(elem_th) = elem.type_hint(db) {
                             // Compare heap values
                             let elem_heap = elem_th.heap(db);
@@ -240,39 +240,39 @@ fn test_heap_annotation_preservation() {
                                 (Heap::Local, Heap::Local) | (Heap::Global, Heap::Global) | (Heap::Omitted, Heap::Omitted)),
                                 "List element heap should match container's element type heap");
                         }
-                        check_heap_consistency(db, Some(th_list.element_type.type_hint(db)), &elem.expr(db).expr(db));
+                        check_heap_consistency(db, Some(th_list.element_type.type_hint(db)), &elem.expr(db).expr.clone());
                     }
                 }
                 (TypeHint::Map(th_map), Expr::Map(map)) => {
                     let expected_key_heap = th_map.key_type.heap(db);
                     let expected_value_heap = th_map.value_type.heap(db);
-                    for entry in map.entries(db) {
-                        if let Some(key_th) = entry.key(db).type_hint(db) {
+                    for entry in map.entries.clone() {
+                        if let Some(key_th) = entry.key.type_hint(db) {
                             let key_heap = key_th.heap(db);
                             assert!(matches!((expected_key_heap, key_heap),
                                 (Heap::Local, Heap::Local) | (Heap::Global, Heap::Global) | (Heap::Omitted, Heap::Omitted)),
                                 "Map key heap should match container's key type heap");
                         }
-                        if let Some(value_th) = entry.value(db).type_hint(db) {
+                        if let Some(value_th) = entry.value.type_hint(db) {
                             let value_heap = value_th.heap(db);
                             assert!(matches!((expected_value_heap, value_heap),
                                 (Heap::Local, Heap::Local) | (Heap::Global, Heap::Global) | (Heap::Omitted, Heap::Omitted)),
                                 "Map value heap should match container's value type heap");
                         }
-                        check_heap_consistency(db, Some(th_map.key_type.type_hint(db)), &entry.key(db).expr(db).expr(db));
-                        check_heap_consistency(db, Some(th_map.value_type.type_hint(db)), &entry.value(db).expr(db).expr(db));
+                        check_heap_consistency(db, Some(th_map.key_type.type_hint(db)), &entry.key.expr(db).expr.clone());
+                        check_heap_consistency(db, Some(th_map.value_type.type_hint(db)), &entry.value.expr(db).expr.clone());
                     }
                 }
                 (TypeHint::Set(th_set), Expr::Set(set)) => {
                     let expected_heap = th_set.element_type.heap(db);
-                    for elem in set.elements(db) {
+                    for elem in set.elements.clone() {
                         if let Some(elem_th) = elem.type_hint(db) {
                             let elem_heap = elem_th.heap(db);
                             assert!(matches!((expected_heap, elem_heap),
                                 (Heap::Local, Heap::Local) | (Heap::Global, Heap::Global) | (Heap::Omitted, Heap::Omitted)),
                                 "Set element heap should match container's element type heap");
                         }
-                        check_heap_consistency(db, Some(th_set.element_type.type_hint(db)), &elem.expr(db).expr(db));
+                        check_heap_consistency(db, Some(th_set.element_type.type_hint(db)), &elem.expr(db).expr.clone());
                     }
                 }
                 _ => {}
@@ -283,7 +283,7 @@ fn test_heap_annotation_preservation() {
     for seed in 0..50 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
         let type_hint = expr_full.type_hint(&db).map(|th| th.type_hint(&db));
-        check_heap_consistency(&db, type_hint, &expr_full.expr(&db).expr(&db));
+        check_heap_consistency(&db, type_hint, &expr_full.expr(&db).expr.clone());
     }
 }
 
@@ -315,9 +315,9 @@ fn test_numeric_corner_cases_generated() {
     for seed in 0..1000 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
 
-        match expr_full.expr(&db).expr(&db) {
+        match expr_full.expr(&db).expr.clone() {
             Expr::Float(f) => {
-                let val_str = f.value(&db).as_str(&db);
+                let val_str = f.value.as_str(&db);
                 // Note: NaN and infinity not tested because parser doesn't support them yet.
                 if val_str == "0.0" || val_str == "0" {
                     seen_pos_zero = true;
@@ -327,7 +327,7 @@ fn test_numeric_corner_cases_generated() {
                 }
             }
             Expr::Int(i) => {
-                let val_str = i.value(&db).as_str(&db);
+                let val_str = i.value.as_str(&db);
                 if val_str == "-2147483648" {
                     seen_i32_min = true;
                 }
@@ -396,7 +396,7 @@ fn test_type_weight_configuration() {
 
     for seed in 0..100 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
-        match expr_full.expr(&db).expr(&db) {
+        match expr_full.expr(&db).expr.clone() {
             Expr::True | Expr::False => bool_count += 1,
             _ => other_count += 1,
         }
@@ -433,45 +433,45 @@ fn test_result_error_case_generation() {
                     *seen = true;
                 }
                 Expr::List(list) => {
-                    for elem in list.elements(db) {
-                        check_for_err(db, &elem.expr(db).expr(db), seen);
+                    for elem in list.elements.clone() {
+                        check_for_err(db, &elem.expr(db).expr.clone(), seen);
                     }
                 }
                 Expr::Map(map) => {
-                    for entry in map.entries(db) {
-                        check_for_err(db, &entry.key(db).expr(db).expr(db), seen);
-                        check_for_err(db, &entry.value(db).expr(db).expr(db), seen);
+                    for entry in map.entries.clone() {
+                        check_for_err(db, &entry.key.expr(db).expr.clone(), seen);
+                        check_for_err(db, &entry.value.expr(db).expr.clone(), seen);
                     }
                 }
                 Expr::Set(set) => {
-                    for elem in set.elements(db) {
-                        check_for_err(db, &elem.expr(db).expr(db), seen);
+                    for elem in set.elements.clone() {
+                        check_for_err(db, &elem.expr(db).expr.clone(), seen);
                     }
                 }
                 Expr::AnonTuple(tuple) => {
-                    for elem in tuple.elements(db) {
-                        check_for_err(db, &elem.expr(db).expr(db), seen);
+                    for elem in tuple.elements.clone() {
+                        check_for_err(db, &elem.expr(db).expr.clone(), seen);
                     }
                 }
                 Expr::AnonStruct(st) => {
-                    for field in st.fields(db) {
-                        check_for_err(db, &field.value(db).expr(db).expr(db), seen);
+                    for field in st.fields.clone() {
+                        check_for_err(db, &field.value.expr(db).expr.clone(), seen);
                     }
                 }
                 Expr::Data(d) => {
-                    check_for_err(db, &d.value(db).expr(db).expr(db), seen);
+                    check_for_err(db, &d.value.expr(db).expr.clone(), seen);
                 }
                 _ => {}
             }
         }
 
-        if matches!(expr_full.expr(&db).expr(&db), Expr::Error(_)) {
+        if matches!(expr_full.expr(&db).expr.clone(), Expr::Error(_)) {
             seen_err = true;
         } else {
             seen_ok = true;
         }
 
-        check_for_err(&db, &expr_full.expr(&db).expr(&db), &mut seen_err);
+        check_for_err(&db, &expr_full.expr(&db).expr.clone(), &mut seen_err);
     }
 
     assert!(seen_err, "Should generate at least one Result error case (Expr::Error)");

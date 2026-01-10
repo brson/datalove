@@ -26,8 +26,8 @@ pub fn lower_statement_indexed<'db>(
 ) -> Result<(), LowerError> {
     match stmt {
         Statement::Let(let_stmt) => {
-            let name = let_stmt.name(ctx.db).text(ctx.db).to_string();
-            let init_expr = let_stmt.value(ctx.db);
+            let name = let_stmt.name.text(ctx.db).to_string();
+            let init_expr = let_stmt.value;
             let value_id = lower_expression(ctx, init_expr)?;
             let operand = Operand::Value(value_id);
             ctx.bind_var(&name, operand);
@@ -36,9 +36,9 @@ pub fn lower_statement_indexed<'db>(
             Ok(())
         }
         Statement::Var(var_stmt) => {
-            let name = var_stmt.name(ctx.db).text(ctx.db).to_string();
+            let name = var_stmt.name.text(ctx.db).to_string();
             // Get type from the initialization expression.
-            let init_expr = var_stmt.value(ctx.db);
+            let init_expr = var_stmt.value;
             let slot_type = ctx.expr_type(init_expr);
             let slot = ctx.fresh_slot(slot_type.clone());
             let value_id = lower_expression(ctx, init_expr)?;
@@ -53,8 +53,8 @@ pub fn lower_statement_indexed<'db>(
             Ok(())
         }
         Statement::Set(set_stmt) => {
-            let name = set_stmt.name(ctx.db).text(ctx.db).to_string();
-            let value_id = lower_expression(ctx, set_stmt.value(ctx.db))?;
+            let name = set_stmt.name.text(ctx.db).to_string();
+            let value_id = lower_expression(ctx, set_stmt.value)?;
             match ctx.lookup_var(&name) {
                 Some(Operand::Slot(slot)) => {
                     // Drop old value before storing new one.
@@ -87,7 +87,7 @@ pub fn lower_statement_indexed<'db>(
             }
         }
         Statement::Ret(ret_stmt) => {
-            let value = if let Some(expr) = ret_stmt.value(ctx.db) {
+            let value = if let Some(expr) = ret_stmt.value {
                 let value_id = lower_expression(ctx, expr)?;
                 Some(Operand::Value(value_id))
             } else {
@@ -102,10 +102,10 @@ pub fn lower_statement_indexed<'db>(
             Ok(())
         }
         Statement::If(if_stmt) => {
-            lower_if(ctx, *if_stmt, stmt_idx)
+            lower_if(ctx, if_stmt, stmt_idx)
         }
         Statement::Loop(loop_stmt) => {
-            lower_loop(ctx, *loop_stmt, stmt_idx)
+            lower_loop(ctx, loop_stmt, stmt_idx)
         }
         Statement::Break(_) => {
             let loop_ctx = ctx.loop_stack.last()
@@ -144,7 +144,7 @@ pub fn lower_statement_indexed<'db>(
             Ok(())
         }
         Statement::DebugLog(stmt) => {
-            let value_id = lower_expression(ctx, stmt.value(ctx.db))?;
+            let value_id = lower_expression(ctx, stmt.value)?;
             ctx.emit(Instruction::DebugLog {
                 operand: Operand::Value(value_id),
             });
@@ -165,12 +165,12 @@ pub fn lower_statement_indexed<'db>(
 /// - Result with then_binding and else_binding: destructure Ok/Err values
 pub fn lower_if<'db>(
     ctx: &mut LowerCtx<'db>,
-    if_stmt: ast::StmtIf<'db>,
+    if_stmt: &ast::StmtIf<'db>,
     stmt_idx: usize,
 ) -> Result<(), LowerError> {
-    let condition = if_stmt.condition(ctx.db);
-    let then_binding = if_stmt.then_binding(ctx.db);
-    let else_binding = if_stmt.else_binding(ctx.db);
+    let condition = if_stmt.condition;
+    let then_binding = if_stmt.then_binding;
+    let else_binding = if_stmt.else_binding;
     let cond_type = ctx.expr_type(condition);
 
     match (&cond_type, then_binding) {
@@ -215,7 +215,7 @@ pub fn lower_if<'db>(
 /// Lower a boolean if statement (no binding).
 fn lower_if_bool<'db>(
     ctx: &mut LowerCtx<'db>,
-    if_stmt: ast::StmtIf<'db>,
+    if_stmt: &ast::StmtIf<'db>,
     condition: ExprFun<'db>,
     stmt_idx: usize,
 ) -> Result<(), LowerError> {
@@ -236,8 +236,7 @@ fn lower_if_bool<'db>(
 
     // Lower then branch.
     ctx.start_block(then_block);
-    let then_body = if_stmt.then_body(ctx.db);
-    for (idx, stmt) in then_body.iter().enumerate() {
+    for (idx, stmt) in if_stmt.then_body.iter().enumerate() {
         lower_statement_indexed(ctx, stmt, idx)?;
     }
     // Only emit Goto if branch didn't terminate early.
@@ -249,7 +248,7 @@ fn lower_if_bool<'db>(
 
     // Lower else branch.
     ctx.start_block(else_block);
-    if let Some(else_body) = if_stmt.else_body(ctx.db) {
+    if let Some(else_body) = &if_stmt.else_body {
         for (idx, stmt) in else_body.iter().enumerate() {
             lower_statement_indexed(ctx, stmt, idx)?;
         }
@@ -275,7 +274,7 @@ fn lower_if_bool<'db>(
 /// Moves the inner value out of Some to the binding. If None, takes else branch.
 fn lower_if_option<'db>(
     ctx: &mut LowerCtx<'db>,
-    if_stmt: ast::StmtIf<'db>,
+    if_stmt: &ast::StmtIf<'db>,
     condition: ExprFun<'db>,
     inner_type: &IrType,
     binding_name: InternedText<'db>,
@@ -319,7 +318,7 @@ fn lower_if_option<'db>(
     // Register binding with drop schedule system.
     ctx.record_binding_operand(Operand::Value(inner_dest));
 
-    for stmt in if_stmt.then_body(ctx.db) {
+    for stmt in &if_stmt.then_body {
         lower_statement(ctx, stmt)?;
     }
 
@@ -342,7 +341,7 @@ fn lower_if_option<'db>(
     // No binding in else branch for Option.
     // inner_dest is NOT valid here - do NOT access or drop it.
 
-    if let Some(else_body) = if_stmt.else_body(ctx.db) {
+    if let Some(else_body) = &if_stmt.else_body {
         for stmt in else_body {
             lower_statement(ctx, stmt)?;
         }
@@ -369,7 +368,7 @@ fn lower_if_option<'db>(
 /// Moves the Ok payload to then_binding, or Error to else_binding.
 fn lower_if_result<'db>(
     ctx: &mut LowerCtx<'db>,
-    if_stmt: ast::StmtIf<'db>,
+    if_stmt: &ast::StmtIf<'db>,
     condition: ExprFun<'db>,
     ok_type: &IrType,
     ok_binding: InternedText<'db>,
@@ -417,7 +416,7 @@ fn lower_if_result<'db>(
     // Register binding with drop schedule system.
     ctx.record_binding_operand(Operand::Value(ok_dest));
 
-    for stmt in if_stmt.then_body(ctx.db) {
+    for stmt in &if_stmt.then_body {
         lower_statement(ctx, stmt)?;
     }
 
@@ -446,7 +445,7 @@ fn lower_if_result<'db>(
     // Register binding with drop schedule system.
     ctx.record_binding_operand(Operand::Value(err_dest));
 
-    if let Some(else_body) = if_stmt.else_body(ctx.db) {
+    if let Some(else_body) = &if_stmt.else_body {
         for stmt in else_body {
             lower_statement(ctx, stmt)?;
         }
@@ -478,12 +477,12 @@ fn lower_if_result<'db>(
 /// Lower a loop statement with optional while condition.
 pub fn lower_loop<'db>(
     ctx: &mut LowerCtx<'db>,
-    loop_stmt: ast::StmtLoop<'db>,
+    loop_stmt: &ast::StmtLoop<'db>,
     stmt_idx: usize,
 ) -> Result<(), LowerError> {
     use super::context::LoopLowerContext;
 
-    let condition = loop_stmt.condition(ctx.db);
+    let condition = loop_stmt.condition;
 
     let loop_header = ctx.fresh_block();
     let loop_exit = ctx.fresh_block();
@@ -525,7 +524,7 @@ pub fn lower_loop<'db>(
     });
 
     // Lower loop body with proper statement indexing.
-    for (idx, stmt) in loop_stmt.body(ctx.db).iter().enumerate() {
+    for (idx, stmt) in loop_stmt.body.iter().enumerate() {
         lower_statement_indexed(ctx, stmt, idx)?;
     }
 

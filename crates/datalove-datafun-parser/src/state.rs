@@ -147,7 +147,7 @@ impl<'db> Parser<'db> {
             builder = builder.secondary_label(ctx_span.clone(), ctx_msg);
         }
         builder.emit_parse();
-        ast::Statement::ParseError(ast::StmtParseError::new(self.db, ts.text, ts.span, message_text))
+        ast::Statement::ParseError(ast::StmtParseError { text: ts.text, span: ts.span, message: message_text })
     }
 
     /// Emit both a diagnostic and create an ExprFun with ParseError kind in one call.
@@ -169,7 +169,7 @@ impl<'db> Parser<'db> {
         builder.emit_parse();
         ast::ExprFun::new(
             self.db,
-            ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, ts.text, ts.span, message_text))
+            ast::ExprFunKind::ParseError(ast::ExprFunParseError { text: ts.text, span: ts.span, message: message_text })
         )
     }
 

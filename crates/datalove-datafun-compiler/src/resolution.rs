@@ -137,7 +137,7 @@ pub fn resolve_let_statement<'db>(
         let prev_parsed = parser::parse_script_unit(db, script, prev_idx);
         for stmt in prev_parsed.statements(db) {
             if let ast::Statement::Let(let_stmt) = stmt {
-                let name = let_stmt.name(db).as_str(db);
+                let name = let_stmt.name.as_str(db);
                 available_names.insert(name);
             }
         }

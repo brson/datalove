@@ -29,7 +29,7 @@ impl<'db> Parser<'db> {
                     "D012",
                     "expected '/' separator between type hint and expression"
                 );
-                let expr = ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_expr);
+                let expr = ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_expr };
                 ast::ExprFull::new(self.db, Some(type_hint), expr)
             } else {
                 let expr = self.parse_expr_and_heap();
@@ -89,7 +89,7 @@ impl<'db> Parser<'db> {
                                         "D009",
                                         "expected '@' or '#' before expression"
                                     );
-                                    return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
+                                    return ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_node };
                                 }
                             } else {
                                 // No word string - error.
@@ -99,7 +99,7 @@ impl<'db> Parser<'db> {
                                     "D010",
                                     "expected '@' or '#' before expression"
                                 );
-                                return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
+                                return ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_node };
                             }
                         }
                         _ => {
@@ -110,7 +110,7 @@ impl<'db> Parser<'db> {
                                 "D011",
                                 "expected '@' or '#' before expression"
                             );
-                            return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
+                            return ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_node };
                         }
                     }
                 }
@@ -128,13 +128,13 @@ impl<'db> Parser<'db> {
                         "D012",
                         "expected '@' or '#' before expression"
                     );
-                    return ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_node);
+                    return ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_node };
                 }
                 }
             }
         };
         let expr = self.parse_expr();
-        ast::ExprAndHeap::new(self.db, heap, expr)
+        ast::ExprAndHeap { heap, expr }
     }
 
     fn parse_expr(&mut self) -> ast::Expr<'db> {
@@ -169,17 +169,17 @@ impl<'db> Parser<'db> {
                             let decimal_word = self.eat_name().X();
                             let float_str = format!("-{}.{}", word, decimal_word.as_str(self.db));
                             let value = InternedText::new(self.db, float_str.S());
-                            return ast::Expr::Float(ast::ExprFloat::new(self.db, value));
+                            return ast::Expr::Float(ast::ExprFloat { value });
                         } else if is_hex {
                             // Negative hex literal.
                             let hex_str = format!("-{}", word);
                             let value = InternedText::new(self.db, hex_str.S());
-                            return ast::Expr::Hex(ast::ExprHex::new(self.db, value));
+                            return ast::Expr::Hex(ast::ExprHex { value });
                         } else {
                             // Negative decimal int.
                             let int_str = format!("-{}", word);
                             let value = InternedText::new(self.db, int_str.S());
-                            return ast::Expr::Int(ast::ExprInt::new(self.db, value));
+                            return ast::Expr::Int(ast::ExprInt { value });
                         }
                     }
                 }
@@ -210,27 +210,27 @@ impl<'db> Parser<'db> {
             Some("some") => {
                 self.eat_word("some");
                 let payload = self.parse_expr_full();
-                return ast::Expr::Some(ast::ExprSome::new(self.db, payload));
+                return ast::Expr::Some(ast::ExprSome { payload });
             }
             Some("ok") => {
                 self.eat_word("ok");
                 let payload = self.parse_expr_full();
-                return ast::Expr::Ok(ast::ExprOk::new(self.db, payload));
+                return ast::Expr::Ok(ast::ExprOk { payload });
             }
             Some("er") => {
                 self.eat_word("er");
                 let payload = self.parse_expr_full();
-                return ast::Expr::Er(ast::ExprEr::new(self.db, payload));
+                return ast::Expr::Er(ast::ExprEr { payload });
             }
             Some("data") => {
                 self.eat_word("data");
                 let value = self.parse_expr_full();
-                return ast::Expr::Data(ast::ExprData::new(self.db, value));
+                return ast::Expr::Data(ast::ExprData { value });
             }
             Some("error") => {
                 self.eat_word("error");
                 let value = self.parse_expr_full();
-                return ast::Expr::Error(ast::ExprError::new(self.db, value));
+                return ast::Expr::Error(ast::ExprError { value });
             }
             Some("tensor") => {
                 self.eat_word("tensor");
@@ -335,7 +335,7 @@ impl<'db> Parser<'db> {
                     );
                 };
 
-                return ast::Expr::Tensor(ast::ExprTensor::new(self.db, shape, elements));
+                return ast::Expr::Tensor(ast::ExprTensor { shape, elements });
             }
             Some("enum") => {
                 let ts = self.peek_text_span();
@@ -362,11 +362,7 @@ impl<'db> Parser<'db> {
                 } else {
                     None
                 };
-                return ast::Expr::AnonEnum(ast::ExprAnonEnum::new(
-                    self.db,
-                    variant_name,
-                    payload,
-                ));
+                return ast::Expr::AnonEnum(ast::ExprAnonEnum { variant_name, payload });
             }
             Some("map") => {
                 let ts = self.peek_text_span();
@@ -385,17 +381,17 @@ impl<'db> Parser<'db> {
                             let error_value = ast::ExprFull::new(
                                 p.db,
                                 None,
-                                ast::ExprAndHeap::new(p.db, ast::Heap::Omitted, error_expr)
+                                ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_expr }
                             );
-                            return ast::ExprMapEntry::new(p.db, key, error_value);
+                            return ast::ExprMapEntry { key, value: error_value };
                         }
                         let value = p.parse_expr_full();
-                        ast::ExprMapEntry::new(p.db, key, value)
+                        ast::ExprMapEntry { key, value }
                     });
                     sub_parser.error_if_not_exhausted();
                     // Merge spans from sub-parser.
                     self.expr_spans.extend(sub_parser.expr_spans);
-                    return ast::Expr::Map(ast::ExprMap::new(self.db, entries));
+                    return ast::Expr::Map(ast::ExprMap { entries });
                 } else {
                     return self.emit_expr_error(ts,
                         "expected {} after map keyword",
@@ -413,7 +409,7 @@ impl<'db> Parser<'db> {
                     sub_parser.error_if_not_exhausted();
                     // Merge spans from sub-parser.
                     self.expr_spans.extend(sub_parser.expr_spans);
-                    return ast::Expr::Set(ast::ExprSet::new(self.db, elements));
+                    return ast::Expr::Set(ast::ExprSet { elements });
                 } else {
                     return self.emit_expr_error(ts,
                         "expected {} after set keyword",
@@ -445,7 +441,7 @@ impl<'db> Parser<'db> {
                                             let decimal_word = self.eat_name().X();
                                             let float_str = format!("{}.{}", word, decimal_word.as_str(self.db));
                                             let value = InternedText::new(self.db, float_str.S());
-                                            return ast::Expr::Float(ast::ExprFloat::new(self.db, value));
+                                            return ast::Expr::Float(ast::ExprFloat { value });
                                         }
                                     }
                                 }
@@ -453,9 +449,9 @@ impl<'db> Parser<'db> {
                             // Not a float - check if hex or decimal.
                             let value = InternedText::new(self.db, word.S());
                             if is_hex {
-                                ast::Expr::Hex(ast::ExprHex::new(self.db, value))
+                                ast::Expr::Hex(ast::ExprHex { value })
                             } else {
-                                ast::Expr::Int(ast::ExprInt::new(self.db, value))
+                                ast::Expr::Int(ast::ExprInt { value })
                             }
                         } else {
                             // Not a number, parse error for bare identifiers.
@@ -474,7 +470,7 @@ impl<'db> Parser<'db> {
                             self.db,
                             token.text(self.db).as_str(self.db).S(),
                         );
-                        ast::Expr::String(ast::ExprString::new(self.db, value))
+                        ast::Expr::String(ast::ExprString { value })
                     }
                     _ => {
                         let ts = self.peek_text_span();
@@ -497,7 +493,7 @@ impl<'db> Parser<'db> {
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
                 self.expr_spans.extend(sub_parser.expr_spans);
-                ast::Expr::AnonTuple(ast::ExprAnonTuple::new(self.db, elements))
+                ast::Expr::AnonTuple(ast::ExprAnonTuple { elements })
             }
             Some(TreeToken::Branch { sigil: Sigil::BraceOpen, .. }) => {
                 // Struct.
@@ -510,7 +506,7 @@ impl<'db> Parser<'db> {
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
                 self.expr_spans.extend(sub_parser.expr_spans);
-                ast::Expr::AnonStruct(ast::ExprAnonStruct::new(self.db, fields))
+                ast::Expr::AnonStruct(ast::ExprAnonStruct { fields })
             }
             Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) => {
                 // List.
@@ -523,7 +519,7 @@ impl<'db> Parser<'db> {
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
                 self.expr_spans.extend(sub_parser.expr_spans);
-                ast::Expr::List(ast::ExprList::new(self.db, elements))
+                ast::Expr::List(ast::ExprList { elements })
             }
             _ => {
                 let ts = self.peek_text_span();
@@ -551,9 +547,9 @@ impl<'db> Parser<'db> {
                 let error_value = ast::ExprFull::new(
                     self.db,
                     None,
-                    ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_expr)
+                    ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_expr }
                 );
-                return ast::ExprStructField::new(self.db, placeholder_name, error_value);
+                return ast::ExprStructField { name: placeholder_name, value: error_value };
             }
         };
         if !self.eat_sigil(Sigil::Equals) {
@@ -566,12 +562,12 @@ impl<'db> Parser<'db> {
             let error_value = ast::ExprFull::new(
                 self.db,
                 None,
-                ast::ExprAndHeap::new(self.db, ast::Heap::Omitted, error_expr)
+                ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_expr }
             );
-            return ast::ExprStructField::new(self.db, name, error_value);
+            return ast::ExprStructField { name, value: error_value };
         }
         let value = self.parse_expr_full();
-        ast::ExprStructField::new(self.db, name, value)
+        ast::ExprStructField { name, value }
     }
 
     fn split_tokens_by_comma(&self, tokens: &[TreeToken<'db>]) -> Vec<Vec<TreeToken<'db>>> {

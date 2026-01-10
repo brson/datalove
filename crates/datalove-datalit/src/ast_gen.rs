@@ -620,7 +620,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                     gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1)
                 })
                 .collect();
-            (Expr::AnonTuple(ExprAnonTuple::new(db, elements)), heap)
+            (Expr::AnonTuple(ExprAnonTuple { elements }), heap)
         }
         TypeHint::AnonStruct(th) => {
             let fields: Vec<_> = th
@@ -632,10 +632,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                     let field_type = field_type_and_heap.type_hint(db);
                     let field_heap = field_type_and_heap.heap(db);
                     let value = gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1);
-                    ExprStructField::new(db, name, value)
+                    ExprStructField { name, value }
                 })
                 .collect();
-            (Expr::AnonStruct(ExprAnonStruct::new(db, fields)), heap)
+            (Expr::AnonStruct(ExprAnonStruct { fields }), heap)
         }
         TypeHint::AnonEnum(th) => {
             let variants = &th.variants;
@@ -652,7 +652,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 }
                 None => None,
             };
-            (Expr::AnonEnum(ExprAnonEnum::new(db, variant_name, payload)), heap)
+            (Expr::AnonEnum(ExprAnonEnum { variant_name, payload }), heap)
         }
         TypeHint::List(th) => {
             let element_type_and_heap = th.element_type;
@@ -662,7 +662,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let elements: Vec<_> = (0..count)
                 .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
-            (Expr::List(ExprList::new(db, elements)), heap)
+            (Expr::List(ExprList { elements }), heap)
         }
         TypeHint::Map(th) => {
             let key_type_and_heap = th.key_type;
@@ -676,10 +676,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 .map(|_| {
                     let key = gen_expr_full_with_heap(db, rng, key_type.clone(), key_heap, config, depth + 1);
                     let value = gen_expr_full_with_heap(db, rng, value_type.clone(), value_heap, config, depth + 1);
-                    ExprMapEntry::new(db, key, value)
+                    ExprMapEntry { key, value }
                 })
                 .collect();
-            (Expr::Map(ExprMap::new(db, entries)), heap)
+            (Expr::Map(ExprMap { entries }), heap)
         }
         TypeHint::Set(th) => {
             let element_type_and_heap = th.element_type;
@@ -689,7 +689,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let elements: Vec<_> = (0..count)
                 .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
-            (Expr::Set(ExprSet::new(db, elements)), heap)
+            (Expr::Set(ExprSet { elements }), heap)
         }
         TypeHint::Option(th) => {
             let inner_type_and_heap = th.inner_type;
@@ -701,7 +701,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             } else {
                 // Some case: wrap payload in Expr::Some.
                 let payload = gen_expr_full_with_heap(db, rng, inner_type, inner_heap, config, depth + 1);
-                (Expr::Some(ExprSome::new(db, payload)), heap)
+                (Expr::Some(ExprSome { payload }), heap)
             }
         }
         TypeHint::Result(th) => {
@@ -711,7 +711,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             if rng.gen_bool(0.5) {
                 // Success case: wrap payload in Expr::Ok.
                 let payload = gen_expr_full_with_heap(db, rng, inner_type, inner_heap, config, depth + 1);
-                (Expr::Ok(ExprOk::new(db, payload)), heap)
+                (Expr::Ok(ExprOk { payload }), heap)
             } else {
                 // Error case: generate error with an arbitrary value.
                 // Use fixed heap to ensure all heaps match throughout.
@@ -721,9 +721,9 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 let error_expr_full = ExprFull::new(
                     db,
                     Some(error_type_hint),
-                    ExprAndHeap::new(db, heap, error_value),
+                    ExprAndHeap { heap, expr: error_value },
                 );
-                (Expr::Error(ExprError::new(db, error_expr_full)), heap)
+                (Expr::Error(ExprError { value: error_expr_full }), heap)
             }
         }
         TypeHint::Tensor(th) => {
@@ -759,22 +759,22 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let elements: Vec<_> = (0..total_elements)
                 .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
                 .collect();
-            (Expr::Tensor(ExprTensor::new(db, shape, elements)), heap)
+            (Expr::Tensor(ExprTensor { shape, elements }), heap)
         }
         TypeHint::Data => {
             // Use fixed heap for inner type to ensure all heaps match.
             let inner_type = gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1);
             let value = gen_expr_full_with_heap(db, rng, inner_type, heap, config, depth + 1);
-            (Expr::Data(ExprData::new(db, value)), heap)
+            (Expr::Data(ExprData { value }), heap)
         }
         TypeHint::Error => {
             let error_msg = gen_string_expr(db, rng);
             let error_expr_full = ExprFull::new(
                 db,
                 None,
-                ExprAndHeap::new(db, Heap::Omitted, error_msg),
+                ExprAndHeap { heap: Heap::Omitted, expr: error_msg },
             );
-            (Expr::Error(ExprError::new(db, error_expr_full)), heap)
+            (Expr::Error(ExprError { value: error_expr_full }), heap)
         }
         TypeHint::ParseError(_) => (Expr::None, heap),
     }
@@ -825,7 +825,7 @@ where
         }
     };
 
-    Expr::Int(ExprInt::new(db, InternedText::new(db, &value_str)))
+    Expr::Int(ExprInt { value: InternedText::new(db, &value_str) })
 }
 
 /// Generate a signed integer expression.
@@ -875,7 +875,7 @@ where
         }
     };
 
-    Expr::Int(ExprInt::new(db, InternedText::new(db, &value_str)))
+    Expr::Int(ExprInt { value: InternedText::new(db, &value_str) })
 }
 
 /// Special f32 values represented as hex bit patterns.
@@ -917,24 +917,24 @@ fn gen_f32_expr<'db, R: Rng>(
             // 50% chance of hex special value, 50% decimal.
             if rng.gen_bool(0.5) {
                 let (hex, _desc) = F32_HEX_SPECIAL[rng.gen_range(0..F32_HEX_SPECIAL.len())];
-                Expr::Hex(ExprHex::new(db, InternedText::new(db, hex)))
+                Expr::Hex(ExprHex { value: InternedText::new(db, hex) })
             } else {
                 let value_str = &decimal_choices[rng.gen_range(0..decimal_choices.len())];
-                Expr::Float(ExprFloat::new(db, InternedText::new(db, value_str)))
+                Expr::Float(ExprFloat { value: InternedText::new(db, value_str) })
             }
         }
         NumericStrategy::Random => {
             // 20% chance of special values via hex.
             if rng.gen_bool(0.2) {
                 let (hex, _desc) = F32_HEX_SPECIAL[rng.gen_range(0..F32_HEX_SPECIAL.len())];
-                Expr::Hex(ExprHex::new(db, InternedText::new(db, hex)))
+                Expr::Hex(ExprHex { value: InternedText::new(db, hex) })
             } else {
                 // Random finite floats.
                 loop {
                     let val = rng.r#gen::<f32>();
                     if val.is_finite() {
                         let value_str = val.to_string();
-                        break Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)));
+                        break Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) });
                     }
                 }
             }
@@ -950,10 +950,10 @@ fn gen_f32_expr<'db, R: Rng>(
 
                 if rng.gen_bool(0.5) {
                     let (hex, _desc) = F32_HEX_SPECIAL[rng.gen_range(0..F32_HEX_SPECIAL.len())];
-                    Expr::Hex(ExprHex::new(db, InternedText::new(db, hex)))
+                    Expr::Hex(ExprHex { value: InternedText::new(db, hex) })
                 } else {
                     let value_str = &decimal_choices[rng.gen_range(0..decimal_choices.len())];
-                    Expr::Float(ExprFloat::new(db, InternedText::new(db, value_str)))
+                    Expr::Float(ExprFloat { value: InternedText::new(db, value_str) })
                 }
             } else {
                 // 70% random finite floats.
@@ -961,7 +961,7 @@ fn gen_f32_expr<'db, R: Rng>(
                     let val = rng.r#gen::<f32>();
                     if val.is_finite() {
                         let value_str = val.to_string();
-                        break Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)));
+                        break Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) });
                     }
                 }
             }
@@ -970,7 +970,7 @@ fn gen_f32_expr<'db, R: Rng>(
             // Small positive floats 0.0..255.0.
             let val = rng.gen_range(0.0f32..=255.0);
             let value_str = format!("{:.1}", val);
-            Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)))
+            Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) })
         }
     }
 }
@@ -1016,24 +1016,24 @@ fn gen_f64_expr<'db, R: Rng>(
             // 50% chance of hex special value, 50% decimal.
             if rng.gen_bool(0.5) {
                 let (hex, _desc) = F64_HEX_SPECIAL[rng.gen_range(0..F64_HEX_SPECIAL.len())];
-                Expr::Hex(ExprHex::new(db, InternedText::new(db, hex)))
+                Expr::Hex(ExprHex { value: InternedText::new(db, hex) })
             } else {
                 let value_str = &decimal_choices[rng.gen_range(0..decimal_choices.len())];
-                Expr::Float(ExprFloat::new(db, InternedText::new(db, value_str)))
+                Expr::Float(ExprFloat { value: InternedText::new(db, value_str) })
             }
         }
         NumericStrategy::Random => {
             // 20% chance of special values via hex.
             if rng.gen_bool(0.2) {
                 let (hex, _desc) = F64_HEX_SPECIAL[rng.gen_range(0..F64_HEX_SPECIAL.len())];
-                Expr::Hex(ExprHex::new(db, InternedText::new(db, hex)))
+                Expr::Hex(ExprHex { value: InternedText::new(db, hex) })
             } else {
                 // Random finite floats.
                 loop {
                     let val = rng.r#gen::<f64>();
                     if val.is_finite() {
                         let value_str = val.to_string();
-                        break Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)));
+                        break Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) });
                     }
                 }
             }
@@ -1049,10 +1049,10 @@ fn gen_f64_expr<'db, R: Rng>(
 
                 if rng.gen_bool(0.5) {
                     let (hex, _desc) = F64_HEX_SPECIAL[rng.gen_range(0..F64_HEX_SPECIAL.len())];
-                    Expr::Hex(ExprHex::new(db, InternedText::new(db, hex)))
+                    Expr::Hex(ExprHex { value: InternedText::new(db, hex) })
                 } else {
                     let value_str = &decimal_choices[rng.gen_range(0..decimal_choices.len())];
-                    Expr::Float(ExprFloat::new(db, InternedText::new(db, value_str)))
+                    Expr::Float(ExprFloat { value: InternedText::new(db, value_str) })
                 }
             } else {
                 // 70% random finite floats.
@@ -1060,7 +1060,7 @@ fn gen_f64_expr<'db, R: Rng>(
                     let val = rng.r#gen::<f64>();
                     if val.is_finite() {
                         let value_str = val.to_string();
-                        break Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)));
+                        break Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) });
                     }
                 }
             }
@@ -1069,7 +1069,7 @@ fn gen_f64_expr<'db, R: Rng>(
             // Small positive floats 0.0..255.0.
             let val = rng.gen_range(0.0f64..=255.0);
             let value_str = format!("{:.1}", val);
-            Expr::Float(ExprFloat::new(db, InternedText::new(db, &value_str)))
+            Expr::Float(ExprFloat { value: InternedText::new(db, &value_str) })
         }
     }
 }
@@ -1092,7 +1092,7 @@ fn gen_string_expr<'db, R: Rng>(db: &'db dyn salsa::Database, rng: &mut R) -> Ex
         }
     }
     escaped.push('"');
-    Expr::String(ExprString::new(db, InternedText::new(db, escaped.S())))
+    Expr::String(ExprString { value: InternedText::new(db, escaped.S()) })
 }
 
 /// Generate an ExprFull matching the given type hint with a specific heap.
@@ -1105,7 +1105,7 @@ fn gen_expr_full_with_heap<'db, R: Rng>(
     depth: usize,
 ) -> ExprFull<'db> {
     let (expr, value_heap) = gen_expr_matching_type(db, rng, type_hint.clone(), heap, config, depth);
-    let expr_and_heap = ExprAndHeap::new(db, value_heap, expr);
+    let expr_and_heap = ExprAndHeap { heap: value_heap, expr };
 
     // Always include type hints for types that cannot be synthesized.
     // Option::None, Result values, and anonymous enums require type hints

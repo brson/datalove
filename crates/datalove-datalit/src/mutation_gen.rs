@@ -328,13 +328,13 @@ fn apply_out_of_range_int<'db>(
 
     // Check if the expression is an integer literal.
     let expr_and_heap = expr.expr(db);
-    match expr_and_heap.expr(db) {
+    match expr_and_heap.expr.clone() {
         Expr::Int(_) | Expr::Hex(_) => {}
         _ => return None,
     }
 
     // Build mutated source: keep type hint, replace value.
-    let heap = expr_and_heap.heap(db);
+    let heap = expr_and_heap.heap;
     let heap_str = match heap {
         Heap::Local => "@",
         Heap::Global => "#",
@@ -364,19 +364,20 @@ fn apply_wrong_element_type<'db>(
     _rng: &mut impl Rng,
 ) -> Option<MutationResult> {
     let expr_and_heap = expr.expr(db);
-    let outer_heap = expr_and_heap.heap(db);
+    let outer_heap = expr_and_heap.heap;
 
     // Check if this is a list with at least one element.
-    if let Expr::List(list) = expr_and_heap.expr(db) {
-        let elements = list.elements(db);
+    if let Expr::List(list) = expr_and_heap.expr.clone() {
+        let elements = list.elements.clone();
         if elements.is_empty() {
             return None;
         }
 
         // Get the type of first element to determine what's "wrong".
         let first_elem = elements[0];
-        let first_heap = first_elem.expr(db).heap(db);
-        let first_expr = first_elem.expr(db).expr(db);
+        let first_expr_and_heap = first_elem.expr(db);
+        let first_heap = first_expr_and_heap.heap;
+        let first_expr = first_expr_and_heap.expr.clone();
 
         // Determine the wrong element to insert based on first element's type.
         let wrong_elem_str = match first_expr {
@@ -453,17 +454,17 @@ fn apply_heap_mismatch<'db>(
     _rng: &mut impl Rng,
 ) -> Option<MutationResult> {
     let expr_and_heap = expr.expr(db);
-    let outer_heap = expr_and_heap.heap(db);
+    let outer_heap = expr_and_heap.heap;
 
     // Check if this is a list with at least 2 elements.
-    if let Expr::List(list) = expr_and_heap.expr(db) {
-        let elements = list.elements(db);
+    if let Expr::List(list) = expr_and_heap.expr.clone() {
+        let elements = list.elements.clone();
         if elements.len() < 2 {
             return None;
         }
 
         // Get first element's heap to determine what to flip to.
-        let first_heap = elements[0].expr(db).heap(db);
+        let first_heap = elements[0].expr(db).heap;
         let new_heap = match first_heap {
             Heap::Local => Heap::Global,
             Heap::Global => Heap::Local,
@@ -544,7 +545,7 @@ fn apply_arity_mismatch<'db>(
 ) -> Option<MutationResult> {
     let type_hint = expr.type_hint(db)?;
     let expr_and_heap = expr.expr(db);
-    let heap = expr_and_heap.heap(db);
+    let heap = expr_and_heap.heap;
 
     let heap_str = match heap {
         Heap::Local => "@",
@@ -552,9 +553,9 @@ fn apply_arity_mismatch<'db>(
         Heap::Omitted => "",
     };
 
-    match (type_hint.type_hint(db), expr_and_heap.expr(db)) {
+    match (type_hint.type_hint(db), expr_and_heap.expr.clone()) {
         (TypeHint::AnonTuple(_th), Expr::AnonTuple(t)) => {
-            let elements = t.elements(db);
+            let elements = t.elements.clone();
             if elements.len() < 2 {
                 // Need at least 2 elements to remove one and still have a tuple.
                 return None;
@@ -580,7 +581,7 @@ fn apply_arity_mismatch<'db>(
             })
         }
         (TypeHint::AnonStruct(_th), Expr::AnonStruct(s)) => {
-            let fields = s.fields(db);
+            let fields = s.fields.clone();
             if fields.len() < 2 {
                 // Need at least 2 fields to remove one.
                 return None;
@@ -590,8 +591,8 @@ fn apply_arity_mismatch<'db>(
             let field_strs: Vec<String> = fields[..fields.len() - 1]
                 .iter()
                 .map(|f| {
-                    let name = f.name(db).as_str(db);
-                    let value = pretty_print(db, f.value(db));
+                    let name = f.name.as_str(db);
+                    let value = pretty_print(db, f.value);
                     format!("{}: {}", name, value)
                 })
                 .collect();
@@ -622,15 +623,15 @@ fn apply_remove_type_hint<'db>(
 ) -> Option<MutationResult> {
     let _type_hint = expr.type_hint(db)?;
     let expr_and_heap = expr.expr(db);
-    let heap = expr_and_heap.heap(db);
+    let heap = expr_and_heap.heap;
 
     // Check if this is an expression that requires a type hint.
-    let (needs_hint, error_code) = match expr_and_heap.expr(db) {
+    let (needs_hint, error_code) = match expr_and_heap.expr.clone() {
         Expr::None => (true, "T016"), // Cannot synthesize type for None.
         Expr::AnonEnum(_) => (true, "T016"), // Cannot synthesize type for anonymous enum.
-        Expr::List(l) if l.elements(db).is_empty() => (true, "T013"), // Cannot synthesize type for empty list.
-        Expr::Set(s) if s.elements(db).is_empty() => (true, "T014"), // Cannot synthesize type for empty set.
-        Expr::Map(m) if m.entries(db).is_empty() => (true, "T015"), // Cannot synthesize type for empty map.
+        Expr::List(l) if l.elements.is_empty() => (true, "T013"), // Cannot synthesize type for empty list.
+        Expr::Set(s) if s.elements.is_empty() => (true, "T014"), // Cannot synthesize type for empty set.
+        Expr::Map(m) if m.entries.is_empty() => (true, "T015"), // Cannot synthesize type for empty map.
         _ => (false, ""),
     };
 
@@ -645,12 +646,12 @@ fn apply_remove_type_hint<'db>(
         Heap::Omitted => "",
     };
 
-    let source = match expr_and_heap.expr(db) {
+    let source = match expr_and_heap.expr.clone() {
         Expr::None => format!("{}none", heap_str),
         Expr::AnonEnum(e) => {
             // Format: heap { .VariantName payload }
-            let variant = e.variant_name(db).as_str(db);
-            if let Some(payload) = e.payload(db) {
+            let variant = e.variant_name.as_str(db);
+            if let Some(payload) = e.payload {
                 let payload_str = pretty_print(db, payload);
                 format!("{}{{ .{} {} }}", heap_str, variant, payload_str)
             } else {
@@ -680,7 +681,7 @@ fn apply_wrong_variant<'db>(
 ) -> Option<MutationResult> {
     let type_hint = expr.type_hint(db)?;
     let expr_and_heap = expr.expr(db);
-    let heap = expr_and_heap.heap(db);
+    let heap = expr_and_heap.heap;
 
     // Build heap prefix string.
     let heap_str = match heap {
@@ -695,11 +696,11 @@ fn apply_wrong_variant<'db>(
     pretty_type_hint_and_heap(db, type_hint, &mut type_hint_str);
     type_hint_str.push_str(" / ");
 
-    match expr_and_heap.expr(db) {
+    match expr_and_heap.expr.clone() {
         Expr::AnonEnum(e) => {
             // Build source: `: type / heap{ .NonexistentVariant12345 payload }`
             let wrong_variant = "NonexistentVariant12345";
-            let source = if let Some(payload) = e.payload(db) {
+            let source = if let Some(payload) = e.payload {
                 let payload_str = pretty_print(db, payload);
                 format!("{}{}{{ .{} {} }}", type_hint_str, heap_str, wrong_variant, payload_str)
             } else {
@@ -745,7 +746,7 @@ fn apply_duplicate_field<'db>(
 ) -> Option<MutationResult> {
     let type_hint = expr.type_hint(db)?;
     let expr_and_heap = expr.expr(db);
-    let heap = expr_and_heap.heap(db);
+    let heap = expr_and_heap.heap;
 
     let heap_str = match heap {
         Heap::Local => "@",
@@ -754,22 +755,22 @@ fn apply_duplicate_field<'db>(
     };
 
     // Check if this is an anon struct with at least 2 fields.
-    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr(db)) {
-        let fields = s.fields(db);
+    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr.clone()) {
+        let fields = s.fields.clone();
         if fields.len() < 2 {
             return None;
         }
 
         // Duplicate first field's name in second field.
-        let first_name = fields[0].name(db).as_str(db);
+        let first_name = fields[0].name.as_str(db);
         let mut field_strs: Vec<String> = fields.iter().map(|f| {
-            let name = f.name(db).as_str(db);
-            let value = pretty_print(db, f.value(db));
+            let name = f.name.as_str(db);
+            let value = pretty_print(db, f.value);
             format!("{}: {}", name, value)
         }).collect();
 
         // Replace second field name with first field name.
-        let second_value = pretty_print(db, fields[1].value(db));
+        let second_value = pretty_print(db, fields[1].value);
         field_strs[1] = format!("{}: {}", first_name, second_value);
 
         // Build type hint string.
@@ -795,7 +796,7 @@ fn apply_wrong_field_name<'db>(
 ) -> Option<MutationResult> {
     let type_hint = expr.type_hint(db)?;
     let expr_and_heap = expr.expr(db);
-    let heap = expr_and_heap.heap(db);
+    let heap = expr_and_heap.heap;
 
     let heap_str = match heap {
         Heap::Local => "@",
@@ -804,20 +805,20 @@ fn apply_wrong_field_name<'db>(
     };
 
     // Check if this is an anon struct.
-    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr(db)) {
-        let fields = s.fields(db);
+    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr.clone()) {
+        let fields = s.fields.clone();
         if fields.is_empty() {
             return None;
         }
 
         // Change first field name to nonexistent.
         let mut field_strs: Vec<String> = fields.iter().map(|f| {
-            let name = f.name(db).as_str(db);
-            let value = pretty_print(db, f.value(db));
+            let name = f.name.as_str(db);
+            let value = pretty_print(db, f.value);
             format!("{}: {}", name, value)
         }).collect();
 
-        let first_value = pretty_print(db, fields[0].value(db));
+        let first_value = pretty_print(db, fields[0].value);
         field_strs[0] = format!("nonexistent_field_xyz: {}", first_value);
 
         // Build type hint string.
@@ -843,7 +844,7 @@ fn apply_wrong_payload_presence<'db>(
 ) -> Option<MutationResult> {
     let type_hint = expr.type_hint(db)?;
     let expr_and_heap = expr.expr(db);
-    let heap = expr_and_heap.heap(db);
+    let heap = expr_and_heap.heap;
 
     let heap_str = match heap {
         Heap::Local => "@",
@@ -857,9 +858,9 @@ fn apply_wrong_payload_presence<'db>(
     pretty_type_hint_and_heap(db, type_hint, &mut type_hint_str);
     type_hint_str.push_str(" / ");
 
-    match (type_hint.type_hint(db), expr_and_heap.expr(db)) {
+    match (type_hint.type_hint(db), expr_and_heap.expr.clone()) {
         (TypeHint::AnonEnum(th_enum), Expr::AnonEnum(e)) => {
-            let variant_name = e.variant_name(db).as_str(db);
+            let variant_name = e.variant_name.as_str(db);
 
             // Find this variant in the type hint to check expected payload.
             let variants = &th_enum.variants;
@@ -891,11 +892,11 @@ fn apply_swap_map_key_value<'db>(
 ) -> Option<MutationResult> {
     let type_hint = expr.type_hint(db)?;
     let expr_and_heap = expr.expr(db);
-    let outer_heap = expr_and_heap.heap(db);
+    let outer_heap = expr_and_heap.heap;
 
     // Check if this is a map with at least one entry where key/value types differ.
-    if let (TypeHint::Map(map_th), Expr::Map(m)) = (type_hint.type_hint(db), expr_and_heap.expr(db)) {
-        let entries = m.entries(db);
+    if let (TypeHint::Map(map_th), Expr::Map(m)) = (type_hint.type_hint(db), expr_and_heap.expr.clone()) {
+        let entries = m.entries.clone();
         if entries.is_empty() {
             return None;
         }
@@ -913,8 +914,8 @@ fn apply_swap_map_key_value<'db>(
 
         // Build map entries with first entry's key/value swapped.
         let entry_strs: Vec<String> = entries.iter().enumerate().map(|(i, e)| {
-            let key_pp = pretty_print(db, e.key(db));
-            let val_pp = pretty_print(db, e.value(db));
+            let key_pp = pretty_print(db, e.key);
+            let val_pp = pretty_print(db, e.value);
             if i == 0 {
                 // Swap key and value for first entry.
                 format!("{}: {}", val_pp, key_pp)

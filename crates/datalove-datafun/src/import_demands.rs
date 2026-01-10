@@ -45,9 +45,9 @@ fn module_import_demands<'db>(
         match statement {
             ast::Statement::Require(ast::StmtRequire::Module(require)) => {
                 let demand = (
-                    require.import_space(db).as_str(db).S(),
-                    require.package_alias(db).as_str(db).S(),
-                    require.module_alias(db).as_str(db).S(),
+                    require.import_space.as_str(db).S(),
+                    require.package_alias.as_str(db).S(),
+                    require.module_alias.as_str(db).S(),
                 );
                 demands.push(demand);
             }

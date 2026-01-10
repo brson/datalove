@@ -342,17 +342,17 @@ impl<'db> ScriptTypeContext<'db> {
         for stmt in parsed.statements(db) {
             match stmt {
                 Statement::Let(let_stmt) => {
-                    let name = let_stmt.name(db);
+                    let name = let_stmt.name;
                     // Look up the type from the expression via Salsa ID.
-                    let value_expr = let_stmt.value(db);
+                    let value_expr = let_stmt.value;
                     let expr_id = value_expr.as_id().index() as usize;
                     if let Some(ty) = result.expr_types.get(expr_id).and_then(|t| *t) {
                         self.variables.insert(name, ty);
                     }
                 }
                 Statement::Var(var_stmt) => {
-                    let name = var_stmt.name(db);
-                    let value_expr = var_stmt.value(db);
+                    let name = var_stmt.name;
+                    let value_expr = var_stmt.value;
                     let expr_id = value_expr.as_id().index() as usize;
                     if let Some(ty) = result.expr_types.get(expr_id).and_then(|t| *t) {
                         self.variables.insert(name, ty);
@@ -411,9 +411,9 @@ pub fn build_function_type_from_stmt<'db>(
     let mut param_types = Vec::new();
     let mut param_modes = Vec::new();
     for param in params {
-        let ty = crate::types::convert_type_hint(db, param.type_hint(db)).ok()?;
+        let ty = crate::types::convert_type_hint(db, param.type_hint).ok()?;
         param_types.push(ty);
-        param_modes.push(param.mode(db));
+        param_modes.push(param.mode);
     }
 
     // Convert return type (default to unit if not specified).

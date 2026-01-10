@@ -103,7 +103,7 @@ fn instantiate_expr_into<'db>(
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null(), "dest_ptr must be non-null");
     let expr_and_heap = expr.expr(db);
-    let expr_inner = expr_and_heap.expr(db);
+    let expr_inner = &expr_and_heap.expr;
 
     match (expr_inner, ty) {
         (Expr::True, Type::Bool) => instantiate_bool(rt, true, dest_ptr),
@@ -142,22 +142,22 @@ fn instantiate_expr_into<'db>(
 
         (Expr::AnonTuple(tuple_expr), Type::AnonTuple(tuple_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_tuple(db, rt, &tuple_expr.elements(db), &tuple_ty.fields, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_tuple(db, rt, &tuple_expr.elements, &tuple_ty.fields, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::AnonStruct(struct_expr), Type::AnonStruct(struct_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_struct(db, rt, &struct_expr.fields(db), &struct_ty.fields, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_struct(db, rt, &struct_expr.fields, &struct_ty.fields, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::AnonEnum(enum_expr), Type::AnonEnum(enum_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, rt, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty.variants, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_enum(db, rt, enum_expr.variant_name, enum_expr.payload, &enum_ty.variants, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::List(list_expr), Type::List(list_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_list(db, rt, &list_expr.elements(db), list_ty.element_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_list(db, rt, &list_expr.elements, list_ty.element_type, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::None, Type::Option(opt)) => {
@@ -167,47 +167,47 @@ fn instantiate_expr_into<'db>(
 
         (Expr::Some(some_expr), Type::Option(opt)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_option(db, rt, true, Some(some_expr.payload(db)), opt.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_option(db, rt, true, Some(some_expr.payload), opt.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Error(err_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_result(db, rt, false, None, Some(err_expr.value(db)), res.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_result(db, rt, false, None, Some(err_expr.value), res.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Er(er_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_result(db, rt, false, None, Some(er_expr.payload(db)), res.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_result(db, rt, false, None, Some(er_expr.payload), res.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Ok(ok_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_result(db, rt, true, Some(ok_expr.payload(db)), None, res.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_result(db, rt, true, Some(ok_expr.payload), None, res.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Data(data_expr), Type::Data) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_data(db, rt, data_expr.value(db), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_data(db, rt, data_expr.value, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Error(err_expr), Type::Error) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_error(db, rt, err_expr.value(db), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_error(db, rt, err_expr.value, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Map(map_expr), Type::Map(map_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_map(db, rt, map_expr, map_ty.key_type, map_ty.value_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_map(db, rt, map_expr.clone(), map_ty.key_type, map_ty.value_type, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Set(set_expr), Type::Set(set_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_set(db, rt, set_expr, set_ty.element_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_set(db, rt, set_expr.clone(), set_ty.element_type, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Tensor(tensor_expr), Type::Tensor(tensor_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_tensor(db, rt, &tensor_expr.shape(db), &tensor_expr.elements(db), tensor_ty.element_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_tensor(db, rt, &tensor_expr.shape, &tensor_expr.elements, tensor_ty.element_type, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         _ => bail!("Unsupported expression/type combination for instantiation"),
@@ -226,9 +226,9 @@ fn instantiate_bool(_rt: datalove_rt::c::LocalRtHandle, value: bool, dest_ptr: *
     }
 }
 
-fn instantiate_u8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_u8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value(db).as_str(db);
+    let value_str = int_expr.value.as_str(db);
     let value: u8 = value_str.parse()?;
     unsafe {
         *dest_ptr = value;
@@ -236,9 +236,9 @@ fn instantiate_u8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_ex
     }
 }
 
-fn instantiate_i8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_i8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value(db).as_str(db);
+    let value_str = int_expr.value.as_str(db);
     let value: i8 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut i8) = value;
@@ -246,9 +246,9 @@ fn instantiate_i8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_ex
     }
 }
 
-fn instantiate_u16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_u16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value(db).as_str(db);
+    let value_str = int_expr.value.as_str(db);
     let value: u16 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut u16) = value;
@@ -256,9 +256,9 @@ fn instantiate_u16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
     }
 }
 
-fn instantiate_i16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_i16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value(db).as_str(db);
+    let value_str = int_expr.value.as_str(db);
     let value: i16 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut i16) = value;
@@ -266,9 +266,9 @@ fn instantiate_i16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
     }
 }
 
-fn instantiate_u32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_u32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value(db).as_str(db);
+    let value_str = int_expr.value.as_str(db);
     let value: u32 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut u32) = value;
@@ -276,9 +276,9 @@ fn instantiate_u32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
     }
 }
 
-fn instantiate_i32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_i32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value(db).as_str(db);
+    let value_str = int_expr.value.as_str(db);
     let value: i32 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut i32) = value;
@@ -286,9 +286,9 @@ fn instantiate_i32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
     }
 }
 
-fn instantiate_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value(db).as_str(db);
+    let value_str = int_expr.value.as_str(db);
     let value: u64 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut u64) = value;
@@ -296,9 +296,9 @@ fn instantiate_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
     }
 }
 
-fn instantiate_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value(db).as_str(db);
+    let value_str = int_expr.value.as_str(db);
     let value: i64 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut i64) = value;
@@ -306,9 +306,9 @@ fn instantiate_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
     }
 }
 
-fn instantiate_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, float_expr: ExprFloat, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, float_expr: &ExprFloat, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = float_expr.value(db).as_str(db);
+    let value_str = float_expr.value.as_str(db);
     let value: f32 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut f32) = value;
@@ -325,9 +325,9 @@ fn parse_hex_str(s: &str) -> &str {
     s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s)
 }
 
-fn instantiate_hex_u8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_hex_u8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value(db).as_str(db);
+    let value_str = hex_expr.value.as_str(db);
     let value = u8::from_str_radix(parse_hex_str(value_str), 16)?;
     unsafe {
         *dest_ptr = value;
@@ -335,9 +335,9 @@ fn instantiate_hex_u8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, he
     }
 }
 
-fn instantiate_hex_i8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_hex_i8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value(db).as_str(db);
+    let value_str = hex_expr.value.as_str(db);
     // Parse as u8, then reinterpret bits as i8.
     let value = u8::from_str_radix(parse_hex_str(value_str), 16)?;
     unsafe {
@@ -346,9 +346,9 @@ fn instantiate_hex_i8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, he
     }
 }
 
-fn instantiate_hex_u16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_hex_u16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value(db).as_str(db);
+    let value_str = hex_expr.value.as_str(db);
     let value = u16::from_str_radix(parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut u16) = value;
@@ -356,9 +356,9 @@ fn instantiate_hex_u16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
     }
 }
 
-fn instantiate_hex_i16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_hex_i16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value(db).as_str(db);
+    let value_str = hex_expr.value.as_str(db);
     let value = u16::from_str_radix(parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut i16) = value as i16;
@@ -366,9 +366,9 @@ fn instantiate_hex_i16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
     }
 }
 
-fn instantiate_hex_u32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_hex_u32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value(db).as_str(db);
+    let value_str = hex_expr.value.as_str(db);
     let value = u32::from_str_radix(parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut u32) = value;
@@ -376,9 +376,9 @@ fn instantiate_hex_u32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
     }
 }
 
-fn instantiate_hex_i32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_hex_i32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value(db).as_str(db);
+    let value_str = hex_expr.value.as_str(db);
     let value = u32::from_str_radix(parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut i32) = value as i32;
@@ -386,9 +386,9 @@ fn instantiate_hex_i32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
     }
 }
 
-fn instantiate_hex_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_hex_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value(db).as_str(db);
+    let value_str = hex_expr.value.as_str(db);
     let value = u64::from_str_radix(parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut u64) = value;
@@ -396,9 +396,9 @@ fn instantiate_hex_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
     }
 }
 
-fn instantiate_hex_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_hex_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value(db).as_str(db);
+    let value_str = hex_expr.value.as_str(db);
     let value = u64::from_str_radix(parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut i64) = value as i64;
@@ -407,9 +407,9 @@ fn instantiate_hex_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
 }
 
 /// Hex literal interpreted as f32 bit pattern.
-fn instantiate_hex_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_hex_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value(db).as_str(db);
+    let value_str = hex_expr.value.as_str(db);
     let bits = u32::from_str_radix(parse_hex_str(value_str), 16)?;
     let value = f32::from_bits(bits);
     unsafe {
@@ -418,9 +418,9 @@ fn instantiate_hex_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
     }
 }
 
-fn instantiate_hex_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_hex_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value(db).as_str(db);
+    let value_str = hex_expr.value.as_str(db);
     let value = u128::from_str_radix(parse_hex_str(value_str), 16)?;
 
     // BigInt is always non-negative when parsed from hex.
@@ -460,9 +460,9 @@ fn instantiate_hex_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db,
     }
 }
 
-fn instantiate_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+fn instantiate_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value(db).as_str(db);
+    let value_str = int_expr.value.as_str(db);
     let value: i128 = value_str.parse()?;
 
     let abs_value = value.unsigned_abs();
@@ -509,12 +509,12 @@ fn instantiate_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int
 fn instantiate_string(
     rt: datalove_rt::c::LocalRtHandle,
     db: &dyn crate::Db,
-    string_expr: ExprString,
+    string_expr: &ExprString,
     string_tydesc: *const rtdt::TyDesc,
     dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str_raw = string_expr.value(db).as_str(db);
+    let value_str_raw = string_expr.value.as_str(db);
 
     let value_str_escaped = if value_str_raw.starts_with('"') && value_str_raw.ends_with('"') {
         &value_str_raw[1..value_str_raw.len()-1]
@@ -624,9 +624,9 @@ fn instantiate_struct<'db>(
 
             let field_expr = expr_fields
                 .iter()
-                .find(|ef| ef.name(db).as_str(db) == field_name)
+                .find(|ef| ef.name.as_str(db) == field_name)
                 .ok_or_else(|| anyhow!("Missing field: {}", field_name))?
-                .value(db);
+                .value;
 
             let field_offset = layout.field_offsets[i];
             let field_dest = unsafe { dest_ptr.add(field_offset as usize) };
@@ -648,8 +648,8 @@ fn instantiate_struct<'db>(
         // HashMap for large structs.
         let mut field_map: std::collections::HashMap<&str, ExprFull<'db>> = std::collections::HashMap::new();
         for expr_field in expr_fields {
-            let name = expr_field.name(db).as_str(db);
-            field_map.insert(name, expr_field.value(db));
+            let name = expr_field.name.as_str(db);
+            field_map.insert(name, expr_field.value);
         }
 
         for (i, type_field) in type_fields.iter().enumerate() {
@@ -933,7 +933,7 @@ fn instantiate_map<'db>(
     debug_assert!(!dest_ptr.is_null());
     let map_ptr = dest_ptr as *mut rtdt::Map;
 
-    let entries = map_expr.entries(db);
+    let entries = &map_expr.entries;
     if entries.is_empty() {
         unsafe {
             (*map_ptr).root = std::ptr::null();
@@ -943,7 +943,7 @@ fn instantiate_map<'db>(
     }
 
     // Get sorted indices (cached by Salsa).
-    let sorted_indices = crate::canon::sorted_map_indices(db, map_expr);
+    let sorted_indices = crate::canon::sorted_map_indices(db, &map_expr);
 
     let key_tydesc = tydesc_table.get_or_create(key_type.ty(db));
     let value_tydesc = tydesc_table.get_or_create(value_type.ty(db));
@@ -976,8 +976,8 @@ fn instantiate_map<'db>(
         // Instantiate entries into the buffers in sorted order (by key).
         for (i, &orig_idx) in sorted_indices.iter().enumerate() {
             let entry = &entries[orig_idx];
-            let key_expr = entry.key(db);
-            let value_expr = entry.value(db);
+            let key_expr = entry.key;
+            let value_expr = entry.value;
 
             let key_dest = keys_buffer.add(i * key_size);
             let value_dest = values_buffer.add(i * value_size);
@@ -1057,7 +1057,7 @@ fn instantiate_set<'db>(
     debug_assert!(!dest_ptr.is_null());
     let set_ptr = dest_ptr as *mut rtdt::Set;
 
-    let elements = set_expr.elements(db);
+    let elements = &set_expr.elements;
     if elements.is_empty() {
         unsafe {
             (*set_ptr).root = std::ptr::null();
@@ -1067,7 +1067,7 @@ fn instantiate_set<'db>(
     }
 
     // Get sorted indices (cached by Salsa).
-    let sorted_indices = crate::canon::sorted_set_indices(db, set_expr);
+    let sorted_indices = crate::canon::sorted_set_indices(db, &set_expr);
 
     let element_tydesc = tydesc_table.get_or_create(element_type.ty(db));
     let element_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(element_tydesc) };

@@ -26,10 +26,10 @@ pub fn collect_function_signature<'db>(
     let mut param_types = Vec::new();
     let mut param_modes = Vec::new();
     for param in params {
-        match convert_type_hint(db, param.type_hint(db)) {
+        match convert_type_hint(db, param.type_hint) {
             Ok(ty) => {
                 param_types.push(ty);
-                param_modes.push(param.mode(db));
+                param_modes.push(param.mode);
             }
             Err(e) => {
                 ctx.add_error(e);
@@ -69,12 +69,12 @@ pub fn check_statement<'db>(
 
     match statement {
         Statement::Let(stmt) => {
-            let name = stmt.name(db);
-            let value = stmt.value(db);
+            let name = stmt.name;
+            let value = stmt.value;
 
             // If type hint is provided, check against it.
             // Otherwise, synthesize type from value.
-            let var_type = match stmt.type_hint(db) {
+            let var_type = match stmt.type_hint {
                 Some(type_hint) => {
                     // Convert type hint to expected type and check value.
                     match convert_type_hint(db, type_hint) {
@@ -112,11 +112,11 @@ pub fn check_statement<'db>(
         }
 
         Statement::Var(stmt) => {
-            let name = stmt.name(db);
-            let value = stmt.value(db);
+            let name = stmt.name;
+            let value = stmt.value;
 
             // Same as let: if type hint provided, check against it.
-            let var_type = match stmt.type_hint(db) {
+            let var_type = match stmt.type_hint {
                 Some(type_hint) => {
                     match convert_type_hint(db, type_hint) {
                         Ok(expected_type) => {
@@ -152,8 +152,8 @@ pub fn check_statement<'db>(
         }
 
         Statement::Set(stmt) => {
-            let name = stmt.name(db);
-            let value = stmt.value(db);
+            let name = stmt.name;
+            let value = stmt.value;
 
             // Look up the variable type.
             match ctx.lookup_variable(name) {
@@ -202,7 +202,7 @@ pub fn check_statement<'db>(
 
             // Add parameters to context.
             for (param, param_ty) in params.iter().zip(param_types.iter()) {
-                ctx.add_variable(param.name(db), *param_ty);
+                ctx.add_variable(param.name, *param_ty);
             }
 
             ctx.expected_return_type = Some(ret_ty);
@@ -220,7 +220,7 @@ pub fn check_statement<'db>(
         }
 
         Statement::Ret(stmt) => {
-            let ret_value = stmt.value(db);
+            let ret_value = stmt.value;
             let expected_ty = ctx.expected_return_type;
 
             match (ret_value, expected_ty) {
@@ -268,11 +268,11 @@ pub fn check_statement<'db>(
         }
 
         Statement::If(stmt) => {
-            let condition = stmt.condition(db);
-            let then_binding = stmt.then_binding(db);
-            let then_body = stmt.then_body(db);
-            let else_binding = stmt.else_binding(db);
-            let else_body = stmt.else_body(db);
+            let condition = stmt.condition;
+            let then_binding = stmt.then_binding;
+            let then_body = &stmt.then_body;
+            let else_binding = stmt.else_binding;
+            let else_body = &stmt.else_body;
 
             // If there's a binding, this is destructuring syntax.
             if let Some(binding_name) = then_binding {
@@ -395,13 +395,13 @@ pub fn check_statement<'db>(
         }
 
         Statement::Loop(stmt) => {
-            let body = stmt.body(db);
+            let body = &stmt.body;
 
             // Increment loop depth.
             ctx.loop_depth += 1;
 
             // Type check while condition (if present).
-            if let Some(condition) = stmt.condition(db) {
+            if let Some(condition) = stmt.condition {
                 let bool_type = TypeAndHeap::new(
                     db,
                     datalit::ast::Heap::Omitted,
@@ -434,7 +434,7 @@ pub fn check_statement<'db>(
         }
 
         Statement::DebugLog(stmt) => {
-            let value = stmt.value(db);
+            let value = stmt.value;
             // Accept any type - just synthesize to verify the expression is valid.
             if let Err(e) = ctx.synthesize_expr(value) {
                 ctx.add_error(e);

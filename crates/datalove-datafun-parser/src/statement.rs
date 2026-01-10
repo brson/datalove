@@ -101,12 +101,11 @@ impl<'db> Parser<'db> {
         // Parse the value expression.
         let value = self.parse_expr_full();
 
-        ast::Statement::Let(ast::StmtLet::new(
-            self.db,
+        ast::Statement::Let(ast::StmtLet {
             name,
             type_hint,
             value,
-        ))
+        })
     }
 
     fn parse_var(&mut self) -> ast::Statement<'db> {
@@ -145,12 +144,11 @@ impl<'db> Parser<'db> {
         // Parse the value expression.
         let value = self.parse_expr_full();
 
-        ast::Statement::Var(ast::StmtVar::new(
-            self.db,
+        ast::Statement::Var(ast::StmtVar {
             name,
             type_hint,
             value,
-        ))
+        })
     }
 
     fn parse_set(&mut self) -> ast::Statement<'db> {
@@ -181,11 +179,10 @@ impl<'db> Parser<'db> {
         // Parse the value expression.
         let value = self.parse_expr_full();
 
-        ast::Statement::Set(ast::StmtSet::new(
-            self.db,
+        ast::Statement::Set(ast::StmtSet {
             name,
             value,
-        ))
+        })
     }
 
     fn parse_fun(
@@ -327,7 +324,7 @@ impl<'db> Parser<'db> {
 
         let type_hint = self.parse_type_hint_and_heap();
 
-        ast::FunParam::new(self.db, name, mode, type_hint)
+        ast::FunParam { name, mode, type_hint }
     }
 
     fn parse_ret(&mut self) -> ast::Statement<'db> {
@@ -340,7 +337,7 @@ impl<'db> Parser<'db> {
             None
         };
 
-        ast::Statement::Ret(ast::StmtRet::new(self.db, value))
+        ast::Statement::Ret(ast::StmtRet { value })
     }
 
     fn parse_require(&mut self) -> ast::Statement<'db> {
@@ -410,12 +407,11 @@ impl<'db> Parser<'db> {
                 };
 
                 ast::Statement::Require(ast::StmtRequire::Module(
-                    ast::StmtRequireModule::new(
-                        self.db,
+                    ast::StmtRequireModule {
                         import_space,
                         package_alias,
                         module_alias,
-                    )
+                    }
                 ))
             }
             Some("data") => {
@@ -442,11 +438,10 @@ impl<'db> Parser<'db> {
                 };
 
                 ast::Statement::Require(ast::StmtRequire::Data(
-                    ast::StmtRequireData::new(
-                        self.db,
+                    ast::StmtRequireData {
                         name,
                         type_hint,
-                    )
+                    }
                 ))
             }
             _ => {
@@ -501,11 +496,10 @@ impl<'db> Parser<'db> {
         };
 
         ast::Statement::Import(
-            ast::StmtImport::new(
-                self.db,
+            ast::StmtImport {
                 module_name,
                 item_name,
-            )
+            }
         )
     }
 
@@ -638,14 +632,13 @@ impl<'db> Parser<'db> {
             (None, None)
         };
 
-        ast::Statement::If(ast::StmtIf::new(
-            self.db,
+        ast::Statement::If(ast::StmtIf {
             condition,
             then_binding,
             then_body,
             else_binding,
             else_body,
-        ))
+        })
     }
 
     fn parse_loop(
@@ -683,23 +676,23 @@ impl<'db> Parser<'db> {
             }
         }
 
-        ast::Statement::Loop(ast::StmtLoop::new(self.db, condition, body))
+        ast::Statement::Loop(ast::StmtLoop { condition, body })
     }
 
     fn parse_break(&mut self) -> ast::Statement<'db> {
         self.eat_word("break");
-        ast::Statement::Break(ast::StmtBreak::new(self.db, ()))
+        ast::Statement::Break(ast::StmtBreak {})
     }
 
     fn parse_continue(&mut self) -> ast::Statement<'db> {
         self.eat_word("continue");
-        ast::Statement::Continue(ast::StmtContinue::new(self.db, ()))
+        ast::Statement::Continue(ast::StmtContinue {})
     }
 
     fn parse_debuglog(&mut self) -> ast::Statement<'db> {
         self.eat_word("debuglog");
         let value = self.parse_expr_full();
-        ast::Statement::DebugLog(ast::StmtDebugLog::new(self.db, value))
+        ast::Statement::DebugLog(ast::StmtDebugLog { value })
     }
 
     /// Delegate to datalit parser for type hints.

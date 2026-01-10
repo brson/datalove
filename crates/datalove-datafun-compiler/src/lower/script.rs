@@ -225,8 +225,8 @@ fn lower_statement_for_script<'db>(
 ) -> Result<(), LowerError> {
     match stmt {
         Statement::Let(let_stmt) => {
-            let name = let_stmt.name(ctx.db).text(ctx.db).to_string();
-            let init_expr = let_stmt.value(ctx.db);
+            let name = let_stmt.name.text(ctx.db).to_string();
+            let init_expr = let_stmt.value;
             let value_id = lower_expression(ctx, init_expr)?;
             let operand = Operand::Value(value_id);
             ctx.bind_var(&name, operand);
@@ -237,8 +237,8 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Var(var_stmt) => {
-            let name = var_stmt.name(ctx.db).text(ctx.db).to_string();
-            let init_expr = var_stmt.value(ctx.db);
+            let name = var_stmt.name.text(ctx.db).to_string();
+            let init_expr = var_stmt.value;
             let slot_type = ctx.expr_type(init_expr);
             let slot = ctx.fresh_slot(slot_type);
             let value_id = lower_expression(ctx, init_expr)?;
@@ -256,8 +256,8 @@ fn lower_statement_for_script<'db>(
         }
         Statement::Set(set_stmt) => {
             // Same as function lowering - no export needed for assignment.
-            let name = set_stmt.name(ctx.db).text(ctx.db).to_string();
-            let value_id = lower_expression(ctx, set_stmt.value(ctx.db))?;
+            let name = set_stmt.name.text(ctx.db).to_string();
+            let value_id = lower_expression(ctx, set_stmt.value)?;
             if let Some(operand) = ctx.lookup_var(&name) {
                 match operand {
                     Operand::Slot(slot) => {
@@ -296,7 +296,7 @@ fn lower_statement_for_script<'db>(
         }
         Statement::Ret(ret_stmt) => {
             // In scripts, return means early return from the unit.
-            let value = if let Some(expr) = ret_stmt.value(ctx.db) {
+            let value = if let Some(expr) = ret_stmt.value {
                 let value_id = lower_expression(ctx, expr)?;
                 Operand::Value(value_id)
             } else {
@@ -379,10 +379,10 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::If(if_stmt) => {
-            super::stmt::lower_if(ctx, *if_stmt, stmt_idx)
+            super::stmt::lower_if(ctx, if_stmt, stmt_idx)
         }
         Statement::Loop(loop_stmt) => {
-            super::stmt::lower_loop(ctx, *loop_stmt, stmt_idx)
+            super::stmt::lower_loop(ctx, loop_stmt, stmt_idx)
         }
         Statement::Break(_) => {
             let loop_ctx = ctx.loop_stack.last()
@@ -417,7 +417,7 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::DebugLog(stmt) => {
-            let debug_expr = stmt.value(ctx.db);
+            let debug_expr = stmt.value;
             let value_id = lower_expression(ctx, debug_expr)?;
             ctx.emit(Instruction::DebugLog {
                 operand: Operand::Value(value_id),

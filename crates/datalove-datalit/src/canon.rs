@@ -15,7 +15,7 @@ use crate::ast::*;
 /// enums, named types) will panic - to be addressed when new interpreter
 /// is implemented.
 fn cmp_expr<'db>(db: &'db dyn salsa::Database, a: ExprFull<'db>, b: ExprFull<'db>) -> Ordering {
-    cmp_expr_inner(db, &a.expr(db).expr(db), &b.expr(db).expr(db))
+    cmp_expr_inner(db, &a.expr(db).expr, &b.expr(db).expr)
 }
 
 fn cmp_expr_inner<'db>(db: &'db dyn salsa::Database, a: &Expr<'db>, b: &Expr<'db>) -> Ordering {
@@ -36,39 +36,39 @@ fn cmp_expr_inner<'db>(db: &'db dyn salsa::Database, a: &Expr<'db>, b: &Expr<'db
         (False, True) => Ordering::Less,
 
         (Int(a_int), Int(b_int)) => {
-            cmp_int_strings(a_int.value(db).as_str(db), b_int.value(db).as_str(db))
+            cmp_int_strings(a_int.value.as_str(db), b_int.value.as_str(db))
         }
 
         (Float(a_float), Float(b_float)) => {
-            cmp_float_strings(a_float.value(db).as_str(db), b_float.value(db).as_str(db))
+            cmp_float_strings(a_float.value.as_str(db), b_float.value.as_str(db))
         }
 
         (Hex(a_hex), Hex(b_hex)) => {
             // Compare hex as unsigned integers.
-            let a_val = parse_hex(a_hex.value(db).as_str(db));
-            let b_val = parse_hex(b_hex.value(db).as_str(db));
+            let a_val = parse_hex(a_hex.value.as_str(db));
+            let b_val = parse_hex(b_hex.value.as_str(db));
             a_val.cmp(&b_val)
         }
 
         (String(a_str), String(b_str)) => {
             // Compare the raw string content (including quotes).
-            a_str.value(db).as_str(db).cmp(b_str.value(db).as_str(db))
+            a_str.value.as_str(db).cmp(b_str.value.as_str(db))
         }
 
         (AnonTuple(a_tuple), AnonTuple(b_tuple)) => {
-            cmp_expr_lists(db, &a_tuple.elements(db), &b_tuple.elements(db))
+            cmp_expr_lists(db, &a_tuple.elements, &b_tuple.elements)
         }
 
         (List(a_list), List(b_list)) => {
-            cmp_expr_lists(db, &a_list.elements(db), &b_list.elements(db))
+            cmp_expr_lists(db, &a_list.elements, &b_list.elements)
         }
 
         (Set(a_set), Set(b_set)) => {
             // For sets, we need to compare the sorted elements.
-            let a_sorted = sorted_set_indices(db, *a_set);
-            let b_sorted = sorted_set_indices(db, *b_set);
-            let a_elements = a_set.elements(db);
-            let b_elements = b_set.elements(db);
+            let a_sorted = sorted_set_indices(db, a_set);
+            let b_sorted = sorted_set_indices(db, b_set);
+            let a_elements = &a_set.elements;
+            let b_elements = &b_set.elements;
 
             // Compare lengths first.
             match a_sorted.len().cmp(&b_sorted.len()) {
@@ -88,10 +88,10 @@ fn cmp_expr_inner<'db>(db: &'db dyn salsa::Database, a: &Expr<'db>, b: &Expr<'db
 
         (Map(a_map), Map(b_map)) => {
             // For maps, compare by sorted keys, then by values.
-            let a_sorted = sorted_map_indices(db, *a_map);
-            let b_sorted = sorted_map_indices(db, *b_map);
-            let a_entries = a_map.entries(db);
-            let b_entries = b_map.entries(db);
+            let a_sorted = sorted_map_indices(db, a_map);
+            let b_sorted = sorted_map_indices(db, b_map);
+            let a_entries = &a_map.entries;
+            let b_entries = &b_map.entries;
 
             // Compare lengths first.
             match a_sorted.len().cmp(&b_sorted.len()) {
@@ -105,13 +105,13 @@ fn cmp_expr_inner<'db>(db: &'db dyn salsa::Database, a: &Expr<'db>, b: &Expr<'db
                 let b_entry = &b_entries[*b_idx];
 
                 // Compare keys first.
-                match cmp_expr(db, a_entry.key(db), b_entry.key(db)) {
+                match cmp_expr(db, a_entry.key, b_entry.key) {
                     Ordering::Equal => {}
                     ord => return ord,
                 }
 
                 // Then compare values.
-                match cmp_expr(db, a_entry.value(db), b_entry.value(db)) {
+                match cmp_expr(db, a_entry.value, b_entry.value) {
                     Ordering::Equal => continue,
                     ord => return ord,
                 }
@@ -121,43 +121,43 @@ fn cmp_expr_inner<'db>(db: &'db dyn salsa::Database, a: &Expr<'db>, b: &Expr<'db
 
         (Tensor(a_tensor), Tensor(b_tensor)) => {
             // Compare shape first, then elements.
-            match a_tensor.shape(db).cmp(&b_tensor.shape(db)) {
+            match a_tensor.shape.cmp(&b_tensor.shape) {
                 Ordering::Equal => {}
                 ord => return ord,
             }
-            cmp_expr_lists(db, &a_tensor.elements(db), &b_tensor.elements(db))
+            cmp_expr_lists(db, &a_tensor.elements, &b_tensor.elements)
         }
 
         (None, None) => Ordering::Equal,
 
         // Some: compare payloads.
         (Some(a_some), Some(b_some)) => {
-            cmp_expr(db, a_some.payload(db), b_some.payload(db))
+            cmp_expr(db, a_some.payload, b_some.payload)
         }
 
         // Ok: compare payloads.
         (Ok(a_ok), Ok(b_ok)) => {
-            cmp_expr(db, a_ok.payload(db), b_ok.payload(db))
+            cmp_expr(db, a_ok.payload, b_ok.payload)
         }
 
         // Er: compare payloads.
         (Er(a_er), Er(b_er)) => {
-            cmp_expr(db, a_er.payload(db), b_er.payload(db))
+            cmp_expr(db, a_er.payload, b_er.payload)
         }
 
         // Data and Error: compare their wrapped values.
         (Data(a_data), Data(b_data)) => {
-            cmp_expr(db, a_data.value(db), b_data.value(db))
+            cmp_expr(db, a_data.value, b_data.value)
         }
 
         (Error(a_err), Error(b_err)) => {
-            cmp_expr(db, a_err.value(db), b_err.value(db))
+            cmp_expr(db, a_err.value, b_err.value)
         }
 
         // Anonymous struct: compare fields by name, then by value.
         (AnonStruct(a_struct), AnonStruct(b_struct)) => {
-            let a_fields = a_struct.fields(db);
-            let b_fields = b_struct.fields(db);
+            let a_fields = &a_struct.fields;
+            let b_fields = &b_struct.fields;
 
             // Compare number of fields first.
             match a_fields.len().cmp(&b_fields.len()) {
@@ -168,17 +168,17 @@ fn cmp_expr_inner<'db>(db: &'db dyn salsa::Database, a: &Expr<'db>, b: &Expr<'db
             // Compare field by field (sorted by field name).
             let mut a_sorted: Vec<_> = a_fields.iter().collect();
             let mut b_sorted: Vec<_> = b_fields.iter().collect();
-            a_sorted.sort_by_key(|f| f.name(db).as_str(db));
-            b_sorted.sort_by_key(|f| f.name(db).as_str(db));
+            a_sorted.sort_by_key(|f| f.name.as_str(db));
+            b_sorted.sort_by_key(|f| f.name.as_str(db));
 
             for (a_field, b_field) in a_sorted.iter().zip(b_sorted.iter()) {
                 // Compare field names first.
-                match a_field.name(db).as_str(db).cmp(b_field.name(db).as_str(db)) {
+                match a_field.name.as_str(db).cmp(b_field.name.as_str(db)) {
                     Ordering::Equal => {}
                     ord => return ord,
                 }
                 // Then compare field values.
-                match cmp_expr(db, a_field.value(db), b_field.value(db)) {
+                match cmp_expr(db, a_field.value, b_field.value) {
                     Ordering::Equal => continue,
                     ord => return ord,
                 }
@@ -189,13 +189,13 @@ fn cmp_expr_inner<'db>(db: &'db dyn salsa::Database, a: &Expr<'db>, b: &Expr<'db
         // Anonymous enum: compare variant name, then payload.
         (AnonEnum(a_enum), AnonEnum(b_enum)) => {
             // Compare variant names first.
-            match a_enum.variant_name(db).as_str(db).cmp(b_enum.variant_name(db).as_str(db)) {
+            match a_enum.variant_name.as_str(db).cmp(b_enum.variant_name.as_str(db)) {
                 Ordering::Equal => {}
                 ord => return ord,
             }
 
             // Then compare payloads (if any).
-            match (a_enum.payload(db), b_enum.payload(db)) {
+            match (a_enum.payload, b_enum.payload) {
                 (Option::None, Option::None) => Ordering::Equal,
                 (Option::None, Option::Some(_)) => Ordering::Less,
                 (Option::Some(_), Option::None) => Ordering::Greater,
@@ -307,10 +307,9 @@ fn cmp_expr_lists<'db>(
 /// Compute sorted indices for set elements.
 ///
 /// Returns a vector of indices into the set's elements list, sorted by
-/// the elements' ordering. Memoized by Salsa.
-#[salsa::tracked]
-pub fn sorted_set_indices<'db>(db: &'db dyn salsa::Database, set: ExprSet<'db>) -> Vec<usize> {
-    let elements = set.elements(db);
+/// the elements' ordering.
+pub fn sorted_set_indices<'db>(db: &'db dyn salsa::Database, set: &ExprSet<'db>) -> Vec<usize> {
+    let elements = &set.elements;
     let mut indices: Vec<usize> = (0..elements.len()).collect();
     indices.sort_by(|&a, &b| cmp_expr(db, elements[a], elements[b]));
     indices
@@ -319,11 +318,10 @@ pub fn sorted_set_indices<'db>(db: &'db dyn salsa::Database, set: ExprSet<'db>) 
 /// Compute sorted indices for map entries (by key).
 ///
 /// Returns a vector of indices into the map's entries list, sorted by
-/// the entries' keys. Memoized by Salsa.
-#[salsa::tracked]
-pub fn sorted_map_indices<'db>(db: &'db dyn salsa::Database, map: ExprMap<'db>) -> Vec<usize> {
-    let entries = map.entries(db);
+/// the entries' keys.
+pub fn sorted_map_indices<'db>(db: &'db dyn salsa::Database, map: &ExprMap<'db>) -> Vec<usize> {
+    let entries = &map.entries;
     let mut indices: Vec<usize> = (0..entries.len()).collect();
-    indices.sort_by(|&a, &b| cmp_expr(db, entries[a].key(db), entries[b].key(db)));
+    indices.sort_by(|&a, &b| cmp_expr(db, entries[a].key, entries[b].key));
     indices
 }

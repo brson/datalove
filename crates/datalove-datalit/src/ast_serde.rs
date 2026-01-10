@@ -252,7 +252,7 @@ impl ExprFull {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprFull<'db>) -> Self {
         ExprFull {
             type_hint: ast.type_hint(db).map(|th| TypeHintAndHeap::from_ast(db, th)),
-            expr: ExprAndHeap::from_ast(db, *ast.expr(db)),
+            expr: ExprAndHeap::from_ast(db, ast.expr(db).clone()),
         }
     }
 }
@@ -404,8 +404,8 @@ impl TypeHintTensor {
 impl ExprAndHeap {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAndHeap<'db>) -> Self {
         ExprAndHeap {
-            heap: Heap::from_ast(ast.heap(db)),
-            expr: Expr::from_ast(db, ast.expr(db)),
+            heap: Heap::from_ast(ast.heap),
+            expr: Expr::from_ast(db, ast.expr.clone()),
         }
     }
 }
@@ -440,7 +440,7 @@ impl Expr {
 impl ExprInt {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprInt<'db>) -> Self {
         ExprInt {
-            value: ast.value(db).text(db).S(),
+            value: ast.value.text(db).S(),
         }
     }
 }
@@ -448,7 +448,7 @@ impl ExprInt {
 impl ExprFloat {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprFloat<'db>) -> Self {
         ExprFloat {
-            value: ast.value(db).text(db).S(),
+            value: ast.value.text(db).S(),
         }
     }
 }
@@ -456,7 +456,7 @@ impl ExprFloat {
 impl ExprHex {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprHex<'db>) -> Self {
         ExprHex {
-            value: ast.value(db).text(db).S(),
+            value: ast.value.text(db).S(),
         }
     }
 }
@@ -464,7 +464,7 @@ impl ExprHex {
 impl ExprString {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprString<'db>) -> Self {
         ExprString {
-            value: ast.value(db).text(db).S(),
+            value: ast.value.text(db).S(),
         }
     }
 }
@@ -472,7 +472,7 @@ impl ExprString {
 impl ExprAnonTuple {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAnonTuple<'db>) -> Self {
         ExprAnonTuple {
-            elements: ast.elements(db).iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
         }
     }
 }
@@ -480,7 +480,7 @@ impl ExprAnonTuple {
 impl ExprAnonStruct {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAnonStruct<'db>) -> Self {
         ExprAnonStruct {
-            fields: ast.fields(db).iter().map(|f| ExprStructField::from_ast(db, *f)).collect(),
+            fields: ast.fields.iter().map(|f| ExprStructField::from_ast(db, f.clone())).collect(),
         }
     }
 }
@@ -488,8 +488,8 @@ impl ExprAnonStruct {
 impl ExprStructField {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprStructField<'db>) -> Self {
         ExprStructField {
-            name: ast.name(db).text(db).S(),
-            value: ExprFull::from_ast(db, ast.value(db)),
+            name: ast.name.text(db).S(),
+            value: ExprFull::from_ast(db, ast.value),
         }
     }
 }
@@ -497,8 +497,8 @@ impl ExprStructField {
 impl ExprAnonEnum {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAnonEnum<'db>) -> Self {
         ExprAnonEnum {
-            variant_name: ast.variant_name(db).text(db).S(),
-            payload: ast.payload(db).map(|p| Box::new(ExprFull::from_ast(db, p))),
+            variant_name: ast.variant_name.text(db).S(),
+            payload: ast.payload.map(|p| Box::new(ExprFull::from_ast(db, p))),
         }
     }
 }
@@ -506,7 +506,7 @@ impl ExprAnonEnum {
 impl ExprList {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprList<'db>) -> Self {
         ExprList {
-            elements: ast.elements(db).iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
         }
     }
 }
@@ -514,7 +514,7 @@ impl ExprList {
 impl ExprMap {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprMap<'db>) -> Self {
         ExprMap {
-            entries: ast.entries(db).iter().map(|e| ExprMapEntry::from_ast(db, *e)).collect(),
+            entries: ast.entries.iter().map(|e| ExprMapEntry::from_ast(db, e.clone())).collect(),
         }
     }
 }
@@ -522,8 +522,8 @@ impl ExprMap {
 impl ExprMapEntry {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprMapEntry<'db>) -> Self {
         ExprMapEntry {
-            key: ExprFull::from_ast(db, ast.key(db)),
-            value: ExprFull::from_ast(db, ast.value(db)),
+            key: ExprFull::from_ast(db, ast.key),
+            value: ExprFull::from_ast(db, ast.value),
         }
     }
 }
@@ -531,7 +531,7 @@ impl ExprMapEntry {
 impl ExprSet {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprSet<'db>) -> Self {
         ExprSet {
-            elements: ast.elements(db).iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
         }
     }
 }
@@ -539,8 +539,8 @@ impl ExprSet {
 impl ExprTensor {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprTensor<'db>) -> Self {
         ExprTensor {
-            shape: ast.shape(db),
-            elements: ast.elements(db).iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+            shape: ast.shape.clone(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
         }
     }
 }
@@ -548,7 +548,7 @@ impl ExprTensor {
 impl ExprSome {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprSome<'db>) -> Self {
         ExprSome {
-            payload: Box::new(ExprFull::from_ast(db, ast.payload(db))),
+            payload: Box::new(ExprFull::from_ast(db, ast.payload)),
         }
     }
 }
@@ -556,7 +556,7 @@ impl ExprSome {
 impl ExprOk {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprOk<'db>) -> Self {
         ExprOk {
-            payload: Box::new(ExprFull::from_ast(db, ast.payload(db))),
+            payload: Box::new(ExprFull::from_ast(db, ast.payload)),
         }
     }
 }
@@ -564,7 +564,7 @@ impl ExprOk {
 impl ExprEr {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprEr<'db>) -> Self {
         ExprEr {
-            payload: Box::new(ExprFull::from_ast(db, ast.payload(db))),
+            payload: Box::new(ExprFull::from_ast(db, ast.payload)),
         }
     }
 }
@@ -572,7 +572,7 @@ impl ExprEr {
 impl ExprData {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprData<'db>) -> Self {
         ExprData {
-            value: Box::new(ExprFull::from_ast(db, ast.value(db))),
+            value: Box::new(ExprFull::from_ast(db, ast.value)),
         }
     }
 }
@@ -580,7 +580,7 @@ impl ExprData {
 impl ExprError {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprError<'db>) -> Self {
         ExprError {
-            value: Box::new(ExprFull::from_ast(db, ast.value(db))),
+            value: Box::new(ExprFull::from_ast(db, ast.value)),
         }
     }
 }
@@ -596,7 +596,7 @@ impl TypeHintParseError {
 impl ExprParseError {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprParseError<'db>) -> Self {
         ExprParseError {
-            message: ast.message(db).as_str(db).to_string(),
+            message: ast.message.as_str(db).to_string(),
         }
     }
 }

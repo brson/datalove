@@ -79,22 +79,22 @@ fn has_parse_error<'db>(
         }
     }
 
-    match expr.expr(db).expr(db) {
+    match &expr.expr(db).expr {
         Expr::ParseError(_) => true,
-        Expr::List(l) => l.elements(db).iter().any(|e| has_parse_error(db, *e)),
-        Expr::Set(s) => s.elements(db).iter().any(|e| has_parse_error(db, *e)),
-        Expr::Map(m) => m.entries(db).iter().any(|e| {
-            has_parse_error(db, e.key(db)) || has_parse_error(db, e.value(db))
+        Expr::List(l) => l.elements.iter().any(|e| has_parse_error(db, *e)),
+        Expr::Set(s) => s.elements.iter().any(|e| has_parse_error(db, *e)),
+        Expr::Map(m) => m.entries.iter().any(|e| {
+            has_parse_error(db, e.key) || has_parse_error(db, e.value)
         }),
-        Expr::AnonTuple(t) => t.elements(db).iter().any(|e| has_parse_error(db, *e)),
-        Expr::AnonStruct(s) => s.fields(db).iter().any(|f| has_parse_error(db, f.value(db))),
-        Expr::AnonEnum(e) => e.payload(db).map(|p| has_parse_error(db, p)).unwrap_or(false),
-        Expr::Data(d) => has_parse_error(db, d.value(db)),
-        Expr::Error(e) => has_parse_error(db, e.value(db)),
-        Expr::Tensor(t) => t.elements(db).iter().any(|e| has_parse_error(db, *e)),
-        Expr::Some(s) => has_parse_error(db, s.payload(db)),
-        Expr::Ok(o) => has_parse_error(db, o.payload(db)),
-        Expr::Er(e) => has_parse_error(db, e.payload(db)),
+        Expr::AnonTuple(t) => t.elements.iter().any(|e| has_parse_error(db, *e)),
+        Expr::AnonStruct(s) => s.fields.iter().any(|f| has_parse_error(db, f.value)),
+        Expr::AnonEnum(e) => e.payload.map(|p| has_parse_error(db, p)).unwrap_or(false),
+        Expr::Data(d) => has_parse_error(db, d.value),
+        Expr::Error(e) => has_parse_error(db, e.value),
+        Expr::Tensor(t) => t.elements.iter().any(|e| has_parse_error(db, *e)),
+        Expr::Some(s) => has_parse_error(db, s.payload),
+        Expr::Ok(o) => has_parse_error(db, o.payload),
+        Expr::Er(e) => has_parse_error(db, e.payload),
         _ => false,
     }
 }
@@ -117,7 +117,7 @@ fn get_datafun_errors<'db>(
 
     // Extract the let statement value.
     let expr = match &statements[0] {
-        datalove_datafun_ast::ast::Statement::Let(stmt) => stmt.value(db),
+        datalove_datafun_ast::ast::Statement::Let(stmt) => stmt.value,
         _ => return (vec!["PARSE_ERROR".to_string()], true),
     };
 
@@ -152,67 +152,67 @@ fn has_datafun_parse_error<'db>(
 
     match expr.expr(db) {
         ExprFunKind::ParseError(_) => true,
-        ExprFunKind::List(l) => {
-            check_type_hint(l.type_hint(db)) ||
-            l.elements(db).iter().any(|e| has_datafun_parse_error(db, *e))
+        ExprFunKind::List(ref l) => {
+            check_type_hint(l.type_hint) ||
+            l.elements.iter().any(|e| has_datafun_parse_error(db, *e))
         }
-        ExprFunKind::Set(s) => {
-            check_type_hint(s.type_hint(db)) ||
-            s.elements(db).iter().any(|e| has_datafun_parse_error(db, *e))
+        ExprFunKind::Set(ref s) => {
+            check_type_hint(s.type_hint) ||
+            s.elements.iter().any(|e| has_datafun_parse_error(db, *e))
         }
-        ExprFunKind::Map(m) => {
-            check_type_hint(m.type_hint(db)) ||
-            m.entries(db).iter().any(|e| {
-                has_datafun_parse_error(db, e.key(db)) || has_datafun_parse_error(db, e.value(db))
+        ExprFunKind::Map(ref m) => {
+            check_type_hint(m.type_hint) ||
+            m.entries.iter().any(|e| {
+                has_datafun_parse_error(db, e.key) || has_datafun_parse_error(db, e.value)
             })
         }
-        ExprFunKind::AnonTuple(t) => {
-            check_type_hint(t.type_hint(db)) ||
-            t.elements(db).iter().any(|e| has_datafun_parse_error(db, *e))
+        ExprFunKind::AnonTuple(ref t) => {
+            check_type_hint(t.type_hint) ||
+            t.elements.iter().any(|e| has_datafun_parse_error(db, *e))
         }
-        ExprFunKind::AnonStruct(s) => {
-            check_type_hint(s.type_hint(db)) ||
-            s.fields(db).iter().any(|f| has_datafun_parse_error(db, f.value(db)))
+        ExprFunKind::AnonStruct(ref s) => {
+            check_type_hint(s.type_hint) ||
+            s.fields.iter().any(|f| has_datafun_parse_error(db, f.value))
         }
-        ExprFunKind::AnonEnum(e) => {
-            check_type_hint(e.type_hint(db)) ||
-            e.payload(db).map(|p| has_datafun_parse_error(db, p)).unwrap_or(false)
+        ExprFunKind::AnonEnum(ref e) => {
+            check_type_hint(e.type_hint) ||
+            e.payload.map(|p| has_datafun_parse_error(db, p)).unwrap_or(false)
         }
-        ExprFunKind::Data(d) => {
-            check_type_hint(d.type_hint(db)) ||
-            has_datafun_parse_error(db, d.value(db))
+        ExprFunKind::Data(ref d) => {
+            check_type_hint(d.type_hint) ||
+            has_datafun_parse_error(db, d.value)
         }
-        ExprFunKind::Error(e) => {
-            check_type_hint(e.type_hint(db)) ||
-            has_datafun_parse_error(db, e.value(db))
+        ExprFunKind::Error(ref e) => {
+            check_type_hint(e.type_hint) ||
+            has_datafun_parse_error(db, e.value)
         }
-        ExprFunKind::Tensor(t) => {
-            check_type_hint(t.type_hint(db)) ||
-            t.elements(db).iter().any(|e| has_datafun_parse_error(db, *e))
+        ExprFunKind::Tensor(ref t) => {
+            check_type_hint(t.type_hint) ||
+            t.elements.iter().any(|e| has_datafun_parse_error(db, *e))
         }
-        ExprFunKind::Tuple(t) => t.elements(db).iter().any(|e| has_datafun_parse_error(db, *e)),
-        ExprFunKind::UnaryOp(u) => has_datafun_parse_error(db, u.operand(db)),
-        ExprFunKind::BinOp(b) => {
-            has_datafun_parse_error(db, b.lhs(db)) || has_datafun_parse_error(db, b.rhs(db))
+        ExprFunKind::Tuple(ref t) => t.elements.iter().any(|e| has_datafun_parse_error(db, *e)),
+        ExprFunKind::UnaryOp(ref u) => has_datafun_parse_error(db, u.operand),
+        ExprFunKind::BinOp(ref b) => {
+            has_datafun_parse_error(db, b.lhs) || has_datafun_parse_error(db, b.rhs)
         }
-        ExprFunKind::True(l) => check_type_hint(l.type_hint(db)),
-        ExprFunKind::False(l) => check_type_hint(l.type_hint(db)),
-        ExprFunKind::None(l) => check_type_hint(l.type_hint(db)),
-        ExprFunKind::Int(i) => check_type_hint(i.type_hint(db)),
-        ExprFunKind::Float(f) => check_type_hint(f.type_hint(db)),
-        ExprFunKind::Hex(h) => check_type_hint(h.type_hint(db)),
-        ExprFunKind::String(s) => check_type_hint(s.type_hint(db)),
-        ExprFunKind::Some(s) => {
-            check_type_hint(s.type_hint(db)) ||
-            has_datafun_parse_error(db, s.payload(db))
+        ExprFunKind::True(ref l) => check_type_hint(l.type_hint),
+        ExprFunKind::False(ref l) => check_type_hint(l.type_hint),
+        ExprFunKind::None(ref l) => check_type_hint(l.type_hint),
+        ExprFunKind::Int(ref i) => check_type_hint(i.type_hint),
+        ExprFunKind::Float(ref f) => check_type_hint(f.type_hint),
+        ExprFunKind::Hex(ref h) => check_type_hint(h.type_hint),
+        ExprFunKind::String(ref s) => check_type_hint(s.type_hint),
+        ExprFunKind::Some(ref s) => {
+            check_type_hint(s.type_hint) ||
+            has_datafun_parse_error(db, s.payload)
         }
-        ExprFunKind::Ok(o) => {
-            check_type_hint(o.type_hint(db)) ||
-            has_datafun_parse_error(db, o.payload(db))
+        ExprFunKind::Ok(ref o) => {
+            check_type_hint(o.type_hint) ||
+            has_datafun_parse_error(db, o.payload)
         }
-        ExprFunKind::Er(e) => {
-            check_type_hint(e.type_hint(db)) ||
-            has_datafun_parse_error(db, e.payload(db))
+        ExprFunKind::Er(ref e) => {
+            check_type_hint(e.type_hint) ||
+            has_datafun_parse_error(db, e.payload)
         }
         _ => false,
     }
@@ -985,7 +985,7 @@ fn test_debug_specific_bracket_cases() {
         if stmts.is_empty() {
             true
         } else if let datalove_datafun_ast::ast::Statement::Let(stmt) = &stmts[0] {
-            has_datafun_parse_error(&db, stmt.value(&db))
+            has_datafun_parse_error(&db, stmt.value)
         } else {
             true
         }

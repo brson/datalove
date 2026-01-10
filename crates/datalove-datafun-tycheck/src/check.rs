@@ -65,7 +65,7 @@ pub fn check_expr<'db>(
                         inner_ty.heap(db),
                         Type::Datalit(inner_ty.ty(db).clone())
                     );
-                    check_expr(ctx, some_expr.payload(db), expected_inner)?;
+                    check_expr(ctx, some_expr.payload, expected_inner)?;
                     ctx.store_expr_type(expr, expected);
                     Ok(())
                 }
@@ -87,7 +87,7 @@ pub fn check_expr<'db>(
                         inner_ty.heap(db),
                         Type::Datalit(inner_ty.ty(db).clone())
                     );
-                    check_expr(ctx, ok_expr.payload(db), expected_inner)?;
+                    check_expr(ctx, ok_expr.payload, expected_inner)?;
                     ctx.store_expr_type(expr, expected);
                     Ok(())
                 }
@@ -108,7 +108,7 @@ pub fn check_expr<'db>(
                         datalit::ast::Heap::Omitted,
                         Type::Datalit(datalit::tycheck::Type::Error)
                     );
-                    check_expr(ctx, er_expr.payload(db), error_ty)?;
+                    check_expr(ctx, er_expr.payload, error_ty)?;
                     ctx.store_expr_type(expr, expected);
                     Ok(())
                 }
@@ -124,16 +124,16 @@ pub fn check_expr<'db>(
             match expected.ty(db) {
                 Type::Datalit(datalit::tycheck::Type::AnonEnum(_)) => {
                     // Check the variant and payload against expected enum type.
-                    check_enum_variant(ctx, enum_expr.variant_name(db), enum_expr.payload(db), &expected)?;
+                    check_enum_variant(ctx, enum_expr.variant_name, enum_expr.payload, &expected)?;
                     ctx.store_expr_type(expr, expected);
                     Ok(())
                 }
                 Type::Datalit(datalit::tycheck::Type::Data) => {
                     // Any type can coerce to Data - but we need a concrete type.
                     // Try to get the type hint, otherwise synthesize will fail.
-                    if let Some(type_hint) = enum_expr.type_hint(db) {
+                    if let Some(type_hint) = enum_expr.type_hint {
                         let enum_ty = convert_type_hint(db, type_hint)?;
-                        check_enum_variant(ctx, enum_expr.variant_name(db), enum_expr.payload(db), &enum_ty)?;
+                        check_enum_variant(ctx, enum_expr.variant_name, enum_expr.payload, &enum_ty)?;
                         ctx.store_expr_type(expr, expected);
                         Ok(())
                     } else {
@@ -152,7 +152,7 @@ pub fn check_expr<'db>(
             match expected.ty(db) {
                 Type::Datalit(datalit::tycheck::Type::List(_)) => {
                     // Check elements against expected element type (with coercion).
-                    check_list_elements(ctx, list_expr.elements(db), expected)?;
+                    check_list_elements(ctx, &list_expr.elements, expected)?;
                     ctx.store_expr_type(expr, expected);
                     Ok(())
                 }
@@ -444,8 +444,8 @@ pub fn check_map_entries<'db>(
 
     // Check each entry against expected types.
     for entry in entries {
-        let key_ty = ctx.synthesize_expr(entry.key(db))?;
-        let value_ty = ctx.synthesize_expr(entry.value(db))?;
+        let key_ty = ctx.synthesize_expr(entry.key)?;
+        let value_ty = ctx.synthesize_expr(entry.value)?;
 
         // Extract actual datalit types.
         let actual_key_ty = match key_ty.ty(db) {
@@ -472,7 +472,7 @@ pub fn check_map_entries<'db>(
         }
 
         // Also check key expression's outer heap.
-        let key_expr_heap = get_expr_heap(db, entry.key(db));
+        let key_expr_heap = get_expr_heap(db, entry.key);
         if !heaps_compatible(expected_key_heap, key_expr_heap) {
             return Err(TypeError::HeapMismatch {
                 expected_heap: heap_to_string(expected_key_heap),
@@ -495,7 +495,7 @@ pub fn check_map_entries<'db>(
         }
 
         // Also check value expression's outer heap.
-        let value_expr_heap = get_expr_heap(db, entry.value(db));
+        let value_expr_heap = get_expr_heap(db, entry.value);
         if !heaps_compatible(expected_value_heap, value_expr_heap) {
             return Err(TypeError::HeapMismatch {
                 expected_heap: heap_to_string(expected_value_heap),
@@ -514,8 +514,8 @@ pub fn check_tensor_shape_and_elements<'db>(
     expected_ty: TypeAndHeap<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
-    let elements = tensor_expr.elements(db);
-    let shape = tensor_expr.shape(db);
+    let elements = &tensor_expr.elements;
+    let shape = &tensor_expr.shape;
 
     // Unwrap Option/Result wrappers to get the actual tensor type.
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
@@ -677,13 +677,13 @@ pub fn check_struct_fields<'db>(
     // Check each field against expected field type.
     for (field, expected_field) in fields.iter().zip(expected_fields.iter()) {
         // Check field name matches.
-        let field_name = field.name(db);
+        let field_name = field.name;
         let expected_name = expected_field.name;
         if field_name != expected_name {
             return Err(TypeError::FieldOrderMismatch);
         }
 
-        let field_value_ty = ctx.synthesize_expr(field.value(db))?;
+        let field_value_ty = ctx.synthesize_expr(field.value)?;
 
         // Extract actual datalit type.
         let actual_datalit_ty = match field_value_ty.ty(db) {
@@ -707,7 +707,7 @@ pub fn check_struct_fields<'db>(
         }
 
         // Also check expression's outer heap.
-        let expr_heap = get_expr_heap(db, field.value(db));
+        let expr_heap = get_expr_heap(db, field.value);
         if !heaps_compatible(expected_heap, expr_heap) {
             return Err(TypeError::HeapMismatch {
                 expected_heap: heap_to_string(expected_heap),

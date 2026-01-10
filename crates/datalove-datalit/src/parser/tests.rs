@@ -10,7 +10,7 @@ fn test_parse_bool() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@true"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     assert!(matches!(expr, ast::Expr::True));
 }
 
@@ -21,7 +21,7 @@ fn test_parse_bool_with_type() {
     let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     assert!(matches!(type_hint, ast::TypeHint::Bool));
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     assert!(matches!(expr, ast::Expr::True));
 }
 
@@ -30,9 +30,9 @@ fn test_parse_int() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@42"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
-        ast::Expr::Int(e) => assert_eq!(e.value(db).as_str(db), "42"),
+        ast::Expr::Int(e) => assert_eq!(e.value.as_str(db), "42"),
         _ => panic!("expected int"),
     }
 }
@@ -42,9 +42,9 @@ fn test_parse_tuple() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@(@true, @1)"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
-        ast::Expr::AnonTuple(e) => assert_eq!(e.elements(db).len(), 2),
+        ast::Expr::AnonTuple(e) => assert_eq!(e.elements.len(), 2),
         _ => panic!("expected tuple"),
     }
 }
@@ -54,9 +54,9 @@ fn test_parse_list() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@[@1, @2, @3]"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
-        ast::Expr::List(e) => assert_eq!(e.elements(db).len(), 3),
+        ast::Expr::List(e) => assert_eq!(e.elements.len(), 3),
         _ => panic!("expected list"),
     }
 }
@@ -66,9 +66,9 @@ fn test_parse_float() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@1.0"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
-        ast::Expr::Float(e) => assert_eq!(e.value(db).as_str(db), "1.0"),
+        ast::Expr::Float(e) => assert_eq!(e.value.as_str(db), "1.0"),
         ast::Expr::Int(_) => panic!("expected float, got Int"),
         _ => panic!("expected float, got something else"),
     }
@@ -81,9 +81,9 @@ fn test_parse_float_with_type() {
     let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     assert!(matches!(type_hint, ast::TypeHint::F32));
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
-        ast::Expr::Float(e) => assert_eq!(e.value(db).as_str(db), "1.0"),
+        ast::Expr::Float(e) => assert_eq!(e.value.as_str(db), "1.0"),
         _ => panic!("expected float"),
     }
 }
@@ -108,10 +108,10 @@ fn test_parse_string() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(r#": @string / @"hello world""#));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
         ast::Expr::String(s) => {
-            assert_eq!(s.value(db).as_str(db), r#""hello world""#);
+            assert_eq!(s.value.as_str(db), r#""hello world""#);
         }
         _ => panic!("expected string"),
     }
@@ -127,10 +127,10 @@ fn test_parse_map() {
         ast::TypeHint::Map(_) => {}
         _ => panic!("expected map type hint"),
     }
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
         ast::Expr::Map(m) => {
-            assert_eq!(m.entries(db).len(), 2);
+            assert_eq!(m.entries.len(), 2);
         }
         _ => panic!("expected map expr"),
     }
@@ -146,10 +146,10 @@ fn test_parse_set() {
         ast::TypeHint::Set(_) => {}
         _ => panic!("expected set type hint"),
     }
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
         ast::Expr::Set(s) => {
-            assert_eq!(s.elements(db).len(), 3);
+            assert_eq!(s.elements.len(), 3);
         }
         _ => panic!("expected set expr"),
     }
@@ -160,11 +160,11 @@ fn test_parse_enum_variant_no_payload() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@enum Foo"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
         ast::Expr::AnonEnum(e) => {
-            assert_eq!(e.variant_name(db).as_str(db), "Foo");
-            assert!(e.payload(db).is_none());
+            assert_eq!(e.variant_name.as_str(db), "Foo");
+            assert!(e.payload.is_none());
         }
         _ => panic!("expected anonymous enum"),
     }
@@ -175,11 +175,11 @@ fn test_parse_enum_variant_with_payload() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@enum Bar(@2)"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
         ast::Expr::AnonEnum(e) => {
-            assert_eq!(e.variant_name(db).as_str(db), "Bar");
-            assert!(e.payload(db).is_some());
+            assert_eq!(e.variant_name.as_str(db), "Bar");
+            assert!(e.payload.is_some());
         }
         _ => panic!("expected anonymous enum"),
     }
@@ -190,15 +190,15 @@ fn test_parse_enum_variant_with_tuple() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@enum Baz(@(@true, @1))"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
         ast::Expr::AnonEnum(e) => {
-            assert_eq!(e.variant_name(db).as_str(db), "Baz");
-            assert!(e.payload(db).is_some());
+            assert_eq!(e.variant_name.as_str(db), "Baz");
+            assert!(e.payload.is_some());
             // Verify the payload is a tuple.
-            let payload = e.payload(db).unwrap();
-            match payload.expr(db).expr(db) {
-                ast::Expr::AnonTuple(t) => assert_eq!(t.elements(db).len(), 2),
+            let payload = e.payload.unwrap();
+            match payload.expr(db).expr.clone() {
+                ast::Expr::AnonTuple(t) => assert_eq!(t.elements.len(), 2),
                 _ => panic!("expected tuple payload"),
             }
         }
@@ -242,9 +242,9 @@ fn test_parse_list_multiline() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@[\n@1,\n@2,\n@3\n]"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
-        ast::Expr::List(e) => assert_eq!(e.elements(db).len(), 3),
+        ast::Expr::List(e) => assert_eq!(e.elements.len(), 3),
         _ => panic!("expected list"),
     }
 }
@@ -255,9 +255,9 @@ fn test_parse_tuple_multiline() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("@(\n@true,\n@1\n)"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).expr(db);
+    let expr = ast.expr(db).expr.clone();
     match expr {
-        ast::Expr::AnonTuple(e) => assert_eq!(e.elements(db).len(), 2),
+        ast::Expr::AnonTuple(e) => assert_eq!(e.elements.len(), 2),
         _ => panic!("expected tuple"),
     }
 }

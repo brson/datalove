@@ -164,9 +164,9 @@ pub fn type_check_script_units<'db>(
                 let mut alias_to_path: HashMap<InternedText<'db>, String> = HashMap::new();
                 for statement in script.statements(db) {
                     if let Statement::Require(StmtRequire::Module(req)) = statement {
-                        let import_space = req.import_space(db);
-                        let package_alias = req.package_alias(db);
-                        let module_alias = req.module_alias(db);
+                        let import_space = req.import_space;
+                        let package_alias = req.package_alias;
+                        let module_alias = req.module_alias;
                         let full_path = format!(
                             "{}/{}/{}",
                             import_space.as_str(db),
@@ -180,8 +180,8 @@ pub fn type_check_script_units<'db>(
                 // Process import statements.
                 for statement in script.statements(db) {
                     if let Statement::Import(import) = statement {
-                        let module_alias = import.module_name(db);
-                        let item_name = import.item_name(db);
+                        let module_alias = import.module_name;
+                        let item_name = import.item_name;
 
                         // Look up the full path from the alias.
                         let module_path = alias_to_path.get(&module_alias)
@@ -219,13 +219,13 @@ pub fn type_check_script_units<'db>(
                 for stmt in script.statements(db) {
                     match stmt {
                         Statement::Let(let_stmt) => {
-                            let name = let_stmt.name(db);
+                            let name = let_stmt.name;
                             if let Some(ty) = ctx.variables.get(&name) {
                                 accumulated_vars.insert(name, *ty);
                             }
                         }
                         Statement::Var(var_stmt) => {
-                            let name = var_stmt.name(db);
+                            let name = var_stmt.name;
                             if let Some(ty) = ctx.variables.get(&name) {
                                 accumulated_vars.insert(name, *ty);
                             }
@@ -387,8 +387,8 @@ pub fn type_check_with_module_graph<'db>(
     // Process import statements to populate function signatures.
     for statement in parsed.statements(db) {
         if let Statement::Import(import) = statement {
-            let module_name = import.module_name(db);
-            let item_name = import.item_name(db);
+            let module_name = import.module_name;
+            let item_name = import.item_name;
 
             // Look up the module in the alias map.
             if let Some(&source_module_id) = alias_map.get(&module_name) {
@@ -606,8 +606,8 @@ pub fn typecheck_module_graph<'db>(
 
         for statement in parsed.statements(db) {
             if let Statement::Import(import) = statement {
-                let module_name = import.module_name(db);
-                let item_name = import.item_name(db);
+                let module_name = import.module_name;
+                let item_name = import.item_name;
 
                 if let Some(&source_module_id) = alias_map.get(&module_name) {
                     // Look up the function in pass 1 exports.
@@ -706,9 +706,9 @@ fn build_module_alias_map_for_graph<'db>(
 
     for statement in parsed.statements(db) {
         if let Statement::Require(StmtRequire::Module(req)) = statement {
-            let import_space = req.import_space(db);
-            let package_alias = req.package_alias(db);
-            let module_alias = req.module_alias(db);
+            let import_space = req.import_space;
+            let package_alias = req.package_alias;
+            let module_alias = req.module_alias;
 
             // Build the module path from the require statement.
             let path = format!(
@@ -747,10 +747,10 @@ fn collect_module_exports<'db>(
             let mut param_modes = Vec::new();
             let mut has_error = false;
             for param in params {
-                match convert_type_hint(db, param.type_hint(db)) {
+                match convert_type_hint(db, param.type_hint) {
                     Ok(ty) => {
                         param_types.push(ty);
-                        param_modes.push(param.mode(db));
+                        param_modes.push(param.mode);
                     }
                     Err(_) => {
                         has_error = true;

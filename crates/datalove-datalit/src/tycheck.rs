@@ -243,8 +243,8 @@ fn synthesize<'db>(
 
     // Otherwise, synthesize from the expression.
     let expr_and_heap = expr.expr(db);
-    let heap = expr_and_heap.heap(db);
-    let expr_inner = expr_and_heap.expr(db);
+    let heap = expr_and_heap.heap;
+    let expr_inner = &expr_and_heap.expr;
 
     let ty = match expr_inner {
         // Rule: Syn-Bool
@@ -255,7 +255,7 @@ fn synthesize<'db>(
 
         // Rule: Syn-Int - default to u32 with range check.
         Expr::Int(i) => {
-            let value_str = i.value(db).as_str(db);
+            let value_str = i.value.as_str(db);
             if value_str.parse::<u32>().is_ok() {
                 Type::U32
             } else {
@@ -276,7 +276,7 @@ fn synthesize<'db>(
 
         // Rule: Syn-Hex - default to u32 (most common use case).
         Expr::Hex(h) => {
-            let value_str = h.value(db).as_str(db);
+            let value_str = h.value.as_str(db);
             // Strip 0x/0X prefix and optional leading minus.
             let hex_part = value_str.trim_start_matches('-').trim_start_matches("0x").trim_start_matches("0X");
             if u32::from_str_radix(hex_part, 16).is_ok() && !value_str.starts_with('-') {
@@ -296,10 +296,10 @@ fn synthesize<'db>(
 
         // Rule: Syn-AnonTuple - synthesize tuple by synthesizing each element.
         Expr::AnonTuple(t) => {
-            let elements = t.elements(db);
+            let elements = &t.elements;
             let mut element_types = Vec::new();
             for elem in elements {
-                let elem_type = synthesize(ctx, elem)?;
+                let elem_type = synthesize(ctx, *elem)?;
                 element_types.push(elem_type);
             }
             Type::AnonTuple(TypeAnonTuple { fields: element_types })
@@ -307,11 +307,11 @@ fn synthesize<'db>(
 
         // Rule: Syn-AnonStruct - synthesize struct by synthesizing each field.
         Expr::AnonStruct(s) => {
-            let fields = s.fields(db).clone();
+            let fields = s.fields.clone();
             let mut field_types = Vec::new();
             for field in fields {
-                let field_name = field.name(db);
-                let field_value = field.value(db);
+                let field_name = field.name;
+                let field_value = field.value;
                 let field_type = synthesize(ctx, field_value)?;
                 field_types.push(TypeNamedField { name: field_name, ty: field_type });
             }
@@ -320,7 +320,7 @@ fn synthesize<'db>(
 
         // Rule: Syn-List - synthesize list by synthesizing all elements (must have same type).
         Expr::List(l) => {
-            let elements = l.elements(db);
+            let elements = &l.elements;
             if elements.is_empty() {
                 // T013: Cannot synthesize type for empty list.
                 if let Some(ts) = ctx.get_span(expr) {
@@ -379,7 +379,7 @@ fn synthesize<'db>(
 
         // Rule: Syn-Set - synthesize set by synthesizing all elements (must have same type).
         Expr::Set(s) => {
-            let elements = s.elements(db);
+            let elements = s.elements.clone();
             if elements.is_empty() {
                 // T014: Cannot synthesize type for empty set.
                 if let Some(ts) = ctx.get_span(expr) {
@@ -438,7 +438,7 @@ fn synthesize<'db>(
 
         // Rule: Syn-Map - synthesize map by synthesizing all keys and values (must have same types).
         Expr::Map(m) => {
-            let entries = m.entries(db);
+            let entries = m.entries.clone();
             if entries.is_empty() {
                 // T015: Cannot synthesize type for empty map.
                 if let Some(ts) = ctx.get_span(expr) {
@@ -452,18 +452,18 @@ fn synthesize<'db>(
             }
 
             // Synthesize first entry to get the expected key and value types.
-            let first_entry = entries[0];
-            let first_key_type = synthesize(ctx, first_entry.key(db))?;
-            let first_value_type = synthesize(ctx, first_entry.value(db))?;
+            let first_entry = &entries[0];
+            let first_key_type = synthesize(ctx, first_entry.key)?;
+            let first_value_type = synthesize(ctx, first_entry.value)?;
 
             // Check remaining entries against first types.
             for entry in &entries[1..] {
-                let key_type = synthesize(ctx, entry.key(db))?;
-                let value_type = synthesize(ctx, entry.value(db))?;
+                let key_type = synthesize(ctx, entry.key)?;
+                let value_type = synthesize(ctx, entry.value)?;
 
                 if !types_equivalent(db, first_key_type.ty(db), key_type.ty(db)) {
                     // T020: Map key type mismatch.
-                    if let Some(ts) = ctx.get_span(entry.key(db)) {
+                    if let Some(ts) = ctx.get_span(entry.key) {
                         let msg = format!("mismatched key types in map");
                         DiagnosticBuilder::error(db, &msg)
                             .code("T020")
@@ -480,7 +480,7 @@ fn synthesize<'db>(
                 }
                 if !heaps_compatible(first_key_type.heap(db), key_type.heap(db)) {
                     // T035: Map key heap mismatch.
-                    if let Some(ts) = ctx.get_span(entry.key(db)) {
+                    if let Some(ts) = ctx.get_span(entry.key) {
                         DiagnosticBuilder::error(db, "heap allocation mismatch in map keys")
                             .code("T035")
                             .primary_label(ts.clone(), &format!("expected {}, found {}",
@@ -497,7 +497,7 @@ fn synthesize<'db>(
 
                 if !types_equivalent(db, first_value_type.ty(db), value_type.ty(db)) {
                     // T021: Map value type mismatch.
-                    if let Some(ts) = ctx.get_span(entry.value(db)) {
+                    if let Some(ts) = ctx.get_span(entry.value) {
                         let msg = format!("mismatched value types in map");
                         DiagnosticBuilder::error(db, &msg)
                             .code("T021")
@@ -514,7 +514,7 @@ fn synthesize<'db>(
                 }
                 if !heaps_compatible(first_value_type.heap(db), value_type.heap(db)) {
                     // T036: Map value heap mismatch.
-                    if let Some(ts) = ctx.get_span(entry.value(db)) {
+                    if let Some(ts) = ctx.get_span(entry.value) {
                         DiagnosticBuilder::error(db, "heap allocation mismatch in map values")
                             .code("T036")
                             .primary_label(ts.clone(), &format!("expected {}, found {}",
@@ -535,14 +535,14 @@ fn synthesize<'db>(
 
         // Rule: Syn-Some - synthesize Option type by synthesizing inner.
         Expr::Some(s) => {
-            let payload = s.payload(db);
+            let payload = s.payload;
             let inner_type = synthesize(ctx, payload)?;
             Type::Option(TypeOption { inner_type })
         }
 
         // Rule: Syn-Ok - synthesize Result type by synthesizing inner.
         Expr::Ok(o) => {
-            let payload = o.payload(db);
+            let payload = o.payload;
             let inner_type = synthesize(ctx, payload)?;
             Type::Result(TypeResult { inner_type })
         }
@@ -559,7 +559,7 @@ fn synthesize<'db>(
         | Expr::Er(_) => {
             // T016: Cannot synthesize type for anonymous enum, None, or Er.
             if let Some(ts) = ctx.get_span(expr) {
-                let msg = match expr_and_heap.expr(db) {
+                let msg = match expr_and_heap.expr.clone() {
                     Expr::None => "cannot infer type for None value",
                     Expr::Er(_) => "cannot infer type for Er value",
                     _ => "cannot infer type for anonymous enum",
@@ -575,8 +575,8 @@ fn synthesize<'db>(
 
         // Rule: Syn-Tensor - synthesize tensor by synthesizing all elements (must have same type).
         Expr::Tensor(t) => {
-            let shape = t.shape(db);
-            let elements = t.elements(db);
+            let shape = t.shape.clone();
+            let elements = t.elements.clone();
 
             if elements.is_empty() {
                 // T050: Cannot synthesize type for empty tensor.
@@ -678,8 +678,8 @@ fn check<'db>(
     let db = ctx.db;
 
     let expr_and_heap = expr.expr(db);
-    let actual_heap = expr_and_heap.heap(db);
-    let expr_inner = expr_and_heap.expr(db);
+    let actual_heap = expr_and_heap.heap;
+    let expr_inner = expr_and_heap.expr.clone();
     let expected_type = expected.ty(db);
 
     // Extract the expected heap for the heap compatibility check.
@@ -718,22 +718,22 @@ fn check<'db>(
 
         // Rule: Check-Some - explicit some constructor
         (Expr::Some(s), Type::Option(opt)) => {
-            let payload = s.payload(db);
+            let payload = s.payload;
             check(ctx, payload, opt.inner_type)
         }
 
         // Rule: Check-Ok - explicit ok constructor
         (Expr::Ok(o), Type::Result(res)) => {
-            let payload = o.payload(db);
+            let payload = o.payload;
             check(ctx, payload, res.inner_type)
         }
 
         // Rule: Check-Er - explicit er constructor
         (Expr::Er(e), Type::Result(_)) => {
             // Check that the payload is a valid error expression.
-            let payload = e.payload(db);
+            let payload = e.payload;
             let payload_expr = payload.expr(db);
-            match payload_expr.expr(db) {
+            match &payload_expr.expr {
                 Expr::Error(_) => Ok(()),
                 Expr::Data(_) => Ok(()), // data can be used as error payload
                 _ => {
@@ -769,7 +769,7 @@ fn check<'db>(
             let hinted_type_inner = hinted_type.ty(db);
 
             // First check against the hinted type to ensure the literal is valid.
-            let expr_without_hint = ExprFull::new(db, None, *expr_and_heap);
+            let expr_without_hint = ExprFull::new(db, None, expr_and_heap.clone());
             check(ctx, expr_without_hint, hinted_type)?;
 
             // Now check if the hinted type matches or can widen to the expected type.
@@ -800,7 +800,7 @@ fn check<'db>(
         // Rule: Check-Subsume - try synthesis first.
         // IMPORTANT: Synthesize from the inner expression without type hint to avoid infinite recursion.
         (Expr::True | Expr::False | Expr::String(_), _) => {
-            let expr_without_hint = ExprFull::new(db, None, *expr_and_heap);
+            let expr_without_hint = ExprFull::new(db, None, expr_and_heap.clone());
             let synthesized = synthesize(ctx, expr_without_hint)?;
             if !types_equivalent(db, synthesized.ty(db), expected_type) {
                 // T022: Type mismatch for primitive literal.
@@ -823,7 +823,7 @@ fn check<'db>(
 
         // Rule: Check-Int
         (Expr::Int(i), Type::U8) => {
-            let value_str = i.value(db).as_str(db);
+            let value_str = i.value.as_str(db);
             if value_str.parse::<u8>().is_ok() {
                 Ok(())
             } else {
@@ -840,7 +840,7 @@ fn check<'db>(
         }
 
         (Expr::Int(i), Type::I8) => {
-            let value_str = i.value(db).as_str(db);
+            let value_str = i.value.as_str(db);
             if value_str.parse::<i8>().is_ok() {
                 Ok(())
             } else {
@@ -857,7 +857,7 @@ fn check<'db>(
         }
 
         (Expr::Int(i), Type::U16) => {
-            let value_str = i.value(db).as_str(db);
+            let value_str = i.value.as_str(db);
             if value_str.parse::<u16>().is_ok() {
                 Ok(())
             } else {
@@ -874,7 +874,7 @@ fn check<'db>(
         }
 
         (Expr::Int(i), Type::I16) => {
-            let value_str = i.value(db).as_str(db);
+            let value_str = i.value.as_str(db);
             if value_str.parse::<i16>().is_ok() {
                 Ok(())
             } else {
@@ -891,7 +891,7 @@ fn check<'db>(
         }
 
         (Expr::Int(i), Type::U32) => {
-            let value_str = i.value(db).as_str(db);
+            let value_str = i.value.as_str(db);
             if value_str.parse::<u32>().is_ok() {
                 Ok(())
             } else {
@@ -908,7 +908,7 @@ fn check<'db>(
         }
 
         (Expr::Int(i), Type::I32) => {
-            let value_str = i.value(db).as_str(db);
+            let value_str = i.value.as_str(db);
             if value_str.parse::<i32>().is_ok() {
                 Ok(())
             } else {
@@ -925,7 +925,7 @@ fn check<'db>(
         }
 
         (Expr::Int(i), Type::U64) => {
-            let value_str = i.value(db).as_str(db);
+            let value_str = i.value.as_str(db);
             if value_str.parse::<u64>().is_ok() {
                 Ok(())
             } else {
@@ -942,7 +942,7 @@ fn check<'db>(
         }
 
         (Expr::Int(i), Type::I64) => {
-            let value_str = i.value(db).as_str(db);
+            let value_str = i.value.as_str(db);
             if value_str.parse::<i64>().is_ok() {
                 Ok(())
             } else {
@@ -966,7 +966,7 @@ fn check<'db>(
 
         // Rule: Check-Hex - hex literals can check against integer types or f32 (bit pattern).
         (Expr::Hex(h), Type::U8) => {
-            let value_str = h.value(db).as_str(db);
+            let value_str = h.value.as_str(db);
             let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
             if u8::from_str_radix(hex_part, 16).is_ok() {
                 Ok(())
@@ -982,7 +982,7 @@ fn check<'db>(
             }
         }
         (Expr::Hex(h), Type::U16) => {
-            let value_str = h.value(db).as_str(db);
+            let value_str = h.value.as_str(db);
             let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
             if u16::from_str_radix(hex_part, 16).is_ok() {
                 Ok(())
@@ -998,7 +998,7 @@ fn check<'db>(
             }
         }
         (Expr::Hex(h), Type::U32) => {
-            let value_str = h.value(db).as_str(db);
+            let value_str = h.value.as_str(db);
             let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
             if u32::from_str_radix(hex_part, 16).is_ok() {
                 Ok(())
@@ -1014,7 +1014,7 @@ fn check<'db>(
             }
         }
         (Expr::Hex(h), Type::U64) => {
-            let value_str = h.value(db).as_str(db);
+            let value_str = h.value.as_str(db);
             let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
             if u64::from_str_radix(hex_part, 16).is_ok() {
                 Ok(())
@@ -1031,7 +1031,7 @@ fn check<'db>(
         (Expr::Hex(_), Type::Int) => Ok(()),
         // Hex as f32 bit pattern - any 32-bit hex value is valid.
         (Expr::Hex(h), Type::F32) => {
-            let value_str = h.value(db).as_str(db);
+            let value_str = h.value.as_str(db);
             let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
             if u32::from_str_radix(hex_part, 16).is_ok() {
                 Ok(())
@@ -1048,7 +1048,7 @@ fn check<'db>(
         }
         // Hex as f64 bit pattern - any 64-bit hex value is valid.
         (Expr::Hex(h), Type::F64) => {
-            let value_str = h.value(db).as_str(db);
+            let value_str = h.value.as_str(db);
             let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
             if u64::from_str_radix(hex_part, 16).is_ok() {
                 Ok(())
@@ -1066,7 +1066,7 @@ fn check<'db>(
 
         // Rule: Check-AnonTuple
         (Expr::AnonTuple(t), Type::AnonTuple(expected_tuple)) => {
-            let elements = t.elements(db);
+            let elements = t.elements.clone();
             let expected_fields = expected_tuple.fields.clone();
 
             if elements.len() != expected_fields.len() {
@@ -1093,7 +1093,7 @@ fn check<'db>(
 
         // Rule: Check-AnonStruct
         (Expr::AnonStruct(s), Type::AnonStruct(expected_struct)) => {
-            let fields = s.fields(db).clone();
+            let fields = s.fields.clone();
             let expected_fields = expected_struct.fields.clone();
 
             if fields.len() != expected_fields.len() {
@@ -1112,7 +1112,7 @@ fn check<'db>(
             }
 
             for (field, expected_field) in fields.iter().zip(expected_fields.iter()) {
-                let field_name = field.name(db);
+                let field_name = field.name;
                 let expected_name = expected_field.name;
 
                 if field_name != expected_name {
@@ -1128,7 +1128,7 @@ fn check<'db>(
                     return Err(TypeError::FieldOrderMismatch);
                 }
 
-                check(ctx, field.value(db), expected_field.ty)?;
+                check(ctx, field.value, expected_field.ty)?;
             }
 
             Ok(())
@@ -1160,13 +1160,13 @@ fn check<'db>(
             }
 
             // Now check the expression without hint against the expected type.
-            let expr_without_hint = ExprFull::new(db, None, *expr_and_heap);
+            let expr_without_hint = ExprFull::new(db, None, expr_and_heap.clone());
             check(ctx, expr_without_hint, expected)
         }
 
         // Rule: Check-AnonEnum
         (Expr::AnonEnum(e), Type::AnonEnum(expected_enum)) => {
-            let variant_name = e.variant_name(db);
+            let variant_name = e.variant_name;
             let expected_variants = expected_enum.variants.clone();
 
             let expected_variant = expected_variants
@@ -1183,7 +1183,7 @@ fn check<'db>(
                     TypeError::VariantNotFound(variant_name.as_str(db).to_string())
                 })?;
 
-            match (e.payload(db), expected_variant.payload) {
+            match (e.payload, expected_variant.payload) {
                 (Some(payload), Some(expected_payload)) => {
                     check(ctx, payload, expected_payload)
                 }
@@ -1219,7 +1219,7 @@ fn check<'db>(
 
         // Rule: Check-List
         (Expr::List(l), Type::List(expected_list)) => {
-            let elements = l.elements(db);
+            let elements = l.elements.clone();
             let element_type = expected_list.element_type;
 
             for elem in elements {
@@ -1231,13 +1231,13 @@ fn check<'db>(
 
         // Rule: Check-Map
         (Expr::Map(m), Type::Map(expected_map)) => {
-            let entries = m.entries(db);
+            let entries = m.entries.clone();
             let key_type = expected_map.key_type;
             let value_type = expected_map.value_type;
 
             for entry in entries {
-                check(ctx, entry.key(db), key_type)?;
-                check(ctx, entry.value(db), value_type)?;
+                check(ctx, entry.key, key_type)?;
+                check(ctx, entry.value, value_type)?;
             }
 
             Ok(())
@@ -1245,7 +1245,7 @@ fn check<'db>(
 
         // Rule: Check-Set
         (Expr::Set(s), Type::Set(expected_set)) => {
-            let elements = s.elements(db);
+            let elements = s.elements.clone();
             let element_type = expected_set.element_type;
 
             for elem in elements {
@@ -1257,8 +1257,8 @@ fn check<'db>(
 
         // Rule: Check-Tensor
         (Expr::Tensor(t), Type::Tensor(expected_tensor)) => {
-            let shape = t.shape(db);
-            let elements = t.elements(db);
+            let shape = t.shape.clone();
+            let elements = t.elements.clone();
             let element_type = expected_tensor.element_type;
 
             // Verify rank matches.
@@ -1312,7 +1312,7 @@ fn check<'db>(
         // Otherwise, try subsumption.
         _ => {
             // Synthesize from the inner expression without type hint to avoid infinite recursion.
-            let ty_without_hint = ExprFull::new(db, None, *expr_and_heap);
+            let ty_without_hint = ExprFull::new(db, None, expr_and_heap.clone());
             let synthesized = synthesize(ctx, ty_without_hint)?;
             if types_equivalent(db, synthesized.ty(db), expected_type) {
                 Ok(())

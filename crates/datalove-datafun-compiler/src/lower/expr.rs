@@ -116,7 +116,7 @@ pub fn lower_expression<'db>(
         ExprFunKind::Int(lit) => {
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type.clone());
-            let text = lit.value(ctx.db).text(ctx.db);
+            let text = lit.value.text(ctx.db);
             let const_value = parse_int_const(text, &result_type)
                 .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
             ctx.emit(Instruction::Const { dest, value: const_value });
@@ -125,7 +125,7 @@ pub fn lower_expression<'db>(
         ExprFunKind::Hex(lit) => {
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type.clone());
-            let text = lit.value(ctx.db).text(ctx.db);
+            let text = lit.value.text(ctx.db);
             let hex_str = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")).unwrap_or(text);
             let const_value = parse_hex_const(hex_str, &result_type)
                 .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
@@ -160,7 +160,7 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::Some(some_expr) => {
-            let inner_id = lower_expression(ctx, some_expr.payload(ctx.db))?;
+            let inner_id = lower_expression(ctx, some_expr.payload)?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::WrapSome {
@@ -170,7 +170,7 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::Ok(ok_expr) => {
-            let inner_id = lower_expression(ctx, ok_expr.payload(ctx.db))?;
+            let inner_id = lower_expression(ctx, ok_expr.payload)?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::WrapOk {
@@ -180,7 +180,7 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::Er(er_expr) => {
-            let inner_id = lower_expression(ctx, er_expr.payload(ctx.db))?;
+            let inner_id = lower_expression(ctx, er_expr.payload)?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::WrapErr {
@@ -196,7 +196,7 @@ pub fn lower_expression<'db>(
             lower_try_result(ctx, expr, try_expr)
         }
         ExprFunKind::Tuple(tuple) => {
-            let elements: Result<Vec<_>, _> = tuple.elements(ctx.db)
+            let elements: Result<Vec<_>, _> = tuple.elements
                 .iter()
                 .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
                 .collect();
@@ -211,7 +211,7 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::AnonTuple(tuple) => {
-            let elements: Result<Vec<_>, _> = tuple.elements(ctx.db)
+            let elements: Result<Vec<_>, _> = tuple.elements
                 .iter()
                 .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
                 .collect();
@@ -226,7 +226,7 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::List(list) => {
-            let elements: Result<Vec<_>, _> = list.elements(ctx.db)
+            let elements: Result<Vec<_>, _> = list.elements
                 .iter()
                 .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
                 .collect();
@@ -239,7 +239,7 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::Set(set) => {
-            let elements: Result<Vec<_>, _> = set.elements(ctx.db)
+            let elements: Result<Vec<_>, _> = set.elements
                 .iter()
                 .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
                 .collect();
@@ -252,11 +252,11 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::Map(map) => {
-            let entries: Result<Vec<_>, _> = map.entries(ctx.db)
+            let entries: Result<Vec<_>, _> = map.entries
                 .iter()
                 .map(|e| {
-                    let k = lower_expression(ctx, e.key(ctx.db))?;
-                    let v = lower_expression(ctx, e.value(ctx.db))?;
+                    let k = lower_expression(ctx, e.key)?;
+                    let v = lower_expression(ctx, e.value)?;
                     Ok((Operand::Value(k), Operand::Value(v)))
                 })
                 .collect();
@@ -269,7 +269,7 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::Error(err_expr) => {
-            let inner_id = lower_expression(ctx, err_expr.value(ctx.db))?;
+            let inner_id = lower_expression(ctx, err_expr.value)?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::ErrorFrom {
@@ -279,7 +279,7 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::Data(data_expr) => {
-            let inner_id = lower_expression(ctx, data_expr.value(ctx.db))?;
+            let inner_id = lower_expression(ctx, data_expr.value)?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::DataFrom {
@@ -292,7 +292,7 @@ pub fn lower_expression<'db>(
             Err(LowerError::NotImplemented("Float".to_string()))
         }
         ExprFunKind::String(string_expr) => {
-            let raw = string_expr.value(ctx.db).as_str(ctx.db);
+            let raw = string_expr.value.as_str(ctx.db);
             // Strip quotes if present.
             let content = if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
                 &raw[1..raw.len()-1]
@@ -319,9 +319,9 @@ pub fn lower_expression<'db>(
             // Lower all field expressions and collect by name.
             let mut field_values: std::collections::HashMap<String, ValueId> =
                 std::collections::HashMap::new();
-            for field in struct_expr.fields(ctx.db).iter() {
-                let name = field.name(ctx.db).text(ctx.db).to_string();
-                let value = lower_expression(ctx, field.value(ctx.db))?;
+            for field in struct_expr.fields.iter() {
+                let name = field.name.text(ctx.db).to_string();
+                let value = lower_expression(ctx, field.value)?;
                 field_values.insert(name, value);
             }
 
@@ -345,7 +345,7 @@ pub fn lower_expression<'db>(
         ExprFunKind::AnonEnum(enum_expr) => {
             // Get the result type - this is IrType::Enum with sorted variants.
             let result_type = ctx.expr_type(expr);
-            let variant_name = enum_expr.variant_name(ctx.db).text(ctx.db).to_string();
+            let variant_name = enum_expr.variant_name.text(ctx.db).to_string();
 
             // Find the variant index in the sorted list.
             let variant_index = match &result_type {
@@ -362,7 +362,7 @@ pub fn lower_expression<'db>(
             };
 
             // Lower payload if present.
-            let payload = enum_expr.payload(ctx.db)
+            let payload = enum_expr.payload
                 .map(|p| lower_expression(ctx, p))
                 .transpose()?
                 .map(Operand::Value);
@@ -376,8 +376,8 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::Tensor(tensor) => {
-            let shape = tensor.shape(ctx.db).clone();
-            let elements: Result<Vec<_>, _> = tensor.elements(ctx.db)
+            let shape = tensor.shape.clone();
+            let elements: Result<Vec<_>, _> = tensor.elements
                 .iter()
                 .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
                 .collect();
@@ -404,16 +404,16 @@ fn lower_binop<'db>(
 ) -> Result<ValueId, LowerError> {
     // Use lower_operand for borrowing semantics - operands are read by
     // reference, not consumed.
-    let mut lhs = lower_operand(ctx, binop.lhs(ctx.db))?;
-    let mut rhs = lower_operand(ctx, binop.rhs(ctx.db))?;
+    let mut lhs = lower_operand(ctx, binop.lhs)?;
+    let mut rhs = lower_operand(ctx, binop.rhs)?;
 
-    let ast_op = binop.op(ctx.db);
+    let ast_op = binop.op;
     let result_type = ctx.expr_type(expr);
 
     // Check if we need to widen fixed-width operands to Int.
     // This happens for bare arithmetic (+, -, *) on fixed-width ints.
-    let lhs_type = ctx.expr_type(binop.lhs(ctx.db));
-    let rhs_type = ctx.expr_type(binop.rhs(ctx.db));
+    let lhs_type = ctx.expr_type(binop.lhs);
+    let rhs_type = ctx.expr_type(binop.rhs);
     let needs_widening = matches!(result_type, IrType::Int)
         && is_fixed_width_int(&lhs_type)
         && is_fixed_width_int(&rhs_type);
@@ -494,11 +494,11 @@ fn lower_unaryop<'db>(
     unary: ast::ExprUnaryOp<'db>,
 ) -> Result<ValueId, LowerError> {
     // Use lower_operand for borrowing semantics.
-    let operand = lower_operand(ctx, unary.operand(ctx.db))?;
+    let operand = lower_operand(ctx, unary.operand)?;
     let result_type = ctx.expr_type(expr);
     let dest = ctx.fresh_value(result_type);
 
-    match unary.op(ctx.db) {
+    match unary.op {
         ast::UnaryOp::Neg => {
             ctx.emit(Instruction::UnaryOp {
                 dest,
@@ -803,7 +803,7 @@ fn lower_try_option<'db>(
     expr: ExprFun<'db>,
     try_expr: ast::ExprTryOption<'db>,
 ) -> Result<ValueId, LowerError> {
-    let src_id = lower_expression(ctx, try_expr.operand(ctx.db))?;
+    let src_id = lower_expression(ctx, try_expr.operand)?;
     let result_type = ctx.expr_type(expr);
     let dest = ctx.fresh_value(result_type.clone());
     let is_some = ctx.fresh_value(IrType::Bool);
@@ -854,7 +854,7 @@ fn lower_try_result<'db>(
     expr: ExprFun<'db>,
     try_expr: ast::ExprTryResult<'db>,
 ) -> Result<ValueId, LowerError> {
-    let src_id = lower_expression(ctx, try_expr.operand(ctx.db))?;
+    let src_id = lower_expression(ctx, try_expr.operand)?;
     let result_type = ctx.expr_type(expr);
     let ok_dest = ctx.fresh_value(result_type.clone());
     let err_dest = ctx.fresh_value(IrType::Error);

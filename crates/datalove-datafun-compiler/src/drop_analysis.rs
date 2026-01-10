@@ -458,50 +458,50 @@ impl<'db> AnalysisCtx<'db> {
             ExprFunKind::TryOption(_) | ExprFunKind::TryResult(_) => true,
             ExprFunKind::BinOp(binop) => {
                 let op_may_return = matches!(
-                    binop.op(self.db),
+                    binop.op,
                     BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional |
                     BinOp::AddChecked | BinOp::SubChecked | BinOp::MulChecked | BinOp::DivChecked
                 );
                 op_may_return
-                    || self.expr_may_early_return(binop.lhs(self.db))
-                    || self.expr_may_early_return(binop.rhs(self.db))
+                    || self.expr_may_early_return(binop.lhs)
+                    || self.expr_may_early_return(binop.rhs)
             }
             ExprFunKind::UnaryOp(unary) => {
                 let op_may_return = matches!(
-                    unary.op(self.db),
+                    unary.op,
                     UnaryOp::NegOptional | UnaryOp::NegResult
                 );
-                op_may_return || self.expr_may_early_return(unary.operand(self.db))
+                op_may_return || self.expr_may_early_return(unary.operand)
             }
             ExprFunKind::FunctionCall(call) => {
                 call.args(self.db).iter().any(|arg| self.expr_may_early_return(*arg))
             }
             ExprFunKind::Tuple(tuple) => {
-                tuple.elements(self.db).iter().any(|elem| self.expr_may_early_return(*elem))
+                tuple.elements.iter().any(|elem| self.expr_may_early_return(*elem))
             }
             ExprFunKind::List(list) => {
-                list.elements(self.db).iter().any(|elem| self.expr_may_early_return(*elem))
+                list.elements.iter().any(|elem| self.expr_may_early_return(*elem))
             }
             ExprFunKind::Set(set) => {
-                set.elements(self.db).iter().any(|elem| self.expr_may_early_return(*elem))
+                set.elements.iter().any(|elem| self.expr_may_early_return(*elem))
             }
             ExprFunKind::Map(map) => {
-                map.entries(self.db).iter().any(|entry| {
-                    self.expr_may_early_return(entry.key(self.db))
-                        || self.expr_may_early_return(entry.value(self.db))
+                map.entries.iter().any(|entry| {
+                    self.expr_may_early_return(entry.key)
+                        || self.expr_may_early_return(entry.value)
                 })
             }
             ExprFunKind::AnonTuple(tuple) => {
-                tuple.elements(self.db).iter().any(|elem| self.expr_may_early_return(*elem))
+                tuple.elements.iter().any(|elem| self.expr_may_early_return(*elem))
             }
             ExprFunKind::AnonStruct(s) => {
-                s.fields(self.db).iter().any(|f| self.expr_may_early_return(f.value(self.db)))
+                s.fields.iter().any(|f| self.expr_may_early_return(f.value))
             }
-            ExprFunKind::Some(s) => self.expr_may_early_return(s.payload(self.db)),
-            ExprFunKind::Ok(o) => self.expr_may_early_return(o.payload(self.db)),
-            ExprFunKind::Er(e) => self.expr_may_early_return(e.payload(self.db)),
-            ExprFunKind::Data(d) => self.expr_may_early_return(d.value(self.db)),
-            ExprFunKind::Error(e) => self.expr_may_early_return(e.value(self.db)),
+            ExprFunKind::Some(s) => self.expr_may_early_return(s.payload),
+            ExprFunKind::Ok(o) => self.expr_may_early_return(o.payload),
+            ExprFunKind::Er(e) => self.expr_may_early_return(e.payload),
+            ExprFunKind::Data(d) => self.expr_may_early_return(d.value),
+            ExprFunKind::Error(e) => self.expr_may_early_return(e.value),
             _ => false,
         }
     }
@@ -542,13 +542,13 @@ impl<'db> AnalysisCtx<'db> {
             }
             ExprFunKind::BinOp(binop) => {
                 // Binary ops read their operands, not consume them.
-                self.analyze_expr_moves(binop.lhs(self.db), false);
-                self.analyze_expr_moves(binop.rhs(self.db), false);
+                self.analyze_expr_moves(binop.lhs, false);
+                self.analyze_expr_moves(binop.rhs, false);
                 None
             }
             ExprFunKind::UnaryOp(unary) => {
                 // Unary ops read their operand, not consume it.
-                self.analyze_expr_moves(unary.operand(self.db), false);
+                self.analyze_expr_moves(unary.operand, false);
                 None
             }
             ExprFunKind::FunctionCall(call) => {
@@ -560,7 +560,7 @@ impl<'db> AnalysisCtx<'db> {
                     .map(|target| {
                         target.func(self.db).params(self.db)
                             .iter()
-                            .map(|p| p.mode(self.db))
+                            .map(|p| p.mode)
                             .collect()
                     })
                     .unwrap_or_default();
@@ -595,85 +595,85 @@ impl<'db> AnalysisCtx<'db> {
             }
             ExprFunKind::Tuple(tuple) => {
                 // Tuple elements are consumed.
-                for elem in tuple.elements(self.db) {
+                for elem in &tuple.elements {
                     self.analyze_expr_moves(*elem, true);
                 }
                 None
             }
             ExprFunKind::TryOption(try_opt) => {
                 // Try operand is consumed.
-                self.analyze_expr_moves(try_opt.operand(self.db), true);
+                self.analyze_expr_moves(try_opt.operand, true);
                 None
             }
             ExprFunKind::TryResult(try_res) => {
                 // Try operand is consumed.
-                self.analyze_expr_moves(try_res.operand(self.db), true);
+                self.analyze_expr_moves(try_res.operand, true);
                 None
             }
             ExprFunKind::List(list) => {
                 // List elements are consumed.
-                for elem in list.elements(self.db) {
+                for elem in &list.elements {
                     self.analyze_expr_moves(*elem, true);
                 }
                 None
             }
             ExprFunKind::Set(set) => {
                 // Set elements are consumed.
-                for elem in set.elements(self.db) {
+                for elem in &set.elements {
                     self.analyze_expr_moves(*elem, true);
                 }
                 None
             }
             ExprFunKind::Map(map) => {
                 // Map entries are consumed.
-                for entry in map.entries(self.db) {
-                    self.analyze_expr_moves(entry.key(self.db), true);
-                    self.analyze_expr_moves(entry.value(self.db), true);
+                for entry in &map.entries {
+                    self.analyze_expr_moves(entry.key, true);
+                    self.analyze_expr_moves(entry.value, true);
                 }
                 None
             }
             ExprFunKind::AnonTuple(tuple) => {
                 // Tuple elements are consumed.
-                for elem in tuple.elements(self.db) {
+                for elem in &tuple.elements {
                     self.analyze_expr_moves(*elem, true);
                 }
                 None
             }
             ExprFunKind::AnonStruct(s) => {
                 // Struct fields are consumed.
-                for field in s.fields(self.db) {
-                    self.analyze_expr_moves(field.value(self.db), true);
+                for field in &s.fields {
+                    self.analyze_expr_moves(field.value, true);
                 }
                 None
             }
             ExprFunKind::Some(s) => {
                 // Payload is consumed.
-                self.analyze_expr_moves(s.payload(self.db), true);
+                self.analyze_expr_moves(s.payload, true);
                 None
             }
             ExprFunKind::Ok(o) => {
                 // Payload is consumed.
-                self.analyze_expr_moves(o.payload(self.db), true);
+                self.analyze_expr_moves(o.payload, true);
                 None
             }
             ExprFunKind::Er(e) => {
                 // Payload is consumed.
-                self.analyze_expr_moves(e.payload(self.db), true);
+                self.analyze_expr_moves(e.payload, true);
                 None
             }
             ExprFunKind::Data(d) => {
                 // Value is consumed.
-                self.analyze_expr_moves(d.value(self.db), true);
+                self.analyze_expr_moves(d.value, true);
                 None
             }
             ExprFunKind::Error(e) => {
                 // Value is consumed.
-                self.analyze_expr_moves(e.value(self.db), true);
+                self.analyze_expr_moves(e.value, true);
                 None
             }
             ExprFunKind::AnonEnum(e) => {
                 // Payload is consumed.
-                if let Some(payload) = e.payload(self.db) {
+                if let Some(payload) = e.payload {
                     self.analyze_expr_moves(payload, true);
                 }
                 None
@@ -698,9 +698,9 @@ pub fn analyze_function<'db>(
 
     // Register parameters as bindings.
     for param in func.params(db) {
-        let name = param.name(db).text(db).to_string();
-        let ty = IrType::from_type_hint(db, &param.type_hint(db));
-        ctx.alloc_binding(name, ty, false, Some(param.mode(db)));
+        let name = param.name.text(db).to_string();
+        let ty = IrType::from_type_hint(db, &param.type_hint);
+        ctx.alloc_binding(name, ty, false, Some(param.mode));
     }
 
     // Analyze function body.
@@ -813,22 +813,22 @@ fn analyze_statements<'db>(
 
         match stmt {
             Statement::Let(let_stmt) => {
-                analyze_let(ctx, *let_stmt, i);
+                analyze_let(ctx, let_stmt, i);
             }
             Statement::Var(var_stmt) => {
-                analyze_var(ctx, *var_stmt, i);
+                analyze_var(ctx, var_stmt, i);
             }
             Statement::Set(set_stmt) => {
-                analyze_set(ctx, *set_stmt, i);
+                analyze_set(ctx, set_stmt, i);
             }
             Statement::Ret(ret_stmt) => {
-                analyze_return(ctx, *ret_stmt, i);
+                analyze_return(ctx, ret_stmt, i);
             }
             Statement::If(if_stmt) => {
-                analyze_if(ctx, *if_stmt, i);
+                analyze_if(ctx, if_stmt, i);
             }
             Statement::Loop(loop_stmt) => {
-                analyze_loop(ctx, *loop_stmt, i);
+                analyze_loop(ctx, loop_stmt, i);
             }
             Statement::Break(_) => {
                 // Drops before break: all live bindings in loop body.
@@ -849,7 +849,7 @@ fn analyze_statements<'db>(
             }
             Statement::DebugLog(stmt) => {
                 // Debuglog borrows its value, so analyze the expression but don't consume it.
-                ctx.analyze_expr_moves(stmt.value(ctx.db), false);
+                ctx.analyze_expr_moves(stmt.value, false);
             }
             Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
                 // No drops.
@@ -858,8 +858,8 @@ fn analyze_statements<'db>(
     }
 }
 
-fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLet<'db>, stmt_idx: usize) {
-    let expr = stmt.value(ctx.db);
+fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLet<'db>, stmt_idx: usize) {
+    let expr = stmt.value;
     let may_early_return = ctx.expr_may_early_return(expr);
 
     // Analyze moves in the expression. The expression result is consumed by the binding.
@@ -875,13 +875,13 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLet<'db>, stmt_idx: us
     }
 
     // Create binding for the let.
-    let name = stmt.name(ctx.db).text(ctx.db).to_string();
+    let name = stmt.name.text(ctx.db).to_string();
     let ty = ctx.expr_type(expr);
     ctx.alloc_binding(name, ty, false, None);
 }
 
-fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtVar<'db>, stmt_idx: usize) {
-    let expr = stmt.value(ctx.db);
+fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtVar<'db>, stmt_idx: usize) {
+    let expr = stmt.value;
     let may_early_return = ctx.expr_may_early_return(expr);
 
     // Analyze moves in the expression. The expression result is consumed by the binding.
@@ -897,13 +897,13 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtVar<'db>, stmt_idx: us
     }
 
     // Create binding for the var (as a slot).
-    let name = stmt.name(ctx.db).text(ctx.db).to_string();
+    let name = stmt.name.text(ctx.db).to_string();
     let ty = ctx.expr_type(expr);
     ctx.alloc_binding(name, ty, true, None);
 }
 
-fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtSet<'db>, stmt_idx: usize) {
-    let expr = stmt.value(ctx.db);
+fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: usize) {
+    let expr = stmt.value;
     let may_early_return = ctx.expr_may_early_return(expr);
 
     // Analyze moves in the expression. The value is moved into the slot.
@@ -919,7 +919,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtSet<'db>, stmt_idx: us
     }
 
     // Set doesn't create a new binding, but the slot is now live again.
-    let name = stmt.name(ctx.db).text(ctx.db);
+    let name = stmt.name.text(ctx.db);
     if let Some(id) = ctx.lookup(name) {
         ctx.set_state(id, BindingState::Live);
 
@@ -930,7 +930,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtSet<'db>, stmt_idx: us
     }
 }
 
-fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtRet<'db>, stmt_idx: usize) {
+fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtRet<'db>, stmt_idx: usize) {
     // Check that all Out params are initialized before return.
     for (idx, info) in ctx.bindings.iter().enumerate() {
         if info.param_mode == Some(ParamMode::Out) {
@@ -942,12 +942,12 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtRet<'db>, stmt_idx:
         }
     }
 
-    let may_early_return = stmt.value(ctx.db)
+    let may_early_return = stmt.value
         .map(|expr| ctx.expr_may_early_return(expr))
         .unwrap_or(false);
 
     // Analyze moves in return value if any. The return value is consumed.
-    if let Some(expr) = stmt.value(ctx.db) {
+    if let Some(expr) = stmt.value {
         ctx.analyze_expr_moves(expr, true);
     }
 
@@ -972,11 +972,11 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtRet<'db>, stmt_idx:
     }
 }
 
-fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usize) {
+fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usize) {
     // Analyze condition. For regular bool conditions, it's just read.
     // For Option/Result conditions with bindings, it's consumed by the destructure.
-    let has_binding = stmt.then_binding(ctx.db).is_some();
-    ctx.analyze_expr_moves(stmt.condition(ctx.db), has_binding);
+    let has_binding = stmt.then_binding.is_some();
+    ctx.analyze_expr_moves(stmt.condition, has_binding);
 
     // Save state before branches.
     let state_before = ctx.scope_stack.last()
@@ -990,9 +990,9 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
     ctx.enter_scope(ScopeKind::IfThen);
 
     // If there's a then-binding (if-let), create it.
-    if let Some(binding_name) = stmt.then_binding(ctx.db) {
+    if let Some(binding_name) = stmt.then_binding {
         let name = binding_name.text(ctx.db).to_string();
-        let ty = ctx.expr_type(stmt.condition(ctx.db));
+        let ty = ctx.expr_type(stmt.condition);
         // The binding type depends on the condition type (unwrap Option/Result).
         let inner_ty = match &ty {
             IrType::Option(inner) => (**inner).clone(),
@@ -1002,7 +1002,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
         ctx.alloc_binding(name, inner_ty, false, None);
     }
 
-    analyze_statements(ctx, stmt.then_body(ctx.db), &[]);
+    analyze_statements(ctx, &stmt.then_body, &[]);
     let then_drops = ctx.exit_scope();
     let state_after_then = ctx.scope_stack.last()
         .map(|f| f.current_state.clone())
@@ -1018,11 +1018,11 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
     }
 
     // Analyze else branch.
-    let (state_after_else, out_param_init_after_else) = if let Some(else_body) = stmt.else_body(ctx.db) {
+    let (state_after_else, out_param_init_after_else) = if let Some(else_body) = &stmt.else_body {
         ctx.enter_scope(ScopeKind::IfElse);
 
         // If there's an else-binding (if-let with else), create it.
-        if let Some(binding_name) = stmt.else_binding(ctx.db) {
+        if let Some(binding_name) = stmt.else_binding {
             let name = binding_name.text(ctx.db).to_string();
             // Else binding gets the error for Result types.
             let ty = IrType::Error;
@@ -1124,7 +1124,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
     }
 }
 
-fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLoop<'db>, stmt_idx: usize) {
+fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLoop<'db>, stmt_idx: usize) {
     // Capture outer-scope non-copy bindings that are Live before entering the loop.
     // If any of these become Moved during loop body analysis, that's an error
     // because the loop could iterate multiple times.
@@ -1141,7 +1141,7 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLoop<'db>, stmt_idx: 
 
     ctx.enter_scope(ScopeKind::Loop);
 
-    analyze_statements(ctx, stmt.body(ctx.db), &[]);
+    analyze_statements(ctx, &stmt.body, &[]);
 
     // Check for outer-scope bindings that were moved inside the loop body.
     // This is an error because the loop could iterate multiple times.

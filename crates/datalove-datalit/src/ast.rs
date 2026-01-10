@@ -30,7 +30,7 @@ pub struct ExprFull<'db> {
     pub expr: ExprAndHeap<'db>,
 }
 
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub enum Heap {
     Local,
@@ -144,13 +144,14 @@ pub struct TypeHintTensor<'db> {
     pub rank: u32,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprAndHeap<'db> {
     pub heap: Heap,
     pub expr: Expr<'db>,
 }
 
-#[derive(Clone, Hash)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub enum Expr<'db> {
     True,
@@ -178,96 +179,114 @@ pub enum Expr<'db> {
     ParseError(ExprParseError<'db>),
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprInt<'db> {
     pub value: InternedText<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprFloat<'db> {
     pub value: InternedText<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprHex<'db> {
     pub value: InternedText<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprString<'db> {
     pub value: InternedText<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprAnonTuple<'db> {
     pub elements: Vec<ExprFull<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprAnonStruct<'db> {
     pub fields: Vec<ExprStructField<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprStructField<'db> {
     pub name: InternedText<'db>,
     pub value: ExprFull<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprAnonEnum<'db> {
     pub variant_name: InternedText<'db>,
     pub payload: Option<ExprFull<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprList<'db> {
     pub elements: Vec<ExprFull<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprMap<'db> {
     pub entries: Vec<ExprMapEntry<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprMapEntry<'db> {
     pub key: ExprFull<'db>,
     pub value: ExprFull<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprSet<'db> {
     pub elements: Vec<ExprFull<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprTensor<'db> {
     pub shape: Vec<u32>,
     pub elements: Vec<ExprFull<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprSome<'db> {
     pub payload: ExprFull<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprOk<'db> {
     pub payload: ExprFull<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprEr<'db> {
     pub payload: ExprFull<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprData<'db> {
     pub value: ExprFull<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprError<'db> {
     pub value: ExprFull<'db>,
 }
@@ -280,7 +299,8 @@ pub struct TypeHintParseError<'db> {
     pub message: InternedText<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ExprParseError<'db> {
     pub text: Text<'db>,
     pub span: ByteSpan,

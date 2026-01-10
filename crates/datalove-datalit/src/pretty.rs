@@ -238,7 +238,7 @@ fn pretty_expr_full<'db>(
 
     // Print expression.
     let expr_and_heap = expr.expr(db);
-    pretty_expr_and_heap(db, *expr_and_heap, out, indent);
+    pretty_expr_and_heap(db, expr_and_heap.clone(), out, indent);
 }
 
 fn pretty_type_hint_and_heap<'db>(
@@ -374,13 +374,13 @@ fn pretty_expr_and_heap<'db>(
     indent: usize,
 ) {
     // Print heap sigil.
-    match eh.heap(db) {
+    match eh.heap {
         Heap::Local => out.push('@'),
         Heap::Global => out.push('#'),
         Heap::Omitted => {}
     }
 
-    pretty_expr(db, eh.expr(db), out, indent);
+    pretty_expr(db, eh.expr, out, indent);
 }
 
 fn pretty_expr<'db>(
@@ -395,36 +395,36 @@ fn pretty_expr<'db>(
         Expr::None => out.push_str("none"),
         Expr::Some(s) => {
             out.push_str("some ");
-            pretty_expr_full(db, s.payload(db), out, indent);
+            pretty_expr_full(db, s.payload, out, indent);
         }
         Expr::Ok(o) => {
             out.push_str("ok ");
-            pretty_expr_full(db, o.payload(db), out, indent);
+            pretty_expr_full(db, o.payload, out, indent);
         }
         Expr::Er(e) => {
             out.push_str("er ");
-            pretty_expr_full(db, e.payload(db), out, indent);
+            pretty_expr_full(db, e.payload, out, indent);
         }
 
         Expr::Int(i) => {
-            out.push_str(i.value(db).as_str(db));
+            out.push_str(i.value.as_str(db));
         }
 
         Expr::Float(f) => {
-            out.push_str(f.value(db).as_str(db));
+            out.push_str(f.value.as_str(db));
         }
 
         Expr::Hex(h) => {
-            out.push_str(h.value(db).as_str(db));
+            out.push_str(h.value.as_str(db));
         }
 
         Expr::String(s) => {
-            out.push_str(s.value(db).as_str(db));
+            out.push_str(s.value.as_str(db));
         }
 
         Expr::AnonTuple(t) => {
             out.push('(');
-            let elements = t.elements(db);
+            let elements = &t.elements;
             for (i, elem) in elements.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
@@ -436,22 +436,22 @@ fn pretty_expr<'db>(
 
         Expr::AnonStruct(s) => {
             out.push('{');
-            let fields = s.fields(db);
+            let fields = &s.fields;
             for (i, field) in fields.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
                 }
-                out.push_str(field.name(db).as_str(db));
+                out.push_str(field.name.as_str(db));
                 out.push_str(" = ");
-                pretty_expr_full(db, field.value(db), out, indent);
+                pretty_expr_full(db, field.value, out, indent);
             }
             out.push('}');
         }
 
         Expr::AnonEnum(e) => {
             out.push_str("enum ");
-            out.push_str(e.variant_name(db).as_str(db));
-            if let Some(payload) = e.payload(db) {
+            out.push_str(e.variant_name.as_str(db));
+            if let Some(payload) = e.payload {
                 out.push('(');
                 pretty_expr_full(db, payload, out, indent);
                 out.push(')');
@@ -460,7 +460,7 @@ fn pretty_expr<'db>(
 
         Expr::List(l) => {
             out.push('[');
-            let elements = l.elements(db);
+            let elements = &l.elements;
             for (i, elem) in elements.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
@@ -472,21 +472,21 @@ fn pretty_expr<'db>(
 
         Expr::Map(m) => {
             out.push_str("map {");
-            let entries = m.entries(db);
+            let entries = &m.entries;
             for (i, entry) in entries.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
                 }
-                pretty_expr_full(db, entry.key(db), out, indent);
+                pretty_expr_full(db, entry.key, out, indent);
                 out.push_str(" = ");
-                pretty_expr_full(db, entry.value(db), out, indent);
+                pretty_expr_full(db, entry.value, out, indent);
             }
             out.push('}');
         }
 
         Expr::Set(s) => {
             out.push_str("set {");
-            let elements = s.elements(db);
+            let elements = &s.elements;
             for (i, elem) in elements.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
@@ -498,7 +498,7 @@ fn pretty_expr<'db>(
 
         Expr::Tensor(t) => {
             out.push_str("tensor [");
-            let shape = t.shape(db);
+            let shape = &t.shape;
             for (i, &dim) in shape.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
@@ -506,7 +506,7 @@ fn pretty_expr<'db>(
                 out.push_str(&dim.to_string());
             }
             out.push_str("] [");
-            let elements = t.elements(db);
+            let elements = &t.elements;
             let rank = shape.len();
 
             if rank == 1 {
@@ -538,17 +538,17 @@ fn pretty_expr<'db>(
 
         Expr::Data(d) => {
             out.push_str("data ");
-            pretty_expr_full(db, d.value(db), out, indent);
+            pretty_expr_full(db, d.value, out, indent);
         }
 
         Expr::Error(e) => {
             out.push_str("error ");
-            pretty_expr_full(db, e.value(db), out, indent);
+            pretty_expr_full(db, e.value, out, indent);
         }
 
         Expr::ParseError(e) => {
             out.push_str("<parse-error: ");
-            out.push_str(e.message(db).as_str(db));
+            out.push_str(e.message.as_str(db));
             out.push('>');
         }
     }

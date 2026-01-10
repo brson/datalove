@@ -201,9 +201,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     for statement in script.statements(&db) {
         match statement {
             datalove_datafun_ast::ast::Statement::Let(let_stmt) => {
-                let name = let_stmt.name(&db);
+                let name = let_stmt.name;
                 // Get type from the let statement's value expression.
-                let value_expr = let_stmt.value(&db);
+                let value_expr = let_stmt.value;
                 let expr_id = value_expr.as_id().index() as usize;
                 if let Some(Some(ty)) = expr_types.get(expr_id) {
                     let ty_val = ty.ty(&db);
@@ -221,8 +221,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
                 let param_types: Vec<_> = params.iter().map(|p| {
                     json!({
-                        "name": p.name(&db).as_str(&db),
-                        "type": type_hint_to_string(&db, p.type_hint(&db))
+                        "name": p.name.as_str(&db),
+                        "type": type_hint_to_string(&db, p.type_hint)
                     })
                 }).collect();
 

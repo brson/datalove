@@ -53,7 +53,7 @@ impl<'db> Parser<'db> {
             let end_pos = self.last_byte_end();
             let span = start_pos..end_pos;
             lhs = self.create_expr(
-                ast::ExprFunKind::BinOp(ast::ExprBinOp::new(self.db, op, lhs, rhs)),
+                ast::ExprFunKind::BinOp(ast::ExprBinOp { op, lhs, rhs }),
                 TextSpan::new(text, span),
             );
         }
@@ -76,7 +76,7 @@ impl<'db> Parser<'db> {
                             let end_pos = self.last_byte_end();
                             let span = op_span.start..end_pos;
                             expr = self.create_expr(
-                                ast::ExprFunKind::TryOption(ast::ExprTryOption::new(self.db, expr)),
+                                ast::ExprFunKind::TryOption(ast::ExprTryOption { operand: expr }),
                                 TextSpan::new(text, span),
                             );
                         }
@@ -85,7 +85,7 @@ impl<'db> Parser<'db> {
                             let end_pos = self.last_byte_end();
                             let span = op_span.start..end_pos;
                             expr = self.create_expr(
-                                ast::ExprFunKind::TryResult(ast::ExprTryResult::new(self.db, expr)),
+                                ast::ExprFunKind::TryResult(ast::ExprTryResult { operand: expr }),
                                 TextSpan::new(text, span),
                             );
                         }
@@ -204,7 +204,7 @@ impl<'db> Parser<'db> {
                 let operand = self.parse_expr_primary();
                 return ast::ExprFun::new(
                     self.db,
-                    ast::ExprFunKind::UnaryOp(ast::ExprUnaryOp::new(self.db, op, operand))
+                    ast::ExprFunKind::UnaryOp(ast::ExprUnaryOp { op, operand })
                 );
             }
         }
@@ -243,9 +243,9 @@ impl<'db> Parser<'db> {
                                     let payload = self.parse_expr_primary();
                                     let heap = datalit::ast::Heap::Omitted;
                                     let expr_kind = match word {
-                                        "some" => ast::ExprFunKind::Some(ast::ExprSome::new(self.db, heap, None, payload)),
-                                        "ok" => ast::ExprFunKind::Ok(ast::ExprOk::new(self.db, heap, None, payload)),
-                                        "er" => ast::ExprFunKind::Er(ast::ExprEr::new(self.db, heap, None, payload)),
+                                        "some" => ast::ExprFunKind::Some(ast::ExprSome { heap, type_hint: None, payload }),
+                                        "ok" => ast::ExprFunKind::Ok(ast::ExprOk { heap, type_hint: None, payload }),
+                                        "er" => ast::ExprFunKind::Er(ast::ExprEr { heap, type_hint: None, payload }),
                                         _ => unreachable!(),
                                     };
                                     self.create_expr(expr_kind, ts)
@@ -307,12 +307,11 @@ impl<'db> Parser<'db> {
                         let value = InternedText::new(self.db, text_str);
                         ast::ExprFun::new(
                             self.db,
-                            ast::ExprFunKind::String(ast::ExprString::new(
-                                self.db,
-                                datalit::ast::Heap::Omitted,
-                                None,
+                            ast::ExprFunKind::String(ast::ExprString {
+                                heap: datalit::ast::Heap::Omitted,
+                                type_hint: None,
                                 value
-                            ))
+                            })
                         )
                     }
                     _ => {
@@ -396,7 +395,7 @@ impl<'db> Parser<'db> {
         } else {
             ast::ExprFun::new(
                 self.db,
-                ast::ExprFunKind::Tuple(ast::ExprTuple::new(self.db, elements))
+                ast::ExprFunKind::Tuple(ast::ExprTuple { elements })
             )
         }
     }

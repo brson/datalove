@@ -139,7 +139,7 @@ impl<'db> Parser<'db> {
             .code(code)
             .primary_label(ts.clone(), label)
             .emit_parse();
-        ast::Expr::ParseError(ast::ExprParseError::new(self.db, ts.text, ts.span, message_text))
+        ast::Expr::ParseError(ast::ExprParseError { text: ts.text, span: ts.span, message: message_text })
     }
 
     /// Emit both a diagnostic and create a TypeHintParseError node in one call.
