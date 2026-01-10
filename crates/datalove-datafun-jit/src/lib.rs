@@ -310,6 +310,104 @@ mod tests {
         let result = result_buf as i32;
         assert_eq!(result, 3, "1 + 2 should equal 3");
     }
+
+    /// Test full integration: interpreter -> dispatcher -> JIT.
+    #[test]
+    fn test_interpreter_jit_integration() {
+        use datalove_datafun_interp::{
+            IrInterpreter, ExecutionContext, FunctionRegistry, FrameStore,
+        };
+        use datalove_datafun_ir::ParamId;
+
+        // Create callee: fn add(a: i32, b: i32) -> i32 { a + b }
+        let add_fn = IrFunction {
+            id: FuncId(0),
+            name: "add".to_string(),
+            params: vec![ParamId(0), ParamId(1)],
+            param_modes: vec![],
+            param_types: vec![IrType::I32, IrType::I32],
+            return_type: IrType::I32,
+            blocks: vec![IrBlock {
+                id: BlockId(0),
+                params: vec![],
+                instructions: vec![
+                    Instruction::BinOp {
+                        dest: ValueId(0),
+                        op: BinOp::Add,
+                        lhs: Operand::Param(ParamId(0)),
+                        rhs: Operand::Param(ParamId(1)),
+                    },
+                ],
+                terminator: Terminator::Return {
+                    value: Some(Operand::Value(ValueId(0))),
+                },
+            }],
+            value_count: 1,
+            slot_count: 0,
+            value_types: vec![IrType::I32],
+            slot_types: vec![],
+        };
+
+        // Create caller: fn main() -> i32 { add(10, 20) }
+        let main_fn = IrFunction {
+            id: FuncId(1),
+            name: "main".to_string(),
+            params: vec![],
+            param_modes: vec![],
+            param_types: vec![],
+            return_type: IrType::I32,
+            blocks: vec![IrBlock {
+                id: BlockId(0),
+                params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: ConstValue::I32(10) },
+                    Instruction::Const { dest: ValueId(1), value: ConstValue::I32(20) },
+                    Instruction::Call {
+                        dest: ValueId(2),
+                        func: datalove_datafun_ir::FuncRef::Local(FuncId(0)),
+                        args: vec![
+                            Operand::Value(ValueId(0)),
+                            Operand::Value(ValueId(1)),
+                        ],
+                    },
+                ],
+                terminator: Terminator::Return {
+                    value: Some(Operand::Value(ValueId(2))),
+                },
+            }],
+            value_count: 3,
+            slot_count: 0,
+            value_types: vec![IrType::I32, IrType::I32, IrType::I32],
+            slot_types: vec![],
+        };
+
+        // Set up interpreter with JIT dispatcher (threshold=1: compile on first call).
+        let mut interp = IrInterpreter::new();
+        let jit = JitEngine::new(1).expect("JitEngine creation failed");
+        interp.set_call_dispatcher(Box::new(jit));
+
+        // Set up execution context with both functions.
+        let functions = vec![add_fn, main_fn.clone()];
+        let ctx = ExecutionContext::new(&functions);
+        let registry = FunctionRegistry::new();
+        let mut frames = FrameStore::new();
+
+        // Prepare return destination.
+        let mut result: usize = 0; // usize for alignment
+        let ret_tydesc = interp.tydesc_table_mut().get_or_create(&IrType::I32);
+        let ret_dest = Destination {
+            ptr: &mut result as *mut usize as *mut u8,
+            tydesc: ret_tydesc,
+        };
+
+        // Execute main, which calls add(10, 20).
+        // The call to add should go through the JIT dispatcher.
+        interp.call_in_context(&main_fn, vec![], ret_dest, &ctx, &registry, &mut frames)
+            .expect("execution failed");
+
+        // Verify result: 10 + 20 = 30.
+        assert_eq!(result as i32, 30, "add(10, 20) should equal 30");
+    }
 }
 
 impl CallDispatcher for JitEngine {
