@@ -89,10 +89,10 @@
           "hash_changed": true,
           "expected": {
             "parsed": true,
-            "typechecked": true,
+            "typechecked": false,
             "hash_changed": true
           },
-          "correct": true
+          "correct": false
         }
       }
     }

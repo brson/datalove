@@ -75,30 +75,30 @@ def main():
 
     for r in results:
         test = r["test"]
+        # expected can be None for cases where memoization doesn't apply
+        exp = r.get("expected") or {}
         if test.startswith("1") and r.get("is_direct"):
-            exp = r.get("expected", {})
             direct_results.append({
                 "test": test[:3],
                 "action": r["action"],
                 "parsed": r.get("parsed"),
                 "typechecked": r.get("typechecked"),
                 "hash_changed": r.get("hash_changed"),
-                "exp_p": exp.get("parsed"),
-                "exp_t": exp.get("typechecked"),
-                "exp_h": exp.get("hash_changed"),
+                "exp_p": exp.get("parsed") if exp else "-",
+                "exp_t": exp.get("typechecked") if exp else "-",
+                "exp_h": exp.get("hash_changed") if exp else "-",
                 "correct": r.get("correct"),
             })
         elif test.startswith("2") and r.get("is_dependent"):
-            exp = r.get("expected", {})
             dependent_results.append({
                 "test": test[:3],
                 "action": r["action"],
                 "parsed": r.get("parsed"),
                 "typechecked": r.get("typechecked"),
                 "hash_changed": r.get("hash_changed"),
-                "exp_p": exp.get("parsed"),
-                "exp_t": exp.get("typechecked"),
-                "exp_h": exp.get("hash_changed"),
+                "exp_p": exp.get("parsed") if exp else "-",
+                "exp_t": exp.get("typechecked") if exp else "-",
+                "exp_h": exp.get("hash_changed") if exp else "-",
                 "correct": r.get("correct"),
             })
 

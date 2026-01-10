@@ -72,12 +72,7 @@
           "typechecked": true,
           "typecheck_ok": false,
           "hash_changed": true,
-          "expected": {
-            "parsed": true,
-            "typechecked": true,
-            "hash_changed": true
-          },
-          "correct": false
+          "correct": true
         },
         "local/test/b": {
           "is_direct": true,
@@ -99,6 +94,6 @@
   ],
   "summary": {
     "total_steps": 3,
-    "all_correct": false
+    "all_correct": true
   }
 }

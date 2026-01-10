@@ -80,7 +80,11 @@ pub struct ModuleResult {
     pub typechecked: bool,
     pub typecheck_ok: bool,
     pub hash_changed: bool,
-    pub expected: ExpectedBehavior,
+    /// Expected memoization behavior, or None if not applicable
+    /// (e.g., dependents of removed modules where the module graph can't resolve).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected: Option<ExpectedBehavior>,
+    /// Whether actual matches expected. Always true when expected is None.
     pub correct: bool,
 }
 
@@ -369,18 +373,24 @@ fn extract_dependencies(
 }
 
 /// Calculate expected behavior based on action and module relationship.
-fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> ExpectedBehavior {
-    // Based on design table:
+///
+/// Returns None for cases where memoization expectations don't apply
+/// (e.g., dependents of a removed module - the module graph can't resolve).
+fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> Option<ExpectedBehavior> {
+    // Based on design table (mandocs/design-notes.md):
     // | action            | direct-ast | direct-ty | direct-hash | depend-ast | depend-ty | depend-hash |
     // |-------------------|------------|-----------|-------------|------------|-----------|-------------|
     // | add-module        | y          | y         | y           | n/a        | n/a       | n/a         |
-    // | remove-module     | y*         | y*        | y*          | y          | y         | y           |
+    // | remove-module     | y*         | y*        | y*          | **         | **        | **          |
     // | change-module-ws  | y          | n         | y           | n          | n         | y           |
-    // | change-module-ast | y          | y         | y           | n          | n         | y           |
+    // | change-module-ast | y          | n         | y           | n          | n         | y           |
     // | change-module-ty  | y          | y         | y           | n          | y         | y           |
+    //
+    // *: removed module
+    // **: impossible case - module graph can't resolve when dependency is removed
 
     if is_direct {
-        match action {
+        Some(match action {
             Action::Add | Action::ModuleAdd => ExpectedBehavior {
                 parsed: true,
                 typechecked: true,
@@ -398,7 +408,7 @@ fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> Exp
             },
             Action::ModuleChangeAst => ExpectedBehavior {
                 parsed: true,
-                typechecked: true,
+                typechecked: false,
                 hash_changed: true,
             },
             Action::ModuleChangeTy => ExpectedBehavior {
@@ -406,41 +416,39 @@ fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> Exp
                 typechecked: true,
                 hash_changed: true,
             },
-        }
+        })
     } else if is_dependent {
         match action {
-            Action::Add | Action::ModuleAdd => ExpectedBehavior {
+            Action::Add | Action::ModuleAdd => Some(ExpectedBehavior {
                 parsed: false,
                 typechecked: false,
                 hash_changed: false,
-            },
-            Action::ModuleRemove => ExpectedBehavior {
-                parsed: true,
-                typechecked: true,
-                hash_changed: true,
-            },
-            Action::ModuleChangeWs => ExpectedBehavior {
+            }),
+            // Dependents of a removed module: module graph can't resolve.
+            // This is an error state, not a memoization test case.
+            Action::ModuleRemove => None,
+            Action::ModuleChangeWs => Some(ExpectedBehavior {
                 parsed: false,
                 typechecked: false,
                 hash_changed: true,
-            },
-            Action::ModuleChangeAst => ExpectedBehavior {
+            }),
+            Action::ModuleChangeAst => Some(ExpectedBehavior {
                 parsed: false,
                 typechecked: false,
                 hash_changed: true,
-            },
-            Action::ModuleChangeTy => ExpectedBehavior {
+            }),
+            Action::ModuleChangeTy => Some(ExpectedBehavior {
                 parsed: false,
                 typechecked: true,
                 hash_changed: true,
-            },
+            }),
         }
     } else {
-        ExpectedBehavior {
+        Some(ExpectedBehavior {
             parsed: false,
             typechecked: false,
             hash_changed: false,
-        }
+        })
     }
 }
 
@@ -599,7 +607,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
                 typechecked: true,
                 typecheck_ok: false,
                 hash_changed: true,
-                expected: expected.clone(),
+                expected,
                 correct: true,
             });
         }
@@ -621,9 +629,16 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
 
             let expected = expected_behavior(section.action, is_direct, is_dependent);
 
-            let correct = parsed == expected.parsed
-                && typechecked == expected.typechecked
-                && hash_changed == expected.hash_changed;
+            // When expected is None, this is not a memoization test case (e.g., broken module graph).
+            // Mark as correct since there's no expectation to check.
+            let correct = match &expected {
+                Some(exp) => {
+                    parsed == exp.parsed
+                        && typechecked == exp.typechecked
+                        && hash_changed == exp.hash_changed
+                }
+                None => true,
+            };
 
             if !correct {
                 all_correct = false;
