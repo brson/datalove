@@ -461,11 +461,6 @@ impl<'db> Parser<'db> {
                             // Not a number, parse error for bare identifiers.
                             let ts = self.peek_text_span();
                             self.next();
-                            let _message = InternedText::new(
-                                self.db,
-                                format!("Unexpected identifier: {}", word).S()
-                            );
-
                             self.emit_expr_error(ts,
                                 &format!("unexpected identifier '{}'", word),
                                 "D019",
