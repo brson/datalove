@@ -153,26 +153,48 @@ pub enum ScriptUnitKind<'db> {
 }
 
 /// Spec for a single script unit (with pre-parsed content).
-#[salsa::interned]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ScriptUnitSpec<'db> {
     pub source: bct::input::Source,
-    pub spans: DatafunSpans<'db>,
-    #[returns(ref)]
+    pub spans: DatafunSpans,
     pub kind: ScriptUnitKind<'db>,
 }
 
+impl<'db> ScriptUnitSpec<'db> {
+    /// Create new ScriptUnitSpec.
+    pub fn new(source: bct::input::Source, spans: DatafunSpans, kind: ScriptUnitKind<'db>) -> Self {
+        Self { source, spans, kind }
+    }
+}
+
 /// Spec for a module (path + pre-parsed statements + module ID).
-#[salsa::interned]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ModuleSpec<'db> {
-    #[returns(ref)]
     pub path: String,
     pub source: bct::input::Source,
-    pub spans: DatafunSpans<'db>,
+    pub spans: DatafunSpans,
     pub parsed: ParsedStatements<'db>,
     pub module_id: ModuleId,
 }
 
+impl<'db> ModuleSpec<'db> {
+    /// Create new ModuleSpec.
+    pub fn new(
+        path: String,
+        source: bct::input::Source,
+        spans: DatafunSpans,
+        parsed: ParsedStatements<'db>,
+        module_id: ModuleId,
+    ) -> Self {
+        Self { path, source, spans, parsed, module_id }
+    }
+}
+
 /// Spec for a batch of script units (the "input" to typechecking).
+///
+/// Interned because it's the input to a tracked function for memoization.
 #[salsa::interned]
 pub struct ScriptBatchSpec<'db> {
     #[returns(ref)]
@@ -356,7 +378,7 @@ pub struct ParsedModuleGraph<'db> {
     /// Pre-parsed statements with spans, as (ModuleId, ParsedStatements, DatafunSpans) tuples.
     /// Order matches graph.iter_modules() order.
     #[returns(ref)]
-    pub parsed_statements: Vec<(ModuleId, ParsedStatements<'db>, DatafunSpans<'db>)>,
+    pub parsed_statements: Vec<(ModuleId, ParsedStatements<'db>, DatafunSpans)>,
 
     /// Resolved module requires from package resolution.
     ///
@@ -385,10 +407,10 @@ impl<'db> ParsedModuleGraph<'db> {
     }
 
     /// Get the spans for a module by its ID.
-    pub fn get_spans(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<DatafunSpans<'db>> {
+    pub fn get_spans(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<DatafunSpans> {
         self.parsed_statements(db).iter()
             .find(|(id, _, _)| *id == module_id)
-            .map(|(_, _, spans)| *spans)
+            .map(|(_, _, spans)| spans.clone())
     }
 
     /// Get the resolved require aliases for a module.

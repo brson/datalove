@@ -240,11 +240,10 @@ pub use datalove_datafun_ast::spans::{
 /// Extract datafun expression spans from a parsed source.
 ///
 /// Reads spans from the ParseResult side table (no accumulators).
-#[salsa::tracked]
 pub fn datafun_spans<'db>(
     db: &'db dyn Db,
     source: Source,
-) -> DatafunSpans<'db> {
+) -> DatafunSpans {
     use datalove_diagnostic::SpanEntry;
 
     let parse_result = parse(db, source);
@@ -256,5 +255,5 @@ pub fn datafun_spans<'db>(
         })
         .collect();
 
-    DatafunSpans::new(db, entries)
+    DatafunSpans::new(entries)
 }

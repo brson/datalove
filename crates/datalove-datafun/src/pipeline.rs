@@ -450,10 +450,9 @@ impl<'db> CompiledModules<'db> {
                 .expect("module should exist in graph");
 
             module_specs.push(ModuleSpec::new(
-                db,
                 module_path.clone(),
                 module_source,
-                *spans,
+                spans.clone(),
                 *parsed,
                 *salsa_module_id,
             ));
@@ -517,7 +516,7 @@ impl<'db> ScriptCompilationContext<'db> {
         }
 
         let spans = datalove_datafun_parser::datafun_spans(self.db, src);
-        let unit_spec = ScriptUnitSpec::new(self.db, src, spans, ScriptUnitKind::Fragment(parsed));
+        let unit_spec = ScriptUnitSpec::new( src, spans, ScriptUnitKind::Fragment(parsed));
         self.accumulated_unit_specs.push(unit_spec);
         let batch_spec = ScriptBatchSpec::new(
             self.db,
@@ -554,7 +553,7 @@ impl<'db> ScriptCompilationContext<'db> {
         }
 
         let spans = datalove_datafun_parser::datafun_spans(self.db, src);
-        let unit_spec = ScriptUnitSpec::new(self.db, src, spans, ScriptUnitKind::Expr(expr));
+        let unit_spec = ScriptUnitSpec::new( src, spans, ScriptUnitKind::Expr(expr));
         self.accumulated_unit_specs.push(unit_spec);
         let batch_spec = ScriptBatchSpec::new(
             self.db,
@@ -612,7 +611,7 @@ impl<'db> ScriptCompilationContext<'db> {
         }
 
         let spans = datalove_datafun_parser::datafun_spans(self.db, src);
-        let unit_spec = ScriptUnitSpec::new(self.db, src, spans, ScriptUnitKind::Fragment(parsed));
+        let unit_spec = ScriptUnitSpec::new( src, spans, ScriptUnitKind::Fragment(parsed));
         self.accumulated_unit_specs.push(unit_spec);
         let batch_spec = ScriptBatchSpec::new(
             self.db,
@@ -647,7 +646,7 @@ impl<'db> ScriptCompilationContext<'db> {
         }
 
         let spans = datalove_datafun_parser::datafun_spans(self.db, src);
-        let unit_spec = ScriptUnitSpec::new(self.db, src, spans, ScriptUnitKind::Expr(expr));
+        let unit_spec = ScriptUnitSpec::new( src, spans, ScriptUnitKind::Expr(expr));
         self.accumulated_unit_specs.push(unit_spec);
         let batch_spec = ScriptBatchSpec::new(
             self.db,

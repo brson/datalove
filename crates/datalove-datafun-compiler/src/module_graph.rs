@@ -75,7 +75,7 @@ pub fn parse_module_graph<'db>(
                 entry: SpanEntry::new(e.text_id, e.span.clone()),
             })
             .collect();
-        let spans = DatafunSpans::new(db, span_entries);
+        let spans = DatafunSpans::new(span_entries);
         parsed_statements.push((module_id, parsed, spans));
     }
 
@@ -750,9 +750,9 @@ mod tests {
     }
 
     #[test]
-    fn test_datafun_spans_caching_fixed() {
-        // Verifies that datafun_spans caching is now correct after the side table fix.
-        // Previously accumulators broke caching; now spans are in ParseResult.
+    fn test_datafun_spans_consistency() {
+        // Verifies that datafun_spans produces consistent results for unchanged source.
+        // DatafunSpans is now a plain struct (not salsa interned/tracked).
         let mut db = Database::default();
 
         let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
@@ -760,21 +760,18 @@ mod tests {
 
         let spans_a1 = datalove_datafun_parser::datafun_spans(&db, source_a);
         let _ = datalove_datafun_parser::datafun_spans(&db, source_b);
-        let id_a1 = salsa::plumbing::AsId::as_id(&spans_a1);
-        let entries_a1: Vec<_> = spans_a1.entries(&db).iter().map(|e| e.expr_id).collect();
+        let entries_a1: Vec<_> = spans_a1.entries.iter().map(|e| e.expr_id).collect();
 
         // Change only B.
         source_b.set_text(&mut db).to("let y = 999".to_string());
 
         let spans_a2 = datalove_datafun_parser::datafun_spans(&db, source_a);
-        let id_a2 = salsa::plumbing::AsId::as_id(&spans_a2);
-        let entries_a2: Vec<_> = spans_a2.entries(&db).iter().map(|e| e.expr_id).collect();
+        let entries_a2: Vec<_> = spans_a2.entries.iter().map(|e| e.expr_id).collect();
 
-        // FIX VERIFIED: A's spans have same ID because side table pattern works.
-        assert_eq!(id_a1, id_a2, "A should have same ID (cached correctly)");
+        // Verify entries are consistent for unchanged source A.
         assert!(!entries_a1.is_empty(), "First call has entries");
         assert!(!entries_a2.is_empty(), "Second call also has entries (not empty)");
-        assert_eq!(entries_a1, entries_a2, "Entries should be identical");
+        assert_eq!(entries_a1, entries_a2, "Entries should be identical for unchanged source");
     }
 
     // ========================================================================

@@ -22,7 +22,7 @@ pub use crate::{
 pub struct TypeContext<'db> {
     pub(crate) db: &'db dyn crate::Db,
     /// Pre-computed spans for error reporting.
-    pub(crate) spans: DatafunSpans<'db>,
+    pub(crate) spans: DatafunSpans,
     /// Variable bindings (name -> type).
     pub(crate) variables: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
     /// Function signatures (name -> function type).
@@ -45,7 +45,7 @@ pub struct TypeContext<'db> {
 impl<'db> TypeContext<'db> {
     pub fn new(
         db: &'db dyn crate::Db,
-        spans: DatafunSpans<'db>,
+        spans: DatafunSpans,
     ) -> Self {
         TypeContext {
             db,
@@ -224,7 +224,7 @@ impl<'db> TypeContext<'db> {
 
     /// Look up span for a datafun expression.
     pub fn get_span(&self, expr: ExprFun<'db>) -> Option<TextSpan<'db>> {
-        self.spans.lookup(self.db, expr).map(|entry| {
+        self.spans.lookup(expr).map(|entry| {
             let (text, span) = entry.to_text_and_span(self.db);
             TextSpan::new(text, span)
         })

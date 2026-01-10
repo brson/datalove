@@ -14,22 +14,24 @@ pub struct SpanMapEntry {
     pub entry: SpanEntry,
 }
 
-/// Interned struct for datafun expression spans.
-///
-/// Using `interned` instead of `tracked` ensures identical entries get the same
-/// salsa ID, which is critical for memoization of functions that return this type.
-#[salsa::interned]
-pub struct DatafunSpans<'db> {
-    #[returns(ref)]
+/// Datafun expression spans.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct DatafunSpans {
     pub entries: Vec<SpanMapEntry>,
 }
 
-impl<'db> DatafunSpans<'db> {
+impl DatafunSpans {
+    /// Create new DatafunSpans.
+    pub fn new(entries: Vec<SpanMapEntry>) -> Self {
+        Self { entries }
+    }
+
     /// Look up span for an expression.
-    pub fn lookup(&self, db: &'db dyn crate::Db, expr: ExprFun<'db>) -> Option<SpanEntry> {
+    pub fn lookup<'db>(&self, expr: ExprFun<'db>) -> Option<SpanEntry> {
         use salsa::plumbing::AsId;
         let expr_id = expr.as_id();
-        self.entries(db).iter()
+        self.entries.iter()
             .find(|e| e.expr_id == expr_id)
             .map(|e| e.entry.clone())
     }

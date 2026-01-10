@@ -50,8 +50,8 @@ pub fn type_check_script_units<'db>(
     // Build tracked types from specs (already pre-parsed).
     let mut units = Vec::new();
     for unit_spec in spec.units(db) {
-        let source = unit_spec.source(db);
-        let kind = unit_spec.kind(db).clone();
+        let source = unit_spec.source;
+        let kind = unit_spec.kind.clone();
         units.push(ScriptUnitInput::new(db, source, kind));
     }
 
@@ -59,10 +59,10 @@ pub fn type_check_script_units<'db>(
     for module_spec in spec.modules(db) {
         modules.push(ModuleInfo::new(
             db,
-            module_spec.path(db).clone(),
-            module_spec.parsed(db),
-            module_spec.source(db),
-            module_spec.module_id(db),
+            module_spec.path.clone(),
+            module_spec.parsed,
+            module_spec.source,
+            module_spec.module_id,
         ));
     }
 
@@ -76,7 +76,7 @@ pub fn type_check_script_units<'db>(
     for (module_info, module_spec) in modules.iter().zip(spec.modules(db).iter()) {
         let mut funcs = HashMap::new();
         // First pass: collect function signatures.
-        let module_spans = module_spec.spans(db);
+        let module_spans = module_spec.spans.clone();
         let mut temp_ctx = TypeContext::new(db, module_spans);
         for statement in module_info.parsed(db).statements(db) {
             if let Statement::Fun(stmt) = statement {
@@ -103,7 +103,7 @@ pub fn type_check_script_units<'db>(
     let mut results = Vec::new();
 
     for (unit, unit_spec) in units.iter().zip(spec.units(db).iter()) {
-        let spans = unit_spec.spans(db);
+        let spans = unit_spec.spans.clone();
         let mut ctx = TypeContext::new(db, spans);
 
         // Script units have Result<()> return type for try operators.
@@ -250,10 +250,10 @@ pub fn type_check_script_units<'db>(
 pub fn type_check_single_script<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,
-    spans: DatafunSpans<'db>,
+    spans: DatafunSpans,
     parsed: ParsedStatements<'db>,
 ) -> UnitTypecheckResultTracked<'db> {
-    let unit_spec = ScriptUnitSpec::new(db, source, spans, ScriptUnitKind::Fragment(parsed));
+    let unit_spec = ScriptUnitSpec::new(source, spans, ScriptUnitKind::Fragment(parsed));
     let batch_spec = ScriptBatchSpec::new(db, vec![unit_spec], vec![]);
     let results = type_check_script_units(db, batch_spec);
     results.results(db)[0]
@@ -265,7 +265,7 @@ pub fn type_check_single_script<'db>(
 /// Returns raw results (not salsa-tracked) to allow use outside tracked functions.
 pub fn type_check_script_with_context<'db>(
     db: &'db dyn crate::Db,
-    spans: DatafunSpans<'db>,
+    spans: DatafunSpans,
     parsed: ParsedStatements<'db>,
     prior_ctx: &ScriptTypeContext<'db>,
 ) -> ScriptTypecheckResultRaw<'db> {
@@ -305,7 +305,7 @@ pub fn type_check_script_with_context<'db>(
 /// Returns raw results (not salsa-tracked) to allow use outside tracked functions.
 pub fn type_check_expr_with_context<'db>(
     db: &'db dyn crate::Db,
-    spans: DatafunSpans<'db>,
+    spans: DatafunSpans,
     expr: ExprFun<'db>,
     prior_ctx: &ScriptTypeContext<'db>,
 ) -> ExprTypecheckResultRaw<'db> {
@@ -337,7 +337,7 @@ pub fn type_check_expr_with_context<'db>(
 #[salsa::tracked]
 pub fn type_check_with_module_graph<'db>(
     db: &'db dyn crate::Db,
-    spans: DatafunSpans<'db>,
+    spans: DatafunSpans,
     parsed: ParsedStatements<'db>,
     parsed_graph: ParsedModuleGraph<'db>,
     graph_typecheck: ModuleGraphTypecheckResult<'db>,
@@ -452,7 +452,7 @@ pub fn typecheck_module<'db>(
     db: &'db dyn crate::Db,
     module: Module,
     parsed: ParsedStatements<'db>,
-    spans: DatafunSpans<'db>,
+    spans: DatafunSpans,
     resolved_imports: Vec<ResolvedImport<'db>>,
 ) -> SingleModuleTypecheckResult<'db> {
     let module_id = module.id(db);
@@ -525,7 +525,7 @@ pub fn typecheck_module_graph<'db>(
 
     // Build maps for parsed statements, spans, and function ASTs from pre-parsed modules.
     let mut module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = HashMap::new();
-    let mut module_spans: HashMap<ModuleId, DatafunSpans<'db>> = HashMap::new();
+    let mut module_spans: HashMap<ModuleId, DatafunSpans> = HashMap::new();
     let mut module_function_asts: HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> = HashMap::new();
     let mut module_to_module_obj: HashMap<ModuleId, Module> = HashMap::new();
 
@@ -537,7 +537,7 @@ pub fn typecheck_module_graph<'db>(
             }
         }
         module_parsed.insert(*module_id, *parsed);
-        module_spans.insert(*module_id, *spans);
+        module_spans.insert(*module_id, spans.clone());
         module_function_asts.insert(*module_id, funcs);
     }
 
@@ -575,7 +575,7 @@ pub fn typecheck_module_graph<'db>(
             .copied()
             .expect("module should have been parsed");
         let spans = module_spans.get(&module_id)
-            .copied()
+            .cloned()
             .expect("module should have spans");
 
         // Build module alias map from pre-resolved requires.
