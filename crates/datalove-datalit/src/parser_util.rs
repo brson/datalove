@@ -107,8 +107,7 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
 
     /// Extract TextSpan from a token, using source_text for the text.
     fn extract_text_span(&self, token: &TreeToken<'db>) -> TextSpan<'db> {
-        let ts = token.text_span(self.db()).X();
-        TextSpan::new(self.source_text(), ts.span)
+        token.text_span(self.db(), self.source_text()).X()
     }
 
     /// Get Text and ByteSpan from current position for error reporting.

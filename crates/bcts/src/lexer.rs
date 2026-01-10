@@ -6,7 +6,7 @@ use rmx::std::{iter, mem};
 use rmx::std::collections::BTreeMap;
 
 use crate::input::Source;
-use crate::text::{Text, SubText};
+use crate::text::{Text, InternedText};
 use crate::chunk::{Chunk, RangeKind};
 use crate::source_map::{
     basic_source_map,
@@ -14,7 +14,7 @@ use crate::source_map::{
 
 #[salsa::tracked]
 pub struct ChunkLex<'db> {
-    chunk: Chunk<'db>,
+    pub chunk: Chunk<'db>,
     #[returns(ref)]
     pub tokens: Vec<Token<'db>>,
 }
@@ -22,7 +22,8 @@ pub struct ChunkLex<'db> {
 #[salsa::tracked]
 #[derive(Debug)]
 pub struct Token<'db> {
-    pub text: SubText<'db>,
+    pub text: InternedText<'db>,
+    pub span: Range<usize>,
     pub kind: TokenKind,
 }
 
@@ -112,27 +113,32 @@ pub fn lex_chunk<'db>(
 ) -> ChunkLex<'db> {
     let mut tokens = Vec::new();
     let chunk_text = chunk.text(db);
+    let chunk_str = chunk_text.as_str(db);
+    let intern = |range: Range<usize>| InternedText::new(db, S(&chunk_str[range]));
 
     for range in chunk.ranges(db) {
         match range {
             (range, RangeKind::Comment) => {
                 tokens.push(Token::new(
                     db,
-                    chunk_text.sub(db, range),
+                    intern(range.C()),
+                    range,
                     TokenKind::Comment,
                 ));
             }
             (range, RangeKind::String) => {
                 tokens.push(Token::new(
                     db,
-                    chunk_text.sub(db, range),
+                    intern(range.C()),
+                    range,
                     TokenKind::String,
                 ));
             }
             (range, RangeKind::Error) => {
                 tokens.push(Token::new(
                     db,
-                    chunk_text.sub(db, range),
+                    intern(range.C()),
+                    range,
                     TokenKind::Error,
                 ));
             }
@@ -196,6 +202,10 @@ pub fn lex_chunk<'db>(
             ch.is_alphanumeric() || ch == '_'
         }
 
+        fn intern(&self, range: Range<usize>) -> InternedText<'db> {
+            InternedText::new(self.db, S(&self.chunk_text.as_str(self.db)[range]))
+        }
+
         fn eat_word(&mut self) -> Token<'db> {
             assert_eq!(self.peek_token(), Some(NextToken::Word));
 
@@ -210,9 +220,11 @@ pub fn lex_chunk<'db>(
                 }
             }
             assert!(start < self.range.start);
+            let span = start .. self.range.start;
             Token::new(
                 self.db,
-                self.chunk_text.sub(self.db, start .. self.range.start),
+                self.intern(span.C()),
+                span,
                 TokenKind::Word,
             )
         }
@@ -232,12 +244,13 @@ pub fn lex_chunk<'db>(
                 if text.starts_with(sigil_str) {
                     let range_start = self.range.start;
                     self.range.start = range_start.checked_add(sigil_str.len()).X();
+                    let span = range_start .. self.range.start;
                     return Token::new(
                         self.db,
-                        self.chunk_text.sub(self.db, range_start .. self.range.start),
+                        self.intern(span.C()),
+                        span,
                         TokenKind::Sigil(sigil),
                     )
-                    
                 }
             }
 
@@ -274,9 +287,11 @@ pub fn lex_chunk<'db>(
                 }
             }
             assert!(start < self.range.start);
+            let span = start .. self.range.start;
             Token::new(
                 self.db,
-                self.chunk_text.sub(self.db, start .. self.range.start),
+                self.intern(span.C()),
+                span,
                 TokenKind::Error,
             )
         }
@@ -293,9 +308,11 @@ pub fn lex_chunk<'db>(
                 }
             }
             assert!(start < self.range.start);
+            let span = start .. self.range.start;
             Token::new(
                 self.db,
-                self.chunk_text.sub(self.db, start .. self.range.start),
+                self.intern(span.C()),
+                span,
                 TokenKind::Whitespace,
             )
         }

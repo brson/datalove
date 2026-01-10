@@ -84,15 +84,16 @@ impl<'db> BracerIter<'db> {
     ///
     /// Returns None for top-level iterators (which have no enclosing braces).
     pub fn text_span(&self) -> Option<crate::text::TextSpan<'db>> {
-        let tokens = self.tree.chunk(self.db).tokens(self.db);
+        let chunk_lex = self.tree.chunk(self.db);
+        let tokens = chunk_lex.tokens(self.db);
         // real_token_range starts AFTER the open brace, so go back 1 for open brace.
         let open_idx = self.real_token_range.start.checked_sub(1)?;
         let close_idx = self.real_token_range.end.checked_sub(1)?;
         let open_token = tokens.get(open_idx)?;
         let close_token = tokens.get(close_idx)?;
-        let text = open_token.text(self.db).text(self.db);
-        let span = open_token.text(self.db).range(self.db).start
-                 ..close_token.text(self.db).range(self.db).end;
+        let text = chunk_lex.chunk(self.db).text(self.db);
+        let span = open_token.span(self.db).start
+                 ..close_token.span(self.db).end;
         Some(crate::text::TextSpan::new(text, span))
     }
 
@@ -438,11 +439,10 @@ pub fn bracer<'db>(
 
 impl<'db> TreeToken<'db> {
     /// Get source Text and byte span for this token or branch.
-    pub fn text_span(&self, db: &'db dyn crate::Db) -> Option<crate::text::TextSpan<'db>> {
+    pub fn text_span(&self, db: &'db dyn crate::Db, source_text: crate::text::Text<'db>) -> Option<crate::text::TextSpan<'db>> {
         match self {
             TreeToken::Token(tok) => {
-                let subtext = tok.text(db);
-                Some(crate::text::TextSpan::new(subtext.text(db), subtext.range(db)))
+                Some(crate::text::TextSpan::new(source_text, tok.span(db)))
             }
             TreeToken::Branch(_, iter) => iter.text_span(),
         }
@@ -659,10 +659,11 @@ fn test_text_span() {
         let chunk = crate::source_map::basic_source_map(db, source);
         let chunk_lex = crate::lexer::lex_chunk(db, chunk);
         let bracer = bracer(db, chunk_lex);
+        let source_text = chunk_lex.chunk(db).text(db);
         // Find the first branch.
         for token in bracer.iter(db) {
             if let TreeToken::Branch(_, _) = &token {
-                let ts = token.text_span(db)?;
+                let ts = token.text_span(db, source_text)?;
                 let spanned = &ts.text.as_str(db)[ts.span.clone()];
                 return Some((ts.start(), ts.end(), spanned.to_string()));
             }
