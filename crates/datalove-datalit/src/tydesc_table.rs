@@ -353,15 +353,15 @@ impl<'db> TyDescTable<'db> {
                     },
                 })
             }
-            Type::AnonTuple(t) => self.create_tuple_tydesc(&t.fields(self.db)),
-            Type::AnonStruct(s) => self.create_struct_tydesc(&s.fields(self.db)),
-            Type::AnonEnum(e) => self.create_enum_tydesc(&e.variants(self.db)),
-            Type::List(l) => self.create_list_tydesc(l.element_type(self.db)),
-            Type::Map(m) => self.create_map_tydesc(m.key_type(self.db), m.value_type(self.db)),
-            Type::Set(s) => self.create_set_tydesc(s.element_type(self.db)),
-            Type::Option(o) => self.create_option_tydesc(o.inner_type(self.db)),
-            Type::Result(r) => self.create_result_tydesc(r.inner_type(self.db)),
-            Type::Tensor(t) => self.create_tensor_tydesc(t.element_type(self.db), t.rank(self.db)),
+            Type::AnonTuple(t) => self.create_tuple_tydesc(&t.fields),
+            Type::AnonStruct(s) => self.create_struct_tydesc(&s.fields),
+            Type::AnonEnum(e) => self.create_enum_tydesc(&e.variants),
+            Type::List(l) => self.create_list_tydesc(l.element_type),
+            Type::Map(m) => self.create_map_tydesc(m.key_type, m.value_type),
+            Type::Set(s) => self.create_set_tydesc(s.element_type),
+            Type::Option(o) => self.create_option_tydesc(o.inner_type),
+            Type::Result(r) => self.create_result_tydesc(r.inner_type),
+            Type::Tensor(t) => self.create_tensor_tydesc(t.element_type, t.rank),
         }
     }
 
@@ -431,7 +431,7 @@ impl<'db> TyDescTable<'db> {
         // Recursively create TyDescs for field types.
         let mut field_tydescs = Vec::new();
         for field in fields {
-            let field_ty = field.ty(self.db);
+            let field_ty = field.ty;
             let field_tydesc = self.get_or_create(field_ty.ty(self.db));
             field_tydescs.push(field_tydesc);
         }
@@ -439,7 +439,7 @@ impl<'db> TyDescTable<'db> {
         // Create temporary field info array with placeholder offsets.
         let mut temp_field_info = Vec::new();
         for (i, field) in fields.iter().enumerate() {
-            let field_name = field.name(self.db).as_str(self.db);
+            let field_name = field.name.as_str(self.db);
             temp_field_info.push(rtdt::TyInfoStructField {
                 name: field_name.as_ptr(),
                 name_len: field_name.len() as u32,
@@ -467,7 +467,7 @@ impl<'db> TyDescTable<'db> {
         // Create final field info array with computed offsets.
         let mut field_info = Vec::new();
         for (i, field) in fields.iter().enumerate() {
-            let field_name = field.name(self.db).as_str(self.db);
+            let field_name = field.name.as_str(self.db);
             field_info.push(rtdt::TyInfoStructField {
                 name: field_name.as_ptr(),
                 name_len: field_name.len() as u32,
@@ -498,8 +498,8 @@ impl<'db> TyDescTable<'db> {
         // Create variant info array with TyDescs for payloads.
         let mut variant_info = Vec::new();
         for variant in variants {
-            let variant_name = variant.name(self.db).as_str(self.db);
-            let payload_tydesc = if let Some(payload_ty) = variant.payload(self.db) {
+            let variant_name = variant.name.as_str(self.db);
+            let payload_tydesc = if let Some(payload_ty) = variant.payload {
                 self.get_or_create(payload_ty.ty(self.db))
             } else {
                 std::ptr::null()

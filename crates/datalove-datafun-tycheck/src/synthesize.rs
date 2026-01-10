@@ -67,7 +67,7 @@ pub fn synthesize_expr<'db>(
 
             // Create datalit tuple type.
             let datalit_tuple_ty = datalit::tycheck::Type::AnonTuple(
-                datalit::tycheck::TypeAnonTuple::new(db, datalit_element_types)
+                datalit::tycheck::TypeAnonTuple { fields: datalit_element_types }
             );
 
             // Wrap in datafun type.
@@ -270,7 +270,7 @@ pub fn synthesize_expr<'db>(
             let heap = some_expr.heap(db);
             let inner_datalit = to_datalit_type_and_heap(db, inner_ty)?;
             let option_ty = datalit::tycheck::Type::Option(
-                datalit::tycheck::TypeOption::new(db, inner_datalit)
+                datalit::tycheck::TypeOption { inner_type: inner_datalit }
             );
             Ok(TypeAndHeap::new(db, heap, Type::Datalit(option_ty)))
         }
@@ -284,7 +284,7 @@ pub fn synthesize_expr<'db>(
             let heap = ok_expr.heap(db);
             let inner_datalit = to_datalit_type_and_heap(db, inner_ty)?;
             let result_ty = datalit::tycheck::Type::Result(
-                datalit::tycheck::TypeResult::new(db, inner_datalit)
+                datalit::tycheck::TypeResult { inner_type: inner_datalit }
             );
             Ok(TypeAndHeap::new(db, heap, Type::Datalit(result_ty)))
         }
@@ -731,7 +731,7 @@ fn synthesize_try_option<'db>(
     // Operand must be Option<T>.
     let inner_ty = match operand_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
-            opt.inner_type(db)
+            opt.inner_type
         }
         _ => {
             return Err(ctx.error_try_type_mismatch(
@@ -783,7 +783,7 @@ fn synthesize_try_result<'db>(
     // Operand must be Result<T>.
     let inner_ty = match operand_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Result(res)) => {
-            res.inner_type(db)
+            res.inner_type
         }
         _ => {
             return Err(ctx.error_try_type_mismatch(
@@ -830,10 +830,10 @@ fn synthesize_inline_list<'db>(
         // Empty list - can't synthesize element type.
         // Default to List<()>.
         let elem_ty = datalit::tycheck::TypeAndHeap::new(
-            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple::new(db, vec![]))
+            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: vec![] })
         );
         let ty = Type::Datalit(datalit::tycheck::Type::List(
-            datalit::tycheck::TypeList::new(db, elem_ty)
+            datalit::tycheck::TypeList { element_type: elem_ty }
         ));
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
@@ -855,7 +855,7 @@ fn synthesize_inline_list<'db>(
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::List(
-        datalit::tycheck::TypeList::new(db, first_datalit)
+        datalit::tycheck::TypeList { element_type: first_datalit }
     ));
     Ok(TypeAndHeap::new(db, heap, ty))
 }
@@ -872,10 +872,10 @@ fn synthesize_inline_set<'db>(
 
     if elements.is_empty() {
         let elem_ty = datalit::tycheck::TypeAndHeap::new(
-            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple::new(db, vec![]))
+            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: vec![] })
         );
         let ty = Type::Datalit(datalit::tycheck::Type::Set(
-            datalit::tycheck::TypeSet::new(db, elem_ty)
+            datalit::tycheck::TypeSet { element_type: elem_ty }
         ));
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
@@ -895,7 +895,7 @@ fn synthesize_inline_set<'db>(
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Set(
-        datalit::tycheck::TypeSet::new(db, first_datalit)
+        datalit::tycheck::TypeSet { element_type: first_datalit }
     ));
     Ok(TypeAndHeap::new(db, heap, ty))
 }
@@ -912,10 +912,10 @@ fn synthesize_inline_map<'db>(
 
     if entries.is_empty() {
         let unit_ty = datalit::tycheck::TypeAndHeap::new(
-            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple::new(db, vec![]))
+            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: vec![] })
         );
         let ty = Type::Datalit(datalit::tycheck::Type::Map(
-            datalit::tycheck::TypeMap::new(db, unit_ty.clone(), unit_ty)
+            datalit::tycheck::TypeMap { key_type: unit_ty.clone(), value_type: unit_ty }
         ));
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
@@ -946,7 +946,7 @@ fn synthesize_inline_map<'db>(
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Map(
-        datalit::tycheck::TypeMap::new(db, first_key_datalit, first_value_datalit)
+        datalit::tycheck::TypeMap { key_type: first_key_datalit, value_type: first_value_datalit }
     ));
     Ok(TypeAndHeap::new(db, heap, ty))
 }
@@ -970,7 +970,7 @@ fn synthesize_inline_tensor<'db>(
             db, heap, datalit::tycheck::Type::F32
         );
         let ty = Type::Datalit(datalit::tycheck::Type::Tensor(
-            datalit::tycheck::TypeTensor::new(db, elem_ty, rank)
+            datalit::tycheck::TypeTensor { element_type: elem_ty, rank }
         ));
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
@@ -990,7 +990,7 @@ fn synthesize_inline_tensor<'db>(
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Tensor(
-        datalit::tycheck::TypeTensor::new(db, first_datalit, rank)
+        datalit::tycheck::TypeTensor { element_type: first_datalit, rank }
     ));
     Ok(TypeAndHeap::new(db, heap, ty))
 }
@@ -1013,7 +1013,7 @@ fn synthesize_inline_anon_tuple<'db>(
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::AnonTuple(
-        datalit::tycheck::TypeAnonTuple::new(db, elem_types)
+        datalit::tycheck::TypeAnonTuple { fields: elem_types }
     ));
     Ok(TypeAndHeap::new(db, heap, ty))
 }
@@ -1032,11 +1032,11 @@ fn synthesize_inline_anon_struct<'db>(
     for field in fields {
         let field_ty = ctx.synthesize_expr(field.value(db))?;
         let field_datalit = to_datalit_type_and_heap(db, field_ty)?;
-        field_types.push(datalit::tycheck::TypeNamedField::new(db, field.name(db), field_datalit));
+        field_types.push(datalit::tycheck::TypeNamedField { name: field.name(db), ty: field_datalit });
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::AnonStruct(
-        datalit::tycheck::TypeAnonStruct::new(db, field_types)
+        datalit::tycheck::TypeAnonStruct { fields: field_types }
     ));
     Ok(TypeAndHeap::new(db, heap, ty))
 }

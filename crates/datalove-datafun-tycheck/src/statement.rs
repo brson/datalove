@@ -288,7 +288,7 @@ pub fn check_statement<'db>(
                 // Extract inner type from Option or Result.
                 let inner_ty = match condition_ty.ty(db) {
                     Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
-                        opt.inner_type(db)
+                        opt.inner_type
                     }
                     Type::Datalit(datalit::tycheck::Type::Result(res)) => {
                         // F046: Result destructuring requires error-binding else branch.
@@ -296,7 +296,7 @@ pub fn check_statement<'db>(
                             ctx.add_error(ctx.error_result_requires_binding(condition));
                             return;
                         }
-                        res.inner_type(db)
+                        res.inner_type
                     }
                     _ => {
                         // F017: If/match condition type mismatch.

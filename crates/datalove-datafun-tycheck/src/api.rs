@@ -127,10 +127,10 @@ pub fn type_check_script_units<'db>(
         let unit_tuple_ty = datalit::tycheck::TypeAndHeap::new(
             db,
             datalit::ast::Heap::Omitted,
-            datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple::new(db, Vec::new())),
+            datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: Vec::new() }),
         );
         let result_unit_ty = datalit::tycheck::Type::Result(
-            datalit::tycheck::TypeResult::new(db, unit_tuple_ty)
+            datalit::tycheck::TypeResult { inner_type: unit_tuple_ty }
         );
         ctx.expected_return_type = Some(TypeAndHeap::new(
             db,

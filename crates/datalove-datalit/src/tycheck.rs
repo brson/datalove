@@ -41,60 +41,71 @@ pub struct TypeAndHeap<'db> {
     pub ty: Type<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeAnonTuple<'db> {
     pub fields: Vec<TypeAndHeap<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeAnonStruct<'db> {
     pub fields: Vec<TypeNamedField<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeNamedField<'db> {
     pub name: InternedText<'db>,
     pub ty: TypeAndHeap<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeAnonEnum<'db> {
     pub variants: Vec<TypeEnumVariant<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeEnumVariant<'db> {
     pub name: InternedText<'db>,
     pub payload: Option<TypeAndHeap<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeList<'db> {
     pub element_type: TypeAndHeap<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeMap<'db> {
     pub key_type: TypeAndHeap<'db>,
     pub value_type: TypeAndHeap<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeSet<'db> {
     pub element_type: TypeAndHeap<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeOption<'db> {
     pub inner_type: TypeAndHeap<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeResult<'db> {
     pub inner_type: TypeAndHeap<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeTensor<'db> {
     pub element_type: TypeAndHeap<'db>,
     pub rank: u32,
@@ -291,20 +302,20 @@ fn synthesize<'db>(
                 let elem_type = synthesize(ctx, elem)?;
                 element_types.push(elem_type);
             }
-            Type::AnonTuple(TypeAnonTuple::new(db, element_types))
+            Type::AnonTuple(TypeAnonTuple { fields: element_types })
         }
 
         // Rule: Syn-AnonStruct - synthesize struct by synthesizing each field.
         Expr::AnonStruct(s) => {
-            let fields = s.fields(db);
+            let fields = s.fields(db).clone();
             let mut field_types = Vec::new();
             for field in fields {
                 let field_name = field.name(db);
                 let field_value = field.value(db);
                 let field_type = synthesize(ctx, field_value)?;
-                field_types.push(TypeNamedField::new(db, field_name, field_type));
+                field_types.push(TypeNamedField { name: field_name, ty: field_type });
             }
-            Type::AnonStruct(TypeAnonStruct::new(db, field_types))
+            Type::AnonStruct(TypeAnonStruct { fields: field_types })
         }
 
         // Rule: Syn-List - synthesize list by synthesizing all elements (must have same type).
@@ -363,7 +374,7 @@ fn synthesize<'db>(
                 }
             }
 
-            Type::List(TypeList::new(db, first_type))
+            Type::List(TypeList { element_type: first_type })
         }
 
         // Rule: Syn-Set - synthesize set by synthesizing all elements (must have same type).
@@ -422,7 +433,7 @@ fn synthesize<'db>(
                 }
             }
 
-            Type::Set(TypeSet::new(db, first_type))
+            Type::Set(TypeSet { element_type: first_type })
         }
 
         // Rule: Syn-Map - synthesize map by synthesizing all keys and values (must have same types).
@@ -519,21 +530,21 @@ fn synthesize<'db>(
                 }
             }
 
-            Type::Map(TypeMap::new(db, first_key_type, first_value_type))
+            Type::Map(TypeMap { key_type: first_key_type, value_type: first_value_type })
         }
 
         // Rule: Syn-Some - synthesize Option type by synthesizing inner.
         Expr::Some(s) => {
             let payload = s.payload(db);
             let inner_type = synthesize(ctx, payload)?;
-            Type::Option(TypeOption::new(db, inner_type))
+            Type::Option(TypeOption { inner_type })
         }
 
         // Rule: Syn-Ok - synthesize Result type by synthesizing inner.
         Expr::Ok(o) => {
             let payload = o.payload(db);
             let inner_type = synthesize(ctx, payload)?;
-            Type::Result(TypeResult::new(db, inner_type))
+            Type::Result(TypeResult { inner_type })
         }
 
         // Rule: Syn-Data - data values synthesize as Type::Data.
@@ -639,7 +650,7 @@ fn synthesize<'db>(
             // Rank is the length of the shape vector.
             let rank = shape.len() as u32;
 
-            Type::Tensor(TypeTensor::new(db, first_type, rank))
+            Type::Tensor(TypeTensor { element_type: first_type, rank })
         }
 
         Expr::ParseError(_) => {
@@ -679,8 +690,8 @@ fn check<'db>(
         (Expr::Ok(_), Type::Result(_)) => expected.heap(db),
         (Expr::Er(_), Type::Result(_)) => expected.heap(db),
         (Expr::Error(_), Type::Result(_)) => expected.heap(db),
-        (_, Type::Option(opt)) => opt.inner_type(db).heap(db),
-        (_, Type::Result(res)) => res.inner_type(db).heap(db),
+        (_, Type::Option(opt)) => opt.inner_type.heap(db),
+        (_, Type::Result(res)) => res.inner_type.heap(db),
         _ => expected.heap(db),
     };
 
@@ -708,13 +719,13 @@ fn check<'db>(
         // Rule: Check-Some - explicit some constructor
         (Expr::Some(s), Type::Option(opt)) => {
             let payload = s.payload(db);
-            check(ctx, payload, opt.inner_type(db))
+            check(ctx, payload, opt.inner_type)
         }
 
         // Rule: Check-Ok - explicit ok constructor
         (Expr::Ok(o), Type::Result(res)) => {
             let payload = o.payload(db);
-            check(ctx, payload, res.inner_type(db))
+            check(ctx, payload, res.inner_type)
         }
 
         // Rule: Check-Er - explicit er constructor
@@ -1056,7 +1067,7 @@ fn check<'db>(
         // Rule: Check-AnonTuple
         (Expr::AnonTuple(t), Type::AnonTuple(expected_tuple)) => {
             let elements = t.elements(db);
-            let expected_fields = expected_tuple.fields(db);
+            let expected_fields = expected_tuple.fields.clone();
 
             if elements.len() != expected_fields.len() {
                 // T038: Tuple arity mismatch.
@@ -1082,8 +1093,8 @@ fn check<'db>(
 
         // Rule: Check-AnonStruct
         (Expr::AnonStruct(s), Type::AnonStruct(expected_struct)) => {
-            let fields = s.fields(db);
-            let expected_fields = expected_struct.fields(db);
+            let fields = s.fields(db).clone();
+            let expected_fields = expected_struct.fields.clone();
 
             if fields.len() != expected_fields.len() {
                 // T039: Struct arity mismatch.
@@ -1102,7 +1113,7 @@ fn check<'db>(
 
             for (field, expected_field) in fields.iter().zip(expected_fields.iter()) {
                 let field_name = field.name(db);
-                let expected_name = expected_field.name(db);
+                let expected_name = expected_field.name;
 
                 if field_name != expected_name {
                     // T042: Struct field order mismatch.
@@ -1117,7 +1128,7 @@ fn check<'db>(
                     return Err(TypeError::FieldOrderMismatch);
                 }
 
-                check(ctx, field.value(db), expected_field.ty(db))?;
+                check(ctx, field.value(db), expected_field.ty)?;
             }
 
             Ok(())
@@ -1156,11 +1167,11 @@ fn check<'db>(
         // Rule: Check-AnonEnum
         (Expr::AnonEnum(e), Type::AnonEnum(expected_enum)) => {
             let variant_name = e.variant_name(db);
-            let expected_variants = expected_enum.variants(db);
+            let expected_variants = expected_enum.variants.clone();
 
             let expected_variant = expected_variants
                 .iter()
-                .find(|v| v.name(db) == variant_name)
+                .find(|v| v.name == variant_name)
                 .ok_or_else(|| {
                     // T044: Enum variant not found.
                     if let Some(ts) = ctx.get_span(expr) {
@@ -1172,7 +1183,7 @@ fn check<'db>(
                     TypeError::VariantNotFound(variant_name.as_str(db).to_string())
                 })?;
 
-            match (e.payload(db), expected_variant.payload(db)) {
+            match (e.payload(db), expected_variant.payload) {
                 (Some(payload), Some(expected_payload)) => {
                     check(ctx, payload, expected_payload)
                 }
@@ -1209,7 +1220,7 @@ fn check<'db>(
         // Rule: Check-List
         (Expr::List(l), Type::List(expected_list)) => {
             let elements = l.elements(db);
-            let element_type = expected_list.element_type(db);
+            let element_type = expected_list.element_type;
 
             for elem in elements {
                 check(ctx, elem, element_type)?;
@@ -1221,8 +1232,8 @@ fn check<'db>(
         // Rule: Check-Map
         (Expr::Map(m), Type::Map(expected_map)) => {
             let entries = m.entries(db);
-            let key_type = expected_map.key_type(db);
-            let value_type = expected_map.value_type(db);
+            let key_type = expected_map.key_type;
+            let value_type = expected_map.value_type;
 
             for entry in entries {
                 check(ctx, entry.key(db), key_type)?;
@@ -1235,7 +1246,7 @@ fn check<'db>(
         // Rule: Check-Set
         (Expr::Set(s), Type::Set(expected_set)) => {
             let elements = s.elements(db);
-            let element_type = expected_set.element_type(db);
+            let element_type = expected_set.element_type;
 
             for elem in elements {
                 check(ctx, elem, element_type)?;
@@ -1248,21 +1259,21 @@ fn check<'db>(
         (Expr::Tensor(t), Type::Tensor(expected_tensor)) => {
             let shape = t.shape(db);
             let elements = t.elements(db);
-            let element_type = expected_tensor.element_type(db);
+            let element_type = expected_tensor.element_type;
 
             // Verify rank matches.
             let rank = shape.len() as u32;
-            if rank != expected_tensor.rank(db) {
+            if rank != expected_tensor.rank {
                 // T048: Tensor rank mismatch.
                 if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "tensor has wrong rank")
                         .code("T048")
                         .primary_label(ts.clone(), &format!("expected rank {}, found rank {}",
-                            expected_tensor.rank(db), rank))
+                            expected_tensor.rank, rank))
                         .emit_type();
                 }
                 return Err(TypeError::ArityMismatch {
-                    expected: expected_tensor.rank(db) as usize,
+                    expected: expected_tensor.rank as usize,
                     actual: rank as usize,
                 });
             }
@@ -1359,7 +1370,7 @@ pub fn convert_type_hint<'db>(
                 .iter()
                 .map(|f| convert_type_hint(db, *f))
                 .collect();
-            Type::AnonTuple(TypeAnonTuple::new(db, fields?))
+            Type::AnonTuple(TypeAnonTuple { fields: fields? })
         }
 
         TypeHint::AnonStruct(s) => {
@@ -1369,10 +1380,10 @@ pub fn convert_type_hint<'db>(
                 .map(|f| {
                     let name = f.name(db);
                     let ty = convert_type_hint(db, f.type_hint(db))?;
-                    Ok(TypeNamedField::new(db, name, ty))
+                    Ok(TypeNamedField { name, ty })
                 })
                 .collect();
-            Type::AnonStruct(TypeAnonStruct::new(db, fields?))
+            Type::AnonStruct(TypeAnonStruct { fields: fields? })
         }
 
         TypeHint::AnonEnum(e) => {
@@ -1385,41 +1396,41 @@ pub fn convert_type_hint<'db>(
                         .payload(db)
                         .map(|p| convert_type_hint(db, p))
                         .transpose()?;
-                    Ok(TypeEnumVariant::new(db, name, payload))
+                    Ok(TypeEnumVariant { name, payload })
                 })
                 .collect();
-            Type::AnonEnum(TypeAnonEnum::new(db, variants?))
+            Type::AnonEnum(TypeAnonEnum { variants: variants? })
         }
 
         TypeHint::List(l) => {
             let element_type = convert_type_hint(db, l.element_type(db))?;
-            Type::List(TypeList::new(db, element_type))
+            Type::List(TypeList { element_type })
         }
 
         TypeHint::Map(m) => {
             let key_type = convert_type_hint(db, m.key_type(db))?;
             let value_type = convert_type_hint(db, m.value_type(db))?;
-            Type::Map(TypeMap::new(db, key_type, value_type))
+            Type::Map(TypeMap { key_type, value_type })
         }
 
         TypeHint::Set(s) => {
             let element_type = convert_type_hint(db, s.element_type(db))?;
-            Type::Set(TypeSet::new(db, element_type))
+            Type::Set(TypeSet { element_type })
         }
 
         TypeHint::Option(o) => {
             let inner_type = convert_type_hint(db, o.inner_type(db))?;
-            Type::Option(TypeOption::new(db, inner_type))
+            Type::Option(TypeOption { inner_type })
         }
 
         TypeHint::Result(r) => {
             let inner_type = convert_type_hint(db, r.inner_type(db))?;
-            Type::Result(TypeResult::new(db, inner_type))
+            Type::Result(TypeResult { inner_type })
         }
 
         TypeHint::Tensor(t) => {
             let element_type = convert_type_hint(db, t.element_type(db))?;
-            Type::Tensor(TypeTensor::new(db, element_type, t.rank(db)))
+            Type::Tensor(TypeTensor { element_type, rank: t.rank(db) })
         }
 
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
@@ -1461,8 +1472,8 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
         (Type::Error, Type::Error) => true,
 
         (Type::AnonTuple(t1), Type::AnonTuple(t2)) => {
-            let f1 = t1.fields(db);
-            let f2 = t2.fields(db);
+            let f1 = t1.fields.clone();
+            let f2 = t2.fields.clone();
             f1.len() == f2.len()
                 && f1
                     .iter()
@@ -1471,23 +1482,23 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
         }
 
         (Type::AnonStruct(s1), Type::AnonStruct(s2)) => {
-            let f1 = s1.fields(db);
-            let f2 = s2.fields(db);
+            let f1 = s1.fields.clone();
+            let f2 = s2.fields.clone();
             f1.len() == f2.len()
                 && f1.iter().zip(f2.iter()).all(|(a, b)| {
-                    a.name(db) == b.name(db) && types_and_heaps_equivalent(db, &a.ty(db), &b.ty(db))
+                    a.name == b.name && types_and_heaps_equivalent(db, &a.ty, &b.ty)
                 })
         }
 
         (Type::AnonEnum(e1), Type::AnonEnum(e2)) => {
             // Enum variants are order-independent.
-            let v1 = e1.variants(db);
-            let v2 = e2.variants(db);
+            let v1 = e1.variants.clone();
+            let v2 = e2.variants.clone();
             v1.len() == v2.len()
                 && v1.iter().all(|var1| {
                     v2.iter().any(|var2| {
-                        var1.name(db) == var2.name(db)
-                            && match (var1.payload(db), var2.payload(db)) {
+                        var1.name == var2.name
+                            && match (var1.payload, var2.payload) {
                                 (Some(p1), Some(p2)) => types_and_heaps_equivalent(db, &p1, &p2),
                                 (None, None) => true,
                                 _ => false,
@@ -1497,29 +1508,29 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
         }
 
         (Type::List(l1), Type::List(l2)) => {
-            types_and_heaps_equivalent(db, &l1.element_type(db), &l2.element_type(db))
+            types_and_heaps_equivalent(db, &l1.element_type, &l2.element_type)
         }
 
         (Type::Map(m1), Type::Map(m2)) => {
-            types_and_heaps_equivalent(db, &m1.key_type(db), &m2.key_type(db))
-                && types_and_heaps_equivalent(db, &m1.value_type(db), &m2.value_type(db))
+            types_and_heaps_equivalent(db, &m1.key_type, &m2.key_type)
+                && types_and_heaps_equivalent(db, &m1.value_type, &m2.value_type)
         }
 
         (Type::Set(s1), Type::Set(s2)) => {
-            types_and_heaps_equivalent(db, &s1.element_type(db), &s2.element_type(db))
+            types_and_heaps_equivalent(db, &s1.element_type, &s2.element_type)
         }
 
         (Type::Option(o1), Type::Option(o2)) => {
-            types_and_heaps_equivalent(db, &o1.inner_type(db), &o2.inner_type(db))
+            types_and_heaps_equivalent(db, &o1.inner_type, &o2.inner_type)
         }
 
         (Type::Result(r1), Type::Result(r2)) => {
-            types_and_heaps_equivalent(db, &r1.inner_type(db), &r2.inner_type(db))
+            types_and_heaps_equivalent(db, &r1.inner_type, &r2.inner_type)
         }
 
         (Type::Tensor(t1), Type::Tensor(t2)) => {
-            t1.rank(db) == t2.rank(db)
-                && types_and_heaps_equivalent(db, &t1.element_type(db), &t2.element_type(db))
+            t1.rank == t2.rank
+                && types_and_heaps_equivalent(db, &t1.element_type, &t2.element_type)
         }
 
         _ => false,
@@ -1597,7 +1608,7 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
         Type::Data => "data".to_string(),
         Type::Error => "error".to_string(),
         Type::AnonTuple(t) => {
-            let fields: Vec<_> = t.fields(db)
+            let fields: Vec<_> = t.fields.clone()
                 .iter()
                 .map(|f| {
                     let heap = heap_to_string(f.heap(db));
@@ -1608,12 +1619,12 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
             format!("({})", fields.join(", "))
         }
         Type::AnonStruct(s) => {
-            let fields: Vec<_> = s.fields(db)
+            let fields: Vec<_> = s.fields.clone()
                 .iter()
                 .map(|f| {
-                    let name = f.name(db).as_str(db);
-                    let heap = heap_to_string(f.ty(db).heap(db));
-                    let ty_str = type_to_string(db, f.ty(db).ty(db));
+                    let name = f.name.as_str(db);
+                    let heap = heap_to_string(f.ty.heap(db));
+                    let ty_str = type_to_string(db, f.ty.ty(db));
                     format!("{}: {}{}", name, heap, ty_str)
                 })
                 .collect();
@@ -1623,41 +1634,41 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
             format!("@enum{{...}}")
         }
         Type::List(l) => {
-            let elem = l.element_type(db);
+            let elem = l.element_type;
             let heap = heap_to_string(elem.heap(db));
             let ty_str = type_to_string(db, elem.ty(db));
             format!("[{}{}]", heap, ty_str)
         }
         Type::Map(m) => {
-            let key = m.key_type(db);
-            let value = m.value_type(db);
+            let key = m.key_type;
+            let value = m.value_type;
             format!("@map<{}, {}>",
                 format!("{}{}", heap_to_string(key.heap(db)), type_to_string(db, key.ty(db))),
                 format!("{}{}", heap_to_string(value.heap(db)), type_to_string(db, value.ty(db))))
         }
         Type::Set(s) => {
-            let elem = s.element_type(db);
+            let elem = s.element_type;
             let heap = heap_to_string(elem.heap(db));
             let ty_str = type_to_string(db, elem.ty(db));
             format!("@set<{}{}>", heap, ty_str)
         }
         Type::Option(o) => {
-            let inner = o.inner_type(db);
+            let inner = o.inner_type;
             let heap = heap_to_string(inner.heap(db));
             let ty_str = type_to_string(db, inner.ty(db));
             format!("@?{}{}", heap, ty_str)
         }
         Type::Result(r) => {
-            let inner = r.inner_type(db);
+            let inner = r.inner_type;
             let heap = heap_to_string(inner.heap(db));
             let ty_str = type_to_string(db, inner.ty(db));
             format!("@!{}{}", heap, ty_str)
         }
         Type::Tensor(t) => {
-            let elem = t.element_type(db);
+            let elem = t.element_type;
             let heap = heap_to_string(elem.heap(db));
             let ty_str = type_to_string(db, elem.ty(db));
-            format!("@tensor<{}{}, {}>", heap, ty_str, t.rank(db))
+            format!("@tensor<{}{}, {}>", heap, ty_str, t.rank)
         }
     }
 }

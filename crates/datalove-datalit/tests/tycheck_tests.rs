@@ -32,7 +32,7 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
         Type::Error => json!(format!("{}error", heap_str)),
 
         Type::AnonTuple(t) => {
-            let fields: Vec<_> = t.fields(db)
+            let fields: Vec<_> = t.fields
                 .iter()
                 .map(|f| type_to_json(db, *f))
                 .collect();
@@ -44,12 +44,12 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
         }
 
         Type::AnonStruct(s) => {
-            let fields: Vec<_> = s.fields(db)
+            let fields: Vec<_> = s.fields
                 .iter()
                 .map(|f| {
                     json!({
-                        "name": f.name(db).as_str(db),
-                        "type": type_to_json(db, f.ty(db))
+                        "name": f.name.as_str(db),
+                        "type": type_to_json(db, f.ty)
                     })
                 })
                 .collect();
@@ -61,12 +61,12 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
         }
 
         Type::AnonEnum(e) => {
-            let variants: Vec<_> = e.variants(db)
+            let variants: Vec<_> = e.variants
                 .iter()
                 .map(|v| {
-                    let payload = v.payload(db).map(|p| type_to_json(db, p));
+                    let payload = v.payload.clone().map(|p| type_to_json(db, p));
                     json!({
-                        "name": v.name(db).as_str(db),
+                        "name": v.name.as_str(db),
                         "payload": payload
                     })
                 })
@@ -82,7 +82,7 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
             json!({
                 "kind": "List",
                 "heap": heap_str,
-                "element_type": type_to_json(db, l.element_type(db))
+                "element_type": type_to_json(db, l.element_type)
             })
         }
 
@@ -90,8 +90,8 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
             json!({
                 "kind": "Map",
                 "heap": heap_str,
-                "key_type": type_to_json(db, m.key_type(db)),
-                "value_type": type_to_json(db, m.value_type(db))
+                "key_type": type_to_json(db, m.key_type),
+                "value_type": type_to_json(db, m.value_type)
             })
         }
 
@@ -99,7 +99,7 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
             json!({
                 "kind": "Set",
                 "heap": heap_str,
-                "element_type": type_to_json(db, s.element_type(db))
+                "element_type": type_to_json(db, s.element_type)
             })
         }
 
@@ -107,7 +107,7 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
             json!({
                 "kind": "Option",
                 "heap": heap_str,
-                "inner_type": type_to_json(db, o.inner_type(db))
+                "inner_type": type_to_json(db, o.inner_type)
             })
         }
 
@@ -115,7 +115,7 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
             json!({
                 "kind": "Result",
                 "heap": heap_str,
-                "inner_type": type_to_json(db, r.inner_type(db))
+                "inner_type": type_to_json(db, r.inner_type)
             })
         }
 
@@ -123,8 +123,8 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
             json!({
                 "kind": "Tensor",
                 "heap": heap_str,
-                "element_type": type_to_json(db, t.element_type(db)),
-                "rank": t.rank(db)
+                "element_type": type_to_json(db, t.element_type),
+                "rank": t.rank
             })
         }
     }

@@ -28,8 +28,8 @@ fn types_equal<'db>(
         (Type::Error, Type::Error) => true,
 
         (Type::AnonTuple(t1), Type::AnonTuple(t2)) => {
-            let fields1 = t1.fields(db);
-            let fields2 = t2.fields(db);
+            let fields1 = &t1.fields;
+            let fields2 = &t2.fields;
             if fields1.len() != fields2.len() {
                 return false;
             }
@@ -41,34 +41,34 @@ fn types_equal<'db>(
         }
 
         (Type::List(t1), Type::List(t2)) => {
-            let elem1 = t1.element_type(db);
-            let elem2 = t2.element_type(db);
+            let elem1 = t1.element_type;
+            let elem2 = t2.element_type;
             let heap1 = std::mem::discriminant(&elem1.heap(db));
             let heap2 = std::mem::discriminant(&elem2.heap(db));
             heap1 == heap2 && types_equal(db, elem1.ty(db), elem2.ty(db))
         }
 
         (Type::Option(t1), Type::Option(t2)) => {
-            let inner1 = t1.inner_type(db);
-            let inner2 = t2.inner_type(db);
+            let inner1 = t1.inner_type;
+            let inner2 = t2.inner_type;
             let heap1 = std::mem::discriminant(&inner1.heap(db));
             let heap2 = std::mem::discriminant(&inner2.heap(db));
             heap1 == heap2 && types_equal(db, inner1.ty(db), inner2.ty(db))
         }
 
         (Type::Result(t1), Type::Result(t2)) => {
-            let inner1 = t1.inner_type(db);
-            let inner2 = t2.inner_type(db);
+            let inner1 = t1.inner_type;
+            let inner2 = t2.inner_type;
             let heap1 = std::mem::discriminant(&inner1.heap(db));
             let heap2 = std::mem::discriminant(&inner2.heap(db));
             heap1 == heap2 && types_equal(db, inner1.ty(db), inner2.ty(db))
         }
 
         (Type::Map(m1), Type::Map(m2)) => {
-            let key1 = m1.key_type(db);
-            let key2 = m2.key_type(db);
-            let value1 = m1.value_type(db);
-            let value2 = m2.value_type(db);
+            let key1 = m1.key_type;
+            let key2 = m2.key_type;
+            let value1 = m1.value_type;
+            let value2 = m2.value_type;
             let key_heap1 = std::mem::discriminant(&key1.heap(db));
             let key_heap2 = std::mem::discriminant(&key2.heap(db));
             let value_heap1 = std::mem::discriminant(&value1.heap(db));
@@ -79,8 +79,8 @@ fn types_equal<'db>(
         }
 
         (Type::Set(s1), Type::Set(s2)) => {
-            let elem1 = s1.element_type(db);
-            let elem2 = s2.element_type(db);
+            let elem1 = s1.element_type;
+            let elem2 = s2.element_type;
             let heap1 = std::mem::discriminant(&elem1.heap(db));
             let heap2 = std::mem::discriminant(&elem2.heap(db));
             heap1 == heap2 && types_equal(db, elem1.ty(db), elem2.ty(db))

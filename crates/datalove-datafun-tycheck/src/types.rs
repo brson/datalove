@@ -143,10 +143,10 @@ pub fn check_int_fits_type(value_str: &str, ty: &datalit::tycheck::Type<'_>) -> 
 pub fn check_int_fits_wrapped_type(value_str: &str, ty: &datalit::tycheck::Type<'_>, db: &dyn crate::Db) -> Result<(), TypeError> {
     match ty {
         datalit::tycheck::Type::Option(opt) => {
-            check_int_fits_wrapped_type(value_str, opt.inner_type(db).ty(db), db)
+            check_int_fits_wrapped_type(value_str, opt.inner_type.ty(db), db)
         }
         datalit::tycheck::Type::Result(res) => {
-            check_int_fits_wrapped_type(value_str, res.inner_type(db).ty(db), db)
+            check_int_fits_wrapped_type(value_str, res.inner_type.ty(db), db)
         }
         _ => check_int_fits_type(value_str, ty),
     }
@@ -224,10 +224,10 @@ pub fn check_hex_fits_type(value_str: &str, ty: &datalit::tycheck::Type<'_>) -> 
 pub fn check_hex_fits_wrapped_type(value_str: &str, ty: &datalit::tycheck::Type<'_>, db: &dyn crate::Db) -> Result<(), TypeError> {
     match ty {
         datalit::tycheck::Type::Option(opt) => {
-            check_hex_fits_wrapped_type(value_str, opt.inner_type(db).ty(db), db)
+            check_hex_fits_wrapped_type(value_str, opt.inner_type.ty(db), db)
         }
         datalit::tycheck::Type::Result(res) => {
-            check_hex_fits_wrapped_type(value_str, res.inner_type(db).ty(db), db)
+            check_hex_fits_wrapped_type(value_str, res.inner_type.ty(db), db)
         }
         _ => check_hex_fits_type(value_str, ty),
     }
@@ -241,10 +241,10 @@ pub fn unwrap_wrapper_heap<'db>(
 ) -> datalit::ast::Heap {
     match ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
-            unwrap_wrapper_heap_datalit(db, opt.inner_type(db))
+            unwrap_wrapper_heap_datalit(db, opt.inner_type)
         }
         Type::Datalit(datalit::tycheck::Type::Result(res)) => {
-            unwrap_wrapper_heap_datalit(db, res.inner_type(db))
+            unwrap_wrapper_heap_datalit(db, res.inner_type)
         }
         _ => ty.heap(db),
     }
@@ -257,10 +257,10 @@ pub fn unwrap_wrapper_heap_datalit<'db>(
 ) -> datalit::ast::Heap {
     match ty.ty(db) {
         datalit::tycheck::Type::Option(opt) => {
-            unwrap_wrapper_heap_datalit(db, opt.inner_type(db))
+            unwrap_wrapper_heap_datalit(db, opt.inner_type)
         }
         datalit::tycheck::Type::Result(res) => {
-            unwrap_wrapper_heap_datalit(db, res.inner_type(db))
+            unwrap_wrapper_heap_datalit(db, res.inner_type)
         }
         _ => ty.heap(db),
     }
@@ -383,7 +383,7 @@ pub fn unwrap_wrapper_types<'db>(
     match ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
             // Convert datalit TypeAndHeap to datafun TypeAndHeap.
-            let inner = opt.inner_type(db);
+            let inner = opt.inner_type;
             let datafun_inner = TypeAndHeap::new(
                 db,
                 inner.heap(db),
@@ -393,7 +393,7 @@ pub fn unwrap_wrapper_types<'db>(
         }
         Type::Datalit(datalit::tycheck::Type::Result(res)) => {
             // Convert datalit TypeAndHeap to datafun TypeAndHeap.
-            let inner = res.inner_type(db);
+            let inner = res.inner_type;
             let datafun_inner = TypeAndHeap::new(
                 db,
                 inner.heap(db),
@@ -411,7 +411,7 @@ pub fn unwrap_wrapper_types<'db>(
 /// Memoized to avoid creating tracked structs outside of tracked functions.
 #[salsa::tracked]
 pub fn unit_type<'db>(db: &'db dyn crate::Db) -> TypeAndHeap<'db> {
-    let unit_tuple = datalit::tycheck::TypeAnonTuple::new(db, vec![]);
+    let unit_tuple = datalit::tycheck::TypeAnonTuple { fields: vec![] };
     TypeAndHeap::new(
         db,
         datalit::ast::Heap::Omitted,
@@ -423,7 +423,7 @@ pub fn unit_type<'db>(db: &'db dyn crate::Db) -> TypeAndHeap<'db> {
 pub fn is_unit_type<'db>(db: &'db dyn crate::Db, ty: TypeAndHeap<'db>) -> bool {
     match ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::AnonTuple(tuple)) => {
-            tuple.fields(db).is_empty()
+            tuple.fields.is_empty()
         }
         _ => false,
     }

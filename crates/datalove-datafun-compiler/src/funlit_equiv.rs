@@ -465,37 +465,37 @@ fn datalit_type_inner_to_serde<'db>(
         Type::Int => TypeSerde::Int,
         Type::String => TypeSerde::String,
         Type::AnonTuple(t) => TypeSerde::AnonTuple {
-            fields: t.fields(db).iter().map(|f| datalit_type_to_serde(db, *f)).collect(),
+            fields: t.fields.iter().map(|f| datalit_type_to_serde(db, *f)).collect(),
         },
         Type::AnonStruct(t) => TypeSerde::AnonStruct {
-            fields: t.fields(db).iter()
-                .map(|f| (f.name(db).as_str(db).to_string(), datalit_type_to_serde(db, f.ty(db))))
+            fields: t.fields.iter()
+                .map(|f| (f.name.as_str(db).to_string(), datalit_type_to_serde(db, f.ty)))
                 .collect(),
         },
         Type::AnonEnum(t) => TypeSerde::AnonEnum {
-            variants: t.variants(db).iter()
-                .map(|v| (v.name(db).as_str(db).to_string(), v.payload(db).map(|p| datalit_type_to_serde(db, p))))
+            variants: t.variants.iter()
+                .map(|v| (v.name.as_str(db).to_string(), v.payload.clone().map(|p| datalit_type_to_serde(db, p))))
                 .collect(),
         },
         Type::List(t) => TypeSerde::List {
-            element: Box::new(datalit_type_to_serde(db, t.element_type(db))),
+            element: Box::new(datalit_type_to_serde(db, t.element_type)),
         },
         Type::Map(t) => TypeSerde::Map {
-            key: Box::new(datalit_type_to_serde(db, t.key_type(db))),
-            value: Box::new(datalit_type_to_serde(db, t.value_type(db))),
+            key: Box::new(datalit_type_to_serde(db, t.key_type)),
+            value: Box::new(datalit_type_to_serde(db, t.value_type)),
         },
         Type::Set(t) => TypeSerde::Set {
-            element: Box::new(datalit_type_to_serde(db, t.element_type(db))),
+            element: Box::new(datalit_type_to_serde(db, t.element_type)),
         },
         Type::Option(t) => TypeSerde::Option {
-            inner: Box::new(datalit_type_to_serde(db, t.inner_type(db))),
+            inner: Box::new(datalit_type_to_serde(db, t.inner_type)),
         },
         Type::Result(t) => TypeSerde::Result {
-            inner: Box::new(datalit_type_to_serde(db, t.inner_type(db))),
+            inner: Box::new(datalit_type_to_serde(db, t.inner_type)),
         },
         Type::Tensor(t) => TypeSerde::Tensor {
-            element: Box::new(datalit_type_to_serde(db, t.element_type(db))),
-            rank: t.rank(db),
+            element: Box::new(datalit_type_to_serde(db, t.element_type)),
+            rank: t.rank,
         },
         Type::Data => TypeSerde::Data,
         Type::Error => TypeSerde::Error,

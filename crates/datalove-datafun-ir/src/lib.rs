@@ -288,7 +288,7 @@ impl IrType {
             DlType::Data => IrType::Data,
             DlType::Error => IrType::Error,
             DlType::AnonTuple(tuple) => {
-                let fields: Vec<_> = tuple.fields(db)
+                let fields: Vec<_> = tuple.fields
                     .iter()
                     .map(|f| Self::from_datalit_tyandheap(db, f))
                     .collect();
@@ -299,18 +299,18 @@ impl IrType {
                 }
             }
             DlType::AnonStruct(struct_) => {
-                let fields: Vec<_> = struct_.fields(db)
+                let fields: Vec<_> = struct_.fields
                     .iter()
-                    .map(|f| (f.name(db).text(db).to_string(), Self::from_datalit_tyandheap(db, &f.ty(db))))
+                    .map(|f| (f.name.text(db).to_string(), Self::from_datalit_tyandheap(db, &f.ty)))
                     .collect();
                 IrType::Struct(fields)
             }
             DlType::AnonEnum(enum_) => {
-                let mut variants: Vec<_> = enum_.variants(db)
+                let mut variants: Vec<_> = enum_.variants
                     .iter()
                     .map(|v| {
-                        let name = v.name(db).text(db).to_string();
-                        let payload = v.payload(db).map(|p| Self::from_datalit_tyandheap(db, &p));
+                        let name = v.name.text(db).to_string();
+                        let payload = v.payload.clone().map(|p| Self::from_datalit_tyandheap(db, &p));
                         (name, payload)
                     })
                     .collect();
@@ -319,29 +319,29 @@ impl IrType {
                 IrType::Enum(variants)
             }
             DlType::List(list) => {
-                let elem = Self::from_datalit_tyandheap(db, &list.element_type(db));
+                let elem = Self::from_datalit_tyandheap(db, &list.element_type);
                 IrType::List(Box::new(elem))
             }
             DlType::Set(set) => {
-                let elem = Self::from_datalit_tyandheap(db, &set.element_type(db));
+                let elem = Self::from_datalit_tyandheap(db, &set.element_type);
                 IrType::Set(Box::new(elem))
             }
             DlType::Map(map) => {
-                let key = Self::from_datalit_tyandheap(db, &map.key_type(db));
-                let val = Self::from_datalit_tyandheap(db, &map.value_type(db));
+                let key = Self::from_datalit_tyandheap(db, &map.key_type);
+                let val = Self::from_datalit_tyandheap(db, &map.value_type);
                 IrType::Map(Box::new(key), Box::new(val))
             }
             DlType::Option(opt) => {
-                let inner = Self::from_datalit_tyandheap(db, &opt.inner_type(db));
+                let inner = Self::from_datalit_tyandheap(db, &opt.inner_type);
                 IrType::Option(Box::new(inner))
             }
             DlType::Result(res) => {
-                let ok = Self::from_datalit_tyandheap(db, &res.inner_type(db));
+                let ok = Self::from_datalit_tyandheap(db, &res.inner_type);
                 IrType::Result(Box::new(ok))
             }
             DlType::Tensor(t) => {
-                let elem = Self::from_datalit_tyandheap(db, &t.element_type(db));
-                IrType::Tensor(Box::new(elem), t.rank(db))
+                let elem = Self::from_datalit_tyandheap(db, &t.element_type);
+                IrType::Tensor(Box::new(elem), t.rank)
             }
         }
     }

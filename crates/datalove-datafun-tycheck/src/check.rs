@@ -59,7 +59,7 @@ pub fn check_expr<'db>(
             match expected.ty(db) {
                 Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
                     // Check payload against inner type.
-                    let inner_ty = opt.inner_type(db);
+                    let inner_ty = opt.inner_type;
                     let expected_inner = TypeAndHeap::new(
                         db,
                         inner_ty.heap(db),
@@ -81,7 +81,7 @@ pub fn check_expr<'db>(
             match expected.ty(db) {
                 Type::Datalit(datalit::tycheck::Type::Result(res)) => {
                     // Check payload against inner type.
-                    let inner_ty = res.inner_type(db);
+                    let inner_ty = res.inner_type;
                     let expected_inner = TypeAndHeap::new(
                         db,
                         inner_ty.heap(db),
@@ -278,8 +278,8 @@ fn check_type_arity_or_mismatch<'db>(
         datalit::tycheck::Type::AnonStruct(actual_struct),
         datalit::tycheck::Type::AnonStruct(expected_struct),
     ) = (actual, expected) {
-        let actual_count = actual_struct.fields(db).len();
-        let expected_count = expected_struct.fields(db).len();
+        let actual_count = actual_struct.fields.len();
+        let expected_count = expected_struct.fields.len();
         if actual_count != expected_count {
             return Err(CoercionError::ArityMismatch {
                 expected: expected_count,
@@ -293,8 +293,8 @@ fn check_type_arity_or_mismatch<'db>(
         datalit::tycheck::Type::AnonTuple(actual_tuple),
         datalit::tycheck::Type::AnonTuple(expected_tuple),
     ) = (actual, expected) {
-        let actual_count = actual_tuple.fields(db).len();
-        let expected_count = expected_tuple.fields(db).len();
+        let actual_count = actual_tuple.fields.len();
+        let expected_count = expected_tuple.fields.len();
         if actual_count != expected_count {
             return Err(CoercionError::ArityMismatch {
                 expected: expected_count,
@@ -324,7 +324,7 @@ pub fn check_list_elements<'db>(
     // Extract the element type from the list type.
     let elem_type = match inner_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::List(list_ty)) => {
-            list_ty.element_type(db)
+            list_ty.element_type
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
@@ -381,7 +381,7 @@ pub fn check_set_elements<'db>(
     // Extract the element type from the set type.
     let elem_type = match inner_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Set(set_ty)) => {
-            set_ty.element_type(db)
+            set_ty.element_type
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
@@ -437,7 +437,7 @@ pub fn check_map_entries<'db>(
     // Extract the key and value types from the map type.
     let (key_type, value_type) = match inner_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Map(map_ty)) => {
-            (map_ty.key_type(db), map_ty.value_type(db))
+            (map_ty.key_type, map_ty.value_type)
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
@@ -523,7 +523,7 @@ pub fn check_tensor_shape_and_elements<'db>(
     // Extract tensor type info.
     let (elem_type, expected_rank) = match inner_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Tensor(tensor_ty)) => {
-            (tensor_ty.element_type(db), tensor_ty.rank(db))
+            (tensor_ty.element_type, tensor_ty.rank)
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
@@ -597,7 +597,7 @@ pub fn check_tuple_elements<'db>(
     // Extract the field types from the tuple type.
     let expected_fields = match inner_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::AnonTuple(tuple_ty)) => {
-            tuple_ty.fields(db)
+            tuple_ty.fields.clone()
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
@@ -661,7 +661,7 @@ pub fn check_struct_fields<'db>(
     // Extract the field types from the struct type.
     let expected_fields = match inner_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::AnonStruct(struct_ty)) => {
-            struct_ty.fields(db)
+            struct_ty.fields.clone()
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
@@ -678,7 +678,7 @@ pub fn check_struct_fields<'db>(
     for (field, expected_field) in fields.iter().zip(expected_fields.iter()) {
         // Check field name matches.
         let field_name = field.name(db);
-        let expected_name = expected_field.name(db);
+        let expected_name = expected_field.name;
         if field_name != expected_name {
             return Err(TypeError::FieldOrderMismatch);
         }
@@ -692,7 +692,7 @@ pub fn check_struct_fields<'db>(
         };
 
         // Check type compatibility with coercion.
-        let expected_field_ty = expected_field.ty(db);
+        let expected_field_ty = expected_field.ty;
         if let Err(err) = check_type_coercion(db, actual_datalit_ty, &expected_field_ty) {
             return Err(TypeError::from(err));
         }
@@ -734,7 +734,7 @@ pub fn check_enum_variant<'db>(
     // Extract the variants from the enum type.
     let expected_variants = match inner_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::AnonEnum(enum_ty)) => {
-            enum_ty.variants(db)
+            enum_ty.variants.clone()
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
@@ -742,7 +742,7 @@ pub fn check_enum_variant<'db>(
     // Look up the variant by name.
     let expected_variant = expected_variants
         .iter()
-        .find(|v| v.name(db) == variant_name)
+        .find(|v| v.name == variant_name)
         .ok_or_else(|| {
             TypeError::VariantNotFound(variant_name.as_str(db).to_string())
         })?;
@@ -752,7 +752,7 @@ pub fn check_enum_variant<'db>(
     // don't fail here - let the type comparison at a higher level catch the mismatch.
     // This matches datalit's Check-TypedAnonEnum behavior which compares enum types rather
     // than individual variant payloads.
-    if let (Some(payload_expr), Some(expected_payload_ty)) = (payload, expected_variant.payload(db)) {
+    if let (Some(payload_expr), Some(expected_payload_ty)) = (payload, expected_variant.payload.clone()) {
         // Synthesize payload type and check against expected.
         let payload_ty = ctx.synthesize_expr(payload_expr)?;
         let actual_datalit_ty = match payload_ty.ty(db) {
