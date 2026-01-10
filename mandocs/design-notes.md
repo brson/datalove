@@ -36,12 +36,13 @@ after each of the actions has been taken.
 | action            | direct-ast | direct-ty | direct-hash | depend-ast | depend-ty | depend-hash |
 |-------------------|------------|-----------|-------------|------------|-----------|-------------|
 | add-module        | y          | y         | y           | n/a        | n/a       | n/a         |
-| remove-module     | y*         | y*        | y*          | y          | y         | y           |
+| remove-module     | y*         | y*        | y*          | **         | **        | **          |
 | change-module-ws  | y          | n         | y           | n          | n         | y           |
-| change-module-ast | y          | y         | y           | n          | n         | y           |
+| change-module-ast | y          | n         | y           | n          | n         | y           |
 | change-module-ty  | y          | y         | y           | n          | y         | y           |
 
 > *: removed
+> **: i think this case is impossible because the module graph can't resolve
 
 Our test suite is a worldfile variant with the following sections:
 `module`, `module-add`, `module-change-ws`, `module-change-ast`, `module-change-ty`.
