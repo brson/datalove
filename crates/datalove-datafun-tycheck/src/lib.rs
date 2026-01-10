@@ -72,18 +72,6 @@ pub enum TypeError {
     VariantNotFound(String),
     BreakOutsideLoop,
     ContinueOutsideLoop,
-    /// Break has wrong number of values for loop's bring bindings.
-    BreakArityMismatch { expected: usize, actual: usize },
-    /// Continue has wrong number of values for loop's carry bindings.
-    ContinueArityMismatch { expected: usize, actual: usize },
-    /// Loop with carry/bring has paths that fall through without break/continue.
-    LoopBodyFallthrough,
-    /// Loop while with bring requires else break clause.
-    LoopWhileMissingElseBreak,
-    /// Else break not allowed on loop while with carries but no brings.
-    ElseBreakNotAllowed,
-    /// Else break has wrong number of values for loop's bring bindings.
-    ElseBreakArityMismatch { expected: usize, actual: usize },
 }
 
 impl From<datalove_datalit::tycheck::TypeError> for TypeError {
@@ -432,7 +420,6 @@ pub use api::{
 // Re-export context types.
 pub use context::{
     TypeContext,
-    LoopContext,
     ScriptTypeContext,
     ScriptTypecheckResultRaw,
     ExprTypecheckResultRaw,

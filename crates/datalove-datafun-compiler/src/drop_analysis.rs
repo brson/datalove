@@ -57,8 +57,6 @@ pub struct BindingInfo {
     pub is_script_unit: bool,
     /// Parameter mode if this binding is a param (None for let/var).
     pub param_mode: Option<ParamMode>,
-    /// Whether this binding is a loop carry binding (passed via block params, not dropped).
-    pub is_carry: bool,
 }
 
 impl BindingInfo {
@@ -192,8 +190,6 @@ struct ScopeFrame {
     current_state: HashMap<BindingId, BindingState>,
     /// Initialization state for Out params.
     out_param_init: HashMap<BindingId, OutParamInitState>,
-    /// Carry bindings for this loop scope (not dropped at scope exit).
-    carry_bindings: Vec<BindingId>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -235,7 +231,7 @@ impl<'db> AnalysisCtx<'db> {
             .map(|f| f.kind == ScopeKind::ScriptUnit)
             .unwrap_or(false);
 
-        self.bindings.push(BindingInfo { name: name.clone(), ty, is_slot, is_script_unit, param_mode, is_carry: false });
+        self.bindings.push(BindingInfo { name: name.clone(), ty, is_slot, is_script_unit, param_mode });
 
         // Record in current scope.
         if let Some(frame) = self.scope_stack.last_mut() {
@@ -269,7 +265,6 @@ impl<'db> AnalysisCtx<'db> {
             kind,
             current_state,
             out_param_init,
-            carry_bindings: Vec::new(),
         });
     }
 
@@ -288,8 +283,7 @@ impl<'db> AnalysisCtx<'db> {
                     let info = &self.bindings[id.0 as usize];
                     // Skip Copy types (no drop needed).
                     // Skip borrowed params (caller retains ownership).
-                    // Skip carry bindings (passed via block params, not dropped).
-                    if !info.ty.is_copy() && !info.is_borrowed() && !info.is_carry {
+                    if !info.ty.is_copy() && !info.is_borrowed() {
                         to_drop.push(id);
                     }
                 }
@@ -375,7 +369,6 @@ impl<'db> AnalysisCtx<'db> {
     ///
     /// Only includes bindings that were created within the scopes being traversed,
     /// not bindings from outer scopes that happen to be live.
-    /// Excludes carry bindings (they're passed via block params, not dropped).
     fn live_bindings_in_scopes(&self, stop_at: ScopeKind) -> Vec<BindingId> {
         let mut result = Vec::new();
         for frame in self.scope_stack.iter().rev() {
@@ -383,8 +376,8 @@ impl<'db> AnalysisCtx<'db> {
             for &id in &frame.bindings {
                 if frame.current_state.get(&id) == Some(&BindingState::Live) {
                     let info = &self.bindings[id.0 as usize];
-                    // Skip Copy types and carry bindings.
-                    if !info.ty.is_copy() && !info.is_carry {
+                    // Skip Copy types.
+                    if !info.ty.is_copy() {
                         result.push(id);
                     }
                 }
@@ -837,66 +830,16 @@ fn analyze_statements<'db>(
             Statement::Loop(loop_stmt) => {
                 analyze_loop(ctx, *loop_stmt, i);
             }
-            Statement::Break(stmt) => {
-                // Analyze break values (they're consumed/moved into bring bindings).
-                // This marks carries as Moved if they appear in break args.
-                for value in stmt.values(ctx.db) {
-                    ctx.analyze_expr_moves(*value, true);
-                }
-
-                // Drops before break:
-                // 1. Regular bindings defined in loop body
-                let mut drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
-
-                // 2. Carries that were NOT moved by break args (still Live, not passed to bring)
-                for frame in ctx.scope_stack.iter().rev() {
-                    if frame.kind == ScopeKind::Loop {
-                        for &carry_id in &frame.carry_bindings {
-                            if frame.current_state.get(&carry_id) == Some(&BindingState::Live) {
-                                let info = &ctx.bindings[carry_id.0 as usize];
-                                if !info.ty.is_copy() {
-                                    drops.push(carry_id);
-                                }
-                            }
-                        }
-                        break;
-                    }
-                }
-
+            Statement::Break(_) => {
+                // Drops before break: all live bindings in loop body.
+                let drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
                 if !drops.is_empty() {
                     ctx.schedule.before_break.insert(i, drops);
                 }
             }
-            Statement::Continue(stmt) => {
-                // Analyze continue values (they're passed as carry values to next iteration).
-                let continue_values = stmt.values(ctx.db);
-                for value in continue_values {
-                    ctx.analyze_expr_moves(*value, true);
-                }
-
-                // Drops before continue:
-                // 1. Regular bindings defined in loop body
-                let mut drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
-
-                // 2. If new values provided, old carries are replaced and need dropping.
-                //    If no values provided, carries pass through (not dropped).
-                if !continue_values.is_empty() {
-                    for frame in ctx.scope_stack.iter().rev() {
-                        if frame.kind == ScopeKind::Loop {
-                            for &carry_id in &frame.carry_bindings {
-                                // Old carry is being replaced - drop it if non-copy and still live.
-                                if frame.current_state.get(&carry_id) == Some(&BindingState::Live) {
-                                    let info = &ctx.bindings[carry_id.0 as usize];
-                                    if !info.ty.is_copy() {
-                                        drops.push(carry_id);
-                                    }
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-
+            Statement::Continue(_) => {
+                // Drops before continue: all live bindings in loop body.
+                let drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
                 if !drops.is_empty() {
                     ctx.schedule.before_continue.insert(i, drops);
                 }
@@ -1182,15 +1125,6 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtIf<'db>, stmt_idx: usiz
 }
 
 fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLoop<'db>, stmt_idx: usize) {
-    let carries = stmt.carries(ctx.db);
-    let brings = stmt.brings(ctx.db);
-
-    // Analyze carry init expressions (outside loop scope).
-    for carry in carries {
-        let init = carry.init(ctx.db);
-        ctx.analyze_expr_moves(init, true);
-    }
-
     // Capture outer-scope non-copy bindings that are Live before entering the loop.
     // If any of these become Moved during loop body analysis, that's an error
     // because the loop could iterate multiple times.
@@ -1207,22 +1141,6 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLoop<'db>, stmt_idx: 
 
     ctx.enter_scope(ScopeKind::Loop);
 
-    // Register carry bindings. Mark them as carry bindings so they're excluded from drops.
-    let mut carry_binding_ids = Vec::new();
-    for carry in carries {
-        let name = carry.name(ctx.db).text(ctx.db).to_string();
-        let ty = ctx.expr_type(carry.init(ctx.db));
-        let id = ctx.alloc_binding(name, ty, false, None);
-        // Mark as carry binding (not a regular binding that gets dropped).
-        ctx.bindings[id.0 as usize].is_carry = true;
-        carry_binding_ids.push(id);
-    }
-
-    // Track carry bindings for this loop in the scope frame.
-    if let Some(frame) = ctx.scope_stack.last_mut() {
-        frame.carry_bindings = carry_binding_ids.clone();
-    }
-
     analyze_statements(ctx, stmt.body(ctx.db), &[]);
 
     // Check for outer-scope bindings that were moved inside the loop body.
@@ -1234,23 +1152,10 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: StmtLoop<'db>, stmt_idx: 
         }
     }
 
-    // Drops at end of loop iteration - excludes carry bindings.
+    // Drops at end of loop iteration.
     let loop_drops = ctx.exit_scope();
     if !loop_drops.is_empty() {
         ctx.schedule.loop_body_end.insert(stmt_idx, loop_drops);
-    }
-
-    // Bring bindings become available after the loop (handled by lowering).
-    // Register them in the outer scope.
-    for bring in brings {
-        let name = bring.name(ctx.db).text(ctx.db).to_string();
-        // Get bring type from type hint if available, otherwise default to Unit.
-        let ty = if let Some(type_hint) = bring.type_hint(ctx.db) {
-            IrType::from_type_hint(ctx.db, &type_hint)
-        } else {
-            IrType::Unit
-        };
-        ctx.alloc_binding(name, ty, false, None);
     }
 }
 

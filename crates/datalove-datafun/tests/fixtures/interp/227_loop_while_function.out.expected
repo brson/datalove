@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn count_up(p0):\nblock0:\n    v0 = const 0int\n    store s0, v0\n    v1 = const 0int\n    store s1, v1\n    goto block1\nblock1:\n    v2 = lt s1, p0\n    branch v2, block3, block4\nblock4:\n    goto block2\nblock3:\n    v3 = add s0, s1\n    drop s0\n    store s0, v3\n    v4 = const 1int\n    v5 = add s1, v4\n    drop v4\n    drop s1\n    store s1, v5\n    goto block1\nblock2:\n    v6 = load s0\n    drop p0\n    drop s1\n    return v6\nexports:\n    count_up = f0\n",
+                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn count_up(p0):\nblock0:\n    v0 = const 0int\n    store s0, v0\n    v1 = const 0int\n    store s1, v1\n    goto block1\nblock1:\n    v2 = lt s1, p0\n    branch v2, block3, block2\nblock3:\n    v3 = add s0, s1\n    drop s0\n    store s0, v3\n    v4 = const 1int\n    v5 = add s1, v4\n    drop v4\n    drop s1\n    store s1, v5\n    goto block1\nblock2:\n    v6 = load s0\n    drop p0\n    drop s1\n    return v6\nexports:\n    count_up = f0\n",
             ),
             output: "(fragment executed)",
         ),

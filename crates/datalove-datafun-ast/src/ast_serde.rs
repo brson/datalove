@@ -113,7 +113,6 @@ pub struct StmtIf {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtLoop {
     pub body: Vec<Statement>,
-    pub else_break: Option<Vec<ExprFun>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -536,7 +535,6 @@ impl StmtLoop {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::StmtLoop<'db>) -> Self {
         StmtLoop {
             body: ast.body(db).iter().map(|s| Statement::from_ast(db, s)).collect(),
-            else_break: ast.else_break(db).map(|v| v.iter().map(|e| ExprFun::from_ast(db, *e)).collect()),
         }
     }
 }

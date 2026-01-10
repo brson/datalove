@@ -649,27 +649,6 @@ impl<'db> Parser<'db> {
     ) -> ast::Statement<'db> {
         self.eat_word("loop");
 
-        // Check for optional `carry (...)` clause.
-        let carries = if self.peek_word() == Some("carry") {
-            self.eat_word("carry");
-            match self.next() {
-                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => {
-                    self.parse_carry_bindings(inner)
-                }
-                _ => {
-                    let ts = self.peek_text_span();
-                    DiagnosticBuilder::error(self.db, "expected '(' after 'carry'")
-                        .code("P030")
-                        .primary_label(ts, "expected '('")
-                        .emit_parse();
-                    self.had_error = true;
-                    vec![]
-                }
-            }
-        } else {
-            vec![]
-        };
-
         // Check for optional `while condition` clause.
         let condition = if self.peek_word() == Some("while") {
             self.eat_word("while");
@@ -678,47 +657,15 @@ impl<'db> Parser<'db> {
             None
         };
 
-        // Check for optional `else break (...)` clause after while condition.
-        let else_break = if condition.is_some() && self.peek_word() == Some("else") {
-            self.eat_word("else");
-            if self.peek_word() == Some("break") {
-                self.eat_word("break");
-                // Parse optional (values...).
-                let values = match self.peek() {
-                    Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
-                        if let Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) = self.next() {
-                            self.parse_else_break_values(inner)
-                        } else {
-                            vec![]
-                        }
-                    }
-                    _ => vec![], // else break without values
-                };
-                Some(values)
-            } else {
-                let ts = self.peek_text_span();
-                DiagnosticBuilder::error(self.db, "expected 'break' after 'else' in loop while")
-                    .code("P034")
-                    .primary_label(ts, "expected 'break'")
-                    .emit_parse();
-                self.had_error = true;
-                None
-            }
-        } else {
-            None
-        };
-
         // Parse body until we hit "end loop".
         let mut body = vec![];
-        let mut brings = vec![];
         while let Some((_, line)) = remaining_lines.peek() {
-            // Check for "end loop" with optional "bring".
+            // Check for "end loop".
             if line.len() >= 2 {
                 if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
                     if let (Some("end"), Some("loop")) = (t1.word_str(self.db), t2.word_str(self.db)) {
-                        // Consume "end loop" line and parse optional bring.
-                        let (_, end_line) = remaining_lines.next().X();
-                        brings = self.parse_end_loop_bring(end_line);
+                        // Consume "end loop" line.
+                        remaining_lines.next();
                         break;
                     }
                 }
@@ -731,168 +678,17 @@ impl<'db> Parser<'db> {
             }
         }
 
-        ast::Statement::Loop(ast::StmtLoop::new(self.db, carries, condition, else_break, body, brings))
-    }
-
-    /// Parse carry bindings: `(name: type = expr, ...)`.
-    fn parse_carry_bindings(&mut self, iter: BracerIter<'db>) -> Vec<ast::CarryBinding<'db>> {
-        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
-        let bindings = sub.parse_comma_separated(|p| p.parse_carry_binding());
-        sub.error_if_not_exhausted();
-        self.had_error |= sub.had_error;
-        self.merge_spans_from(&mut sub);
-        bindings
-    }
-
-    /// Parse a single carry binding: `name: type = expr` or `name = expr`.
-    fn parse_carry_binding(&mut self) -> ast::CarryBinding<'db> {
-        let name = match self.eat_name() {
-            Some(n) => n,
-            None => {
-                self.had_error = true;
-                let ts = self.peek_text_span();
-                DiagnosticBuilder::error(self.db, "expected carry binding name")
-                    .code("P031")
-                    .primary_label(ts, "expected name")
-                    .emit_parse();
-                InternedText::new(self.db, "<error>".S())
-            }
-        };
-
-        // Check for optional type hint: `: type`.
-        let type_hint = if self.peek_sigil(Sigil::Colon) {
-            self.eat_sigil(Sigil::Colon);
-            Some(self.parse_type_hint_and_heap())
-        } else {
-            None
-        };
-
-        // Need `=` sigil.
-        if !self.eat_sigil(Sigil::Equals) {
-            self.had_error = true;
-            let ts = self.peek_text_span();
-            DiagnosticBuilder::error(self.db, "expected '=' in carry binding")
-                .code("P032")
-                .primary_label(ts, "expected '='")
-                .emit_parse();
-        }
-
-        // Parse the initial value expression.
-        let init = self.parse_expr_full();
-
-        ast::CarryBinding::new(self.db, name, type_hint, init)
-    }
-
-    /// Parse optional bring clause after "end loop": `bring (name: type, ...)`.
-    fn parse_end_loop_bring(&mut self, end_line: Vec<TreeToken<'db>>) -> Vec<ast::BringBinding<'db>> {
-        // Create sub-parser for the "end loop [bring (...)]" line.
-        let line_tokens: Vec<_> = end_line.into_iter().filter_map(|t| t.without_space(self.db)).collect();
-        let mut sub = Parser::new(self.db, line_tokens, self.source_text());
-
-        // Consume "end loop".
-        sub.eat_word("end");
-        sub.eat_word("loop");
-
-        // Check for optional "bring".
-        let brings = if sub.peek_word() == Some("bring") {
-            sub.eat_word("bring");
-            match sub.next() {
-                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => {
-                    sub.parse_bring_bindings(inner)
-                }
-                _ => {
-                    let ts = sub.peek_text_span();
-                    DiagnosticBuilder::error(self.db, "expected '(' after 'bring'")
-                        .code("P033")
-                        .primary_label(ts, "expected '('")
-                        .emit_parse();
-                    sub.had_error = true;
-                    vec![]
-                }
-            }
-        } else {
-            vec![]
-        };
-
-        sub.error_if_not_exhausted();
-        self.had_error |= sub.had_error;
-        brings
-    }
-
-    /// Parse bring bindings: `(name: type, ...)`.
-    fn parse_bring_bindings(&mut self, iter: BracerIter<'db>) -> Vec<ast::BringBinding<'db>> {
-        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
-        let bindings = sub.parse_comma_separated(|p| p.parse_bring_binding());
-        sub.error_if_not_exhausted();
-        self.had_error |= sub.had_error;
-        bindings
-    }
-
-    /// Parse a single bring binding: `name: type` or `name`.
-    fn parse_bring_binding(&mut self) -> ast::BringBinding<'db> {
-        let name = match self.eat_name() {
-            Some(n) => n,
-            None => {
-                self.had_error = true;
-                let ts = self.peek_text_span();
-                DiagnosticBuilder::error(self.db, "expected bring binding name")
-                    .code("P034")
-                    .primary_label(ts, "expected name")
-                    .emit_parse();
-                InternedText::new(self.db, "<error>".S())
-            }
-        };
-
-        // Check for optional type hint: `: type`.
-        let type_hint = if self.peek_sigil(Sigil::Colon) {
-            self.eat_sigil(Sigil::Colon);
-            Some(self.parse_type_hint_and_heap())
-        } else {
-            None
-        };
-
-        ast::BringBinding::new(self.db, name, type_hint)
-    }
-
-    /// Parse else break values: `(expr1, expr2, ...)`.
-    fn parse_else_break_values(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
-        self.parse_comma_separated_exprs(iter)
+        ast::Statement::Loop(ast::StmtLoop::new(self.db, condition, body))
     }
 
     fn parse_break(&mut self) -> ast::Statement<'db> {
         self.eat_word("break");
-
-        // Check for optional values: `break (expr1, expr2)`.
-        let values = if let Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) = self.peek() {
-            match self.next() {
-                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => {
-                    self.parse_comma_separated_exprs(inner)
-                }
-                _ => vec![],
-            }
-        } else {
-            vec![]
-        };
-
-        ast::Statement::Break(ast::StmtBreak::new(self.db, values))
+        ast::Statement::Break(ast::StmtBreak::new(self.db, ()))
     }
 
     fn parse_continue(&mut self) -> ast::Statement<'db> {
         self.eat_word("continue");
-
-        // Check for optional values: `continue (expr1, expr2)`.
-        let values = if let Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) = self.peek() {
-            match self.next() {
-                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => {
-                    self.parse_comma_separated_exprs(inner)
-                }
-                _ => vec![],
-            }
-        } else {
-            vec![]
-        };
-
-        ast::Statement::Continue(ast::StmtContinue::new(self.db, values))
+        ast::Statement::Continue(ast::StmtContinue::new(self.db, ()))
     }
 
     fn parse_debuglog(&mut self) -> ast::Statement<'db> {

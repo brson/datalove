@@ -464,7 +464,7 @@ impl IrInterpreter {
 
     /// Pass block arguments to the target block's parameters.
     ///
-    /// Implements move semantics for block parameters (loop carries/brings):
+    /// Implements move semantics for block parameters:
     /// 1. Read source operand value
     /// 2. Copy data into the target block param's fixed frame location
     /// 3. Mark source as dropped (ownership transferred)

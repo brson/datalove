@@ -4,6 +4,11 @@
       "actual": "u32",
       "expected": "int",
       "kind": "TypeMismatch"
+    },
+    {
+      "actual": "int",
+      "expected": "u32",
+      "kind": "TypeMismatch"
     }
   ],
   "judgements": [

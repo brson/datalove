@@ -38,16 +38,8 @@ pub struct TypeContext<'db> {
     pub(crate) expr_types: Vec<Option<TypeAndHeap<'db>>>,
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     pub(crate) call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
-    /// Stack of loop contexts (for validating break/continue with carry/bring).
-    pub(crate) loop_contexts: Vec<LoopContext<'db>>,
-}
-
-/// Context for a single loop (carry/bring types).
-pub struct LoopContext<'db> {
-    /// Expected types for continue(...) values.
-    pub carry_types: Vec<TypeAndHeap<'db>>,
-    /// Expected types for break(...) values.
-    pub bring_types: Vec<TypeAndHeap<'db>>,
+    /// Stack of loop depth (for validating break/continue are inside a loop).
+    pub(crate) loop_depth: usize,
 }
 
 impl<'db> TypeContext<'db> {
@@ -66,7 +58,7 @@ impl<'db> TypeContext<'db> {
             errors: Vec::new(),
             expr_types: Vec::new(),
             call_targets: Vec::new(),
-            loop_contexts: Vec::new(),
+            loop_depth: 0,
         }
     }
 

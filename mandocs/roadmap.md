@@ -64,5 +64,3 @@ The MVP is a working bare datafun language with:
 
 
 ## backburner
-
-- if with brings - complexity, need to proove usefulness of brings with loop first

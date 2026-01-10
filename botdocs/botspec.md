@@ -113,11 +113,9 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 | `if` | `if cond ... end if` | Implemented (in function bodies) |
 | `if` with binding | `if opt \|value\| ... end if` | Implemented (option/result unwrap) |
 | `loop` | `loop ... end loop` | Implemented (in function bodies) |
-| `loop carry` | `loop carry (i = 0) ... end loop` | Implemented (loop with iteration state) |
-| `loop bring` | `loop ... end loop bring (x)` | Implemented (loop that produces values) |
 | `loop while` | `loop while cond ... end loop` | Implemented (conditional loop) |
-| `break` | `break` or `break(values...)` | Implemented (exits loop, optionally with bring values) |
-| `continue` | `continue` or `continue(values...)` | Implemented (next iteration, optionally with new carries) |
+| `break` | `break` | Implemented (exits innermost loop) |
+| `continue` | `continue` | Implemented (next iteration of innermost loop) |
 
 ### 2.2 Expressions
 
@@ -267,71 +265,6 @@ fun count_to_three(): !u32
 end fun
 ```
 
-#### Loop with Carry (Iteration State)
-
-Carries pass explicit iteration state via block parameters. Mnemonic: "continue and carry".
-
-```
-fun factorial(n: u32): u32
-    loop carry (acc: u32 = @1, i = n)
-        if i <= @1
-            break
-        end if
-        continue(acc * i, i - @1)
-    end loop
-    ret acc
-end fun
-```
-
-**Carry syntax:**
-- `loop carry (name: type = init, ...)` - declare carries with initial values
-- Type annotations optional (inferred from init expression)
-- Carry bindings are visible inside the loop body
-- `continue(values...)` passes new values to next iteration
-- Plain `continue` not allowed - must provide values (prevents accidental reuse)
-
-**Static analysis:** Loops with carries must not fall through. Every path must explicitly `break`, `continue(...)`, or `ret`. This prevents accidentally forgetting to update carry values.
-
-#### Loop with Bring (Exit Values)
-
-Brings capture values when the loop exits via break. Mnemonic: "break and bring".
-
-```
-fun find_first_over(threshold: u32): u32
-    var x: u32 = @0
-    loop
-        set x = x + @1
-        if x .> threshold
-            break(x)
-        end if
-    end loop bring (found: u32)
-    ret found
-end fun
-```
-
-**Bring syntax:**
-- `end loop bring (name: type, ...)` - declare bindings assigned on break
-- Type annotations required (cannot infer without seeing break values first)
-- Bring bindings are visible after the loop
-- `break(values...)` provides values for bring bindings
-- `break` without values when loop has brings is a typecheck error
-
-**Static analysis:** Loops with only brings (no carries) can fall through - it just means "keep looping until we break".
-
-#### Combined Carry and Bring
-
-```
-fun factorial(n: u32): u32
-    loop carry (acc: u32 = @1, i = n)
-        if i <= @1
-            break(acc)
-        end if
-        continue(acc * i, i - @1)
-    end loop bring (result: u32)
-    ret result
-end fun
-```
-
 #### Loop While (Conditional Loop)
 
 Conditional loop that checks condition at start of each iteration:
@@ -346,78 +279,13 @@ fun count_while(): u32
 end fun
 ```
 
-**Loop while with carries:**
-
-When `loop while` has carries but no brings, carries are implicitly dropped when the condition is initially false:
-
-```
-fun sum_to(limit: u32): u32
-    var total: u32 = @0
-    loop carry (i: u32 = @0) while i .< limit
-        set total = total + i
-        continue(i + @1)
-    end loop
-    ret total
-end fun
-```
-
-**Loop while with brings (requires else break):**
-
-When `loop while` has brings, an `else break` clause is required to provide bring values when the condition is initially false:
-
-```
-fun first_over(threshold: u32): u32
-    var x: u32 = @0
-    loop while x .<= threshold else break (x)
-        set x = x + @1
-        if x .> @100
-            break(x)
-        end if
-    end loop bring (result: u32)
-    ret result
-end fun
-```
-
-**Full combined form:**
-
-```
-fun factorial(n: u32): u32
-    loop carry (acc: u32 = @1, i = n) while i .> @1 else break (acc)
-        continue(acc * i, i - @1)
-    end loop bring (result: u32)
-    ret result
-end fun
-```
-
-**Loop while syntax:**
-- `loop while condition` - basic conditional loop
-- `loop carry (...) while condition` - carries only, implicit drop when false
-- `loop while condition else break (values) ... end loop bring (...)` - brings require else break
-- `else break` is NOT allowed without brings (type error)
-- `else break (values)` must match bring types and arity
-
 **Behavior:**
 - `loop ... end loop` repeats indefinitely until `break` or `ret`
 - `break` exits the innermost loop
-- `break(values...)` exits and assigns bring bindings
 - `continue` jumps to the start of the innermost loop
-- `continue(values...)` jumps with new carry values
 - `break`/`continue` outside a loop is a typecheck error
 - Nested loops supported; break/continue affect only the innermost loop
 - No loop labels - only innermost loop can be targeted
-
-**Implementation notes:**
-- Uses SSA block parameters (not Phi nodes) for carries/brings
-- Loop header block has params for carries; exit block has params for brings
-- Goto/Branch terminators pass args to target blocks
-- Typechecker validates arity and types of break/continue values
-
-**Carry/bring value semantics:**
-- Carry/bring bindings define IR values with fixed frame locations
-- `continue(values...)` and `break(values...)` MOVE their arguments INTO the carry/bring locations
-- Interpreter: `pass_block_args()` copies data into block param frame locations, marks source dropped
-- AOT scalars: pure SSA (Cranelift block param IS the value, no frame location)
-- AOT aggregates: block param is pointer to source, memcpy to local frame location on block entry
 
 ### 2.7 Operator Argument Semantics
 
@@ -531,20 +399,8 @@ loop
 end loop
 ```
 
-**Solution - use carry bindings:** For mutable state across loop iterations, use `loop carry`:
-
-```
-loop carry (a = :int/@4, b = :int/@5)
-    if a == b
-        break
-    end if
-    continue(b, a)   // explicit state passing
-end loop
-```
-
 **Exceptions:**
 - Copy types (fixed-width integers, bool, f32) can be used freely in loops
-- Carry bindings are designed for loop iteration state and follow different rules
 - Binary operators borrow their operands (don't consume), so `a + b` doesn't move `a` or `b`
 
 ---

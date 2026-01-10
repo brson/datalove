@@ -142,65 +142,32 @@ pub struct StmtIf<'db> {
     pub else_body: Option<Vec<Statement<'db>>>,
 }
 
-/// Carry binding for loop iteration state.
-///
-/// Syntax: `name: type = expr` or `name = expr` (type inferred).
-#[salsa::tracked]
-pub struct CarryBinding<'db> {
-    pub name: InternedText<'db>,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
-    pub init: ExprFun<'db>,
-}
-
-/// Bring binding for loop exit values.
-///
-/// Syntax: `name: type` or `name` (type inferred from break values).
-#[salsa::tracked]
-pub struct BringBinding<'db> {
-    pub name: InternedText<'db>,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
-}
-
-/// Loop statement with optional carry/bring and while condition.
+/// Loop statement with optional while condition.
 ///
 /// Basic: `loop ... end loop`
 /// With while: `loop while cond ... end loop`
-/// With carry: `loop carry (x = 0) ... end loop`
-/// With bring: `loop ... end loop bring (result)`
-/// With else break: `loop carry (x = 0) while cond else break (values) ... end loop bring (result)`
 #[salsa::tracked]
 pub struct StmtLoop<'db> {
-    #[returns(ref)]
-    pub carries: Vec<CarryBinding<'db>>,
     /// Optional while condition, checked at the start of each iteration.
     pub condition: Option<ExprFun<'db>>,
-    /// Whether else break clause is present (None = absent, Some = present).
-    /// Empty vec means `else break` without values; non-empty means `else break (values)`.
-    pub else_break: Option<Vec<ExprFun<'db>>>,
     #[returns(ref)]
     pub body: Vec<Statement<'db>>,
-    #[returns(ref)]
-    pub brings: Vec<BringBinding<'db>>,
 }
 
 /// Break statement for exiting the innermost loop.
-///
-/// Basic: `break`
-/// With values: `break (expr1, expr2)` (required if loop has brings)
 #[salsa::tracked]
 pub struct StmtBreak<'db> {
-    #[returns(ref)]
-    pub values: Vec<ExprFun<'db>>,
+    /// Placeholder field since salsa::tracked needs at least one field.
+    #[allow(dead_code)]
+    _marker: (),
 }
 
 /// Continue statement for skipping to the next iteration.
-///
-/// Basic: `continue`
-/// With values: `continue (expr1, expr2)` (required if loop has carries)
 #[salsa::tracked]
 pub struct StmtContinue<'db> {
-    #[returns(ref)]
-    pub values: Vec<ExprFun<'db>>,
+    /// Placeholder field since salsa::tracked needs at least one field.
+    #[allow(dead_code)]
+    _marker: (),
 }
 
 /// Debug log statement for outputting values during execution.

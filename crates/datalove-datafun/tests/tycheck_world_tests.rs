@@ -143,42 +143,6 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "kind": "ContinueOutsideLoop"
             })
         }
-        TypeError::BreakArityMismatch { expected, actual } => {
-            json!({
-                "kind": "BreakArityMismatch",
-                "expected": expected,
-                "actual": actual
-            })
-        }
-        TypeError::ContinueArityMismatch { expected, actual } => {
-            json!({
-                "kind": "ContinueArityMismatch",
-                "expected": expected,
-                "actual": actual
-            })
-        }
-        TypeError::LoopBodyFallthrough => {
-            json!({
-                "kind": "LoopBodyFallthrough"
-            })
-        }
-        TypeError::LoopWhileMissingElseBreak => {
-            json!({
-                "kind": "LoopWhileMissingElseBreak"
-            })
-        }
-        TypeError::ElseBreakNotAllowed => {
-            json!({
-                "kind": "ElseBreakNotAllowed"
-            })
-        }
-        TypeError::ElseBreakArityMismatch { expected, actual } => {
-            json!({
-                "kind": "ElseBreakArityMismatch",
-                "expected": expected,
-                "actual": actual
-            })
-        }
     }
 }
 

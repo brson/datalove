@@ -18,20 +18,11 @@ use super::LowerError;
 
 /// Context for a single loop during lowering.
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub struct LoopLowerContext {
     /// Header block (target for continue).
     pub header: BlockId,
     /// Exit block (target for break).
     pub exit: BlockId,
-    /// Current iteration's carry ValueIds (updated by continue).
-    pub carry_values: Vec<ValueId>,
-    /// Types of carry values.
-    pub carry_types: Vec<IrType>,
-    /// ValueIds for bring bindings in exit block.
-    pub bring_values: Vec<ValueId>,
-    /// Types of bring values.
-    pub bring_types: Vec<IrType>,
 }
 
 /// Context for lowering script units.
