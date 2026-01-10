@@ -311,7 +311,7 @@ impl TypeHint {
 impl TypeHintAnonTuple {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintAnonTuple<'db>) -> Self {
         TypeHintAnonTuple {
-            fields: ast.fields(db).iter().map(|f| TypeHintAndHeap::from_ast(db, *f)).collect(),
+            fields: ast.fields.iter().map(|f| TypeHintAndHeap::from_ast(db, *f)).collect(),
         }
     }
 }
@@ -319,7 +319,7 @@ impl TypeHintAnonTuple {
 impl TypeHintAnonStruct {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintAnonStruct<'db>) -> Self {
         TypeHintAnonStruct {
-            fields: ast.fields(db).iter().map(|f| TypeHintNamedField::from_ast(db, *f)).collect(),
+            fields: ast.fields.iter().map(|f| TypeHintNamedField::from_ast(db, f.clone())).collect(),
         }
     }
 }
@@ -327,8 +327,8 @@ impl TypeHintAnonStruct {
 impl TypeHintNamedField {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintNamedField<'db>) -> Self {
         TypeHintNamedField {
-            name: ast.name(db).text(db).S(),
-            type_hint: TypeHintAndHeap::from_ast(db, ast.type_hint(db)),
+            name: ast.name.text(db).S(),
+            type_hint: TypeHintAndHeap::from_ast(db, ast.type_hint),
         }
     }
 }
@@ -336,7 +336,7 @@ impl TypeHintNamedField {
 impl TypeHintAnonEnum {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintAnonEnum<'db>) -> Self {
         TypeHintAnonEnum {
-            variants: ast.variants(db).iter().map(|v| TypeHintEnumVariant::from_ast(db, *v)).collect(),
+            variants: ast.variants.iter().map(|v| TypeHintEnumVariant::from_ast(db, v.clone())).collect(),
         }
     }
 }
@@ -344,8 +344,8 @@ impl TypeHintAnonEnum {
 impl TypeHintEnumVariant {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintEnumVariant<'db>) -> Self {
         TypeHintEnumVariant {
-            name: ast.name(db).text(db).S(),
-            payload: ast.payload(db).map(|p| Box::new(TypeHintAndHeap::from_ast(db, p))),
+            name: ast.name.text(db).S(),
+            payload: ast.payload.map(|p| Box::new(TypeHintAndHeap::from_ast(db, p))),
         }
     }
 }
@@ -353,7 +353,7 @@ impl TypeHintEnumVariant {
 impl TypeHintList {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintList<'db>) -> Self {
         TypeHintList {
-            element_type: Box::new(TypeHintAndHeap::from_ast(db, ast.element_type(db))),
+            element_type: Box::new(TypeHintAndHeap::from_ast(db, ast.element_type)),
         }
     }
 }
@@ -361,8 +361,8 @@ impl TypeHintList {
 impl TypeHintMap {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintMap<'db>) -> Self {
         TypeHintMap {
-            key_type: Box::new(TypeHintAndHeap::from_ast(db, ast.key_type(db))),
-            value_type: Box::new(TypeHintAndHeap::from_ast(db, ast.value_type(db))),
+            key_type: Box::new(TypeHintAndHeap::from_ast(db, ast.key_type)),
+            value_type: Box::new(TypeHintAndHeap::from_ast(db, ast.value_type)),
         }
     }
 }
@@ -370,7 +370,7 @@ impl TypeHintMap {
 impl TypeHintSet {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintSet<'db>) -> Self {
         TypeHintSet {
-            element_type: Box::new(TypeHintAndHeap::from_ast(db, ast.element_type(db))),
+            element_type: Box::new(TypeHintAndHeap::from_ast(db, ast.element_type)),
         }
     }
 }
@@ -378,7 +378,7 @@ impl TypeHintSet {
 impl TypeHintOption {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintOption<'db>) -> Self {
         TypeHintOption {
-            inner_type: Box::new(TypeHintAndHeap::from_ast(db, ast.inner_type(db))),
+            inner_type: Box::new(TypeHintAndHeap::from_ast(db, ast.inner_type)),
         }
     }
 }
@@ -386,7 +386,7 @@ impl TypeHintOption {
 impl TypeHintResult {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintResult<'db>) -> Self {
         TypeHintResult {
-            inner_type: Box::new(TypeHintAndHeap::from_ast(db, ast.inner_type(db))),
+            inner_type: Box::new(TypeHintAndHeap::from_ast(db, ast.inner_type)),
         }
     }
 }
@@ -394,8 +394,8 @@ impl TypeHintResult {
 impl TypeHintTensor {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintTensor<'db>) -> Self {
         TypeHintTensor {
-            element_type: Box::new(TypeHintAndHeap::from_ast(db, ast.element_type(db))),
-            rank: ast.rank(db),
+            element_type: Box::new(TypeHintAndHeap::from_ast(db, ast.element_type)),
+            rank: ast.rank,
         }
     }
 }
@@ -588,7 +588,7 @@ impl ExprError {
 impl TypeHintParseError {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintParseError<'db>) -> Self {
         TypeHintParseError {
-            message: ast.message(db).as_str(db).to_string(),
+            message: ast.message.as_str(db).to_string(),
         }
     }
 }

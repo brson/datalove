@@ -156,7 +156,7 @@ impl<'db> Parser<'db> {
             .code(code)
             .primary_label(ts.clone(), label)
             .emit_parse();
-        ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, ts.text, ts.span, message_text))
+        ast::TypeHint::ParseError(ast::TypeHintParseError { text: ts.text, span: ts.span, message: message_text })
     }
 
     /// Parse a u32 literal from the current position.

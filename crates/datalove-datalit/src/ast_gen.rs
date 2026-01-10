@@ -325,36 +325,36 @@ pub fn gen_type_hint<'db, R: Rng>(
         11 => TypeHint::String,
         12 => {
             let element_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
-            TypeHint::List(TypeHintList::new(db, element_type))
+            TypeHint::List(TypeHintList { element_type })
         }
         13 => {
             let key_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
             let value_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
-            TypeHint::Map(TypeHintMap::new(db, key_type, value_type))
+            TypeHint::Map(TypeHintMap { key_type, value_type })
         }
         14 => {
             let element_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
-            TypeHint::Set(TypeHintSet::new(db, element_type))
+            TypeHint::Set(TypeHintSet { element_type })
         }
         15 => {
             let inner_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
-            TypeHint::Option(TypeHintOption::new(db, inner_type))
+            TypeHint::Option(TypeHintOption { inner_type })
         }
         16 => {
             let inner_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
-            TypeHint::Result(TypeHintResult::new(db, inner_type))
+            TypeHint::Result(TypeHintResult { inner_type })
         }
         17 => {
             let element_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
             let rank = rng.gen_range(1..=config.tensor_config.max_rank);
-            TypeHint::Tensor(TypeHintTensor::new(db, element_type, rank))
+            TypeHint::Tensor(TypeHintTensor { element_type, rank })
         }
         18 => {
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let fields: Vec<_> = (0..count)
                 .map(|_| gen_type_hint_and_heap(db, rng, config, depth + 1))
                 .collect();
-            TypeHint::AnonTuple(TypeHintAnonTuple::new(db, fields))
+            TypeHint::AnonTuple(TypeHintAnonTuple { fields })
         }
         19 => {
             // Cap count to available unique field names to prevent infinite loops.
@@ -371,10 +371,10 @@ pub fn gen_type_hint<'db, R: Rng>(
                         }
                     };
                     let type_hint = gen_type_hint_and_heap(db, rng, config, depth + 1);
-                    TypeHintNamedField::new(db, name, type_hint)
+                    TypeHintNamedField { name, type_hint }
                 })
                 .collect();
-            TypeHint::AnonStruct(TypeHintAnonStruct::new(db, fields))
+            TypeHint::AnonStruct(TypeHintAnonStruct { fields })
         }
         20 => {
             let count = rng.gen_range(1..=config.max_collection_size.max(1));
@@ -394,10 +394,10 @@ pub fn gen_type_hint<'db, R: Rng>(
                     } else {
                         None
                     };
-                    TypeHintEnumVariant::new(db, variant_name, payload)
+                    TypeHintEnumVariant { name: variant_name, payload }
                 })
                 .collect();
-            TypeHint::AnonEnum(TypeHintAnonEnum::new(db, variants))
+            TypeHint::AnonEnum(TypeHintAnonEnum { variants })
         }
         21 => TypeHint::Data,
         22 => TypeHint::Error,
@@ -496,36 +496,36 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
         11 => TypeHint::String,
         12 => {
             let element_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-            TypeHint::List(TypeHintList::new(db, element_type))
+            TypeHint::List(TypeHintList { element_type })
         }
         13 => {
             let key_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
             let value_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-            TypeHint::Map(TypeHintMap::new(db, key_type, value_type))
+            TypeHint::Map(TypeHintMap { key_type, value_type })
         }
         14 => {
             let element_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-            TypeHint::Set(TypeHintSet::new(db, element_type))
+            TypeHint::Set(TypeHintSet { element_type })
         }
         15 => {
             let inner_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-            TypeHint::Option(TypeHintOption::new(db, inner_type))
+            TypeHint::Option(TypeHintOption { inner_type })
         }
         16 => {
             let inner_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-            TypeHint::Result(TypeHintResult::new(db, inner_type))
+            TypeHint::Result(TypeHintResult { inner_type })
         }
         17 => {
             let element_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
             let rank = rng.gen_range(1..=config.tensor_config.max_rank);
-            TypeHint::Tensor(TypeHintTensor::new(db, element_type, rank))
+            TypeHint::Tensor(TypeHintTensor { element_type, rank })
         }
         18 => {
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let fields: Vec<_> = (0..count)
                 .map(|_| TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1)))
                 .collect();
-            TypeHint::AnonTuple(TypeHintAnonTuple::new(db, fields))
+            TypeHint::AnonTuple(TypeHintAnonTuple { fields })
         }
         19 => {
             // Cap count to available unique field names to prevent infinite loops.
@@ -542,10 +542,10 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
                         }
                     };
                     let type_hint = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-                    TypeHintNamedField::new(db, name, type_hint)
+                    TypeHintNamedField { name, type_hint }
                 })
                 .collect();
-            TypeHint::AnonStruct(TypeHintAnonStruct::new(db, fields))
+            TypeHint::AnonStruct(TypeHintAnonStruct { fields })
         }
         20 => {
             let count = rng.gen_range(1..=config.max_collection_size.max(1));
@@ -565,10 +565,10 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
                     } else {
                         None
                     };
-                    TypeHintEnumVariant::new(db, variant_name, payload)
+                    TypeHintEnumVariant { name: variant_name, payload }
                 })
                 .collect();
-            TypeHint::AnonEnum(TypeHintAnonEnum::new(db, variants))
+            TypeHint::AnonEnum(TypeHintAnonEnum { variants })
         }
         21 => TypeHint::Data,
         22 => TypeHint::Error,
@@ -612,7 +612,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         TypeHint::String => (gen_string_expr(db, rng), heap),
         TypeHint::AnonTuple(th) => {
             let elements: Vec<_> = th
-                .fields(db)
+                .fields
                 .iter()
                 .map(|field| {
                     let field_type = field.type_hint(db);
@@ -624,11 +624,11 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         }
         TypeHint::AnonStruct(th) => {
             let fields: Vec<_> = th
-                .fields(db)
+                .fields
                 .iter()
                 .map(|field| {
-                    let name = field.name(db);
-                    let field_type_and_heap = field.type_hint(db);
+                    let name = field.name;
+                    let field_type_and_heap = field.type_hint;
                     let field_type = field_type_and_heap.type_hint(db);
                     let field_heap = field_type_and_heap.heap(db);
                     let value = gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1);
@@ -638,13 +638,13 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             (Expr::AnonStruct(ExprAnonStruct::new(db, fields)), heap)
         }
         TypeHint::AnonEnum(th) => {
-            let variants = th.variants(db);
+            let variants = &th.variants;
             if variants.is_empty() {
                 return (Expr::None, heap);
             }
             let variant = &variants[rng.gen_range(0..variants.len())];
-            let variant_name = variant.name(db);
-            let payload = match variant.payload(db) {
+            let variant_name = variant.name;
+            let payload = match variant.payload {
                 Some(payload_type_and_heap) => {
                     let payload_type = payload_type_and_heap.type_hint(db);
                     let payload_heap = payload_type_and_heap.heap(db);
@@ -655,7 +655,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             (Expr::AnonEnum(ExprAnonEnum::new(db, variant_name, payload)), heap)
         }
         TypeHint::List(th) => {
-            let element_type_and_heap = th.element_type(db);
+            let element_type_and_heap = th.element_type;
             let element_type = element_type_and_heap.type_hint(db);
             let element_heap = element_type_and_heap.heap(db);
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
@@ -665,10 +665,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             (Expr::List(ExprList::new(db, elements)), heap)
         }
         TypeHint::Map(th) => {
-            let key_type_and_heap = th.key_type(db);
+            let key_type_and_heap = th.key_type;
             let key_type = key_type_and_heap.type_hint(db);
             let key_heap = key_type_and_heap.heap(db);
-            let value_type_and_heap = th.value_type(db);
+            let value_type_and_heap = th.value_type;
             let value_type = value_type_and_heap.type_hint(db);
             let value_heap = value_type_and_heap.heap(db);
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
@@ -682,7 +682,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             (Expr::Map(ExprMap::new(db, entries)), heap)
         }
         TypeHint::Set(th) => {
-            let element_type_and_heap = th.element_type(db);
+            let element_type_and_heap = th.element_type;
             let element_type = element_type_and_heap.type_hint(db);
             let element_heap = element_type_and_heap.heap(db);
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
@@ -692,7 +692,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             (Expr::Set(ExprSet::new(db, elements)), heap)
         }
         TypeHint::Option(th) => {
-            let inner_type_and_heap = th.inner_type(db);
+            let inner_type_and_heap = th.inner_type;
             let inner_type = inner_type_and_heap.type_hint(db);
             let inner_heap = inner_type_and_heap.heap(db);
             if rng.gen_bool(0.5) {
@@ -705,7 +705,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             }
         }
         TypeHint::Result(th) => {
-            let inner_type_and_heap = th.inner_type(db);
+            let inner_type_and_heap = th.inner_type;
             let inner_type = inner_type_and_heap.type_hint(db);
             let inner_heap = inner_type_and_heap.heap(db);
             if rng.gen_bool(0.5) {
@@ -727,10 +727,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             }
         }
         TypeHint::Tensor(th) => {
-            let element_type_and_heap = th.element_type(db);
+            let element_type_and_heap = th.element_type;
             let element_type = element_type_and_heap.type_hint(db);
             let element_heap = element_type_and_heap.heap(db);
-            let rank = th.rank(db);
+            let rank = th.rank;
             // Generate shape ensuring total elements don't exceed max_collection_size.
             let mut shape: Vec<u32> = Vec::with_capacity(rank as usize);
             let mut total_elements = 1usize;

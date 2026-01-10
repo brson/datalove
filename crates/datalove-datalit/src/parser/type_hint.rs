@@ -32,11 +32,11 @@ impl<'db> Parser<'db> {
         if self.peek_sigil(Sigil::Question) {
             self.eat_sigil(Sigil::Question);
             let inner_type = self.parse_type_hint_and_heap();
-            return ast::TypeHint::Option(ast::TypeHintOption::new(self.db, inner_type));
+            return ast::TypeHint::Option(ast::TypeHintOption { inner_type });
         } else if self.peek_sigil(Sigil::Exclamation) {
             self.eat_sigil(Sigil::Exclamation);
             let inner_type = self.parse_type_hint_and_heap();
-            return ast::TypeHint::Result(ast::TypeHintResult::new(self.db, inner_type));
+            return ast::TypeHint::Result(ast::TypeHintResult { inner_type });
         }
 
         // Parse base type.
@@ -65,7 +65,7 @@ impl<'db> Parser<'db> {
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
+                    ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple { fields })
                 } else {
                     self.emit_type_hint_error(ts,
                         "expected () after tuple keyword",
@@ -83,7 +83,7 @@ impl<'db> Parser<'db> {
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
+                    ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct { fields })
                 } else {
                     self.emit_type_hint_error(ts,
                         "expected {} after struct keyword",
@@ -101,10 +101,7 @@ impl<'db> Parser<'db> {
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let variants = sub_parser.parse_comma_separated(|p| p.parse_type_hint_enum_variant());
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::AnonEnum(ast::TypeHintAnonEnum::new(
-                        self.db,
-                        variants,
-                    ))
+                    ast::TypeHint::AnonEnum(ast::TypeHintAnonEnum { variants })
                 } else {
                     self.emit_type_hint_error(ts,
                         "expected {} after enum keyword",
@@ -130,7 +127,7 @@ impl<'db> Parser<'db> {
                     }
                     let value_type = sub_parser.parse_type_hint_and_heap();
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::Map(ast::TypeHintMap::new(self.db, key_type, value_type))
+                    ast::TypeHint::Map(ast::TypeHintMap { key_type, value_type })
                 } else {
                     self.emit_type_hint_error(ts,
                         "expected <> after map keyword",
@@ -147,7 +144,7 @@ impl<'db> Parser<'db> {
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let element_type = sub_parser.parse_type_hint_and_heap();
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::Set(ast::TypeHintSet::new(self.db, element_type))
+                    ast::TypeHint::Set(ast::TypeHintSet { element_type })
                 } else {
                     self.emit_type_hint_error(ts,
                         "expected <> after set keyword",
@@ -185,11 +182,7 @@ impl<'db> Parser<'db> {
                     };
 
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::Tensor(ast::TypeHintTensor::new(
-                        self.db,
-                        element_type,
-                        rank,
-                    ))
+                    ast::TypeHint::Tensor(ast::TypeHintTensor { element_type, rank })
                 } else {
                     self.emit_type_hint_error(ts,
                         "expected <> after tensor keyword",
@@ -205,19 +198,19 @@ impl<'db> Parser<'db> {
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple::new(self.db, fields))
+                    ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple { fields })
                 } else if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
                     // List type.
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let element_type = sub_parser.parse_type_hint_and_heap();
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::List(ast::TypeHintList::new(self.db, element_type))
+                    ast::TypeHint::List(ast::TypeHintList { element_type })
                 } else if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     // Anonymous struct.
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct::new(self.db, fields))
+                    ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct { fields })
                 } else {
                     let ts = self.peek_text_span();
                     // Check if this looks like a capitalized type name.
@@ -259,7 +252,7 @@ impl<'db> Parser<'db> {
                 use rmx::prelude::*;
                 let placeholder_name = InternedText::new(self.db, "<error>".S());
                 let type_hint = ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_hint);
-                return ast::TypeHintNamedField::new(self.db, placeholder_name, type_hint);
+                return ast::TypeHintNamedField { name: placeholder_name, type_hint };
             }
         };
         if !self.eat_sigil(Sigil::Colon) {
@@ -270,10 +263,10 @@ impl<'db> Parser<'db> {
                 "expected ':' after field name"
             );
             let type_hint = ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_hint);
-            return ast::TypeHintNamedField::new(self.db, name, type_hint);
+            return ast::TypeHintNamedField { name, type_hint };
         }
         let type_hint = self.parse_type_hint_and_heap();
-        ast::TypeHintNamedField::new(self.db, name, type_hint)
+        ast::TypeHintNamedField { name, type_hint }
     }
 
     fn parse_type_hint_enum_variant(&mut self) -> ast::TypeHintEnumVariant<'db> {
@@ -291,11 +284,10 @@ impl<'db> Parser<'db> {
                     .primary_label(ts, "expected variant name")
                     .emit_parse();
                 // Create a placeholder name for the error variant.
-                return ast::TypeHintEnumVariant::new(
-                    self.db,
-                    InternedText::new(self.db, "<error>".S()),
-                    None
-                );
+                return ast::TypeHintEnumVariant {
+                    name: InternedText::new(self.db, "<error>".S()),
+                    payload: None,
+                };
             }
         };
         let payload = if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
@@ -311,18 +303,17 @@ impl<'db> Parser<'db> {
                     self.db,
                     "enum variant payload must be a single type (use a tuple for multiple values)".S()
                 );
-                let error_type = ast::TypeHint::ParseError(ast::TypeHintParseError::new(self.db, ts.text, ts.span, message));
-                return ast::TypeHintEnumVariant::new(
-                    self.db,
+                let error_type = ast::TypeHint::ParseError(ast::TypeHintParseError { text: ts.text, span: ts.span, message });
+                return ast::TypeHintEnumVariant {
                     name,
-                    Some(ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_type))
-                );
+                    payload: Some(ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_type)),
+                };
             }
 
             Some(payload_type)
         } else {
             None
         };
-        ast::TypeHintEnumVariant::new(self.db, name, payload)
+        ast::TypeHintEnumVariant { name, payload }
     }
 }

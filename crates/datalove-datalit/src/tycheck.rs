@@ -1366,7 +1366,7 @@ pub fn convert_type_hint<'db>(
 
         TypeHint::AnonTuple(t) => {
             let fields: Result<Vec<_>, _> = t
-                .fields(db)
+                .fields
                 .iter()
                 .map(|f| convert_type_hint(db, *f))
                 .collect();
@@ -1375,11 +1375,11 @@ pub fn convert_type_hint<'db>(
 
         TypeHint::AnonStruct(s) => {
             let fields: Result<Vec<_>, _> = s
-                .fields(db)
+                .fields
                 .iter()
                 .map(|f| {
-                    let name = f.name(db);
-                    let ty = convert_type_hint(db, f.type_hint(db))?;
+                    let name = f.name;
+                    let ty = convert_type_hint(db, f.type_hint)?;
                     Ok(TypeNamedField { name, ty })
                 })
                 .collect();
@@ -1388,12 +1388,12 @@ pub fn convert_type_hint<'db>(
 
         TypeHint::AnonEnum(e) => {
             let variants: Result<Vec<_>, _> = e
-                .variants(db)
+                .variants
                 .iter()
                 .map(|v| {
-                    let name = v.name(db);
+                    let name = v.name;
                     let payload = v
-                        .payload(db)
+                        .payload
                         .map(|p| convert_type_hint(db, p))
                         .transpose()?;
                     Ok(TypeEnumVariant { name, payload })
@@ -1403,34 +1403,34 @@ pub fn convert_type_hint<'db>(
         }
 
         TypeHint::List(l) => {
-            let element_type = convert_type_hint(db, l.element_type(db))?;
+            let element_type = convert_type_hint(db, l.element_type)?;
             Type::List(TypeList { element_type })
         }
 
         TypeHint::Map(m) => {
-            let key_type = convert_type_hint(db, m.key_type(db))?;
-            let value_type = convert_type_hint(db, m.value_type(db))?;
+            let key_type = convert_type_hint(db, m.key_type)?;
+            let value_type = convert_type_hint(db, m.value_type)?;
             Type::Map(TypeMap { key_type, value_type })
         }
 
         TypeHint::Set(s) => {
-            let element_type = convert_type_hint(db, s.element_type(db))?;
+            let element_type = convert_type_hint(db, s.element_type)?;
             Type::Set(TypeSet { element_type })
         }
 
         TypeHint::Option(o) => {
-            let inner_type = convert_type_hint(db, o.inner_type(db))?;
+            let inner_type = convert_type_hint(db, o.inner_type)?;
             Type::Option(TypeOption { inner_type })
         }
 
         TypeHint::Result(r) => {
-            let inner_type = convert_type_hint(db, r.inner_type(db))?;
+            let inner_type = convert_type_hint(db, r.inner_type)?;
             Type::Result(TypeResult { inner_type })
         }
 
         TypeHint::Tensor(t) => {
-            let element_type = convert_type_hint(db, t.element_type(db))?;
-            Type::Tensor(TypeTensor { element_type, rank: t.rank(db) })
+            let element_type = convert_type_hint(db, t.element_type)?;
+            Type::Tensor(TypeTensor { element_type, rank: t.rank })
         }
 
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),

@@ -760,12 +760,11 @@ impl<'db> Parser<'db> {
                     .primary_label(TextSpan::new(text, 0..1), "unexpected tokens")
                     .emit_parse();
 
-                let error = datalit::ast::TypeHintParseError::new(
-                    self.db,
+                let error = datalit::ast::TypeHintParseError {
                     text,
-                    0..1, // placeholder span
+                    span: (0..1).into(),
                     message,
-                );
+                };
                 return datalit::ast::TypeHintAndHeap::new(
                     self.db,
                     datalit::ast::Heap::Omitted,

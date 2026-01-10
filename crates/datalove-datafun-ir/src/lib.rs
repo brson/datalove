@@ -201,7 +201,7 @@ impl IrType {
             TypeHint::Data => IrType::Data,
             TypeHint::Error => IrType::Error,
             TypeHint::AnonTuple(tuple) => {
-                let fields: Vec<_> = tuple.fields(db)
+                let fields: Vec<_> = tuple.fields
                     .iter()
                     .map(|f| Self::from_type_hint(db, f))
                     .collect();
@@ -212,18 +212,18 @@ impl IrType {
                 }
             }
             TypeHint::AnonStruct(struct_) => {
-                let fields: Vec<_> = struct_.fields(db)
+                let fields: Vec<_> = struct_.fields
                     .iter()
-                    .map(|f| (f.name(db).text(db).to_string(), Self::from_type_hint(db, &f.type_hint(db))))
+                    .map(|f| (f.name.text(db).to_string(), Self::from_type_hint(db, &f.type_hint)))
                     .collect();
                 IrType::Struct(fields)
             }
             TypeHint::AnonEnum(enum_) => {
-                let mut variants: Vec<_> = enum_.variants(db)
+                let mut variants: Vec<_> = enum_.variants
                     .iter()
                     .map(|v| {
-                        let name = v.name(db).text(db).to_string();
-                        let payload = v.payload(db).map(|p| Self::from_type_hint(db, &p));
+                        let name = v.name.text(db).to_string();
+                        let payload = v.payload.map(|p| Self::from_type_hint(db, &p));
                         (name, payload)
                     })
                     .collect();
@@ -232,29 +232,29 @@ impl IrType {
                 IrType::Enum(variants)
             }
             TypeHint::List(list) => {
-                let elem = Self::from_type_hint(db, &list.element_type(db));
+                let elem = Self::from_type_hint(db, &list.element_type);
                 IrType::List(Box::new(elem))
             }
             TypeHint::Set(set) => {
-                let elem = Self::from_type_hint(db, &set.element_type(db));
+                let elem = Self::from_type_hint(db, &set.element_type);
                 IrType::Set(Box::new(elem))
             }
             TypeHint::Map(map) => {
-                let key = Self::from_type_hint(db, &map.key_type(db));
-                let val = Self::from_type_hint(db, &map.value_type(db));
+                let key = Self::from_type_hint(db, &map.key_type);
+                let val = Self::from_type_hint(db, &map.value_type);
                 IrType::Map(Box::new(key), Box::new(val))
             }
             TypeHint::Option(opt) => {
-                let inner = Self::from_type_hint(db, &opt.inner_type(db));
+                let inner = Self::from_type_hint(db, &opt.inner_type);
                 IrType::Option(Box::new(inner))
             }
             TypeHint::Result(res) => {
-                let ok = Self::from_type_hint(db, &res.inner_type(db));
+                let ok = Self::from_type_hint(db, &res.inner_type);
                 IrType::Result(Box::new(ok))
             }
             TypeHint::Tensor(t) => {
-                let elem = Self::from_type_hint(db, &t.element_type(db));
-                IrType::Tensor(Box::new(elem), t.rank(db))
+                let elem = Self::from_type_hint(db, &t.element_type);
+                IrType::Tensor(Box::new(elem), t.rank)
             }
             TypeHint::ParseError(_) => {
                 IrType::Error

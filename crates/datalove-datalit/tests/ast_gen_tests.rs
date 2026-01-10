@@ -231,7 +231,7 @@ fn test_heap_annotation_preservation() {
         if let Some(th) = type_hint {
             match (th, expr) {
                 (TypeHint::List(th_list), Expr::List(list)) => {
-                    let expected_heap = th_list.element_type(db).heap(db);
+                    let expected_heap = th_list.element_type.heap(db);
                     for elem in list.elements(db) {
                         if let Some(elem_th) = elem.type_hint(db) {
                             // Compare heap values
@@ -240,12 +240,12 @@ fn test_heap_annotation_preservation() {
                                 (Heap::Local, Heap::Local) | (Heap::Global, Heap::Global) | (Heap::Omitted, Heap::Omitted)),
                                 "List element heap should match container's element type heap");
                         }
-                        check_heap_consistency(db, Some(th_list.element_type(db).type_hint(db)), &elem.expr(db).expr(db));
+                        check_heap_consistency(db, Some(th_list.element_type.type_hint(db)), &elem.expr(db).expr(db));
                     }
                 }
                 (TypeHint::Map(th_map), Expr::Map(map)) => {
-                    let expected_key_heap = th_map.key_type(db).heap(db);
-                    let expected_value_heap = th_map.value_type(db).heap(db);
+                    let expected_key_heap = th_map.key_type.heap(db);
+                    let expected_value_heap = th_map.value_type.heap(db);
                     for entry in map.entries(db) {
                         if let Some(key_th) = entry.key(db).type_hint(db) {
                             let key_heap = key_th.heap(db);
@@ -259,12 +259,12 @@ fn test_heap_annotation_preservation() {
                                 (Heap::Local, Heap::Local) | (Heap::Global, Heap::Global) | (Heap::Omitted, Heap::Omitted)),
                                 "Map value heap should match container's value type heap");
                         }
-                        check_heap_consistency(db, Some(th_map.key_type(db).type_hint(db)), &entry.key(db).expr(db).expr(db));
-                        check_heap_consistency(db, Some(th_map.value_type(db).type_hint(db)), &entry.value(db).expr(db).expr(db));
+                        check_heap_consistency(db, Some(th_map.key_type.type_hint(db)), &entry.key(db).expr(db).expr(db));
+                        check_heap_consistency(db, Some(th_map.value_type.type_hint(db)), &entry.value(db).expr(db).expr(db));
                     }
                 }
                 (TypeHint::Set(th_set), Expr::Set(set)) => {
-                    let expected_heap = th_set.element_type(db).heap(db);
+                    let expected_heap = th_set.element_type.heap(db);
                     for elem in set.elements(db) {
                         if let Some(elem_th) = elem.type_hint(db) {
                             let elem_heap = elem_th.heap(db);
@@ -272,7 +272,7 @@ fn test_heap_annotation_preservation() {
                                 (Heap::Local, Heap::Local) | (Heap::Global, Heap::Global) | (Heap::Omitted, Heap::Omitted)),
                                 "Set element heap should match container's element type heap");
                         }
-                        check_heap_consistency(db, Some(th_set.element_type(db).type_hint(db)), &elem.expr(db).expr(db));
+                        check_heap_consistency(db, Some(th_set.element_type.type_hint(db)), &elem.expr(db).expr(db));
                     }
                 }
                 _ => {}

@@ -27,24 +27,24 @@ fn type_hint_to_string(db: &dyn salsa::Database, type_hint: datalove_datalit::as
         TypeHint::String => "string",
         TypeHint::Int => "int",
         TypeHint::Result(inner) => {
-            let inner_str = type_hint_to_string(db, inner.inner_type(db));
+            let inner_str = type_hint_to_string(db, inner.inner_type);
             return format!("!{}", inner_str);
         }
         TypeHint::Option(inner) => {
-            let inner_str = type_hint_to_string(db, inner.inner_type(db));
+            let inner_str = type_hint_to_string(db, inner.inner_type);
             return format!("?{}", inner_str);
         }
         TypeHint::List(inner) => {
-            let inner_str = type_hint_to_string(db, inner.element_type(db));
+            let inner_str = type_hint_to_string(db, inner.element_type);
             return format!("[{}]", inner_str);
         }
         TypeHint::Map(inner) => {
-            let key_str = type_hint_to_string(db, inner.key_type(db));
-            let val_str = type_hint_to_string(db, inner.value_type(db));
+            let key_str = type_hint_to_string(db, inner.key_type);
+            let val_str = type_hint_to_string(db, inner.value_type);
             return format!("{{{}: {}}}", key_str, val_str);
         }
         TypeHint::Set(inner) => {
-            let inner_str = type_hint_to_string(db, inner.element_type(db));
+            let inner_str = type_hint_to_string(db, inner.element_type);
             return format!("{{{}}}", inner_str);
         }
         TypeHint::AnonTuple(_) |

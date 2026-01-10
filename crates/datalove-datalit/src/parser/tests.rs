@@ -96,7 +96,7 @@ fn test_parse_anon_enum_type() {
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::AnonEnum(e) => {
-            let variants = e.variants(db);
+            let variants = &e.variants;
             assert_eq!(variants.len(), 2);
         }
         _ => panic!("expected anonymous enum type hint"),
@@ -215,12 +215,12 @@ fn test_parse_enum_variant_with_extra_tokens_error() {
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
         ast::TypeHint::AnonEnum(e) => {
-            let variants = e.variants(db);
+            let variants = &e.variants;
             assert_eq!(variants.len(), 1);
             let variant = &variants[0];
-            assert_eq!(variant.name(db).as_str(db), "Ok");
+            assert_eq!(variant.name.as_str(db), "Ok");
             // Check that the payload contains a parse error.
-            match variant.payload(db) {
+            match variant.payload {
                 Some(payload_type) => {
                     match payload_type.type_hint(db) {
                         ast::TypeHint::ParseError(_) => {

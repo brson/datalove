@@ -74,60 +74,71 @@ pub enum TypeHint<'db> {
     ParseError(TypeHintParseError<'db>),
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeHintAnonTuple<'db> {
     pub fields: Vec<TypeHintAndHeap<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeHintAnonStruct<'db> {
     pub fields: Vec<TypeHintNamedField<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeHintNamedField<'db> {
     pub name: InternedText<'db>,
     pub type_hint: TypeHintAndHeap<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeHintAnonEnum<'db> {
     pub variants: Vec<TypeHintEnumVariant<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeHintEnumVariant<'db> {
     pub name: InternedText<'db>,
     pub payload: Option<TypeHintAndHeap<'db>>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeHintList<'db> {
     pub element_type: TypeHintAndHeap<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeHintMap<'db> {
     pub key_type: TypeHintAndHeap<'db>,
     pub value_type: TypeHintAndHeap<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeHintSet<'db> {
     pub element_type: TypeHintAndHeap<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeHintOption<'db> {
     pub inner_type: TypeHintAndHeap<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeHintResult<'db> {
     pub inner_type: TypeHintAndHeap<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeHintTensor<'db> {
     pub element_type: TypeHintAndHeap<'db>,
     pub rank: u32,
@@ -261,7 +272,8 @@ pub struct ExprError<'db> {
     pub value: ExprFull<'db>,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeHintParseError<'db> {
     pub text: Text<'db>,
     pub span: ByteSpan,

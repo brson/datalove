@@ -862,11 +862,11 @@ fn apply_wrong_payload_presence<'db>(
             let variant_name = e.variant_name(db).as_str(db);
 
             // Find this variant in the type hint to check expected payload.
-            let variants = th_enum.variants(db);
-            let variant_hint = variants.iter().find(|v| v.name(db).as_str(db) == variant_name)?;
+            let variants = &th_enum.variants;
+            let variant_hint = variants.iter().find(|v| v.name.as_str(db) == variant_name)?;
 
             // Flip payload presence: add if missing, remove if present.
-            let source = if variant_hint.payload(db).is_some() {
+            let source = if variant_hint.payload.is_some() {
                 // Variant expects payload, but we'll omit it.
                 format!("{}{}{{ .{} }}", type_hint_str, heap_str, variant_name)
             } else {
@@ -901,8 +901,8 @@ fn apply_swap_map_key_value<'db>(
         }
 
         // Check if key and value types are different (otherwise swap is not an error).
-        let key_type = map_th.key_type(db);
-        let val_type = map_th.value_type(db);
+        let key_type = map_th.key_type;
+        let val_type = map_th.value_type;
         let mut key_str = String::new();
         let mut val_str = String::new();
         pretty_type_hint_and_heap(db, key_type, &mut key_str);
@@ -992,7 +992,7 @@ fn pretty_type_hint<'db>(
 
         TypeHint::AnonTuple(t) => {
             out.push('(');
-            for (i, field) in t.fields(db).iter().enumerate() {
+            for (i, field) in t.fields.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
                 }
@@ -1003,25 +1003,25 @@ fn pretty_type_hint<'db>(
 
         TypeHint::AnonStruct(s) => {
             out.push('{');
-            for (i, field) in s.fields(db).iter().enumerate() {
+            for (i, field) in s.fields.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
                 }
-                out.push_str(field.name(db).as_str(db));
+                out.push_str(field.name.as_str(db));
                 out.push_str(": ");
-                pretty_type_hint_and_heap(db, field.type_hint(db), out);
+                pretty_type_hint_and_heap(db, field.type_hint, out);
             }
             out.push('}');
         }
 
         TypeHint::AnonEnum(e) => {
             out.push_str("enum {");
-            for (i, variant) in e.variants(db).iter().enumerate() {
+            for (i, variant) in e.variants.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
                 }
-                out.push_str(variant.name(db).as_str(db));
-                if let Some(payload) = variant.payload(db) {
+                out.push_str(variant.name.as_str(db));
+                if let Some(payload) = variant.payload {
                     out.push('(');
                     pretty_type_hint_and_heap(db, payload, out);
                     out.push(')');
@@ -1032,45 +1032,45 @@ fn pretty_type_hint<'db>(
 
         TypeHint::List(l) => {
             out.push('[');
-            pretty_type_hint_and_heap(db, l.element_type(db), out);
+            pretty_type_hint_and_heap(db, l.element_type, out);
             out.push(']');
         }
 
         TypeHint::Map(m) => {
             out.push_str("map<");
-            pretty_type_hint_and_heap(db, m.key_type(db), out);
+            pretty_type_hint_and_heap(db, m.key_type, out);
             out.push_str(", ");
-            pretty_type_hint_and_heap(db, m.value_type(db), out);
+            pretty_type_hint_and_heap(db, m.value_type, out);
             out.push('>');
         }
 
         TypeHint::Set(s) => {
             out.push_str("set<");
-            pretty_type_hint_and_heap(db, s.element_type(db), out);
+            pretty_type_hint_and_heap(db, s.element_type, out);
             out.push('>');
         }
 
         TypeHint::Option(o) => {
             out.push('?');
-            pretty_type_hint_and_heap(db, o.inner_type(db), out);
+            pretty_type_hint_and_heap(db, o.inner_type, out);
         }
 
         TypeHint::Result(r) => {
             out.push('!');
-            pretty_type_hint_and_heap(db, r.inner_type(db), out);
+            pretty_type_hint_and_heap(db, r.inner_type, out);
         }
 
         TypeHint::Tensor(t) => {
             out.push_str("tensor<");
-            pretty_type_hint_and_heap(db, t.element_type(db), out);
+            pretty_type_hint_and_heap(db, t.element_type, out);
             out.push_str(", ");
-            out.push_str(&t.rank(db).to_string());
+            out.push_str(&t.rank.to_string());
             out.push('>');
         }
 
         TypeHint::ParseError(e) => {
             out.push_str("<parse-error: ");
-            out.push_str(e.message(db).as_str(db));
+            out.push_str(e.message.as_str(db));
             out.push('>');
         }
     }

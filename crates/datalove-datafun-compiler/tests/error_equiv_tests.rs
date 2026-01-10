@@ -47,20 +47,20 @@ fn has_datalit_type_hint_parse_error<'db>(
     use datalove_datalit::ast::TypeHint;
     match th.type_hint(db) {
         TypeHint::ParseError(_) => true,
-        TypeHint::List(l) => has_datalit_type_hint_parse_error(db, l.element_type(db)),
-        TypeHint::Set(s) => has_datalit_type_hint_parse_error(db, s.element_type(db)),
+        TypeHint::List(l) => has_datalit_type_hint_parse_error(db, l.element_type),
+        TypeHint::Set(s) => has_datalit_type_hint_parse_error(db, s.element_type),
         TypeHint::Map(m) => {
-            has_datalit_type_hint_parse_error(db, m.key_type(db)) ||
-            has_datalit_type_hint_parse_error(db, m.value_type(db))
+            has_datalit_type_hint_parse_error(db, m.key_type) ||
+            has_datalit_type_hint_parse_error(db, m.value_type)
         }
-        TypeHint::Option(o) => has_datalit_type_hint_parse_error(db, o.inner_type(db)),
-        TypeHint::Result(r) => has_datalit_type_hint_parse_error(db, r.inner_type(db)),
-        TypeHint::AnonTuple(t) => t.fields(db).iter().any(|f| has_datalit_type_hint_parse_error(db, *f)),
-        TypeHint::AnonStruct(s) => s.fields(db).iter().any(|f| has_datalit_type_hint_parse_error(db, f.type_hint(db))),
-        TypeHint::AnonEnum(e) => e.variants(db).iter().any(|v| {
-            v.payload(db).map(|p| has_datalit_type_hint_parse_error(db, p)).unwrap_or(false)
+        TypeHint::Option(o) => has_datalit_type_hint_parse_error(db, o.inner_type),
+        TypeHint::Result(r) => has_datalit_type_hint_parse_error(db, r.inner_type),
+        TypeHint::AnonTuple(t) => t.fields.iter().any(|f| has_datalit_type_hint_parse_error(db, *f)),
+        TypeHint::AnonStruct(s) => s.fields.iter().any(|f| has_datalit_type_hint_parse_error(db, f.type_hint)),
+        TypeHint::AnonEnum(e) => e.variants.iter().any(|v| {
+            v.payload.map(|p| has_datalit_type_hint_parse_error(db, p)).unwrap_or(false)
         }),
-        TypeHint::Tensor(t) => has_datalit_type_hint_parse_error(db, t.element_type(db)),
+        TypeHint::Tensor(t) => has_datalit_type_hint_parse_error(db, t.element_type),
         _ => false,
     }
 }
@@ -226,20 +226,20 @@ fn has_type_hint_parse_error<'db>(
     use datalove_datalit::ast::TypeHint;
     match th.type_hint(db) {
         TypeHint::ParseError(_) => true,
-        TypeHint::List(l) => has_type_hint_parse_error(db, l.element_type(db)),
-        TypeHint::Set(s) => has_type_hint_parse_error(db, s.element_type(db)),
+        TypeHint::List(l) => has_type_hint_parse_error(db, l.element_type),
+        TypeHint::Set(s) => has_type_hint_parse_error(db, s.element_type),
         TypeHint::Map(m) => {
-            has_type_hint_parse_error(db, m.key_type(db)) ||
-            has_type_hint_parse_error(db, m.value_type(db))
+            has_type_hint_parse_error(db, m.key_type) ||
+            has_type_hint_parse_error(db, m.value_type)
         }
-        TypeHint::Option(o) => has_type_hint_parse_error(db, o.inner_type(db)),
-        TypeHint::Result(r) => has_type_hint_parse_error(db, r.inner_type(db)),
-        TypeHint::AnonTuple(t) => t.fields(db).iter().any(|f| has_type_hint_parse_error(db, *f)),
-        TypeHint::AnonStruct(s) => s.fields(db).iter().any(|f| has_type_hint_parse_error(db, f.type_hint(db))),
-        TypeHint::AnonEnum(e) => e.variants(db).iter().any(|v| {
-            v.payload(db).map(|p| has_type_hint_parse_error(db, p)).unwrap_or(false)
+        TypeHint::Option(o) => has_type_hint_parse_error(db, o.inner_type),
+        TypeHint::Result(r) => has_type_hint_parse_error(db, r.inner_type),
+        TypeHint::AnonTuple(t) => t.fields.iter().any(|f| has_type_hint_parse_error(db, *f)),
+        TypeHint::AnonStruct(s) => s.fields.iter().any(|f| has_type_hint_parse_error(db, f.type_hint)),
+        TypeHint::AnonEnum(e) => e.variants.iter().any(|v| {
+            v.payload.map(|p| has_type_hint_parse_error(db, p)).unwrap_or(false)
         }),
-        TypeHint::Tensor(t) => has_type_hint_parse_error(db, t.element_type(db)),
+        TypeHint::Tensor(t) => has_type_hint_parse_error(db, t.element_type),
         _ => false,
     }
 }
