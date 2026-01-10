@@ -40,6 +40,8 @@ pub(super) struct Parser<'db> {
     source_text: bct::text::Text<'db>,
     /// Accumulated expression spans (side table pattern).
     expr_spans: Vec<ast::ParseSpanEntry>,
+    /// Optional context for error messages showing the enclosing branch's opening token.
+    branch_context: Option<(TextSpan<'db>, &'static str)>,
 }
 
 impl<'db> Parser<'db> {
@@ -51,11 +53,25 @@ impl<'db> Parser<'db> {
             had_error: false,
             source_text,
             expr_spans: Vec::new(),
+            branch_context: None,
         }
     }
 
     /// Create a new parser from a BracerIter (iterator-backed, zero allocation).
     pub(super) fn from_branch(db: &'db dyn Db, iter: BracerIter<'db>, source_text: bct::text::Text<'db>) -> Self {
+        Self::from_branch_with_context(db, iter, source_text, None)
+    }
+
+    /// Create a new parser from a BracerIter with an optional context label.
+    ///
+    /// The context is used to add a secondary label to error messages showing
+    /// the enclosing branch (e.g., "in this argument list").
+    pub(super) fn from_branch_with_context(
+        db: &'db dyn Db,
+        iter: BracerIter<'db>,
+        source_text: bct::text::Text<'db>,
+        context: Option<(TextSpan<'db>, &'static str)>,
+    ) -> Self {
         let mut parser = Parser {
             db,
             source: TokenSource::Iter {
@@ -66,6 +82,7 @@ impl<'db> Parser<'db> {
             had_error: false,
             source_text,
             expr_spans: Vec::new(),
+            branch_context: context,
         };
         // Prime the buffer.
         parser.fill_iter_buffer();
@@ -123,10 +140,13 @@ impl<'db> Parser<'db> {
     ) -> ast::Statement<'db> {
         self.had_error = true;
         let message_text = InternedText::new(self.db, message.S());
-        DiagnosticBuilder::error(self.db, message)
+        let mut builder = DiagnosticBuilder::error(self.db, message)
             .code(code)
-            .primary_label(ts.clone(), label)
-            .emit_parse();
+            .primary_label(ts.clone(), label);
+        if let Some((ctx_span, ctx_msg)) = &self.branch_context {
+            builder = builder.secondary_label(ctx_span.clone(), ctx_msg);
+        }
+        builder.emit_parse();
         ast::Statement::ParseError(ast::StmtParseError::new(self.db, ts.text, ts.span, message_text))
     }
 
@@ -140,10 +160,13 @@ impl<'db> Parser<'db> {
     ) -> ast::ExprFun<'db> {
         self.had_error = true;
         let message_text = InternedText::new(self.db, message.S());
-        DiagnosticBuilder::error(self.db, message)
+        let mut builder = DiagnosticBuilder::error(self.db, message)
             .code(code)
-            .primary_label(ts.clone(), label)
-            .emit_parse();
+            .primary_label(ts.clone(), label);
+        if let Some((ctx_span, ctx_msg)) = &self.branch_context {
+            builder = builder.secondary_label(ctx_span.clone(), ctx_msg);
+        }
+        builder.emit_parse();
         ast::ExprFun::new(
             self.db,
             ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(self.db, ts.text, ts.span, message_text))
@@ -229,10 +252,13 @@ impl<'db> Parser<'db> {
         if self.peek().is_some() && !self.had_error {
             self.had_error = true;
             let ts = self.peek_text_span();
-            DiagnosticBuilder::error(self.db, "unexpected token after expression")
+            let mut builder = DiagnosticBuilder::error(self.db, "unexpected token after expression")
                 .code("P021")
-                .primary_label(ts, "unexpected token")
-                .emit_parse();
+                .primary_label(ts, "unexpected token");
+            if let Some((ctx_span, ctx_msg)) = &self.branch_context {
+                builder = builder.secondary_label(ctx_span.clone(), ctx_msg);
+            }
+            builder.emit_parse();
         }
     }
 }

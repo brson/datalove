@@ -13,6 +13,7 @@ use bct::{
     input::Source,
     lexer::{Token, TokenKind, Sigil},
     bracer::{Bracer, TreeToken},
+    text::{Text, TextSpan},
     source_map,
     lexer,
     bracer,
@@ -20,6 +21,7 @@ use bct::{
 
 use datalove_datafun_ast::ast;
 use datalove_datafun_ast::script;
+use datalove_diagnostic::DiagnosticBuilder;
 use state::Parser;
 
 /// Re-export Db trait for convenience.
@@ -51,6 +53,7 @@ pub fn parse<'db>(
     let source_text = chunk.text(db);
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
+    emit_bracer_errors(db, bracer, source_text);
     parse_bracer(db, bracer, source_text)
 }
 
@@ -64,6 +67,7 @@ pub fn parse_expr<'db>(
     let source_text = chunk.text(db);
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
+    emit_bracer_errors(db, bracer, source_text);
     parse_bracer_expr(db, bracer, source_text)
 }
 
@@ -78,10 +82,50 @@ fn parse_bracer_expr<'db>(
     expr
 }
 
+/// Emit parse diagnostics for bracer errors (unclosed, mismatched, or stray braces).
+fn emit_bracer_errors<'db>(
+    db: &'db dyn Db,
+    bracer: Bracer<'db>,
+    source_text: Text<'db>,
+) {
+    let chunk = bracer.chunk(db);
+    let tokens = chunk.tokens(db);
+
+    for (token_range, sigil) in bracer.errors(db) {
+        // Single-token range means stray closing brace.
+        // Multi-token range means unclosed opening brace.
+        let is_stray_close = token_range.len() == 1;
+
+        if is_stray_close {
+            // Stray closing brace - no matching open.
+            if let Some(token) = tokens.get(token_range.start) {
+                let span = token.span(db);
+                let ts = TextSpan::new(source_text, span);
+                DiagnosticBuilder::error(db, &format!("unmatched '{}'", sigil.as_str()))
+                    .code("P050")
+                    .primary_label(ts, &format!("this '{}' has no matching '{}'",
+                        sigil.as_str(), sigil.open_sigil().as_str()))
+                    .emit_parse();
+            }
+        } else {
+            // Unclosed opening brace.
+            if let Some(open_token) = tokens.get(token_range.start) {
+                let span = open_token.span(db);
+                let ts = TextSpan::new(source_text, span);
+                DiagnosticBuilder::error(db, &format!("unclosed '{}'", sigil.as_str()))
+                    .code("P051")
+                    .primary_label(ts, &format!("this '{}' is never closed",
+                        sigil.as_str()))
+                    .emit_parse();
+            }
+        }
+    }
+}
+
 fn parse_bracer<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
-    source_text: bct::text::Text<'db>,
+    source_text: Text<'db>,
 ) -> ast::ParseResult<'db> {
     // Get line iterator - newlines inside balanced braces don't count as line breaks.
     // First split on newlines, then filter spaces from each line.

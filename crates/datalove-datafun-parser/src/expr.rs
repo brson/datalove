@@ -266,11 +266,14 @@ impl<'db> Parser<'db> {
                                     // Check if followed by parentheses (function call).
                                     if let Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) = self.peek() {
                                         // It's a function call.
-                                        let args_iter = match self.next() {
-                                            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
+                                        let (args_iter, open_span) = match self.next() {
+                                            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
+                                                let open_span = TextSpan::new(self.source_text(), open.span(self.db));
+                                                (inner, open_span)
+                                            }
                                             _ => unreachable!(),
                                         };
-                                        let args = self.parse_function_call_args(args_iter);
+                                        let args = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
                                         // For function calls, span should include the parens, but for now just use the name span.
                                         self.create_expr(
                                             ast::ExprFunKind::FunctionCall(
@@ -345,8 +348,12 @@ impl<'db> Parser<'db> {
         }
     }
 
-    pub(super) fn parse_function_call_args(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
-        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
+    pub(super) fn parse_function_call_args(
+        &mut self,
+        iter: BracerIter<'db>,
+        context: Option<(TextSpan<'db>, &'static str)>,
+    ) -> Vec<ast::ExprFun<'db>> {
+        let mut sub = Parser::from_branch_with_context(self.db, iter, self.source_text(), context);
         let args = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
@@ -357,8 +364,11 @@ impl<'db> Parser<'db> {
     /// Parse a datafun tuple: (expr1, expr2, ...).
     pub(super) fn parse_datafun_tuple(&mut self) -> ast::ExprFun<'db> {
         // Consume the ParenOpen branch and get its contents.
-        let iter = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
+        let (iter, open_span) = match self.next() {
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
+                let open_span = TextSpan::new(self.source_text(), open.span(self.db));
+                (inner, open_span)
+            }
             _ => {
                 let ts = self.peek_text_span();
                 return self.emit_expr_error(ts,
@@ -369,7 +379,12 @@ impl<'db> Parser<'db> {
             }
         };
 
-        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
+        let mut sub = Parser::from_branch_with_context(
+            self.db,
+            iter,
+            self.source_text(),
+            Some((open_span, "in this tuple")),
+        );
         let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;

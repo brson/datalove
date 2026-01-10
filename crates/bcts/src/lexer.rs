@@ -458,6 +458,17 @@ impl Sigil {
         }
     }
 
+    /// Get the corresponding opening sigil for a closing sigil.
+    pub fn open_sigil(&self) -> Sigil {
+        match self {
+            Sigil::ParenClose => Sigil::ParenOpen,
+            Sigil::BraceClose => Sigil::BraceOpen,
+            Sigil::BracketClose => Sigil::BracketOpen,
+            Sigil::AngleClose => Sigil::AngleOpen,
+            _ => bug!(),
+        }
+    }
+
     fn is_close_sigil(&self) -> bool {
         matches!(self, Sigil::ParenClose | Sigil::BraceClose | Sigil::BracketClose | Sigil::AngleClose)
     }

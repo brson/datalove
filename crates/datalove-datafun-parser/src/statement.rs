@@ -208,8 +208,9 @@ impl<'db> Parser<'db> {
 
         // Parse parameters in parentheses.
         let params = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => {
-                self.parse_fun_params(inner)
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
+                let open_span = TextSpan::new(self.source_text(), open.span(self.db));
+                self.parse_fun_params(inner, Some((open_span, "in this parameter list")))
             }
             _ => {
                 let ts = self.peek_text_span();
@@ -270,8 +271,12 @@ impl<'db> Parser<'db> {
         ))
     }
 
-    fn parse_fun_params(&mut self, iter: BracerIter<'db>) -> Vec<ast::FunParam<'db>> {
-        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
+    fn parse_fun_params(
+        &mut self,
+        iter: BracerIter<'db>,
+        context: Option<(TextSpan<'db>, &'static str)>,
+    ) -> Vec<ast::FunParam<'db>> {
+        let mut sub = Parser::from_branch_with_context(self.db, iter, self.source_text(), context);
         let params = sub.parse_comma_separated(|p| p.parse_fun_param());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
