@@ -46,6 +46,7 @@ mod env;
 mod ops;
 mod types;
 mod collections;
+mod dispatch;
 
 #[cfg(test)]
 mod tests;
@@ -56,6 +57,7 @@ pub use layout::IrLayout;
 pub use tydesc::IrTyDescTable;
 pub use frame::{Frame, FrameStore};
 pub use env::{FunctionRegistry, ScriptEnvironment, ExecutionContext};
+pub use dispatch::{CallDispatcher, DispatchResult};
 pub use datalove_rt::c::DebugOutputMode;
 
 use datalove_rt::rtdt;
@@ -77,6 +79,8 @@ pub enum UnitCompletion {
 pub struct IrInterpreter {
     runtime: datalove_rt::rust::Runtime,
     tydesc_table: IrTyDescTable,
+    /// Optional call dispatcher for JIT integration.
+    call_dispatcher: Option<Box<dyn CallDispatcher>>,
 }
 
 impl IrInterpreter {
@@ -90,7 +94,20 @@ impl IrInterpreter {
         Self {
             runtime: datalove_rt::rust::Runtime::new_with_debug_mode(debug_mode),
             tydesc_table: IrTyDescTable::new(),
+            call_dispatcher: None,
         }
+    }
+
+    /// Set a call dispatcher for intercepting function calls.
+    ///
+    /// Use this to integrate JIT compilation or other call dispatch mechanisms.
+    pub fn set_call_dispatcher(&mut self, dispatcher: Box<dyn CallDispatcher>) {
+        self.call_dispatcher = Some(dispatcher);
+    }
+
+    /// Remove the call dispatcher.
+    pub fn clear_call_dispatcher(&mut self) {
+        self.call_dispatcher = None;
     }
 
     /// Get the runtime handle for memory management.
@@ -924,18 +941,37 @@ impl IrInterpreter {
                     }
                 }
 
-                // Call the function with appropriate context.
-                // For external functions, use the callee's unit's context.
-                // For local/module functions, use the current context.
-                if let Some(unit) = callee_unit {
-                    // External function - create context with callee's unit functions.
-                    let unit_funcs = registry.unit_functions(unit)
-                        .ok_or(InterpError::ExternalUnitNotFound(unit))?;
-                    let callee_ctx = ExecutionContext::new(unit_funcs);
-                    self.call_in_context(callee, arg_vals, dest_slot, &callee_ctx, registry, frames)?;
-                } else {
-                    // Local or module function - use current context.
-                    self.call_in_context(callee, arg_vals, dest_slot, ctx, registry, frames)?;
+                // Try dispatcher first (for JIT integration).
+                let mut call_handled = false;
+                if let Some(mut dispatcher) = self.call_dispatcher.take() {
+                    let rt_handle = self.runtime.handle();
+                    match dispatcher.dispatch_call(func, callee, &arg_vals, dest_slot, rt_handle) {
+                        dispatch::DispatchResult::Handled(result) => {
+                            self.call_dispatcher = Some(dispatcher);
+                            result?;
+                            call_handled = true;
+                        }
+                        dispatch::DispatchResult::NotHandled => {
+                            self.call_dispatcher = Some(dispatcher);
+                        }
+                    }
+                }
+
+                // Fall through to interpreter if not handled by dispatcher.
+                if !call_handled {
+                    // Call the function with appropriate context.
+                    // For external functions, use the callee's unit's context.
+                    // For local/module functions, use the current context.
+                    if let Some(unit) = callee_unit {
+                        // External function - create context with callee's unit functions.
+                        let unit_funcs = registry.unit_functions(unit)
+                            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
+                        let callee_ctx = ExecutionContext::new(unit_funcs);
+                        self.call_in_context(callee, arg_vals, dest_slot, &callee_ctx, registry, frames)?;
+                    } else {
+                        // Local or module function - use current context.
+                        self.call_in_context(callee, arg_vals, dest_slot, ctx, registry, frames)?;
+                    }
                 }
 
                 // After call returns, Out param slots are now initialized.
