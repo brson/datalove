@@ -38,7 +38,7 @@ use datalove_datafun_compiler::module_graph::{
     ModuleGraph, ModuleGraphTypecheckResult, ModuleId,
     ParsedModuleGraph, parse_module_graph,
 };
-use datalove_datafun_interp::{ScriptEnvironment, UnitCompletion};
+use datalove_datafun_interp::{CallDispatcher, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;
 use drop_analysis::FunctionDropAnalysis;
 
@@ -1102,6 +1102,16 @@ impl<'db> ScriptCompilationContext<'db> {
     /// Clear debug buffer.
     pub fn clear_debug_buffer(&self) {
         self.interp.clear_debug_buffer();
+    }
+
+    // --- JIT configuration ---
+
+    /// Set a call dispatcher for JIT compilation.
+    ///
+    /// When set, function calls are routed through the dispatcher, which can
+    /// decide to execute JIT-compiled code or fall back to interpretation.
+    pub fn set_call_dispatcher(&mut self, dispatcher: Box<dyn CallDispatcher>) {
+        self.interp.set_call_dispatcher(dispatcher);
     }
 
     // --- Cleanup ---

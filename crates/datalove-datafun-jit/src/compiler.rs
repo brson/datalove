@@ -15,7 +15,7 @@ use datalove_datafun_ir::{FuncRef, Instruction, IrFunction, IrModuleId};
 use datalove_datafun_interp::{ExecutionContext, FunctionRegistry};
 use datalove_datafun_aot_cranelift::codegen::{self, build_signature_for_func, uses_sret};
 use datalove_datafun_aot_cranelift::runtime::RuntimeImports;
-use datalove_datafun_aot_cranelift::tydesc_emit::TyDescEmitter;
+use datalove_datafun_aot_cranelift::tydesc_emit::{self, TyDescEmitter};
 use datalove_datafun_aot_cranelift::types::PTR_TYPE;
 
 use crate::trampoline::{self, EncodedFuncKey};
@@ -55,11 +55,14 @@ impl JitCompiler {
         let isa = builder.finish(flags)
             .map_err(|e| JitError::CompilationFailed(format!("isa error: {}", e)))?;
 
-        // Build JIT module with dispatch symbol registered.
+        // Build JIT module with all required symbols registered.
         let mut jit_builder = JITBuilder::with_isa(isa.clone(), cranelift_module::default_libcall_names());
 
         // Register the dispatch function so JIT code can call it.
         jit_builder.symbol("__jit_dispatch_call", trampoline::dispatch_fn_ptr());
+
+        // Register all runtime symbols so JIT code can call them.
+        register_runtime_symbols(&mut jit_builder);
 
         let mut jit_module = JITModule::new(jit_builder);
 
@@ -98,6 +101,13 @@ impl JitCompiler {
     ///
     /// Returns (code_ptr, uses_sret).
     pub fn compile_function(&mut self, func: &IrFunction) -> Result<(*const u8, bool), JitError> {
+        // Emit TyDescs for all types in this function.
+        let mut types = HashSet::new();
+        tydesc_emit::collect_types_from_function(func, &mut types);
+
+        self.tydesc_emitter.emit_all(&mut self.jit_module, types)
+            .map_err(|e| JitError::CompilationFailed(format!("tydesc emit: {}", e)))?;
+
         // Build a FunctionCompiler for this function.
         let compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
             func,
@@ -140,6 +150,10 @@ impl JitCompiler {
         // Collect all Call targets in this function.
         let callees = self.collect_call_targets(func);
 
+        // Collect types from main function and all callees for TyDesc emission.
+        let mut types = HashSet::new();
+        tydesc_emit::collect_types_from_function(func, &mut types);
+
         // Create stubs for each callee.
         let mut local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId> = HashMap::new();
         let mut module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::FuncId), FuncId> = HashMap::new();
@@ -148,6 +162,9 @@ impl JitCompiler {
             // Look up the callee's IR to get its signature.
             let callee_ir = ctx.get_function(&func_ref, registry)
                 .map_err(|e| JitError::CompilationFailed(format!("callee lookup: {:?}", e)))?;
+
+            // Collect types from callee for TyDesc emission.
+            tydesc_emit::collect_types_from_function(callee_ir, &mut types);
 
             // Create a stub for this callee.
             let stub_id = self.create_stub_for_callee(&func_ref, callee_ir)?;
@@ -168,6 +185,10 @@ impl JitCompiler {
                 }
             }
         }
+
+        // Emit TyDescs for all collected types.
+        self.tydesc_emitter.emit_all(&mut self.jit_module, types)
+            .map_err(|e| JitError::CompilationFailed(format!("tydesc emit: {}", e)))?;
 
         // Build a FunctionCompiler with stub mappings.
         let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
@@ -368,4 +389,49 @@ impl JitCompiler {
 
         Ok(())
     }
+}
+
+/// Register all runtime symbols with the JIT builder.
+///
+/// These symbols are declared as imports by RuntimeImports::declare and must be
+/// registered before creating the JITModule so they can be resolved at runtime.
+fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
+    use datalove_rt::c;
+
+    // Core runtime functions.
+    jit_builder.symbol("dtlv_rti_init", c::dtlv_rti_init as *const u8);
+    jit_builder.symbol("dtlv_rti_shutdown", c::dtlv_rti_shutdown as *const u8);
+    jit_builder.symbol("dtlv_rti_set_debug_mode", c::dtlv_rti_set_debug_mode as *const u8);
+    jit_builder.symbol("dtlv_rti_debuglog_local", c::dtlv_rti_debuglog_local as *const u8);
+    jit_builder.symbol("dtlv_rti_any_destroy_local", c::dtlv_rti_any_destroy_local as *const u8);
+    jit_builder.symbol("dtlv_rti_mem_alloc_raw_local", c::dtlv_rti_mem_alloc_raw_local as *const u8);
+
+    // String functions.
+    jit_builder.symbol("dtlv_rti_string_create_local", c::dtlv_rti_string_create_local as *const u8);
+    jit_builder.symbol("dtlv_rti_string_push_bytes_local", c::dtlv_rti_string_push_bytes_local as *const u8);
+
+    // Collection functions.
+    jit_builder.symbol("dtlv_rti_list_create_local", c::dtlv_rti_list_create_local as *const u8);
+    jit_builder.symbol("dtlv_rti_list_push_local", c::dtlv_rti_list_push_local as *const u8);
+    jit_builder.symbol("dtlv_rti_btreeset_create_local", c::dtlv_rti_btreeset_create_local as *const u8);
+    jit_builder.symbol("dtlv_rti_btreeset_insert_local", c::dtlv_rti_btreeset_insert_local as *const u8);
+    jit_builder.symbol("dtlv_rti_btreemap_create_local", c::dtlv_rti_btreemap_create_local as *const u8);
+    jit_builder.symbol("dtlv_rti_btreemap_insert_local", c::dtlv_rti_btreemap_insert_local as *const u8);
+    jit_builder.symbol("dtlv_rti_tensor_init_local", c::dtlv_rti_tensor_init_local as *const u8);
+
+    // Int (bigint) arithmetic functions.
+    jit_builder.symbol("dtlv_rti_int_add", c::dtlv_rti_int_add as *const u8);
+    jit_builder.symbol("dtlv_rti_int_sub", c::dtlv_rti_int_sub as *const u8);
+    jit_builder.symbol("dtlv_rti_int_mul", c::dtlv_rti_int_mul as *const u8);
+    jit_builder.symbol("dtlv_rti_int_div_checked", c::dtlv_rti_int_div_checked as *const u8);
+    jit_builder.symbol("dtlv_rti_int_neg", c::dtlv_rti_int_neg as *const u8);
+    jit_builder.symbol("dtlv_rti_int_from_fixed", c::dtlv_rti_int_from_fixed as *const u8);
+    jit_builder.symbol("dtlv_rti_cmp_local", c::dtlv_rti_cmp_local as *const u8);
+
+    // Value move function.
+    jit_builder.symbol("dtlv_rti_move_value_local", c::dtlv_rti_move_value_local as *const u8);
+
+    // Boxing functions.
+    jit_builder.symbol("dtlv_rti_error_from_local", c::dtlv_rti_error_from_local as *const u8);
+    jit_builder.symbol("dtlv_rti_data_from_local", c::dtlv_rti_data_from_local as *const u8);
 }

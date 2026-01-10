@@ -1093,6 +1093,7 @@ dependencies = [
  "datalove-datafun-compiler",
  "datalove-datafun-interp",
  "datalove-datafun-ir",
+ "datalove-datafun-jit",
  "datalove-datafun-parser",
  "datalove-datafun-pkg",
  "datalove-datafun-tycheck",

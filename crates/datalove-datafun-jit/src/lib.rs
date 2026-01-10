@@ -22,7 +22,7 @@ pub use trampoline::{DispatchContext, set_dispatch_context, clear_dispatch_conte
 
 use std::collections::HashMap;
 
-use datalove_datafun_ir::{FuncId, FuncRef, IrFunction, IrModuleId};
+use datalove_datafun_ir::{FuncId, FuncRef, IrFunction, IrModuleId, IrType};
 use datalove_datafun_interp::{CallDispatcher, Destination, DispatchResult, InterpError, Value};
 use datalove_rt::c::LocalRtHandle;
 
@@ -153,8 +153,10 @@ impl JitEngine {
 
         match state {
             FunctionState::Interpreted { call_count } => {
-                *call_count += 1;
-                if *call_count >= self.threshold {
+                // Use saturating_add to avoid overflow. u32::MAX indicates permanently
+                // interpreted (e.g., function uses unsupported features).
+                *call_count = call_count.saturating_add(1);
+                if *call_count >= self.threshold && *call_count != u32::MAX {
                     // Compile the function.
                     let (code_ptr, uses_sret) = self.compiler.compile_function(func)?;
                     *state = FunctionState::Compiled { code_ptr, uses_sret };
@@ -227,9 +229,10 @@ impl JitEngine {
         rt_handle: LocalRtHandle,
         args: &[Value],
         ret_dest: Destination,
+        return_type: &IrType,
     ) -> Result<(), JitError> {
         // SAFETY: caller guarantees code_ptr and args are valid.
-        unsafe { bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest) }
+        unsafe { bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, return_type) }
     }
 }
 
@@ -323,6 +326,9 @@ mod tests {
 
     #[test]
     fn test_execute_jit_code() {
+        // Create runtime FIRST, like the integration test does.
+        let runtime = datalove_rt::rust::Runtime::new();
+
         let mut jit = JitEngine::new(1).unwrap();
         let func = make_add_function();
         let key = FunctionKey::local(FuncId(0));
@@ -331,8 +337,7 @@ mod tests {
         let (code_ptr, uses_sret) = jit.record_call(key, &func).unwrap().unwrap();
         assert!(!uses_sret);
 
-        // Set up runtime and return destination.
-        let runtime = datalove_rt::rust::Runtime::new();
+        // Runtime is already created.
         let rt_handle = runtime.handle();
 
         // Allocate space for return value (use usize for proper alignment).
@@ -345,8 +350,9 @@ mod tests {
         // Call the JIT code.
         // Function takes: (rt_handle) -> i32
         // No user args, scalar return.
+        let return_type = IrType::I32;
         unsafe {
-            jit.call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest).unwrap();
+            jit.call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type).unwrap();
         }
 
         // Extract i32 from the buffer.
@@ -579,8 +585,9 @@ mod tests {
         // 5. Dispatcher calls interpreter to execute add()
         // 6. Result flows back through the chain
         // SAFETY: code_ptr is valid JIT code.
+        let return_type = IrType::I32;
         unsafe {
-            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest)
+            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type)
                 .expect("JIT call failed");
         }
 
@@ -609,7 +616,7 @@ impl CallDispatcher for JitEngine {
                 // JIT code available - call it.
                 // SAFETY: code_ptr is a valid JIT-compiled function for this signature.
                 let result = unsafe {
-                    self.call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest)
+                    self.call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, &func.return_type)
                 };
                 match result {
                     Ok(()) => DispatchResult::Handled(Ok(())),
@@ -621,8 +628,16 @@ impl CallDispatcher for JitEngine {
                 DispatchResult::NotHandled
             }
             Err(e) => {
-                // Compilation failed, report error but don't fall through.
-                DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string())))
+                // Check if this is an error that we should fall back for.
+                let error_str = e.to_string();
+                if error_str.contains("unsupported:") || error_str.contains("Duplicate definition") {
+                    // Mark as not JIT-able and fall back to interpreter.
+                    self.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
+                    DispatchResult::NotHandled
+                } else {
+                    // Compilation failed with error, report it.
+                    DispatchResult::Handled(Err(InterpError::RuntimeError(error_str)))
+                }
             }
         }
     }

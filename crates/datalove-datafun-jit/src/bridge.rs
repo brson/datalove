@@ -3,12 +3,24 @@
 //! Converts between interpreter's Value/Destination and JIT's raw pointer convention.
 
 use datalove_datafun_interp::{Destination, Value};
+use datalove_datafun_ir::IrType;
 use datalove_rt::c::LocalRtHandle;
 
 use crate::JitError;
 
 /// Maximum number of function parameters supported by direct dispatch.
 const MAX_DIRECT_ARGS: usize = 8;
+
+/// Get the size of a scalar return type in bytes.
+fn scalar_return_size(ty: &IrType) -> usize {
+    match ty {
+        IrType::Bool | IrType::U8 | IrType::I8 => 1,
+        IrType::U16 | IrType::I16 => 2,
+        IrType::U32 | IrType::I32 | IrType::F32 => 4,
+        IrType::U64 | IrType::I64 | IrType::F64 => 8,
+        _ => 8, // Default to pointer size for other types.
+    }
+}
 
 /// Call a JIT-compiled function from the interpreter.
 ///
@@ -24,6 +36,7 @@ pub unsafe fn call_jit(
     rt_handle: LocalRtHandle,
     args: &[Value],
     ret_dest: Destination,
+    return_type: &IrType,
 ) -> Result<(), JitError> {
     if args.len() > MAX_DIRECT_ARGS {
         return Err(JitError::BridgeCallFailed(format!(
@@ -57,7 +70,7 @@ pub unsafe fn call_jit(
     // This avoids using libffi by handling common cases directly.
     let total_args = arg_idx;
     // SAFETY: code_ptr is a valid JIT-compiled function, args are valid pointers.
-    unsafe { dispatch_call(code_ptr, &raw_args, total_args, uses_sret, ret_dest)? };
+    unsafe { dispatch_call(code_ptr, &raw_args, total_args, uses_sret, ret_dest, return_type)? };
 
     Ok(())
 }
@@ -74,6 +87,7 @@ unsafe fn dispatch_call(
     arg_count: usize,
     uses_sret: bool,
     ret_dest: Destination,
+    return_type: &IrType,
 ) -> Result<(), JitError> {
     // Type aliases for function pointers with different arities.
     type Fn1 = unsafe extern "C" fn(usize) -> usize;
@@ -140,11 +154,18 @@ unsafe fn dispatch_call(
     };
 
     // If not sret, write scalar result to destination.
-    // The result is in a register (usize-sized). Caller must provide
-    // a properly aligned buffer (at least usize alignment).
+    // The result is in a register (usize-sized), but we only write the
+    // appropriate number of bytes based on the return type.
     if !uses_sret {
-        // SAFETY: ret_dest.ptr must be usize-aligned for scalar returns.
-        unsafe { *(ret_dest.ptr as *mut usize) = result };
+        let size = scalar_return_size(return_type);
+        // SAFETY: ret_dest.ptr points to a buffer of at least `size` bytes.
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                &result as *const usize as *const u8,
+                ret_dest.ptr,
+                size,
+            );
+        }
     }
     // If sret, result was written directly to ret_dest.ptr by the callee.
 
