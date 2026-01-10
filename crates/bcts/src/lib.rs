@@ -13,12 +13,6 @@ pub mod lexer;
 pub mod bracer;
 pub mod lines;
 
-pub mod modules;
-pub mod module_resolve;
-
-pub mod package;
-pub mod package_resolve;
-
 pub mod package2;
 pub mod package_resolve2;
 
