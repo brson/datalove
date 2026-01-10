@@ -104,7 +104,7 @@ impl<'db> Parser<'db> {
             TreeToken::Token(t) => {
                 !matches!(t.kind(db), TokenKind::Whitespace | TokenKind::Comment)
             }
-            TreeToken::Branch(_, _) => true,
+            TreeToken::Branch { .. } => true,
         }
     }
 

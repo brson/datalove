@@ -208,8 +208,8 @@ impl<'db> Parser<'db> {
 
         // Parse parameters in parentheses.
         let params = match self.next() {
-            Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
-                self.parse_fun_params(iter)
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => {
+                self.parse_fun_params(inner)
             }
             _ => {
                 let ts = self.peek_text_span();
@@ -653,8 +653,8 @@ impl<'db> Parser<'db> {
         let carries = if self.peek_word() == Some("carry") {
             self.eat_word("carry");
             match self.next() {
-                Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
-                    self.parse_carry_bindings(iter)
+                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => {
+                    self.parse_carry_bindings(inner)
                 }
                 _ => {
                     let ts = self.peek_text_span();
@@ -685,9 +685,9 @@ impl<'db> Parser<'db> {
                 self.eat_word("break");
                 // Parse optional (values...).
                 let values = match self.peek() {
-                    Some(TreeToken::Branch(Sigil::ParenOpen, _)) => {
-                        if let Some(TreeToken::Branch(Sigil::ParenOpen, iter)) = self.next() {
-                            self.parse_else_break_values(iter)
+                    Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
+                        if let Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) = self.next() {
+                            self.parse_else_break_values(inner)
                         } else {
                             vec![]
                         }
@@ -797,8 +797,8 @@ impl<'db> Parser<'db> {
         let brings = if sub.peek_word() == Some("bring") {
             sub.eat_word("bring");
             match sub.next() {
-                Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
-                    sub.parse_bring_bindings(iter)
+                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => {
+                    sub.parse_bring_bindings(inner)
                 }
                 _ => {
                     let ts = sub.peek_text_span();
@@ -863,10 +863,10 @@ impl<'db> Parser<'db> {
         self.eat_word("break");
 
         // Check for optional values: `break (expr1, expr2)`.
-        let values = if let Some(TreeToken::Branch(Sigil::ParenOpen, _)) = self.peek() {
+        let values = if let Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) = self.peek() {
             match self.next() {
-                Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
-                    self.parse_comma_separated_exprs(iter)
+                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => {
+                    self.parse_comma_separated_exprs(inner)
                 }
                 _ => vec![],
             }
@@ -881,10 +881,10 @@ impl<'db> Parser<'db> {
         self.eat_word("continue");
 
         // Check for optional values: `continue (expr1, expr2)`.
-        let values = if let Some(TreeToken::Branch(Sigil::ParenOpen, _)) = self.peek() {
+        let values = if let Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) = self.peek() {
             match self.next() {
-                Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => {
-                    self.parse_comma_separated_exprs(iter)
+                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => {
+                    self.parse_comma_separated_exprs(inner)
                 }
                 _ => vec![],
             }

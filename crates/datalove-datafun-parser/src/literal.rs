@@ -251,15 +251,15 @@ impl<'db> Parser<'db> {
                     }
                 }
             }
-            Some(TreeToken::Branch(Sigil::ParenOpen, _)) => {
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
                 // Anonymous tuple.
                 return self.parse_lit_anon_tuple(heap, type_hint);
             }
-            Some(TreeToken::Branch(Sigil::BraceOpen, _)) => {
+            Some(TreeToken::Branch { sigil: Sigil::BraceOpen, .. }) => {
                 // Anonymous struct.
                 return self.parse_lit_anon_struct(heap, type_hint);
             }
-            Some(TreeToken::Branch(Sigil::BracketOpen, _)) => {
+            Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) => {
                 // List.
                 return self.parse_lit_list(heap, type_hint);
             }
@@ -296,8 +296,8 @@ impl<'db> Parser<'db> {
         heap: datalit::ast::Heap,
         type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
     ) -> ast::ExprFunKind<'db> {
-        let iter = match self.next() {
-            Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
+        let inner = match self.next() {
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
@@ -307,7 +307,7 @@ impl<'db> Parser<'db> {
             }
         };
 
-        let elements = self.parse_comma_separated_exprs(iter);
+        let elements = self.parse_comma_separated_exprs(inner);
         ast::ExprFunKind::AnonTuple(ast::ExprAnonTuple::new(self.db, heap, type_hint, elements))
     }
 
@@ -317,8 +317,8 @@ impl<'db> Parser<'db> {
         heap: datalit::ast::Heap,
         type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
     ) -> ast::ExprFunKind<'db> {
-        let iter = match self.next() {
-            Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => iter,
+        let inner = match self.next() {
+            Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
@@ -328,7 +328,7 @@ impl<'db> Parser<'db> {
             }
         };
 
-        let fields = self.parse_comma_separated_struct_fields(iter);
+        let fields = self.parse_comma_separated_struct_fields(inner);
         ast::ExprFunKind::AnonStruct(ast::ExprAnonStruct::new(self.db, heap, type_hint, fields))
     }
 
@@ -338,8 +338,8 @@ impl<'db> Parser<'db> {
         heap: datalit::ast::Heap,
         type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
     ) -> ast::ExprFunKind<'db> {
-        let iter = match self.next() {
-            Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => iter,
+        let inner = match self.next() {
+            Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner,
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
@@ -349,7 +349,7 @@ impl<'db> Parser<'db> {
             }
         };
 
-        let elements = self.parse_comma_separated_exprs(iter);
+        let elements = self.parse_comma_separated_exprs(inner);
         ast::ExprFunKind::List(ast::ExprList::new(self.db, heap, type_hint, elements))
     }
 
@@ -360,8 +360,8 @@ impl<'db> Parser<'db> {
         type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
     ) -> ast::ExprFunKind<'db> {
         self.eat_word("set");
-        let iter = match self.next() {
-            Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => iter,
+        let inner = match self.next() {
+            Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
@@ -371,7 +371,7 @@ impl<'db> Parser<'db> {
             }
         };
 
-        let elements = self.parse_comma_separated_exprs(iter);
+        let elements = self.parse_comma_separated_exprs(inner);
         ast::ExprFunKind::Set(ast::ExprSet::new(self.db, heap, type_hint, elements))
     }
 
@@ -382,8 +382,8 @@ impl<'db> Parser<'db> {
         type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
     ) -> ast::ExprFunKind<'db> {
         self.eat_word("map");
-        let iter = match self.next() {
-            Some(TreeToken::Branch(Sigil::BraceOpen, iter)) => iter,
+        let inner = match self.next() {
+            Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(
@@ -393,7 +393,7 @@ impl<'db> Parser<'db> {
             }
         };
 
-        let entries = self.parse_comma_separated_map_entries(iter);
+        let entries = self.parse_comma_separated_map_entries(inner);
         ast::ExprFunKind::Map(ast::ExprMap::new(self.db, heap, type_hint, entries))
     }
 
@@ -431,12 +431,12 @@ impl<'db> Parser<'db> {
     /// Parse optional enum payload: (expr)
     fn parse_optional_enum_payload(&mut self) -> Option<ast::ExprFun<'db>> {
         match self.peek() {
-            Some(TreeToken::Branch(Sigil::ParenOpen, _)) => {
-                let iter = match self.next() {
-                    Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
                     _ => return None,
                 };
-                let mut sub = Parser::from_branch(self.db, iter, self.source_text());
+                let mut sub = Parser::from_branch(self.db, inner, self.source_text());
                 if sub.peek().is_none() {
                     return None;
                 }
@@ -460,8 +460,8 @@ impl<'db> Parser<'db> {
 
         // Parse shape: [dim1, dim2, ...]
         let shape = match self.next() {
-            Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
-                self.parse_tensor_shape(iter)
+            Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => {
+                self.parse_tensor_shape(inner)
             }
             _ => {
                 let ts = self.peek_text_span();
@@ -478,12 +478,12 @@ impl<'db> Parser<'db> {
         // For rank 1: comma-separated elements.
         // For rank 2+: comma-separated rows, space-separated elements within each row.
         let elements = match self.next() {
-            Some(TreeToken::Branch(Sigil::BracketOpen, iter)) => {
+            Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => {
                 if rank <= 1 {
-                    self.parse_comma_separated_exprs(iter)
+                    self.parse_comma_separated_exprs(inner)
                 } else {
                     let row_size = *shape.last().unwrap_or(&1) as usize;
-                    let (elems, has_error) = self.parse_tensor_data_2d_plus(iter, row_size);
+                    let (elems, has_error) = self.parse_tensor_data_2d_plus(inner, row_size);
                     if has_error {
                         let ts = self.peek_text_span();
                         return ast::ExprFunKind::ParseError(ast::ExprFunParseError::new(

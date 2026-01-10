@@ -73,7 +73,7 @@ impl<'db> Iterator for BracerIter<'db> {
         debug!("next: {:?}", match res.as_ref() {
             None => "none",
             Some(TreeToken::Token(t)) => t.text(self.db).as_str(self.db),
-            Some(TreeToken::Branch(..)) => "branch",
+            Some(TreeToken::Branch { .. }) => "branch",
         });
         res
     }
@@ -174,13 +174,38 @@ impl<'db> BracerIter<'db> {
                             self.next_token_index = self.next_token_index.checked_add(1).X();
                             self.next_branch_index = self.next_branch_index.checked_add(1).X();
 
-                            // skip the opening brace of the branch
+                            // Skip the opening brace of the branch.
                             let branch_token_range_start = next_branch.real_token_range.start.checked_add(1).X();
                             let branch_token_range = branch_token_range_start..next_branch.real_token_range.end;
 
-                            let branch = TreeToken::Branch(
-                                next_branch.open_sigil,
-                                BracerIter {
+                            // Get the open token.
+                            let open_token = *next_token;
+
+                            // Get the potential close token and check if it's a real close.
+                            let all_tokens = self.tree.chunk(self.db).tokens(self.db);
+                            let close_idx = next_branch.real_token_range.end.checked_sub(1);
+                            let expected_close_sigil = next_branch.open_sigil.close_sigil();
+                            let (close_token, end_byte) = match close_idx.and_then(|i| all_tokens.get(i)) {
+                                Some(tok) if tok.kind(self.db) == TokenKind::Sigil(expected_close_sigil) => {
+                                    // Real close token found.
+                                    (Some(*tok), tok.span(self.db).end)
+                                }
+                                Some(tok) => {
+                                    // Last token exists but isn't the close sigil (unclosed/mismatched).
+                                    (None, tok.span(self.db).end)
+                                }
+                                None => {
+                                    // No tokens at all after open (empty unclosed branch).
+                                    (None, open_token.span(self.db).end)
+                                }
+                            };
+
+                            let branch = TreeToken::Branch {
+                                sigil: next_branch.open_sigil,
+                                open: open_token,
+                                close: close_token,
+                                end_byte,
+                                inner: BracerIter {
                                     db: self.db,
                                     tree: self.tree,
                                     real_token_range: branch_token_range,
@@ -191,8 +216,8 @@ impl<'db> BracerIter<'db> {
                                     next_branch_index: self.next_branch_index,
                                     next_inserted_close_index: self.next_inserted_close_index,
                                     next_removed_close_index: self.next_removed_close_index,
-                                }
-                            );
+                                },
+                            };
 
                             debug!("sbi {:#?}", Range::from_start_len(self.next_branch_index, next_branch.branches).X());
 
@@ -240,7 +265,13 @@ impl<'db> BracerIter<'db> {
 #[derive(Clone)]
 pub enum TreeToken<'db> {
     Token(Token<'db>),
-    Branch(Sigil, BracerIter<'db>),
+    Branch {
+        sigil: Sigil,
+        open: Token<'db>,
+        close: Option<Token<'db>>,
+        end_byte: usize,
+        inner: BracerIter<'db>,
+    },
 }
 
 #[salsa::tracked]
@@ -444,7 +475,25 @@ impl<'db> TreeToken<'db> {
             TreeToken::Token(tok) => {
                 Some(crate::text::TextSpan::new(source_text, tok.span(db)))
             }
-            TreeToken::Branch(_, iter) => iter.text_span(),
+            TreeToken::Branch { open, end_byte, .. } => {
+                Some(crate::text::TextSpan::new(source_text, open.span(db).start..*end_byte))
+            }
+        }
+    }
+
+    /// Get the byte span of the opening delimiter, if this is a branch.
+    pub fn open_span(&self, db: &'db dyn crate::Db) -> Option<Range<usize>> {
+        match self {
+            TreeToken::Token(_) => None,
+            TreeToken::Branch { open, .. } => Some(open.span(db)),
+        }
+    }
+
+    /// Get the byte span of the closing delimiter, if this is a branch with a real close.
+    pub fn close_span(&self, db: &'db dyn crate::Db) -> Option<Range<usize>> {
+        match self {
+            TreeToken::Token(_) => None,
+            TreeToken::Branch { close, .. } => close.map(|c| c.span(db)),
         }
     }
 
@@ -454,7 +503,7 @@ impl<'db> TreeToken<'db> {
                 token.without_space(db)
                     .map(TreeToken::Token)
             }
-            token @ TreeToken::Branch(..) => Some(token),
+            token @ TreeToken::Branch { .. } => Some(token),
         }
     }
 }
@@ -500,12 +549,12 @@ impl<'db> Bracer<'db> {
                 TreeToken::Token(token) => {
                     write!(w, "{}", token.debug_str(db))?;
                 }
-                TreeToken::Branch(sigil, mut next_iter) => {
+                TreeToken::Branch { sigil, mut inner, .. } => {
                     write!(w, "{} ", sigil.as_str())?;
                     rmx::extras::recurse(|| {
-                        Self::debug_write(next_iter.C(), w, db)
+                        Self::debug_write(inner.C(), w, db)
                     })?;
-                    if next_iter.next().is_some() {
+                    if inner.next().is_some() {
                         write!(w, " ");
                     }
                     write!(w, "{}", sigil.close_sigil().as_str())?;
@@ -662,7 +711,7 @@ fn test_text_span() {
         let source_text = chunk_lex.chunk(db).text(db);
         // Find the first branch.
         for token in bracer.iter(db) {
-            if let TreeToken::Branch(_, _) = &token {
+            if let TreeToken::Branch { .. } = &token {
                 let ts = token.text_span(db, source_text)?;
                 let spanned = &ts.text.as_str(db)[ts.span.clone()];
                 return Some((ts.start(), ts.end(), spanned.to_string()));

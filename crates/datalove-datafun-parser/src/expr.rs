@@ -264,10 +264,10 @@ impl<'db> Parser<'db> {
                                     let name = InternedText::new(self.db, word.S());
 
                                     // Check if followed by parentheses (function call).
-                                    if let Some(TreeToken::Branch(Sigil::ParenOpen, _)) = self.peek() {
+                                    if let Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) = self.peek() {
                                         // It's a function call.
                                         let args_iter = match self.next() {
-                                            Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
+                                            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
                                             _ => unreachable!(),
                                         };
                                         let args = self.parse_function_call_args(args_iter);
@@ -322,7 +322,7 @@ impl<'db> Parser<'db> {
                     }
                 }
             }
-            Some(TreeToken::Branch(sigil, _)) => {
+            Some(TreeToken::Branch { sigil, .. }) => {
                 // Check if it's a tuple (ParenOpen) - parse as datafun tuple.
                 // Other branches like {}, [] are literal expressions.
                 if matches!(sigil, Sigil::ParenOpen) {
@@ -358,7 +358,7 @@ impl<'db> Parser<'db> {
     pub(super) fn parse_datafun_tuple(&mut self) -> ast::ExprFun<'db> {
         // Consume the ParenOpen branch and get its contents.
         let iter = match self.next() {
-            Some(TreeToken::Branch(Sigil::ParenOpen, iter)) => iter,
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
             _ => {
                 let ts = self.peek_text_span();
                 return self.emit_expr_error(ts,

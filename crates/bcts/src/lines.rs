@@ -51,7 +51,7 @@ impl<'db> TreeToken<'db> {
                     _ => false,
                 }
             }
-            TreeToken::Branch(..) => false,
+            TreeToken::Branch { .. } => false,
         };
 
         #[salsa::tracked]

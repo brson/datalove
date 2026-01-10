@@ -114,9 +114,9 @@ impl<'db> Parser<'db> {
                         }
                     }
                 }
-                Some(TreeToken::Branch(Sigil::ParenOpen, _)) |
-                Some(TreeToken::Branch(Sigil::BracketOpen, _)) |
-                Some(TreeToken::Branch(Sigil::BraceOpen, _)) => {
+                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) |
+                Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) |
+                Some(TreeToken::Branch { sigil: Sigil::BraceOpen, .. }) => {
                     // Bare branch (anonymous tuple, list, or struct) - use Omitted heap.
                     ast::Heap::Omitted
                 }
@@ -491,39 +491,39 @@ impl<'db> Parser<'db> {
                     }
                 }
             }
-            Some(TreeToken::Branch(Sigil::ParenOpen, _)) => {
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
                 // Tuple.
-                let iter = match self.next() {
-                    Some(TreeToken::Branch(_, iter)) => iter,
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { inner, .. }) => inner,
                     _ => unreachable!(),
                 };
-                let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
+                let mut sub_parser = Parser::from_branch(self.db, inner, self.source_text());
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
                 self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::AnonTuple(ast::ExprAnonTuple::new(self.db, elements))
             }
-            Some(TreeToken::Branch(Sigil::BraceOpen, _)) => {
+            Some(TreeToken::Branch { sigil: Sigil::BraceOpen, .. }) => {
                 // Struct.
-                let iter = match self.next() {
-                    Some(TreeToken::Branch(_, iter)) => iter,
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { inner, .. }) => inner,
                     _ => unreachable!(),
                 };
-                let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
+                let mut sub_parser = Parser::from_branch(self.db, inner, self.source_text());
                 let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
                 self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::AnonStruct(ast::ExprAnonStruct::new(self.db, fields))
             }
-            Some(TreeToken::Branch(Sigil::BracketOpen, _)) => {
+            Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) => {
                 // List.
-                let iter = match self.next() {
-                    Some(TreeToken::Branch(_, iter)) => iter,
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { inner, .. }) => inner,
                     _ => unreachable!(),
                 };
-                let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
+                let mut sub_parser = Parser::from_branch(self.db, inner, self.source_text());
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.

@@ -41,7 +41,7 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
             Some(TreeToken::Token(token)) => {
                 matches!(token.kind(self.db()), TokenKind::Sigil(s) if s == sigil)
             }
-            Some(TreeToken::Branch(s, _)) => *s == sigil,
+            Some(TreeToken::Branch { sigil: s, .. }) => *s == sigil,
             None => false,
         }
     }
@@ -78,7 +78,7 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
     fn eat_branch(&mut self, sigil: Sigil) -> Option<BracerIter<'db>> {
         if self.peek_sigil(sigil) {
             match self.next() {
-                Some(TreeToken::Branch(_, iter)) => Some(iter),
+                Some(TreeToken::Branch { inner, .. }) => Some(inner),
                 _ => None,
             }
         } else {
