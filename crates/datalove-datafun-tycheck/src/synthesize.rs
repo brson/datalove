@@ -84,6 +84,11 @@ pub fn synthesize_expr<'db>(
             synthesize_try_result(ctx, expr, try_op)
         }
 
+        ExprFunKind::FieldProj(_proj) => {
+            // TODO: Implement field projection type synthesis.
+            Err(ctx.error_cannot_synthesize(expr, "field projections not yet implemented"))
+        }
+
         ExprFunKind::ParseError(_) => {
             Err(ctx.error_cannot_synthesize(expr, "cannot type check parse error"))
         }

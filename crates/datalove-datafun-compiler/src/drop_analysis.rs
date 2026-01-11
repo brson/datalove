@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop,
-    ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode,
+    ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, SetTarget,
 };
 use datalove_datafun_ir::IrType;
 use crate::ir_ext::IrTypeExt;
@@ -919,7 +919,13 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
     }
 
     // Set doesn't create a new binding, but the slot is now live again.
-    let name = stmt.name.text(ctx.db);
+    let name = match &stmt.target {
+        SetTarget::Name(n) => n.text(ctx.db),
+        SetTarget::Proj(_) => {
+            // TODO: Handle field projection in drop analysis.
+            return;
+        }
+    };
     if let Some(id) = ctx.lookup(name) {
         ctx.set_state(id, BindingState::Live);
 

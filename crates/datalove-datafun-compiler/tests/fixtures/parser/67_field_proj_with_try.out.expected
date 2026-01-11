@@ -1,0 +1,32 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "base": {
+              "expr": {
+                "kind": "TryOption",
+                "operand": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "a"
+                  }
+                }
+              }
+            },
+            "field": {
+              "name": "b",
+              "variant": "Name"
+            },
+            "kind": "FieldProj"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

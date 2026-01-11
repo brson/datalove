@@ -152,21 +152,31 @@ pub fn check_statement<'db>(
         }
 
         Statement::Set(stmt) => {
-            let name = stmt.name;
             let value = stmt.value;
 
-            // Look up the variable type.
-            match ctx.lookup_variable(name) {
-                Some(expected_type) => {
-                    // Check that value matches the variable's type.
-                    if let Err(e) = check_expr(ctx, value, expected_type) {
-                        ctx.add_error(e);
+            // Handle set target.
+            match &stmt.target {
+                SetTarget::Name(name) => {
+                    // Look up the variable type.
+                    match ctx.lookup_variable(*name) {
+                        Some(expected_type) => {
+                            // Check that value matches the variable's type.
+                            if let Err(e) = check_expr(ctx, value, expected_type) {
+                                ctx.add_error(e);
+                            }
+                        }
+                        None => {
+                            // Variable not found.
+                            ctx.add_error(TypeError::DatalitError(
+                                format!("undefined variable: {}", name.text(db))
+                            ));
+                        }
                     }
                 }
-                None => {
-                    // Variable not found.
+                SetTarget::Proj(_proj) => {
+                    // TODO: Implement field projection set target typechecking.
                     ctx.add_error(TypeError::DatalitError(
-                        format!("undefined variable: {}", name.text(db))
+                        "field projection in set statements not yet implemented".to_string()
                     ));
                 }
             }

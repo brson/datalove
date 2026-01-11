@@ -69,12 +69,30 @@ pub struct StmtVar<'db> {
     pub value: ExprFun<'db>,
 }
 
-/// Mutation of an existing mutable variable.
+/// Mutation of an existing mutable variable or field.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct StmtSet<'db> {
-    pub name: InternedText<'db>,
+    pub target: SetTarget<'db>,
     pub value: ExprFun<'db>,
+}
+
+/// Target of a set statement.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub enum SetTarget<'db> {
+    /// Simple variable: `set x = ...`
+    Name(InternedText<'db>),
+    /// Field projection: `set a.x = ...` or `set a.0 = ...`
+    Proj(SetTargetProj<'db>),
+}
+
+/// Projection chain for set target.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct SetTargetProj<'db> {
+    pub base: Box<SetTarget<'db>>,
+    pub field: FieldSelector<'db>,
 }
 
 #[salsa::tracked]
@@ -227,6 +245,8 @@ pub enum ExprFunKind<'db> {
     // Try operators (postfix ? and !)
     TryOption(ExprTryOption<'db>),
     TryResult(ExprTryResult<'db>),
+    // Field projection (postfix .field or .0)
+    FieldProj(ExprFieldProj<'db>),
 
     // Literal expressions (formerly delegated to datalit).
     True(ExprLit<'db>),
@@ -349,6 +369,24 @@ pub struct ExprTryOption<'db> {
 #[derive(salsa::Update)]
 pub struct ExprTryResult<'db> {
     pub operand: ExprFun<'db>,
+}
+
+/// Field projection expression (a.x or a.0).
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExprFieldProj<'db> {
+    pub base: ExprFun<'db>,
+    pub field: FieldSelector<'db>,
+}
+
+/// Selector for field projection.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub enum FieldSelector<'db> {
+    /// Named field: a.x
+    Name(InternedText<'db>),
+    /// Indexed field: a.0
+    Index(u32),
 }
 
 /// Base struct for simple literals (true, false, none).

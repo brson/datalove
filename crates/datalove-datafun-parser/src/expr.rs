@@ -61,10 +61,13 @@ impl<'db> Parser<'db> {
         lhs
     }
 
-    /// Parse postfix try operators (? and !).
+    /// Parse postfix operators (?, !, and field projections).
     ///
-    /// These are postfix operators that unwrap Option/Result with early return.
-    /// Takes the start position of the inner expression for span tracking.
+    /// Handles:
+    /// - `?` - unwrap Option with early return
+    /// - `!` - unwrap Result with early return
+    /// - `.field` - struct field projection
+    /// - `.0` - tuple index projection
     fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprFun<'db>) -> ast::ExprFun<'db> {
         loop {
             match self.peek() {
@@ -89,6 +92,18 @@ impl<'db> Parser<'db> {
                                 TextSpan::new(text, span),
                             );
                         }
+                        TokenKind::Sigil(Sigil::Dot) => {
+                            // Note: .< and .> are already tokenized as DotLess/DotGreater,
+                            // so a bare Dot is always a field projection.
+                            self.next(); // consume .
+                            let field = self.parse_field_selector();
+                            let end_pos = self.last_byte_end();
+                            let span = op_span.start..end_pos;
+                            expr = self.create_expr(
+                                ast::ExprFunKind::FieldProj(ast::ExprFieldProj { base: expr, field }),
+                                TextSpan::new(text, span),
+                            );
+                        }
                         _ => break,
                     }
                 }
@@ -96,6 +111,44 @@ impl<'db> Parser<'db> {
             }
         }
         expr
+    }
+
+    /// Parse a field selector (name or index) after a dot.
+    fn parse_field_selector(&mut self) -> ast::FieldSelector<'db> {
+        match self.peek() {
+            Some(TreeToken::Token(token)) => {
+                match token.kind(self.db) {
+                    TokenKind::Word => {
+                        let word = token.word_str(self.db).unwrap_or("");
+                        self.next(); // consume word
+                        // Check if all digits (tuple index).
+                        if word.chars().all(|c| c.is_ascii_digit()) && !word.is_empty() {
+                            match word.parse::<u32>() {
+                                Ok(idx) => ast::FieldSelector::Index(idx),
+                                Err(_) => {
+                                    // Too large for u32, treat as name.
+                                    let name = InternedText::new(self.db, word.to_string());
+                                    ast::FieldSelector::Name(name)
+                                }
+                            }
+                        } else {
+                            let name = InternedText::new(self.db, word.to_string());
+                            ast::FieldSelector::Name(name)
+                        }
+                    }
+                    _ => {
+                        // No valid field selector - create error name.
+                        let name = InternedText::new(self.db, "<error>".to_string());
+                        ast::FieldSelector::Name(name)
+                    }
+                }
+            }
+            _ => {
+                // No token after dot - create error name.
+                let name = InternedText::new(self.db, "<error>".to_string());
+                ast::FieldSelector::Name(name)
+            }
+        }
     }
 
     /// Get operator precedence (higher number = higher precedence).

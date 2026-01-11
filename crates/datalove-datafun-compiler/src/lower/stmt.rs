@@ -53,7 +53,14 @@ pub fn lower_statement_indexed<'db>(
             Ok(())
         }
         Statement::Set(set_stmt) => {
-            let name = set_stmt.name.text(ctx.db).to_string();
+            let name = match &set_stmt.target {
+                ast::SetTarget::Name(n) => n.text(ctx.db).to_string(),
+                ast::SetTarget::Proj(_) => {
+                    return Err(LowerError::NotImplemented(
+                        "field projection in set statements".to_string()
+                    ));
+                }
+            };
             let value_id = lower_expression(ctx, set_stmt.value)?;
             match ctx.lookup_var(&name) {
                 Some(Operand::Slot(slot)) => {

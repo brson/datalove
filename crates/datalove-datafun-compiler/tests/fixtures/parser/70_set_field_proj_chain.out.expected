@@ -1,0 +1,56 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Var",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "heap": "Omitted",
+            "kind": "Int",
+            "type_hint": null,
+            "value": "1"
+          }
+        }
+      },
+      {
+        "kind": "Set",
+        "target": {
+          "base": {
+            "base": {
+              "base": {
+                "name": "a",
+                "variant": "Name"
+              },
+              "field": {
+                "name": "x",
+                "variant": "Name"
+              },
+              "variant": "Proj"
+            },
+            "field": {
+              "index": 0,
+              "variant": "Index"
+            },
+            "variant": "Proj"
+          },
+          "field": {
+            "name": "y",
+            "variant": "Name"
+          },
+          "variant": "Proj"
+        },
+        "value": {
+          "expr": {
+            "heap": "Omitted",
+            "kind": "Int",
+            "type_hint": null,
+            "value": "2"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

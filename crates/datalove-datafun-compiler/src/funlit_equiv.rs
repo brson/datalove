@@ -309,6 +309,9 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::TryResult(_) => {
             return Err(ConversionError::NotPureDatalit("TryResult".to_string()));
         }
+        ast::ExprFunKind::FieldProj(_) => {
+            return Err(ConversionError::NotPureDatalit("FieldProj".to_string()));
+        }
     };
 
     // Convert type hint using datalit's from_ast.

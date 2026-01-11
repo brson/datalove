@@ -3,7 +3,7 @@
 //! Handles lowering of script units (fragments and expressions).
 
 use std::collections::HashMap;
-use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunKind};
+use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::{TypecheckResult, ResolvedCallTarget};
 use datalove_datafun_ir::{
@@ -256,7 +256,14 @@ fn lower_statement_for_script<'db>(
         }
         Statement::Set(set_stmt) => {
             // Same as function lowering - no export needed for assignment.
-            let name = set_stmt.name.text(ctx.db).to_string();
+            let name = match &set_stmt.target {
+                ast::SetTarget::Name(n) => n.text(ctx.db).to_string(),
+                ast::SetTarget::Proj(_) => {
+                    return Err(LowerError::NotImplemented(
+                        "field projection in set statements".to_string()
+                    ));
+                }
+            };
             let value_id = lower_expression(ctx, set_stmt.value)?;
             if let Some(operand) = ctx.lookup_var(&name) {
                 match operand {

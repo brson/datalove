@@ -45,8 +45,28 @@ pub struct StmtVar {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtSet {
-    pub name: String,
+    pub target: SetTarget,
     pub value: ExprFun,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "variant")]
+pub enum SetTarget {
+    Name { name: String },
+    Proj(SetTargetProj),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SetTargetProj {
+    pub base: Box<SetTarget>,
+    pub field: FieldSelector,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "variant")]
+pub enum FieldSelector {
+    Name { name: String },
+    Index { index: u32 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -146,6 +166,7 @@ pub enum ExprFunKind {
     UnaryOp(ExprUnaryOp),
     TryOption(ExprTryOption),
     TryResult(ExprTryResult),
+    FieldProj(ExprFieldProj),
 
     // Inline literal expressions.
     True(ExprLit),
@@ -242,6 +263,12 @@ pub struct ExprTryOption {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprTryResult {
     pub operand: Box<ExprFun>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprFieldProj {
+    pub base: Box<ExprFun>,
+    pub field: FieldSelector,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -444,8 +471,39 @@ impl StmtVar {
 impl StmtSet {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: &crate::ast::StmtSet<'db>) -> Self {
         StmtSet {
-            name: ast.name.as_str(db).to_string(),
+            target: SetTarget::from_ast(db, &ast.target),
             value: ExprFun::from_ast(db, ast.value),
+        }
+    }
+}
+
+impl SetTarget {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: &crate::ast::SetTarget<'db>) -> Self {
+        match ast {
+            crate::ast::SetTarget::Name(name) => SetTarget::Name {
+                name: name.as_str(db).to_string(),
+            },
+            crate::ast::SetTarget::Proj(proj) => SetTarget::Proj(SetTargetProj::from_ast(db, proj)),
+        }
+    }
+}
+
+impl SetTargetProj {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: &crate::ast::SetTargetProj<'db>) -> Self {
+        SetTargetProj {
+            base: Box::new(SetTarget::from_ast(db, &*ast.base)),
+            field: FieldSelector::from_ast(db, &ast.field),
+        }
+    }
+}
+
+impl FieldSelector {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: &crate::ast::FieldSelector<'db>) -> Self {
+        match ast {
+            crate::ast::FieldSelector::Name(name) => FieldSelector::Name {
+                name: name.as_str(db).to_string(),
+            },
+            crate::ast::FieldSelector::Index(idx) => FieldSelector::Index { index: *idx },
         }
     }
 }
@@ -567,6 +625,7 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::UnaryOp(u) => ExprFunKind::UnaryOp(ExprUnaryOp::from_ast(db, u)),
             crate::ast::ExprFunKind::TryOption(t) => ExprFunKind::TryOption(ExprTryOption::from_ast(db, t)),
             crate::ast::ExprFunKind::TryResult(t) => ExprFunKind::TryResult(ExprTryResult::from_ast(db, t)),
+            crate::ast::ExprFunKind::FieldProj(f) => ExprFunKind::FieldProj(ExprFieldProj::from_ast(db, f)),
 
             // Inline literal expressions.
             crate::ast::ExprFunKind::True(e) => ExprFunKind::True(ExprLit::from_ast(db, e)),
@@ -687,6 +746,15 @@ impl ExprTryResult {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: &crate::ast::ExprTryResult<'db>) -> Self {
         ExprTryResult {
             operand: Box::new(ExprFun::from_ast(db, ast.operand)),
+        }
+    }
+}
+
+impl ExprFieldProj {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: &crate::ast::ExprFieldProj<'db>) -> Self {
+        ExprFieldProj {
+            base: Box::new(ExprFun::from_ast(db, ast.base)),
+            field: FieldSelector::from_ast(db, &ast.field),
         }
     }
 }

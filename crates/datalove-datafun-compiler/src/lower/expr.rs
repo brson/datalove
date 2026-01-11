@@ -195,6 +195,12 @@ pub fn lower_expression<'db>(
         ExprFunKind::TryResult(try_expr) => {
             lower_try_result(ctx, expr, try_expr)
         }
+        ExprFunKind::FieldProj(_) => {
+            // TODO: Implement field projection lowering.
+            Err(LowerError::NotImplemented(
+                "field projections".to_string()
+            ))
+        }
         ExprFunKind::Tuple(tuple) => {
             let elements: Result<Vec<_>, _> = tuple.elements
                 .iter()

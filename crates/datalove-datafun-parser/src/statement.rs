@@ -166,6 +166,9 @@ impl<'db> Parser<'db> {
             }
         };
 
+        // Parse optional field projections: set a.x.y = value
+        let target = self.parse_set_target_projections(ast::SetTarget::Name(name));
+
         // Need `=` sigil.
         if !self.eat_sigil(Sigil::Equals) {
             let ts = self.peek_text_span();
@@ -180,9 +183,54 @@ impl<'db> Parser<'db> {
         let value = self.parse_expr_full();
 
         ast::Statement::Set(ast::StmtSet {
-            name,
+            target,
             value,
         })
+    }
+
+    /// Parse optional field projections for set targets (e.g., `.x.0.y`).
+    fn parse_set_target_projections(&mut self, mut target: ast::SetTarget<'db>) -> ast::SetTarget<'db> {
+        loop {
+            if self.peek_sigil(Sigil::Dot) {
+                self.next(); // consume .
+                let field = self.parse_set_field_selector();
+                target = ast::SetTarget::Proj(ast::SetTargetProj {
+                    base: Box::new(target),
+                    field,
+                });
+            } else {
+                break;
+            }
+        }
+        target
+    }
+
+    /// Parse a field selector for set target (name or index).
+    fn parse_set_field_selector(&mut self) -> ast::FieldSelector<'db> {
+        match self.peek_word() {
+            Some(word) => {
+                self.next(); // consume word
+                // Check if all digits (tuple index).
+                if word.chars().all(|c| c.is_ascii_digit()) && !word.is_empty() {
+                    match word.parse::<u32>() {
+                        Ok(idx) => ast::FieldSelector::Index(idx),
+                        Err(_) => {
+                            // Too large for u32, treat as name.
+                            let name = InternedText::new(self.db, word.to_string());
+                            ast::FieldSelector::Name(name)
+                        }
+                    }
+                } else {
+                    let name = InternedText::new(self.db, word.to_string());
+                    ast::FieldSelector::Name(name)
+                }
+            }
+            None => {
+                // No valid field selector - create error name.
+                let name = InternedText::new(self.db, "<error>".to_string());
+                ast::FieldSelector::Name(name)
+            }
+        }
     }
 
     fn parse_fun(
