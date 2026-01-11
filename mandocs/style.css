@@ -6,6 +6,7 @@
 
 :root {
     --font-text: 'Source Sans 3', system-ui, sans-serif;
+    --font-text: 'Source Serif 4', system-ui, sans-serif;
     --font-code: 'Source Code Pro', monospace;
 
     /* Dune palette */

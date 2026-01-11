@@ -36,14 +36,14 @@ through a Rustic linear-typing lens.
 
 <div class="four-things-grid">
   <div class="thing-box">
-    <p>A data serialization, configuration and interchange format
+    <p>A <em>data serialization, configuration and interchange format</em>
        for common data types,
-       with a focus on numerical correctness.</p>
+       with a focus on <em>numerical correctness.</em></p>
   </div>
   <div class="thing-box">
-    <p>A pure-functional language
+    <p>A <em>pure-functional language</em>
        that reads like an imperative language,
-       with a simple but sophisticated linear type system.</p>
+       with a simple but sophisticated <em>linear type system.</em></p>
   </div>
   <div class="thing-box">
     <p>Simple and complete <em>syntax and machine representation</em>
@@ -62,11 +62,10 @@ through a Rustic linear-typing lens.
 -->
 
 
-Datalove is built from three cleanly-scoped strict sublanguages of increasing power:
-[Datalove Literals](#user-content-datalove-literals),
-[Datalove Functions](#user-content-datalove-functions),
-and [Datalove with Side Effects](#user-content-datalove-with-side-effects).
 
+<br>
+<center>Datalove is built from three sublanguages of increasing power.</center>
+<br>
 
 
 
@@ -134,7 +133,8 @@ The complete language with I/O-bearing procedures,
 owned native pointers, objects with identity,
 and stack unwinding.
 _This language is not implemented yet,
-and mostly not discussed in the documentation._
+and mostly not discussed in the documentation_,
+but I do have a [vision](vision.md) about what it will be.
 
 
 
@@ -154,3 +154,4 @@ and mostly not discussed in the documentation._
 - [Compiler Guide](todo.md)
 - [Testing](testing-tower.md)
 - [Influences](influences.md)
+- [Vision](vision.md)
