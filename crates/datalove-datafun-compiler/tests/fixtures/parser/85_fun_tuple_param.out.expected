@@ -1,0 +1,39 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [],
+        "kind": "Fun",
+        "name": "get_first",
+        "params": [
+          {
+            "mode": "In",
+            "name": "t",
+            "type_hint": {
+              "heap": "Omitted",
+              "type_hint": {
+                "AnonTuple": {
+                  "fields": [
+                    {
+                      "heap": "Local",
+                      "type_hint": "U32"
+                    },
+                    {
+                      "heap": "Local",
+                      "type_hint": "U32"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "return_type": {
+          "heap": "Local",
+          "type_hint": "U32"
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}
