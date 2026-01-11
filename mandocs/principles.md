@@ -6,25 +6,25 @@
 
 
 
-## Restrictive type systems enable better compilers
-
-
-
-
 ## Modern compiler and execution architecture
 
 Full memoization for efficient recompilation and compiler queries (LSPs).
 Efficient IR-based interpreter with per-function JIT, or ahead-of-time compilation.
 Incremental script (REPL) typechecking and evaluation with full JIT support.
-Rollback, record/replay, virtualized I/O.
+LSP, undo/redo, virtualized I/O with record/replay.
+
+We establish broad architecture-level capabilities early
+to inform architectural and design decisions.
 
 
-## Implementation simplicity
+## Minimal compiler passes, simple analysis
 
-Given that we're already committed to
-some sophisticated architectural decisions,
-we also need to minimize the cognitive burden
-of maintaining the compiler and understanding the language.
+The type system is strong but simple and restrictive.
+We want to have the startup speed of dynamic scripting languages,
+and must be ruthless about removing features
+until some baseline performance has been established.
+A simple implementation makes maintenance easier,
+enables quick development.
 
 
 ## Minimal syntax sugar
