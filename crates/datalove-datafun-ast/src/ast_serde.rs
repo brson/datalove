@@ -388,7 +388,7 @@ pub struct ExprError {
 impl Script {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ParsedStatements<'db>) -> Self {
         Script {
-            statements: ast.statements(db).iter().map(|s| Statement::from_ast(db, s)).collect(),
+            statements: ast.statements.iter().map(|s| Statement::from_ast(db, s)).collect(),
         }
     }
 }

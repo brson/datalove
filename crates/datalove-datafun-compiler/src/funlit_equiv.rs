@@ -33,7 +33,7 @@ pub fn extract_expr_from_parsed<'db>(
     db: &'db dyn salsa::Database,
     parsed: ast::ParsedStatements<'db>,
 ) -> Result<ast::ExprFun<'db>, ConversionError> {
-    let statements = parsed.statements(db);
+    let statements = parsed.statements;
     if statements.len() != 1 {
         return Err(ConversionError::InvalidScriptStructure(
             format!("expected 1 statement, got {}", statements.len())

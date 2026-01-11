@@ -34,8 +34,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 // Parse the fragment to get statements.
                 let source_obj = Source::new(&db, source.clone());
                 let parse_result = datalove_datafun_parser::parse(&db, source_obj);
-                let parsed_ast = parse_result.parsed(&db);
-                let stmts: Vec<Statement> = parsed_ast.statements(&db).to_vec();
+                let parsed_ast = parse_result.parsed;
+                let stmts: Vec<Statement> = parsed_ast.statements.to_vec();
 
                 // Typecheck to get expression types using production path.
                 let spans = datalove_datafun_parser::datafun_spans(&db, source_obj);

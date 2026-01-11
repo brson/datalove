@@ -94,13 +94,13 @@ pub fn type_check_script_units<'db>(
         // First pass: collect function signatures.
         let module_spans = module_spec.spans.clone();
         let mut temp_ctx = TypeContext::new(db, module_spans);
-        for statement in module_info.parsed(db).statements(db) {
+        for statement in &module_info.parsed(db).statements {
             if let Statement::Fun(stmt) = statement {
                 collect_function_signature(&mut temp_ctx, stmt, None);
             }
         }
         // Extract function info.
-        for statement in module_info.parsed(db).statements(db) {
+        for statement in &module_info.parsed(db).statements {
             if let Statement::Fun(stmt) = statement {
                 let name = stmt.name(db);
                 if let Some(func_ty) = temp_ctx.functions.get(&name) {
@@ -153,7 +153,7 @@ pub fn type_check_script_units<'db>(
         match unit.kind(db) {
             ScriptUnitKind::Fragment(script) => {
                 // First pass: collect function signatures from this unit.
-                for statement in script.statements(db) {
+                for statement in &script.statements {
                     if let Statement::Fun(stmt) = statement {
                         collect_function_signature(&mut ctx, stmt, None);
                     }
@@ -162,7 +162,7 @@ pub fn type_check_script_units<'db>(
                 // Build alias map from require statements.
                 // Maps module alias (e.g., "utils") to full path (e.g., "local/test/utils").
                 let mut alias_to_path: HashMap<InternedText<'db>, String> = HashMap::new();
-                for statement in script.statements(db) {
+                for statement in &script.statements {
                     if let Statement::Require(StmtRequire::Module(req)) = statement {
                         let import_space = req.import_space;
                         let package_alias = req.package_alias;
@@ -178,7 +178,7 @@ pub fn type_check_script_units<'db>(
                 }
 
                 // Process import statements.
-                for statement in script.statements(db) {
+                for statement in &script.statements {
                     if let Statement::Import(import) = statement {
                         let module_alias = import.module_name;
                         let item_name = import.item_name;
@@ -211,12 +211,12 @@ pub fn type_check_script_units<'db>(
                 }
 
                 // Second pass: typecheck all statements.
-                for statement in script.statements(db) {
+                for statement in &script.statements {
                     check_statement(&mut ctx, &statement);
                 }
 
                 // Extract new bindings for subsequent units.
-                for stmt in script.statements(db) {
+                for stmt in &script.statements {
                     match stmt {
                         Statement::Let(let_stmt) => {
                             let name = let_stmt.name;
@@ -296,14 +296,14 @@ pub fn type_check_script_with_context<'db>(
     }
 
     // First pass: collect function signatures from this unit.
-    for statement in parsed.statements(db) {
+    for statement in &parsed.statements {
         if let Statement::Fun(stmt) = statement {
             collect_function_signature(&mut ctx, stmt, None);
         }
     }
 
     // Second pass: typecheck all statements.
-    for statement in parsed.statements(db) {
+    for statement in &parsed.statements {
         check_statement(&mut ctx, &statement);
     }
 
@@ -370,9 +370,9 @@ pub fn type_check_with_module_graph<'db>(
 
     // Build a map of function ASTs per module from pre-parsed statements.
     let mut module_function_asts: HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> = HashMap::new();
-    for (module_id, module_parsed, _spans) in parsed_graph.parsed_statements(db) {
+    for (module_id, module_parsed) in parsed_graph.statements_only(db) {
         let mut funcs = HashMap::new();
-        for statement in module_parsed.statements(db) {
+        for statement in &module_parsed.statements {
             if let Statement::Fun(func) = statement {
                 funcs.insert(func.name(db), *func);
             }
@@ -385,7 +385,7 @@ pub fn type_check_with_module_graph<'db>(
     let alias_map = build_module_alias_map_for_graph(db, &parsed, &path_to_id);
 
     // Process import statements to populate function signatures.
-    for statement in parsed.statements(db) {
+    for statement in &parsed.statements {
         if let Statement::Import(import) = statement {
             let module_name = import.module_name;
             let item_name = import.item_name;
@@ -429,14 +429,14 @@ pub fn type_check_with_module_graph<'db>(
     }
 
     // First pass: collect all function signatures (script-local, no module).
-    for statement in parsed.statements(db) {
+    for statement in &parsed.statements {
         if let Statement::Fun(stmt) = statement {
             collect_function_signature(&mut ctx, stmt, None);
         }
     }
 
     // Second pass: type check all statements (including function bodies).
-    for statement in parsed.statements(db) {
+    for statement in &parsed.statements {
         check_statement(&mut ctx, &statement);
     }
 
@@ -493,14 +493,14 @@ pub fn typecheck_module<'db>(
     }
 
     // Collect all function signatures from this module.
-    for statement in parsed.statements(db) {
+    for statement in &parsed.statements {
         if let Statement::Fun(stmt) = statement {
             collect_function_signature(&mut ctx, stmt, Some(module_id));
         }
     }
 
     // Type check all statements.
-    for statement in parsed.statements(db) {
+    for statement in &parsed.statements {
         check_statement(&mut ctx, &statement);
     }
 
@@ -539,21 +539,22 @@ pub fn typecheck_module_graph<'db>(
 ) -> ModuleGraphTypecheckResult<'db> {
     let graph = parsed_graph.graph(db);
 
-    // Build maps for parsed statements, spans, and function ASTs from pre-parsed modules.
+    // Build maps for parsed statements and function ASTs from pre-parsed modules.
+    // Note: spans are NOT read here to avoid salsa dependency. Changes to spans
+    // (from whitespace) should not invalidate typecheck memoization.
     let mut module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = HashMap::new();
-    let mut module_spans: HashMap<ModuleId, DatafunSpans> = HashMap::new();
     let mut module_function_asts: HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> = HashMap::new();
     let mut module_to_module_obj: HashMap<ModuleId, Module> = HashMap::new();
 
-    for (module_id, parsed, spans) in parsed_graph.parsed_statements(db) {
+    // Populate statements (this is the field typecheck depends on).
+    for (module_id, parsed) in parsed_graph.statements_only(db) {
         let mut funcs = HashMap::new();
-        for statement in parsed.statements(db) {
+        for statement in &parsed.statements {
             if let Statement::Fun(func) = statement {
                 funcs.insert(func.name(db), *func);
             }
         }
         module_parsed.insert(*module_id, parsed.clone());
-        module_spans.insert(*module_id, spans.clone());
         module_function_asts.insert(*module_id, funcs);
     }
 
@@ -590,9 +591,9 @@ pub fn typecheck_module_graph<'db>(
         let parsed = module_parsed.get(&module_id)
             .cloned()
             .expect("module should have been parsed");
-        let spans = module_spans.get(&module_id)
-            .cloned()
-            .expect("module should have spans");
+        // Use empty spans inside tracked function - diagnostics won't have source locations
+        // but typecheck results will be correct and properly memoized.
+        let spans = DatafunSpans::new(vec![]);
 
         // Build module alias map from pre-resolved requires.
         let resolved_requires = parsed_graph.get_requires(db, module_id);
@@ -604,7 +605,7 @@ pub fn typecheck_module_graph<'db>(
         let mut resolved_imports: Vec<ResolvedImport<'db>> = Vec::new();
         let mut import_errors: Vec<TypeError> = Vec::new();
 
-        for statement in parsed.statements(db) {
+        for statement in &parsed.statements {
             if let Statement::Import(import) = statement {
                 let module_name = import.module_name;
                 let item_name = import.item_name;
@@ -704,7 +705,7 @@ fn build_module_alias_map_for_graph<'db>(
 ) -> HashMap<InternedText<'db>, ModuleId> {
     let mut alias_map = HashMap::new();
 
-    for statement in parsed.statements(db) {
+    for statement in &parsed.statements {
         if let Statement::Require(StmtRequire::Module(req)) = statement {
             let import_space = req.import_space;
             let package_alias = req.package_alias;
@@ -736,7 +737,7 @@ fn collect_module_exports<'db>(
     let mut functions = Vec::new();
 
     // Collect all top-level function signatures.
-    for statement in parsed.statements(db) {
+    for statement in &parsed.statements {
         if let Statement::Fun(stmt) = statement {
             let name = stmt.name(db);
             let params = stmt.params(db);

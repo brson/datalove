@@ -110,13 +110,12 @@ fn get_datafun_errors<'db>(
     let script = datalove_datafun_parser::parse_integration_test(db, src);
 
     // Check for parse errors.
-    let statements = script.statements(db);
-    if statements.is_empty() {
+    if script.statements.is_empty() {
         return (vec!["PARSE_ERROR".to_string()], true);
     }
 
     // Extract the let statement value.
-    let expr = match &statements[0] {
+    let expr = match &script.statements[0] {
         datalove_datafun_ast::ast::Statement::Let(stmt) => stmt.value,
         _ => return (vec!["PARSE_ERROR".to_string()], true),
     };
@@ -981,7 +980,7 @@ fn test_debug_specific_bracket_cases() {
     let src1_fun = bct::input::Source::new(&db, datafun_text1);
     let datafun_parsed = datalove_datafun_parser::parse_integration_test(&db, src1_fun);
     eprintln!("Datafun has_parse_error: {}", {
-        let stmts = datafun_parsed.statements(&db);
+        let stmts = datafun_parsed.statements;
         if stmts.is_empty() {
             true
         } else if let datalove_datafun_ast::ast::Statement::Let(stmt) = &stmts[0] {

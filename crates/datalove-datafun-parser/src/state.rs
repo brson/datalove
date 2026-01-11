@@ -45,6 +45,12 @@ pub(super) struct Parser<'db> {
     expr_spans: Vec<ast::ParseSpanEntry>,
     /// Optional context for error messages showing the enclosing branch's opening token.
     branch_context: Option<(TextSpan<'db>, &'static str)>,
+    /// Current function name for expression identity (None for script-level).
+    current_fn_name: Option<InternedText<'db>>,
+    /// Counter for expressions within current function.
+    expr_counter: u32,
+    /// Counter for function calls within current function.
+    call_counter: u32,
 }
 
 impl<'db> Parser<'db> {
@@ -63,6 +69,9 @@ impl<'db> Parser<'db> {
             module_id,
             expr_spans: Vec::new(),
             branch_context: None,
+            current_fn_name: None,
+            expr_counter: 0,
+            call_counter: 0,
         }
     }
 
@@ -94,15 +103,85 @@ impl<'db> Parser<'db> {
             module_id,
             expr_spans: Vec::new(),
             branch_context: context,
+            current_fn_name: None,
+            expr_counter: 0,
+            call_counter: 0,
         };
         // Prime the buffer.
         parser.fill_iter_buffer();
         parser
     }
 
+    /// Create a sub-parser that inherits function context from parent.
+    ///
+    /// This ensures expressions in sub-parsers get the correct function identity.
+    pub(super) fn sub_parser(
+        &mut self,
+        iter: BracerIter<'db>,
+        context: Option<(TextSpan<'db>, &'static str)>,
+    ) -> Self {
+        let mut parser = Parser {
+            db: self.db,
+            source: TokenSource::Iter {
+                iter,
+                buffer: [None, None],
+                last_token: None,
+            },
+            had_error: false,
+            source_text: self.source_text,
+            module_id: self.module_id,
+            expr_spans: Vec::new(),
+            branch_context: context,
+            current_fn_name: self.current_fn_name,
+            expr_counter: self.expr_counter,
+            call_counter: self.call_counter,
+        };
+        parser.fill_iter_buffer();
+        parser
+    }
+
+    /// Merge state back from sub-parser after it finishes.
+    pub(super) fn merge_from_sub(&mut self, sub: &mut Self) {
+        self.had_error |= sub.had_error;
+        self.expr_counter = sub.expr_counter;
+        self.call_counter = sub.call_counter;
+        self.merge_spans_from(sub);
+    }
+
     /// Get the module ID for this parser (for stable function identity).
     pub(super) fn module_id(&self) -> Option<ModuleId> {
         self.module_id
+    }
+
+    /// Get current function name for expression identity.
+    pub(super) fn current_fn_name(&self) -> Option<InternedText<'db>> {
+        self.current_fn_name
+    }
+
+    /// Enter function context for expression identity tracking.
+    pub(super) fn enter_function(&mut self, name: InternedText<'db>) {
+        self.current_fn_name = Some(name);
+        self.expr_counter = 0;
+        self.call_counter = 0;
+    }
+
+    /// Exit function context.
+    pub(super) fn exit_function(&mut self) {
+        self.current_fn_name = None;
+    }
+
+    /// Get next expression index and increment counter.
+    pub(super) fn next_expr_index(&mut self) -> u32 {
+        let idx = self.expr_counter;
+        self.expr_counter += 1;
+        idx
+    }
+
+    /// Get next function call index and increment counter.
+    pub(super) fn next_call_index(&mut self) -> u32 {
+        let idx = self.call_counter;
+        self.call_counter += 1;
+        idx
     }
 
     /// Fill the iterator buffer with next non-whitespace tokens.
@@ -185,6 +264,9 @@ impl<'db> Parser<'db> {
         builder.emit_parse();
         ast::ExprFun::new(
             self.db,
+            self.module_id,
+            self.current_fn_name,
+            self.next_expr_index(),
             ast::ExprFunKind::ParseError(ast::ExprFunParseError { text: ts.text, span: ts.span, message: message_text })
         )
     }
@@ -244,7 +326,13 @@ impl<'db> Parser<'db> {
     /// Create an expression and record its span in the side table.
     pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan<'db>) -> ast::ExprFun<'db> {
         use salsa::plumbing::AsId;
-        let expr = ast::ExprFun::new(self.db, kind);
+        let expr = ast::ExprFun::new(
+            self.db,
+            self.module_id,
+            self.current_fn_name,
+            self.next_expr_index(),
+            kind,
+        );
         self.expr_spans.push(ast::ParseSpanEntry::new(
             expr.as_id(),
             ts.text.as_id(),

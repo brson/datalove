@@ -42,7 +42,7 @@ pub fn parse_script_unit<'db>(
     let unit = units[unit_index];
     let source = unit.source(db);
     // Scripts don't have a ModuleId.
-    parse_with_module_id(db, source, None).parsed(db)
+    parse_with_module_id(db, source, None).parsed
 }
 
 /// Parse a Source into a datafun script with span information.
@@ -175,8 +175,8 @@ fn parse_bracer<'db>(
         });
 
     let (statements, expr_spans) = parse_statements(db, lines, source_text, module_id);
-    let parsed = ast::ParsedStatements::new(db, statements);
-    ast::ParseResult::new(db, parsed, expr_spans)
+    let parsed = ast::ParsedStatements { statements };
+    ast::ParseResult { parsed, expr_spans }
 }
 
 /// Check if a token acts as a line separator.
@@ -223,7 +223,7 @@ pub fn parse_for_test<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> ast::ParsedStatements<'db> {
-    parse(db, source).parsed(db)
+    parse(db, source).parsed
 }
 
 /// Public tracked wrapper for integration tests that returns just the ParsedStatements.
@@ -234,7 +234,7 @@ pub fn parse_integration_test<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> ast::ParsedStatements<'db> {
-    parse(db, source).parsed(db)
+    parse(db, source).parsed
 }
 
 /// Public tracked wrapper for integration code to enable diagnostic accumulation.
@@ -247,7 +247,7 @@ pub fn parse_for_diagnostics<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> ast::ParsedStatements<'db> {
-    parse(db, source).parsed(db)
+    parse(db, source).parsed
 }
 
 // Re-export span types from AST crate.
@@ -266,7 +266,7 @@ pub fn datafun_spans<'db>(
     use datalove_diagnostic::SpanEntry;
 
     let parse_result = parse(db, source);
-    let entries: Vec<SpanMapEntry> = parse_result.expr_spans(db)
+    let entries: Vec<SpanMapEntry> = parse_result.expr_spans
         .iter()
         .map(|e| SpanMapEntry {
             expr_id: e.expr_id,

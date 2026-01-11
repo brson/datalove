@@ -339,7 +339,7 @@ impl<'db> ScriptTypeContext<'db> {
         result: &ScriptTypecheckResultRaw<'db>,
     ) {
         // Extract let/var bindings and function definitions from the parsed statements.
-        for stmt in parsed.statements(db) {
+        for stmt in &parsed.statements {
             match stmt {
                 Statement::Let(let_stmt) => {
                     let name = let_stmt.name;

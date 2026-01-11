@@ -28,7 +28,7 @@ pub fn resolve_functions<'db>(
     // Process each unit in order.
     for unit_index in 0..units.len() {
         let parsed = parser::parse_script_unit(db, script, unit_index);
-        let statements = parsed.statements(db);
+        let statements = parsed.statements;
 
         // Check if this unit contains function statements.
         let has_fun = statements.iter().any(|stmt| matches!(stmt, ast::Statement::Fun(_)));
@@ -44,7 +44,7 @@ pub fn resolve_functions<'db>(
         // Add functions from previously green units.
         for &green_idx in &green_units {
             let green_parsed = parser::parse_script_unit(db, script, green_idx);
-            for stmt in green_parsed.statements(db) {
+            for stmt in &green_parsed.statements {
                 if let ast::Statement::Fun(fun) = stmt {
                     candidate_functions.push((green_idx, *fun));
                 }
@@ -54,7 +54,7 @@ pub fn resolve_functions<'db>(
         // Add functions from current unit.
         for stmt in statements {
             if let ast::Statement::Fun(fun) = stmt {
-                candidate_functions.push((unit_index, *fun));
+                candidate_functions.push((unit_index, fun));
             }
         }
 
@@ -100,7 +100,7 @@ pub fn resolve_let_statement<'db>(
     unit_index: usize,
 ) -> LetResolution<'db> {
     let parsed = parser::parse_script_unit(db, script, unit_index);
-    let statements = parsed.statements(db);
+    let statements = parsed.statements;
 
     // Check that this unit contains a let statement.
     let has_let = statements.iter().any(|stmt| matches!(stmt, ast::Statement::Let(_)));
@@ -123,7 +123,7 @@ pub fn resolve_let_statement<'db>(
     // Add function names.
     for &fun_idx in green_functions {
         let fun_parsed = parser::parse_script_unit(db, script, fun_idx);
-        for stmt in fun_parsed.statements(db) {
+        for stmt in &fun_parsed.statements {
             if let ast::Statement::Fun(fun) = stmt {
                 let name = fun.name(db).as_str(db);
                 available_names.insert(name);
@@ -135,7 +135,7 @@ pub fn resolve_let_statement<'db>(
     let _units = script.units(db);
     for prev_idx in 0..unit_index {
         let prev_parsed = parser::parse_script_unit(db, script, prev_idx);
-        for stmt in prev_parsed.statements(db) {
+        for stmt in &prev_parsed.statements {
             if let ast::Statement::Let(let_stmt) = stmt {
                 let name = let_stmt.name.as_str(db);
                 available_names.insert(name);

@@ -25,19 +25,20 @@ pub use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
-use datalove_datafun_ast::ast::ParseResult;
+use datalove_datafun_ast::ast::{ParseResult, ParsedStatements};
 
-/// Parse a single module with logging.
+/// Parse a single module and return only the AST (no spans).
 ///
 /// This is a tracked function so Salsa can cache per-module.
 /// The logging only fires when the function actually executes.
 ///
-/// Returns the full ParseResult containing both parsed statements and spans.
+/// Returns just ParsedStatements. For whitespace-only changes, this should
+/// return an equal value, allowing downstream functions to be memoized.
 #[salsa::tracked]
-pub fn parse_module<'db>(
+pub fn parse_module_ast<'db>(
     db: &'db dyn salsa::Database,
     module: Module,
-) -> ParseResult<'db> {
+) -> ParsedStatements<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
     let source = module.source(db);
@@ -47,37 +48,51 @@ pub fn parse_module<'db>(
     let parse_result = datalove_datafun_parser::parse_with_module_id(db, source, Some(module_id));
     log_query("parse", module_path, QueryPhase::End);
 
-    parse_result
+    // Return only the AST, not spans. This allows memoization when only whitespace changes.
+    parse_result.parsed
+}
+
+/// Parse a single module and return the full result including spans.
+///
+/// This is NOT a tracked function - spans change with whitespace and we don't
+/// want that to invalidate downstream memoization.
+pub fn parse_module_full<'db>(
+    db: &'db dyn salsa::Database,
+    module: Module,
+) -> ParseResult<'db> {
+    let module_id = module.id(db);
+    let source = module.source(db);
+    datalove_datafun_parser::parse_with_module_id(db, source, Some(module_id))
 }
 
 /// Parse all modules in a graph with resolved requires.
 ///
 /// Returns a ParsedModuleGraph containing the original graph, pre-parsed statements,
 /// spans, and resolved require aliases from package resolution.
+///
+/// Note: This function uses parse_module_ast (tracked) to get AST only. Spans are NOT
+/// fetched inside this tracked function to avoid creating dependencies on span data
+/// (which changes with whitespace). Spans are empty - they can be fetched separately
+/// outside the memoization chain if needed for diagnostics.
 #[salsa::tracked]
 pub fn parse_module_graph<'db>(
     db: &'db dyn salsa::Database,
     graph: ModuleGraph,
     resolved_requires_str: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
 ) -> ParsedModuleGraph<'db> {
-    use datalove_diagnostic::SpanEntry;
-    use datalove_datafun_parser::{DatafunSpans, SpanMapEntry};
+    use datalove_datafun_parser::DatafunSpans;
 
-    let mut parsed_statements = Vec::new();
+    // Collect only statements. Spans are NOT fetched here to avoid memoization issues.
+    let mut statements_only = Vec::new();
+    let mut spans_list = Vec::new();
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
-        let parse_result = parse_module(db, module);
-        let parsed = parse_result.parsed(db);
-        // Convert ParseSpanEntry to SpanMapEntry for DatafunSpans.
-        let span_entries: Vec<SpanMapEntry> = parse_result.expr_spans(db)
-            .iter()
-            .map(|e| SpanMapEntry {
-                expr_id: e.expr_id,
-                entry: SpanEntry::new(e.text_id, e.span.clone()),
-            })
-            .collect();
-        let spans = DatafunSpans::new(span_entries);
-        parsed_statements.push((module_id, parsed, spans));
+        // Get AST from tracked function (memoized).
+        let parsed = parse_module_ast(db, module);
+        // Use empty spans - diagnostics won't have source locations but memoization works.
+        let spans = DatafunSpans::new(vec![]);
+        statements_only.push((module_id, parsed));
+        spans_list.push((module_id, spans));
     }
 
     // Convert String aliases to InternedText.
@@ -91,36 +106,42 @@ pub fn parse_module_graph<'db>(
             })
             .collect();
 
-    // Compute recursive content hashes for each module.
-    let module_content_hashes = compute_module_content_hashes(db, &graph, &resolved_requires);
+    // Build statements map for hash computation.
+    let statements_map: BTreeMap<ModuleId, ParsedStatements<'db>> = statements_only.iter()
+        .map(|(id, parsed)| (*id, parsed.clone()))
+        .collect();
 
-    ParsedModuleGraph::new(db, graph, parsed_statements, resolved_requires, module_content_hashes)
+    // Compute recursive content hashes based on AST (not source text).
+    let module_content_hashes = compute_module_content_hashes(db, &graph, &statements_map, &resolved_requires);
+
+    ParsedModuleGraph::new(db, graph, statements_only, spans_list, resolved_requires, module_content_hashes)
 }
 
 /// Compute recursive content hashes for each module in the graph.
 ///
 /// Each module's hash incorporates:
-/// - The module's source text
+/// - The module's source text (not AST)
 /// - The sorted (alias, dependency_hash) pairs for resolved requires
 ///
-/// Because modules are processed in topological order (dependencies first),
-/// each module's hash transitively includes all its dependencies' content.
+/// This is a true "content hash" - any change to the source file (including
+/// whitespace) changes the hash. Memoization of typecheck is handled separately
+/// by Salsa based on AST equality.
 fn compute_module_content_hashes<'db>(
     db: &'db dyn salsa::Database,
     graph: &ModuleGraph,
+    _statements_map: &BTreeMap<ModuleId, ParsedStatements<'db>>,
     resolved_requires: &BTreeMap<ModuleId, Vec<(InternedText<'db>, ModuleId)>>,
 ) -> BTreeMap<ModuleId, u64> {
     let mut hashes = BTreeMap::new();
 
-    // Process in dependency order (graph.iter_modules is topologically sorted).
+    // Process modules in deterministic order.
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
-        let source = module.source(db);
-
         let mut hasher = DefaultHasher::new();
 
-        // Hash source text.
-        source.text(db).hash(&mut hasher);
+        // Hash the source text directly.
+        let source_text = module.source(db).text(db);
+        source_text.hash(&mut hasher);
 
         // Hash resolved requires with their content hashes (sorted for determinism).
         if let Some(requires) = resolved_requires.get(&module_id) {
@@ -627,7 +648,7 @@ mod tests {
 
         // First call: should execute.
         enable_query_logging();
-        let _result1 = parse_module(&db, module);
+        let _result1 = parse_module_ast(&db, module);
         let log1 = disable_query_logging();
         let first_parsed = get_executed_modules(&log1, "parse");
         eprintln!("Direct first call: {:?}", first_parsed);
@@ -635,7 +656,7 @@ mod tests {
 
         // Second call with same inputs: should be cached.
         enable_query_logging();
-        let _result2 = parse_module(&db, module);
+        let _result2 = parse_module_ast(&db, module);
         let log2 = disable_query_logging();
         let second_parsed = get_executed_modules(&log2, "parse");
         eprintln!("Direct second call (same): {:?}", second_parsed);
@@ -646,7 +667,7 @@ mod tests {
 
         // Third call: should re-execute because source changed.
         enable_query_logging();
-        let _result3 = parse_module(&db, module);
+        let _result3 = parse_module_ast(&db, module);
         let log3 = disable_query_logging();
         let third_parsed = get_executed_modules(&log3, "parse");
         eprintln!("Direct third call (changed): {:?}", third_parsed);
@@ -668,8 +689,8 @@ mod tests {
 
         // Parse both modules.
         enable_query_logging();
-        let _result_a1 = parse_module(&db, module_a);
-        let _result_b1 = parse_module(&db, module_b);
+        let _result_a1 = parse_module_ast(&db, module_a);
+        let _result_b1 = parse_module_ast(&db, module_b);
         let log1 = disable_query_logging();
         let first_parsed = get_executed_modules(&log1, "parse");
         eprintln!("Two modules first: {:?}", first_parsed);
@@ -680,8 +701,8 @@ mod tests {
 
         // Parse both again.
         enable_query_logging();
-        let _result_a2 = parse_module(&db, module_a);
-        let _result_b2 = parse_module(&db, module_b);
+        let _result_a2 = parse_module_ast(&db, module_a);
+        let _result_b2 = parse_module_ast(&db, module_b);
         let log2 = disable_query_logging();
         let second_parsed = get_executed_modules(&log2, "parse");
         eprintln!("Two modules after B change: {:?}", second_parsed);
@@ -703,13 +724,13 @@ mod tests {
         let module_b = bct::module_graph::Module::new(&db, id_b, source_b);
 
         // First parse.
-        let _r1 = parse_module(&db, module_a);
-        let _r2 = parse_module(&db, module_b);
+        let _r1 = parse_module_ast(&db, module_a);
+        let _r2 = parse_module_ast(&db, module_b);
 
         // Second parse with NO changes - should be fully cached.
         enable_query_logging();
-        let _r3 = parse_module(&db, module_a);
-        let _r4 = parse_module(&db, module_b);
+        let _r3 = parse_module_ast(&db, module_a);
+        let _r4 = parse_module_ast(&db, module_b);
         let log = disable_query_logging();
         let parsed = get_executed_modules(&log, "parse");
         eprintln!("No change, second call: {:?}", parsed);
@@ -729,8 +750,8 @@ mod tests {
         let module_b = bct::module_graph::Module::new(&db, id_b, source_b);
 
         // First parse.
-        let _r1 = parse_module(&db, module_a);
-        let _r2 = parse_module(&db, module_b);
+        let _r1 = parse_module_ast(&db, module_a);
+        let _r2 = parse_module_ast(&db, module_b);
 
         db.clear_events();
 
@@ -739,8 +760,8 @@ mod tests {
 
         // Parse both again.
         enable_query_logging();
-        let _r3 = parse_module(&db, module_a);
-        let _r4 = parse_module(&db, module_b);
+        let _r3 = parse_module_ast(&db, module_a);
+        let _r4 = parse_module_ast(&db, module_b);
         let log = disable_query_logging();
 
         let executed = db.executed_queries();

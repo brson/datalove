@@ -1,20 +1,5 @@
 {
-  "diagnostics": [
-    {
-      "code": "F016",
-      "labels": [
-        {
-          "message": "type mismatch",
-          "span": [
-            93,
-            94
-          ],
-          "text": "@"
-        }
-      ],
-      "message": "mismatched types: expected `u32`, found `string`"
-    }
-  ],
+  "diagnostics": [],
   "modules": {
     "math": {
       "errors": [

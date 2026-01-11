@@ -38,7 +38,7 @@ after each of the actions has been taken.
 | add-module        | y          | y         | y           | n/a        | n/a       | n/a         |
 | remove-module     | y*         | y*        | y*          | **         | **        | **          |
 | change-module-ws  | y          | n         | y           | n          | n         | y           |
-| change-module-ast | y          | n         | y           | n          | n         | y           |
+| change-module-ast | y          | y         | y           | n          | n         | y           |
 | change-module-ty  | y          | y         | y           | n          | y         | y           |
 
 > *: removed

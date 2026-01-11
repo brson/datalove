@@ -429,14 +429,13 @@ impl<'db> Parser<'db> {
                     Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
                     _ => return None,
                 };
-                let mut sub = Parser::from_branch(self.db, inner, self.source_text());
+                let mut sub = self.sub_parser(inner, None);
                 if sub.peek().is_none() {
                     return None;
                 }
                 let expr = sub.parse_expr_full();
                 sub.error_if_not_exhausted();
-                self.had_error |= sub.had_error;
-                self.merge_spans_from(&mut sub);
+                self.merge_from_sub(&mut sub);
                 Some(expr)
             }
             _ => None
@@ -602,21 +601,19 @@ impl<'db> Parser<'db> {
 
     /// Helper to parse comma-separated expressions from a branch.
     pub(super) fn parse_comma_separated_exprs(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
-        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
+        let mut sub = self.sub_parser(iter, None);
         let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
-        self.had_error |= sub.had_error;
-        self.merge_spans_from(&mut sub);
+        self.merge_from_sub(&mut sub);
         elements
     }
 
     /// Helper to parse comma-separated struct fields.
     fn parse_comma_separated_struct_fields(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprStructField<'db>> {
-        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
+        let mut sub = self.sub_parser(iter, None);
         let fields = sub.parse_comma_separated(|p| p.parse_struct_field());
         sub.error_if_not_exhausted();
-        self.had_error |= sub.had_error;
-        self.merge_spans_from(&mut sub);
+        self.merge_from_sub(&mut sub);
         fields
     }
 
@@ -652,11 +649,10 @@ impl<'db> Parser<'db> {
 
     /// Helper to parse comma-separated map entries.
     fn parse_comma_separated_map_entries(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprMapEntry<'db>> {
-        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
+        let mut sub = self.sub_parser(iter, None);
         let entries = sub.parse_comma_separated(|p| p.parse_map_entry());
         sub.error_if_not_exhausted();
-        self.had_error |= sub.had_error;
-        self.merge_spans_from(&mut sub);
+        self.merge_from_sub(&mut sub);
         entries
     }
 

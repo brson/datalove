@@ -204,6 +204,9 @@ impl<'db> Parser<'db> {
                 let operand = self.parse_expr_primary();
                 return ast::ExprFun::new(
                     self.db,
+                    self.module_id(),
+                    self.current_fn_name(),
+                    self.next_expr_index(),
                     ast::ExprFunKind::UnaryOp(ast::ExprUnaryOp { op, operand })
                 );
             }
@@ -275,10 +278,16 @@ impl<'db> Parser<'db> {
                                         };
                                         let args = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
                                         // For function calls, span should include the parens, but for now just use the name span.
+                                        let call = ast::ExprFunctionCall::new(
+                                            self.db,
+                                            self.module_id(),
+                                            self.current_fn_name(),
+                                            self.next_call_index(),
+                                            name,
+                                            args,
+                                        );
                                         self.create_expr(
-                                            ast::ExprFunKind::FunctionCall(
-                                                ast::ExprFunctionCall::new(self.db, name, args)
-                                            ),
+                                            ast::ExprFunKind::FunctionCall(call),
                                             ts
                                         )
                                     } else {
@@ -307,6 +316,9 @@ impl<'db> Parser<'db> {
                         let value = InternedText::new(self.db, text_str);
                         ast::ExprFun::new(
                             self.db,
+                            self.module_id(),
+                            self.current_fn_name(),
+                            self.next_expr_index(),
                             ast::ExprFunKind::String(ast::ExprString {
                                 heap: datalit::ast::Heap::Omitted,
                                 type_hint: None,
@@ -352,11 +364,10 @@ impl<'db> Parser<'db> {
         iter: BracerIter<'db>,
         context: Option<(TextSpan<'db>, &'static str)>,
     ) -> Vec<ast::ExprFun<'db>> {
-        let mut sub = Parser::from_branch_with_context(self.db, iter, self.source_text(), context, self.module_id());
+        let mut sub = self.sub_parser(iter, context);
         let args = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
-        self.had_error |= sub.had_error;
-        self.merge_spans_from(&mut sub);
+        self.merge_from_sub(&mut sub);
         args
     }
 
@@ -378,17 +389,10 @@ impl<'db> Parser<'db> {
             }
         };
 
-        let mut sub = Parser::from_branch_with_context(
-            self.db,
-            iter,
-            self.source_text(),
-            Some((open_span, "in this tuple")),
-            self.module_id(),
-        );
+        let mut sub = self.sub_parser(iter, Some((open_span, "in this tuple")));
         let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
-        self.had_error |= sub.had_error;
-        self.merge_spans_from(&mut sub);
+        self.merge_from_sub(&mut sub);
 
         // If there's exactly one element, treat as grouping (not tuple).
         if elements.len() == 1 {
@@ -396,6 +400,9 @@ impl<'db> Parser<'db> {
         } else {
             ast::ExprFun::new(
                 self.db,
+                self.module_id(),
+                self.current_fn_name(),
+                self.next_expr_index(),
                 ast::ExprFunKind::Tuple(ast::ExprTuple { elements })
             )
         }

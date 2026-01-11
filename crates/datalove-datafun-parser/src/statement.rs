@@ -227,6 +227,9 @@ impl<'db> Parser<'db> {
             None
         };
 
+        // Enter function context for expression identity tracking.
+        self.enter_function(name);
+
         // Parse body until we hit "end fun".
         let mut body = vec![];
         let mut found_end_fun = false;
@@ -250,6 +253,7 @@ impl<'db> Parser<'db> {
         }
 
         if !found_end_fun {
+            self.exit_function();
             let ts = TextSpan::new(self.source_text(), 0..0);
             return self.emit_stmt_error(
                 ts,
@@ -258,6 +262,9 @@ impl<'db> Parser<'db> {
                 "expected 'end fun' before end of input"
             );
         }
+
+        // Exit function context.
+        self.exit_function();
 
         ast::Statement::Fun(ast::StmtFun::new(
             self.db,

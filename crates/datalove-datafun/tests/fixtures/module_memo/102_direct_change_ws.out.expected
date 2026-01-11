@@ -32,7 +32,7 @@
           "is_dependent": false,
           "parsed": true,
           "parse_ok": true,
-          "typechecked": true,
+          "typechecked": false,
           "typecheck_ok": true,
           "hash_changed": true,
           "expected": {
@@ -40,13 +40,13 @@
             "typechecked": false,
             "hash_changed": true
           },
-          "correct": false
+          "correct": true
         }
       }
     }
   ],
   "summary": {
     "total_steps": 2,
-    "all_correct": false
+    "all_correct": true
   }
 }

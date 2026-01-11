@@ -372,19 +372,28 @@ impl<'db> ModuleGraphTypecheckResult<'db> {
 /// A module graph paired with pre-parsed statements and spans for each module.
 #[salsa::tracked]
 pub struct ParsedModuleGraph<'db> {
-    /// The underlying module graph.
+    /// The underlying module graph (identity key).
     pub graph: ModuleGraph,
 
-    /// Pre-parsed statements with spans, as (ModuleId, ParsedStatements, DatafunSpans) tuples.
+    /// Pre-parsed statements only, as (ModuleId, ParsedStatements) tuples.
+    /// Separate from spans so typecheck can depend only on statements.
     /// Order matches graph.iter_modules() order.
+    #[tracked]
     #[returns(ref)]
-    pub parsed_statements: Vec<(ModuleId, ParsedStatements<'db>, DatafunSpans)>,
+    pub statements_only: Vec<(ModuleId, ParsedStatements<'db>)>,
+
+    /// Expression spans for each module, separate from statements.
+    /// Changes to spans don't invalidate typecheck.
+    #[tracked]
+    #[returns(ref)]
+    pub spans: Vec<(ModuleId, DatafunSpans)>,
 
     /// Resolved module requires from package resolution.
     ///
     /// Maps each module to its resolved require aliases: (alias, target_module_id).
     /// This is populated by the package resolver and used by the typechecker for
     /// import resolution instead of re-parsing require statements.
+    #[tracked]
     #[returns(ref)]
     pub resolved_requires: BTreeMap<ModuleId, Vec<(InternedText<'db>, ModuleId)>>,
 
@@ -394,6 +403,7 @@ pub struct ParsedModuleGraph<'db> {
     /// its resolved dependencies (sorted by alias for determinism). This enables
     /// verification that Salsa memoization is working correctly: if a module's
     /// content hash is unchanged, its typecheck result should be cached.
+    #[tracked]
     #[returns(ref)]
     pub module_content_hashes: BTreeMap<ModuleId, u64>,
 }
@@ -401,16 +411,16 @@ pub struct ParsedModuleGraph<'db> {
 impl<'db> ParsedModuleGraph<'db> {
     /// Get the parsed statements for a module by its ID.
     pub fn get_parsed(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<ParsedStatements<'db>> {
-        self.parsed_statements(db).iter()
-            .find(|(id, _, _)| *id == module_id)
-            .map(|(_, parsed, _)| parsed.clone())
+        self.statements_only(db).iter()
+            .find(|(id, _)| *id == module_id)
+            .map(|(_, parsed)| parsed.clone())
     }
 
     /// Get the spans for a module by its ID.
     pub fn get_spans(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<DatafunSpans> {
-        self.parsed_statements(db).iter()
-            .find(|(id, _, _)| *id == module_id)
-            .map(|(_, _, spans)| spans.clone())
+        self.spans(db).iter()
+            .find(|(id, _)| *id == module_id)
+            .map(|(_, spans)| spans.clone())
     }
 
     /// Get the resolved require aliases for a module.

@@ -122,6 +122,9 @@ struct MemoState {
     prev_hashes: BTreeMap<String, u64>,
     /// Reverse dependency graph: module -> modules that depend on it.
     dependents: BTreeMap<String, BTreeSet<String>>,
+    /// Cached ModuleGraph to preserve identity across steps.
+    /// Must be updated (not recreated) for memoization to work.
+    graph: Option<ModuleGraph>,
 }
 
 impl MemoState {
@@ -131,6 +134,7 @@ impl MemoState {
             raw_sources: BTreeMap::new(),
             prev_hashes: BTreeMap::new(),
             dependents: BTreeMap::new(),
+            graph: None,
         }
     }
 
@@ -376,14 +380,19 @@ fn extract_dependencies(
 ///
 /// Returns None for cases where memoization expectations don't apply
 /// (e.g., dependents of a removed module - the module graph can't resolve).
+///
+/// Note: Content hash is based on source text. Memoization of typecheck is
+/// handled separately by Salsa based on AST equality. This means:
+/// - Whitespace changes: source changed (hash changes), but AST stable (no re-typecheck)
+/// - AST changes: source changed (hash changes), AST changed (re-typecheck)
 fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> Option<ExpectedBehavior> {
-    // Based on design table (mandocs/design-notes.md):
+    // Table based on source text content hashing:
     // | action            | direct-ast | direct-ty | direct-hash | depend-ast | depend-ty | depend-hash |
     // |-------------------|------------|-----------|-------------|------------|-----------|-------------|
     // | add-module        | y          | y         | y           | n/a        | n/a       | n/a         |
     // | remove-module     | y*         | y*        | y*          | **         | **        | **          |
     // | change-module-ws  | y          | n         | y           | n          | n         | y           |
-    // | change-module-ast | y          | n         | y           | n          | n         | y           |
+    // | change-module-ast | y          | y         | y           | n          | n         | y           |
     // | change-module-ty  | y          | y         | y           | n          | y         | y           |
     //
     // *: removed module
@@ -401,14 +410,16 @@ fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> Opt
                 typechecked: true,
                 hash_changed: true,
             },
+            // Whitespace change: source changed (hash changes), AST stable (no re-typecheck).
             Action::ModuleChangeWs => ExpectedBehavior {
                 parsed: true,
                 typechecked: false,
                 hash_changed: true,
             },
+            // AST change: hash changes, must re-typecheck.
             Action::ModuleChangeAst => ExpectedBehavior {
                 parsed: true,
-                typechecked: false,
+                typechecked: true,
                 hash_changed: true,
             },
             Action::ModuleChangeTy => ExpectedBehavior {
@@ -427,11 +438,13 @@ fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> Opt
             // Dependents of a removed module: module graph can't resolve.
             // This is an error state, not a memoization test case.
             Action::ModuleRemove => None,
+            // Whitespace change in dependency: source changed (hash changes transitively).
             Action::ModuleChangeWs => Some(ExpectedBehavior {
                 parsed: false,
                 typechecked: false,
                 hash_changed: true,
             }),
+            // AST change in dependency: dependency hash changes, dependent hash changes.
             Action::ModuleChangeAst => Some(ExpectedBehavior {
                 parsed: false,
                 typechecked: false,
@@ -520,6 +533,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
 
         // Build ModuleGraph from tracked Module objects (for memoization).
         // Must be in dependency order (dependencies first) for hash computation.
+        // CRITICAL: Reuse the same ModuleGraph identity, updating fields via setters.
         let all_paths: BTreeSet<String> = state.modules.keys().cloned().collect();
         let sorted_paths = topological_sort(&all_paths, &path_deps);
         let modules: Vec<Module> = sorted_paths.iter()
@@ -545,7 +559,31 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             dependencies.entry(module.id(&db)).or_default();
         }
 
-        let graph = ModuleGraph::new(&db, modules, module_by_id, dependencies);
+        // Create or update the ModuleGraph. Using the same identity is critical for
+        // salsa memoization - the downstream tracked functions need the same input ID.
+        // IMPORTANT: Only call setters when values actually change, because calling
+        // a setter ALWAYS marks the input as "changed" in salsa, even if the value is equal.
+        let graph = match state.graph {
+            Some(g) => {
+                // Only update fields if they differ.
+                if g.modules(&db) != &modules {
+                    g.set_modules(&mut db).to(modules.clone());
+                }
+                if g.module_by_id(&db) != &module_by_id {
+                    g.set_module_by_id(&mut db).to(module_by_id.clone());
+                }
+                if g.dependencies(&db) != &dependencies {
+                    g.set_dependencies(&mut db).to(dependencies.clone());
+                }
+                g
+            }
+            None => {
+                // First time - create the graph.
+                let g = ModuleGraph::new(&db, modules.clone(), module_by_id.clone(), dependencies.clone());
+                state.graph = Some(g);
+                g
+            }
+        };
 
         // Build resolved requires for parse_module_graph.
         let mut resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>> = BTreeMap::new();

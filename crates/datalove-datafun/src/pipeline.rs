@@ -227,9 +227,9 @@ impl<'db> ModuleCompilationPipeline<'db> {
         // Use parsed statements from parsed_graph to ensure consistent ExprFun IDs.
         let mut func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> = HashMap::new();
         let mut next_func_id: u32 = 0;
-        for (ir_module_idx, (salsa_module_id, parsed, _spans)) in parsed_graph.parsed_statements(self.db).iter().enumerate() {
+        for (ir_module_idx, (salsa_module_id, parsed)) in parsed_graph.statements_only(self.db).iter().enumerate() {
             let ir_module_id = IrModuleId(ir_module_idx as u32);
-            for statement in parsed.statements(self.db) {
+            for statement in &parsed.statements {
                 if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
                     let func_name = func.name(self.db).text(self.db).to_string();
                     let func_id = FuncId(next_func_id);
@@ -244,14 +244,14 @@ impl<'db> ModuleCompilationPipeline<'db> {
         let mut drop_analyses: HashMap<(String, String), FunctionDropAnalysis> = HashMap::new();
         let mut drop_analysis_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
-        for (salsa_module_id, parsed, _spans) in parsed_graph.parsed_statements(self.db) {
+        for (salsa_module_id, parsed) in parsed_graph.statements_only(self.db) {
             let module_path = salsa_module_id.path(self.db).clone();
 
             if path_to_errors.get(&module_path).map_or(false, |e| !e.is_empty()) {
                 continue;
             }
 
-            for statement in parsed.statements(self.db) {
+            for statement in &parsed.statements {
                 if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
                     let func_name = func.name(self.db).text(self.db).to_string();
                     let analysis = drop_analysis::analyze_function(self.db, *func, combined_expr_types, combined_call_targets);
@@ -274,7 +274,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
         let mut env = ScriptEnvironment::new();
         let mut module_lowering_results: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
-        for (ir_module_idx, (salsa_module_id, parsed, _spans)) in parsed_graph.parsed_statements(self.db).iter().enumerate() {
+        for (ir_module_idx, (salsa_module_id, parsed)) in parsed_graph.statements_only(self.db).iter().enumerate() {
             let ir_module_id = IrModuleId(ir_module_idx as u32);
             let module_path = salsa_module_id.path(self.db).clone();
 
@@ -284,7 +284,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
 
             let mut ir_dumps = Vec::new();
 
-            for statement in parsed.statements(self.db) {
+            for statement in &parsed.statements {
                 if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
                     let func_name = func.name(self.db).text(self.db).to_string();
 
@@ -431,17 +431,24 @@ impl<'db> CompiledModules<'db> {
         let script_ctx = lower::ScriptLowerContext::new();
         let mut module_specs = Vec::new();
 
-        for (salsa_module_id, parsed, spans) in self.parsed_graph.parsed_statements(db) {
+        // Build a map of spans for quick lookup.
+        let spans_map: std::collections::HashMap<_, _> = self.parsed_graph.spans(db).iter()
+            .map(|(id, spans)| (*id, spans.clone()))
+            .collect();
+
+        for (salsa_module_id, parsed) in self.parsed_graph.statements_only(db) {
             let module_path = salsa_module_id.path(db).clone();
             let module_source = self.module_graph.iter_modules(db)
                 .find(|m| m.id(db) == *salsa_module_id)
                 .map(|m| m.source(db))
                 .expect("module should exist in graph");
+            let spans = spans_map.get(salsa_module_id).cloned()
+                .expect("spans should exist for module");
 
             module_specs.push(ModuleSpec::new(
                 module_path.clone(),
                 module_source,
-                spans.clone(),
+                spans,
                 parsed.clone(),
                 *salsa_module_id,
             ));
@@ -486,7 +493,7 @@ impl<'db> ScriptCompilationContext<'db> {
         let src = bct::input::Source::new(self.db, source.to_string());
         self.last_source = Some(src);
         let parse_result = datalove_datafun_parser::parse(self.db, src);
-        let parsed = parse_result.parsed(self.db);
+        let parsed = parse_result.parsed;
 
         let parse_diags = datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
         if !parse_diags.is_empty() {
@@ -586,7 +593,7 @@ impl<'db> ScriptCompilationContext<'db> {
         let src = bct::input::Source::new(self.db, source.to_string());
         self.last_source = Some(src);
         let parse_result = datalove_datafun_parser::parse(self.db, src);
-        let parsed = parse_result.parsed(self.db);
+        let parsed = parse_result.parsed;
 
         let parse_diags = datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
         if !parse_diags.is_empty() {
@@ -678,7 +685,7 @@ impl<'db> ScriptCompilationContext<'db> {
 
         let expr_types = tycheck_result.expr_types(self.db);
         let call_targets = tycheck_result.call_targets(self.db);
-        let stmts = parsed.statements(self.db).to_vec();
+        let stmts = parsed.statements.to_vec();
 
         let func_analyses = match drop_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts) {
             Ok(analyses) => analyses,
@@ -800,7 +807,7 @@ impl<'db> ScriptCompilationContext<'db> {
 
         let expr_types = tycheck_result.expr_types(self.db);
         let call_targets = tycheck_result.call_targets(self.db);
-        let stmts = parsed.statements(self.db).to_vec();
+        let stmts = parsed.statements.to_vec();
 
         let func_analyses = match drop_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts) {
             Ok(analyses) => analyses,

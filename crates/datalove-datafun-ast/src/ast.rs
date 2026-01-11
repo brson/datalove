@@ -20,17 +20,17 @@ impl ParseSpanEntry {
 }
 
 /// Result of parsing a source text into statements.
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ParsedStatements<'db> {
-    #[returns(ref)]
     pub statements: Vec<Statement<'db>>,
 }
 
 /// Parse result containing parsed statements and span side table.
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ParseResult<'db> {
     pub parsed: ParsedStatements<'db>,
-    #[returns(ref)]
     pub expr_spans: Vec<ParseSpanEntry>,
 }
 
@@ -201,6 +201,13 @@ pub struct StmtParseError<'db> {
 // Datafun expressions - wraps datalit expressions and adds datafun-specific variants
 #[salsa::tracked]
 pub struct ExprFun<'db> {
+    /// Module this expression belongs to (identity key). None for scripts.
+    pub module_id: Option<ModuleId>,
+    /// Function this expression belongs to (identity key). None for script-level.
+    pub fn_name: Option<InternedText<'db>>,
+    /// Sequential index within the function (identity key).
+    pub local_index: u32,
+    #[tracked]
     pub expr: ExprFunKind<'db>,
 }
 
@@ -262,7 +269,15 @@ pub struct ExprBinOp<'db> {
 
 #[salsa::tracked]
 pub struct ExprFunctionCall<'db> {
+    /// Module this call belongs to (identity key). None for scripts.
+    pub module_id: Option<ModuleId>,
+    /// Function this call belongs to (identity key). None for script-level.
+    pub fn_name: Option<InternedText<'db>>,
+    /// Sequential index within the function (identity key).
+    pub local_index: u32,
+    #[tracked]
     pub name: InternedText<'db>,
+    #[tracked]
     #[returns(ref)]
     pub args: Vec<ExprFun<'db>>,
 }

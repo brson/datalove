@@ -1167,11 +1167,11 @@ mod tests {
     fn parse_function<'db>(db: &'db dyn salsa::Database, source_code: &str) -> StmtFun<'db> {
         let source = Source::new(db, source_code.to_string());
         let script = datalove_datafun_parser::parse_for_test(db, source);
-        let statements = script.statements(db);
+        let statements = script.statements;
 
         for stmt in statements {
             if let Statement::Fun(fun) = stmt {
-                return *fun;
+                return fun;
             }
         }
         panic!("No function found in source code");

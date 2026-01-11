@@ -17,7 +17,7 @@ fn extract_let_value<'db>(
     db: &'db datalove_datafun_compiler::Database,
     parsed: datalove_datafun_ast::ast::ParsedStatements<'db>,
 ) -> Result<datalove_datafun_ast::ast::ExprFun<'db>, String> {
-    let statements = parsed.statements(db);
+    let statements = parsed.statements;
     if statements.len() != 1 {
         return Err(format!("expected 1 statement, got {}", statements.len()));
     }

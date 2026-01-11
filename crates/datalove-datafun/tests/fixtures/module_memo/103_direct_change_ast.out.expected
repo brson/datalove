@@ -37,16 +37,16 @@
           "hash_changed": true,
           "expected": {
             "parsed": true,
-            "typechecked": false,
+            "typechecked": true,
             "hash_changed": true
           },
-          "correct": false
+          "correct": true
         }
       }
     }
   ],
   "summary": {
     "total_steps": 2,
-    "all_correct": false
+    "all_correct": true
   }
 }
