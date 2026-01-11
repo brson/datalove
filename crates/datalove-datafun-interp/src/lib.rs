@@ -57,8 +57,10 @@ pub use layout::IrLayout;
 pub use tydesc::IrTyDescTable;
 pub use frame::{Frame, FrameStore};
 pub use env::{FunctionRegistry, ScriptEnvironment, ExecutionContext};
-pub use dispatch::{CallDispatcher, DispatchResult};
+pub use dispatch::{CallDispatcher, DispatchCallContext, DispatchResult};
 pub use datalove_rt::c::DebugOutputMode;
+
+use std::cell::RefCell;
 
 use datalove_rt::rtdt;
 use datalove_datafun_ir::{
@@ -80,7 +82,8 @@ pub struct IrInterpreter {
     runtime: datalove_rt::rust::Runtime,
     tydesc_table: IrTyDescTable,
     /// Optional call dispatcher for JIT integration.
-    call_dispatcher: Option<Box<dyn CallDispatcher>>,
+    /// Uses RefCell to allow passing &mut self to dispatch_call.
+    call_dispatcher: RefCell<Option<Box<dyn CallDispatcher>>>,
 }
 
 impl IrInterpreter {
@@ -94,7 +97,7 @@ impl IrInterpreter {
         Self {
             runtime: datalove_rt::rust::Runtime::new_with_debug_mode(debug_mode),
             tydesc_table: IrTyDescTable::new(),
-            call_dispatcher: None,
+            call_dispatcher: RefCell::new(None),
         }
     }
 
@@ -102,12 +105,12 @@ impl IrInterpreter {
     ///
     /// Use this to integrate JIT compilation or other call dispatch mechanisms.
     pub fn set_call_dispatcher(&mut self, dispatcher: Box<dyn CallDispatcher>) {
-        self.call_dispatcher = Some(dispatcher);
+        *self.call_dispatcher.borrow_mut() = Some(dispatcher);
     }
 
     /// Remove the call dispatcher.
     pub fn clear_call_dispatcher(&mut self) {
-        self.call_dispatcher = None;
+        *self.call_dispatcher.borrow_mut() = None;
     }
 
     /// Get the runtime handle for memory management.
@@ -261,6 +264,37 @@ impl IrInterpreter {
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
+        self.call_in_context_impl(func, args, ret_dest, ctx, registry, frames, false)
+    }
+
+    /// Execute a function called from JIT code via the trampoline.
+    ///
+    /// All arguments are treated as borrowed because the JIT caller is responsible
+    /// for its own frame values. The JIT calling convention doesn't have the same
+    /// ownership transfer semantics as interpreter-to-interpreter calls.
+    pub fn call_in_context_jit(
+        &mut self,
+        func: &IrFunction,
+        args: Vec<Value>,
+        ret_dest: Destination,
+        ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
+    ) -> Result<(), InterpError> {
+        self.call_in_context_impl(func, args, ret_dest, ctx, registry, frames, true)
+    }
+
+    /// Implementation for call_in_context and call_in_context_jit.
+    fn call_in_context_impl(
+        &mut self,
+        func: &IrFunction,
+        args: Vec<Value>,
+        ret_dest: Destination,
+        ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
+        jit_caller: bool,
+    ) -> Result<(), InterpError> {
         // Compute layout.
         let layout = IrLayout::compute(
             &func.value_types,
@@ -285,9 +319,11 @@ impl IrInterpreter {
                 // Borrowed semantics (caller retains ownership, callee doesn't destroy):
                 // - Ref/Mut/Out modes: caller retains ownership
                 // - Copy types with In mode: callee makes a copy, caller retains original
+                // - JIT caller: all params borrowed (JIT handles its own frame)
                 // Non-borrowed (callee destroys):
                 // - Non-Copy types with In mode: ownership transfers to callee
-                let borrowed = matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out)
+                let borrowed = jit_caller
+                    || matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out)
                     || param_type.is_copy();
 
                 // Initialized: true for In/Ref/Mut (data exists), false for Out (callee writes first).
@@ -303,6 +339,7 @@ impl IrInterpreter {
 
         // Destroy remaining values in frame.
         // This destroys In params (ownership transferred from caller).
+        // For JIT callers, params are borrowed so they won't be destroyed here.
         frame.destroy_all(self.runtime.handle());
 
         // Convert UnitCompletion to () - functions always complete normally.
@@ -943,16 +980,29 @@ impl IrInterpreter {
 
                 // Try dispatcher first (for JIT integration).
                 let mut call_handled = false;
-                if let Some(mut dispatcher) = self.call_dispatcher.take() {
-                    let rt_handle = self.runtime.handle();
-                    match dispatcher.dispatch_call(func, callee, &arg_vals, dest_slot, rt_handle) {
-                        dispatch::DispatchResult::Handled(result) => {
-                            self.call_dispatcher = Some(dispatcher);
-                            result?;
-                            call_handled = true;
-                        }
-                        dispatch::DispatchResult::NotHandled => {
-                            self.call_dispatcher = Some(dispatcher);
+                {
+                    // Take the dispatcher temporarily to avoid borrow conflicts.
+                    let dispatcher_opt = self.call_dispatcher.borrow_mut().take();
+                    if let Some(mut dispatcher) = dispatcher_opt {
+                        let rt_handle = self.runtime.handle();
+
+                        // Create dispatch context for mixed-mode execution.
+                        let call_ctx = dispatch::DispatchCallContext {
+                            exec_ctx: ctx,
+                            registry,
+                            frames,
+                            interp: self,
+                        };
+
+                        match dispatcher.dispatch_call(func, callee, &arg_vals, dest_slot, rt_handle, call_ctx) {
+                            dispatch::DispatchResult::Handled(result) => {
+                                *self.call_dispatcher.borrow_mut() = Some(dispatcher);
+                                result?;
+                                call_handled = true;
+                            }
+                            dispatch::DispatchResult::NotHandled => {
+                                *self.call_dispatcher.borrow_mut() = Some(dispatcher);
+                            }
                         }
                     }
                 }

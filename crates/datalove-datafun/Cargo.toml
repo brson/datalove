@@ -86,3 +86,8 @@ harness = false
 name = "interp_jit_tests"
 path = "tests/interp_jit_tests.rs"
 harness = false
+
+[[test]]
+name = "interp_jit_chaos_tests"
+path = "tests/interp_jit_chaos_tests.rs"
+harness = false

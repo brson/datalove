@@ -233,7 +233,9 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             0 // Return value written via dest/sret
         }
         None => {
-            // Call interpreter.
+            // Call interpreter with normal ownership semantics.
+            // For In-mode non-copy args, interpreter takes ownership and destroys them.
+            // JIT caller must not access these args after the call returns.
             let result = ctx.interp.call_in_context(
                 ir_func,
                 arg_vals,

@@ -15,15 +15,17 @@
 //! ```
 
 mod compiler;
-mod bridge;
-mod trampoline;
+pub(crate) mod bridge;
+pub(crate) mod trampoline;
+pub mod chaos;
 
 pub use trampoline::{DispatchContext, set_dispatch_context, clear_dispatch_context};
+pub use chaos::ChaosDispatcher;
 
 use std::collections::HashMap;
 
 use datalove_datafun_ir::{FuncId, FuncRef, IrFunction, IrModuleId, IrType};
-use datalove_datafun_interp::{CallDispatcher, Destination, DispatchResult, InterpError, Value};
+use datalove_datafun_interp::{CallDispatcher, DispatchCallContext, Destination, DispatchResult, InterpError, Value};
 use datalove_rt::c::LocalRtHandle;
 
 use compiler::JitCompiler;
@@ -120,7 +122,7 @@ pub enum FunctionState {
 /// Single-threaded design - no synchronization overhead.
 pub struct JitEngine {
     /// Function states (interpreted with call count, or compiled).
-    states: HashMap<FunctionKey, FunctionState>,
+    pub(crate) states: HashMap<FunctionKey, FunctionState>,
     /// Cranelift JIT compiler.
     compiler: JitCompiler,
     /// Call count threshold for triggering compilation.
@@ -597,6 +599,135 @@ mod tests {
         // Verify result: add(10, 20) = 30.
         assert_eq!(result as i32, 30, "add(10, 20) should equal 30");
     }
+
+    /// Test that demonstrates the missing DispatchContext bug.
+    ///
+    /// When JIT code calls an uncompiled function but DispatchContext is not set,
+    /// the trampoline fails silently and returns 0.
+    ///
+    /// This test is marked #[ignore] because it demonstrates broken behavior
+    /// that needs to be fixed. Run with `cargo test -- --ignored` to see the failure.
+    #[test]
+    #[ignore]
+    fn test_jit_calls_without_context_fails() {
+        use datalove_datafun_ir::ParamId;
+
+        // Create callee: fn add(a: i32, b: i32) -> i32 { a + b }
+        let add_fn = IrFunction {
+            id: FuncId(0),
+            name: "add".to_string(),
+            params: vec![ParamId(0), ParamId(1)],
+            param_modes: vec![],
+            param_types: vec![IrType::I32, IrType::I32],
+            return_type: IrType::I32,
+            blocks: vec![IrBlock {
+                id: BlockId(0),
+                params: vec![],
+                instructions: vec![
+                    Instruction::BinOp {
+                        dest: ValueId(0),
+                        op: BinOp::Add,
+                        lhs: Operand::Param(ParamId(0)),
+                        rhs: Operand::Param(ParamId(1)),
+                    },
+                ],
+                terminator: Terminator::Return {
+                    value: Some(Operand::Value(ValueId(0))),
+                },
+            }],
+            value_count: 1,
+            slot_count: 0,
+            value_types: vec![IrType::I32],
+            slot_types: vec![],
+        };
+
+        // Create caller: fn main() -> i32 { add(10, 20) }
+        let main_fn = IrFunction {
+            id: FuncId(1),
+            name: "main".to_string(),
+            params: vec![],
+            param_modes: vec![],
+            param_types: vec![],
+            return_type: IrType::I32,
+            blocks: vec![IrBlock {
+                id: BlockId(0),
+                params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: ConstValue::I32(10) },
+                    Instruction::Const { dest: ValueId(1), value: ConstValue::I32(20) },
+                    Instruction::Call {
+                        dest: ValueId(2),
+                        func: datalove_datafun_ir::FuncRef::Local(FuncId(0)),
+                        args: vec![
+                            Operand::Value(ValueId(0)),
+                            Operand::Value(ValueId(1)),
+                        ],
+                    },
+                ],
+                terminator: Terminator::Return {
+                    value: Some(Operand::Value(ValueId(2))),
+                },
+            }],
+            value_count: 3,
+            slot_count: 0,
+            value_types: vec![IrType::I32, IrType::I32, IrType::I32],
+            slot_types: vec![],
+        };
+
+        // Set up context with both functions.
+        let functions = vec![add_fn, main_fn.clone()];
+        let ctx = ExecutionContext::new(&functions);
+        let registry = FunctionRegistry::new();
+
+        // Create JIT engine.
+        let mut jit = JitEngine::new(1).expect("JitEngine creation failed");
+
+        // Compile main() with context (creates stub for add()).
+        let main_key = FunctionKey::local(FuncId(1));
+        let (code_ptr, uses_sret) = jit
+            .record_call_with_context(main_key, &main_fn, &ctx, &registry)
+            .expect("compilation failed")
+            .expect("should compile on first call");
+
+        assert!(!uses_sret, "i32 return should not use sret");
+
+        // Create interpreter but DO NOT set up DispatchContext.
+        // This simulates what happens in real execution when the
+        // CallDispatcher interface is used (which doesn't provide context).
+        let interp = IrInterpreter::new();
+
+        // Prepare return destination.
+        let mut result: usize = 0;
+        let ret_dest = Destination {
+            ptr: &mut result as *mut usize as *mut u8,
+            tydesc: std::ptr::null(),
+        };
+
+        // Get runtime handle.
+        let rt_handle = interp.runtime_handle();
+
+        // Call the JIT-compiled main() WITHOUT setting DispatchContext.
+        // This will:
+        // 1. Execute JIT code for main()
+        // 2. main() calls add() via stub
+        // 3. Stub calls __jit_dispatch_call
+        // 4. __jit_dispatch_call sees no context, prints error, returns 0
+        // 5. main() receives 0 as the result of add(10, 20)
+        // 6. main() returns 0 (WRONG!)
+        let return_type = IrType::I32;
+        unsafe {
+            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type)
+                .expect("JIT call failed");
+        }
+
+        // This SHOULD be 30, but will be 0 because DispatchContext wasn't set.
+        // This test demonstrates the bug.
+        assert_eq!(
+            result as i32, 30,
+            "BUG: add(10, 20) returned {} instead of 30 because DispatchContext was not set",
+            result as i32
+        );
+    }
 }
 
 impl CallDispatcher for JitEngine {
@@ -607,17 +738,36 @@ impl CallDispatcher for JitEngine {
         args: &[Value],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,
+        call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
         let key = FunctionKey::from(func_ref);
 
-        // Record call and check if we should compile/use JIT.
+        // For now, use record_call (without stubs) to avoid leak in trampoline path.
+        // Functions with calls will fall back to interpreter.
+        // TODO: Fix trampoline ownership semantics for full mixed-mode support.
         match self.record_call(key, func) {
             Ok(Some((code_ptr, uses_sret))) => {
-                // JIT code available - call it.
+                // JIT code available - set up dispatch context and call it.
+                // The trampoline needs this context to route calls back to the interpreter.
+                let mut dispatch_ctx = DispatchContext {
+                    jit_engine: self,
+                    interp: call_ctx.interp,
+                    exec_ctx: call_ctx.exec_ctx,
+                    registry: call_ctx.registry,
+                    frames: call_ctx.frames,
+                };
+
+                // SAFETY: context is valid for duration of call.
+                unsafe { set_dispatch_context(&mut dispatch_ctx) };
+
                 // SAFETY: code_ptr is a valid JIT-compiled function for this signature.
                 let result = unsafe {
-                    self.call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, &func.return_type)
+                    bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, &func.return_type)
                 };
+
+                // Clear dispatch context.
+                clear_dispatch_context();
+
                 match result {
                     Ok(()) => DispatchResult::Handled(Ok(())),
                     Err(e) => DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
