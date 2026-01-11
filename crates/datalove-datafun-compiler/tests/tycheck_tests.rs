@@ -193,7 +193,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     let script = datalove_datafun_parser::parse_for_diagnostics(&db, source);
     let spans = datalove_datafun_parser::datafun_spans(&db, source);
-    let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source, spans, script);
+    let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source, spans, script.clone());
 
     // Collect type judgements for variables and functions.
     let mut judgements = Vec::new();

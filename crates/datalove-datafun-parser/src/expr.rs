@@ -352,7 +352,7 @@ impl<'db> Parser<'db> {
         iter: BracerIter<'db>,
         context: Option<(TextSpan<'db>, &'static str)>,
     ) -> Vec<ast::ExprFun<'db>> {
-        let mut sub = Parser::from_branch_with_context(self.db, iter, self.source_text(), context);
+        let mut sub = Parser::from_branch_with_context(self.db, iter, self.source_text(), context, self.module_id());
         let args = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
@@ -383,6 +383,7 @@ impl<'db> Parser<'db> {
             iter,
             self.source_text(),
             Some((open_span, "in this tuple")),
+            self.module_id(),
         );
         let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();

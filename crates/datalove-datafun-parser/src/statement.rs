@@ -58,7 +58,7 @@ impl<'db> Parser<'db> {
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
     ) -> ast::Statement<'db> {
         let line_tokens: Vec<_> = line.into_iter().filter_map(|t| t.without_space(self.db)).collect();
-        let mut sub = Parser::new(self.db, line_tokens, self.source_text());
+        let mut sub = Parser::new(self.db, line_tokens, self.source_text(), self.module_id());
         let stmt = sub.parse_statement(remaining_lines);
         self.had_error |= sub.had_error;
         self.merge_spans_from(&mut sub);
@@ -261,6 +261,7 @@ impl<'db> Parser<'db> {
 
         ast::Statement::Fun(ast::StmtFun::new(
             self.db,
+            self.module_id(),
             name,
             params,
             return_type,
@@ -273,7 +274,7 @@ impl<'db> Parser<'db> {
         iter: BracerIter<'db>,
         context: Option<(TextSpan<'db>, &'static str)>,
     ) -> Vec<ast::FunParam<'db>> {
-        let mut sub = Parser::from_branch_with_context(self.db, iter, self.source_text(), context);
+        let mut sub = Parser::from_branch_with_context(self.db, iter, self.source_text(), context, self.module_id());
         let params = sub.parse_comma_separated(|p| p.parse_fun_param());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
@@ -575,7 +576,7 @@ impl<'db> Parser<'db> {
             // Consume the "else" line and parse any binding.
             let (_, else_line) = remaining_lines.next().X();
             let else_tokens: Vec<_> = else_line.into_iter().filter_map(|t| t.without_space(self.db)).collect();
-            let mut else_sub = Parser::new(self.db, else_tokens, self.source_text());
+            let mut else_sub = Parser::new(self.db, else_tokens, self.source_text(), self.module_id());
             else_sub.eat_word("else");
 
             // Parse optional else binding: |identifier|

@@ -76,7 +76,7 @@ pub fn type_check_script_units<'db>(
         modules.push(ModuleInfo::new(
             db,
             module_spec.path.clone(),
-            module_spec.parsed,
+            module_spec.parsed.clone(),
             module_spec.source,
             module_spec.module_id,
         ));
@@ -191,7 +191,7 @@ pub fn type_check_script_units<'db>(
                         if let Some(funcs) = module_functions.get(module_path) {
                             if let Some((func_ty, func_ast)) = funcs.get(&item_name) {
                                 // Get the source module's ModuleId for call target resolution.
-                                let source_module_id = path_to_module_id.get(module_path).copied();
+                                let source_module_id = path_to_module_id.get(module_path).cloned();
                                 ctx.add_function(item_name, *func_ty);
                                 ctx.function_asts.insert(item_name, (*func_ast, source_module_id));
                                 // Also add to accumulated so subsequent units can use it.
@@ -212,7 +212,7 @@ pub fn type_check_script_units<'db>(
 
                 // Second pass: typecheck all statements.
                 for statement in script.statements(db) {
-                    check_statement(&mut ctx, statement);
+                    check_statement(&mut ctx, &statement);
                 }
 
                 // Extract new bindings for subsequent units.
@@ -304,7 +304,7 @@ pub fn type_check_script_with_context<'db>(
 
     // Second pass: typecheck all statements.
     for statement in parsed.statements(db) {
-        check_statement(&mut ctx, statement);
+        check_statement(&mut ctx, &statement);
     }
 
     ScriptTypecheckResultRaw {
@@ -382,7 +382,7 @@ pub fn type_check_with_module_graph<'db>(
 
     // Build module alias map from require statements.
     let module_exports_map = graph_typecheck.module_exports(db);
-    let alias_map = build_module_alias_map_for_graph(db, parsed, &path_to_id);
+    let alias_map = build_module_alias_map_for_graph(db, &parsed, &path_to_id);
 
     // Process import statements to populate function signatures.
     for statement in parsed.statements(db) {
@@ -437,7 +437,7 @@ pub fn type_check_with_module_graph<'db>(
 
     // Second pass: type check all statements (including function bodies).
     for statement in parsed.statements(db) {
-        check_statement(&mut ctx, statement);
+        check_statement(&mut ctx, &statement);
     }
 
     let errors = ctx
@@ -495,13 +495,13 @@ pub fn typecheck_module<'db>(
     // Collect all function signatures from this module.
     for statement in parsed.statements(db) {
         if let Statement::Fun(stmt) = statement {
-            collect_function_signature(&mut ctx, &stmt, Some(module_id));
+            collect_function_signature(&mut ctx, stmt, Some(module_id));
         }
     }
 
     // Type check all statements.
     for statement in parsed.statements(db) {
-        check_statement(&mut ctx, statement);
+        check_statement(&mut ctx, &statement);
     }
 
     // Collect exports for this module.
@@ -552,7 +552,7 @@ pub fn typecheck_module_graph<'db>(
                 funcs.insert(func.name(db), *func);
             }
         }
-        module_parsed.insert(*module_id, *parsed);
+        module_parsed.insert(*module_id, parsed.clone());
         module_spans.insert(*module_id, spans.clone());
         module_function_asts.insert(*module_id, funcs);
     }
@@ -569,7 +569,7 @@ pub fn typecheck_module_graph<'db>(
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
         let parsed = module_parsed.get(&module_id)
-            .copied()
+            .cloned()
             .expect("module should have been parsed");
         let exports = collect_module_exports(db, parsed);
         all_exports.insert(module_id, exports);
@@ -588,7 +588,7 @@ pub fn typecheck_module_graph<'db>(
         let module_id = module.id(db);
 
         let parsed = module_parsed.get(&module_id)
-            .copied()
+            .cloned()
             .expect("module should have been parsed");
         let spans = module_spans.get(&module_id)
             .cloned()
@@ -621,7 +621,7 @@ pub fn typecheck_module_graph<'db>(
                             let func_ast = module_function_asts
                                 .get(&source_module_id)
                                 .and_then(|funcs| funcs.get(&item_name))
-                                .copied();
+                                .cloned();
 
                             resolved_imports.push(ResolvedImport::new(
                                 db,
@@ -699,7 +699,7 @@ pub fn typecheck_module_graph<'db>(
 /// against the path_to_id map.
 fn build_module_alias_map_for_graph<'db>(
     db: &'db dyn crate::Db,
-    parsed: ParsedStatements<'db>,
+    parsed: &ParsedStatements<'db>,
     path_to_id: &HashMap<String, ModuleId>,
 ) -> HashMap<InternedText<'db>, ModuleId> {
     let mut alias_map = HashMap::new();

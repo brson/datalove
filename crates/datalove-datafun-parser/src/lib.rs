@@ -11,6 +11,7 @@ use rmx::prelude::*;
 
 use bct::{
     input::Source,
+    module_graph::ModuleId,
     lexer::{Token, TokenKind, Sigil},
     bracer::{Bracer, TreeToken},
     text::{Text, TextSpan},
@@ -40,21 +41,35 @@ pub fn parse_script_unit<'db>(
     let units = &script.units(db);
     let unit = units[unit_index];
     let source = unit.source(db);
-    parse(db, source).parsed(db)
+    // Scripts don't have a ModuleId.
+    parse_with_module_id(db, source, None).parsed(db)
 }
 
 /// Parse a Source into a datafun script with span information.
+///
+/// For script parsing (no module context).
 #[salsa::tracked]
 pub fn parse<'db>(
     db: &'db dyn Db,
     source: Source,
+) -> ast::ParseResult<'db> {
+    parse_with_module_id(db, source, None)
+}
+
+/// Parse a Source into a datafun script with span information and module context.
+///
+/// The module_id is used to give functions stable identity for memoization.
+pub fn parse_with_module_id<'db>(
+    db: &'db dyn Db,
+    source: Source,
+    module_id: Option<ModuleId>,
 ) -> ast::ParseResult<'db> {
     let chunk = source_map::basic_source_map(db, source);
     let source_text = chunk.text(db);
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
     emit_bracer_errors(db, bracer, source_text);
-    parse_bracer(db, bracer, source_text)
+    parse_bracer(db, bracer, source_text, module_id)
 }
 
 /// Parse a Source as a single expression.
@@ -68,6 +83,7 @@ pub fn parse_expr<'db>(
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
     emit_bracer_errors(db, bracer, source_text);
+    // Expressions don't have module context.
     parse_bracer_expr(db, bracer, source_text)
 }
 
@@ -76,7 +92,8 @@ fn parse_bracer_expr<'db>(
     bracer: Bracer<'db>,
     source_text: bct::text::Text<'db>,
 ) -> ast::ExprFun<'db> {
-    let mut parser = Parser::from_branch(db, bracer.iter(db), source_text);
+    // Expressions don't have module context.
+    let mut parser = Parser::from_branch_with_context(db, bracer.iter(db), source_text, None, None);
     let expr = parser.parse_expr_full();
     parser.error_if_not_exhausted();
     expr
@@ -126,6 +143,7 @@ fn parse_bracer<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
     source_text: Text<'db>,
+    module_id: Option<ModuleId>,
 ) -> ast::ParseResult<'db> {
     // Get line iterator - newlines inside balanced braces don't count as line breaks.
     // First split on newlines, then filter spaces from each line.
@@ -156,7 +174,7 @@ fn parse_bracer<'db>(
             }
         });
 
-    let (statements, expr_spans) = parse_statements(db, lines, source_text);
+    let (statements, expr_spans) = parse_statements(db, lines, source_text, module_id);
     let parsed = ast::ParsedStatements::new(db, statements);
     ast::ParseResult::new(db, parsed, expr_spans)
 }
@@ -179,6 +197,7 @@ fn parse_statements<'db>(
     db: &'db dyn Db,
     lines: impl Iterator<Item = Vec<TreeToken<'db>>>,
     source_text: bct::text::Text<'db>,
+    module_id: Option<ModuleId>,
 ) -> (Vec<ast::Statement<'db>>, Vec<ast::ParseSpanEntry>) {
     let mut statements = vec![];
     let mut all_spans = vec![];
@@ -189,7 +208,7 @@ fn parse_statements<'db>(
             continue;
         }
 
-        let mut parser = Parser::new(db, line, source_text);
+        let mut parser = Parser::new(db, line, source_text, module_id);
         let statement = parser.parse_statement(&mut line_iter);
         statements.push(statement);
         all_spans.extend(parser.take_expr_spans());

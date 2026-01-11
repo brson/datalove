@@ -403,7 +403,7 @@ impl<'db> ParsedModuleGraph<'db> {
     pub fn get_parsed(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<ParsedStatements<'db>> {
         self.parsed_statements(db).iter()
             .find(|(id, _, _)| *id == module_id)
-            .map(|(_, parsed, _)| *parsed)
+            .map(|(_, parsed, _)| parsed.clone())
     }
 
     /// Get the spans for a module by its ID.

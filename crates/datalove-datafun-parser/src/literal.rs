@@ -519,7 +519,7 @@ impl<'db> Parser<'db> {
                 .collect();
 
             // Parse all elements in the row using a sub-parser.
-            let mut sub = Parser::new(self.db, elem_tokens, self.source_text());
+            let mut sub = Parser::new(self.db, elem_tokens, self.source_text(), self.module_id());
             let mut row_elements = Vec::new();
             while sub.peek().is_some() {
                 row_elements.push(sub.parse_expr_full());

@@ -43,7 +43,8 @@ pub fn parse_module<'db>(
     let source = module.source(db);
 
     log_query("parse", module_path, QueryPhase::Start);
-    let parse_result = datalove_datafun_parser::parse(db, source);
+    // Pass ModuleId for stable function identity.
+    let parse_result = datalove_datafun_parser::parse_with_module_id(db, source, Some(module_id));
     log_query("parse", module_path, QueryPhase::End);
 
     parse_result

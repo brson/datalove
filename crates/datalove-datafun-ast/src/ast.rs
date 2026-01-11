@@ -1,5 +1,6 @@
 use rmx::prelude::*;
 
+use bct::module_graph::ModuleId;
 use bct::text::{InternedText, Text};
 use datalove_diagnostic::ByteSpan;
 use crate::datalit;
@@ -78,10 +79,17 @@ pub struct StmtSet<'db> {
 
 #[salsa::tracked]
 pub struct StmtFun<'db> {
+    /// Module this function belongs to (identity key).
+    /// None for script-local functions.
+    pub module_id: Option<ModuleId>,
+    /// Function name (identity key).
     pub name: InternedText<'db>,
+    #[tracked]
     #[returns(ref)]
     pub params: Vec<FunParam<'db>>,
+    #[tracked]
     pub return_type: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    #[tracked]
     #[returns(ref)]
     pub body: Vec<Statement<'db>>,
 }

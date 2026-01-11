@@ -3,6 +3,7 @@
 use rmx::prelude::*;
 
 use bct::{
+    module_graph::ModuleId,
     lexer::{Sigil, TokenKind},
     bracer::{BracerIter, TreeToken},
     text::InternedText,
@@ -38,6 +39,8 @@ pub(super) struct Parser<'db> {
     pub(super) had_error: bool,
     /// Source text for error reporting when no current token.
     source_text: bct::text::Text<'db>,
+    /// Module ID for stable function identity (None for scripts).
+    module_id: Option<ModuleId>,
     /// Accumulated expression spans (side table pattern).
     expr_spans: Vec<ast::ParseSpanEntry>,
     /// Optional context for error messages showing the enclosing branch's opening token.
@@ -46,12 +49,18 @@ pub(super) struct Parser<'db> {
 
 impl<'db> Parser<'db> {
     /// Create a new parser with the given tokens (Vec-backed).
-    pub(super) fn new(db: &'db dyn Db, tokens: Vec<TreeToken<'db>>, source_text: bct::text::Text<'db>) -> Self {
+    pub(super) fn new(
+        db: &'db dyn Db,
+        tokens: Vec<TreeToken<'db>>,
+        source_text: bct::text::Text<'db>,
+        module_id: Option<ModuleId>,
+    ) -> Self {
         Parser {
             db,
             source: TokenSource::Vec { tokens, pos: 0 },
             had_error: false,
             source_text,
+            module_id,
             expr_spans: Vec::new(),
             branch_context: None,
         }
@@ -59,7 +68,7 @@ impl<'db> Parser<'db> {
 
     /// Create a new parser from a BracerIter (iterator-backed, zero allocation).
     pub(super) fn from_branch(db: &'db dyn Db, iter: BracerIter<'db>, source_text: bct::text::Text<'db>) -> Self {
-        Self::from_branch_with_context(db, iter, source_text, None)
+        Self::from_branch_with_context(db, iter, source_text, None, None)
     }
 
     /// Create a new parser from a BracerIter with an optional context label.
@@ -71,6 +80,7 @@ impl<'db> Parser<'db> {
         iter: BracerIter<'db>,
         source_text: bct::text::Text<'db>,
         context: Option<(TextSpan<'db>, &'static str)>,
+        module_id: Option<ModuleId>,
     ) -> Self {
         let mut parser = Parser {
             db,
@@ -81,12 +91,18 @@ impl<'db> Parser<'db> {
             },
             had_error: false,
             source_text,
+            module_id,
             expr_spans: Vec::new(),
             branch_context: context,
         };
         // Prime the buffer.
         parser.fill_iter_buffer();
         parser
+    }
+
+    /// Get the module ID for this parser (for stable function identity).
+    pub(super) fn module_id(&self) -> Option<ModuleId> {
+        self.module_id
     }
 
     /// Fill the iterator buffer with next non-whitespace tokens.
