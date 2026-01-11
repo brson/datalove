@@ -1,7 +1,27 @@
-//! Incremental module world for salsa memoization.
+//! Incremental module compilation with correct salsa memoization.
 //!
-//! Provides `IncrementalModuleWorld` which manages module identity correctly
-//! for incremental compilation with proper salsa memoization.
+//! Salsa requires careful identity management for memoization to work:
+//! - Tracked structs must be reused, not recreated, across incremental updates
+//! - Input setters mark values as "changed" even if the value is the same
+//! - ModuleGraph setters must be called conditionally to avoid spurious invalidation
+//!
+//! [`IncrementalModuleWorld`] encapsulates these requirements. It maintains stable
+//! Module and ModuleGraph identities across edits, only calling setters when values
+//! actually differ.
+//!
+//! # Usage
+//!
+//! ```ignore
+//! let mut world = IncrementalModuleWorld::new();
+//!
+//! // Initial compilation (only needs &db).
+//! world.add_module(&db, "local/pkg/main", source);
+//! let (graph, requires) = world.build_fresh(&db);
+//!
+//! // Incremental update (needs &mut db for setters).
+//! world.update_source(&mut db, "local/pkg/main", new_source);
+//! let (graph, requires) = world.prepare_for_compile(&mut db);
+//! ```
 
 use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, BTreeSet};
@@ -12,19 +32,14 @@ use salsa::Setter;
 use datalove_datafun_compiler::module_graph::parse_module_graph;
 use datalove_datafun_tycheck::typecheck_module_graph;
 
-/// Manages modules with stable salsa identity for incremental compilation.
+/// Module world with stable salsa identity for incremental compilation.
 ///
-/// Salsa memoization requires careful identity management:
-/// - Module objects must be reused (not recreated) across incremental changes
-/// - Source text updates use `set_text` to preserve identity
-/// - ModuleGraph is reused and updated via setters only when values change
-///
-/// This struct encapsulates these requirements, providing a clean API for
-/// incremental module management.
+/// Maintains Module and ModuleGraph objects across edits, ensuring downstream
+/// queries see stable identities and can benefit from memoization.
 pub struct IncrementalModuleWorld {
-    /// Module objects keyed by path. Reused for memoization.
+    /// Modules keyed by path (e.g., "local/pkg/main").
     modules: BTreeMap<String, Module>,
-    /// Cached ModuleGraph for identity reuse.
+    /// Cached graph, reused across incremental updates.
     graph: Option<ModuleGraph>,
 }
 
@@ -37,9 +52,7 @@ impl IncrementalModuleWorld {
         }
     }
 
-    /// Add a new module.
-    ///
-    /// Creates new Source, ModuleId, and Module objects.
+    /// Add a module with the given path and source text.
     pub fn add_module(&mut self, db: &dyn salsa::Database, path: &str, source: &str) {
         let new_source = Source::new(db, source.to_string());
         let module_id = ModuleId::new(db, path.to_string());
@@ -52,11 +65,7 @@ impl IncrementalModuleWorld {
         self.modules.remove(path);
     }
 
-    /// Update a module's source text.
-    ///
-    /// Reuses the existing Module identity and calls `set_text` on its Source.
-    /// This is critical for salsa memoization - downstream queries see the
-    /// same Module identity and can check if the source actually changed.
+    /// Update a module's source text, preserving its identity for memoization.
     pub fn update_source(&mut self, db: &mut dyn salsa::Database, path: &str, source: &str) {
         if let Some(module) = self.modules.get(path) {
             let existing_source = module.source(db);
@@ -79,11 +88,9 @@ impl IncrementalModuleWorld {
         self.modules.get(path).copied()
     }
 
-    /// Build a fresh ModuleGraph, storing it for potential later incremental updates.
+    /// Build a fresh ModuleGraph (first compilation, only needs `&db`).
     ///
-    /// This method only needs an immutable database reference since it creates
-    /// new salsa objects without using setters. The graph is stored in `self.graph`
-    /// so that later calls to `prepare_for_compile` can incrementally update it.
+    /// Stores the graph for later incremental updates via `prepare_for_compile`.
     pub fn build_fresh(
         &mut self,
         db: &dyn salsa::Database,
@@ -131,10 +138,9 @@ impl IncrementalModuleWorld {
         (graph, resolved_requires)
     }
 
-    /// Prepare for compilation by building/updating the ModuleGraph.
+    /// Build or update the ModuleGraph (incremental, needs `&mut db`).
     ///
-    /// This method requires a mutable database reference for updating an existing
-    /// graph via setters. Use `build_fresh` for one-shot compilation.
+    /// Updates the stored graph via setters, only when values differ.
     pub fn prepare_for_compile(
         &mut self,
         db: &mut dyn salsa::Database,
@@ -181,10 +187,7 @@ impl IncrementalModuleWorld {
         (graph, resolved_requires)
     }
 
-    /// Compile modules: parse and typecheck.
-    ///
-    /// Convenience method that calls `prepare_for_compile`, `parse_module_graph`,
-    /// and `typecheck_module_graph`.
+    /// Parse and typecheck all modules.
     pub fn compile<'db>(
         &mut self,
         db: &'db mut dyn salsa::Database,
@@ -195,12 +198,12 @@ impl IncrementalModuleWorld {
         CompileResult { graph, parsed, typechecked }
     }
 
-    /// Get the cached ModuleGraph if it exists.
+    /// Get the cached ModuleGraph.
     pub fn graph(&self) -> Option<ModuleGraph> {
         self.graph
     }
 
-    /// Get transitive dependents of a module.
+    /// Get all modules that transitively depend on the given module.
     pub fn get_dependents(&self, db: &dyn salsa::Database, path: &str) -> BTreeSet<String> {
         let path_deps = self.extract_dependencies(db);
 
@@ -230,9 +233,7 @@ impl IncrementalModuleWorld {
         result
     }
 
-    // --- Private helpers ---
-
-    /// Update the cached ModuleGraph, only calling setters when values change.
+    /// Update the cached ModuleGraph, calling setters only when values differ.
     fn update_graph(
         &mut self,
         db: &mut dyn salsa::Database,
@@ -264,7 +265,7 @@ impl IncrementalModuleWorld {
         }
     }
 
-    /// Extract dependencies by running through the package resolution pipeline.
+    /// Extract module dependencies via the package resolution pipeline.
     fn extract_dependencies(&self, db: &dyn salsa::Database) -> BTreeMap<String, BTreeSet<String>> {
         use datalove_datafun_pkg::package_load::{Package, PackageModule, PackageWorld};
 
@@ -331,7 +332,7 @@ impl IncrementalModuleWorld {
         deps
     }
 
-    /// Build resolved_requires for parse_module_graph.
+    /// Build the resolved_requires map needed by parse_module_graph.
     fn build_resolved_requires(
         &self,
         db: &dyn salsa::Database,
@@ -365,16 +366,14 @@ impl Default for IncrementalModuleWorld {
     }
 }
 
-/// Result of compiling modules.
+/// Result of `IncrementalModuleWorld::compile`.
 pub struct CompileResult<'db> {
     pub graph: ModuleGraph,
     pub parsed: datalove_datafun_tycheck::ParsedModuleGraph<'db>,
     pub typechecked: datalove_datafun_tycheck::ModuleGraphTypecheckResult<'db>,
 }
 
-/// Topologically sort paths by dependencies.
-///
-/// Returns paths in dependency order: dependencies come before dependents.
+/// Sort paths so dependencies come before dependents.
 fn topological_sort(
     paths: &BTreeSet<String>,
     path_deps: &BTreeMap<String, BTreeSet<String>>,

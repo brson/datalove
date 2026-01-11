@@ -2,23 +2,46 @@
 //!
 //! Two-stage compilation: modules first, then scripts.
 //!
-//! 1. [`ModuleCompilationPipeline`] compiles module definitions through parsing,
-//!    typechecking, drop analysis, and IR lowering.
+//! - [`ModuleCompilationPipeline`]: compiles modules through parsing, typechecking,
+//!   drop analysis, and IR lowering. Supports incremental recompilation.
 //!
-//! 2. [`ScriptCompilationContext`] incrementally compiles and executes script
-//!    units against those modules.
+//! - [`ScriptCompilationContext`]: incrementally compiles and executes script
+//!   fragments and expressions against compiled modules.
 //!
 //! # Example
 //!
 //! ```ignore
-//! let mut pipeline = ModuleCompilationPipeline::new(&db);
-//! pipeline.add_module("local", "mypackage", "main", source);
-//! let compiled = pipeline.compile();
+//! // Stage 1: compile modules.
+//! let mut pipeline = ModuleCompilationPipeline::new();
+//! pipeline.add_module(&db, "local", "mypackage", "main", source);
+//! let compiled = pipeline.compile_fresh(&db);
 //!
+//! // Stage 2: run scripts.
 //! let mut ctx = compiled.script_context(&db, DebugOutputMode::Stderr);
 //! ctx.eval_fragment("let x = 42");
 //! ctx.eval_expr("x + 1");
 //! ```
+//!
+//! # Incremental Compilation
+//!
+//! The pipeline supports incremental recompilation after source changes. Use
+//! `compile_fresh` for the first compilation (only needs `&db`), then
+//! `update_source` and `compile` for subsequent updates (needs `&mut db`).
+//!
+//! ```ignore
+//! let mut pipeline = ModuleCompilationPipeline::new();
+//! pipeline.add_module(&db, "local", "pkg", "main", source_v1);
+//! let compiled1 = pipeline.compile_fresh(&db);
+//!
+//! // Edit a module and recompile incrementally.
+//! pipeline.update_source(&mut db, "local", "pkg", "main", source_v2);
+//! let (compiled2, db) = pipeline.compile(&mut db);
+//! ```
+//!
+//! The `&mut db` requirement for `compile` comes from salsa: updating existing
+//! tracked structs requires mutable access. The pipeline preserves module and
+//! graph identity across updates, enabling salsa to skip recomputing unchanged
+//! portions of the compilation.
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
@@ -70,27 +93,23 @@ pub enum LoweringResult {
 // Module compilation pipeline
 // ============================================================================
 
-/// Pipeline for compiling modules to IR.
+/// Compiles modules through parsing, typechecking, drop analysis, and IR lowering.
 ///
-/// Uses `IncrementalModuleWorld` for stable salsa identity management.
-///
-/// Runs three compilation phases:
-/// 1. Build module graph, resolve imports, typecheck
-/// 2. Run drop analysis on all functions
-/// 3. Lower all functions to IR
+/// Supports both one-shot compilation (`compile_fresh`) and incremental
+/// recompilation (`compile`) after source updates.
 pub struct ModuleCompilationPipeline {
     world: IncrementalModuleWorld,
 }
 
 impl ModuleCompilationPipeline {
-    /// Create a new pipeline.
+    /// Create an empty pipeline.
     pub fn new() -> Self {
         Self {
             world: IncrementalModuleWorld::new(),
         }
     }
 
-    /// Create from worldfile sections.
+    /// Create a pipeline from worldfile sections.
     pub fn from_sections(
         db: &dyn salsa::Database,
         sections: &[WorldfileSection],
@@ -175,9 +194,7 @@ impl ModuleCompilationPipeline {
         self.world.remove_module(&path);
     }
 
-    /// Update a module's source text.
-    ///
-    /// The module must already exist. Use this for incremental updates.
+    /// Update a module's source text for incremental recompilation.
     pub fn update_source(
         &mut self,
         db: &mut dyn salsa::Database,
@@ -191,20 +208,12 @@ impl ModuleCompilationPipeline {
     }
 
     /// Compile all modules (first compilation, only needs `&db`).
-    ///
-    /// The graph is stored internally, so you can later call `compile` with
-    /// `&mut db` for incremental updates after modifying modules.
     pub fn compile_fresh<'db>(&mut self, db: &'db dyn salsa::Database) -> CompiledModules<'db> {
         let (module_graph, resolved_requires) = self.world.build_fresh(db);
         self.compile_impl(db, module_graph, resolved_requires)
     }
 
     /// Compile all modules (incremental, needs `&mut db`).
-    ///
-    /// Uses setters to update the stored ModuleGraph. Call this after modifying
-    /// modules via `add_module`, `remove_module`, or `update_source`.
-    ///
-    /// Returns the compiled modules and an immutable database reference.
     pub fn compile<'db>(
         &mut self,
         db: &'db mut dyn salsa::Database,
@@ -361,7 +370,7 @@ impl Default for ModuleCompilationPipeline {
 // Compiled modules
 // ============================================================================
 
-/// Result of module compilation.
+/// Result of compiling modules, ready for script execution.
 pub struct CompiledModules<'db> {
     pub resolution_error: Option<String>,
     pub module_graph: ModuleGraph,
@@ -439,12 +448,7 @@ impl<'db> CompiledModules<'db> {
             .collect()
     }
 
-    /// Create a script compilation context.
-    ///
-    /// The `debug_mode` controls debuglog behavior:
-    /// - `Disabled`: no output
-    /// - `Stderr`: output to stderr
-    /// - `Buffer`: output to internal buffer (for testing)
+    /// Create a context for compiling and executing scripts against these modules.
     pub fn script_context(
         self,
         db: &'db dyn salsa::Database,
@@ -494,7 +498,10 @@ impl<'db> CompiledModules<'db> {
 // Script compilation context
 // ============================================================================
 
-/// Context for incremental script compilation and execution.
+/// Incrementally compiles and executes script fragments and expressions.
+///
+/// Maintains state across evaluations: bindings from `let` and `var` statements
+/// persist and can be used in subsequent expressions.
 pub struct ScriptCompilationContext<'db> {
     db: &'db dyn salsa::Database,
     pub script_ctx: lower::ScriptLowerContext,
@@ -508,9 +515,7 @@ pub struct ScriptCompilationContext<'db> {
 }
 
 impl<'db> ScriptCompilationContext<'db> {
-    // --- Evaluation (compile + execute) ---
-
-    /// Compile and execute a script fragment.
+    /// Compile and execute a script fragment (statements like `let x = 1`).
     pub fn eval_fragment(&mut self, source: &str) -> ScriptUnitResult {
         let src = bct::input::Source::new(self.db, source.to_string());
         self.last_source = Some(src);
@@ -550,7 +555,7 @@ impl<'db> ScriptCompilationContext<'db> {
         self.process_fragment(parsed, tycheck_result)
     }
 
-    /// Compile and execute a script expression.
+    /// Compile and execute an expression, returning its value.
     pub fn eval_expr(&mut self, source: &str) -> ScriptUnitResult {
         let src = bct::input::Source::new(self.db, source.to_string());
         self.last_source = Some(src);
@@ -589,24 +594,22 @@ impl<'db> ScriptCompilationContext<'db> {
         self.process_expr(expr, tycheck_result)
     }
 
-    // --- Lowering only (for AOT) ---
-
-    /// Lower a fragment without executing.
+    /// Lower a fragment to IR without executing.
     pub fn lower_fragment(&mut self, source: &str) -> ScriptLowerResult {
         self.lower_fragment_impl(source, false)
     }
 
-    /// Lower a fragment for AOT (emits drops for script bindings).
+    /// Lower a fragment to IR for AOT compilation.
     pub fn lower_fragment_for_aot(&mut self, source: &str) -> ScriptLowerResult {
         self.lower_fragment_impl(source, true)
     }
 
-    /// Lower an expression without executing.
+    /// Lower an expression to IR without executing.
     pub fn lower_expr(&mut self, source: &str) -> ScriptLowerResult {
         self.lower_expr_impl(source, false)
     }
 
-    /// Lower an expression for AOT.
+    /// Lower an expression to IR for AOT compilation.
     pub fn lower_expr_for_aot(&mut self, source: &str) -> ScriptLowerResult {
         self.lower_expr_impl(source, true)
     }
@@ -685,8 +688,6 @@ impl<'db> ScriptCompilationContext<'db> {
 
         self.lower_expr_inner(expr, tycheck_result, for_aot)
     }
-
-    // --- Internal processing ---
 
     fn lower_fragment_inner(
         &mut self,
@@ -1011,9 +1012,7 @@ impl<'db> ScriptCompilationContext<'db> {
         }
     }
 
-    // --- Environment access ---
-
-    /// Get type and value for a binding.
+    /// Get the type and value of a binding by name.
     pub fn get_binding(&mut self, name: &str) -> Option<(String, String)> {
         use datalove_datafun_interp::InterpError;
 
@@ -1046,7 +1045,7 @@ impl<'db> ScriptCompilationContext<'db> {
         None
     }
 
-    /// Get all environment bindings.
+    /// Get all bindings as (name, kind, type, value) tuples.
     pub fn get_environment(&mut self) -> Vec<(String, String, String, String)> {
         use datalove_datafun_interp::InterpError;
         let mut result = Vec::new();
@@ -1085,9 +1084,7 @@ impl<'db> ScriptCompilationContext<'db> {
         result
     }
 
-    // --- Diagnostics ---
-
-    /// Get parse diagnostics from last eval.
+    /// Get parse diagnostics from the last evaluation.
     pub fn get_parse_diagnostics(&self) -> Vec<&datalove_diagnostic::ParseDiagnostic> {
         if let Some(src) = self.last_source {
             datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src)
@@ -1096,7 +1093,7 @@ impl<'db> ScriptCompilationContext<'db> {
         }
     }
 
-    /// Get type diagnostics from last eval.
+    /// Get type diagnostics from the last evaluation.
     pub fn get_type_diagnostics(&self) -> Vec<&datalove_diagnostic::TypeDiagnostic> {
         if let Some(batch_spec) = self.last_batch_spec {
             type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(self.db, batch_spec)
@@ -1105,36 +1102,27 @@ impl<'db> ScriptCompilationContext<'db> {
         }
     }
 
-    /// Get database reference.
+    /// Get the database reference.
     pub fn db(&self) -> &'db dyn salsa::Database {
         self.db
     }
 
-    // --- Debug output ---
-
-    /// Get debug buffer contents.
+    /// Get buffered debug output.
     pub fn get_debug_buffer(&self) -> String {
         self.interp.get_debug_buffer()
     }
 
-    /// Clear debug buffer.
+    /// Clear buffered debug output.
     pub fn clear_debug_buffer(&self) {
         self.interp.clear_debug_buffer();
     }
 
-    // --- JIT configuration ---
-
     /// Set a call dispatcher for JIT compilation.
-    ///
-    /// When set, function calls are routed through the dispatcher, which can
-    /// decide to execute JIT-compiled code or fall back to interpretation.
     pub fn set_call_dispatcher(&mut self, dispatcher: Box<dyn CallDispatcher>) {
         self.interp.set_call_dispatcher(dispatcher);
     }
 
-    // --- Cleanup ---
-
-    /// Destroy all allocated values.
+    /// Destroy all allocated runtime values.
     pub fn destroy_all(&mut self) {
         self.env.destroy_all(self.interp.runtime_handle());
     }
@@ -1148,11 +1136,13 @@ impl<'db> ScriptCompilationContext<'db> {
 pub struct ScriptUnitResult {
     pub typecheck: TypecheckResult,
     pub lowering: LoweringResult,
+    /// Type of the result expression (if any).
     pub ty: Option<String>,
+    /// Pretty-printed output value or error message.
     pub output: String,
 }
 
-/// Result of lowering a script unit (without execution).
+/// Result of lowering a script unit to IR (without execution).
 pub struct ScriptLowerResult {
     pub typecheck: TypecheckResult,
     pub lowering: LoweringResult,
@@ -1195,10 +1185,10 @@ pub fn format_module_lowering_result(
 }
 
 // ============================================================================
-// AOT compilation utilities
+// AOT compilation
 // ============================================================================
 
-/// AOT compilation, linking, and execution utilities.
+/// Ahead-of-time compilation to native executables.
 pub mod aot {
     use rmx::prelude::*;
     use std::path::{Path, PathBuf};
@@ -1208,9 +1198,7 @@ pub mod aot {
     use datalove_datafun_aot_cranelift::AotCompiler;
     use datalove_datafun_ir::{IrScriptUnit, FunctionRegistry, IrFunction};
 
-    // --- Error types ---
-
-    /// AOT linking error.
+    /// Linking error.
     #[derive(Debug)]
     pub enum LinkError {
         TempDir(std::io::Error),
@@ -1236,7 +1224,7 @@ pub mod aot {
 
     impl std::error::Error for LinkError {}
 
-    /// AOT execution error.
+    /// Execution error.
     #[derive(Debug)]
     pub enum ExecError {
         Exec(std::io::Error),
@@ -1254,18 +1242,16 @@ pub mod aot {
 
     impl std::error::Error for ExecError {}
 
-    /// Execution output.
+    /// Output from executing an AOT-compiled binary.
     pub struct ExecOutput {
         pub exit_code: i32,
         pub stdout: String,
         pub stderr: String,
     }
 
-    // --- Runtime library ---
-
     static RUNTIME_LIB_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-    /// Build runtime library and return path to lib directory.
+    /// Ensure the runtime library is built and return its directory.
     pub fn ensure_runtime_lib() -> &'static Path {
         RUNTIME_LIB_DIR.get_or_init(|| {
             let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
@@ -1290,9 +1276,7 @@ pub mod aot {
         })
     }
 
-    // --- Compilation ---
-
-    /// Compile IR to object bytes.
+    /// Compile a script unit to object bytes.
     pub fn compile_script_to_object(unit: &IrScriptUnit) -> AnyResult<Vec<u8>> {
         let mut compiler = AotCompiler::new_for_host()
             .map_err(|e| anyhow!("failed to create AOT compiler: {}", e))?;
@@ -1303,7 +1287,7 @@ pub mod aot {
         Ok(obj_bytes)
     }
 
-    /// Compile IR with world types to object bytes.
+    /// Compile a script unit with module functions to object bytes.
     pub fn compile_script_to_object_with_world<'a>(
         unit: &IrScriptUnit,
         world_funcs: impl Iterator<Item = &'a IrFunction>,
@@ -1318,12 +1302,7 @@ pub mod aot {
         Ok(obj_bytes)
     }
 
-    // --- Linking ---
-
-    /// Link object to executable in temp directory.
-    ///
-    /// Returns the executable path and the TempDir. Caller must keep the TempDir
-    /// alive to prevent the executable from being deleted.
+    /// Link object bytes to an executable in a temp directory.
     pub fn link_object_to_temp_executable(
         obj_bytes: &[u8],
     ) -> Result<(PathBuf, tempfile::TempDir), LinkError> {
@@ -1333,7 +1312,7 @@ pub mod aot {
         Ok((exe_path, dir))
     }
 
-    /// Link object to specified path.
+    /// Link object bytes to an executable at the specified path.
     pub fn link_object_to_path(obj_bytes: &[u8], output_path: &Path) -> Result<(), LinkError> {
         let dir = tempfile::tempdir().map_err(LinkError::TempDir)?;
         let obj_path = dir.path().join("script.o");
@@ -1360,8 +1339,6 @@ pub mod aot {
         Ok(())
     }
 
-    // --- Execution ---
-
     /// Run an AOT-compiled executable.
     pub fn run_executable(exe_path: &Path) -> Result<ExecOutput, ExecError> {
         let output = Command::new(exe_path)
@@ -1379,9 +1356,7 @@ pub mod aot {
         Ok(ExecOutput { exit_code, stdout, stderr })
     }
 
-    // --- Convenience functions ---
-
-    /// Compile, link, and run.
+    /// Compile, link, and run a script unit.
     pub fn compile_link_run(unit: &IrScriptUnit) -> AnyResult<ExecOutput> {
         let obj_bytes = compile_script_to_object(unit)?;
         let (exe_path, _dir) = link_object_to_temp_executable(&obj_bytes)
@@ -1389,7 +1364,7 @@ pub mod aot {
         run_executable(&exe_path).map_err(|e| anyhow!("{}", e))
     }
 
-    /// Compile, link, and run with world types.
+    /// Compile, link, and run a script unit with module functions.
     pub fn compile_link_run_with_world<'a>(
         unit: &IrScriptUnit,
         world_funcs: impl Iterator<Item = &'a IrFunction>,
