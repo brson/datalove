@@ -7,7 +7,7 @@
       "params": [
         {
           "name": "t",
-          "type": "?"
+          "type": "(@u32, @u32)"
         }
       ],
       "return_type": "@u32"

@@ -47,12 +47,39 @@ fn type_hint_to_string(db: &dyn salsa::Database, type_hint: datalove_datalit::as
             let inner_str = type_hint_to_string(db, inner.element_type);
             return format!("{{{}}}", inner_str);
         }
-        TypeHint::AnonTuple(_) |
-        TypeHint::AnonStruct(_) |
-        TypeHint::AnonEnum(_) |
-        TypeHint::Tensor(_) |
-        TypeHint::Data |
-        TypeHint::Error |
+        TypeHint::AnonTuple(tuple) => {
+            let fields: Vec<_> = tuple.fields.iter()
+                .map(|f| type_hint_to_string(db, *f))
+                .collect();
+            return format!("{}({})", heap_prefix, fields.join(", "));
+        }
+        TypeHint::AnonStruct(s) => {
+            let fields: Vec<_> = s.fields.iter()
+                .map(|f| format!("{}: {}", f.name.as_str(db), type_hint_to_string(db, f.type_hint)))
+                .collect();
+            return format!("{}{{{}}}", heap_prefix, fields.join(", "));
+        }
+        TypeHint::AnonEnum(e) => {
+            let variants: Vec<_> = e.variants.iter()
+                .map(|v| {
+                    match v.payload {
+                        Some(p) => format!("{}({})", v.name.as_str(db), type_hint_to_string(db, p)),
+                        None => v.name.as_str(db).to_string(),
+                    }
+                })
+                .collect();
+            return format!("{}enum {{{}}}", heap_prefix, variants.join(", "));
+        }
+        TypeHint::Tensor(t) => {
+            let elem_str = type_hint_to_string(db, t.element_type);
+            return format!("{}tensor<{}, {}>", heap_prefix, elem_str, t.rank);
+        }
+        TypeHint::Data => {
+            return format!("{}data", heap_prefix);
+        }
+        TypeHint::Error => {
+            return format!("{}error", heap_prefix);
+        }
         TypeHint::ParseError(_) => {
             return "?".to_string();
         }
