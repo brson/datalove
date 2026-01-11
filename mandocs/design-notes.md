@@ -85,9 +85,17 @@ Copy-types copy their projections;
 move types move.
 
 Partial moves:
-ompiler must track which struct fields have been moved,
+compiler must track which struct fields have been moved,
 deny any further uses of the field or aggregate type,
 handle precise partial destruction at later drop points.
+
+An aggregrate that is partially moved in one
+branch is also partially moved in the other branch.
+The entire partially-moved aggregate is dropped
+in both branches: fields of aggregrates partially-moved
+in an `if` branch cannot be accessed after the `if`.
+
+Partial moves within loops are not allowed.
 
 The kind of projection depends on the destination:
 if the destination is a `ref`, `mut`, or `out` params,
@@ -96,19 +104,12 @@ then the projections become ref projections,
 the aggregate remains fully constructed after
 the call.
 
+
 #### Reinitialization
 
-previously-deinitialized struct fields _can_
-be projected into `out` params, after which
-they become reinitialized; potentially making
-the aggregate fully-constructed again
-and able to be used in aggregate.
-
-Within loops,
-what happens with moved projections of outer fields?
-
-todo todo
-
+Reinitialization of partially-moved aggregates is not allowed:
+assigning to a moved field is not allowed.
+Moved fields may not be used in `out` arguments.
 
 
 
