@@ -15,6 +15,7 @@
 //! This runs only tests whose names contain "foo". Multiple filters can be
 //! provided and a test runs if it matches any filter.
 
+use rayon::prelude::*;
 use rmx::prelude::*;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -65,7 +66,7 @@ pub struct ExampleTestRunner<F> {
 
 impl<F> ExampleTestRunner<F>
 where
-    F: Fn(&Path) -> Result<String, String>,
+    F: Fn(&Path) -> Result<String, String> + Sync,
 {
     /// Create a new test runner with the given analyzer function.
     ///
@@ -227,15 +228,22 @@ where
             writeln!(&mut stdout).X();
         }
 
+        // Run all tests in parallel.
+        let results: Vec<_> = fixtures
+            .par_iter()
+            .map(|fixture| (fixture.clone(), self.run_test_case(fixture)))
+            .collect();
+
         let mut passed = 0;
         let mut failed = 0;
         let mut blessed = 0;
         let mut no_expected = 0;
         let mut errors = 0;
 
-        for fixture in &fixtures {
+        // Report results sequentially for consistent output.
+        for (fixture, result) in &results {
             let test_name = fixture.file_stem().X().to_str().X();
-            match self.run_test_case(fixture) {
+            match result {
                 TestResult::Passed => {
                     stdout
                         .set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))

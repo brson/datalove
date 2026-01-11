@@ -1264,6 +1264,7 @@ dependencies = [
 name = "datalove-exampletest"
 version = "0.1.0"
 dependencies = [
+ "rayon",
  "rustmax",
  "termcolor",
 ]
