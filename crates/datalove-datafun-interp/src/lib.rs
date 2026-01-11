@@ -1221,7 +1221,16 @@ impl IrInterpreter {
                     }
                 }
 
-                // Copy value to target field.
+                // Destroy old field value before overwriting (handles move types).
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        self.runtime.handle(),
+                        current_ptr,
+                        current_tydesc,
+                    );
+                }
+
+                // Copy new value to target field.
                 let size = unsafe { (*current_tydesc).size as usize };
                 unsafe {
                     std::ptr::copy_nonoverlapping(

@@ -326,7 +326,28 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             current_ty = field_types[field_idx as usize].clone();
         }
 
-        // Store value at target address.
+        // Destroy old field value before overwriting (handles move types).
+        // Get TyDesc for the field type.
+        let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
+            AotError::Codegen(format!(
+                "TyDesc not found for type {:?}",
+                current_ty
+            ))
+        })?;
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+        // Call destroy_local on old field value.
+        let destroy_func_id = self.runtime.as_ref()
+            .ok_or_else(|| AotError::Codegen("SetField requires runtime imports".into()))?
+            .destroy_local;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            AotError::Codegen("SetField requires runtime handle parameter".into())
+        })?;
+        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
+        builder.ins().call(destroy_ref, &[rt_handle, current_addr, tydesc_ptr]);
+
+        // Store new value at target address.
         let val = self.get_operand_value(builder, value)?;
         let field_repr = types::ir_type_to_cranelift(&current_ty);
 
@@ -335,23 +356,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().store(MemFlags::new(), val, current_addr, 0);
             }
             CraneliftRepr::Aggregate(_) => {
-                // Copy aggregate bytes from source to destination.
-                let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
-                    AotError::Codegen(format!(
-                        "TyDesc not found for type {:?}",
-                        current_ty
-                    ))
-                })?;
-                let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
-
                 // Call move_value runtime function.
                 let move_func_id = self.runtime.as_ref()
                     .ok_or_else(|| AotError::Codegen("SetField aggregate requires runtime imports".into()))?
                     .move_value;
-                let rt_handle = self.rt_handle_param.ok_or_else(|| {
-                    AotError::Codegen("SetField aggregate requires runtime handle parameter".into())
-                })?;
                 let move_ref = self.module.declare_func_in_func(move_func_id, builder.func);
                 builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, current_addr]);
             }

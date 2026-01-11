@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Mixed nested set: set s.t.0 = value (struct containing tuple)
+var s = @{t = @(@1, @2)}
+set s.t.0 = @99
+debuglog s.t.0

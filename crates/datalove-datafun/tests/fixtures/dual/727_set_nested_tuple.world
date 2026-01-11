@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Nested set on tuple: set t.0.1 = value
+var t = @((@1, @2), @3)
+set t.0.1 = @99
+debuglog t.0.1
