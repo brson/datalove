@@ -73,30 +73,39 @@ Datalove structs and tuples support
 reading and writing of fields.
 
 ```datalove
-let a: { x: int, y: int) = (1, 2)
-let b = a.x   // this is a move, `a` is partially destructured
-let c = a.y   // another move
+let a: { x: u32, y: u32 } = { x = 1, y = 2 }
+let b = a.x   // this is a copy
+let c = a.y   // another copy
 
-let a: (int, int) = (1, 2)
+let a: (u32, u32) = (1, 2)
 let b = a.0
 ```
 
+Field projections are allowed in `set` statements:
+
+```datalove
+var a: { x: u32, y: u32 } = { x = 1, y = 2 }
+set a.x = 3
+
+var a: (u32, u32) = (1, 2)
+set a.0 = 3 // integer indexes for tuple fields
+```
+
+`set` on move-type fields drops the prior value first.
+
+Through `?` and `!`:
+
+```datalove
+let a: ?(u32, u32) = some (1, 2)
+let b = a?.0
+
+let a: !(u32, u32) = ok (1, 2)
+let b = a!.0
+```
+
 Copy-types copy their projections;
-move types move.
-
-Partial moves:
-compiler must track which struct fields have been moved,
-deny any further uses of the field or aggregate type,
-handle precise partial destruction at later drop points.
-
-An aggregrate that is partially moved in one
-branch is also partially moved in the other branch.
-The entire partially-moved aggregate is dropped
-in both branches: fields of aggregrates partially-moved
-in an `if` branch cannot be accessed after the `if`.
-
-Partial moves within loops are not allowed.
-
+move-type projections are disallowed except in reference destinations
+or `set` statements.
 The kind of projection depends on the destination:
 if the destination is a `ref`, `mut`, or `out` params,
 or operator operands,
@@ -104,12 +113,23 @@ then the projections become ref projections,
 the aggregate remains fully constructed after
 the call.
 
+```datalove
+fun foo(ref b: int): int
+  ret b + : int / 0
+end fun
 
-#### Reinitialization
+let a: (int, int) = (1, 2)
+debuglog foo(a.0) // ref-destination projections are ok for move types
+```
 
-Reinitialization of partially-moved aggregates is not allowed:
-assigning to a moved field is not allowed.
-Moved fields may not be used in `out` arguments.
+Nested projections are allowed:
+
+```datalove
+var a: { x: (u32, u32), y: u32 } = { x = (1, 2), y = 3 }
+set a.x.0 = 3
+let b = a.x.0
+```
+
 
 
 
