@@ -26,6 +26,7 @@ pub use datalove_datafun_pkg::{
 
 // Bridge modules.
 pub mod import_demands;
+pub mod incremental;
 pub mod memo_analysis;
 pub mod package_resolve;
 pub mod pipeline;
