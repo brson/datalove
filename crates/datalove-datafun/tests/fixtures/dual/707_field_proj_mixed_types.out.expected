@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = const true\n    v2 = const 99u32\n    v3 = pack Tuple3 {v0, v1, v2}\n    v4 = getfield v3.0\n    v5 = getfield v3.1\n    v6 = getfield v3.2\n    debuglog v4\n    debuglog v5\n    debuglog v6\n    unit_end\nexports:\n    t = v3\n    n = v4\n    b = v5\n    x = v6\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = const true\n    v2 = const 99u32\n    v3 = pack Tuple3 {v0, v1, v2}\n    v4 = getfield v3.0\n    v5 = getfield v3.1\n    v6 = getfield v3.2\n    debuglog v4\n    debuglog v5\n    debuglog v6\n    unit_end\nexports:\n    t = v3\n    n = v4\n    b = v5\n    x = v6\n",
+            ),
+            ir_match: true,
+            interp_output: "@42\n@true\n@99\n",
+            aot_output: "@42\n@true\n@99\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

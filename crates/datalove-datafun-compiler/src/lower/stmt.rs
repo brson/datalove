@@ -53,45 +53,7 @@ pub fn lower_statement_indexed<'db>(
             Ok(())
         }
         Statement::Set(set_stmt) => {
-            let name = match &set_stmt.target {
-                ast::SetTarget::Name(n) => n.text(ctx.db).to_string(),
-                ast::SetTarget::Proj(_) => {
-                    return Err(LowerError::NotImplemented(
-                        "field projection in set statements".to_string()
-                    ));
-                }
-            };
-            let value_id = lower_expression(ctx, set_stmt.value)?;
-            match ctx.lookup_var(&name) {
-                Some(Operand::Slot(slot)) => {
-                    // Drop old value before storing new one.
-                    if let Some(slot_type) = ctx.slot_type(slot).cloned() {
-                        if !slot_type.is_copy() {
-                            ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
-                        }
-                    }
-                    ctx.emit(Instruction::SlotStore {
-                        dest: SlotDest::Local(slot),
-                        value: Operand::Value(value_id),
-                    });
-                    Ok(())
-                }
-                Some(Operand::Param(param)) => {
-                    // Only Mut/Out params can be assigned.
-                    let mode = ctx.param_mode(param);
-                    if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
-                        // ParamStore handles destroying the old value internally.
-                        ctx.emit(Instruction::ParamStore {
-                            param,
-                            value: Operand::Value(value_id),
-                        });
-                        Ok(())
-                    } else {
-                        Err(LowerError::VariableNotMutable(name))
-                    }
-                }
-                _ => Err(LowerError::VariableNotMutable(name)),
-            }
+            lower_set(ctx, set_stmt)
         }
         Statement::Ret(ret_stmt) => {
             let value = if let Some(expr) = ret_stmt.value {
@@ -552,4 +514,109 @@ pub fn lower_loop<'db>(
 
     let _ = body_block; // Silence unused warning.
     Ok(())
+}
+
+/// Lower a set statement.
+fn lower_set<'db>(
+    ctx: &mut LowerCtx<'db>,
+    set_stmt: &ast::StmtSet<'db>,
+) -> Result<(), LowerError> {
+    match &set_stmt.target {
+        ast::SetTarget::Name(name) => {
+            let name_str = name.text(ctx.db).to_string();
+            let value_id = lower_expression(ctx, set_stmt.value)?;
+            match ctx.lookup_var(&name_str) {
+                Some(Operand::Slot(slot)) => {
+                    // Drop old value before storing new one.
+                    if let Some(slot_type) = ctx.slot_type(slot).cloned() {
+                        if !slot_type.is_copy() {
+                            ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
+                        }
+                    }
+                    ctx.emit(Instruction::SlotStore {
+                        dest: SlotDest::Local(slot),
+                        value: Operand::Value(value_id),
+                    });
+                    Ok(())
+                }
+                Some(Operand::Param(param)) => {
+                    // Only Mut/Out params can be assigned.
+                    let mode = ctx.param_mode(param);
+                    if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
+                        // ParamStore handles destroying the old value internally.
+                        ctx.emit(Instruction::ParamStore {
+                            param,
+                            value: Operand::Value(value_id),
+                        });
+                        Ok(())
+                    } else {
+                        Err(LowerError::VariableNotMutable(name_str))
+                    }
+                }
+                _ => Err(LowerError::VariableNotMutable(name_str)),
+            }
+        }
+        ast::SetTarget::Proj(proj) => {
+            // Walk the projection chain to find root and collect field path.
+            let (root_name, field_path) = collect_field_path(ctx.db, proj)?;
+            let root_name_str = root_name.text(ctx.db).to_string();
+
+            // Lower the value expression.
+            let value_id = lower_expression(ctx, set_stmt.value)?;
+
+            // Look up the root slot.
+            match ctx.lookup_var(&root_name_str) {
+                Some(Operand::Slot(slot)) => {
+                    // Emit SetField instruction.
+                    ctx.emit(Instruction::SetField {
+                        slot: SlotDest::Local(slot),
+                        field_path,
+                        value: Operand::Value(value_id),
+                    });
+                    Ok(())
+                }
+                Some(Operand::Param(_)) => {
+                    // TODO: Support SetField on mut params.
+                    Err(LowerError::NotImplemented(
+                        "field projection set on mutable parameters".to_string()
+                    ))
+                }
+                _ => Err(LowerError::VariableNotMutable(root_name_str)),
+            }
+        }
+    }
+}
+
+/// Collect the field path from a projection target.
+///
+/// Returns (root_name, field_indices) where field_indices is the chain of
+/// field indices from root to target.
+fn collect_field_path<'db>(
+    db: &'db dyn salsa::Database,
+    proj: &ast::SetTargetProj<'db>,
+) -> Result<(InternedText<'db>, Vec<u32>), LowerError> {
+    // Recursively collect from base.
+    let (root_name, mut path) = match proj.base.as_ref() {
+        ast::SetTarget::Name(name) => (*name, Vec::new()),
+        ast::SetTarget::Proj(base_proj) => collect_field_path(db, base_proj)?,
+    };
+
+    // Add this projection's field index.
+    // For now, only support index selectors. Named selectors need type info
+    // to resolve to indices.
+    match &proj.field {
+        ast::FieldSelector::Index(idx) => {
+            path.push(*idx);
+        }
+        ast::FieldSelector::Name(_name) => {
+            // Named field projections in set statements require type information
+            // to resolve to field indices. For now, return an error.
+            // TODO: Pass type context through to resolve named fields.
+            return Err(LowerError::NotImplemented(
+                "named field projection in set statements (need type resolution)".to_string()
+            ));
+        }
+    }
+
+    Ok((root_name, path))
 }

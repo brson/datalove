@@ -1149,6 +1149,82 @@ impl IrInterpreter {
                 // Source is borrowed (read), not consumed.
             }
             Instruction::Nop => {}
+            Instruction::GetField { dest, src, field_index } => {
+                let src_val = self.read_operand(src, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest)?;
+                let tag = unsafe { (*src_val.tydesc).type_tag };
+
+                match tag {
+                    rtdt::TyTag::Tuple => {
+                        let tuple_info = unsafe { (*src_val.tydesc).type_info.tuple };
+                        let field_info = unsafe { &*tuple_info.fields.add(*field_index as usize) };
+                        let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
+                        let size = unsafe { (*field_info.tydesc).size as usize };
+                        unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, size); }
+                        frame.mark_value_initialized(*dest);
+                    }
+                    rtdt::TyTag::Struct => {
+                        let struct_info = unsafe { (*src_val.tydesc).type_info.struct_ };
+                        let field_info = unsafe { &*struct_info.fields.add(*field_index as usize) };
+                        let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
+                        let size = unsafe { (*field_info.tydesc).size as usize };
+                        unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, size); }
+                        frame.mark_value_initialized(*dest);
+                    }
+                    _ => return Err(InterpError::TypeMismatch(
+                        format!("GetField requires tuple or struct type, got {:?}", tag)
+                    )),
+                }
+            }
+            Instruction::SetField { slot, field_path, value } => {
+                let value_val = self.read_operand(value, frame, frames)?;
+
+                // Get the slot's base pointer and tydesc.
+                let slot_info = match slot {
+                    SlotDest::Local(id) => frame.slot_dest(*id)?,
+                    SlotDest::External { unit, slot: ext_slot } => {
+                        return Err(InterpError::RuntimeError(format!(
+                            "SetField on external slot unit={} slot={:?} not yet supported",
+                            unit, ext_slot
+                        )));
+                    }
+                };
+
+                // Navigate field path to find target field.
+                let mut current_ptr = slot_info.ptr;
+                let mut current_tydesc = slot_info.tydesc;
+
+                for &field_idx in field_path.iter() {
+                    let tag = unsafe { (*current_tydesc).type_tag };
+                    match tag {
+                        rtdt::TyTag::Tuple => {
+                            let tuple_info = unsafe { (*current_tydesc).type_info.tuple };
+                            let field_info = unsafe { &*tuple_info.fields.add(field_idx as usize) };
+                            current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
+                            current_tydesc = field_info.tydesc;
+                        }
+                        rtdt::TyTag::Struct => {
+                            let struct_info = unsafe { (*current_tydesc).type_info.struct_ };
+                            let field_info = unsafe { &*struct_info.fields.add(field_idx as usize) };
+                            current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
+                            current_tydesc = field_info.tydesc;
+                        }
+                        _ => return Err(InterpError::TypeMismatch(
+                            format!("SetField path element requires tuple or struct type, got {:?}", tag)
+                        )),
+                    }
+                }
+
+                // Copy value to target field.
+                let size = unsafe { (*current_tydesc).size as usize };
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        value_val.ptr,
+                        current_ptr,
+                        size,
+                    );
+                }
+            }
         }
         Ok(())
     }

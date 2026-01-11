@@ -173,11 +173,17 @@ pub fn check_statement<'db>(
                         }
                     }
                 }
-                SetTarget::Proj(_proj) => {
-                    // TODO: Implement field projection set target typechecking.
-                    ctx.add_error(TypeError::DatalitError(
-                        "field projection in set statements not yet implemented".to_string()
-                    ));
+                SetTarget::Proj(proj) => {
+                    // Typecheck projection target.
+                    match typecheck_set_target_proj(ctx, proj) {
+                        Ok(expected_type) => {
+                            // Check that value matches the field's type.
+                            if let Err(e) = check_expr(ctx, value, expected_type) {
+                                ctx.add_error(e);
+                            }
+                        }
+                        Err(e) => ctx.add_error(e),
+                    }
                 }
             }
         }
@@ -454,5 +460,96 @@ pub fn check_statement<'db>(
         Statement::ParseError(_) => {
             // Skip parse errors.
         }
+    }
+}
+
+/// Typecheck a projection target in a set statement.
+///
+/// Returns the expected type of the final field being set.
+fn typecheck_set_target_proj<'db>(
+    ctx: &mut TypeContext<'db>,
+    proj: &SetTargetProj<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+
+    // First, resolve the base to get the starting type.
+    let base_ty = typecheck_set_target(ctx, &proj.base)?;
+
+    // Base must be a datalit type (tuple or struct).
+    let base_datalit_ty = match base_ty.ty(db) {
+        Type::Datalit(dt) => dt,
+        _ => {
+            return Err(TypeError::ProjectionOnNonAggregate {
+                ty: type_to_string(db, base_ty.ty(db)),
+            });
+        }
+    };
+
+    // Extract field type based on selector.
+    match &proj.field {
+        FieldSelector::Index(idx) => {
+            // Index projection: base must be tuple.
+            match base_datalit_ty {
+                datalit::tycheck::Type::AnonTuple(tuple) => {
+                    let idx_usize = *idx as usize;
+                    if idx_usize >= tuple.fields.len() {
+                        return Err(TypeError::FieldIndexOutOfBounds {
+                            index: *idx,
+                            tuple_size: tuple.fields.len(),
+                        });
+                    }
+                    let field_ty = &tuple.fields[idx_usize];
+                    let heap = field_ty.heap(db);
+                    let ty = Type::Datalit(field_ty.ty(db).clone());
+                    Ok(TypeAndHeap::new(db, heap, ty))
+                }
+                _ => {
+                    Err(TypeError::ProjectionOnNonAggregate {
+                        ty: type_to_string(db, base_ty.ty(db)),
+                    })
+                }
+            }
+        }
+        FieldSelector::Name(name) => {
+            // Named projection: base must be struct.
+            match base_datalit_ty {
+                datalit::tycheck::Type::AnonStruct(struct_ty) => {
+                    let name_str = name.text(db);
+                    for field in &struct_ty.fields {
+                        if field.name.text(db) == name_str {
+                            let heap = field.ty.heap(db);
+                            let ty = Type::Datalit(field.ty.ty(db).clone());
+                            return Ok(TypeAndHeap::new(db, heap, ty));
+                        }
+                    }
+                    Err(TypeError::FieldNotFound {
+                        field_name: name_str.to_string(),
+                        ty: type_to_string(db, base_ty.ty(db)),
+                    })
+                }
+                _ => {
+                    Err(TypeError::ProjectionOnNonAggregate {
+                        ty: type_to_string(db, base_ty.ty(db)),
+                    })
+                }
+            }
+        }
+    }
+}
+
+/// Typecheck a set target, returning its type.
+fn typecheck_set_target<'db>(
+    ctx: &mut TypeContext<'db>,
+    target: &SetTarget<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+
+    match target {
+        SetTarget::Name(name) => {
+            ctx.lookup_variable(*name).ok_or_else(|| {
+                TypeError::DatalitError(format!("undefined variable: {}", name.text(db)))
+            })
+        }
+        SetTarget::Proj(proj) => typecheck_set_target_proj(ctx, proj),
     }
 }

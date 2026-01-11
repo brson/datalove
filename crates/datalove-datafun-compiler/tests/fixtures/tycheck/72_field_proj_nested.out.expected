@@ -1,0 +1,20 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "nested",
+      "type": "(@(@u32, @u32), @(@u32, @u32))"
+    },
+    {
+      "kind": "variable",
+      "name": "inner",
+      "type": "(@u32, @u32)"
+    },
+    {
+      "kind": "variable",
+      "name": "elem",
+      "type": "u32"
+    }
+  ]
+}

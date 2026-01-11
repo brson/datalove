@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 30u32\n    v1 = const 5u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = getfield v2.0\n    v4 = getfield v2.1\n    debuglog v3\n    debuglog v4\n    unit_end\nexports:\n    s = v2\n    a = v3\n    c = v4\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 30u32\n    v1 = const 5u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = getfield v2.0\n    v4 = getfield v2.1\n    debuglog v3\n    debuglog v4\n    unit_end\nexports:\n    s = v2\n    a = v3\n    c = v4\n",
+            ),
+            ir_match: true,
+            interp_output: "@30\n@5\n",
+            aot_output: "@30\n@5\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

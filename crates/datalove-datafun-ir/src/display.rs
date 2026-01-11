@@ -274,6 +274,9 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, ") = unpack {}", src)
             }
+            Instruction::GetField { dest, src, field_index } => {
+                write!(f, "{} = getfield {}.{}", dest, src, field_index)
+            }
             Instruction::WrapSome { dest, inner } => {
                 write!(f, "{} = some {}", dest, inner)
             }
@@ -354,6 +357,13 @@ impl fmt::Display for Instruction {
             }
             Instruction::SlotStore { dest, value } => {
                 write!(f, "store {}, {}", dest, value)
+            }
+            Instruction::SetField { slot, field_path, value } => {
+                write!(f, "setfield {}", slot)?;
+                for idx in field_path {
+                    write!(f, ".{}", idx)?;
+                }
+                write!(f, ", {}", value)
             }
             Instruction::ParamStore { param, value } => {
                 write!(f, "store {}, {}", param, value)

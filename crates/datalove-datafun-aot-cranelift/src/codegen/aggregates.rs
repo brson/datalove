@@ -178,4 +178,172 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         Ok(())
     }
+
+    /// Compile a get_field instruction (extract single field from tuple/struct).
+    pub(super) fn compile_get_field(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        src: &Operand,
+        field_index: u32,
+    ) -> Result<(), AotError> {
+        let src_ty = self.get_operand_type(src)?;
+        let repr = types::ir_type_to_cranelift(&src_ty);
+
+        match repr {
+            CraneliftRepr::Scalar(_) => {
+                // Single-element tuple that fits in a register.
+                if field_index == 0 {
+                    let val = self.get_operand_value(builder, src)?;
+                    self.values.insert(dest, val);
+                } else {
+                    return Err(AotError::Unsupported(
+                        format!("scalar get_field with field_index {} (max 0)", field_index)
+                    ));
+                }
+            }
+            CraneliftRepr::Aggregate(_) => {
+                // Source is a pointer to aggregate; load the field.
+                let base = self.get_operand_value(builder, src)?;
+
+                let field_types: Vec<_> = match &src_ty {
+                    IrType::Tuple(tys) => tys.clone(),
+                    IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                    _ => {
+                        return Err(AotError::Unsupported(format!(
+                            "get_field from non-tuple/struct: {:?}",
+                            src_ty
+                        )));
+                    }
+                };
+
+                if field_index as usize >= field_types.len() {
+                    return Err(AotError::Codegen(format!(
+                        "field index {} out of bounds for type with {} fields",
+                        field_index,
+                        field_types.len()
+                    )));
+                }
+
+                let offsets = types::compute_tuple_field_offsets(&field_types);
+                let field_ty = &field_types[field_index as usize];
+                let field_repr = types::ir_type_to_cranelift(field_ty);
+
+                match field_repr {
+                    CraneliftRepr::Scalar(field_cl_ty) => {
+                        let addr = builder.ins().iadd_imm(base, offsets[field_index as usize] as i64);
+                        let val = builder.ins().load(field_cl_ty, MemFlags::new(), addr, 0);
+                        self.values.insert(dest, val);
+                    }
+                    CraneliftRepr::Aggregate(_) => {
+                        // Return pointer to field.
+                        let addr = builder.ins().iadd_imm(base, offsets[field_index as usize] as i64);
+                        self.values.insert(dest, addr);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Compile a set_field instruction (set field in slot).
+    pub(super) fn compile_set_field(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        slot: &datalove_datafun_ir::SlotDest,
+        field_path: &[u32],
+        value: &Operand,
+    ) -> Result<(), AotError> {
+        use datalove_datafun_ir::SlotDest;
+
+        // Get base address of the slot.
+        let base = match slot {
+            SlotDest::Local(slot_id) => {
+                let frame_slot = self.frame_slot.ok_or_else(|| {
+                    AotError::Codegen("no frame slot for set_field".into())
+                })?;
+                let slot_offset = self.layout.slot_offset(slot_id.0);
+                builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32)
+            }
+            SlotDest::External { unit: _, slot: _ } => {
+                return Err(AotError::Unsupported(
+                    "set_field on external slot".into()
+                ));
+            }
+        };
+
+        // Get slot type.
+        let slot_ty = match slot {
+            SlotDest::Local(slot_id) => {
+                self.func.slot_types.get(slot_id.0 as usize)
+                    .cloned()
+                    .ok_or_else(|| AotError::Codegen(format!("slot {:?} type not found", slot_id)))?
+            }
+            SlotDest::External { .. } => {
+                return Err(AotError::Unsupported("external slot".into()));
+            }
+        };
+
+        // Navigate field path to find target.
+        let mut current_addr = base;
+        let mut current_ty = slot_ty;
+
+        for &field_idx in field_path.iter() {
+            let field_types: Vec<_> = match &current_ty {
+                IrType::Tuple(tys) => tys.clone(),
+                IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                _ => {
+                    return Err(AotError::Codegen(format!(
+                        "set_field path through non-aggregate type: {:?}",
+                        current_ty
+                    )));
+                }
+            };
+
+            if field_idx as usize >= field_types.len() {
+                return Err(AotError::Codegen(format!(
+                    "field index {} out of bounds",
+                    field_idx
+                )));
+            }
+
+            let offsets = types::compute_tuple_field_offsets(&field_types);
+            current_addr = builder.ins().iadd_imm(current_addr, offsets[field_idx as usize] as i64);
+            current_ty = field_types[field_idx as usize].clone();
+        }
+
+        // Store value at target address.
+        let val = self.get_operand_value(builder, value)?;
+        let field_repr = types::ir_type_to_cranelift(&current_ty);
+
+        match field_repr {
+            CraneliftRepr::Scalar(_) => {
+                builder.ins().store(MemFlags::new(), val, current_addr, 0);
+            }
+            CraneliftRepr::Aggregate(_) => {
+                // Copy aggregate bytes from source to destination.
+                let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
+                    AotError::Codegen(format!(
+                        "TyDesc not found for type {:?}",
+                        current_ty
+                    ))
+                })?;
+                let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+                let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+                // Call move_value runtime function.
+                let move_func_id = self.runtime.as_ref()
+                    .ok_or_else(|| AotError::Codegen("SetField aggregate requires runtime imports".into()))?
+                    .move_value;
+                let rt_handle = self.rt_handle_param.ok_or_else(|| {
+                    AotError::Codegen("SetField aggregate requires runtime handle parameter".into())
+                })?;
+                let move_ref = self.module.declare_func_in_func(move_func_id, builder.func);
+                builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, current_addr]);
+            }
+        }
+
+        Ok(())
+    }
 }

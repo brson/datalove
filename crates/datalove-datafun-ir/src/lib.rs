@@ -597,6 +597,13 @@ pub enum Instruction {
     /// Unpack struct/tuple into fields.
     Unpack { dests: Vec<ValueId>, src: Operand },
 
+    /// Get a single field from a struct/tuple.
+    GetField {
+        dest: ValueId,
+        src: Operand,
+        field_index: u32,
+    },
+
     /// Wrap value in Some.
     WrapSome { dest: ValueId, inner: Operand },
 
@@ -670,6 +677,16 @@ pub enum Instruction {
 
     /// Store value to mutable slot.
     SlotStore { dest: SlotDest, value: Operand },
+
+    /// Store value to a field within a mutable slot.
+    ///
+    /// field_path is the chain of field indices from the slot root
+    /// to the target field: `set a.x.0.y = v` becomes field_path [x_idx, 0, y_idx].
+    SetField {
+        slot: SlotDest,
+        field_path: Vec<u32>,
+        value: Operand,
+    },
 
     /// Store value to mutable parameter (writes through to caller's data).
     ParamStore { param: ParamId, value: Operand },

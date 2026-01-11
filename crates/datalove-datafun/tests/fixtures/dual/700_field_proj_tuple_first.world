@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+let t = @(@1, @2)
+let x = t.0
+debuglog x

@@ -514,6 +514,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::Unpack { dests, src } => {
                 self.compile_unpack(builder, dests, src)?;
             }
+            Instruction::GetField { dest, src, field_index } => {
+                self.compile_get_field(builder, *dest, src, *field_index)?;
+            }
+            Instruction::SetField { slot, field_path, value } => {
+                self.compile_set_field(builder, slot, field_path, value)?;
+            }
             Instruction::Nop => {}
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;

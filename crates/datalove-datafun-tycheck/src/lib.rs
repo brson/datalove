@@ -72,6 +72,12 @@ pub enum TypeError {
     VariantNotFound(String),
     BreakOutsideLoop,
     ContinueOutsideLoop,
+    /// Field index out of bounds for tuple.
+    FieldIndexOutOfBounds { index: u32, tuple_size: usize },
+    /// Named field not found in struct.
+    FieldNotFound { field_name: String, ty: String },
+    /// Projection on non-aggregate type.
+    ProjectionOnNonAggregate { ty: String },
 }
 
 impl From<datalove_datalit::tycheck::TypeError> for TypeError {

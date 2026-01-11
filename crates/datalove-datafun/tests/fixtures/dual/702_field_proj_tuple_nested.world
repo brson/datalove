@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+let t = @(@(@1, @2), @(@3, @4))
+let elem00 = t.0.0
+let elem01 = t.0.1
+let elem10 = t.1.0
+let elem11 = t.1.1
+debuglog elem00
+debuglog elem01
+debuglog elem10
+debuglog elem11

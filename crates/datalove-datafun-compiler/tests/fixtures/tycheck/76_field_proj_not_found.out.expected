@@ -1,0 +1,16 @@
+{
+  "errors": [
+    {
+      "field_name": "age",
+      "kind": "FieldNotFound",
+      "type": "{name: @string}"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "s",
+      "type": "{name: @string}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "errors": [
+    {
+      "kind": "ProjectionOnNonAggregate",
+      "type": "u32"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "x",
+      "type": "u32"
+    }
+  ]
+}

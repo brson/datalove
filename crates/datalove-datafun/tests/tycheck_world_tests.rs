@@ -143,6 +143,26 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "kind": "ContinueOutsideLoop"
             })
         }
+        TypeError::FieldIndexOutOfBounds { index, tuple_size } => {
+            json!({
+                "kind": "FieldIndexOutOfBounds",
+                "index": index,
+                "tuple_size": tuple_size
+            })
+        }
+        TypeError::FieldNotFound { field_name, ty } => {
+            json!({
+                "kind": "FieldNotFound",
+                "field_name": field_name,
+                "type": ty
+            })
+        }
+        TypeError::ProjectionOnNonAggregate { ty } => {
+            json!({
+                "kind": "ProjectionOnNonAggregate",
+                "type": ty
+            })
+        }
     }
 }
 

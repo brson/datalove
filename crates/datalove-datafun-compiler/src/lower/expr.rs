@@ -195,11 +195,8 @@ pub fn lower_expression<'db>(
         ExprFunKind::TryResult(try_expr) => {
             lower_try_result(ctx, expr, try_expr)
         }
-        ExprFunKind::FieldProj(_) => {
-            // TODO: Implement field projection lowering.
-            Err(LowerError::NotImplemented(
-                "field projections".to_string()
-            ))
+        ExprFunKind::FieldProj(proj) => {
+            lower_field_proj(ctx, expr, proj)
         }
         ExprFunKind::Tuple(tuple) => {
             let elements: Result<Vec<_>, _> = tuple.elements
@@ -908,6 +905,64 @@ fn lower_try_result<'db>(
     // Continue block: ok_dest has the unwrapped Ok value.
     ctx.start_block(continue_block);
     Ok(ok_dest)
+}
+
+/// Lower field projection expression.
+fn lower_field_proj<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+    proj: ast::ExprFieldProj<'db>,
+) -> Result<ValueId, LowerError> {
+    // Lower the base expression.
+    let base_id = lower_expression(ctx, proj.base)?;
+    let base_type = ctx.expr_type(proj.base);
+
+    // Get the field index.
+    let field_index = resolve_field_index(&proj.field, &base_type, ctx.db)?;
+
+    // Get the result type.
+    let result_type = ctx.expr_type(expr);
+    let dest = ctx.fresh_value(result_type);
+
+    ctx.emit(Instruction::GetField {
+        dest,
+        src: Operand::Value(base_id),
+        field_index,
+    });
+    Ok(dest)
+}
+
+/// Resolve a field selector to a field index.
+fn resolve_field_index<'db>(
+    selector: &ast::FieldSelector<'db>,
+    base_type: &IrType,
+    db: &'db dyn salsa::Database,
+) -> Result<u32, LowerError> {
+    match selector {
+        ast::FieldSelector::Index(idx) => Ok(*idx),
+        ast::FieldSelector::Name(name) => {
+            // For struct types, find the field by name.
+            // Struct fields are sorted by name.
+            let name_str = name.text(db);
+            match base_type {
+                IrType::Struct(fields) => {
+                    for (i, (field_name, _)) in fields.iter().enumerate() {
+                        if field_name == name_str {
+                            return Ok(i as u32);
+                        }
+                    }
+                    Err(LowerError::InvalidLiteral(format!(
+                        "field '{}' not found in struct",
+                        name_str
+                    )))
+                }
+                _ => Err(LowerError::InvalidLiteral(format!(
+                    "named field projection on non-struct type: {:?}",
+                    base_type
+                ))),
+            }
+        }
+    }
 }
 
 /// Check if a type is a fixed-width integer (u8, u16, u32, u64, i8, i16, i32, i64).

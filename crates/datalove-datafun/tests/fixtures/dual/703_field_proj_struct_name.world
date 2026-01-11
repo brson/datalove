@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+let s = @{age = @30, count = @5}
+let a = s.age
+let c = s.count
+debuglog a
+debuglog c

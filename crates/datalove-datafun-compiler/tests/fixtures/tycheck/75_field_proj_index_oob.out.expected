@@ -1,0 +1,16 @@
+{
+  "errors": [
+    {
+      "index": 5,
+      "kind": "FieldIndexOutOfBounds",
+      "tuple_size": 2
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "t",
+      "type": "(@u32, @u32)"
+    }
+  ]
+}

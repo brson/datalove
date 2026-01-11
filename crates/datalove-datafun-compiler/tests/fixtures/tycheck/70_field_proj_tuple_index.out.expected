@@ -1,0 +1,20 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "t",
+      "type": "(@u32, @string)"
+    },
+    {
+      "kind": "variable",
+      "name": "x",
+      "type": "u32"
+    },
+    {
+      "kind": "variable",
+      "name": "y",
+      "type": "string"
+    }
+  ]
+}

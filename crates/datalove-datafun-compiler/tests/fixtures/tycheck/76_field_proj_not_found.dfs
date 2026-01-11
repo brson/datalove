@@ -1,0 +1,2 @@
+let s = @{name = @"Alice"}
+let x = s.age
