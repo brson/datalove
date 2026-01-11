@@ -1159,16 +1159,22 @@ impl IrInterpreter {
                         let tuple_info = unsafe { (*src_val.tydesc).type_info.tuple };
                         let field_info = unsafe { &*tuple_info.fields.add(*field_index as usize) };
                         let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
-                        let size = unsafe { (*field_info.tydesc).size as usize };
-                        unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, size); }
+                        let field_size = unsafe { (*field_info.tydesc).size as usize };
+                        // Copy the field value. Only copy types are allowed for field projections.
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, field_size);
+                        }
                         frame.mark_value_initialized(*dest);
                     }
                     rtdt::TyTag::Struct => {
                         let struct_info = unsafe { (*src_val.tydesc).type_info.struct_ };
                         let field_info = unsafe { &*struct_info.fields.add(*field_index as usize) };
                         let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
-                        let size = unsafe { (*field_info.tydesc).size as usize };
-                        unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, size); }
+                        let field_size = unsafe { (*field_info.tydesc).size as usize };
+                        // Copy the field value. Only copy types are allowed for field projections.
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, field_size);
+                        }
                         frame.mark_value_initialized(*dest);
                     }
                     _ => return Err(InterpError::TypeMismatch(

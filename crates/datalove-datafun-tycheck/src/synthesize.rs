@@ -8,7 +8,7 @@ use crate::context::TypeContext;
 use crate::check::{check_expr, check_list_elements, check_set_elements, check_map_entries, check_tensor_shape_and_elements, check_tuple_elements, check_struct_fields, check_enum_variant};
 use crate::types::*;
 
-pub use crate::{Type, TypeAndHeap, TypeError};
+pub use crate::{Type, TypeAndHeap, TypeError, is_copy_type};
 
 /// Synthesize a type for an expression.
 pub fn synthesize_expr<'db>(
@@ -855,6 +855,15 @@ fn synthesize_field_proj<'db>(
                         });
                     }
                     let field_ty = &tuple.fields[idx_usize];
+
+                    // Check that field is a copy type.
+                    // Move-type field projections are not allowed (except in ref context).
+                    if !is_copy_type(db, field_ty.ty(db)) {
+                        return Err(TypeError::NonCopyFieldProjection {
+                            field_ty: datalit::tycheck::type_to_string(db, field_ty.ty(db)),
+                        });
+                    }
+
                     let heap = field_ty.heap(db);
                     let ty = Type::Datalit(field_ty.ty(db).clone());
                     Ok(TypeAndHeap::new(db, heap, ty))
@@ -873,6 +882,14 @@ fn synthesize_field_proj<'db>(
                     let name_str = name.text(db);
                     for field in &struct_ty.fields {
                         if field.name.text(db) == name_str {
+                            // Check that field is a copy type.
+                            // Move-type field projections are not allowed (except in ref context).
+                            if !is_copy_type(db, field.ty.ty(db)) {
+                                return Err(TypeError::NonCopyFieldProjection {
+                                    field_ty: datalit::tycheck::type_to_string(db, field.ty.ty(db)),
+                                });
+                            }
+
                             let heap = field.ty.heap(db);
                             let ty = Type::Datalit(field.ty.ty(db).clone());
                             return Ok(TypeAndHeap::new(db, heap, ty));

@@ -14,6 +14,7 @@ use crate::drop_analysis::{ScriptFunctionAnalyses, analyze_script_statements, An
 use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
 use super::expr::lower_expression;
 use super::func::lower_function_body;
+use super::stmt::collect_field_path;
 use super::LowerError;
 
 /// Format analysis errors into a single error message.
@@ -255,50 +256,78 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Set(set_stmt) => {
-            // Same as function lowering - no export needed for assignment.
-            let name = match &set_stmt.target {
-                ast::SetTarget::Name(n) => n.text(ctx.db).to_string(),
-                ast::SetTarget::Proj(_) => {
-                    return Err(LowerError::NotImplemented(
-                        "field projection in set statements".to_string()
-                    ));
-                }
-            };
-            let value_id = lower_expression(ctx, set_stmt.value)?;
-            if let Some(operand) = ctx.lookup_var(&name) {
-                match operand {
-                    Operand::Slot(slot) => {
-                        // Drop old value before storing new one.
-                        if let Some(slot_type) = ctx.slot_type(slot).cloned() {
-                            if !slot_type.is_copy() {
-                                ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
-                            }
-                        }
-                        ctx.emit(Instruction::SlotStore {
-                            dest: SlotDest::Local(slot),
-                            value: Operand::Value(value_id),
-                        });
-                        Ok(())
-                    }
-                    Operand::ExternalSlot { unit, slot } => {
-                        // Drop old value before storing new one.
-                        if let Some(slot_type) = ctx.external_slot_type(&name).cloned() {
-                            if !slot_type.is_copy() {
-                                ctx.emit(Instruction::Drop {
-                                    operand: Operand::ExternalSlot { unit, slot },
+            // No export needed for assignment.
+            match &set_stmt.target {
+                ast::SetTarget::Name(n) => {
+                    let name = n.text(ctx.db).to_string();
+                    let value_id = lower_expression(ctx, set_stmt.value)?;
+                    if let Some(operand) = ctx.lookup_var(&name) {
+                        match operand {
+                            Operand::Slot(slot) => {
+                                // Drop old value before storing new one.
+                                if let Some(slot_type) = ctx.slot_type(slot).cloned() {
+                                    if !slot_type.is_copy() {
+                                        ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
+                                    }
+                                }
+                                ctx.emit(Instruction::SlotStore {
+                                    dest: SlotDest::Local(slot),
+                                    value: Operand::Value(value_id),
                                 });
+                                Ok(())
                             }
+                            Operand::ExternalSlot { unit, slot } => {
+                                // Drop old value before storing new one.
+                                if let Some(slot_type) = ctx.external_slot_type(&name).cloned() {
+                                    if !slot_type.is_copy() {
+                                        ctx.emit(Instruction::Drop {
+                                            operand: Operand::ExternalSlot { unit, slot },
+                                        });
+                                    }
+                                }
+                                ctx.emit(Instruction::SlotStore {
+                                    dest: SlotDest::External { unit, slot },
+                                    value: Operand::Value(value_id),
+                                });
+                                Ok(())
+                            }
+                            _ => Err(LowerError::VariableNotMutable(name)),
                         }
-                        ctx.emit(Instruction::SlotStore {
-                            dest: SlotDest::External { unit, slot },
-                            value: Operand::Value(value_id),
-                        });
-                        Ok(())
+                    } else {
+                        Err(LowerError::VariableNotFound(name))
                     }
-                    _ => Err(LowerError::VariableNotMutable(name)),
                 }
-            } else {
-                Err(LowerError::VariableNotFound(name))
+                ast::SetTarget::Proj(proj) => {
+                    // Walk the projection chain to find root and collect field path.
+                    let (root_name, field_path) = collect_field_path(ctx, proj)?;
+                    let root_name_str = root_name.text(ctx.db).to_string();
+
+                    // Lower the value expression.
+                    let value_id = lower_expression(ctx, set_stmt.value)?;
+
+                    // Look up the root slot.
+                    match ctx.lookup_var(&root_name_str) {
+                        Some(Operand::Slot(slot)) => {
+                            // Emit SetField instruction.
+                            ctx.emit(Instruction::SetField {
+                                slot: SlotDest::Local(slot),
+                                field_path,
+                                value: Operand::Value(value_id),
+                            });
+                            Ok(())
+                        }
+                        Some(Operand::ExternalSlot { unit, slot }) => {
+                            // Emit SetField instruction for external slot.
+                            ctx.emit(Instruction::SetField {
+                                slot: SlotDest::External { unit, slot },
+                                field_path,
+                                value: Operand::Value(value_id),
+                            });
+                            Ok(())
+                        }
+                        _ => Err(LowerError::VariableNotMutable(root_name_str)),
+                    }
+                }
             }
         }
         Statement::Ret(ret_stmt) => {

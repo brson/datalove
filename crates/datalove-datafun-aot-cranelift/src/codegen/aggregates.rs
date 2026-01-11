@@ -235,10 +235,23 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         let val = builder.ins().load(field_cl_ty, MemFlags::new(), addr, 0);
                         self.values.insert(dest, val);
                     }
-                    CraneliftRepr::Aggregate(_) => {
-                        // Return pointer to field.
-                        let addr = builder.ins().iadd_imm(base, offsets[field_index as usize] as i64);
-                        self.values.insert(dest, addr);
+                    CraneliftRepr::Aggregate(layout) => {
+                        // Copy the field into the dest's frame location.
+                        // Only copy types are allowed for field projections.
+                        let src_addr = builder.ins().iadd_imm(base, offsets[field_index as usize] as i64);
+
+                        // Get dest's frame location.
+                        let frame_slot = self.frame_slot.ok_or_else(|| {
+                            AotError::Codegen("GetField aggregate requires frame slot".into())
+                        })?;
+                        let dest_offset = self.layout.value_offset(dest.0);
+                        let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+                        // Emit memcpy for the field.
+                        let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
+                        builder.call_memcpy(self.isa.frontend_config(), dest_addr, src_addr, size);
+
+                        self.values.insert(dest, dest_addr);
                     }
                 }
             }

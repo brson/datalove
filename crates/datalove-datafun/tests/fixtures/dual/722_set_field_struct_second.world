@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+var s = @{x = @10, y = @20}
+set s.y = @88
+debuglog s.y

@@ -4,12 +4,12 @@
     {
       "kind": "variable",
       "name": "s",
-      "type": "{name: @string, age: @u32}"
+      "type": "{id: @u32, age: @u32}"
     },
     {
       "kind": "variable",
-      "name": "n",
-      "type": "string"
+      "name": "i",
+      "type": "u32"
     },
     {
       "kind": "variable",

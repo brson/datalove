@@ -230,6 +230,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "type": ty
             })
         }
+        TypeError::NonCopyFieldProjection { field_ty } => {
+            json!({
+                "kind": "NonCopyFieldProjection",
+                "field_type": field_ty
+            })
+        }
     }
 }
 

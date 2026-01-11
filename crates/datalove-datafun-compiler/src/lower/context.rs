@@ -511,6 +511,18 @@ impl<'db> LowerCtx<'db> {
         self.external_slot_types.get(name)
     }
 
+    /// Get the type for a slot by variable name (checks local and external slots).
+    pub fn slot_type_by_name(&self, name: &str) -> Option<&IrType> {
+        // First check if it's a local slot.
+        if let Some(operand) = self.variables.get(name) {
+            if let Operand::Slot(slot_id) = operand {
+                return self.slot_types.get(slot_id.0 as usize);
+            }
+        }
+        // Then check external slots.
+        self.external_slot_types.get(name)
+    }
+
     /// Set the drop schedule for this context.
     pub fn set_drop_schedule(&mut self, schedule: DropSchedule, bindings: Vec<BindingInfo>) {
         self.drop_schedule = schedule;

@@ -4,7 +4,7 @@
     {
       "kind": "variable",
       "name": "t",
-      "type": "(@u32, @string)"
+      "type": "(@u32, @u32)"
     },
     {
       "kind": "variable",
@@ -14,7 +14,7 @@
     {
       "kind": "variable",
       "name": "y",
-      "type": "string"
+      "type": "u32"
     }
   ]
 }

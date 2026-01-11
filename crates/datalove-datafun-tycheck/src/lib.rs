@@ -78,6 +78,62 @@ pub enum TypeError {
     FieldNotFound { field_name: String, ty: String },
     /// Projection on non-aggregate type.
     ProjectionOnNonAggregate { ty: String },
+    /// Field projection on move-type field (not allowed outside ref context).
+    NonCopyFieldProjection { field_ty: String },
+}
+
+/// Check if a datalit type is a copy type (can be safely copied without cloning).
+///
+/// Copy types are:
+/// - All fixed-size numeric types (bool, u8, i8, u16, i16, u32, i32, u64, i64, f32, f64)
+/// - Tuples/structs where all fields are copy types
+///
+/// Move types (require ownership transfer):
+/// - Int (bigint with heap-allocated limbs)
+/// - String, List, Map, Set, Tensor (heap-allocated collections)
+/// - Option/Result containing move types
+/// - Data, Error
+pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::tycheck::Type<'db>) -> bool {
+    use datalove_datalit::tycheck::Type as DatalitType;
+    match ty {
+        // Fixed-size scalars are copy.
+        DatalitType::Bool
+        | DatalitType::U8 | DatalitType::I8
+        | DatalitType::U16 | DatalitType::I16
+        | DatalitType::U32 | DatalitType::I32
+        | DatalitType::U64 | DatalitType::I64
+        | DatalitType::F32 | DatalitType::F64 => true,
+
+        // Bigint is move (heap-allocated).
+        DatalitType::Int => false,
+
+        // Collections are move (heap-allocated).
+        DatalitType::String
+        | DatalitType::List(_)
+        | DatalitType::Map(_)
+        | DatalitType::Set(_)
+        | DatalitType::Tensor(_) => false,
+
+        // Data and Error are move.
+        DatalitType::Data | DatalitType::Error => false,
+
+        // Aggregates are copy if all fields are copy.
+        DatalitType::AnonTuple(tuple) => {
+            tuple.fields.iter().all(|f| is_copy_type(db, f.ty(db)))
+        }
+        DatalitType::AnonStruct(struct_ty) => {
+            struct_ty.fields.iter().all(|f| is_copy_type(db, f.ty.ty(db)))
+        }
+        DatalitType::AnonEnum(enum_ty) => {
+            enum_ty.variants.iter().all(|v| {
+                v.payload.as_ref().map_or(true, |p| is_copy_type(db, p.ty(db)))
+            })
+        }
+
+        // Option/Result are copy if inner type is copy.
+        DatalitType::Option(opt) => is_copy_type(db, opt.inner_type.ty(db)),
+        DatalitType::Result(res) => is_copy_type(db, res.inner_type.ty(db)),
+    }
 }
 
 impl From<datalove_datalit::tycheck::TypeError> for TypeError {

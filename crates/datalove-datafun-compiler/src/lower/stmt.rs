@@ -558,7 +558,7 @@ fn lower_set<'db>(
         }
         ast::SetTarget::Proj(proj) => {
             // Walk the projection chain to find root and collect field path.
-            let (root_name, field_path) = collect_field_path(ctx.db, proj)?;
+            let (root_name, field_path) = collect_field_path(ctx, proj)?;
             let root_name_str = root_name.text(ctx.db).to_string();
 
             // Lower the value expression.
@@ -587,36 +587,82 @@ fn lower_set<'db>(
     }
 }
 
-/// Collect the field path from a projection target.
+/// Collect the field path from a projection target, resolving named fields to indices.
 ///
 /// Returns (root_name, field_indices) where field_indices is the chain of
 /// field indices from root to target.
-fn collect_field_path<'db>(
-    db: &'db dyn salsa::Database,
+pub(super) fn collect_field_path<'db>(
+    ctx: &LowerCtx<'db>,
     proj: &ast::SetTargetProj<'db>,
 ) -> Result<(InternedText<'db>, Vec<u32>), LowerError> {
-    // Recursively collect from base.
-    let (root_name, mut path) = match proj.base.as_ref() {
-        ast::SetTarget::Name(name) => (*name, Vec::new()),
-        ast::SetTarget::Proj(base_proj) => collect_field_path(db, base_proj)?,
-    };
+    // First, collect all the field selectors from root to leaf.
+    let (root_name, selectors) = collect_selectors(ctx.db, proj);
 
-    // Add this projection's field index.
-    // For now, only support index selectors. Named selectors need type info
-    // to resolve to indices.
-    match &proj.field {
-        ast::FieldSelector::Index(idx) => {
-            path.push(*idx);
-        }
-        ast::FieldSelector::Name(_name) => {
-            // Named field projections in set statements require type information
-            // to resolve to field indices. For now, return an error.
-            // TODO: Pass type context through to resolve named fields.
-            return Err(LowerError::NotImplemented(
-                "named field projection in set statements (need type resolution)".to_string()
-            ));
+    // Look up the root variable's type.
+    let root_name_str = root_name.text(ctx.db).to_string();
+    let root_type = ctx.slot_type_by_name(&root_name_str)
+        .ok_or_else(|| LowerError::VariableNotFound(root_name_str.clone()))?;
+
+    // Now resolve each selector to a field index by walking through the types.
+    let mut path = Vec::new();
+    let mut current_type = root_type.clone();
+
+    for selector in selectors {
+        match selector {
+            ast::FieldSelector::Index(idx) => {
+                // Verify the index is valid and get the field type.
+                match &current_type {
+                    IrType::Tuple(fields) => {
+                        if (idx as usize) >= fields.len() {
+                            return Err(LowerError::InvalidLiteral(
+                                format!("tuple index {} out of bounds (tuple has {} fields)", idx, fields.len())
+                            ));
+                        }
+                        current_type = fields[idx as usize].clone();
+                        path.push(idx);
+                    }
+                    _ => {
+                        return Err(LowerError::InvalidLiteral(
+                            format!("cannot index into non-tuple type: {:?}", current_type)
+                        ));
+                    }
+                }
+            }
+            ast::FieldSelector::Name(name) => {
+                let name_str = name.text(ctx.db);
+                match &current_type {
+                    IrType::Struct(fields) => {
+                        // Find the field by name.
+                        let field_idx = fields.iter()
+                            .position(|(n, _)| n == name_str)
+                            .ok_or_else(|| LowerError::InvalidLiteral(
+                                format!("field '{}' not found in struct", name_str)
+                            ))?;
+                        current_type = fields[field_idx].1.clone();
+                        path.push(field_idx as u32);
+                    }
+                    _ => {
+                        return Err(LowerError::InvalidLiteral(
+                            format!("cannot access field '{}' on non-struct type: {:?}", name_str, current_type)
+                        ));
+                    }
+                }
+            }
         }
     }
 
     Ok((root_name, path))
+}
+
+/// Helper to collect all field selectors from a projection chain.
+fn collect_selectors<'db>(
+    db: &'db dyn salsa::Database,
+    proj: &ast::SetTargetProj<'db>,
+) -> (InternedText<'db>, Vec<ast::FieldSelector<'db>>) {
+    let (root_name, mut selectors) = match proj.base.as_ref() {
+        ast::SetTarget::Name(name) => (*name, Vec::new()),
+        ast::SetTarget::Proj(base_proj) => collect_selectors(db, base_proj),
+    };
+    selectors.push(proj.field.clone());
+    (root_name, selectors)
 }
