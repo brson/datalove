@@ -7,7 +7,7 @@ use datafun::pipeline::{ModuleCompilationPipeline, TypecheckResult, LoweringResu
 
 /// Run a script with the std library loaded from sys/ directory.
 fn analyze_file(path: &Path) -> Result<String, String> {
-    let db = datafun::Database::default();
+    let mut db = datafun::Database::default();
 
     // Read the script file.
     let script_text = std::fs::read_to_string(path)
@@ -30,17 +30,17 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     ).map_err(|e| format!("Failed to load package world: {}", e))?;
 
     // Build pipeline with loaded packages.
-    let mut pipeline = ModuleCompilationPipeline::new(&db);
+    let mut pipeline = ModuleCompilationPipeline::new();
 
     // Add all modules from the loaded package world.
     for (pkg_name, pkg) in &package_world_raw.pkglib_system {
         for (mod_name, pkg_mod) in &pkg.modules {
-            pipeline.add_module("sys", pkg_name, mod_name, &pkg_mod.text);
+            pipeline.add_module(&db, "sys", pkg_name, mod_name, &pkg_mod.text);
         }
     }
 
     // Compile modules.
-    let compiled = pipeline.compile();
+    let compiled = pipeline.compile_fresh(&db);
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {

@@ -38,7 +38,7 @@ pub struct ModulesAnalysis {
 /// 5. Executes the `main` function (with access to all other functions)
 /// 6. Returns the output value
 pub fn analyze_modules_worldfile(
-    db: &dyn salsa::Database,
+    db: &mut dyn salsa::Database,
     parsed: ParsedWorldfile,
 ) -> AnyResult<ModulesAnalysis> {
     // Validate: only module sections allowed.
@@ -61,18 +61,16 @@ pub fn analyze_modules_worldfile(
         }
     }
 
-    // Build pipeline from sections (using consolidated constructor).
-    let pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
+    // Build pipeline from sections.
+    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
 
     // Verify local/test/main module exists.
-    let local_lib = pipeline.pkglib_local().get("test")
-        .ok_or_else(|| anyhow!("missing local/test package"))?;
-    if !local_lib.modules.contains_key("main") {
+    if !pipeline.contains_module("local", "test", "main") {
         bail!("missing local/test/main module");
     }
 
     // Compile modules (typecheck, drop analysis, lower).
-    let mut compiled = pipeline.compile();
+    let (mut compiled, db) = pipeline.compile(db);
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {

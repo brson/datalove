@@ -365,7 +365,7 @@ fn execute_ir_aot(
 fn analyze_worldfile_ir_serial(
     parsed: package_load_worldfile::ParsedWorldfile,
 ) -> IrSerialAnalysis {
-    let db = datafun::Database::default();
+    let mut db = datafun::Database::default();
     let mut results = Vec::new();
 
     // Validate: exactly one scriptunit-fragment.
@@ -447,9 +447,9 @@ fn analyze_worldfile_ir_serial(
         .unwrap();
 
     // Build pipeline and compile.
-    let pipeline =
+    let mut pipeline =
         datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
-    let compiled = pipeline.compile();
+    let compiled = pipeline.compile_fresh(&db);
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {

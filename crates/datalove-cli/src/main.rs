@@ -336,13 +336,13 @@ impl ScriptCommand {
         let db = datafun::Database::default();
 
         // Load sys library unless --no-sys.
-        let mut pipeline = ModuleCompilationPipeline::new(&db);
+        let mut pipeline = ModuleCompilationPipeline::new();
         if !self.no_sys {
-            rmx::futures::executor::block_on(pipeline.load_sys_library_default())?;
+            rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
         }
 
         // Compile modules (typecheck, drop analysis, lower to IR).
-        let compiled = pipeline.compile();
+        let compiled = pipeline.compile_fresh(&db);
 
         // Check for errors using consolidated helper methods.
         if compiled.has_errors() {
@@ -415,13 +415,13 @@ impl AotCompileCommand {
         let db = datafun::Database::default();
 
         // Load sys library unless --no-sys.
-        let mut pipeline = ModuleCompilationPipeline::new(&db);
+        let mut pipeline = ModuleCompilationPipeline::new();
         if !self.no_sys {
-            rmx::futures::executor::block_on(pipeline.load_sys_library_default())?;
+            rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
         }
 
         // Compile modules (typecheck, drop analysis, lower to IR).
-        let compiled = pipeline.compile();
+        let compiled = pipeline.compile_fresh(&db);
 
         // Check for errors.
         if compiled.has_errors() {

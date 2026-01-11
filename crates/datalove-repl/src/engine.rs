@@ -40,8 +40,8 @@ impl ReplHistory {
 impl<'db> Engine<'db> {
     pub fn new(db: &'db dyn datafun::Db) -> AnyResult<Engine<'db>> {
         // Create an empty module pipeline and compile.
-        let pipeline = ModuleCompilationPipeline::new(db);
-        let compiled = pipeline.compile();
+        let mut pipeline = ModuleCompilationPipeline::new();
+        let compiled = pipeline.compile_fresh(db);
 
         // Check for errors.
         if compiled.has_errors() {
@@ -64,8 +64,8 @@ impl<'db> Engine<'db> {
         // Cleanup the current context.
         self.ctx.destroy_all();
         // Create a new context.
-        let pipeline = ModuleCompilationPipeline::new(self.db);
-        let compiled = pipeline.compile();
+        let mut pipeline = ModuleCompilationPipeline::new();
+        let compiled = pipeline.compile_fresh(self.db);
         self.ctx = compiled.script_context(self.db, datalove_datafun::DebugOutputMode::Disabled);
     }
 

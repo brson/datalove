@@ -30,8 +30,8 @@ fn run_with_interpreter(
 ) -> Vec<UnitOutput> {
     let mut results = Vec::new();
 
-    let pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
-    let compiled = pipeline.compile();
+    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
+    let compiled = pipeline.compile_fresh(db);
 
     if compiled.resolution_error.is_some() {
         results.push(UnitOutput {
@@ -87,8 +87,8 @@ fn run_with_jit(
 ) -> Vec<UnitOutput> {
     let mut results = Vec::new();
 
-    let pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
-    let compiled = pipeline.compile();
+    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
+    let compiled = pipeline.compile_fresh(db);
 
     if compiled.resolution_error.is_some() {
         results.push(UnitOutput {
@@ -146,8 +146,8 @@ fn run_with_chaos(
 ) -> Vec<UnitOutput> {
     let mut results = Vec::new();
 
-    let pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
-    let compiled = pipeline.compile();
+    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
+    let compiled = pipeline.compile_fresh(db);
 
     if compiled.resolution_error.is_some() {
         results.push(UnitOutput {
@@ -215,7 +215,7 @@ fn test_file(path: &Path) -> Result<(), String> {
 
     // Run in spawned thread to work around Cranelift JIT + PIE issues.
     std::thread::spawn(move || {
-        let db = datafun::Database::default();
+        let mut db = datafun::Database::default();
 
         let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
             .map_err(|e| format!("Failed to parse worldfile: {}", e))?;

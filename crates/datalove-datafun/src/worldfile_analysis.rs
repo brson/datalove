@@ -51,16 +51,16 @@ pub struct SectionResult {
 /// Script units share a `ScriptLowerContext` (for cross-unit name resolution during lowering)
 /// and a `ScriptEnvironment` (for cross-unit value/function access during execution).
 pub fn analyze_worldfile(
-    db: &dyn salsa::Database,
+    db: &mut dyn salsa::Database,
     parsed: ParsedWorldfile,
 ) -> AnyResult<Analysis> {
     let mut results = Vec::new();
 
-    // Build pipeline from sections (using consolidated constructor).
-    let pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
+    // Build pipeline from sections.
+    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
 
     // Compile modules (typecheck, drop analysis, lower).
-    let compiled = pipeline.compile();
+    let (compiled, db) = pipeline.compile(db);
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {

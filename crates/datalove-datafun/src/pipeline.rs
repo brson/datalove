@@ -25,7 +25,6 @@ use serde::{Serialize, Deserialize};
 use rmx::std::collections::{BTreeMap, HashMap};
 
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
-use datalove_datafun_pkg::package_load::{Package, PackageModule};
 use datalove_datafun_ir::{IrModuleId, FuncId, IrType, IrScriptUnit};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_compiler::drop_analysis;
@@ -41,6 +40,8 @@ use datalove_datafun_compiler::module_graph::{
 use datalove_datafun_interp::{CallDispatcher, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;
 use drop_analysis::FunctionDropAnalysis;
+
+use crate::incremental::IncrementalModuleWorld;
 
 // ============================================================================
 // Result types
@@ -71,64 +72,56 @@ pub enum LoweringResult {
 
 /// Pipeline for compiling modules to IR.
 ///
+/// Uses `IncrementalModuleWorld` for stable salsa identity management.
+///
 /// Runs three compilation phases:
 /// 1. Build module graph, resolve imports, typecheck
 /// 2. Run drop analysis on all functions
 /// 3. Lower all functions to IR
-pub struct ModuleCompilationPipeline<'db> {
-    db: &'db dyn salsa::Database,
-    pkglib_system: BTreeMap<String, Package>,
-    pkglib_local: BTreeMap<String, Package>,
+pub struct ModuleCompilationPipeline {
+    world: IncrementalModuleWorld,
 }
 
-impl<'db> ModuleCompilationPipeline<'db> {
+impl ModuleCompilationPipeline {
     /// Create a new pipeline.
-    pub fn new(db: &'db dyn salsa::Database) -> Self {
+    pub fn new() -> Self {
         Self {
-            db,
-            pkglib_system: BTreeMap::new(),
-            pkglib_local: BTreeMap::new(),
+            world: IncrementalModuleWorld::new(),
         }
     }
 
     /// Create from worldfile sections.
     pub fn from_sections(
-        db: &'db dyn salsa::Database,
+        db: &dyn salsa::Database,
         sections: &[WorldfileSection],
     ) -> Self {
-        let mut pipeline = Self::new(db);
-        pipeline.add_modules_from_sections(sections);
+        let mut pipeline = Self::new();
+        pipeline.add_modules_from_sections(db, sections);
         pipeline
     }
 
     /// Add a module to the pipeline.
-    pub fn add_module(&mut self, library: &str, package: &str, module: &str, source: &str) {
-        let library_map = match library {
-            "sys" => &mut self.pkglib_system,
-            "local" => &mut self.pkglib_local,
-            _ => return,
-        };
-
-        let pkg = library_map.entry(package.to_string())
-            .or_insert_with(|| Package {
-                name: package.to_string(),
-                modules: BTreeMap::new(),
-            });
-
-        let module_path = format!("{}/{}/{}", library, package, module);
-        let pkg_module = PackageModule {
-            name: module.to_string(),
-            path: module_path.into(),
-            text: source.to_string(),
-        };
-        pkg.modules.insert(module.to_string(), pkg_module);
+    pub fn add_module(
+        &mut self,
+        db: &dyn salsa::Database,
+        library: &str,
+        package: &str,
+        module: &str,
+        source: &str,
+    ) {
+        let path = format!("{}/{}/{}", library, package, module);
+        self.world.add_module(db, &path, source);
     }
 
     /// Add modules from worldfile sections.
-    pub fn add_modules_from_sections(&mut self, sections: &[WorldfileSection]) {
+    pub fn add_modules_from_sections(
+        &mut self,
+        db: &dyn salsa::Database,
+        sections: &[WorldfileSection],
+    ) {
         for section in sections {
             if let WorldfileSection::Module { library, package, module, source } = section {
-                self.add_module(library, package, module, source);
+                self.add_module(db, library, package, module, source);
             }
         }
     }
@@ -136,6 +129,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
     /// Load sys library from directory.
     pub async fn load_sys_library_from_dir(
         &mut self,
+        db: &dyn salsa::Database,
         sys_dir: std::path::PathBuf,
     ) -> AnyResult<()> {
         use datalove_datafun_pkg::package_load;
@@ -149,7 +143,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
 
         for (pkg_name, pkg) in &package_world_raw.pkglib_system {
             for (mod_name, pkg_module) in &pkg.modules {
-                self.add_module("sys", pkg_name, mod_name, &pkg_module.text);
+                self.add_module(db, "sys", pkg_name, mod_name, &pkg_module.text);
             }
         }
 
@@ -157,7 +151,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
     }
 
     /// Load sys library from default location.
-    pub async fn load_sys_library_default(&mut self) -> AnyResult<()> {
+    pub async fn load_sys_library_default(&mut self, db: &dyn salsa::Database) -> AnyResult<()> {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let manifest_path = std::path::PathBuf::from(manifest_dir);
         let parent = manifest_path.parent()
@@ -166,57 +160,82 @@ impl<'db> ModuleCompilationPipeline<'db> {
             .ok_or_else(|| anyhow!("Failed to get grandparent directory"))?;
         let sys_dir = grandparent.join("sys");
 
-        self.load_sys_library_from_dir(sys_dir).await
+        self.load_sys_library_from_dir(db, sys_dir).await
     }
 
-    /// Get local packages (for validation).
-    pub fn pkglib_local(&self) -> &BTreeMap<String, Package> {
-        &self.pkglib_local
+    /// Check if a module exists.
+    pub fn contains_module(&self, library: &str, package: &str, module: &str) -> bool {
+        let path = format!("{}/{}/{}", library, package, module);
+        self.world.contains(&path)
     }
 
-    /// Compile all modules.
-    pub fn compile(self) -> CompiledModules<'db> {
-        // Phase 1: Build module graph and typecheck.
-        let raw_package_world = datalove_datafun_pkg::package_load::PackageWorld {
-            pkglib_system: self.pkglib_system,
-            pkglib_local: self.pkglib_local,
-        };
-        let package_world = datalove_datafun_pkg::import_from_loader(self.db, raw_package_world);
+    /// Remove a module from the pipeline.
+    pub fn remove_module(&mut self, library: &str, package: &str, module: &str) {
+        let path = format!("{}/{}/{}", library, package, module);
+        self.world.remove_module(&path);
+    }
 
-        let resolution = crate::package_resolve::resolve_package_world_with_imports(self.db, package_world);
+    /// Update a module's source text.
+    ///
+    /// The module must already exist. Use this for incremental updates.
+    pub fn update_source(
+        &mut self,
+        db: &mut dyn salsa::Database,
+        library: &str,
+        package: &str,
+        module: &str,
+        source: &str,
+    ) {
+        let path = format!("{}/{}/{}", library, package, module);
+        self.world.update_source(db, &path, source);
+    }
 
-        let pkg_graph = match resolution.result(self.db) {
-            Ok(graph) => graph,
-            Err(e) => {
-                let empty_graph = datalove_datafun_compiler::module_graph::ModuleGraphBuilder::new(self.db).build();
-                let empty_parsed = parse_module_graph(self.db, empty_graph.clone(), BTreeMap::new());
-                return CompiledModules {
-                    resolution_error: Some(format!("Package resolution failed: {:?}", e)),
-                    module_graph: empty_graph,
-                    parsed_graph: empty_parsed,
-                    graph_typecheck: typecheck_module_graph(self.db, empty_parsed),
-                    path_to_errors: BTreeMap::new(),
-                    drop_analysis_errors: BTreeMap::new(),
-                    func_id_map: HashMap::new(),
-                    env: ScriptEnvironment::new(),
-                    module_lowering_results: BTreeMap::new(),
-                };
-            }
-        };
+    /// Compile all modules (first compilation, only needs `&db`).
+    ///
+    /// The graph is stored internally, so you can later call `compile` with
+    /// `&mut db` for incremental updates after modifying modules.
+    pub fn compile_fresh<'db>(&mut self, db: &'db dyn salsa::Database) -> CompiledModules<'db> {
+        let (module_graph, resolved_requires) = self.world.build_fresh(db);
+        self.compile_impl(db, module_graph, resolved_requires)
+    }
 
-        let graph_with_requires = datalove_datafun_pkg::to_module_graph(self.db, package_world, pkg_graph);
-        let module_graph = graph_with_requires.graph;
-        let parsed_graph = parse_module_graph(self.db, module_graph.clone(), graph_with_requires.resolved_requires);
+    /// Compile all modules (incremental, needs `&mut db`).
+    ///
+    /// Uses setters to update the stored ModuleGraph. Call this after modifying
+    /// modules via `add_module`, `remove_module`, or `update_source`.
+    ///
+    /// Returns the compiled modules and an immutable database reference.
+    pub fn compile<'db>(
+        &mut self,
+        db: &'db mut dyn salsa::Database,
+    ) -> (CompiledModules<'db>, &'db dyn salsa::Database) {
+        let (module_graph, resolved_requires) = self.world.prepare_for_compile(db);
 
-        let graph_typecheck = typecheck_module_graph(self.db, parsed_graph);
-        let combined_expr_types = graph_typecheck.expr_types(self.db);
-        let combined_call_targets = graph_typecheck.call_targets(self.db);
+        // Reborrow as immutable for the rest of compilation.
+        let db: &'db dyn salsa::Database = &*db;
+
+        let compiled = self.compile_impl(db, module_graph, resolved_requires);
+        (compiled, db)
+    }
+
+    /// Internal compilation implementation.
+    fn compile_impl<'db>(
+        &self,
+        db: &'db dyn salsa::Database,
+        module_graph: ModuleGraph,
+        resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+    ) -> CompiledModules<'db> {
+        let parsed_graph = parse_module_graph(db, module_graph.clone(), resolved_requires);
+        let graph_typecheck = typecheck_module_graph(db, parsed_graph);
+
+        let combined_expr_types = graph_typecheck.expr_types(db);
+        let combined_call_targets = graph_typecheck.call_targets(db);
 
         // Collect typecheck errors.
-        let module_errors = graph_typecheck.module_errors(self.db);
+        let module_errors = graph_typecheck.module_errors(db);
         let mut path_to_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for (module_id, errors) in module_errors {
-            let path = module_id.path(self.db).clone();
+            let path = module_id.path(db).clone();
             let error_strings: Vec<String> = errors.iter()
                 .map(|e| format!("{}: {:?}", path, e))
                 .collect();
@@ -224,14 +243,13 @@ impl<'db> ModuleCompilationPipeline<'db> {
         }
 
         // Assign function IDs.
-        // Use parsed statements from parsed_graph to ensure consistent ExprFun IDs.
         let mut func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> = HashMap::new();
         let mut next_func_id: u32 = 0;
-        for (ir_module_idx, (salsa_module_id, parsed)) in parsed_graph.statements_only(self.db).iter().enumerate() {
+        for (ir_module_idx, (salsa_module_id, parsed)) in parsed_graph.statements_only(db).iter().enumerate() {
             let ir_module_id = IrModuleId(ir_module_idx as u32);
             for statement in &parsed.statements {
                 if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
-                    let func_name = func.name(self.db).text(self.db).to_string();
+                    let func_name = func.name(db).text(db).to_string();
                     let func_id = FuncId(next_func_id);
                     next_func_id += 1;
                     func_id_map.insert((*salsa_module_id, func_name), (ir_module_id, func_id));
@@ -240,12 +258,11 @@ impl<'db> ModuleCompilationPipeline<'db> {
         }
 
         // Phase 2: Drop analysis.
-        // Use parsed statements from parsed_graph to ensure consistent ExprFun IDs.
         let mut drop_analyses: HashMap<(String, String), FunctionDropAnalysis> = HashMap::new();
         let mut drop_analysis_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
-        for (salsa_module_id, parsed) in parsed_graph.statements_only(self.db) {
-            let module_path = salsa_module_id.path(self.db).clone();
+        for (salsa_module_id, parsed) in parsed_graph.statements_only(db) {
+            let module_path = salsa_module_id.path(db).clone();
 
             if path_to_errors.get(&module_path).map_or(false, |e| !e.is_empty()) {
                 continue;
@@ -253,8 +270,8 @@ impl<'db> ModuleCompilationPipeline<'db> {
 
             for statement in &parsed.statements {
                 if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
-                    let func_name = func.name(self.db).text(self.db).to_string();
-                    let analysis = drop_analysis::analyze_function(self.db, *func, combined_expr_types, combined_call_targets);
+                    let func_name = func.name(db).text(db).to_string();
+                    let analysis = drop_analysis::analyze_function(db, *func, combined_expr_types, combined_call_targets);
 
                     if !analysis.errors.is_empty() {
                         let error_msgs: Vec<String> = analysis.errors.iter()
@@ -270,13 +287,12 @@ impl<'db> ModuleCompilationPipeline<'db> {
         }
 
         // Phase 3: Lower to IR.
-        // Use parsed statements from parsed_graph to ensure consistent ExprFun IDs.
         let mut env = ScriptEnvironment::new();
         let mut module_lowering_results: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
-        for (ir_module_idx, (salsa_module_id, parsed)) in parsed_graph.statements_only(self.db).iter().enumerate() {
+        for (ir_module_idx, (salsa_module_id, parsed)) in parsed_graph.statements_only(db).iter().enumerate() {
             let ir_module_id = IrModuleId(ir_module_idx as u32);
-            let module_path = salsa_module_id.path(self.db).clone();
+            let module_path = salsa_module_id.path(db).clone();
 
             if path_to_errors.get(&module_path).map_or(false, |e| !e.is_empty()) {
                 continue;
@@ -286,7 +302,7 @@ impl<'db> ModuleCompilationPipeline<'db> {
 
             for statement in &parsed.statements {
                 if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
-                    let func_name = func.name(self.db).text(self.db).to_string();
+                    let func_name = func.name(db).text(db).to_string();
 
                     let drop_key = format!("{}/{}", module_path, func_name);
                     if drop_analysis_errors.contains_key(&drop_key) {
@@ -303,10 +319,10 @@ impl<'db> ModuleCompilationPipeline<'db> {
                     };
 
                     let (_, func_id) = func_id_map.get(&(*salsa_module_id, func_name.clone())).unwrap();
-                    let call_targets = graph_typecheck.call_targets(self.db);
+                    let call_targets = graph_typecheck.call_targets(db);
 
                     match lower::lower_function_for_module(
-                        self.db, combined_expr_types, call_targets, &func_id_map, *func, analysis
+                        db, combined_expr_types, call_targets, &func_id_map, *func, analysis
                     ) {
                         Ok(ir_func) => {
                             ir_dumps.push(format!("{}", ir_func));
@@ -332,6 +348,12 @@ impl<'db> ModuleCompilationPipeline<'db> {
             env,
             module_lowering_results,
         }
+    }
+}
+
+impl Default for ModuleCompilationPipeline {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

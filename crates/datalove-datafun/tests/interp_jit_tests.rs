@@ -49,10 +49,10 @@ pub fn analyze_worldfile_with_jit(
     let mut results = Vec::new();
 
     // Build pipeline from sections.
-    let pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
+    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
 
     // Compile modules.
-    let compiled = pipeline.compile();
+    let compiled = pipeline.compile_fresh(db);
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {
@@ -174,7 +174,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Run analysis in a spawned thread to work around Cranelift JIT limitations.
     let result = std::thread::spawn(move || {
-        let db = datafun::Database::default();
+        let mut db = datafun::Database::default();
 
         // Parse the worldfile into sections.
         let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())

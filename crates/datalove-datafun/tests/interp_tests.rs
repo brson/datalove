@@ -14,14 +14,14 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let file_bytes = std::fs::read(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    let db = datafun::Database::default();
+    let mut db = datafun::Database::default();
 
     // Parse the worldfile into sections.
     let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
         .map_err(|e| format!("Failed to parse worldfile: {}", e))?;
 
     // Analyze using IR interpreter.
-    let analysis = datafun::worldfile_analysis::analyze_worldfile(&db, parsed)
+    let analysis = datafun::worldfile_analysis::analyze_worldfile(&mut db, parsed)
         .map_err(|e| format!("Analysis failed: {}", e))?;
 
     // Serialize to RON format.

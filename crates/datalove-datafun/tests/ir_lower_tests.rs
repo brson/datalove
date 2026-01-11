@@ -15,24 +15,22 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let file_bytes = std::fs::read(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    let db = datafun::Database::default();
+    let mut db = datafun::Database::default();
 
     // Parse the worldfile into sections.
     let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
         .map_err(|e| format!("Failed to parse worldfile: {}", e))?;
 
     // Build pipeline from sections.
-    let pipeline = ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
+    let mut pipeline = ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
 
     // Verify local/test/main module exists.
-    let local_lib = pipeline.pkglib_local().get("test")
-        .ok_or_else(|| "No local/test package found".to_string())?;
-    if !local_lib.modules.contains_key("main") {
+    if !pipeline.contains_module("local", "test", "main") {
         return Err("No local/test/main module found".to_string());
     }
 
     // Compile modules (typecheck, drop analysis, lower).
-    let compiled = pipeline.compile();
+    let compiled = pipeline.compile_fresh(&db);
 
     // Check for errors using consolidated helper methods.
     if let Some(err) = &compiled.resolution_error {

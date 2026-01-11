@@ -80,15 +80,15 @@ pub enum ExecutionResult {
 
 /// Analyze a worldfile using AOT compilation.
 fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> AotAnalysis {
-    let db = datafun::Database::default();
+    let mut db = datafun::Database::default();
     let mut results = Vec::new();
 
     // Build pipeline and add modules.
-    let mut pipeline = datafun::pipeline::ModuleCompilationPipeline::new(&db);
-    pipeline.add_modules_from_sections(&parsed.sections);
+    let mut pipeline = datafun::pipeline::ModuleCompilationPipeline::new();
+    pipeline.add_modules_from_sections(&db, &parsed.sections);
 
     // Compile modules (typecheck, drop analysis, lower).
-    let compiled = pipeline.compile();
+    let compiled = pipeline.compile_fresh(&db);
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {

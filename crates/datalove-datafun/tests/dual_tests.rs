@@ -155,7 +155,7 @@ fn normalize_ir(ir: &str) -> String {
 
 /// Analyze a worldfile using both pipelines.
 fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> DualAnalysis {
-    let db = datafun::Database::default();
+    let mut db = datafun::Database::default();
     let mut results = Vec::new();
 
     // Validate input: exactly one scriptunit-fragment, no scriptunit-expr.
@@ -217,8 +217,8 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         .unwrap();
 
     // Build pipeline and add modules (use consolidated constructor).
-    let pipeline = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
-    let compiled = pipeline.compile();
+    let mut pipeline = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
+    let compiled = pipeline.compile_fresh(&db);
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {
@@ -298,8 +298,8 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     interp_ctx.destroy_all();
 
     // Build pipeline again for AOT context (necessary because script_context consumes compiled).
-    let pipeline2 = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
-    let compiled2 = pipeline2.compile();
+    let mut pipeline2 = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
+    let compiled2 = pipeline2.compile_fresh(&db);
 
     // Run AOT pipeline.
     let mut aot_ctx = compiled2.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled);

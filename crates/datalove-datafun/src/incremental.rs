@@ -79,9 +79,62 @@ impl IncrementalModuleWorld {
         self.modules.get(path).copied()
     }
 
+    /// Build a fresh ModuleGraph, storing it for potential later incremental updates.
+    ///
+    /// This method only needs an immutable database reference since it creates
+    /// new salsa objects without using setters. The graph is stored in `self.graph`
+    /// so that later calls to `prepare_for_compile` can incrementally update it.
+    pub fn build_fresh(
+        &mut self,
+        db: &dyn salsa::Database,
+    ) -> (ModuleGraph, BTreeMap<ModuleId, Vec<(String, ModuleId)>>) {
+        // Extract dependencies through the package resolution pipeline.
+        let path_deps = self.extract_dependencies(db);
+
+        // Topologically sort modules (dependencies before dependents).
+        let all_paths: BTreeSet<String> = self.modules.keys().cloned().collect();
+        let sorted_paths = topological_sort(&all_paths, &path_deps);
+
+        // Build module list in dependency order.
+        let modules: Vec<Module> = sorted_paths.iter()
+            .filter_map(|p| self.modules.get(p).copied())
+            .collect();
+
+        // Build module_by_id map.
+        let module_by_id: BTreeMap<ModuleId, Module> = self.modules.values()
+            .map(|m| (m.id(db), *m))
+            .collect();
+
+        // Build dependencies map using our ModuleIds.
+        let mut dependencies: BTreeMap<ModuleId, BTreeSet<ModuleId>> = BTreeMap::new();
+        for (source_path, target_paths) in &path_deps {
+            if let Some(source_module) = self.modules.get(source_path) {
+                let source_id = source_module.id(db);
+                let target_ids: BTreeSet<ModuleId> = target_paths.iter()
+                    .filter_map(|p| self.modules.get(p).map(|m| m.id(db)))
+                    .collect();
+                dependencies.insert(source_id, target_ids);
+            }
+        }
+        // Ensure all modules have an entry.
+        for module in &modules {
+            dependencies.entry(module.id(db)).or_default();
+        }
+
+        // Create fresh graph and store for later incremental use.
+        let graph = ModuleGraph::new(db, modules, module_by_id, dependencies);
+        self.graph = Some(graph);
+
+        // Build resolved_requires for parse_module_graph.
+        let resolved_requires = self.build_resolved_requires(db, &path_deps);
+
+        (graph, resolved_requires)
+    }
+
     /// Prepare for compilation by building/updating the ModuleGraph.
     ///
-    /// Returns the graph and resolved_requires ready for `parse_module_graph`.
+    /// This method requires a mutable database reference for updating an existing
+    /// graph via setters. Use `build_fresh` for one-shot compilation.
     pub fn prepare_for_compile(
         &mut self,
         db: &mut dyn salsa::Database,
