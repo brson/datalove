@@ -36,16 +36,18 @@ through a Rustic linear-typing lens.
 
 <div class="four-things-grid">
   <div class="thing-box">
+    <p>A data serialization, configuration and interchange format
+       for common data types,
+       with a focus on numerical correctness.</p>
+  </div>
+  <div class="thing-box">
+    <p>A pure-functional language
+       that reads like an imperative language,
+       with a simple but sophisticated linear type system.</p>
+  </div>
+  <div class="thing-box">
     <p>Simple and complete <em>syntax and machine representation</em>
        of common data types for <em>interchange and transformation.</em></p>
-  </div>
-  <div class="thing-box">
-    <p>Simple but sophisticated <em>linear type system</em>
-       with <em>pure functions</em> and <em>verifiably total</em> functions
-       that read like imperative functions.</p>
-  </div>
-  <div class="thing-box">
-    <p>Novel statement- and line-oriented lexical structure.</p>
   </div>
   <div class="thing-box">
     <p>Modern compilation and execution architecture with
@@ -55,7 +57,9 @@ through a Rustic linear-typing lens.
   </div>
 </div>
 
-
+<!--    
+  Novel statement- and line-oriented lexical structure.
+-->
 
 
 Datalove is built from three cleanly-scoped strict sublanguages of increasing power:
