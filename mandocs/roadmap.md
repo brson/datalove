@@ -29,6 +29,8 @@ The MVP is a working bare datafun language with:
 
 # on deck
 
+- multiple scripts
+- fully reactive scripts
 - clone, working heap types, and default syntax everywhere
 - field access
 - jit
