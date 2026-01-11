@@ -12,18 +12,6 @@ of modern pure data types.
 Let's do that really well.
 Then we'll add I/O to it &mdash; carefully.
 
-<!--
-
-As a Rust programmer who sometimes
-scripts and prototypes in Python,
-Datalove was born from my dissatisfaction with
-Python's weak typing and inconsistent
-facilities for expressing simple data structures.
-Datalove is most usefully compared to Python, JavaScript, and Julia,
-through a Rustic linear-typing lens.
-
--->
-
 > Datalove is a testbed for my personal compiler and language design experiments.
 > There is no recommended way to install or test.
 
@@ -57,9 +45,6 @@ through a Rustic linear-typing lens.
   </div>
 </div>
 
-<!--    
-  Novel statement- and line-oriented lexical structure.
--->
 
 
 
@@ -143,7 +128,7 @@ but I do have a [vision](vision.md) about what it will be.
 
 
 
-
+- [10 Minute Intro](intro.md
 - [Features](features.md)
 - [Principles](principles.md)
 - [Datalove Compared To...](comparisons.md)
