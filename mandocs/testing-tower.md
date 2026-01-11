@@ -10,13 +10,31 @@
 - datalove-datafun/tests/tycheck_world_tests
 - datalove-datafun/tests/interp_tests
 - datalove-datafun/tests/module_interp_tests
+- datalove-datafun/tests/module_memo_tests
 - datalove-datafun/tests/std_tests
+- datalove-datafun/tests/dual_tests
 
 
 ## IR lowering tests
 
 - datalove-datafun/tests/ir_lower_tests
 - datalove-datafun/tests/ir_lower_script_tests
+- datalove-datafun/tests/ir_serial_tests
+
+
+## JIT tests
+
+- datalove-datafun/tests/interp_jit_tests
+- datalove-datafun/tests/interp_jit_chaos_tests
+
+
+## AOT tests
+
+- datalove-datafun/tests/aot_tests
+- datalove-datafun-compiler/tests/aot_layout_tests
+- datalove-datafun-aot-cranelift/tests/aot_run_tests
+- datalove-datafun-aot-cranelift/tests/aot_debuglog_tests
+- datalove-cli/tests/aot_run_tests
 
 
 ## AST-gen tests
@@ -64,10 +82,12 @@ fixme: should have ast_gen collections tests too
 - datalove-cli/tests/script_tests
 - datalove-cli/tests/error_tests
 - datalove-datalit/tests/parser_panic_tests
+- bcts/tests/bracer_panic_tests
 
 
 ## Testing utilities
 
 - datalove-datalit/src/ast_gen - property-based AST generation
 - datalove-datalit/src/ast_serde - AST serialization for snapshot tests
+- datalove-datafun-ast/src/ast_serde - datafun AST serialization
 - datalove-datafun-compiler/src/funlit_equiv - compare datafun/datalit parsing equivalence
