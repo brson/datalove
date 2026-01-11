@@ -15,13 +15,15 @@ The MVP is a working bare datafun language with:
 - core->runtime calls
 - decent diagnostics
 - heap types, examples omit
-- field access
+- field projections
 - match for enums
+
+
 
 
 # in progress
 
-- module hashes and salsa verification
+- field projections
 - human docs
 
 
@@ -32,7 +34,6 @@ The MVP is a working bare datafun language with:
 - multiple scripts
 - fully reactive scripts
 - clone, working heap types, and default syntax everywhere
-- field access
 - jit
 - match
 - generics
