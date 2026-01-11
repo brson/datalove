@@ -337,11 +337,6 @@ impl IrInterpreter {
         // Functions use ret_dest for Return, not expr_dest.
         let result = self.execute_blocks(&func.blocks, &mut frame, ret_dest, None, ctx, registry, frames);
 
-        // Destroy remaining values in frame.
-        // This destroys In params (ownership transferred from caller).
-        // For JIT callers, params are borrowed so they won't be destroyed here.
-        frame.destroy_all(self.runtime.handle());
-
         // Convert UnitCompletion to () - functions always complete normally.
         result.map(|_| ())
     }
