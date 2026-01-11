@@ -10,8 +10,8 @@
 
 Full memoization for efficient recompilation and compiler queries (LSPs).
 Efficient IR-based interpreter with per-function JIT, or ahead-of-time compilation.
-Incremental script (REPL) typechecking and evaluation with full JIT support.
-LSP, undo/redo, virtualized I/O with record/replay.
+Incremental script (REPL) typechecking and evaluation with full JIT support,
+undo/redo, virtualized I/O with record/replay.
 
 We establish broad architecture-level capabilities early
 to inform architectural and design decisions.
