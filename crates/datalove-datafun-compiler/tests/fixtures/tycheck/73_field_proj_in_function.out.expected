@@ -1,0 +1,42 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "get_first",
+      "params": [
+        {
+          "name": "t",
+          "type": "?"
+        }
+      ],
+      "return_type": "@u32"
+    },
+    {
+      "kind": "function",
+      "name": "get_second",
+      "params": [
+        {
+          "name": "t",
+          "type": "?"
+        }
+      ],
+      "return_type": "@u32"
+    },
+    {
+      "kind": "variable",
+      "name": "pair",
+      "type": "(u32, u32)"
+    },
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "u32"
+    },
+    {
+      "kind": "variable",
+      "name": "b",
+      "type": "u32"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "get_x",
+      "params": [
+        {
+          "name": "s",
+          "type": "?"
+        }
+      ],
+      "return_type": "@u32"
+    },
+    {
+      "kind": "function",
+      "name": "get_y",
+      "params": [
+        {
+          "name": "s",
+          "type": "?"
+        }
+      ],
+      "return_type": "@u32"
+    },
+    {
+      "kind": "variable",
+      "name": "point",
+      "type": "{x: @u32, y: @u32}"
+    },
+    {
+      "kind": "variable",
+      "name": "px",
+      "type": "u32"
+    },
+    {
+      "kind": "variable",
+      "name": "py",
+      "type": "u32"
+    }
+  ]
+}

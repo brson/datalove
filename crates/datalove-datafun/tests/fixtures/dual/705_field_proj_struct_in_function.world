@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+fun get_x(s: {x: @u32, y: @u32}): @u32
+    ret s.x
+end fun
+
+fun get_y(s: {x: @u32, y: @u32}): @u32
+    ret s.y
+end fun
+
+let point: {x: @u32, y: @u32} = @{x = @100, y = @200}
+let px = get_x(point)
+let py = get_y(point)
+debuglog px
+debuglog py
