@@ -10,6 +10,54 @@ use crate::types::*;
 
 pub use crate::{Type, TypeAndHeap, TypeError, is_copy_type};
 
+// ============================================================================
+// Return Type Checking Helpers
+// ============================================================================
+
+/// Require that the current function returns an Option type.
+///
+/// Used for operators like `?`, `+?`, `-?`, `*?`, `/?`, `-?` that early-return None.
+fn require_option_return_type<'db>(
+    ctx: &TypeContext<'db>,
+    expr: ExprFun<'db>,
+    op_str: &str,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let expected_return = ctx.expected_return_type
+        .ok_or_else(|| ctx.error_try_outside_function(expr, op_str))?;
+    match expected_return.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::Option(_)) => Ok(expected_return),
+        _ => Err(ctx.error_try_return_type_mismatch(
+            expr,
+            op_str,
+            "Option",
+            &type_to_string(db, expected_return.ty(db))
+        )),
+    }
+}
+
+/// Require that the current function returns a Result type.
+///
+/// Used for operators like `!`, `+!`, `-!`, `*!`, `/!`, `-!` that early-return Err.
+fn require_result_return_type<'db>(
+    ctx: &TypeContext<'db>,
+    expr: ExprFun<'db>,
+    op_str: &str,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let db = ctx.db;
+    let expected_return = ctx.expected_return_type
+        .ok_or_else(|| ctx.error_try_outside_function(expr, op_str))?;
+    match expected_return.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::Result(_)) => Ok(expected_return),
+        _ => Err(ctx.error_try_return_type_mismatch(
+            expr,
+            op_str,
+            "Result",
+            &type_to_string(db, expected_return.ty(db))
+        )),
+    }
+}
+
 /// Synthesize a type for an expression.
 pub fn synthesize_expr<'db>(
     ctx: &mut TypeContext<'db>,
@@ -429,29 +477,11 @@ fn synthesize_binop<'db>(
                     &type_to_string(db, operand_ty)
                 ));
             }
-            // Verify we're inside a function with Result return type.
-            let op_str = format!("{:?}", op);
-            let expected_return = ctx.expected_return_type
-                .ok_or_else(|| ctx.error_try_outside_function(expr, &op_str))?;
-            match expected_return.ty(db) {
-                Type::Datalit(datalit::tycheck::Type::Result(_)) => {
-                    // OK, function returns Result type.
-                }
-                _ => {
-                    return Err(ctx.error_try_return_type_mismatch(
-                        expr,
-                        &op_str,
-                        "Result",
-                        &type_to_string(db, expected_return.ty(db))
-                    ));
-                }
-            }
-            // Return element type directly.
+            require_result_return_type(ctx, expr, &format!("{:?}", op))?;
             lhs_ty
         }
 
         DivChecked => {
-            // Division: fixed ints or bigints.
             if !is_fixed_int_type(operand_ty) && !is_bigint_type(operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
@@ -459,24 +489,7 @@ fn synthesize_binop<'db>(
                     &type_to_string(db, operand_ty)
                 ));
             }
-            // Verify we're inside a function with Result return type.
-            let op_str = format!("{:?}", op);
-            let expected_return = ctx.expected_return_type
-                .ok_or_else(|| ctx.error_try_outside_function(expr, &op_str))?;
-            match expected_return.ty(db) {
-                Type::Datalit(datalit::tycheck::Type::Result(_)) => {
-                    // OK, function returns Result type.
-                }
-                _ => {
-                    return Err(ctx.error_try_return_type_mismatch(
-                        expr,
-                        &op_str,
-                        "Result",
-                        &type_to_string(db, expected_return.ty(db))
-                    ));
-                }
-            }
-            // Return element type directly.
+            require_result_return_type(ctx, expr, &format!("{:?}", op))?;
             lhs_ty
         }
 
@@ -489,29 +502,11 @@ fn synthesize_binop<'db>(
                     &type_to_string(db, operand_ty)
                 ));
             }
-            // Verify we're inside a function with Option return type.
-            let op_str = format!("{:?}", op);
-            let expected_return = ctx.expected_return_type
-                .ok_or_else(|| ctx.error_try_outside_function(expr, &op_str))?;
-            match expected_return.ty(db) {
-                Type::Datalit(datalit::tycheck::Type::Option(_)) => {
-                    // OK, function returns Option type.
-                }
-                _ => {
-                    return Err(ctx.error_try_return_type_mismatch(
-                        expr,
-                        &op_str,
-                        "Option",
-                        &type_to_string(db, expected_return.ty(db))
-                    ));
-                }
-            }
-            // Return element type directly.
+            require_option_return_type(ctx, expr, &format!("{:?}", op))?;
             lhs_ty
         }
 
         DivOptional => {
-            // Division: fixed ints or bigints, early-returns None on overflow/div0.
             if !is_fixed_int_type(operand_ty) && !is_bigint_type(operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
@@ -519,24 +514,7 @@ fn synthesize_binop<'db>(
                     &type_to_string(db, operand_ty)
                 ));
             }
-            // Verify we're inside a function with Option return type.
-            let op_str = format!("{:?}", op);
-            let expected_return = ctx.expected_return_type
-                .ok_or_else(|| ctx.error_try_outside_function(expr, &op_str))?;
-            match expected_return.ty(db) {
-                Type::Datalit(datalit::tycheck::Type::Option(_)) => {
-                    // OK, function returns Option type.
-                }
-                _ => {
-                    return Err(ctx.error_try_return_type_mismatch(
-                        expr,
-                        &op_str,
-                        "Option",
-                        &type_to_string(db, expected_return.ty(db))
-                    ));
-                }
-            }
-            // Return element type directly.
+            require_option_return_type(ctx, expr, &format!("{:?}", op))?;
             lhs_ty
         }
 
@@ -608,42 +586,17 @@ fn synthesize_unaryop<'db>(
             operand_ty
         }
 
-        // Optional negation: only fixed ints, and not unsigned.
+        // Optional negation: only signed fixed ints.
         // Returns element type directly; on overflow, early-returns None.
         UnaryOp::NegOptional => {
-            if !is_fixed_int_type(operand_type) {
+            if !is_fixed_int_type(operand_type) || is_unsigned_int_type(operand_type) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
                     &format!("{:?}", op),
                     &type_to_string(db, operand_type)
                 ));
             }
-            // Disallow -? for unsigned ints (footgun).
-            if is_unsigned_int_type(operand_type) {
-                return Err(ctx.error_invalid_operand_type(
-                    expr,
-                    &format!("{:?}", op),
-                    &type_to_string(db, operand_type)
-                ));
-            }
-            // Verify we're inside a function with Option return type.
-            let op_str = format!("{:?}", op);
-            let expected_return = ctx.expected_return_type
-                .ok_or_else(|| ctx.error_try_outside_function(expr, &op_str))?;
-            match expected_return.ty(db) {
-                Type::Datalit(datalit::tycheck::Type::Option(_)) => {
-                    // OK, function returns Option type.
-                }
-                _ => {
-                    return Err(ctx.error_try_return_type_mismatch(
-                        expr,
-                        &op_str,
-                        "Option",
-                        &type_to_string(db, expected_return.ty(db))
-                    ));
-                }
-            }
-            // Return element type directly (wrapping happens at function boundary).
+            require_option_return_type(ctx, expr, &format!("{:?}", op))?;
             operand_ty
         }
 
@@ -657,24 +610,7 @@ fn synthesize_unaryop<'db>(
                     &type_to_string(db, operand_type)
                 ));
             }
-            // Verify we're inside a function with Result return type.
-            let op_str = format!("{:?}", op);
-            let expected_return = ctx.expected_return_type
-                .ok_or_else(|| ctx.error_try_outside_function(expr, &op_str))?;
-            match expected_return.ty(db) {
-                Type::Datalit(datalit::tycheck::Type::Result(_)) => {
-                    // OK, function returns Result type.
-                }
-                _ => {
-                    return Err(ctx.error_try_return_type_mismatch(
-                        expr,
-                        &op_str,
-                        "Result",
-                        &type_to_string(db, expected_return.ty(db))
-                    ));
-                }
-            }
-            // Return element type directly (wrapping happens at function boundary).
+            require_result_return_type(ctx, expr, &format!("{:?}", op))?;
             operand_ty
         }
 
@@ -737,20 +673,13 @@ fn synthesize_try_option<'db>(
     try_op: &ExprTryOption<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
-    let operand = try_op.operand;
 
-    // Verify we're inside a function.
-    let expected_return = ctx.expected_return_type
-        .ok_or_else(|| ctx.error_try_outside_function(expr, "?"))?;
-
-    // Synthesize operand type.
-    let operand_ty = ctx.synthesize_expr(operand)?;
+    // Synthesize operand type first (to report operand errors before context errors).
+    let operand_ty = ctx.synthesize_expr(try_op.operand)?;
 
     // Operand must be Option<T>.
     let inner_ty = match operand_ty.ty(db) {
-        Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
-            opt.inner_type
-        }
+        Type::Datalit(datalit::tycheck::Type::Option(opt)) => opt.inner_type,
         _ => {
             return Err(ctx.error_try_type_mismatch(
                 expr,
@@ -761,20 +690,8 @@ fn synthesize_try_option<'db>(
         }
     };
 
-    // Function return type must be Option<U> for some U.
-    match expected_return.ty(db) {
-        Type::Datalit(datalit::tycheck::Type::Option(_)) => {
-            // OK, function returns Option type.
-        }
-        _ => {
-            return Err(ctx.error_try_return_type_mismatch(
-                expr,
-                "?",
-                "Option",
-                &type_to_string(db, expected_return.ty(db))
-            ));
-        }
-    }
+    // Verify function returns Option type.
+    require_option_return_type(ctx, expr, "?")?;
 
     // Return the unwrapped type T.
     let heap = inner_ty.heap(db);
@@ -789,20 +706,13 @@ fn synthesize_try_result<'db>(
     try_op: &ExprTryResult<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
-    let operand = try_op.operand;
 
-    // Verify we're inside a function.
-    let expected_return = ctx.expected_return_type
-        .ok_or_else(|| ctx.error_try_outside_function(expr, "!"))?;
-
-    // Synthesize operand type.
-    let operand_ty = ctx.synthesize_expr(operand)?;
+    // Synthesize operand type first (to report operand errors before context errors).
+    let operand_ty = ctx.synthesize_expr(try_op.operand)?;
 
     // Operand must be Result<T>.
     let inner_ty = match operand_ty.ty(db) {
-        Type::Datalit(datalit::tycheck::Type::Result(res)) => {
-            res.inner_type
-        }
+        Type::Datalit(datalit::tycheck::Type::Result(res)) => res.inner_type,
         _ => {
             return Err(ctx.error_try_type_mismatch(
                 expr,
@@ -813,20 +723,8 @@ fn synthesize_try_result<'db>(
         }
     };
 
-    // Function return type must be Result<U> for some U.
-    match expected_return.ty(db) {
-        Type::Datalit(datalit::tycheck::Type::Result(_)) => {
-            // OK, function returns Result type.
-        }
-        _ => {
-            return Err(ctx.error_try_return_type_mismatch(
-                expr,
-                "!",
-                "Result",
-                &type_to_string(db, expected_return.ty(db))
-            ));
-        }
-    }
+    // Verify function returns Result type.
+    require_result_return_type(ctx, expr, "!")?;
 
     // Return the unwrapped type T.
     let heap = inner_ty.heap(db);
