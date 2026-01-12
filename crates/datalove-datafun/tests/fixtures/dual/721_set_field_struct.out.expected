@@ -7,11 +7,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Struct0 {v0, v1}\n    store s0, v2\n    v3 = const 99u32\n    setfield s0.0, v3\n    v4 = load s0\n    v5 = getfield v4.0\n    debuglog v5\n    unit_end\nexports:\n    s = s0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Struct0 {v0, v1}\n    store s0, v2\n    v3 = const 99u32\n    setfield s0.0, v3\n    v4 = getfieldref s0.0\n    debuglog v4\n    unit_end\nexports:\n    s = s0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Struct0 {v0, v1}\n    store s0, v2\n    v3 = const 99u32\n    setfield s0.0, v3\n    v4 = load s0\n    v5 = getfield v4.0\n    debuglog v5\n    unit_end\nexports:\n    s = s0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Struct0 {v0, v1}\n    store s0, v2\n    v3 = const 99u32\n    setfield s0.0, v3\n    v4 = getfieldref s0.0\n    debuglog v4\n    unit_end\nexports:\n    s = s0\n",
             ),
             ir_match: true,
             interp_output: "@99\n",

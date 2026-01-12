@@ -4,7 +4,7 @@ use cranelift_codegen::ir::InstBuilder;
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
-use datalove_datafun_ir::Operand;
+use datalove_datafun_ir::{IrType, Operand};
 
 use crate::types::PTR_TYPE;
 use crate::AotError;
@@ -31,14 +31,25 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Get the type of the operand.
         let ty = self.get_operand_type(operand)?;
 
-        // Get pointer to the value. For scalars, we need to spill to memory first.
-        let value_ptr = self.get_operand_ptr(builder, operand)?;
+        // Handle Ref types: get the dereferenced pointer and inner type.
+        // Refs are produced by GetFieldRef for borrowing field projections.
+        // Note: get_operand_ptr already returns the pointer value for Ref types
+        // (not a pointer to the pointer), so we just use the inner type for TyDesc.
+        let (actual_ty, value_ptr) = if let IrType::Ref(inner) = &ty {
+            // For Ref types, get_operand_ptr returns the contained pointer value.
+            let actual_ptr = self.get_operand_ptr(builder, operand)?;
+            (inner.as_ref().clone(), actual_ptr)
+        } else {
+            // Non-ref: get pointer to the value directly.
+            let value_ptr = self.get_operand_ptr(builder, operand)?;
+            (ty, value_ptr)
+        };
 
-        // Look up pre-emitted TyDesc (whole-world compilation guarantees it exists).
-        let tydesc_id = self.tydesc_emitter.get(&ty).ok_or_else(|| {
+        // Look up pre-emitted TyDesc for the actual (non-ref) type.
+        let tydesc_id = self.tydesc_emitter.get(&actual_ty).ok_or_else(|| {
             AotError::Codegen(format!(
                 "TyDesc not found for type {:?} - should have been emitted upfront",
-                ty
+                actual_ty
             ))
         })?;
 

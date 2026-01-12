@@ -7,7 +7,7 @@ use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun};
 use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode};
 use super::context::LowerCtx;
-use super::expr::lower_expression;
+use super::expr::{lower_expression, lower_expression_for_ref};
 use super::LowerError;
 
 /// Lower a statement (without index tracking, for compatibility).
@@ -113,11 +113,12 @@ pub fn lower_statement_indexed<'db>(
             Ok(())
         }
         Statement::DebugLog(stmt) => {
-            let value_id = lower_expression(ctx, stmt.value)?;
-            ctx.emit(Instruction::DebugLog {
-                operand: Operand::Value(value_id),
-            });
+            // Use lower_expression_for_ref to handle field projections with GetFieldRef.
+            // This borrows the value instead of copying, avoiding shallow-copy issues.
+            let operand = lower_expression_for_ref(ctx, stmt.value)?;
+            ctx.emit(Instruction::DebugLog { operand });
             // Note: no drop - debuglog borrows, does not consume.
+            // Refs are Copy and don't need drops.
             Ok(())
         }
         Statement::ParseError(_) => {

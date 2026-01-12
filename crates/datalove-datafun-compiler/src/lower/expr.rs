@@ -64,8 +64,9 @@ fn lower_call_arg<'db>(
 /// Lower a field projection as a reference (pointer to field).
 ///
 /// Emits GetFieldRef instead of GetField, returning a pointer to the field
-/// without copying. Used when passing field projections to ref/mut/out params.
-fn lower_field_proj_as_ref<'db>(
+/// without copying. Used when passing field projections to ref/mut/out params
+/// and for debuglog expressions.
+pub fn lower_field_proj_as_ref<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
     proj: ast::ExprFieldProj<'db>,
@@ -117,6 +118,28 @@ fn lower_field_proj_as_ref<'db>(
         field_index,
     });
     Ok(Operand::Value(dest))
+}
+
+/// Lower an expression for reference context (borrowing).
+///
+/// For field projections, emits GetFieldRef to borrow the field without copying.
+/// This avoids the shallow-copy problem with move types containing pointers.
+/// For other expressions, uses standard lower_expression.
+pub fn lower_expression_for_ref<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+) -> Result<Operand, LowerError> {
+    match expr.expr(ctx.db) {
+        ExprFunKind::FieldProj(proj) => {
+            // Field projections use GetFieldRef to borrow without copying.
+            lower_field_proj_as_ref(ctx, expr, proj)
+        }
+        _ => {
+            // All other expressions: use standard lowering.
+            let value_id = lower_expression(ctx, expr)?;
+            Ok(Operand::Value(value_id))
+        }
+    }
 }
 
 /// Lower an expression, returning the ValueId holding the result.
