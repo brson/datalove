@@ -1,0 +1,15 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "t",
+      "type": "(int, int)"
+    },
+    {
+      "kind": "variable",
+      "name": "s",
+      "type": "{a: int, b: int}"
+    }
+  ]
+}

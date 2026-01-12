@@ -1,0 +1,12 @@
+// Test that debuglog allows move-type field projections.
+// Before the fix, this would fail with NonCopyFieldProjection
+// because debuglog didn't set ref_context=true.
+// Now debuglog correctly treats its argument as borrowed (ref context).
+
+let t: (int, int) = (:int/@100, :int/@200)
+debuglog t.0
+debuglog t.1
+
+let s: {a: int, b: int} = {a = :int/@1, b = :int/@2}
+debuglog s.a
+debuglog s.b

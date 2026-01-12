@@ -452,9 +452,13 @@ pub fn check_statement<'db>(
         Statement::DebugLog(stmt) => {
             let value = stmt.value;
             // Accept any type - just synthesize to verify the expression is valid.
+            // Set ref_context since debuglog borrows its argument (doesn't consume).
+            let old_ref_context = ctx.ref_context;
+            ctx.ref_context = true;
             if let Err(e) = ctx.synthesize_expr(value) {
                 ctx.add_error(e);
             }
+            ctx.ref_context = old_ref_context;
         }
 
         Statement::ParseError(_) => {
