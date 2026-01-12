@@ -654,22 +654,8 @@ impl IrInterpreter {
             Instruction::SlotLoad { dest, slot } => {
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest)?;
-                // Check if type is Copy (primitive scalars).
-                let tag = unsafe { (*slot_val.tydesc).type_tag };
-                let is_copy = matches!(
-                    tag,
-                    rtdt::TyTag::Bool
-                        | rtdt::TyTag::U8
-                        | rtdt::TyTag::I8
-                        | rtdt::TyTag::U16
-                        | rtdt::TyTag::I16
-                        | rtdt::TyTag::U32
-                        | rtdt::TyTag::I32
-                        | rtdt::TyTag::U64
-                        | rtdt::TyTag::I64
-                        | rtdt::TyTag::F32
-                        | rtdt::TyTag::F64
-                );
+                // Check if type is Copy (includes composite types with all-copy fields).
+                let is_copy = unsafe { Self::is_copy_tydesc(slot_val.tydesc) };
                 if is_copy {
                     // Copy types: just copy the bytes, slot remains valid.
                     unsafe { self.copy_value(&slot_val, dest_slot)?; }
@@ -1264,6 +1250,7 @@ impl IrInterpreter {
     /// Get pointer to operand's destination without checking initialization.
     ///
     /// Used for Out params where we need to pass a pointer to an uninitialized slot.
+    /// For ref values (created by GetFieldRef), dereferences to get the actual destination.
     fn get_operand_dest(&mut self, op: &Operand, frame: &mut Frame) -> Result<Value, InterpError> {
         match op {
             Operand::Slot(id) => {
@@ -1271,8 +1258,16 @@ impl IrInterpreter {
                 Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc })
             }
             Operand::Value(id) => {
-                let dest = frame.value_dest(*id)?;
-                Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc })
+                // Check if this is a ref value (from GetFieldRef).
+                // If so, dereference to get the actual destination.
+                if frame.is_value_ref(*id) {
+                    // Read the ref value (which dereferences the stored pointer).
+                    frame.value(*id)
+                } else {
+                    // Normal value - return the value storage as destination.
+                    let dest = frame.value_dest(*id)?;
+                    Ok(Value { ptr: dest.ptr, tydesc: dest.tydesc })
+                }
             }
             _ => Err(InterpError::InvalidOutParamArg),
         }

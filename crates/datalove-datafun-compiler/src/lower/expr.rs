@@ -70,9 +70,38 @@ fn lower_field_proj_as_ref<'db>(
     expr: ExprFun<'db>,
     proj: ast::ExprFieldProj<'db>,
 ) -> Result<Operand, LowerError> {
-    // Lower the base expression.
-    let base_id = lower_expression(ctx, proj.base)?;
     let base_type = ctx.expr_type(proj.base);
+
+    // For mut/out params, we need to reference the original slot/param directly,
+    // not a copy. Check if base is a simple variable name bound to a slot or param.
+    let src = match proj.base.expr(ctx.db) {
+        ExprFunKind::Name(name) => {
+            let name_str = name.text(ctx.db);
+            if let Some(operand) = ctx.lookup_var(name_str) {
+                match operand {
+                    Operand::Slot(_) | Operand::Param(_) => {
+                        // Use the slot/param directly - no copy needed.
+                        operand
+                    }
+                    Operand::Value(v) => {
+                        // SSA value - use as-is.
+                        Operand::Value(v)
+                    }
+                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
+                        // External references - use as-is.
+                        operand
+                    }
+                }
+            } else {
+                return Err(LowerError::VariableNotFound(name_str.to_string()));
+            }
+        }
+        _ => {
+            // Compound expression - need to lower it to a value.
+            let base_id = lower_expression(ctx, proj.base)?;
+            Operand::Value(base_id)
+        }
+    };
 
     // Get the field index.
     let field_index = resolve_field_index(&proj.field, &base_type, ctx.db)?;
@@ -84,7 +113,7 @@ fn lower_field_proj_as_ref<'db>(
 
     ctx.emit(Instruction::GetFieldRef {
         dest,
-        src: Operand::Value(base_id),
+        src,
         field_index,
     });
     Ok(Operand::Value(dest))

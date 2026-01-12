@@ -584,7 +584,19 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Check for failures.
     for section in &analysis.sections {
         if !section.ir_match {
-            return Err(format!("IR mismatch: {}", section.ir_diff.as_deref().unwrap_or("unknown")));
+            // If ir_diff is None, report lowering status for debugging.
+            let detail = section.ir_diff.as_deref().unwrap_or_else(|| {
+                match (&section.interp_lowering, &section.aot_lowering) {
+                    (datafun::pipeline::LoweringResult::Error { message }, _) =>
+                        return Box::leak(format!("interp lowering: {}", message).into_boxed_str()),
+                    (_, datafun::pipeline::LoweringResult::Error { message }) =>
+                        return Box::leak(format!("aot lowering: {}", message).into_boxed_str()),
+                    (datafun::pipeline::LoweringResult::Skipped, datafun::pipeline::LoweringResult::Skipped) =>
+                        return Box::leak(format!("typecheck: {:?}", section.typecheck).into_boxed_str()),
+                    _ => "unknown",
+                }
+            });
+            return Err(format!("IR mismatch: {}", detail));
         }
         if !section.output_match {
             return Err(format!(

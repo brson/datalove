@@ -1,0 +1,51 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "module",
+            name: Some("local/test/refops"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "fn takes_ref(p0):\nblock0:\n    v0 = copy p0\n    return v0\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "fn takes_ref(p0):\nblock0:\n    v0 = copy p0\n    return v0\n",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    v1 = const 200u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = getfieldref v2.0\n    v4 = call m0.f0(v3)\n    debuglog v4\n    unit_end\nexports:\n    t = v2\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    v1 = const 200u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = getfieldref v2.0\n    v4 = call m0.f0(v3)\n    debuglog v4\n    unit_end\nexports:\n    t = v2\n",
+            ),
+            ir_match: true,
+            interp_output: "@100\n",
+            aot_output: "@100\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

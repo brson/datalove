@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Test passing struct field to mut param with copy type.
+fun set_to_42(mut x: @u32): @bool
+    set x = @42
+    ret @true
+end fun
+
+var s: {a: @u32, b: @u32} = {a = @100, b = @200}
+let _ok = set_to_42(s.a)
+debuglog s.a
+debuglog s.b

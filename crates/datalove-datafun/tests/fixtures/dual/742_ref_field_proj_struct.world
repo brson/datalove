@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Test passing struct field to ref param with copy type.
+fun takes_ref(ref x: @u32): @u32
+    ret x
+end fun
+
+let s: {a: @u32, b: @u32} = {a = @100, b = @200}
+debuglog takes_ref(s.a)

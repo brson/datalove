@@ -1,0 +1,19 @@
+----------
+module local/test/refops
+----------
+
+// Module function taking ref param with move type.
+fun takes_ref(ref x: int): int
+    ret x + :int/@0
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+// Test calling module function with struct field as ref arg (move type).
+require module local/test/refops
+import refops.takes_ref
+
+let s: {a: int, b: int} = {a = :int/@100, b = :int/@200}
+debuglog takes_ref(s.a)

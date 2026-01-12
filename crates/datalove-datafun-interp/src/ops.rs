@@ -45,6 +45,72 @@ impl IrInterpreter {
         )
     }
 
+    /// Check if a TyDesc represents a copy type (recursive check for composites).
+    ///
+    /// Unlike `is_copy_type_tag` which only handles primitives, this function
+    /// recursively checks composite types like tuples and structs.
+    pub(crate) unsafe fn is_copy_tydesc(tydesc: *const rtdt::TyDesc) -> bool {
+        unsafe {
+            let tag = (*tydesc).type_tag;
+            match tag {
+                // Primitives are always copy.
+                rtdt::TyTag::Bool
+                | rtdt::TyTag::U8 | rtdt::TyTag::U16 | rtdt::TyTag::U32 | rtdt::TyTag::U64
+                | rtdt::TyTag::I8 | rtdt::TyTag::I16 | rtdt::TyTag::I32 | rtdt::TyTag::I64
+                | rtdt::TyTag::F32 | rtdt::TyTag::F64 => true,
+
+                // Heap-allocated types are never copy.
+                rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data | rtdt::TyTag::Error => false,
+                rtdt::TyTag::List | rtdt::TyTag::Set | rtdt::TyTag::Map | rtdt::TyTag::Tensor => false,
+                rtdt::TyTag::Result => false,
+
+                // Tuple is copy if all fields are copy.
+                rtdt::TyTag::Tuple => {
+                    let tuple_info = (*tydesc).type_info.tuple;
+                    for i in 0..tuple_info.num_fields {
+                        let field_info = &*tuple_info.fields.add(i as usize);
+                        if !Self::is_copy_tydesc(field_info.tydesc) {
+                            return false;
+                        }
+                    }
+                    true
+                }
+
+                // Struct is copy if all fields are copy.
+                rtdt::TyTag::Struct => {
+                    let struct_info = (*tydesc).type_info.struct_;
+                    for i in 0..struct_info.num_fields {
+                        let field_info = &*struct_info.fields.add(i as usize);
+                        if !Self::is_copy_tydesc(field_info.tydesc) {
+                            return false;
+                        }
+                    }
+                    true
+                }
+
+                // Enum is copy if all variant payloads are copy.
+                rtdt::TyTag::Enum => {
+                    let enum_info = (*tydesc).type_info.enum_;
+                    for i in 0..enum_info.num_variants {
+                        let variant = &*enum_info.variants.add(i as usize);
+                        if !variant.payload.is_null()
+                            && !Self::is_copy_tydesc(variant.payload)
+                        {
+                            return false;
+                        }
+                    }
+                    true
+                }
+
+                // Option is copy if inner is copy.
+                rtdt::TyTag::Option => {
+                    let option_info = (*tydesc).type_info.option;
+                    Self::is_copy_tydesc(option_info.inner_tydesc)
+                }
+            }
+        }
+    }
+
     /// Widen a fixed-width integer value to an Int in a stack-allocated buffer.
     ///
     /// Returns the widened Int representation. The caller is responsible for

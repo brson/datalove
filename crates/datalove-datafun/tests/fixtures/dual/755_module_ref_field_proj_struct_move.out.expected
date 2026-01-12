@@ -1,0 +1,51 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "module",
+            name: Some("local/test/refops"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "fn takes_ref(p0):\nblock0:\n    v0 = const 0int\n    v1 = add p0, v0\n    drop v0\n    return v1\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "fn takes_ref(p0):\nblock0:\n    v0 = const 0int\n    v1 = add p0, v0\n    drop v0\n    return v1\n",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100int\n    v1 = const 200int\n    v2 = pack Struct0 {v0, v1}\n    v3 = getfieldref v2.0\n    v4 = call m0.f0(v3)\n    debuglog v4\n    drop v4\n    unit_end\nexports:\n    s = v2\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100int\n    v1 = const 200int\n    v2 = pack Struct0 {v0, v1}\n    v3 = getfieldref v2.0\n    v4 = call m0.f0(v3)\n    debuglog v4\n    drop v4\n    drop v2\n    unit_end\nexports:\n    s = v2\n",
+            ),
+            ir_match: true,
+            interp_output: "@100\n",
+            aot_output: "@100\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

@@ -1,0 +1,19 @@
+----------
+module local/test/refops
+----------
+
+// Module function taking ref param.
+fun takes_ref(ref x: @u32): @u32
+    ret x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+// Test calling module function with struct field as ref arg (copy type).
+require module local/test/refops
+import refops.takes_ref
+
+let s: {a: @u32, b: @u32} = {a = @100, b = @200}
+debuglog takes_ref(s.a)
