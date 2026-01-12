@@ -713,17 +713,21 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 let payload = gen_expr_full_with_heap(db, rng, inner_type, inner_heap, config, depth + 1);
                 (Expr::Ok(ExprOk { payload }), heap)
             } else {
-                // Error case: generate error with an arbitrary value.
-                // Use fixed heap to ensure all heaps match throughout.
-                let error_type = gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1);
-                let (error_value, _) = gen_expr_matching_type(db, rng, error_type.clone(), heap, config, depth + 1);
-                let error_type_hint = TypeHintAndHeap::new(db, heap, error_type);
-                let error_expr_full = ExprFull::new(
+                // Error case: generate Expr::Er with Expr::Error payload.
+                // Er payload must be an error expression (Expr::Error or Expr::Data).
+                let error_msg = gen_string_expr(db, rng);
+                let error_msg_full = ExprFull::new(
                     db,
-                    Some(error_type_hint),
-                    ExprAndHeap { heap, expr: error_value },
+                    None,
+                    ExprAndHeap { heap: Heap::Omitted, expr: error_msg },
                 );
-                (Expr::Error(ExprError { value: error_expr_full }), heap)
+                let error_expr = Expr::Error(ExprError { value: error_msg_full });
+                let er_payload = ExprFull::new(
+                    db,
+                    None,
+                    ExprAndHeap { heap, expr: error_expr },
+                );
+                (Expr::Er(ExprEr { payload: er_payload }), heap)
             }
         }
         TypeHint::Tensor(th) => {

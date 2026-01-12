@@ -421,59 +421,59 @@ fn test_result_error_case_generation() {
         ..Default::default()
     };
 
-    let mut seen_err = false;
+    let mut seen_er = false;
     let mut seen_ok = false;
 
     for seed in 0..200 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
 
-        fn check_for_err(db: &dyn salsa::Database, expr: &Expr, seen: &mut bool) {
+        fn check_for_er(db: &dyn salsa::Database, expr: &Expr, seen: &mut bool) {
             match expr {
-                Expr::Error(_) => {
+                Expr::Er(_) => {
                     *seen = true;
                 }
                 Expr::List(list) => {
                     for elem in list.elements.clone() {
-                        check_for_err(db, &elem.expr(db).expr.clone(), seen);
+                        check_for_er(db, &elem.expr(db).expr.clone(), seen);
                     }
                 }
                 Expr::Map(map) => {
                     for entry in map.entries.clone() {
-                        check_for_err(db, &entry.key.expr(db).expr.clone(), seen);
-                        check_for_err(db, &entry.value.expr(db).expr.clone(), seen);
+                        check_for_er(db, &entry.key.expr(db).expr.clone(), seen);
+                        check_for_er(db, &entry.value.expr(db).expr.clone(), seen);
                     }
                 }
                 Expr::Set(set) => {
                     for elem in set.elements.clone() {
-                        check_for_err(db, &elem.expr(db).expr.clone(), seen);
+                        check_for_er(db, &elem.expr(db).expr.clone(), seen);
                     }
                 }
                 Expr::AnonTuple(tuple) => {
                     for elem in tuple.elements.clone() {
-                        check_for_err(db, &elem.expr(db).expr.clone(), seen);
+                        check_for_er(db, &elem.expr(db).expr.clone(), seen);
                     }
                 }
                 Expr::AnonStruct(st) => {
                     for field in st.fields.clone() {
-                        check_for_err(db, &field.value.expr(db).expr.clone(), seen);
+                        check_for_er(db, &field.value.expr(db).expr.clone(), seen);
                     }
                 }
                 Expr::Data(d) => {
-                    check_for_err(db, &d.value.expr(db).expr.clone(), seen);
+                    check_for_er(db, &d.value.expr(db).expr.clone(), seen);
                 }
                 _ => {}
             }
         }
 
-        if matches!(expr_full.expr(&db).expr.clone(), Expr::Error(_)) {
-            seen_err = true;
+        if matches!(expr_full.expr(&db).expr.clone(), Expr::Er(_)) {
+            seen_er = true;
         } else {
             seen_ok = true;
         }
 
-        check_for_err(&db, &expr_full.expr(&db).expr.clone(), &mut seen_err);
+        check_for_er(&db, &expr_full.expr(&db).expr.clone(), &mut seen_er);
     }
 
-    assert!(seen_err, "Should generate at least one Result error case (Expr::Error)");
-    assert!(seen_ok, "Should generate at least one Result success case (non-Err)");
+    assert!(seen_er, "Should generate at least one Result error case (Expr::Er)");
+    assert!(seen_ok, "Should generate at least one Result success case (non-Er)");
 }
