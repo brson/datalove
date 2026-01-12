@@ -517,6 +517,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::GetField { dest, src, field_index } => {
                 self.compile_get_field(builder, *dest, src, *field_index)?;
             }
+            Instruction::GetFieldRef { dest, src, field_index } => {
+                self.compile_get_field_ref(builder, *dest, src, *field_index)?;
+            }
             Instruction::SetField { slot, field_path, value } => {
                 self.compile_set_field(builder, slot, field_path, value)?;
             }
@@ -639,6 +642,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         let ty = self.get_operand_type(operand)?;
+
+        // Ref types store a pointer value - return it directly without spilling.
+        if matches!(&ty, IrType::Ref(_)) {
+            return self.get_operand_value(builder, operand);
+        }
+
         let repr = types::ir_type_to_cranelift(&ty);
 
         match repr {

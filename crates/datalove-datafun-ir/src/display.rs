@@ -277,6 +277,9 @@ impl fmt::Display for Instruction {
             Instruction::GetField { dest, src, field_index } => {
                 write!(f, "{} = getfield {}.{}", dest, src, field_index)
             }
+            Instruction::GetFieldRef { dest, src, field_index } => {
+                write!(f, "{} = getfieldref {}.{}", dest, src, field_index)
+            }
             Instruction::WrapSome { dest, inner } => {
                 write!(f, "{} = some {}", dest, inner)
             }

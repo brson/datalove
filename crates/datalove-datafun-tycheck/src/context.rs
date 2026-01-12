@@ -40,6 +40,9 @@ pub struct TypeContext<'db> {
     pub(crate) call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
     /// Stack of loop depth (for validating break/continue are inside a loop).
     pub(crate) loop_depth: usize,
+    /// Whether we're in a reference context (ref/mut/out param or binop operand).
+    /// Move-type field projections are allowed in ref context.
+    pub(crate) ref_context: bool,
 }
 
 impl<'db> TypeContext<'db> {
@@ -59,6 +62,7 @@ impl<'db> TypeContext<'db> {
             expr_types: Vec::new(),
             call_targets: Vec::new(),
             loop_depth: 0,
+            ref_context: false,
         }
     }
 

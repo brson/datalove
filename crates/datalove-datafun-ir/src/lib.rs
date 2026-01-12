@@ -115,6 +115,11 @@ pub enum IrType {
     Result(Box<IrType>),
     /// Tensor with element type and rank.
     Tensor(Box<IrType>, u32),
+    /// Reference to a value (pointer to data of inner type).
+    ///
+    /// Used for field refs passed to ref/mut/out params.
+    /// Layout is pointer-sized (8 bytes), stores a pointer to the inner type.
+    Ref(Box<IrType>),
 }
 
 impl std::fmt::Display for IrType {
@@ -170,6 +175,7 @@ impl std::fmt::Display for IrType {
             IrType::Option(inner) => write!(f, "option<{}>", inner),
             IrType::Result(ok) => write!(f, "result<{}>", ok),
             IrType::Tensor(elem, rank) => write!(f, "tensor<{}, {}>", elem, rank),
+            IrType::Ref(inner) => write!(f, "ref<{}>", inner),
         }
     }
 }
@@ -374,6 +380,9 @@ impl IrType {
             IrType::Option(inner) => inner.is_copy(),
             // Result is never copy (Err variant contains non-copy Error).
             IrType::Result(_) => false,
+
+            // Ref is always copy (it's just a pointer, doesn't own the data).
+            IrType::Ref(_) => true,
         }
     }
 }
@@ -599,6 +608,17 @@ pub enum Instruction {
 
     /// Get a single field from a struct/tuple.
     GetField {
+        dest: ValueId,
+        src: Operand,
+        field_index: u32,
+    },
+
+    /// Get a reference (pointer) to a field within an aggregate.
+    ///
+    /// Unlike GetField which copies the field value, this returns a pointer
+    /// to the field. Used when passing field projections to ref/mut/out params.
+    /// The dest is an IrType::Ref wrapping the field type.
+    GetFieldRef {
         dest: ValueId,
         src: Operand,
         field_index: u32,

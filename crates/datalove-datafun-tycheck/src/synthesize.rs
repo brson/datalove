@@ -342,9 +342,13 @@ fn synthesize_binop<'db>(
     let lhs = binop.lhs;
     let rhs = binop.rhs;
 
-    // Synthesize types for operands.
+    // Synthesize types for operands in ref context.
+    // All binops treat their operands as ref (they don't move).
+    let old_ref_context = ctx.ref_context;
+    ctx.ref_context = true;
     let lhs_ty = ctx.synthesize_expr(lhs)?;
     let rhs_ty = ctx.synthesize_expr(rhs)?;
+    ctx.ref_context = old_ref_context;
 
     // Check that operands have the same type.
     if !types_equivalent(db, lhs_ty.ty(db), rhs_ty.ty(db)) {
@@ -562,8 +566,12 @@ fn synthesize_unaryop<'db>(
     let op = unaryop.op;
     let operand = unaryop.operand;
 
-    // Synthesize type for operand.
+    // Synthesize type for operand in ref context.
+    // Unary operators treat their operands as ref (they don't move).
+    let old_ref_context = ctx.ref_context;
+    ctx.ref_context = true;
     let operand_ty = ctx.synthesize_expr(operand)?;
+    ctx.ref_context = old_ref_context;
     let operand_type = operand_ty.ty(db);
 
     // Boolean not requires bool operand.
@@ -695,6 +703,7 @@ fn synthesize_function_call<'db>(
         .ok_or_else(|| ctx.error_undefined_function(expr, name))?;
 
     let param_types = func_type.param_types(db);
+    let param_modes = func_type.param_modes(db);
     let return_type = func_type.return_type(db);
 
     // F045: Function arity mismatch.
@@ -702,9 +711,14 @@ fn synthesize_function_call<'db>(
         return Err(ctx.error_arity_mismatch(expr, param_types.len(), args.len()));
     }
 
-    // Check each argument type.
-    for (arg, expected_param_ty) in args.iter().zip(param_types.iter()) {
-        check_expr(ctx, *arg, *expected_param_ty)?;
+    // Check each argument type, setting ref context for ref/mut/out params.
+    for ((arg, expected_param_ty), mode) in args.iter().zip(param_types.iter()).zip(param_modes.iter()) {
+        // Set ref context for reference parameter modes.
+        let old_ref_context = ctx.ref_context;
+        ctx.ref_context = matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out);
+        let result = check_expr(ctx, *arg, *expected_param_ty);
+        ctx.ref_context = old_ref_context;
+        result?;
     }
 
     // Store resolved call target for interpreter.
@@ -856,9 +870,9 @@ fn synthesize_field_proj<'db>(
                     }
                     let field_ty = &tuple.fields[idx_usize];
 
-                    // Check that field is a copy type.
-                    // Move-type field projections are not allowed (except in ref context).
-                    if !is_copy_type(db, field_ty.ty(db)) {
+                    // Check that field is a copy type or we're in ref context.
+                    // Move-type field projections are allowed in ref context.
+                    if !is_copy_type(db, field_ty.ty(db)) && !ctx.ref_context {
                         return Err(TypeError::NonCopyFieldProjection {
                             field_ty: datalit::tycheck::type_to_string(db, field_ty.ty(db)),
                         });
@@ -882,9 +896,9 @@ fn synthesize_field_proj<'db>(
                     let name_str = name.text(db);
                     for field in &struct_ty.fields {
                         if field.name.text(db) == name_str {
-                            // Check that field is a copy type.
-                            // Move-type field projections are not allowed (except in ref context).
-                            if !is_copy_type(db, field.ty.ty(db)) {
+                            // Check that field is a copy type or we're in ref context.
+                            // Move-type field projections are allowed in ref context.
+                            if !is_copy_type(db, field.ty.ty(db)) && !ctx.ref_context {
                                 return Err(TypeError::NonCopyFieldProjection {
                                     field_ty: datalit::tycheck::type_to_string(db, field.ty.ty(db)),
                                 });

@@ -129,6 +129,9 @@ pub fn ir_type_to_cranelift(ty: &IrType) -> CraneliftRepr {
             let layout = compute_result_layout(ok_ty);
             CraneliftRepr::Aggregate(layout)
         }
+
+        // Ref is a pointer to the inner type.
+        IrType::Ref(_) => CraneliftRepr::Scalar(PTR_TYPE),
     }
 }
 

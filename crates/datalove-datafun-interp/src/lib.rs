@@ -1182,6 +1182,37 @@ impl IrInterpreter {
                     )),
                 }
             }
+            Instruction::GetFieldRef { dest, src, field_index } => {
+                // Get a reference (pointer) to a field within an aggregate.
+                // Unlike GetField, this stores the field pointer instead of copying.
+                let src_val = self.read_operand(src, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest)?;
+                let tag = unsafe { (*src_val.tydesc).type_tag };
+
+                let field_ptr = match tag {
+                    rtdt::TyTag::Tuple => {
+                        let tuple_info = unsafe { (*src_val.tydesc).type_info.tuple };
+                        let field_info = unsafe { &*tuple_info.fields.add(*field_index as usize) };
+                        unsafe { src_val.ptr.add(field_info.offset as usize) }
+                    }
+                    rtdt::TyTag::Struct => {
+                        let struct_info = unsafe { (*src_val.tydesc).type_info.struct_ };
+                        let field_info = unsafe { &*struct_info.fields.add(*field_index as usize) };
+                        unsafe { src_val.ptr.add(field_info.offset as usize) }
+                    }
+                    _ => return Err(InterpError::TypeMismatch(
+                        format!("GetFieldRef requires tuple or struct type, got {:?}", tag)
+                    )),
+                };
+
+                // Store the field pointer in dest (ref value stores pointer, not data).
+                unsafe {
+                    *(dest_slot.ptr as *mut *mut u8) = field_ptr;
+                }
+                frame.mark_value_initialized(*dest);
+                frame.mark_value_borrowed(*dest);  // Ref doesn't own the data.
+                frame.mark_value_is_ref(*dest);    // Mark as ref for proper reading.
+            }
             Instruction::SetField { slot, field_path, value } => {
                 let value_val = self.read_operand(value, frame, frames)?;
 

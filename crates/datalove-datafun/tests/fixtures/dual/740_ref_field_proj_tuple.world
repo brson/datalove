@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Test passing tuple field to ref param.
+fun takes_ref(ref x: u32): u32
+    ret x
+end fun
+
+let t: (u32, u32) = (100, 200)
+debuglog takes_ref(t.0)

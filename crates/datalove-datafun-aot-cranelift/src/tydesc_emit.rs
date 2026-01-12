@@ -137,6 +137,13 @@ impl TyDescEmitter {
             IrType::Enum(variants) => {
                 return self.emit_enum_tydesc(module, ty, variants);
             }
+            IrType::Ref(inner_ty) => {
+                // Ref is a pointer to the inner type. Emit the inner type's tydesc
+                // first (for when reading through the ref), then emit a pointer-sized
+                // tydesc for the ref itself.
+                let _inner_id = self.emit(module, inner_ty)?;
+                return self.emit_ref_tydesc(module, ty, inner_ty);
+            }
             _ => {}
         }
 
@@ -506,6 +513,92 @@ impl TyDescEmitter {
             .map_err(|e| AotError::Module(format!("define result tydesc: {}", e)))?;
 
         self.tydescs.insert(result_ty, data_id);
+        Ok(data_id)
+    }
+
+    /// Emit a TyDesc for a Ref type (pointer to inner type).
+    ///
+    /// Ref is represented as a 1-element tuple containing the inner type's tydesc,
+    /// but with pointer size/align. This allows getting the inner tydesc when
+    /// reading through the ref.
+    fn emit_ref_tydesc<M: Module>(
+        &mut self,
+        module: &mut M,
+        ref_ty: &IrType,
+        inner_ty: &IrType,
+    ) -> Result<DataId, AotError> {
+        // Check cache.
+        if let Some(&id) = self.tydescs.get(ref_ty) {
+            return Ok(id);
+        }
+
+        // Get inner type's tydesc (should already be emitted).
+        let inner_tydesc_id = self.tydescs.get(inner_ty)
+            .copied()
+            .ok_or_else(|| AotError::Codegen("inner tydesc not found for ref".into()))?;
+
+        // Create the fields array with 1 field (the inner type).
+        let fields_size = TYINFO_TUPLE_FIELD_SIZE;
+        let mut fields_bytes = vec![0u8; fields_size];
+
+        // Write offset field (0 for single field).
+        fields_bytes[TYINFO_TUPLE_FIELD_OFFSET_OFFSET..TYINFO_TUPLE_FIELD_OFFSET_OFFSET + 4]
+            .copy_from_slice(&0u32.to_le_bytes());
+
+        let fields_name = format!("__tydesc_ref_fields_{}", self.counter);
+        self.counter += 1;
+
+        let fields_id = module
+            .declare_data(&fields_name, Linkage::Local, false, false)
+            .map_err(|e| AotError::Module(format!("declare ref fields: {}", e)))?;
+
+        let mut fields_desc = DataDescription::new();
+        fields_desc.define(fields_bytes.into_boxed_slice());
+        fields_desc.set_align(align_of::<TyInfoTupleField>() as u64);
+
+        // Add relocation for inner type's tydesc pointer.
+        let inner_gv = module.declare_data_in_data(inner_tydesc_id, &mut fields_desc);
+        fields_desc.write_data_addr(
+            (TYINFO_TUPLE_FIELD_TYDESC_OFFSET) as u32,
+            inner_gv,
+            0,
+        );
+
+        module
+            .define_data(fields_id, &fields_desc)
+            .map_err(|e| AotError::Module(format!("define ref fields: {}", e)))?;
+
+        // Build the TyDesc for the ref type.
+        let mut bytes = vec![0u8; TYDESC_SIZE];
+        bytes[OFFSET_TYPE_TAG] = TyTag::Tuple as u8;
+        bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&8u32.to_le_bytes()); // Pointer size
+        bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&8u32.to_le_bytes()); // Pointer align
+
+        // Write num_fields (1).
+        let num_fields_offset = OFFSET_TYPE_INFO;
+        bytes[num_fields_offset..num_fields_offset + 8].copy_from_slice(&1u64.to_le_bytes());
+
+        let name = format!("__tydesc_ref_{}", self.counter);
+        self.counter += 1;
+
+        let data_id = module
+            .declare_data(&name, Linkage::Local, false, false)
+            .map_err(|e| AotError::Module(format!("declare ref tydesc: {}", e)))?;
+
+        let mut data_desc = DataDescription::new();
+        data_desc.define(bytes.into_boxed_slice());
+        data_desc.set_align(TYDESC_ALIGN as u64);
+
+        // Add relocation for fields pointer.
+        let fields_gv = module.declare_data_in_data(fields_id, &mut data_desc);
+        let fields_ptr_offset = OFFSET_TYPE_INFO + 8; // After num_fields
+        data_desc.write_data_addr(fields_ptr_offset as u32, fields_gv, 0);
+
+        module
+            .define_data(data_id, &data_desc)
+            .map_err(|e| AotError::Module(format!("define ref tydesc: {}", e)))?;
+
+        self.tydescs.insert(ref_ty.clone(), data_id);
         Ok(data_id)
     }
 
@@ -989,6 +1082,9 @@ impl TyDescEmitter {
             IrType::Enum(variants) => variants.iter().all(|(_, payload)| {
                 payload.as_ref().map_or(true, |t| self.can_emit(t))
             }),
+
+            // Ref types - can emit if inner type can be emitted.
+            IrType::Ref(inner_ty) => self.can_emit(inner_ty),
         }
     }
 

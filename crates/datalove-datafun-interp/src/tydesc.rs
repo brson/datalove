@@ -151,7 +151,35 @@ impl IrTyDescTable {
             IrType::Option(inner) => self.create_option_tydesc(inner),
             IrType::Result(inner) => self.create_result_tydesc(inner),
             IrType::Tensor(elem, rank) => self.create_tensor_tydesc(elem, *rank),
+            IrType::Ref(inner) => self.create_ref_tydesc(inner),
         }
+    }
+
+    fn create_ref_tydesc(&mut self, inner: &IrType) -> Box<TyDesc> {
+        // Create inner tydesc (stored in type_info for reading through the ref).
+        let inner_tydesc = self.get_or_create(inner);
+
+        // Ref is pointer-sized. We use a 1-element tuple containing the inner type
+        // as a hack to store the inner tydesc. The layout uses special handling
+        // to allocate only 8 bytes for Ref types.
+        let field_info = vec![rtdt::TyInfoTupleField {
+            offset: 0,
+            tydesc: inner_tydesc,
+        }];
+        self.tuple_fields.push(field_info);
+        let fields_ptr = self.tuple_fields.last().unwrap().as_ptr();
+
+        Box::new(TyDesc {
+            type_tag: rtdt::TyTag::Tuple,  // Use Tuple tag to store inner tydesc
+            size: 8,  // Always pointer-sized
+            align: 8, // Always pointer-aligned
+            type_info: rtdt::TyInfo {
+                tuple: rtdt::TyInfoTuple {
+                    num_fields: 1,
+                    fields: fields_ptr,
+                },
+            },
+        })
     }
 
     fn create_tuple_tydesc(&mut self, fields: &[IrType]) -> Box<TyDesc> {

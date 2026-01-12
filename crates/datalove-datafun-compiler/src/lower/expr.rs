@@ -2,10 +2,11 @@
 //!
 //! Transforms AST expressions into IR instructions.
 
-use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind};
+use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind, ParamMode};
 use datalove_datafun_ir::{
     IrType, Operand, ValueId, BinOp, UnaryOp, Instruction, ConstValue, Terminator, TypeRef,
 };
+use salsa::plumbing::AsId;
 use super::context::LowerCtx;
 use super::literal::{parse_int_const, parse_hex_const};
 use super::LowerError;
@@ -39,6 +40,54 @@ pub fn lower_operand<'db>(
             Ok(Operand::Value(value_id))
         }
     }
+}
+
+/// Lower an argument for a function call, considering the parameter mode.
+///
+/// For ref/mut/out params with field projection args, emits GetFieldRef instead
+/// of GetField to pass a reference to the field without copying.
+fn lower_call_arg<'db>(
+    ctx: &mut LowerCtx<'db>,
+    arg: ExprFun<'db>,
+    mode: ParamMode,
+) -> Result<Operand, LowerError> {
+    // Check if this is a ref context AND the arg is a field projection.
+    if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
+        if let ExprFunKind::FieldProj(proj) = arg.expr(ctx.db) {
+            return lower_field_proj_as_ref(ctx, arg, proj);
+        }
+    }
+    // Default: use lower_operand.
+    lower_operand(ctx, arg)
+}
+
+/// Lower a field projection as a reference (pointer to field).
+///
+/// Emits GetFieldRef instead of GetField, returning a pointer to the field
+/// without copying. Used when passing field projections to ref/mut/out params.
+fn lower_field_proj_as_ref<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+    proj: ast::ExprFieldProj<'db>,
+) -> Result<Operand, LowerError> {
+    // Lower the base expression.
+    let base_id = lower_expression(ctx, proj.base)?;
+    let base_type = ctx.expr_type(proj.base);
+
+    // Get the field index.
+    let field_index = resolve_field_index(&proj.field, &base_type, ctx.db)?;
+
+    // Get the field type and wrap in Ref.
+    let field_type = ctx.expr_type(expr);
+    let ref_type = IrType::Ref(Box::new(field_type));
+    let dest = ctx.fresh_value(ref_type);
+
+    ctx.emit(Instruction::GetFieldRef {
+        dest,
+        src: Operand::Value(base_id),
+        field_index,
+    });
+    Ok(Operand::Value(dest))
 }
 
 /// Lower an expression, returning the ValueId holding the result.
@@ -139,23 +188,32 @@ pub fn lower_expression<'db>(
             lower_unaryop(ctx, expr, unary)
         }
         ExprFunKind::FunctionCall(call) => {
-            // Use lower_operand to get operands directly without forcing moves.
-            // This allows Param operands to be passed through for ref-mode params.
-            // The interpreter's Call handling checks param modes to decide ownership.
-            let args: Result<Vec<_>, _> = call.args(ctx.db)
-                .iter()
-                .map(|arg| lower_operand(ctx, *arg))
-                .collect();
-            let result_type = ctx.expr_type(expr);
-            let dest = ctx.fresh_value(result_type);
-
             // Resolve function reference using typechecker's resolved call target.
             let func_ref = ctx.resolve_call(call)?;
+
+            // Get param modes from the resolved call target.
+            let id = call.as_id().index() as usize;
+            let target = ctx.call_targets.get(id).and_then(|t| t.as_ref());
+            let param_modes: Vec<ParamMode> = target
+                .map(|t| t.func(ctx.db).params(ctx.db).iter().map(|p| p.mode).collect())
+                .unwrap_or_default();
+
+            // Lower each arg, using GetFieldRef for field projections in ref context.
+            let call_args = call.args(ctx.db);
+            let mut args = Vec::with_capacity(call_args.len());
+            for (i, arg) in call_args.iter().enumerate() {
+                let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
+                let operand = lower_call_arg(ctx, *arg, mode)?;
+                args.push(operand);
+            }
+
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
 
             ctx.emit(Instruction::Call {
                 dest,
                 func: func_ref,
-                args: args?,
+                args,
             });
             Ok(dest)
         }

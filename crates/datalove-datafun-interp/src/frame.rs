@@ -22,6 +22,8 @@ pub struct Frame {
     slot_initialized: Vec<bool>,
     /// Track which values are borrowed (not owned, skip destruction).
     value_borrowed: Vec<bool>,
+    /// Track which values are references (store pointers, dereference on read).
+    value_is_ref: Vec<bool>,
     /// Pointers to caller's data for each parameter.
     param_ptrs: Vec<*mut u8>,
     /// Type descriptors for each parameter.
@@ -48,6 +50,7 @@ impl Frame {
             value_initialized: vec![false; value_count],
             slot_initialized: vec![false; slot_count],
             value_borrowed: vec![false; value_count],
+            value_is_ref: vec![false; value_count],
             param_ptrs: vec![std::ptr::null_mut(); param_count],
             param_tydescs: vec![std::ptr::null(); param_count],
             param_borrowed: vec![false; param_count],
@@ -61,6 +64,20 @@ impl Frame {
         if idx < self.value_borrowed.len() {
             self.value_borrowed[idx] = true;
         }
+    }
+
+    /// Mark a value as a reference (stores pointer, dereference on read).
+    pub fn mark_value_is_ref(&mut self, id: ValueId) {
+        let idx = id.0 as usize;
+        if idx < self.value_is_ref.len() {
+            self.value_is_ref[idx] = true;
+        }
+    }
+
+    /// Check if a value is a reference.
+    pub fn is_value_ref(&self, id: ValueId) -> bool {
+        let idx = id.0 as usize;
+        idx < self.value_is_ref.len() && self.value_is_ref[idx]
     }
 
     /// Get destination for a value.
@@ -87,7 +104,20 @@ impl Frame {
         let offset = self.layout.value_offsets[idx] as usize;
         let tydesc = self.layout.value_tydescs[idx];
         let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
-        Ok(Value { ptr, tydesc })
+
+        // Handle ref values: dereference the stored pointer and use inner tydesc.
+        if self.value_is_ref[idx] {
+            // Read the stored pointer.
+            let stored_ptr = unsafe { *(ptr as *const *mut u8) };
+            // Get inner tydesc from the ref's tydesc (stored as 1-element tuple).
+            let inner_tydesc = unsafe {
+                let tuple_info = (*tydesc).type_info.tuple;
+                (*tuple_info.fields).tydesc
+            };
+            Ok(Value { ptr: stored_ptr, tydesc: inner_tydesc })
+        } else {
+            Ok(Value { ptr, tydesc })
+        }
     }
 
     /// Mark value as initialized.

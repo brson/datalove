@@ -260,6 +260,67 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
+    /// Compile a get_field_ref instruction (get pointer to field).
+    ///
+    /// Unlike get_field which copies the field value, this returns a pointer
+    /// to the field. Used when passing field projections to ref/mut/out params.
+    pub(super) fn compile_get_field_ref(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        src: &Operand,
+        field_index: u32,
+    ) -> Result<(), AotError> {
+        let src_ty = self.get_operand_type(src)?;
+        let repr = types::ir_type_to_cranelift(&src_ty);
+
+        match repr {
+            CraneliftRepr::Scalar(_) => {
+                // Single-element tuple. Need to get address of the value.
+                // This requires spilling the scalar to memory first.
+                if field_index != 0 {
+                    return Err(AotError::Unsupported(
+                        format!("scalar get_field_ref with field_index {} (max 0)", field_index)
+                    ));
+                }
+                // Get pointer to the source operand.
+                let ptr = self.get_operand_ptr(builder, src)?;
+                self.values.insert(dest, ptr);
+            }
+            CraneliftRepr::Aggregate(_) => {
+                // Source is a pointer to aggregate; compute field address.
+                let base = self.get_operand_value(builder, src)?;
+
+                let field_types: Vec<_> = match &src_ty {
+                    IrType::Tuple(tys) => tys.clone(),
+                    IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                    _ => {
+                        return Err(AotError::Unsupported(format!(
+                            "get_field_ref from non-tuple/struct: {:?}",
+                            src_ty
+                        )));
+                    }
+                };
+
+                if field_index as usize >= field_types.len() {
+                    return Err(AotError::Codegen(format!(
+                        "field index {} out of bounds for type with {} fields",
+                        field_index,
+                        field_types.len()
+                    )));
+                }
+
+                let offsets = types::compute_tuple_field_offsets(&field_types);
+                let field_addr = builder.ins().iadd_imm(base, offsets[field_index as usize] as i64);
+
+                // The ref value IS the pointer to the field.
+                self.values.insert(dest, field_addr);
+            }
+        }
+
+        Ok(())
+    }
+
     /// Compile a set_field instruction (set field in slot).
     pub(super) fn compile_set_field(
         &mut self,
