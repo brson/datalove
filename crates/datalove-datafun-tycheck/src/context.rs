@@ -167,34 +167,6 @@ impl<'db> TypeContext<'db> {
         }
     }
 
-    /// F027: Invalid tuple element type.
-    pub fn error_invalid_tuple_element(&self, expr: ExprFun<'db>, ty: &str) -> TypeError {
-        if let Some(ts) = self.get_span(expr) {
-            let msg = format!("tuple elements must be datalit types, found `{}`", ty);
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
-                .code("F027")
-                .primary_label(ts.clone(), "invalid type for tuple element")
-                .emit_type();
-        }
-        TypeError::InvalidTupleElement {
-            ty: ty.to_string(),
-        }
-    }
-
-    /// F047: Try operator used outside function.
-    pub fn error_try_outside_function(&self, expr: ExprFun<'db>, operator: &str) -> TypeError {
-        if let Some(ts) = self.get_span(expr) {
-            let msg = format!("try operator `{}` can only be used inside a function", operator);
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
-                .code("F047")
-                .primary_label(ts.clone(), "try operator here")
-                .emit_type();
-        }
-        TypeError::TryOutsideFunction {
-            operator: operator.to_string(),
-        }
-    }
-
     /// F048: Try operator type mismatch.
     pub fn error_try_type_mismatch(&self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
         if let Some(ts) = self.get_span(expr) {

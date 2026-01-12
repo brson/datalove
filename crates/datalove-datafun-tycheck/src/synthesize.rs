@@ -75,8 +75,9 @@ fn require_option_return_type<'db>(
     op_str: &str,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
+    // Scripts always have an expected return type, so this is always Some.
     let expected_return = ctx.expected_return_type
-        .ok_or_else(|| ctx.error_try_outside_function(expr, op_str))?;
+        .expect("try operator used outside function context");
     match expected_return.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Option(_)) => Ok(expected_return),
         _ => Err(ctx.error_try_return_type_mismatch(
@@ -97,8 +98,9 @@ fn require_result_return_type<'db>(
     op_str: &str,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
+    // Scripts always have an expected return type, so this is always Some.
     let expected_return = ctx.expected_return_type
-        .ok_or_else(|| ctx.error_try_outside_function(expr, op_str))?;
+        .expect("try operator used outside function context");
     match expected_return.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Result(_)) => Ok(expected_return),
         _ => Err(ctx.error_try_return_type_mismatch(
@@ -150,7 +152,8 @@ pub fn synthesize_expr<'db>(
                 let elem_ty = ctx.synthesize_expr(*elem)?;
 
                 // Extract datalit TypeAndHeap from datafun TypeAndHeap.
-                // Tuple elements must be datalit types.
+                // Tuple elements must be datalit types. Function types cannot
+                // appear in expressions, so this match is exhaustive in practice.
                 match elem_ty.ty(db) {
                     Type::Datalit(datalit_ty) => {
                         let datalit_elem_ty = datalit::tycheck::TypeAndHeap::new(
@@ -160,11 +163,8 @@ pub fn synthesize_expr<'db>(
                         );
                         datalit_element_types.push(datalit_elem_ty);
                     }
-                    _ => {
-                        return Err(ctx.error_invalid_tuple_element(
-                            *elem,
-                            &type_to_string(db, elem_ty.ty(db))
-                        ));
+                    Type::Function(_) => {
+                        unreachable!("function types cannot appear in tuple elements");
                     }
                 }
             }
