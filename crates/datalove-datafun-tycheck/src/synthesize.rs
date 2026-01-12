@@ -833,14 +833,7 @@ fn synthesize_inline_list<'db>(
     let elements = &list_expr.elements;
 
     if elements.is_empty() {
-        // Empty list - can't synthesize element type.
-        // Default to List<()>.
-        let elem_ty = datalit::tycheck::TypeAndHeap::new(
-            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: vec![] })
-        );
-        let ty = Type::Datalit(datalit::tycheck::Type::List(
-            datalit::tycheck::TypeList { element_type: elem_ty }
-        ));
+        let ty = Type::Datalit(datalit::tycheck::empty_list_type(db, heap).ty(db).clone());
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
 
@@ -871,12 +864,7 @@ fn synthesize_inline_set<'db>(
     let elements = &set_expr.elements;
 
     if elements.is_empty() {
-        let elem_ty = datalit::tycheck::TypeAndHeap::new(
-            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: vec![] })
-        );
-        let ty = Type::Datalit(datalit::tycheck::Type::Set(
-            datalit::tycheck::TypeSet { element_type: elem_ty }
-        ));
+        let ty = Type::Datalit(datalit::tycheck::empty_set_type(db, heap).ty(db).clone());
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
 
@@ -906,12 +894,7 @@ fn synthesize_inline_map<'db>(
     let entries = &map_expr.entries;
 
     if entries.is_empty() {
-        let unit_ty = datalit::tycheck::TypeAndHeap::new(
-            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: vec![] })
-        );
-        let ty = Type::Datalit(datalit::tycheck::Type::Map(
-            datalit::tycheck::TypeMap { key_type: unit_ty.clone(), value_type: unit_ty }
-        ));
+        let ty = Type::Datalit(datalit::tycheck::empty_map_type(db, heap).ty(db).clone());
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
 
@@ -949,12 +932,7 @@ fn synthesize_inline_tensor<'db>(
     let rank = shape.len() as u32;
 
     if elements.is_empty() {
-        let elem_ty = datalit::tycheck::TypeAndHeap::new(
-            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: vec![] })
-        );
-        let ty = Type::Datalit(datalit::tycheck::Type::Tensor(
-            datalit::tycheck::TypeTensor { element_type: elem_ty, rank }
-        ));
+        let ty = Type::Datalit(datalit::tycheck::empty_tensor_type(db, heap, rank).ty(db).clone());
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
 

@@ -414,13 +414,7 @@ pub fn check_tensor_shape_and_elements<'db>(
     }
 
     // Check element count matches shape product.
-    let expected_count = shape.iter().map(|&d| d as usize).product::<usize>();
-    if elements.len() != expected_count {
-        return Err(TypeError::ArityMismatch {
-            expected: expected_count,
-            actual: elements.len(),
-        });
-    }
+    datalit::tycheck::check_tensor_element_count(shape, elements.len())?;
 
     // Check each element against expected element type.
     for elem in elements {

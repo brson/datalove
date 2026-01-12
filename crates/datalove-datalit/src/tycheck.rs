@@ -322,11 +322,7 @@ fn synthesize<'db>(
         Expr::List(l) => {
             let elements = &l.elements;
             if elements.is_empty() {
-                // Empty list defaults to List<()>.
-                let unit_type = TypeAndHeap::new(
-                    db, heap, Type::AnonTuple(TypeAnonTuple { fields: vec![] })
-                );
-                return Ok(TypeAndHeap::new(db, heap, Type::List(TypeList { element_type: unit_type })));
+                return Ok(empty_list_type(db, heap));
             }
 
             // Synthesize first element to get the expected type.
@@ -367,11 +363,7 @@ fn synthesize<'db>(
         Expr::Set(s) => {
             let elements = s.elements.clone();
             if elements.is_empty() {
-                // Empty set defaults to Set<()>.
-                let unit_type = TypeAndHeap::new(
-                    db, heap, Type::AnonTuple(TypeAnonTuple { fields: vec![] })
-                );
-                return Ok(TypeAndHeap::new(db, heap, Type::Set(TypeSet { element_type: unit_type })));
+                return Ok(empty_set_type(db, heap));
             }
 
             // Synthesize first element to get the expected type.
@@ -412,14 +404,7 @@ fn synthesize<'db>(
         Expr::Map(m) => {
             let entries = m.entries.clone();
             if entries.is_empty() {
-                // Empty map defaults to Map<(), ()>.
-                let unit_type = TypeAndHeap::new(
-                    db, heap, Type::AnonTuple(TypeAnonTuple { fields: vec![] })
-                );
-                return Ok(TypeAndHeap::new(db, heap, Type::Map(TypeMap {
-                    key_type: unit_type,
-                    value_type: unit_type,
-                })));
+                return Ok(empty_map_type(db, heap));
             }
 
             // Synthesize first entry to get the expected key and value types.
@@ -531,31 +516,22 @@ fn synthesize<'db>(
             let rank = shape.len() as u32;
 
             if elements.is_empty() {
-                // Empty tensor defaults to Tensor<()>.
-                let unit_type = TypeAndHeap::new(
-                    db, heap, Type::AnonTuple(TypeAnonTuple { fields: vec![] })
-                );
-                return Ok(TypeAndHeap::new(db, heap, Type::Tensor(TypeTensor {
-                    element_type: unit_type,
-                    rank,
-                })));
+                return Ok(empty_tensor_type(db, heap, rank));
             }
 
-            // Calculate expected element count from shape.
-            let expected_count = shape.iter().map(|&d| d as usize).product::<usize>();
-            if elements.len() != expected_count {
+            // Check element count matches shape product.
+            if let Err(e) = check_tensor_element_count(&shape, elements.len()) {
                 // T051: Tensor element count mismatch (synthesis mode).
                 if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "tensor has wrong number of elements")
-                        .code("T051")
-                        .primary_label(ts.clone(), &format!("expected {} element(s), found {}",
-                            expected_count, elements.len()))
-                        .emit_type();
+                    if let TypeError::ArityMismatch { expected, actual } = &e {
+                        DiagnosticBuilder::error(db, "tensor has wrong number of elements")
+                            .code("T051")
+                            .primary_label(ts.clone(), &format!("expected {} element(s), found {}",
+                                expected, actual))
+                            .emit_type();
+                    }
                 }
-                return Err(TypeError::ArityMismatch {
-                    expected: expected_count,
-                    actual: elements.len(),
-                });
+                return Err(e);
             }
 
             // Synthesize first element to get the expected type.
@@ -1426,6 +1402,56 @@ pub fn heap_to_string(heap: Heap) -> String {
         Heap::Global => "#".to_string(),
         Heap::Omitted => "".to_string(),
     }
+}
+
+// ============================================================================
+// Unit and Empty Collection Type Constructors
+// ============================================================================
+
+/// Create the unit type `()` (empty anonymous tuple) with the given heap.
+pub fn unit_type<'db>(db: &'db dyn crate::Db, heap: Heap) -> TypeAndHeap<'db> {
+    TypeAndHeap::new(db, heap, Type::AnonTuple(TypeAnonTuple { fields: vec![] }))
+}
+
+/// Create an empty list type `List<()>` with the given heap.
+pub fn empty_list_type<'db>(db: &'db dyn crate::Db, heap: Heap) -> TypeAndHeap<'db> {
+    let elem_ty = unit_type(db, heap);
+    TypeAndHeap::new(db, heap, Type::List(TypeList { element_type: elem_ty }))
+}
+
+/// Create an empty set type `Set<()>` with the given heap.
+pub fn empty_set_type<'db>(db: &'db dyn crate::Db, heap: Heap) -> TypeAndHeap<'db> {
+    let elem_ty = unit_type(db, heap);
+    TypeAndHeap::new(db, heap, Type::Set(TypeSet { element_type: elem_ty }))
+}
+
+/// Create an empty map type `Map<(), ()>` with the given heap.
+pub fn empty_map_type<'db>(db: &'db dyn crate::Db, heap: Heap) -> TypeAndHeap<'db> {
+    let elem_ty = unit_type(db, heap);
+    TypeAndHeap::new(db, heap, Type::Map(TypeMap {
+        key_type: elem_ty,
+        value_type: elem_ty,
+    }))
+}
+
+/// Create an empty tensor type `Tensor<(), rank>` with the given heap.
+pub fn empty_tensor_type<'db>(db: &'db dyn crate::Db, heap: Heap, rank: u32) -> TypeAndHeap<'db> {
+    let elem_ty = unit_type(db, heap);
+    TypeAndHeap::new(db, heap, Type::Tensor(TypeTensor {
+        element_type: elem_ty,
+        rank,
+    }))
+}
+
+/// Check that tensor element count matches the shape product.
+///
+/// Returns Ok(()) if the count matches, Err(ArityMismatch) otherwise.
+pub fn check_tensor_element_count(shape: &[u32], actual: usize) -> Result<(), TypeError> {
+    let expected = shape.iter().map(|&d| d as usize).product::<usize>();
+    if actual != expected {
+        return Err(TypeError::ArityMismatch { expected, actual });
+    }
+    Ok(())
 }
 
 // ============================================================================
