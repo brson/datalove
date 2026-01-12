@@ -10,6 +10,52 @@ use crate::types::*;
 
 pub use crate::{Type, TypeAndHeap, TypeError};
 
+// ============================================================================
+// Element Checking Helper
+// ============================================================================
+
+/// Check an element's type and heap against expected type.
+///
+/// This combines type coercion checking and heap compatibility checking,
+/// which is needed for collection elements (set, map, tensor, struct fields).
+fn check_element_type_and_heap<'db>(
+    db: &'db dyn crate::Db,
+    elem_expr: ExprFun<'db>,
+    elem_ty: TypeAndHeap<'db>,
+    expected_type: &datalit::tycheck::TypeAndHeap<'db>,
+) -> Result<(), TypeError> {
+    // Extract actual datalit type.
+    let actual_datalit_ty = match elem_ty.ty(db) {
+        Type::Datalit(dt) => dt,
+        _ => return Ok(()), // Non-datalit types handled elsewhere.
+    };
+
+    // Check type compatibility with coercion.
+    if let Err(err) = check_type_coercion(db, actual_datalit_ty, expected_type) {
+        return Err(TypeError::from(err));
+    }
+
+    // Check heap compatibility.
+    let expected_heap = unwrap_wrapper_heap_datalit(db, *expected_type);
+    if !heaps_compatible(expected_heap, elem_ty.heap(db)) {
+        return Err(TypeError::HeapMismatch {
+            expected_heap: heap_to_string(expected_heap),
+            actual_heap: heap_to_string(elem_ty.heap(db)),
+        });
+    }
+
+    // Also check expression's outer heap.
+    let expr_heap = get_expr_heap(db, elem_expr);
+    if !heaps_compatible(expected_heap, expr_heap) {
+        return Err(TypeError::HeapMismatch {
+            expected_heap: heap_to_string(expected_heap),
+            actual_heap: heap_to_string(expr_heap),
+        });
+    }
+
+    Ok(())
+}
+
 /// Error type for coercion failures.
 pub enum CoercionError {
     TypeMismatch { expected: String, actual: String },
@@ -379,44 +425,14 @@ pub fn check_set_elements<'db>(
 
     // Extract the element type from the set type.
     let elem_type = match inner_ty.ty(db) {
-        Type::Datalit(datalit::tycheck::Type::Set(set_ty)) => {
-            set_ty.element_type
-        }
+        Type::Datalit(datalit::tycheck::Type::Set(set_ty)) => set_ty.element_type,
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
 
     // Check each element against expected element type.
     for elem in elements {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-
-        // Extract actual datalit type.
-        let actual_datalit_ty = match elem_ty.ty(db) {
-            Type::Datalit(dt) => dt,
-            _ => continue,
-        };
-
-        // Check type compatibility with coercion.
-        if let Err(err) = check_type_coercion(db, actual_datalit_ty, &elem_type) {
-            return Err(TypeError::from(err));
-        }
-
-        // Check heap compatibility.
-        let expected_heap = unwrap_wrapper_heap_datalit(db, elem_type);
-        if !heaps_compatible(expected_heap, elem_ty.heap(db)) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_heap),
-                actual_heap: heap_to_string(elem_ty.heap(db)),
-            });
-        }
-
-        // Also check expression's outer heap.
-        let expr_heap = get_expr_heap(db, *elem);
-        if !heaps_compatible(expected_heap, expr_heap) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_heap),
-                actual_heap: heap_to_string(expr_heap),
-            });
-        }
+        check_element_type_and_heap(db, *elem, elem_ty, &elem_type)?;
     }
 
     Ok(())
@@ -446,61 +462,8 @@ pub fn check_map_entries<'db>(
         let key_ty = ctx.synthesize_expr(entry.key)?;
         let value_ty = ctx.synthesize_expr(entry.value)?;
 
-        // Extract actual datalit types.
-        let actual_key_ty = match key_ty.ty(db) {
-            Type::Datalit(dt) => dt,
-            _ => continue,
-        };
-        let actual_value_ty = match value_ty.ty(db) {
-            Type::Datalit(dt) => dt,
-            _ => continue,
-        };
-
-        // Check key type compatibility with coercion.
-        if let Err(err) = check_type_coercion(db, actual_key_ty, &key_type) {
-            return Err(TypeError::from(err));
-        }
-
-        // Check key heap compatibility.
-        let expected_key_heap = unwrap_wrapper_heap_datalit(db, key_type);
-        if !heaps_compatible(expected_key_heap, key_ty.heap(db)) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_key_heap),
-                actual_heap: heap_to_string(key_ty.heap(db)),
-            });
-        }
-
-        // Also check key expression's outer heap.
-        let key_expr_heap = get_expr_heap(db, entry.key);
-        if !heaps_compatible(expected_key_heap, key_expr_heap) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_key_heap),
-                actual_heap: heap_to_string(key_expr_heap),
-            });
-        }
-
-        // Check value type compatibility with coercion.
-        if let Err(err) = check_type_coercion(db, actual_value_ty, &value_type) {
-            return Err(TypeError::from(err));
-        }
-
-        // Check value heap compatibility.
-        let expected_value_heap = unwrap_wrapper_heap_datalit(db, value_type);
-        if !heaps_compatible(expected_value_heap, value_ty.heap(db)) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_value_heap),
-                actual_heap: heap_to_string(value_ty.heap(db)),
-            });
-        }
-
-        // Also check value expression's outer heap.
-        let value_expr_heap = get_expr_heap(db, entry.value);
-        if !heaps_compatible(expected_value_heap, value_expr_heap) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_value_heap),
-                actual_heap: heap_to_string(value_expr_heap),
-            });
-        }
+        check_element_type_and_heap(db, entry.key, key_ty, &key_type)?;
+        check_element_type_and_heap(db, entry.value, value_ty, &value_type)?;
     }
 
     Ok(())
@@ -548,35 +511,7 @@ pub fn check_tensor_shape_and_elements<'db>(
     // Check each element against expected element type.
     for elem in elements {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-
-        // Extract actual datalit type.
-        let actual_datalit_ty = match elem_ty.ty(db) {
-            Type::Datalit(dt) => dt,
-            _ => continue,
-        };
-
-        // Check type compatibility with coercion.
-        if let Err(err) = check_type_coercion(db, actual_datalit_ty, &elem_type) {
-            return Err(TypeError::from(err));
-        }
-
-        // Check heap compatibility.
-        let expected_heap = unwrap_wrapper_heap_datalit(db, elem_type);
-        if !heaps_compatible(expected_heap, elem_ty.heap(db)) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_heap),
-                actual_heap: heap_to_string(elem_ty.heap(db)),
-            });
-        }
-
-        // Also check expression's outer heap.
-        let expr_heap = get_expr_heap(db, *elem);
-        if !heaps_compatible(expected_heap, expr_heap) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_heap),
-                actual_heap: heap_to_string(expr_heap),
-            });
-        }
+        check_element_type_and_heap(db, *elem, elem_ty, &elem_type)?;
     }
 
     Ok(())
@@ -653,43 +588,12 @@ pub fn check_struct_fields<'db>(
     // Check each field against expected field type.
     for (field, expected_field) in fields.iter().zip(expected_fields.iter()) {
         // Check field name matches.
-        let field_name = field.name;
-        let expected_name = expected_field.name;
-        if field_name != expected_name {
+        if field.name != expected_field.name {
             return Err(TypeError::FieldOrderMismatch);
         }
 
         let field_value_ty = ctx.synthesize_expr(field.value)?;
-
-        // Extract actual datalit type.
-        let actual_datalit_ty = match field_value_ty.ty(db) {
-            Type::Datalit(dt) => dt,
-            _ => continue, // Skip non-datalit types.
-        };
-
-        // Check type compatibility with coercion.
-        let expected_field_ty = expected_field.ty;
-        if let Err(err) = check_type_coercion(db, actual_datalit_ty, &expected_field_ty) {
-            return Err(TypeError::from(err));
-        }
-
-        // Check heap compatibility.
-        let expected_heap = unwrap_wrapper_heap_datalit(db, expected_field_ty);
-        if !heaps_compatible(expected_heap, field_value_ty.heap(db)) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_heap),
-                actual_heap: heap_to_string(field_value_ty.heap(db)),
-            });
-        }
-
-        // Also check expression's outer heap.
-        let expr_heap = get_expr_heap(db, field.value);
-        if !heaps_compatible(expected_heap, expr_heap) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_heap),
-                actual_heap: heap_to_string(expr_heap),
-            });
-        }
+        check_element_type_and_heap(db, field.value, field_value_ty, &expected_field.ty)?;
     }
 
     Ok(())
