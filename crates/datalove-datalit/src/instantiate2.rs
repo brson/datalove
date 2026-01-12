@@ -120,6 +120,7 @@ fn instantiate_expr_into<'db>(
         (Expr::Int(int_expr), Type::Int) => instantiate_bigint(rt, db, int_expr, dest_ptr),
 
         (Expr::Float(float_expr), Type::F32) => instantiate_f32(rt, db, float_expr, dest_ptr),
+        (Expr::Float(float_expr), Type::F64) => instantiate_f64(rt, db, float_expr, dest_ptr),
 
         // Hex literals for integer types.
         (Expr::Hex(hex_expr), Type::U8) => instantiate_hex_u8(rt, db, hex_expr, dest_ptr),
@@ -132,8 +133,9 @@ fn instantiate_expr_into<'db>(
         (Expr::Hex(hex_expr), Type::I64) => instantiate_hex_i64(rt, db, hex_expr, dest_ptr),
         (Expr::Hex(hex_expr), Type::Int) => instantiate_hex_bigint(rt, db, hex_expr, dest_ptr),
 
-        // Hex literal for f32 - interpret as bit pattern.
+        // Hex literals for floats - interpret as bit patterns.
         (Expr::Hex(hex_expr), Type::F32) => instantiate_hex_f32(rt, db, hex_expr, dest_ptr),
+        (Expr::Hex(hex_expr), Type::F64) => instantiate_hex_f64(rt, db, hex_expr, dest_ptr),
 
         (Expr::String(string_expr), Type::String) => {
             let tydesc = tydesc_table.get_or_create(ty);
@@ -316,6 +318,16 @@ fn instantiate_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, float
     }
 }
 
+fn instantiate_f64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, float_expr: &ExprFloat, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+    let value_str = float_expr.value.as_str(db);
+    let value: f64 = value_str.parse()?;
+    unsafe {
+        *(dest_ptr as *mut f64) = value;
+        Ok(dest_ptr as *const u8)
+    }
+}
+
 // ============================================================================
 // Hex literal instantiation
 // ============================================================================
@@ -414,6 +426,18 @@ fn instantiate_hex_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
     let value = f32::from_bits(bits);
     unsafe {
         *(dest_ptr as *mut f32) = value;
+        Ok(dest_ptr as *const u8)
+    }
+}
+
+/// Hex literal interpreted as f64 bit pattern.
+fn instantiate_hex_f64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+    let value_str = hex_expr.value.as_str(db);
+    let bits = u64::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = f64::from_bits(bits);
+    unsafe {
+        *(dest_ptr as *mut f64) = value;
         Ok(dest_ptr as *const u8)
     }
 }

@@ -317,6 +317,7 @@ fn make_mutation_config() -> AstGenConfig {
             u64_type: 5,
             i64_type: 5,
             f32_type: 5,
+            f64_type: 5,
             int_type: 5,
             string_type: 10,
             list_type: 15, // Higher weight for list to test collection mutations.
