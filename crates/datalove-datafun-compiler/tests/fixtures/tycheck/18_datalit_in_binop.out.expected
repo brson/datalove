@@ -2,7 +2,7 @@
   "errors": [
     {
       "kind": "InvalidOperandType",
-      "op": "Add",
+      "op": "+",
       "type": "(u32, u32)"
     }
   ],

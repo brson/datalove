@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "TryReturnTypeMismatch { operator: \"AddOptional\", return_type: \"@!()\" }",
+                    "TryReturnTypeMismatch { operator: \"+?\", return_type: \"@!()\" }",
                 ],
             ),
             lowering: LoweringResult(

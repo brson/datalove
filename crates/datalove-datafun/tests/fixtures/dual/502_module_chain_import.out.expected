@@ -6,7 +6,7 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "local/test/base: TryReturnTypeMismatch { operator: \"AddChecked\", return_type: \"u32\" }",
+                    "local/test/base: TryReturnTypeMismatch { operator: \"+!\", return_type: \"u32\" }",
                 ],
             ),
             interp_lowering: LoweringResult(

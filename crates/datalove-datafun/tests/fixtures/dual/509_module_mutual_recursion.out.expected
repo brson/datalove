@@ -6,8 +6,8 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "local/test/mutual: TryReturnTypeMismatch { operator: \"SubChecked\", return_type: \"bool\" }",
-                    "local/test/mutual: TryReturnTypeMismatch { operator: \"SubChecked\", return_type: \"bool\" }",
+                    "local/test/mutual: TryReturnTypeMismatch { operator: \"-!\", return_type: \"bool\" }",
+                    "local/test/mutual: TryReturnTypeMismatch { operator: \"-!\", return_type: \"bool\" }",
                 ],
             ),
             interp_lowering: LoweringResult(

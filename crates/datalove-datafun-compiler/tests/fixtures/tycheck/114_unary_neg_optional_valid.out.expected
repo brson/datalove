@@ -2,7 +2,7 @@
   "errors": [
     {
       "kind": "InvalidOperandType",
-      "op": "NegOptional",
+      "op": "-?",
       "type": "u32"
     }
   ],

@@ -2655,7 +2655,7 @@
       }
     },
     "eval": {
-      "Error": "InvalidOperandType { op: \"Div\", ty: \"u32\" }"
+      "Error": "InvalidOperandType { op: \"/\", ty: \"u32\" }"
     },
     "environment": [
       {

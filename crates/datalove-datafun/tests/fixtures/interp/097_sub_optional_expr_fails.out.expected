@@ -18,7 +18,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "TryReturnTypeMismatch { operator: \"SubOptional\", return_type: \"@!()\" }",
+                    "TryReturnTypeMismatch { operator: \"-?\", return_type: \"@!()\" }",
                 ],
             ),
             lowering: LoweringResult(

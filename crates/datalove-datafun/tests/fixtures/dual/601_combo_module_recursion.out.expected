@@ -6,8 +6,8 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "local/test/fib: TryReturnTypeMismatch { operator: \"SubChecked\", return_type: \"@?u32\" }",
-                    "local/test/fib: TryReturnTypeMismatch { operator: \"SubChecked\", return_type: \"@?u32\" }",
+                    "local/test/fib: TryReturnTypeMismatch { operator: \"-!\", return_type: \"@?u32\" }",
+                    "local/test/fib: TryReturnTypeMismatch { operator: \"-!\", return_type: \"@?u32\" }",
                     "local/test/fib: UnresolvedName(\"a\")",
                 ],
             ),

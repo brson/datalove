@@ -6,9 +6,9 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "local/test/ops: TryReturnTypeMismatch { operator: \"AddChecked\", return_type: \"u32\" }",
-                    "local/test/ops: TryReturnTypeMismatch { operator: \"SubChecked\", return_type: \"u32\" }",
-                    "local/test/ops: TryReturnTypeMismatch { operator: \"MulChecked\", return_type: \"u32\" }",
+                    "local/test/ops: TryReturnTypeMismatch { operator: \"+!\", return_type: \"u32\" }",
+                    "local/test/ops: TryReturnTypeMismatch { operator: \"-!\", return_type: \"u32\" }",
+                    "local/test/ops: TryReturnTypeMismatch { operator: \"*!\", return_type: \"u32\" }",
                 ],
             ),
             interp_lowering: LoweringResult(

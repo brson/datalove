@@ -117,12 +117,6 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "type": ty
             })
         }
-        TypeError::InvalidTupleElement { ty } => {
-            json!({
-                "kind": "InvalidTupleElement",
-                "type": ty
-            })
-        }
         TypeError::ArityMismatch { expected, actual } => {
             json!({
                 "kind": "ArityMismatch",
@@ -144,12 +138,6 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
         }
         TypeError::ResultRequiresErrorBinding => {
             json!("ResultRequiresErrorBinding")
-        }
-        TypeError::TryOutsideFunction { operator } => {
-            json!({
-                "kind": "TryOutsideFunction",
-                "operator": operator
-            })
         }
         TypeError::TryTypeMismatch { operator, actual_type } => {
             json!({

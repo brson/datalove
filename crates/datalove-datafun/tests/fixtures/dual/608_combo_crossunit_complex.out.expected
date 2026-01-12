@@ -6,8 +6,8 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "local/test/utils: TryReturnTypeMismatch { operator: \"AddChecked\", return_type: \"u32\" }",
-                    "local/test/utils: TryReturnTypeMismatch { operator: \"DivChecked\", return_type: \"bool\" }",
+                    "local/test/utils: TryReturnTypeMismatch { operator: \"+!\", return_type: \"u32\" }",
+                    "local/test/utils: TryReturnTypeMismatch { operator: \"/!\", return_type: \"bool\" }",
                     "local/test/utils: UnresolvedName(\"half\")",
                 ],
             ),
