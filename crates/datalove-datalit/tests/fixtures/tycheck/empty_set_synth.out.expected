@@ -1,0 +1,24 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Set": {
+          "elements": []
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "element_type": {
+      "fields": [],
+      "heap": "@",
+      "kind": "AnonTuple"
+    },
+    "heap": "@",
+    "kind": "Set"
+  }
+}

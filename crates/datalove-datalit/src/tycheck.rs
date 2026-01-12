@@ -322,15 +322,11 @@ fn synthesize<'db>(
         Expr::List(l) => {
             let elements = &l.elements;
             if elements.is_empty() {
-                // T013: Cannot synthesize type for empty list.
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "cannot infer type for empty list")
-                        .code("T013")
-                        .primary_label(ts.clone(), "type annotation required")
-                        .note("provide a type hint to specify the element type, e.g., ': @list(@u32) / @list()'")
-                        .emit_type();
-                }
-                return Err(TypeError::CannotSynthesize);
+                // Empty list defaults to List<()>.
+                let unit_type = TypeAndHeap::new(
+                    db, heap, Type::AnonTuple(TypeAnonTuple { fields: vec![] })
+                );
+                return Ok(TypeAndHeap::new(db, heap, Type::List(TypeList { element_type: unit_type })));
             }
 
             // Synthesize first element to get the expected type.
@@ -381,15 +377,11 @@ fn synthesize<'db>(
         Expr::Set(s) => {
             let elements = s.elements.clone();
             if elements.is_empty() {
-                // T014: Cannot synthesize type for empty set.
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "cannot infer type for empty set")
-                        .code("T014")
-                        .primary_label(ts.clone(), "type annotation required")
-                        .note("provide a type hint to specify the element type, e.g., ': @set(@u32) / @set()'")
-                        .emit_type();
-                }
-                return Err(TypeError::CannotSynthesize);
+                // Empty set defaults to Set<()>.
+                let unit_type = TypeAndHeap::new(
+                    db, heap, Type::AnonTuple(TypeAnonTuple { fields: vec![] })
+                );
+                return Ok(TypeAndHeap::new(db, heap, Type::Set(TypeSet { element_type: unit_type })));
             }
 
             // Synthesize first element to get the expected type.
@@ -440,15 +432,14 @@ fn synthesize<'db>(
         Expr::Map(m) => {
             let entries = m.entries.clone();
             if entries.is_empty() {
-                // T015: Cannot synthesize type for empty map.
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "cannot infer type for empty map")
-                        .code("T015")
-                        .primary_label(ts.clone(), "type annotation required")
-                        .note("provide a type hint to specify the key and value types, e.g., ': @map(@string, @u32) / @map()'")
-                        .emit_type();
-                }
-                return Err(TypeError::CannotSynthesize);
+                // Empty map defaults to Map<(), ()>.
+                let unit_type = TypeAndHeap::new(
+                    db, heap, Type::AnonTuple(TypeAnonTuple { fields: vec![] })
+                );
+                return Ok(TypeAndHeap::new(db, heap, Type::Map(TypeMap {
+                    key_type: unit_type,
+                    value_type: unit_type,
+                })));
             }
 
             // Synthesize first entry to get the expected key and value types.
@@ -577,17 +568,17 @@ fn synthesize<'db>(
         Expr::Tensor(t) => {
             let shape = t.shape.clone();
             let elements = t.elements.clone();
+            let rank = shape.len() as u32;
 
             if elements.is_empty() {
-                // T050: Cannot synthesize type for empty tensor.
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "cannot infer type for empty tensor")
-                        .code("T050")
-                        .primary_label(ts.clone(), "type annotation required")
-                        .note("provide a type hint to specify the element type")
-                        .emit_type();
-                }
-                return Err(TypeError::CannotSynthesize);
+                // Empty tensor defaults to Tensor<()>.
+                let unit_type = TypeAndHeap::new(
+                    db, heap, Type::AnonTuple(TypeAnonTuple { fields: vec![] })
+                );
+                return Ok(TypeAndHeap::new(db, heap, Type::Tensor(TypeTensor {
+                    element_type: unit_type,
+                    rank,
+                })));
             }
 
             // Calculate expected element count from shape.
@@ -646,9 +637,6 @@ fn synthesize<'db>(
                     });
                 }
             }
-
-            // Rank is the length of the shape vector.
-            let rank = shape.len() as u32;
 
             Type::Tensor(TypeTensor { element_type: first_type, rank })
         }

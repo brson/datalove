@@ -181,8 +181,8 @@ fn make_compatible_config() -> AstGenConfig {
             omitted: 1,
         },
         max_depth: 2,
-        // Minimum 1 to avoid empty lists (type inference differs for []).
-        min_collection_size: 1,
+        // Empty collections now synthesize to unit element type in both typecheckers.
+        min_collection_size: 0,
         max_collection_size: 3,
         // Small non-negative values work without type hints (no negative literal issues).
         numeric_strategy: NumericStrategy::SmallNonNegative,

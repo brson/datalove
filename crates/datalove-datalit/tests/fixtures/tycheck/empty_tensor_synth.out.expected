@@ -1,0 +1,28 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Tensor": {
+          "elements": [],
+          "shape": [
+            0
+          ]
+        }
+      },
+      "heap": "Local"
+    },
+    "type_hint": null
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "element_type": {
+      "fields": [],
+      "heap": "@",
+      "kind": "AnonTuple"
+    },
+    "heap": "@",
+    "kind": "Tensor",
+    "rank": 1
+  }
+}

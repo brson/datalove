@@ -973,7 +973,7 @@ fn synthesize_inline_tensor<'db>(
 
     if elements.is_empty() {
         let elem_ty = datalit::tycheck::TypeAndHeap::new(
-            db, heap, datalit::tycheck::Type::F32
+            db, heap, datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: vec![] })
         );
         let ty = Type::Datalit(datalit::tycheck::Type::Tensor(
             datalit::tycheck::TypeTensor { element_type: elem_ty, rank }
