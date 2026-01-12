@@ -132,7 +132,13 @@ but I do have a [vision](vision.md) about what it will be.
 - [Principles](principles.md)
 - [Lexical Structure](lexer.md)
 - [Datalove Literals](datalit.md)
+- [Modules, Functions and Scripts](modules-functions-scripts.md)
+- [Control Flow](control-flow.md)
+- [Optional and Result Types and Operations](checked-types.md)
+- [Operators](operators.md)
+- [Heaps and Multithreading](heaps.md)
 
+---
 
 - [Features](features.md)
 - [Datalove Compared To...](comparisons.md)
@@ -140,7 +146,7 @@ but I do have a [vision](vision.md) about what it will be.
 - [Novelties](novelties.md)
 - [Datalit Types](datalit-types.md)
 - [Datalit Runtime Types](datalit-runtime-types.md)
-- [Compiler Guide](todo.md)
+- [Compiler Guide](compiler-guide.md)
 - [Testing](testing-tower.md)
 - [Influences](influences.md)
 - [Vision](vision.md)

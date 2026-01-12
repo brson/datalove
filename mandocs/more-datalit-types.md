@@ -4,7 +4,7 @@
 - ranges 1:2, 1:2:3
 - token types
 - datetimes
-- bitset
+- bitsets, bitfields, bitwise ops
 - subranged ints
 - table (polars, arrow)
 - graph
