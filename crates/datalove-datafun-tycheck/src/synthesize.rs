@@ -851,13 +851,7 @@ fn synthesize_inline_list<'db>(
     // Check remaining elements for type and heap compatibility.
     for elem in &elements[1..] {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-        // Check heap compatibility.
-        if !heaps_compatible(first_ty.heap(db), elem_ty.heap(db)) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(first_ty.heap(db)),
-                actual_heap: heap_to_string(elem_ty.heap(db)),
-            });
-        }
+        check_element_compatible(db, first_ty, elem_ty)?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::List(
@@ -889,15 +883,10 @@ fn synthesize_inline_set<'db>(
     let first_ty = ctx.synthesize_expr(elements[0])?;
     let first_datalit = to_datalit_type_and_heap(db, first_ty)?;
 
-    // Check remaining elements for heap compatibility.
+    // Check remaining elements for type and heap compatibility.
     for elem in &elements[1..] {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-        if !heaps_compatible(first_ty.heap(db), elem_ty.heap(db)) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(first_ty.heap(db)),
-                actual_heap: heap_to_string(elem_ty.heap(db)),
-            });
-        }
+        check_element_compatible(db, first_ty, elem_ty)?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Set(
@@ -931,24 +920,12 @@ fn synthesize_inline_map<'db>(
     let first_value_ty = ctx.synthesize_expr(entries[0].value)?;
     let first_value_datalit = to_datalit_type_and_heap(db, first_value_ty)?;
 
-    // Check remaining entries for heap compatibility.
+    // Check remaining entries for type and heap compatibility.
     for entry in &entries[1..] {
         let key_ty = ctx.synthesize_expr(entry.key)?;
         let value_ty = ctx.synthesize_expr(entry.value)?;
-        // Check key heap compatibility.
-        if !heaps_compatible(first_key_ty.heap(db), key_ty.heap(db)) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(first_key_ty.heap(db)),
-                actual_heap: heap_to_string(key_ty.heap(db)),
-            });
-        }
-        // Check value heap compatibility.
-        if !heaps_compatible(first_value_ty.heap(db), value_ty.heap(db)) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(first_value_ty.heap(db)),
-                actual_heap: heap_to_string(value_ty.heap(db)),
-            });
-        }
+        check_element_compatible(db, first_key_ty, key_ty)?;
+        check_element_compatible(db, first_value_ty, value_ty)?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Map(
@@ -984,15 +961,10 @@ fn synthesize_inline_tensor<'db>(
     let first_ty = ctx.synthesize_expr(elements[0])?;
     let first_datalit = to_datalit_type_and_heap(db, first_ty)?;
 
-    // Check remaining elements for heap compatibility.
+    // Check remaining elements for type and heap compatibility.
     for elem in &elements[1..] {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-        if !heaps_compatible(first_ty.heap(db), elem_ty.heap(db)) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(first_ty.heap(db)),
-                actual_heap: heap_to_string(elem_ty.heap(db)),
-            });
-        }
+        check_element_compatible(db, first_ty, elem_ty)?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Tensor(

@@ -248,6 +248,20 @@ pub fn to_datalit_type_and_heap<'db>(
     }
 }
 
+/// Check that an element type is compatible with the expected element type.
+///
+/// Wrapper around datalit's check_element_compatible that handles datafun types.
+pub fn check_element_compatible<'db>(
+    db: &'db dyn crate::Db,
+    expected: TypeAndHeap<'db>,
+    actual: TypeAndHeap<'db>,
+) -> Result<(), TypeError> {
+    let expected_datalit = to_datalit_type_and_heap(db, expected)?;
+    let actual_datalit = to_datalit_type_and_heap(db, actual)?;
+    datalit::tycheck::check_element_compatible(db, expected_datalit, actual_datalit)
+        .map_err(TypeError::from)
+}
+
 /// Unwrap Option/Result wrappers to get inner type.
 ///
 /// Used to check collection elements when type hint includes Option/Result.

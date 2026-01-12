@@ -335,38 +335,28 @@ fn synthesize<'db>(
             // Check remaining elements against first type.
             for elem in &elements[1..] {
                 let elem_type = synthesize(ctx, *elem)?;
-                if !types_equivalent(db, first_type.ty(db), elem_type.ty(db)) {
-                    // T018: List element type mismatch.
+                if let Err(e) = check_element_compatible(db, first_type, elem_type) {
+                    // Emit diagnostic with span info.
                     if let Some(ts) = ctx.get_span(*elem) {
-                        let msg = format!("mismatched types in list");
-                        DiagnosticBuilder::error(db, &msg)
-                            .code("T018")
-                            .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
-                                type_to_string(db, first_type.ty(db)),
-                                type_to_string(db, elem_type.ty(db))))
-                            .note("all elements in a list must have the same type")
-                            .emit_type();
+                        match &e {
+                            TypeError::TypeMismatch { expected, actual } => {
+                                DiagnosticBuilder::error(db, "mismatched types in list")
+                                    .code("T018")
+                                    .primary_label(ts.clone(), &format!("expected `{}`, found `{}`", expected, actual))
+                                    .note("all elements in a list must have the same type")
+                                    .emit_type();
+                            }
+                            TypeError::HeapMismatch { expected_heap, actual_heap } => {
+                                DiagnosticBuilder::error(db, "heap allocation mismatch in list")
+                                    .code("T033")
+                                    .primary_label(ts.clone(), &format!("expected {}, found {}", expected_heap, actual_heap))
+                                    .note("all elements in a list must have compatible heap allocations")
+                                    .emit_type();
+                            }
+                            _ => {}
+                        }
                     }
-                    return Err(TypeError::TypeMismatch {
-                        expected: type_to_string(db, first_type.ty(db)),
-                        actual: type_to_string(db, elem_type.ty(db)),
-                    });
-                }
-                if !heaps_compatible(first_type.heap(db), elem_type.heap(db)) {
-                    // T033: List element heap mismatch.
-                    if let Some(ts) = ctx.get_span(*elem) {
-                        DiagnosticBuilder::error(db, "heap allocation mismatch in list")
-                            .code("T033")
-                            .primary_label(ts.clone(), &format!("expected {}, found {}",
-                                heap_to_string(first_type.heap(db)),
-                                heap_to_string(elem_type.heap(db))))
-                            .note("all elements in a list must have compatible heap allocations")
-                            .emit_type();
-                    }
-                    return Err(TypeError::HeapMismatch {
-                        expected_heap: heap_to_string(first_type.heap(db)),
-                        actual_heap: heap_to_string(elem_type.heap(db)),
-                    });
+                    return Err(e);
                 }
             }
 
@@ -390,38 +380,28 @@ fn synthesize<'db>(
             // Check remaining elements against first type.
             for elem in &elements[1..] {
                 let elem_type = synthesize(ctx, *elem)?;
-                if !types_equivalent(db, first_type.ty(db), elem_type.ty(db)) {
-                    // T019: Set element type mismatch.
+                if let Err(e) = check_element_compatible(db, first_type, elem_type) {
+                    // Emit diagnostic with span info.
                     if let Some(ts) = ctx.get_span(*elem) {
-                        let msg = format!("mismatched types in set");
-                        DiagnosticBuilder::error(db, &msg)
-                            .code("T019")
-                            .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
-                                type_to_string(db, first_type.ty(db)),
-                                type_to_string(db, elem_type.ty(db))))
-                            .note("all elements in a set must have the same type")
-                            .emit_type();
+                        match &e {
+                            TypeError::TypeMismatch { expected, actual } => {
+                                DiagnosticBuilder::error(db, "mismatched types in set")
+                                    .code("T019")
+                                    .primary_label(ts.clone(), &format!("expected `{}`, found `{}`", expected, actual))
+                                    .note("all elements in a set must have the same type")
+                                    .emit_type();
+                            }
+                            TypeError::HeapMismatch { expected_heap, actual_heap } => {
+                                DiagnosticBuilder::error(db, "heap allocation mismatch in set")
+                                    .code("T034")
+                                    .primary_label(ts.clone(), &format!("expected {}, found {}", expected_heap, actual_heap))
+                                    .note("all elements in a set must have compatible heap allocations")
+                                    .emit_type();
+                            }
+                            _ => {}
+                        }
                     }
-                    return Err(TypeError::TypeMismatch {
-                        expected: type_to_string(db, first_type.ty(db)),
-                        actual: type_to_string(db, elem_type.ty(db)),
-                    });
-                }
-                if !heaps_compatible(first_type.heap(db), elem_type.heap(db)) {
-                    // T034: Set element heap mismatch.
-                    if let Some(ts) = ctx.get_span(*elem) {
-                        DiagnosticBuilder::error(db, "heap allocation mismatch in set")
-                            .code("T034")
-                            .primary_label(ts.clone(), &format!("expected {}, found {}",
-                                heap_to_string(first_type.heap(db)),
-                                heap_to_string(elem_type.heap(db))))
-                            .note("all elements in a set must have compatible heap allocations")
-                            .emit_type();
-                    }
-                    return Err(TypeError::HeapMismatch {
-                        expected_heap: heap_to_string(first_type.heap(db)),
-                        actual_heap: heap_to_string(elem_type.heap(db)),
-                    });
+                    return Err(e);
                 }
             }
 
@@ -452,72 +432,52 @@ fn synthesize<'db>(
                 let key_type = synthesize(ctx, entry.key)?;
                 let value_type = synthesize(ctx, entry.value)?;
 
-                if !types_equivalent(db, first_key_type.ty(db), key_type.ty(db)) {
-                    // T020: Map key type mismatch.
+                // Check key compatibility.
+                if let Err(e) = check_element_compatible(db, first_key_type, key_type) {
                     if let Some(ts) = ctx.get_span(entry.key) {
-                        let msg = format!("mismatched key types in map");
-                        DiagnosticBuilder::error(db, &msg)
-                            .code("T020")
-                            .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
-                                type_to_string(db, first_key_type.ty(db)),
-                                type_to_string(db, key_type.ty(db))))
-                            .note("all keys in a map must have the same type")
-                            .emit_type();
+                        match &e {
+                            TypeError::TypeMismatch { expected, actual } => {
+                                DiagnosticBuilder::error(db, "mismatched key types in map")
+                                    .code("T020")
+                                    .primary_label(ts.clone(), &format!("expected `{}`, found `{}`", expected, actual))
+                                    .note("all keys in a map must have the same type")
+                                    .emit_type();
+                            }
+                            TypeError::HeapMismatch { expected_heap, actual_heap } => {
+                                DiagnosticBuilder::error(db, "heap allocation mismatch in map keys")
+                                    .code("T035")
+                                    .primary_label(ts.clone(), &format!("expected {}, found {}", expected_heap, actual_heap))
+                                    .note("all keys in a map must have compatible heap allocations")
+                                    .emit_type();
+                            }
+                            _ => {}
+                        }
                     }
-                    return Err(TypeError::TypeMismatch {
-                        expected: type_to_string(db, first_key_type.ty(db)),
-                        actual: type_to_string(db, key_type.ty(db)),
-                    });
-                }
-                if !heaps_compatible(first_key_type.heap(db), key_type.heap(db)) {
-                    // T035: Map key heap mismatch.
-                    if let Some(ts) = ctx.get_span(entry.key) {
-                        DiagnosticBuilder::error(db, "heap allocation mismatch in map keys")
-                            .code("T035")
-                            .primary_label(ts.clone(), &format!("expected {}, found {}",
-                                heap_to_string(first_key_type.heap(db)),
-                                heap_to_string(key_type.heap(db))))
-                            .note("all keys in a map must have compatible heap allocations")
-                            .emit_type();
-                    }
-                    return Err(TypeError::HeapMismatch {
-                        expected_heap: heap_to_string(first_key_type.heap(db)),
-                        actual_heap: heap_to_string(key_type.heap(db)),
-                    });
+                    return Err(e);
                 }
 
-                if !types_equivalent(db, first_value_type.ty(db), value_type.ty(db)) {
-                    // T021: Map value type mismatch.
+                // Check value compatibility.
+                if let Err(e) = check_element_compatible(db, first_value_type, value_type) {
                     if let Some(ts) = ctx.get_span(entry.value) {
-                        let msg = format!("mismatched value types in map");
-                        DiagnosticBuilder::error(db, &msg)
-                            .code("T021")
-                            .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
-                                type_to_string(db, first_value_type.ty(db)),
-                                type_to_string(db, value_type.ty(db))))
-                            .note("all values in a map must have the same type")
-                            .emit_type();
+                        match &e {
+                            TypeError::TypeMismatch { expected, actual } => {
+                                DiagnosticBuilder::error(db, "mismatched value types in map")
+                                    .code("T021")
+                                    .primary_label(ts.clone(), &format!("expected `{}`, found `{}`", expected, actual))
+                                    .note("all values in a map must have the same type")
+                                    .emit_type();
+                            }
+                            TypeError::HeapMismatch { expected_heap, actual_heap } => {
+                                DiagnosticBuilder::error(db, "heap allocation mismatch in map values")
+                                    .code("T036")
+                                    .primary_label(ts.clone(), &format!("expected {}, found {}", expected_heap, actual_heap))
+                                    .note("all values in a map must have compatible heap allocations")
+                                    .emit_type();
+                            }
+                            _ => {}
+                        }
                     }
-                    return Err(TypeError::TypeMismatch {
-                        expected: type_to_string(db, first_value_type.ty(db)),
-                        actual: type_to_string(db, value_type.ty(db)),
-                    });
-                }
-                if !heaps_compatible(first_value_type.heap(db), value_type.heap(db)) {
-                    // T036: Map value heap mismatch.
-                    if let Some(ts) = ctx.get_span(entry.value) {
-                        DiagnosticBuilder::error(db, "heap allocation mismatch in map values")
-                            .code("T036")
-                            .primary_label(ts.clone(), &format!("expected {}, found {}",
-                                heap_to_string(first_value_type.heap(db)),
-                                heap_to_string(value_type.heap(db))))
-                            .note("all values in a map must have compatible heap allocations")
-                            .emit_type();
-                    }
-                    return Err(TypeError::HeapMismatch {
-                        expected_heap: heap_to_string(first_value_type.heap(db)),
-                        actual_heap: heap_to_string(value_type.heap(db)),
-                    });
+                    return Err(e);
                 }
             }
 
@@ -604,37 +564,28 @@ fn synthesize<'db>(
             // Check remaining elements against first type.
             for elem in &elements[1..] {
                 let elem_type = synthesize(ctx, *elem)?;
-                if !types_equivalent(db, first_type.ty(db), elem_type.ty(db)) {
-                    // T052: Tensor element type mismatch.
+                if let Err(e) = check_element_compatible(db, first_type, elem_type) {
+                    // Emit diagnostic with span info.
                     if let Some(ts) = ctx.get_span(*elem) {
-                        DiagnosticBuilder::error(db, "mismatched types in tensor")
-                            .code("T052")
-                            .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
-                                type_to_string(db, first_type.ty(db)),
-                                type_to_string(db, elem_type.ty(db))))
-                            .note("all elements in a tensor must have the same type")
-                            .emit_type();
+                        match &e {
+                            TypeError::TypeMismatch { expected, actual } => {
+                                DiagnosticBuilder::error(db, "mismatched types in tensor")
+                                    .code("T052")
+                                    .primary_label(ts.clone(), &format!("expected `{}`, found `{}`", expected, actual))
+                                    .note("all elements in a tensor must have the same type")
+                                    .emit_type();
+                            }
+                            TypeError::HeapMismatch { expected_heap, actual_heap } => {
+                                DiagnosticBuilder::error(db, "heap allocation mismatch in tensor")
+                                    .code("T053")
+                                    .primary_label(ts.clone(), &format!("expected {}, found {}", expected_heap, actual_heap))
+                                    .note("all elements in a tensor must have compatible heap allocations")
+                                    .emit_type();
+                            }
+                            _ => {}
+                        }
                     }
-                    return Err(TypeError::TypeMismatch {
-                        expected: type_to_string(db, first_type.ty(db)),
-                        actual: type_to_string(db, elem_type.ty(db)),
-                    });
-                }
-                if !heaps_compatible(first_type.heap(db), elem_type.heap(db)) {
-                    // T053: Tensor element heap mismatch.
-                    if let Some(ts) = ctx.get_span(*elem) {
-                        DiagnosticBuilder::error(db, "heap allocation mismatch in tensor")
-                            .code("T053")
-                            .primary_label(ts.clone(), &format!("expected {}, found {}",
-                                heap_to_string(first_type.heap(db)),
-                                heap_to_string(elem_type.heap(db))))
-                            .note("all elements in a tensor must have compatible heap allocations")
-                            .emit_type();
-                    }
-                    return Err(TypeError::HeapMismatch {
-                        expected_heap: heap_to_string(first_type.heap(db)),
-                        actual_heap: heap_to_string(elem_type.heap(db)),
-                    });
+                    return Err(e);
                 }
             }
 
@@ -1347,6 +1298,53 @@ pub fn can_widen_to<'db>(from: &Type<'db>, to: &Type<'db>) -> bool {
         // No widening for other types.
         _ => false,
     }
+}
+
+/// Check that an element type is compatible with the expected element type.
+///
+/// Used for homogeneous collections (list, set, tensor) to verify all elements
+/// have the same type and compatible heaps.
+///
+/// Returns Ok(()) if compatible, Err with details otherwise.
+pub fn check_element_compatible<'db>(
+    db: &'db dyn crate::Db,
+    expected: TypeAndHeap<'db>,
+    actual: TypeAndHeap<'db>,
+) -> Result<(), TypeError> {
+    // Check type equivalence.
+    if !types_equivalent(db, expected.ty(db), actual.ty(db)) {
+        return Err(TypeError::TypeMismatch {
+            expected: type_to_string(db, expected.ty(db)),
+            actual: type_to_string(db, actual.ty(db)),
+        });
+    }
+
+    // Check heap compatibility.
+    if !heaps_compatible(expected.heap(db), actual.heap(db)) {
+        return Err(TypeError::HeapMismatch {
+            expected_heap: heap_to_string(expected.heap(db)),
+            actual_heap: heap_to_string(actual.heap(db)),
+        });
+    }
+
+    Ok(())
+}
+
+/// Check that a key-value pair is compatible with expected key and value types.
+///
+/// Used for maps to verify all entries have the same key and value types.
+///
+/// Returns Ok(()) if compatible, Err with details otherwise.
+pub fn check_map_entry_compatible<'db>(
+    db: &'db dyn crate::Db,
+    expected_key: TypeAndHeap<'db>,
+    expected_value: TypeAndHeap<'db>,
+    actual_key: TypeAndHeap<'db>,
+    actual_value: TypeAndHeap<'db>,
+) -> Result<(), TypeError> {
+    check_element_compatible(db, expected_key, actual_key)?;
+    check_element_compatible(db, expected_value, actual_value)?;
+    Ok(())
 }
 
 /// Check if a type can be coerced to an expected type.
