@@ -5,14 +5,14 @@
 - datalove-datalit/tests/tycheck_tests
 - datalove-datalit/tests/pretty_tests
 - datalove-datalit/tests/roundtrip_tests
-- datalove-datafun-compiler/tests/parser_tests
-- datalove-datafun-compiler/tests/tycheck_tests
+- datalove-datafun-compiler/tests/parser_tests -
+- datalove-datafun-compiler/tests/tycheck_tests -
 - datalove-datafun/tests/tycheck_world_tests
-- datalove-datafun/tests/interp_tests
+- datalove-datafun/tests/interp_tests -
 - datalove-datafun/tests/module_interp_tests
-- datalove-datafun/tests/module_memo_tests
+- datalove-datafun/tests/module_memo_tests - Salsa memoization tests.
 - datalove-datafun/tests/std_tests
-- datalove-datafun/tests/dual_tests
+- datalove-datafun/tests/dual_tests - Primary conformance test suite.
 
 
 ## IR lowering tests
@@ -64,8 +64,6 @@
 - datalove-rt-tests/tests/tensor_tests
 - datalove-rt-tests/tests/string_tests
 
-fixme: should have ast_gen collections tests too
-
 
 ## Other runtime tests
 
@@ -80,9 +78,9 @@ fixme: should have ast_gen collections tests too
 
 - datalove-repl/tests/engine_tests
 - datalove-cli/tests/script_tests
-- datalove-cli/tests/error_tests
+- datalove-cli/tests/error_tests -
+    The primary diagnostics test suite.
 - datalove-datalit/tests/parser_panic_tests
-- bcts/tests/bracer_panic_tests
 
 
 ## Testing utilities
