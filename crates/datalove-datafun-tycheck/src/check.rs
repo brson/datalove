@@ -31,9 +31,7 @@ fn check_element_type_and_heap<'db>(
     };
 
     // Check type compatibility with coercion.
-    if let Err(err) = check_type_coercion(db, actual_datalit_ty, expected_type) {
-        return Err(TypeError::from(err));
-    }
+    check_type_coercion(db, actual_datalit_ty, expected_type)?;
 
     // Check heap compatibility.
     let expected_heap = unwrap_wrapper_heap_datalit(db, *expected_type);
@@ -56,24 +54,6 @@ fn check_element_type_and_heap<'db>(
     Ok(())
 }
 
-/// Error type for coercion failures.
-pub enum CoercionError {
-    TypeMismatch { expected: String, actual: String },
-    ArityMismatch { expected: usize, actual: usize },
-}
-
-impl From<CoercionError> for TypeError {
-    fn from(err: CoercionError) -> Self {
-        match err {
-            CoercionError::TypeMismatch { expected, actual } => {
-                TypeError::TypeMismatch { expected, actual }
-            }
-            CoercionError::ArityMismatch { expected, actual } => {
-                TypeError::ArityMismatch { expected, actual }
-            }
-        }
-    }
-}
 
 /// Check an expression against an expected type.
 pub fn check_expr<'db>(
@@ -304,79 +284,13 @@ pub fn check_expr<'db>(
 
 /// Check if a type can be coerced to an expected type.
 ///
-/// Coercion rules:
-/// - T matches T (exact match)
-/// - Numeric widening (u8 -> int, i16 -> int, etc.)
-/// - T matches data (any type coerces to data)
-pub fn check_type_coercion<'db>(
+/// Delegates to datalit's check_type_coercion after extracting the expected type.
+fn check_type_coercion<'db>(
     db: &'db dyn crate::Db,
     actual: &datalit::tycheck::Type<'db>,
     expected: &datalit::tycheck::TypeAndHeap<'db>,
-) -> Result<(), CoercionError> {
-    let expected_ty = expected.ty(db);
-
-    // Check exact match.
-    if datalit::tycheck::types_equivalent(db, actual, expected_ty) {
-        return Ok(());
-    }
-
-    // Check numeric widening (u8 -> int, i16 -> i32, etc.).
-    if datalit::tycheck::can_widen_to(actual, expected_ty) {
-        return Ok(());
-    }
-
-    // Check Data coercion: ANY type T can coerce to data.
-    if let datalit::tycheck::Type::Data = expected_ty {
-        return Ok(());
-    }
-
-    // No coercion possible - check for arity mismatch.
-    check_type_arity_or_mismatch(db, actual, expected_ty)
-}
-
-/// Check if two types have an arity mismatch (for structs/tuples).
-/// Returns ArityMismatch if the types are the same kind but different arity.
-/// Returns TypeMismatch otherwise.
-fn check_type_arity_or_mismatch<'db>(
-    db: &'db dyn crate::Db,
-    actual: &datalit::tycheck::Type<'db>,
-    expected: &datalit::tycheck::Type<'db>,
-) -> Result<(), CoercionError> {
-    // Check for struct arity mismatch.
-    if let (
-        datalit::tycheck::Type::AnonStruct(actual_struct),
-        datalit::tycheck::Type::AnonStruct(expected_struct),
-    ) = (actual, expected) {
-        let actual_count = actual_struct.fields.len();
-        let expected_count = expected_struct.fields.len();
-        if actual_count != expected_count {
-            return Err(CoercionError::ArityMismatch {
-                expected: expected_count,
-                actual: actual_count,
-            });
-        }
-    }
-
-    // Check for tuple arity mismatch.
-    if let (
-        datalit::tycheck::Type::AnonTuple(actual_tuple),
-        datalit::tycheck::Type::AnonTuple(expected_tuple),
-    ) = (actual, expected) {
-        let actual_count = actual_tuple.fields.len();
-        let expected_count = expected_tuple.fields.len();
-        if actual_count != expected_count {
-            return Err(CoercionError::ArityMismatch {
-                expected: expected_count,
-                actual: actual_count,
-            });
-        }
-    }
-
-    // Default to type mismatch.
-    Err(CoercionError::TypeMismatch {
-        expected: datalit::tycheck::type_to_string(db, expected),
-        actual: datalit::tycheck::type_to_string(db, actual),
-    })
+) -> Result<(), TypeError> {
+    datalit::tycheck::check_type_coercion(db, actual, expected.ty(db)).map_err(TypeError::from)
 }
 
 /// Check list elements against expected type.
@@ -639,9 +553,7 @@ pub fn check_enum_variant<'db>(
             Type::Datalit(dt) => dt,
             _ => return Ok(()), // Non-datalit types handled elsewhere.
         };
-        if let Err(err) = check_type_coercion(db, actual_datalit_ty, &expected_payload_ty) {
-            return Err(TypeError::from(err));
-        }
+        check_type_coercion(db, actual_datalit_ty, &expected_payload_ty)?;
     }
 
     Ok(())

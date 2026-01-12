@@ -1349,6 +1349,78 @@ pub fn can_widen_to<'db>(from: &Type<'db>, to: &Type<'db>) -> bool {
     }
 }
 
+/// Check if a type can be coerced to an expected type.
+///
+/// Coercion rules:
+/// - Exact type match (via types_equivalent)
+/// - Numeric widening (via can_widen_to)
+/// - Any type coerces to Data
+///
+/// Returns Ok(()) if coercion is possible, Err with details otherwise.
+pub fn check_type_coercion<'db>(
+    db: &'db dyn crate::Db,
+    actual: &Type<'db>,
+    expected: &Type<'db>,
+) -> Result<(), TypeError> {
+    // Check exact match.
+    if types_equivalent(db, actual, expected) {
+        return Ok(());
+    }
+
+    // Check numeric widening (u8 -> int, i16 -> i32, etc.).
+    if can_widen_to(actual, expected) {
+        return Ok(());
+    }
+
+    // Check Data coercion: ANY type T can coerce to Data.
+    if let Type::Data = expected {
+        return Ok(());
+    }
+
+    // No coercion possible - check for arity mismatch to give better error.
+    check_coercion_arity_or_mismatch(db, actual, expected)
+}
+
+/// Helper for check_type_coercion that distinguishes arity mismatches from type mismatches.
+///
+/// Returns ArityMismatch if the types are the same kind but different arity.
+/// Returns TypeMismatch otherwise.
+fn check_coercion_arity_or_mismatch<'db>(
+    db: &'db dyn crate::Db,
+    actual: &Type<'db>,
+    expected: &Type<'db>,
+) -> Result<(), TypeError> {
+    // Check for struct arity mismatch.
+    if let (Type::AnonStruct(actual_struct), Type::AnonStruct(expected_struct)) = (actual, expected) {
+        let actual_count = actual_struct.fields.len();
+        let expected_count = expected_struct.fields.len();
+        if actual_count != expected_count {
+            return Err(TypeError::ArityMismatch {
+                expected: expected_count,
+                actual: actual_count,
+            });
+        }
+    }
+
+    // Check for tuple arity mismatch.
+    if let (Type::AnonTuple(actual_tuple), Type::AnonTuple(expected_tuple)) = (actual, expected) {
+        let actual_count = actual_tuple.fields.len();
+        let expected_count = expected_tuple.fields.len();
+        if actual_count != expected_count {
+            return Err(TypeError::ArityMismatch {
+                expected: expected_count,
+                actual: actual_count,
+            });
+        }
+    }
+
+    // Default to type mismatch.
+    Err(TypeError::TypeMismatch {
+        expected: type_to_string(db, expected),
+        actual: type_to_string(db, actual),
+    })
+}
+
 /// Convert a heap to a string for error messages.
 pub fn heap_to_string(heap: Heap) -> String {
     match heap {
