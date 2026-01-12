@@ -128,7 +128,9 @@ but I do have a [vision](vision.md) about what it will be.
 
 
 
-- [10 Minute Intro](intro.md
+- [10 Minute Intro](intro.md)
+- [Lexical Structure](lexer.md)
+- [Datalove Literals](datalit.md)
 - [Features](features.md)
 - [Principles](principles.md)
 - [Datalove Compared To...](comparisons.md)
