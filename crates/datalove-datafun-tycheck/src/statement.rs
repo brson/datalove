@@ -11,6 +11,56 @@ use crate::ModuleId;
 
 pub use crate::{Type, TypeAndHeap, TypeFunction, TypeError};
 
+// ============================================================================
+// Variable Declaration Helper
+// ============================================================================
+
+/// Check a variable declaration (let or var) and add binding to context.
+///
+/// If type hint is provided, checks value against it.
+/// Otherwise, synthesizes type from value.
+fn check_variable_decl<'db>(
+    ctx: &mut TypeContext<'db>,
+    name: bct::text::InternedText<'db>,
+    value: ExprFun<'db>,
+    type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+) {
+    let db = ctx.db;
+
+    let var_type = match type_hint {
+        Some(hint) => {
+            match convert_type_hint(db, hint) {
+                Ok(expected_type) => {
+                    match check_expr(ctx, value, expected_type) {
+                        Ok(()) => Some(expected_type),
+                        Err(e) => {
+                            ctx.add_error(e);
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    ctx.add_error(e);
+                    None
+                }
+            }
+        }
+        None => {
+            match ctx.synthesize_expr(value) {
+                Ok(ty) => Some(ty),
+                Err(e) => {
+                    ctx.add_error(e);
+                    None
+                }
+            }
+        }
+    };
+
+    if let Some(ty) = var_type {
+        ctx.add_variable(name, ty);
+    }
+}
+
 /// Collect function signature without checking body (first pass).
 pub fn collect_function_signature<'db>(
     ctx: &mut TypeContext<'db>,
@@ -69,86 +119,11 @@ pub fn check_statement<'db>(
 
     match statement {
         Statement::Let(stmt) => {
-            let name = stmt.name;
-            let value = stmt.value;
-
-            // If type hint is provided, check against it.
-            // Otherwise, synthesize type from value.
-            let var_type = match stmt.type_hint {
-                Some(type_hint) => {
-                    // Convert type hint to expected type and check value.
-                    match convert_type_hint(db, type_hint) {
-                        Ok(expected_type) => {
-                            match check_expr(ctx, value, expected_type) {
-                                Ok(()) => Some(expected_type),
-                                Err(e) => {
-                                    ctx.add_error(e);
-                                    None
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            ctx.add_error(e);
-                            None
-                        }
-                    }
-                }
-                None => {
-                    // Synthesize type from value.
-                    match ctx.synthesize_expr(value) {
-                        Ok(ty) => Some(ty),
-                        Err(e) => {
-                            ctx.add_error(e);
-                            None
-                        }
-                    }
-                }
-            };
-
-            // Add variable to context if we got a type.
-            if let Some(ty) = var_type {
-                ctx.add_variable(name, ty);
-            }
+            check_variable_decl(ctx, stmt.name, stmt.value, stmt.type_hint);
         }
 
         Statement::Var(stmt) => {
-            let name = stmt.name;
-            let value = stmt.value;
-
-            // Same as let: if type hint provided, check against it.
-            let var_type = match stmt.type_hint {
-                Some(type_hint) => {
-                    match convert_type_hint(db, type_hint) {
-                        Ok(expected_type) => {
-                            match check_expr(ctx, value, expected_type) {
-                                Ok(()) => Some(expected_type),
-                                Err(e) => {
-                                    ctx.add_error(e);
-                                    None
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            ctx.add_error(e);
-                            None
-                        }
-                    }
-                }
-                None => {
-                    match ctx.synthesize_expr(value) {
-                        Ok(ty) => Some(ty),
-                        Err(e) => {
-                            ctx.add_error(e);
-                            None
-                        }
-                    }
-                }
-            };
-
-            // Add mutable variable to context if we got a type.
-            if let Some(ty) = var_type {
-                ctx.add_variable(name, ty);
-            }
+            check_variable_decl(ctx, stmt.name, stmt.value, stmt.type_hint);
         }
 
         Statement::Set(stmt) => {
