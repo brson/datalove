@@ -412,15 +412,15 @@ pub fn check_statement<'db>(
             ctx.loop_depth -= 1;
         }
 
-        Statement::Break(_) => {
+        Statement::Break(stmt) => {
             if ctx.loop_depth == 0 {
-                ctx.add_error(TypeError::BreakOutsideLoop);
+                ctx.add_error(ctx.error_break_outside_loop(stmt));
             }
         }
 
-        Statement::Continue(_) => {
+        Statement::Continue(stmt) => {
             if ctx.loop_depth == 0 {
-                ctx.add_error(TypeError::ContinueOutsideLoop);
+                ctx.add_error(ctx.error_continue_outside_loop(stmt));
             }
         }
 

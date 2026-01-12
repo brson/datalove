@@ -211,6 +211,34 @@ impl<'db> TypeContext<'db> {
         })
     }
 
+    /// F050: Break outside loop.
+    pub fn error_break_outside_loop(&self, stmt: &StmtBreak) -> TypeError {
+        if let Some(entry) = self.spans.lookup_break(stmt.local_index) {
+            let (text, span) = entry.to_text_and_span(self.db);
+            let ts = TextSpan::new(text, span);
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, "`break` used outside of loop")
+                .code("F050")
+                .primary_label(ts, "break statement here")
+                .note("break can only be used inside loop blocks")
+                .emit_type();
+        }
+        TypeError::BreakOutsideLoop
+    }
+
+    /// F051: Continue outside loop.
+    pub fn error_continue_outside_loop(&self, stmt: &StmtContinue) -> TypeError {
+        if let Some(entry) = self.spans.lookup_continue(stmt.local_index) {
+            let (text, span) = entry.to_text_and_span(self.db);
+            let ts = TextSpan::new(text, span);
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, "`continue` used outside of loop")
+                .code("F051")
+                .primary_label(ts, "continue statement here")
+                .note("continue can only be used inside loop blocks")
+                .emit_type();
+        }
+        TypeError::ContinueOutsideLoop
+    }
+
     pub fn add_variable(&mut self, name: InternedText<'db>, ty: TypeAndHeap<'db>) {
         self.variables.insert(name, ty);
     }

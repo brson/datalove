@@ -2,7 +2,7 @@ use rmx::prelude::*;
 
 use bct::module_graph::ModuleId;
 use bct::text::{InternedText, Text};
-use datalove_diagnostic::ByteSpan;
+use datalove_diagnostic::{ByteSpan, SpanEntry};
 use crate::datalit;
 
 /// Span entry for a parsed expression, using salsa IDs for storage.
@@ -26,12 +26,16 @@ pub struct ParsedStatements<'db> {
     pub statements: Vec<Statement<'db>>,
 }
 
-/// Parse result containing parsed statements and span side table.
+/// Parse result containing parsed statements and span side tables.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ParseResult<'db> {
     pub parsed: ParsedStatements<'db>,
     pub expr_spans: Vec<ParseSpanEntry>,
+    /// Break statement spans, indexed by local_index.
+    pub break_spans: Vec<SpanEntry>,
+    /// Continue statement spans, indexed by local_index.
+    pub continue_spans: Vec<SpanEntry>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -191,14 +195,16 @@ pub struct StmtLoop<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct StmtBreak {
-    // No fields needed for plain struct.
+    /// Index for span lookup in DatafunSpans.
+    pub local_index: u32,
 }
 
 /// Continue statement for skipping to the next iteration.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct StmtContinue {
-    // No fields needed for plain struct.
+    /// Index for span lookup in DatafunSpans.
+    pub local_index: u32,
 }
 
 /// Debug log statement for outputting values during execution.

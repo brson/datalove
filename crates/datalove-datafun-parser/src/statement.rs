@@ -740,13 +740,17 @@ impl<'db> Parser<'db> {
     }
 
     fn parse_break(&mut self) -> ast::Statement<'db> {
+        let ts = self.peek_text_span();
         self.eat_word("break");
-        ast::Statement::Break(ast::StmtBreak {})
+        let local_index = self.record_break_span(ts);
+        ast::Statement::Break(ast::StmtBreak { local_index })
     }
 
     fn parse_continue(&mut self) -> ast::Statement<'db> {
+        let ts = self.peek_text_span();
         self.eat_word("continue");
-        ast::Statement::Continue(ast::StmtContinue {})
+        let local_index = self.record_continue_span(ts);
+        ast::Statement::Continue(ast::StmtContinue { local_index })
     }
 
     fn parse_debuglog(&mut self) -> ast::Statement<'db> {

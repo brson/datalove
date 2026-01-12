@@ -1,5 +1,23 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F051",
+      "labels": [
+        {
+          "message": "continue statement here",
+          "span": [
+            27,
+            35
+          ],
+          "text": "continue"
+        }
+      ],
+      "message": "`continue` used outside of loop",
+      "notes": [
+        "continue can only be used inside loop blocks"
+      ]
+    }
+  ],
   "errors": [
     {
       "kind": "ContinueOutsideLoop"

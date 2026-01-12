@@ -11,7 +11,7 @@ use bct::{
 
 use datalove_datafun_ast::ast;
 use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
-use datalove_diagnostic::DiagnosticBuilder;
+use datalove_diagnostic::{DiagnosticBuilder, SpanEntry};
 
 use super::Db;
 
@@ -43,6 +43,10 @@ pub(super) struct Parser<'db> {
     module_id: Option<ModuleId>,
     /// Accumulated expression spans (side table pattern).
     expr_spans: Vec<ast::ParseSpanEntry>,
+    /// Accumulated break statement spans, indexed by local_index.
+    break_spans: Vec<SpanEntry>,
+    /// Accumulated continue statement spans, indexed by local_index.
+    continue_spans: Vec<SpanEntry>,
     /// Optional context for error messages showing the enclosing branch's opening token.
     branch_context: Option<(TextSpan<'db>, &'static str)>,
     /// Current function name for expression identity (None for script-level).
@@ -51,6 +55,8 @@ pub(super) struct Parser<'db> {
     expr_counter: u32,
     /// Counter for function calls within current function.
     call_counter: u32,
+    /// Counter for statements needing spans (break, continue).
+    stmt_counter: u32,
 }
 
 impl<'db> Parser<'db> {
@@ -68,10 +74,13 @@ impl<'db> Parser<'db> {
             source_text,
             module_id,
             expr_spans: Vec::new(),
+            break_spans: Vec::new(),
+            continue_spans: Vec::new(),
             branch_context: None,
             current_fn_name: None,
             expr_counter: 0,
             call_counter: 0,
+            stmt_counter: 0,
         }
     }
 
@@ -102,10 +111,13 @@ impl<'db> Parser<'db> {
             source_text,
             module_id,
             expr_spans: Vec::new(),
+            break_spans: Vec::new(),
+            continue_spans: Vec::new(),
             branch_context: context,
             current_fn_name: None,
             expr_counter: 0,
             call_counter: 0,
+            stmt_counter: 0,
         };
         // Prime the buffer.
         parser.fill_iter_buffer();
@@ -131,10 +143,13 @@ impl<'db> Parser<'db> {
             source_text: self.source_text,
             module_id: self.module_id,
             expr_spans: Vec::new(),
+            break_spans: Vec::new(),
+            continue_spans: Vec::new(),
             branch_context: context,
             current_fn_name: self.current_fn_name,
             expr_counter: self.expr_counter,
             call_counter: self.call_counter,
+            stmt_counter: self.stmt_counter,
         };
         parser.fill_iter_buffer();
         parser
@@ -145,6 +160,7 @@ impl<'db> Parser<'db> {
         self.had_error |= sub.had_error;
         self.expr_counter = sub.expr_counter;
         self.call_counter = sub.call_counter;
+        self.stmt_counter = sub.stmt_counter;
         self.merge_spans_from(sub);
     }
 
@@ -346,9 +362,44 @@ impl<'db> Parser<'db> {
         rmx::std::mem::take(&mut self.expr_spans)
     }
 
+    /// Take the accumulated break statement spans (consumes them).
+    pub(super) fn take_break_spans(&mut self) -> Vec<SpanEntry> {
+        rmx::std::mem::take(&mut self.break_spans)
+    }
+
+    /// Take the accumulated continue statement spans (consumes them).
+    pub(super) fn take_continue_spans(&mut self) -> Vec<SpanEntry> {
+        rmx::std::mem::take(&mut self.continue_spans)
+    }
+
     /// Merge spans from a sub-parser into this parser.
     pub(super) fn merge_spans_from(&mut self, sub: &mut Self) {
         self.expr_spans.append(&mut sub.expr_spans);
+        self.break_spans.append(&mut sub.break_spans);
+        self.continue_spans.append(&mut sub.continue_spans);
+    }
+
+    /// Get next statement index and increment counter.
+    pub(super) fn next_stmt_index(&mut self) -> u32 {
+        let idx = self.stmt_counter;
+        self.stmt_counter += 1;
+        idx
+    }
+
+    /// Record a break statement span and return its local_index.
+    pub(super) fn record_break_span(&mut self, ts: TextSpan<'db>) -> u32 {
+        use salsa::plumbing::AsId;
+        let index = self.next_stmt_index();
+        self.break_spans.push(SpanEntry::new(ts.text.as_id(), ts.span));
+        index
+    }
+
+    /// Record a continue statement span and return its local_index.
+    pub(super) fn record_continue_span(&mut self, ts: TextSpan<'db>) -> u32 {
+        use salsa::plumbing::AsId;
+        let index = self.next_stmt_index();
+        self.continue_spans.push(SpanEntry::new(ts.text.as_id(), ts.span));
+        index
     }
 
     /// Emit error if tokens remain unconsumed after a successful parse.

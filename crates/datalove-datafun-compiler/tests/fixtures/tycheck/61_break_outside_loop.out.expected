@@ -1,5 +1,23 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F050",
+      "labels": [
+        {
+          "message": "break statement here",
+          "span": [
+            24,
+            29
+          ],
+          "text": "break"
+        }
+      ],
+      "message": "`break` used outside of loop",
+      "notes": [
+        "break can only be used inside loop blocks"
+      ]
+    }
+  ],
   "errors": [
     {
       "kind": "BreakOutsideLoop"
