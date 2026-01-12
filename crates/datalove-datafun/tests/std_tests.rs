@@ -7,7 +7,7 @@ use datafun::pipeline::{ModuleCompilationPipeline, TypecheckResult, LoweringResu
 
 /// Run a script with the std library loaded from sys/ directory.
 fn analyze_file(path: &Path) -> Result<String, String> {
-    let mut db = datafun::Database::default();
+    let db = datafun::Database::default();
 
     // Read the script file.
     let script_text = std::fs::read_to_string(path)

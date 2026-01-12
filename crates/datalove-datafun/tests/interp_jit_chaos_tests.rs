@@ -215,7 +215,7 @@ fn test_file(path: &Path) -> Result<(), String> {
 
     // Run in spawned thread to work around Cranelift JIT + PIE issues.
     std::thread::spawn(move || {
-        let mut db = datafun::Database::default();
+        let db = datafun::Database::default();
 
         let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
             .map_err(|e| format!("Failed to parse worldfile: {}", e))?;

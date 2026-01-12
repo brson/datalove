@@ -174,7 +174,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Run analysis in a spawned thread to work around Cranelift JIT limitations.
     let result = std::thread::spawn(move || {
-        let mut db = datafun::Database::default();
+        let db = datafun::Database::default();
 
         // Parse the worldfile into sections.
         let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())

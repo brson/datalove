@@ -155,7 +155,7 @@ fn normalize_ir(ir: &str) -> String {
 
 /// Analyze a worldfile using both pipelines.
 fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> DualAnalysis {
-    let mut db = datafun::Database::default();
+    let db = datafun::Database::default();
     let mut results = Vec::new();
 
     // Validate input: exactly one scriptunit-fragment, no scriptunit-expr.

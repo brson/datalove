@@ -365,7 +365,7 @@ fn execute_ir_aot(
 fn analyze_worldfile_ir_serial(
     parsed: package_load_worldfile::ParsedWorldfile,
 ) -> IrSerialAnalysis {
-    let mut db = datafun::Database::default();
+    let db = datafun::Database::default();
     let mut results = Vec::new();
 
     // Validate: exactly one scriptunit-fragment.
