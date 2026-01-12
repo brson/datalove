@@ -157,6 +157,21 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "field_type": field_ty
             })
         }
+        TypeError::VoidFunctionReturnsValue => {
+            json!({
+                "kind": "VoidFunctionReturnsValue"
+            })
+        }
+        TypeError::FunctionRequiresReturnValue => {
+            json!({
+                "kind": "FunctionRequiresReturnValue"
+            })
+        }
+        TypeError::UndefinedVariable => {
+            json!({
+                "kind": "UndefinedVariable"
+            })
+        }
     }
 }
 

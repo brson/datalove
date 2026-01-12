@@ -142,9 +142,7 @@ pub fn check_statement<'db>(
                         }
                         None => {
                             // Variable not found.
-                            ctx.add_error(TypeError::DatalitError(
-                                format!("undefined variable: {}", name.text(db))
-                            ));
+                            ctx.add_error(ctx.error_undefined_variable_set(stmt, name.text(db).as_str()));
                         }
                     }
                 }
@@ -219,9 +217,7 @@ pub fn check_statement<'db>(
                     // Has value - check if void (no declared return type).
                     if ctx.is_void_function {
                         // Void function with value - ERROR.
-                        ctx.add_error(TypeError::DatalitError(
-                            "void function cannot return a value".to_string()
-                        ));
+                        ctx.add_error(ctx.error_void_function_returns_value(stmt));
                     } else {
                         // Non-void function with value - check type.
                         if let Err(e) = check_expr(ctx, value, expected_ret_ty) {
@@ -233,9 +229,7 @@ pub fn check_statement<'db>(
                     // Bare ret - check if void (no declared return type).
                     if !ctx.is_void_function {
                         // Non-void function with bare ret - ERROR.
-                        ctx.add_error(TypeError::DatalitError(
-                            "function requires return value".to_string()
-                        ));
+                        ctx.add_error(ctx.error_function_requires_return_value(stmt));
                     }
                     // Void function with bare ret - OK.
                 }

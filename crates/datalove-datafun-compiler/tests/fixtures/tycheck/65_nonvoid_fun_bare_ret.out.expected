@@ -1,9 +1,26 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F053",
+      "labels": [
+        {
+          "message": "bare return in non-void function",
+          "span": [
+            28,
+            31
+          ],
+          "text": "ret"
+        }
+      ],
+      "message": "function requires return value",
+      "notes": [
+        "add a return value or change the function to void"
+      ]
+    }
+  ],
   "errors": [
     {
-      "kind": "DatalitError",
-      "message": "function requires return value"
+      "kind": "FunctionRequiresReturnValue"
     }
   ],
   "judgements": [

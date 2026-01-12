@@ -1,0 +1,34 @@
+{
+  "diagnostics": [
+    {
+      "code": "F054",
+      "labels": [
+        {
+          "message": "variable not defined",
+          "span": [
+            15,
+            18
+          ],
+          "text": "set"
+        }
+      ],
+      "message": "undefined variable: x",
+      "notes": [
+        "declare the variable with 'var' before assigning to it"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "UndefinedVariable"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "test",
+      "params": [],
+      "return_type": "?"
+    }
+  ]
+}

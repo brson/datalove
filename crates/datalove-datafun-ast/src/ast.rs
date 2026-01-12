@@ -36,6 +36,10 @@ pub struct ParseResult<'db> {
     pub break_spans: Vec<SpanEntry>,
     /// Continue statement spans, indexed by local_index.
     pub continue_spans: Vec<SpanEntry>,
+    /// Return statement spans, indexed by local_index.
+    pub ret_spans: Vec<SpanEntry>,
+    /// Set statement spans, indexed by local_index.
+    pub set_spans: Vec<SpanEntry>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -79,6 +83,8 @@ pub struct StmtVar<'db> {
 pub struct StmtSet<'db> {
     pub target: SetTarget<'db>,
     pub value: ExprFun<'db>,
+    /// Index for span lookup in DatafunSpans.
+    pub local_index: u32,
 }
 
 /// Target of a set statement.
@@ -138,6 +144,8 @@ pub enum ParamMode {
 #[derive(salsa::Update)]
 pub struct StmtRet<'db> {
     pub value: Option<ExprFun<'db>>,
+    /// Index for span lookup in DatafunSpans.
+    pub local_index: u32,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

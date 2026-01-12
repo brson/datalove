@@ -78,6 +78,12 @@ pub enum TypeError {
     ProjectionOnNonAggregate { ty: String },
     /// Field projection on move-type field (not allowed outside ref context).
     NonCopyFieldProjection { field_ty: String },
+    /// Void function returning a value.
+    VoidFunctionReturnsValue,
+    /// Non-void function with bare return (missing return value).
+    FunctionRequiresReturnValue,
+    /// Undefined variable reference.
+    UndefinedVariable,
 }
 
 /// Check if a datalit type is a copy type (can be safely copied without cloning).

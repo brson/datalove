@@ -239,6 +239,48 @@ impl<'db> TypeContext<'db> {
         TypeError::ContinueOutsideLoop
     }
 
+    /// F052: Void function cannot return a value.
+    pub fn error_void_function_returns_value(&self, stmt: &StmtRet) -> TypeError {
+        if let Some(entry) = self.spans.lookup_ret(stmt.local_index) {
+            let (text, span) = entry.to_text_and_span(self.db);
+            let ts = TextSpan::new(text, span);
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, "void function cannot return a value")
+                .code("F052")
+                .primary_label(ts, "return with value in void function")
+                .note("remove the return value or add a return type to the function")
+                .emit_type();
+        }
+        TypeError::VoidFunctionReturnsValue
+    }
+
+    /// F053: Non-void function requires return value.
+    pub fn error_function_requires_return_value(&self, stmt: &StmtRet) -> TypeError {
+        if let Some(entry) = self.spans.lookup_ret(stmt.local_index) {
+            let (text, span) = entry.to_text_and_span(self.db);
+            let ts = TextSpan::new(text, span);
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, "function requires return value")
+                .code("F053")
+                .primary_label(ts, "bare return in non-void function")
+                .note("add a return value or change the function to void")
+                .emit_type();
+        }
+        TypeError::FunctionRequiresReturnValue
+    }
+
+    /// F054: Undefined variable in set statement.
+    pub fn error_undefined_variable_set(&self, stmt: &StmtSet, name: &str) -> TypeError {
+        if let Some(entry) = self.spans.lookup_set(stmt.local_index) {
+            let (text, span) = entry.to_text_and_span(self.db);
+            let ts = TextSpan::new(text, span);
+            datalove_diagnostic::DiagnosticBuilder::error(self.db, &format!("undefined variable: {}", name))
+                .code("F054")
+                .primary_label(ts, "variable not defined")
+                .note("declare the variable with 'var' before assigning to it")
+                .emit_type();
+        }
+        TypeError::UndefinedVariable
+    }
+
     pub fn add_variable(&mut self, name: InternedText<'db>, ty: TypeAndHeap<'db>) {
         self.variables.insert(name, ty);
     }

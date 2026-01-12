@@ -174,9 +174,16 @@ fn parse_bracer<'db>(
             }
         });
 
-    let (statements, expr_spans, break_spans, continue_spans) = parse_statements(db, lines, source_text, module_id);
+    let (statements, spans) = parse_statements(db, lines, source_text, module_id);
     let parsed = ast::ParsedStatements { statements };
-    ast::ParseResult { parsed, expr_spans, break_spans, continue_spans }
+    ast::ParseResult {
+        parsed,
+        expr_spans: spans.expr_spans,
+        break_spans: spans.break_spans,
+        continue_spans: spans.continue_spans,
+        ret_spans: spans.ret_spans,
+        set_spans: spans.set_spans,
+    }
 }
 
 /// Check if a token acts as a line separator.
@@ -190,19 +197,30 @@ fn is_line_separator<'db>(db: &'db dyn Db, token: Token<'db>) -> bool {
     }
 }
 
+/// Parsed statement spans result.
+struct ParsedSpans {
+    expr_spans: Vec<ast::ParseSpanEntry>,
+    break_spans: Vec<datalove_diagnostic::SpanEntry>,
+    continue_spans: Vec<datalove_diagnostic::SpanEntry>,
+    ret_spans: Vec<datalove_diagnostic::SpanEntry>,
+    set_spans: Vec<datalove_diagnostic::SpanEntry>,
+}
+
 /// Parse statements from lines, creating a Parser for each line.
 ///
-/// Returns statements and accumulated spans (expr, break, continue).
+/// Returns statements and accumulated spans.
 fn parse_statements<'db>(
     db: &'db dyn Db,
     lines: impl Iterator<Item = Vec<TreeToken<'db>>>,
     source_text: bct::text::Text<'db>,
     module_id: Option<ModuleId>,
-) -> (Vec<ast::Statement<'db>>, Vec<ast::ParseSpanEntry>, Vec<datalove_diagnostic::SpanEntry>, Vec<datalove_diagnostic::SpanEntry>) {
+) -> (Vec<ast::Statement<'db>>, ParsedSpans) {
     let mut statements = vec![];
     let mut all_expr_spans = vec![];
     let mut all_break_spans = vec![];
     let mut all_continue_spans = vec![];
+    let mut all_ret_spans = vec![];
+    let mut all_set_spans = vec![];
     let mut line_iter = lines.enumerate().peekable();
 
     while let Some((_line_num, line)) = line_iter.next() {
@@ -216,9 +234,18 @@ fn parse_statements<'db>(
         all_expr_spans.extend(parser.take_expr_spans());
         all_break_spans.extend(parser.take_break_spans());
         all_continue_spans.extend(parser.take_continue_spans());
+        all_ret_spans.extend(parser.take_ret_spans());
+        all_set_spans.extend(parser.take_set_spans());
     }
 
-    (statements, all_expr_spans, all_break_spans, all_continue_spans)
+    let spans = ParsedSpans {
+        expr_spans: all_expr_spans,
+        break_spans: all_break_spans,
+        continue_spans: all_continue_spans,
+        ret_spans: all_ret_spans,
+        set_spans: all_set_spans,
+    };
+    (statements, spans)
 }
 
 /// Tracked wrapper for parser tests that only need the ParsedStatements.
@@ -282,5 +309,7 @@ pub fn datafun_spans<'db>(
         entries,
         parse_result.break_spans.clone(),
         parse_result.continue_spans.clone(),
+        parse_result.ret_spans.clone(),
+        parse_result.set_spans.clone(),
     )
 }

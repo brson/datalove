@@ -1,9 +1,26 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F052",
+      "labels": [
+        {
+          "message": "return with value in void function",
+          "span": [
+            19,
+            22
+          ],
+          "text": "ret"
+        }
+      ],
+      "message": "void function cannot return a value",
+      "notes": [
+        "remove the return value or add a return type to the function"
+      ]
+    }
+  ],
   "errors": [
     {
-      "kind": "DatalitError",
-      "message": "void function cannot return a value"
+      "kind": "VoidFunctionReturnsValue"
     }
   ],
   "judgements": [

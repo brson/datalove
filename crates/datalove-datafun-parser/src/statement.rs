@@ -152,7 +152,9 @@ impl<'db> Parser<'db> {
     }
 
     fn parse_set(&mut self) -> ast::Statement<'db> {
+        let ts = self.peek_text_span();
         self.eat_word("set");
+        let local_index = self.record_set_span(ts);
 
         let name = match self.eat_name() {
             Some(n) => n,
@@ -185,6 +187,7 @@ impl<'db> Parser<'db> {
         ast::Statement::Set(ast::StmtSet {
             target,
             value,
+            local_index,
         })
     }
 
@@ -384,7 +387,9 @@ impl<'db> Parser<'db> {
     }
 
     fn parse_ret(&mut self) -> ast::Statement<'db> {
+        let ts = self.peek_text_span();
         self.eat_word("ret");
+        let local_index = self.record_ret_span(ts);
 
         // Bare `ret` for void functions has no expression.
         let value = if self.peek().is_some() {
@@ -393,7 +398,7 @@ impl<'db> Parser<'db> {
             None
         };
 
-        ast::Statement::Ret(ast::StmtRet { value })
+        ast::Statement::Ret(ast::StmtRet { value, local_index })
     }
 
     fn parse_require(&mut self) -> ast::Statement<'db> {
