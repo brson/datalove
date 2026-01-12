@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Test passing tuple field to out param with move type.
+fun write_42(out x: int): @bool
+    set x = :int/@42
+    ret @true
+end fun
+
+var t: (int, int) = (:int/@100, :int/@200)
+let _ok = write_42(t.0)
+debuglog t.0

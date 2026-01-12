@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Test passing tuple field to mut param with move type.
+fun set_to_42(mut x: int): @bool
+    set x = :int/@42
+    ret @true
+end fun
+
+var t: (int, int) = (:int/@100, :int/@200)
+let _ok = set_to_42(t.0)
+debuglog t.0

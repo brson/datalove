@@ -890,6 +890,17 @@ impl IrInterpreter {
                     if mode == ParamMode::Out {
                         // Out param: get destination pointer without reading value.
                         let val = self.get_operand_dest(op, frame)?;
+                        // For out params that point to already-initialized storage (like field refs),
+                        // destroy the old value before the call. The callee will write a new value.
+                        // This is needed because the callee treats the param as "uninitialized"
+                        // but the underlying storage may already have a value.
+                        unsafe {
+                            datalove_rt::c::dtlv_rti_any_destroy_local(
+                                self.runtime.handle(),
+                                val.ptr,
+                                val.tydesc,
+                            );
+                        }
                         arg_vals.push(val);
                     } else {
                         // Other modes: read the value.
