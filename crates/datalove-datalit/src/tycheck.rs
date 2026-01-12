@@ -1440,8 +1440,9 @@ pub fn convert_type_hint<'db>(
 }
 
 /// Check if two heaps are compatible.
+///
 /// Omitted heap is generic and compatible with any heap.
-fn heaps_compatible(h1: Heap, h2: Heap) -> bool {
+pub fn heaps_compatible(h1: Heap, h2: Heap) -> bool {
     match (h1, h2) {
         (Heap::Local, Heap::Local) => true,
         (Heap::Global, Heap::Global) => true,
@@ -1581,11 +1582,176 @@ pub fn can_widen_to<'db>(from: &Type<'db>, to: &Type<'db>) -> bool {
 }
 
 /// Convert a heap to a string for error messages.
-fn heap_to_string(heap: Heap) -> String {
+pub fn heap_to_string(heap: Heap) -> String {
     match heap {
         Heap::Local => "@".to_string(),
         Heap::Global => "#".to_string(),
         Heap::Omitted => "".to_string(),
+    }
+}
+
+// ============================================================================
+// Type Predicates
+// ============================================================================
+
+/// Check if a type is numeric (any integer or float type).
+pub fn is_numeric_type(ty: &Type<'_>) -> bool {
+    matches!(
+        ty,
+        Type::U8 | Type::I8 |
+        Type::U16 | Type::I16 |
+        Type::U32 | Type::I32 |
+        Type::U64 | Type::I64 |
+        Type::F32 | Type::F64 |
+        Type::Int
+    )
+}
+
+/// Check if a type is a floating-point type.
+pub fn is_float_type(ty: &Type<'_>) -> bool {
+    matches!(ty, Type::F32 | Type::F64)
+}
+
+/// Check if a type is the arbitrary-precision integer type.
+pub fn is_bigint_type(ty: &Type<'_>) -> bool {
+    matches!(ty, Type::Int)
+}
+
+/// Check if a type is a fixed-size integer type.
+pub fn is_fixed_int_type(ty: &Type<'_>) -> bool {
+    matches!(
+        ty,
+        Type::U8 | Type::I8 |
+        Type::U16 | Type::I16 |
+        Type::U32 | Type::I32 |
+        Type::U64 | Type::I64
+    )
+}
+
+/// Check if a type is an unsigned integer type.
+pub fn is_unsigned_int_type(ty: &Type<'_>) -> bool {
+    matches!(ty, Type::U8 | Type::U16 | Type::U32 | Type::U64)
+}
+
+/// Check if a type is boolean.
+pub fn is_bool_type(ty: &Type<'_>) -> bool {
+    matches!(ty, Type::Bool)
+}
+
+// ============================================================================
+// Integer Range Checking
+// ============================================================================
+
+/// Check if an integer value fits within a given type.
+///
+/// Returns Ok(()) if the value fits, Err(IntOutOfRange) if not.
+pub fn check_int_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeError> {
+    match ty {
+        Type::U8 => value_str.parse::<u8>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
+        Type::I8 => value_str.parse::<i8>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
+        Type::U16 => value_str.parse::<u16>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
+        Type::I16 => value_str.parse::<i16>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
+        Type::U32 => value_str.parse::<u32>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
+        Type::I32 => value_str.parse::<i32>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
+        Type::U64 => value_str.parse::<u64>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
+        Type::I64 => value_str.parse::<i64>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
+        Type::Int => Ok(()), // Arbitrary precision, always fits.
+        _ => Ok(()), // Non-integer types don't need range checking.
+    }
+}
+
+/// Check if an integer value fits within the innermost integer type of a possibly wrapped type.
+///
+/// Handles Option<u8>, Result<u8>, etc.
+pub fn check_int_fits_wrapped_type<'db>(
+    value_str: &str,
+    ty: &Type<'db>,
+    db: &'db dyn crate::Db,
+) -> Result<(), TypeError> {
+    match ty {
+        Type::Option(opt) => check_int_fits_wrapped_type(value_str, opt.inner_type.ty(db), db),
+        Type::Result(res) => check_int_fits_wrapped_type(value_str, res.inner_type.ty(db), db),
+        _ => check_int_fits_type(value_str, ty),
+    }
+}
+
+/// Check if a hex value fits within a given type.
+pub fn check_hex_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeError> {
+    let is_negative = value_str.starts_with('-');
+    let hex_part = value_str
+        .trim_start_matches('-')
+        .trim_start_matches("0x")
+        .trim_start_matches("0X");
+
+    match ty {
+        Type::U8 if !is_negative => {
+            u8::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        Type::I8 => {
+            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
+            if is_negative {
+                if value <= 128 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            } else {
+                if value <= 127 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            }
+        }
+        Type::U16 if !is_negative => {
+            u16::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        Type::I16 => {
+            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
+            if is_negative {
+                if value <= 32768 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            } else {
+                if value <= 32767 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            }
+        }
+        Type::U32 if !is_negative => {
+            u32::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        Type::I32 => {
+            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
+            if is_negative {
+                if value <= 2147483648 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            } else {
+                if value <= 2147483647 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            }
+        }
+        Type::U64 if !is_negative => {
+            u64::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        Type::I64 => {
+            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
+            if is_negative {
+                if value <= 9223372036854775808 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            } else {
+                if value <= 9223372036854775807 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+            }
+        }
+        Type::Int => Ok(()), // Arbitrary precision.
+        Type::F32 if !is_negative => {
+            // Hex must fit in 32 bits for f32 bit pattern.
+            u32::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        Type::F64 if !is_negative => {
+            // Hex must fit in 64 bits for f64 bit pattern.
+            u64::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        _ if is_negative => Err(TypeError::IntOutOfRange), // Unsigned type with negative value.
+        _ => Ok(()), // Non-integer types.
+    }
+}
+
+/// Check if a hex value fits within the innermost integer type of a possibly wrapped type.
+pub fn check_hex_fits_wrapped_type<'db>(
+    value_str: &str,
+    ty: &Type<'db>,
+    db: &'db dyn crate::Db,
+) -> Result<(), TypeError> {
+    match ty {
+        Type::Option(opt) => check_hex_fits_wrapped_type(value_str, opt.inner_type.ty(db), db),
+        Type::Result(res) => check_hex_fits_wrapped_type(value_str, res.inner_type.ty(db), db),
+        _ => check_hex_fits_type(value_str, ty),
     }
 }
 

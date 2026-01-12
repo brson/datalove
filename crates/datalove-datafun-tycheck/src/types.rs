@@ -1,91 +1,107 @@
 //! Type utilities for datafun typechecking.
 //!
 //! Provides type predicates, conversion functions, and helper utilities.
+//! Many utilities delegate to or re-export from datalit's tycheck module.
 
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
 
 pub use crate::{Type, TypeAndHeap, TypeFunction, TypeError};
 
-/// Check if a type is numeric.
+// Re-export heap utilities from datalit.
+pub use datalit::tycheck::{heaps_compatible, heap_to_string};
+
+// ============================================================================
+// Type Predicates (wrap datalit predicates for datafun's Type enum)
+// ============================================================================
+
+/// Check if a type is numeric (any integer or float type).
 pub fn is_numeric_type<'db>(ty: &Type<'db>) -> bool {
     match ty {
-        Type::Datalit(datalit_ty) => {
-            matches!(
-                datalit_ty,
-                datalit::tycheck::Type::U8 |
-                datalit::tycheck::Type::I8 |
-                datalit::tycheck::Type::U16 |
-                datalit::tycheck::Type::I16 |
-                datalit::tycheck::Type::U32 |
-                datalit::tycheck::Type::I32 |
-                datalit::tycheck::Type::U64 |
-                datalit::tycheck::Type::I64 |
-                datalit::tycheck::Type::F32 |
-                datalit::tycheck::Type::F64 |
-                datalit::tycheck::Type::Int
-            )
-        }
+        Type::Datalit(datalit_ty) => datalit::tycheck::is_numeric_type(datalit_ty),
         Type::Function(_) => false,
     }
 }
 
+/// Check if a type is a floating-point type.
 pub fn is_float_type<'db>(ty: &Type<'db>) -> bool {
     match ty {
-        Type::Datalit(datalit_ty) => {
-            matches!(datalit_ty, datalit::tycheck::Type::F32 | datalit::tycheck::Type::F64)
-        }
-        _ => false,
+        Type::Datalit(datalit_ty) => datalit::tycheck::is_float_type(datalit_ty),
+        Type::Function(_) => false,
     }
 }
 
+/// Check if a type is the arbitrary-precision integer type.
 pub fn is_bigint_type<'db>(ty: &Type<'db>) -> bool {
     match ty {
-        Type::Datalit(datalit_ty) => {
-            matches!(datalit_ty, datalit::tycheck::Type::Int)
-        }
-        _ => false,
+        Type::Datalit(datalit_ty) => datalit::tycheck::is_bigint_type(datalit_ty),
+        Type::Function(_) => false,
     }
 }
 
+/// Check if a type is a fixed-size integer type.
 pub fn is_fixed_int_type<'db>(ty: &Type<'db>) -> bool {
     match ty {
-        Type::Datalit(datalit_ty) => {
-            matches!(
-                datalit_ty,
-                datalit::tycheck::Type::U8 |
-                datalit::tycheck::Type::I8 |
-                datalit::tycheck::Type::U16 |
-                datalit::tycheck::Type::I16 |
-                datalit::tycheck::Type::U32 |
-                datalit::tycheck::Type::I32 |
-                datalit::tycheck::Type::U64 |
-                datalit::tycheck::Type::I64
-            )
-        }
-        _ => false,
+        Type::Datalit(datalit_ty) => datalit::tycheck::is_fixed_int_type(datalit_ty),
+        Type::Function(_) => false,
     }
 }
 
+/// Check if a type is an unsigned integer type.
 pub fn is_unsigned_int_type<'db>(ty: &Type<'db>) -> bool {
     match ty {
-        Type::Datalit(datalit_ty) => {
-            matches!(
-                datalit_ty,
-                datalit::tycheck::Type::U8 |
-                datalit::tycheck::Type::U16 |
-                datalit::tycheck::Type::U32 |
-                datalit::tycheck::Type::U64
-            )
-        }
-        _ => false,
+        Type::Datalit(datalit_ty) => datalit::tycheck::is_unsigned_int_type(datalit_ty),
+        Type::Function(_) => false,
     }
 }
 
 /// Check if a type is boolean.
 pub fn is_bool_type<'db>(ty: &Type<'db>) -> bool {
-    matches!(ty, Type::Datalit(datalit::tycheck::Type::Bool))
+    match ty {
+        Type::Datalit(datalit_ty) => datalit::tycheck::is_bool_type(datalit_ty),
+        Type::Function(_) => false,
+    }
 }
+
+// ============================================================================
+// Integer Range Checking (delegate to datalit)
+// ============================================================================
+
+/// Check if an integer value fits within a given type.
+///
+/// Returns Ok(()) if the value fits, Err(IntOutOfRange) if not.
+pub fn check_int_fits_type(value_str: &str, ty: &datalit::tycheck::Type<'_>) -> Result<(), TypeError> {
+    datalit::tycheck::check_int_fits_type(value_str, ty).map_err(TypeError::from)
+}
+
+/// Check if an integer value fits within the innermost integer type of a possibly wrapped type.
+///
+/// Handles Option<u8>, Result<u8>, etc.
+pub fn check_int_fits_wrapped_type(
+    value_str: &str,
+    ty: &datalit::tycheck::Type<'_>,
+    db: &dyn crate::Db,
+) -> Result<(), TypeError> {
+    datalit::tycheck::check_int_fits_wrapped_type(value_str, ty, db).map_err(TypeError::from)
+}
+
+/// Check if a hex value fits within a given type.
+pub fn check_hex_fits_type(value_str: &str, ty: &datalit::tycheck::Type<'_>) -> Result<(), TypeError> {
+    datalit::tycheck::check_hex_fits_type(value_str, ty).map_err(TypeError::from)
+}
+
+/// Check if a hex value fits within the innermost integer type of a possibly wrapped type.
+pub fn check_hex_fits_wrapped_type(
+    value_str: &str,
+    ty: &datalit::tycheck::Type<'_>,
+    db: &dyn crate::Db,
+) -> Result<(), TypeError> {
+    datalit::tycheck::check_hex_fits_wrapped_type(value_str, ty, db).map_err(TypeError::from)
+}
+
+// ============================================================================
+// Type Hint Conversion
+// ============================================================================
 
 /// Convert a datalit type hint to a datafun type.
 pub fn convert_type_hint<'db>(
@@ -102,138 +118,12 @@ pub fn convert_type_hint<'db>(
     Ok(TypeAndHeap::new(db, heap, ty))
 }
 
-/// Check if an integer value fits within a given type.
-/// Returns Ok(()) if the value fits, Err(IntOutOfRange) if not.
-pub fn check_int_fits_type(value_str: &str, ty: &datalit::tycheck::Type<'_>) -> Result<(), TypeError> {
-    match ty {
-        datalit::tycheck::Type::U8 => {
-            value_str.parse::<u8>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::I8 => {
-            value_str.parse::<i8>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::U16 => {
-            value_str.parse::<u16>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::I16 => {
-            value_str.parse::<i16>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::U32 => {
-            value_str.parse::<u32>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::I32 => {
-            value_str.parse::<i32>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::U64 => {
-            value_str.parse::<u64>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::I64 => {
-            value_str.parse::<i64>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::Int => {
-            // Int is arbitrary precision, always fits.
-            Ok(())
-        }
-        _ => Ok(()), // Non-integer types don't need range checking.
-    }
-}
-
-/// Check if an integer value fits within the innermost integer type of a possibly wrapped type.
-/// Handles Option<u8>, Result<u8>, etc.
-pub fn check_int_fits_wrapped_type(value_str: &str, ty: &datalit::tycheck::Type<'_>, db: &dyn crate::Db) -> Result<(), TypeError> {
-    match ty {
-        datalit::tycheck::Type::Option(opt) => {
-            check_int_fits_wrapped_type(value_str, opt.inner_type.ty(db), db)
-        }
-        datalit::tycheck::Type::Result(res) => {
-            check_int_fits_wrapped_type(value_str, res.inner_type.ty(db), db)
-        }
-        _ => check_int_fits_type(value_str, ty),
-    }
-}
-
-/// Check if a hex value fits within a given type.
-pub fn check_hex_fits_type(value_str: &str, ty: &datalit::tycheck::Type<'_>) -> Result<(), TypeError> {
-    let is_negative = value_str.starts_with('-');
-    let hex_part = value_str
-        .trim_start_matches('-')
-        .trim_start_matches("0x")
-        .trim_start_matches("0X");
-
-    match ty {
-        datalit::tycheck::Type::U8 if !is_negative => {
-            u8::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::I8 => {
-            // For signed types, parse as unsigned first then check range.
-            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
-            if is_negative {
-                if value <= 128 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            } else {
-                if value <= 127 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            }
-        }
-        datalit::tycheck::Type::U16 if !is_negative => {
-            u16::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::I16 => {
-            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
-            if is_negative {
-                if value <= 32768 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            } else {
-                if value <= 32767 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            }
-        }
-        datalit::tycheck::Type::U32 if !is_negative => {
-            u32::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::I32 => {
-            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
-            if is_negative {
-                if value <= 2147483648 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            } else {
-                if value <= 2147483647 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            }
-        }
-        datalit::tycheck::Type::U64 if !is_negative => {
-            u64::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::I64 => {
-            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
-            if is_negative {
-                if value <= 9223372036854775808 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            } else {
-                if value <= 9223372036854775807 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            }
-        }
-        datalit::tycheck::Type::Int => Ok(()), // Arbitrary precision.
-        datalit::tycheck::Type::F32 if !is_negative => {
-            // Hex must fit in 32 bits for f32 bit pattern.
-            u32::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        datalit::tycheck::Type::F64 if !is_negative => {
-            // Hex must fit in 64 bits for f64 bit pattern.
-            u64::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        _ if is_negative => Err(TypeError::IntOutOfRange), // Unsigned type with negative value.
-        _ => Ok(()), // Non-integer types.
-    }
-}
-
-/// Check if a hex value fits within the innermost integer type of a possibly wrapped type.
-pub fn check_hex_fits_wrapped_type(value_str: &str, ty: &datalit::tycheck::Type<'_>, db: &dyn crate::Db) -> Result<(), TypeError> {
-    match ty {
-        datalit::tycheck::Type::Option(opt) => {
-            check_hex_fits_wrapped_type(value_str, opt.inner_type.ty(db), db)
-        }
-        datalit::tycheck::Type::Result(res) => {
-            check_hex_fits_wrapped_type(value_str, res.inner_type.ty(db), db)
-        }
-        _ => check_hex_fits_type(value_str, ty),
-    }
-}
+// ============================================================================
+// Heap Unwrapping
+// ============================================================================
 
 /// Unwrap Option/Result types to get the innermost heap.
+///
 /// Used when checking heap compatibility for typed literals.
 pub fn unwrap_wrapper_heap<'db>(
     db: &'db dyn crate::Db,
@@ -266,29 +156,9 @@ pub fn unwrap_wrapper_heap_datalit<'db>(
     }
 }
 
-/// Check if two heaps are compatible.
-/// Omitted heap is generic and compatible with any heap.
-pub fn heaps_compatible(h1: datalit::ast::Heap, h2: datalit::ast::Heap) -> bool {
-    use datalit::ast::Heap;
-    match (h1, h2) {
-        (Heap::Local, Heap::Local) => true,
-        (Heap::Global, Heap::Global) => true,
-        // Omitted is compatible with any heap (generic).
-        (Heap::Omitted, _) => true,
-        (_, Heap::Omitted) => true,
-        _ => false,
-    }
-}
-
-/// Convert a heap to a string for error messages.
-pub fn heap_to_string(heap: datalit::ast::Heap) -> String {
-    use datalit::ast::Heap;
-    match heap {
-        Heap::Local => "@".to_string(),
-        Heap::Global => "#".to_string(),
-        Heap::Omitted => "".to_string(),
-    }
-}
+// ============================================================================
+// Expression Heap Extraction
+// ============================================================================
 
 /// Extract the outer heap from an expression.
 ///
@@ -318,6 +188,10 @@ pub fn get_expr_heap<'db>(db: &'db dyn crate::Db, expr: ExprFun<'db>) -> datalit
         _ => datalit::ast::Heap::Omitted,
     }
 }
+
+// ============================================================================
+// Type Equivalence and Conversion
+// ============================================================================
 
 /// Check if two types are equivalent.
 pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'db>) -> bool {
@@ -375,6 +249,7 @@ pub fn to_datalit_type_and_heap<'db>(
 }
 
 /// Unwrap Option/Result wrappers to get inner type.
+///
 /// Used to check collection elements when type hint includes Option/Result.
 pub fn unwrap_wrapper_types<'db>(
     db: &'db dyn crate::Db,
@@ -404,6 +279,10 @@ pub fn unwrap_wrapper_types<'db>(
         _ => ty,
     }
 }
+
+// ============================================================================
+// Unit Type
+// ============================================================================
 
 /// Create the unit type `()` (empty anonymous tuple).
 ///
