@@ -1,0 +1,21 @@
+----------
+module local/test/outops_struct_move
+----------
+
+// Module function taking out param with move type.
+fun init_42(out x: int): @bool
+    set x = :int/@42
+    ret @true
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+// Test calling module function with struct field as out arg (move type).
+require module local/test/outops_struct_move
+import outops_struct_move.init_42
+
+var s: {a: int, b: int} = {a = :int/@100, b = :int/@200}
+let _ok = init_42(s.a)
+debuglog s.a
