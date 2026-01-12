@@ -1,6 +1,15 @@
 //! Expression type synthesis.
 //!
 //! Provides synthesize_expr for inferring types from expressions.
+//!
+//! Organization (parallel to datalit/tycheck/synthesize.rs):
+//! 1. Return type checking helpers - for try operators
+//! 2. Main synthesize_expr function - entry point for type synthesis
+//! 3. Operator synthesis helpers - binop, unaryop
+//! 4. Call synthesis - function calls
+//! 5. Try operator synthesis - ?, !
+//! 6. Field projection synthesis
+//! 7. Inline literal synthesis - list, set, map, tensor, tuple, struct, data, error
 
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
@@ -57,6 +66,10 @@ fn require_result_return_type<'db>(
         )),
     }
 }
+
+// ============================================================================
+// Type Synthesis
+// ============================================================================
 
 /// Synthesize a type for an expression.
 pub fn synthesize_expr<'db>(
@@ -379,6 +392,10 @@ pub fn synthesize_expr<'db>(
     }
 }
 
+// ============================================================================
+// Operator Synthesis
+// ============================================================================
+
 /// Synthesize type for binary operation.
 fn synthesize_binop<'db>(
     ctx: &mut TypeContext<'db>,
@@ -624,6 +641,10 @@ fn synthesize_unaryop<'db>(
     Ok(result_ty)
 }
 
+// ============================================================================
+// Call Synthesis
+// ============================================================================
+
 /// Synthesize type for function call.
 fn synthesize_function_call<'db>(
     ctx: &mut TypeContext<'db>,
@@ -665,6 +686,10 @@ fn synthesize_function_call<'db>(
     // Return the function's return type.
     Ok(return_type)
 }
+
+// ============================================================================
+// Try Operator Synthesis
+// ============================================================================
 
 /// Synthesize type for try-option operator (?).
 fn synthesize_try_option<'db>(
@@ -731,6 +756,10 @@ fn synthesize_try_result<'db>(
     let ty = Type::Datalit(inner_ty.ty(db).clone());
     Ok(TypeAndHeap::new(db, heap, ty))
 }
+
+// ============================================================================
+// Field Projection Synthesis
+// ============================================================================
 
 /// Synthesize type for field projection expression.
 fn synthesize_field_proj<'db>(
@@ -821,6 +850,10 @@ fn synthesize_field_proj<'db>(
         }
     }
 }
+
+// ============================================================================
+// Inline Literal Synthesis
+// ============================================================================
 
 /// Synthesize type for inline list expression.
 fn synthesize_inline_list<'db>(

@@ -1,12 +1,21 @@
 //! Expression type synthesis.
 //!
 //! Provides synthesize for inferring types from expressions.
+//!
+//! Organization:
+//! 1. Main synthesize function - entry point for type synthesis
+//!    - Handles type hint propagation
+//!    - Dispatches to expression-specific synthesis rules
 
 use datalove_diagnostic::DiagnosticBuilder;
 use crate::ast::*;
 use super::context::TypeContext;
 use super::check::check;
 use super::types::*;
+
+// ============================================================================
+// Type Synthesis
+// ============================================================================
 
 /// Synthesize a type for an expression.
 pub fn synthesize<'db>(

@@ -529,5 +529,4 @@ pub use types::{
     convert_type_hint,
     type_to_string,
     unit_type,
-    is_unit_type,
 };

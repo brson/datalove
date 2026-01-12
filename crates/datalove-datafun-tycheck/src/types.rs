@@ -1,157 +1,404 @@
 //! Type utilities for datafun typechecking.
 //!
-//! Provides type predicates, conversion functions, and helper utilities.
-//! Many utilities delegate to or re-export from datalit's tycheck module.
+//! Organization (parallel to datalit/tycheck/types.rs):
+//! 1. Re-exports - datalit types
+//! 2. Heap utilities - heap functions
+//! 3. Type predicates - type queries
+//! 4. Type equivalence - comparing types
+//! 5. Type hint conversion - AST to types
+//! 6. Type to string - types to strings for errors
+//! 7. Unit type helper - type constructor
+//! 8. Element compatibility - delegated to datalit
+//! 9. Integer range checking - delegated to datalit
+//! 10. Heap unwrapping - unwrap wrapper types
+//! 11. Expression heap extraction - get heap from expressions
 
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
-
-pub use crate::{Type, TypeAndHeap, TypeFunction, TypeError};
-
-// Re-export heap utilities from datalit.
-pub use datalit::tycheck::{heaps_compatible, heap_to_string};
+use datalit::ast::{TypeHint, TypeHintAndHeap};
+use crate::{Type, TypeAndHeap, TypeError};
 
 // ============================================================================
-// Type Predicates (wrap datalit predicates for datafun's Type enum)
+// Re-exports
 // ============================================================================
 
-/// Check if a type is numeric (any integer or float type).
-pub fn is_numeric_type<'db>(ty: &Type<'db>) -> bool {
+pub use datalit::tycheck::{
+    TypeAnonTuple,
+    TypeAnonStruct,
+    TypeNamedField,
+    TypeAnonEnum,
+    TypeEnumVariant,
+    TypeList,
+    TypeMap,
+    TypeSet,
+    TypeOption,
+    TypeResult,
+    TypeTensor,
+};
+
+// ============================================================================
+// Heap Utilities
+// ============================================================================
+
+pub use datalit::tycheck::heaps_compatible;
+pub use datalit::tycheck::heap_to_string;
+
+// ============================================================================
+// Type Predicates
+// ============================================================================
+
+/// Check if a type is numeric.
+pub fn is_numeric_type(ty: &Type<'_>) -> bool {
     match ty {
-        Type::Datalit(datalit_ty) => datalit::tycheck::is_numeric_type(datalit_ty),
-        Type::Function(_) => false,
+        Type::Datalit(dt) => datalit::tycheck::is_numeric_type(dt),
+        _ => false,
     }
 }
 
 /// Check if a type is a floating-point type.
-pub fn is_float_type<'db>(ty: &Type<'db>) -> bool {
+pub fn is_float_type(ty: &Type<'_>) -> bool {
     match ty {
-        Type::Datalit(datalit_ty) => datalit::tycheck::is_float_type(datalit_ty),
-        Type::Function(_) => false,
+        Type::Datalit(dt) => datalit::tycheck::is_float_type(dt),
+        _ => false,
     }
 }
 
 /// Check if a type is the arbitrary-precision integer type.
-pub fn is_bigint_type<'db>(ty: &Type<'db>) -> bool {
+pub fn is_bigint_type(ty: &Type<'_>) -> bool {
     match ty {
-        Type::Datalit(datalit_ty) => datalit::tycheck::is_bigint_type(datalit_ty),
-        Type::Function(_) => false,
+        Type::Datalit(dt) => datalit::tycheck::is_bigint_type(dt),
+        _ => false,
     }
 }
 
 /// Check if a type is a fixed-size integer type.
-pub fn is_fixed_int_type<'db>(ty: &Type<'db>) -> bool {
+pub fn is_fixed_int_type(ty: &Type<'_>) -> bool {
     match ty {
-        Type::Datalit(datalit_ty) => datalit::tycheck::is_fixed_int_type(datalit_ty),
-        Type::Function(_) => false,
+        Type::Datalit(dt) => datalit::tycheck::is_fixed_int_type(dt),
+        _ => false,
     }
 }
 
 /// Check if a type is an unsigned integer type.
-pub fn is_unsigned_int_type<'db>(ty: &Type<'db>) -> bool {
+pub fn is_unsigned_int_type(ty: &Type<'_>) -> bool {
     match ty {
-        Type::Datalit(datalit_ty) => datalit::tycheck::is_unsigned_int_type(datalit_ty),
-        Type::Function(_) => false,
+        Type::Datalit(dt) => datalit::tycheck::is_unsigned_int_type(dt),
+        _ => false,
     }
 }
 
 /// Check if a type is boolean.
-pub fn is_bool_type<'db>(ty: &Type<'db>) -> bool {
+pub fn is_bool_type(ty: &Type<'_>) -> bool {
     match ty {
-        Type::Datalit(datalit_ty) => datalit::tycheck::is_bool_type(datalit_ty),
-        Type::Function(_) => false,
+        Type::Datalit(dt) => datalit::tycheck::is_bool_type(dt),
+        _ => false,
     }
 }
 
 // ============================================================================
-// Integer Range Checking (delegate to datalit)
+// Type Equivalence
 // ============================================================================
 
-/// Check if an integer value fits within a given type.
-///
-/// Returns Ok(()) if the value fits, Err(IntOutOfRange) if not.
-pub fn check_int_fits_type(value_str: &str, ty: &datalit::tycheck::Type<'_>) -> Result<(), TypeError> {
-    datalit::tycheck::check_int_fits_type(value_str, ty).map_err(TypeError::from)
-}
-
-/// Check if an integer value fits within the innermost integer type of a possibly wrapped type.
-///
-/// Handles Option<u8>, Result<u8>, etc.
-pub fn check_int_fits_wrapped_type(
-    value_str: &str,
-    ty: &datalit::tycheck::Type<'_>,
-    db: &dyn crate::Db,
-) -> Result<(), TypeError> {
-    datalit::tycheck::check_int_fits_wrapped_type(value_str, ty, db).map_err(TypeError::from)
-}
-
-/// Check if a hex value fits within a given type.
-pub fn check_hex_fits_type(value_str: &str, ty: &datalit::tycheck::Type<'_>) -> Result<(), TypeError> {
-    datalit::tycheck::check_hex_fits_type(value_str, ty).map_err(TypeError::from)
-}
-
-/// Check if a hex value fits within the innermost integer type of a possibly wrapped type.
-pub fn check_hex_fits_wrapped_type(
-    value_str: &str,
-    ty: &datalit::tycheck::Type<'_>,
-    db: &dyn crate::Db,
-) -> Result<(), TypeError> {
-    datalit::tycheck::check_hex_fits_wrapped_type(value_str, ty, db).map_err(TypeError::from)
+/// Check if two types are equivalent.
+pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'db>) -> bool {
+    match (t1, t2) {
+        (Type::Datalit(dt1), Type::Datalit(dt2)) => datalit::tycheck::types_equivalent(db, dt1, dt2),
+        (Type::Function(f1), Type::Function(f2)) => {
+            f1.param_types(db).len() == f2.param_types(db).len()
+                && f1.param_types(db).iter().zip(f2.param_types(db).iter())
+                    .all(|(a, b)| types_equivalent(db, a.ty(db), b.ty(db)))
+                && types_equivalent(db, f1.return_type(db).ty(db), f2.return_type(db).ty(db))
+        }
+        _ => false,
+    }
 }
 
 // ============================================================================
 // Type Hint Conversion
 // ============================================================================
 
-/// Convert a datalit type hint to a datafun type.
+/// Convert a type hint to a type.
 pub fn convert_type_hint<'db>(
     db: &'db dyn crate::Db,
-    type_hint_and_heap: datalit::ast::TypeHintAndHeap<'db>,
+    type_hint_and_heap: TypeHintAndHeap<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
-    // Delegate to datalit's convert_type_hint.
-    let datalit_ty = datalit::tycheck::convert_type_hint(db, type_hint_and_heap)
-        .map_err(TypeError::from)?;
+    let heap = type_hint_and_heap.heap(db);
+    let type_hint = type_hint_and_heap.type_hint(db);
+    convert_type_hint_inner(db, heap, type_hint)
+}
 
-    let heap = datalit_ty.heap(db);
-    let ty = Type::Datalit(datalit_ty.ty(db).clone());
+fn convert_type_hint_inner<'db>(
+    db: &'db dyn crate::Db,
+    heap: datalit::ast::Heap,
+    type_hint: TypeHint<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let ty = match type_hint {
+        TypeHint::Bool => Type::Datalit(datalit::tycheck::Type::Bool),
+        TypeHint::U8 => Type::Datalit(datalit::tycheck::Type::U8),
+        TypeHint::I8 => Type::Datalit(datalit::tycheck::Type::I8),
+        TypeHint::U16 => Type::Datalit(datalit::tycheck::Type::U16),
+        TypeHint::I16 => Type::Datalit(datalit::tycheck::Type::I16),
+        TypeHint::U32 => Type::Datalit(datalit::tycheck::Type::U32),
+        TypeHint::I32 => Type::Datalit(datalit::tycheck::Type::I32),
+        TypeHint::U64 => Type::Datalit(datalit::tycheck::Type::U64),
+        TypeHint::I64 => Type::Datalit(datalit::tycheck::Type::I64),
+        TypeHint::F32 => Type::Datalit(datalit::tycheck::Type::F32),
+        TypeHint::F64 => Type::Datalit(datalit::tycheck::Type::F64),
+        TypeHint::Int => Type::Datalit(datalit::tycheck::Type::Int),
+        TypeHint::String => Type::Datalit(datalit::tycheck::Type::String),
+        TypeHint::Data => Type::Datalit(datalit::tycheck::Type::Data),
+        TypeHint::Error => Type::Datalit(datalit::tycheck::Type::Error),
+
+        TypeHint::AnonTuple(t) => {
+            let fields: Result<Vec<_>, TypeError> = t.fields.iter()
+                .map(|f| {
+                    let f_heap = f.heap(db);
+                    let f_hint = f.type_hint(db);
+                    let f_ty = convert_type_hint_inner(db, f_heap, f_hint)?;
+                    to_datalit_type_and_heap(db, f_ty)
+                })
+                .collect();
+            Type::Datalit(datalit::tycheck::Type::AnonTuple(
+                datalit::tycheck::TypeAnonTuple { fields: fields? }
+            ))
+        }
+
+        TypeHint::AnonStruct(s) => {
+            let fields: Result<Vec<_>, TypeError> = s.fields.iter()
+                .map(|f| {
+                    let name = f.name;
+                    let f_heap = f.type_hint.heap(db);
+                    let f_hint = f.type_hint.type_hint(db);
+                    let f_ty = convert_type_hint_inner(db, f_heap, f_hint)?;
+                    Ok(datalit::tycheck::TypeNamedField {
+                        name,
+                        ty: to_datalit_type_and_heap(db, f_ty)?,
+                    })
+                })
+                .collect();
+            Type::Datalit(datalit::tycheck::Type::AnonStruct(
+                datalit::tycheck::TypeAnonStruct { fields: fields? }
+            ))
+        }
+
+        TypeHint::AnonEnum(e) => {
+            let variants: Result<Vec<_>, TypeError> = e.variants.iter()
+                .map(|v| {
+                    let name = v.name;
+                    let payload = v.payload.map(|p| {
+                        let p_heap = p.heap(db);
+                        let p_hint = p.type_hint(db);
+                        let p_ty = convert_type_hint_inner(db, p_heap, p_hint)?;
+                        to_datalit_type_and_heap(db, p_ty)
+                    }).transpose()?;
+                    Ok(datalit::tycheck::TypeEnumVariant { name, payload })
+                })
+                .collect();
+            Type::Datalit(datalit::tycheck::Type::AnonEnum(
+                datalit::tycheck::TypeAnonEnum { variants: variants? }
+            ))
+        }
+
+        TypeHint::List(l) => {
+            let elem_heap = l.element_type.heap(db);
+            let elem_hint = l.element_type.type_hint(db);
+            let elem_ty = convert_type_hint_inner(db, elem_heap, elem_hint)?;
+            Type::Datalit(datalit::tycheck::Type::List(
+                datalit::tycheck::TypeList {
+                    element_type: to_datalit_type_and_heap(db, elem_ty)?
+                }
+            ))
+        }
+
+        TypeHint::Map(m) => {
+            let key_heap = m.key_type.heap(db);
+            let key_hint = m.key_type.type_hint(db);
+            let key_ty = convert_type_hint_inner(db, key_heap, key_hint)?;
+            let value_heap = m.value_type.heap(db);
+            let value_hint = m.value_type.type_hint(db);
+            let value_ty = convert_type_hint_inner(db, value_heap, value_hint)?;
+            Type::Datalit(datalit::tycheck::Type::Map(
+                datalit::tycheck::TypeMap {
+                    key_type: to_datalit_type_and_heap(db, key_ty)?,
+                    value_type: to_datalit_type_and_heap(db, value_ty)?,
+                }
+            ))
+        }
+
+        TypeHint::Set(s) => {
+            let elem_heap = s.element_type.heap(db);
+            let elem_hint = s.element_type.type_hint(db);
+            let elem_ty = convert_type_hint_inner(db, elem_heap, elem_hint)?;
+            Type::Datalit(datalit::tycheck::Type::Set(
+                datalit::tycheck::TypeSet {
+                    element_type: to_datalit_type_and_heap(db, elem_ty)?
+                }
+            ))
+        }
+
+        TypeHint::Option(o) => {
+            let inner_heap = o.inner_type.heap(db);
+            let inner_hint = o.inner_type.type_hint(db);
+            let inner_ty = convert_type_hint_inner(db, inner_heap, inner_hint)?;
+            Type::Datalit(datalit::tycheck::Type::Option(
+                datalit::tycheck::TypeOption {
+                    inner_type: to_datalit_type_and_heap(db, inner_ty)?
+                }
+            ))
+        }
+
+        TypeHint::Result(r) => {
+            let inner_heap = r.inner_type.heap(db);
+            let inner_hint = r.inner_type.type_hint(db);
+            let inner_ty = convert_type_hint_inner(db, inner_heap, inner_hint)?;
+            Type::Datalit(datalit::tycheck::Type::Result(
+                datalit::tycheck::TypeResult {
+                    inner_type: to_datalit_type_and_heap(db, inner_ty)?
+                }
+            ))
+        }
+
+        TypeHint::Tensor(t) => {
+            let elem_heap = t.element_type.heap(db);
+            let elem_hint = t.element_type.type_hint(db);
+            let elem_ty = convert_type_hint_inner(db, elem_heap, elem_hint)?;
+            Type::Datalit(datalit::tycheck::Type::Tensor(
+                datalit::tycheck::TypeTensor {
+                    element_type: to_datalit_type_and_heap(db, elem_ty)?,
+                    rank: t.rank,
+                }
+            ))
+        }
+
+        TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
+    };
 
     Ok(TypeAndHeap::new(db, heap, ty))
+}
+
+// ============================================================================
+// Type to String
+// ============================================================================
+
+/// Convert a type to a string for error messages.
+pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
+    match ty {
+        Type::Datalit(dt) => datalit::tycheck::type_to_string(db, dt),
+        Type::Function(f) => {
+            let params: Vec<_> = f.param_types(db).iter()
+                .map(|p| type_to_string(db, p.ty(db)))
+                .collect();
+            let ret = type_to_string(db, f.return_type(db).ty(db));
+            format!("fn({}) -> {}", params.join(", "), ret)
+        }
+    }
+}
+
+// ============================================================================
+// Unit Type Helper
+// ============================================================================
+
+/// Create the unit type `()`.
+pub fn unit_type<'db>(db: &'db dyn crate::Db) -> TypeAndHeap<'db> {
+    let datalit_unit = datalit::tycheck::unit_type(db, datalit::ast::Heap::Omitted);
+    TypeAndHeap::new(
+        db,
+        datalit::ast::Heap::Omitted,
+        Type::Datalit(datalit_unit.ty(db).clone())
+    )
+}
+
+// ============================================================================
+// Element Compatibility
+// ============================================================================
+
+/// Check that an element type is compatible with the expected element type.
+pub fn check_element_compatible<'db>(
+    db: &'db dyn crate::Db,
+    expected: TypeAndHeap<'db>,
+    actual: TypeAndHeap<'db>,
+) -> Result<(), TypeError> {
+    if !types_equivalent(db, expected.ty(db), actual.ty(db)) {
+        return Err(TypeError::TypeMismatch {
+            expected: type_to_string(db, expected.ty(db)),
+            actual: type_to_string(db, actual.ty(db)),
+        });
+    }
+    if !heaps_compatible(expected.heap(db), actual.heap(db)) {
+        return Err(TypeError::HeapMismatch {
+            expected_heap: heap_to_string(expected.heap(db)),
+            actual_heap: heap_to_string(actual.heap(db)),
+        });
+    }
+    Ok(())
+}
+
+// ============================================================================
+// Integer Range Checking
+// ============================================================================
+
+/// Check if an integer value fits within a type (delegated to datalit).
+pub fn check_int_fits_wrapped_type<'db>(
+    value_str: &str,
+    ty: &datalit::tycheck::Type<'db>,
+    db: &'db dyn crate::Db,
+) -> Result<(), TypeError> {
+    datalit::tycheck::check_int_fits_wrapped_type(value_str, ty, db)
+        .map_err(TypeError::from)
+}
+
+/// Check if a hex value fits within a type (delegated to datalit).
+pub fn check_hex_fits_wrapped_type<'db>(
+    value_str: &str,
+    ty: &datalit::tycheck::Type<'db>,
+    db: &'db dyn crate::Db,
+) -> Result<(), TypeError> {
+    datalit::tycheck::check_hex_fits_wrapped_type(value_str, ty, db)
+        .map_err(TypeError::from)
 }
 
 // ============================================================================
 // Heap Unwrapping
 // ============================================================================
 
-/// Unwrap Option/Result types to get the innermost heap.
-///
-/// Used when checking heap compatibility for typed literals.
+/// Unwrap Option/Result wrappers to get the innermost type.
+pub fn unwrap_wrapper_types<'db>(
+    db: &'db dyn crate::Db,
+    ty: TypeAndHeap<'db>,
+) -> TypeAndHeap<'db> {
+    match ty.ty(db) {
+        Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
+            let inner = opt.inner_type;
+            TypeAndHeap::new(db, inner.heap(db), Type::Datalit(inner.ty(db).clone()))
+        }
+        Type::Datalit(datalit::tycheck::Type::Result(res)) => {
+            let inner = res.inner_type;
+            TypeAndHeap::new(db, inner.heap(db), Type::Datalit(inner.ty(db).clone()))
+        }
+        _ => ty,
+    }
+}
+
+/// Get the heap from the innermost type (unwrapping Option/Result).
 pub fn unwrap_wrapper_heap<'db>(
     db: &'db dyn crate::Db,
     ty: TypeAndHeap<'db>,
 ) -> datalit::ast::Heap {
     match ty.ty(db) {
-        Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
-            unwrap_wrapper_heap_datalit(db, opt.inner_type)
-        }
-        Type::Datalit(datalit::tycheck::Type::Result(res)) => {
-            unwrap_wrapper_heap_datalit(db, res.inner_type)
-        }
+        Type::Datalit(datalit::tycheck::Type::Option(opt)) => opt.inner_type.heap(db),
+        Type::Datalit(datalit::tycheck::Type::Result(res)) => res.inner_type.heap(db),
         _ => ty.heap(db),
     }
 }
 
-/// Unwrap Option/Result types from a datalit TypeAndHeap.
+/// Get the heap from a datalit TypeAndHeap (unwrapping Option/Result).
 pub fn unwrap_wrapper_heap_datalit<'db>(
     db: &'db dyn crate::Db,
     ty: datalit::tycheck::TypeAndHeap<'db>,
 ) -> datalit::ast::Heap {
     match ty.ty(db) {
-        datalit::tycheck::Type::Option(opt) => {
-            unwrap_wrapper_heap_datalit(db, opt.inner_type)
-        }
-        datalit::tycheck::Type::Result(res) => {
-            unwrap_wrapper_heap_datalit(db, res.inner_type)
-        }
+        datalit::tycheck::Type::Option(opt) => opt.inner_type.heap(db),
+        datalit::tycheck::Type::Result(res) => res.inner_type.heap(db),
         _ => ty.heap(db),
     }
 }
@@ -160,80 +407,44 @@ pub fn unwrap_wrapper_heap_datalit<'db>(
 // Expression Heap Extraction
 // ============================================================================
 
-/// Extract the outer heap from an expression.
-///
-/// Returns the heap sigil used on the expression itself (e.g. `@` in `@{...}`).
-/// Returns `Heap::Omitted` for expressions that don't have an explicit heap.
+/// Extract the heap from an expression.
 pub fn get_expr_heap<'db>(db: &'db dyn crate::Db, expr: ExprFun<'db>) -> datalit::ast::Heap {
-    use ExprFunKind;
     match expr.expr(db) {
-        ExprFunKind::True(lit) | ExprFunKind::False(lit) | ExprFunKind::None(lit) => lit.heap,
-        ExprFunKind::Int(e) => e.heap,
-        ExprFunKind::Float(e) => e.heap,
-        ExprFunKind::Hex(e) => e.heap,
-        ExprFunKind::String(e) => e.heap,
-        ExprFunKind::List(e) => e.heap,
-        ExprFunKind::Set(e) => e.heap,
-        ExprFunKind::Map(e) => e.heap,
-        ExprFunKind::Tensor(e) => e.heap,
-        ExprFunKind::AnonTuple(e) => e.heap,
-        ExprFunKind::AnonStruct(e) => e.heap,
-        ExprFunKind::AnonEnum(e) => e.heap,
-        ExprFunKind::Some(e) => e.heap,
-        ExprFunKind::Ok(e) => e.heap,
-        ExprFunKind::Er(e) => e.heap,
-        ExprFunKind::Data(e) => e.heap,
-        ExprFunKind::Error(e) => e.heap,
-        // Non-literal expressions don't have an outer heap.
-        _ => datalit::ast::Heap::Omitted,
+        ExprFunKind::True(lit) => lit.heap,
+        ExprFunKind::False(lit) => lit.heap,
+        ExprFunKind::None(lit) => lit.heap,
+        ExprFunKind::Int(int_expr) => int_expr.heap,
+        ExprFunKind::Float(float_expr) => float_expr.heap,
+        ExprFunKind::Hex(hex_expr) => hex_expr.heap,
+        ExprFunKind::String(str_expr) => str_expr.heap,
+        ExprFunKind::List(list_expr) => list_expr.heap,
+        ExprFunKind::Set(set_expr) => set_expr.heap,
+        ExprFunKind::Map(map_expr) => map_expr.heap,
+        ExprFunKind::Tensor(tensor_expr) => tensor_expr.heap,
+        ExprFunKind::AnonTuple(tuple_expr) => tuple_expr.heap,
+        ExprFunKind::AnonStruct(struct_expr) => struct_expr.heap,
+        ExprFunKind::AnonEnum(enum_expr) => enum_expr.heap,
+        ExprFunKind::Some(some_expr) => some_expr.heap,
+        ExprFunKind::Ok(ok_expr) => ok_expr.heap,
+        ExprFunKind::Er(er_expr) => er_expr.heap,
+        ExprFunKind::Data(data_expr) => data_expr.heap,
+        ExprFunKind::Error(err_expr) => err_expr.heap,
+        // Non-literal expressions use Omitted heap.
+        ExprFunKind::Name(_)
+        | ExprFunKind::BinOp(_)
+        | ExprFunKind::UnaryOp(_)
+        | ExprFunKind::FunctionCall(_)
+        | ExprFunKind::Tuple(_)
+        | ExprFunKind::TryOption(_)
+        | ExprFunKind::TryResult(_)
+        | ExprFunKind::FieldProj(_)
+        | ExprFunKind::ParseError(_) => datalit::ast::Heap::Omitted,
     }
 }
 
 // ============================================================================
-// Type Equivalence and Conversion
+// Type Conversion Helpers
 // ============================================================================
-
-/// Check if two types are equivalent.
-pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'db>) -> bool {
-    match (t1, t2) {
-        (Type::Datalit(d1), Type::Datalit(d2)) => {
-            datalit::tycheck::types_equivalent(db, d1, d2)
-        }
-        (Type::Function(f1), Type::Function(f2)) => {
-            // Check parameter types.
-            let p1 = f1.param_types(db);
-            let p2 = f2.param_types(db);
-            if p1.len() != p2.len() {
-                return false;
-            }
-            for (param1, param2) in p1.iter().zip(p2.iter()) {
-                if !types_equivalent(db, param1.ty(db), param2.ty(db)) {
-                    return false;
-                }
-            }
-
-            // Check return type.
-            types_equivalent(db, f1.return_type(db).ty(db), f2.return_type(db).ty(db))
-        }
-        _ => false,
-    }
-}
-
-/// Convert a type to a string for error messages.
-pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
-    match ty {
-        Type::Datalit(datalit_ty) => datalit::tycheck::type_to_string(db, datalit_ty),
-        Type::Function(func) => {
-            let params: Vec<_> = func
-                .param_types(db)
-                .iter()
-                .map(|p| type_to_string(db, p.ty(db)))
-                .collect();
-            let ret = type_to_string(db, func.return_type(db).ty(db));
-            format!("({}) -> {}", params.join(", "), ret)
-        }
-    }
-}
 
 /// Convert datafun TypeAndHeap to datalit TypeAndHeap.
 pub fn to_datalit_type_and_heap<'db>(
@@ -241,83 +452,7 @@ pub fn to_datalit_type_and_heap<'db>(
     ty: TypeAndHeap<'db>,
 ) -> Result<datalit::tycheck::TypeAndHeap<'db>, TypeError> {
     match ty.ty(db) {
-        Type::Datalit(datalit_ty) => {
-            Ok(datalit::tycheck::TypeAndHeap::new(db, ty.heap(db), datalit_ty.clone()))
-        }
-        _ => Err(TypeError::CannotSynthesize),
-    }
-}
-
-/// Check that an element type is compatible with the expected element type.
-///
-/// Wrapper around datalit's check_element_compatible that handles datafun types.
-pub fn check_element_compatible<'db>(
-    db: &'db dyn crate::Db,
-    expected: TypeAndHeap<'db>,
-    actual: TypeAndHeap<'db>,
-) -> Result<(), TypeError> {
-    let expected_datalit = to_datalit_type_and_heap(db, expected)?;
-    let actual_datalit = to_datalit_type_and_heap(db, actual)?;
-    datalit::tycheck::check_element_compatible(db, expected_datalit, actual_datalit)
-        .map_err(TypeError::from)
-}
-
-/// Unwrap Option/Result wrappers to get inner type.
-///
-/// Used to check collection elements when type hint includes Option/Result.
-pub fn unwrap_wrapper_types<'db>(
-    db: &'db dyn crate::Db,
-    ty: TypeAndHeap<'db>,
-) -> TypeAndHeap<'db> {
-    match ty.ty(db) {
-        Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
-            // Convert datalit TypeAndHeap to datafun TypeAndHeap.
-            let inner = opt.inner_type;
-            let datafun_inner = TypeAndHeap::new(
-                db,
-                inner.heap(db),
-                Type::Datalit(inner.ty(db).clone()),
-            );
-            unwrap_wrapper_types(db, datafun_inner)
-        }
-        Type::Datalit(datalit::tycheck::Type::Result(res)) => {
-            // Convert datalit TypeAndHeap to datafun TypeAndHeap.
-            let inner = res.inner_type;
-            let datafun_inner = TypeAndHeap::new(
-                db,
-                inner.heap(db),
-                Type::Datalit(inner.ty(db).clone()),
-            );
-            unwrap_wrapper_types(db, datafun_inner)
-        }
-        _ => ty,
-    }
-}
-
-// ============================================================================
-// Unit Type
-// ============================================================================
-
-/// Create the unit type `()` (empty anonymous tuple).
-///
-/// Used as the implicit return type for void functions.
-/// Memoized to avoid creating tracked structs outside of tracked functions.
-#[salsa::tracked]
-pub fn unit_type<'db>(db: &'db dyn crate::Db) -> TypeAndHeap<'db> {
-    let unit_tuple = datalit::tycheck::TypeAnonTuple { fields: vec![] };
-    TypeAndHeap::new(
-        db,
-        datalit::ast::Heap::Omitted,
-        Type::Datalit(datalit::tycheck::Type::AnonTuple(unit_tuple)),
-    )
-}
-
-/// Check if a type is the unit type `()`.
-pub fn is_unit_type<'db>(db: &'db dyn crate::Db, ty: TypeAndHeap<'db>) -> bool {
-    match ty.ty(db) {
-        Type::Datalit(datalit::tycheck::Type::AnonTuple(tuple)) => {
-            tuple.fields.is_empty()
-        }
-        _ => false,
+        Type::Datalit(dt) => Ok(datalit::tycheck::TypeAndHeap::new(db, ty.heap(db), dt.clone())),
+        Type::Function(_) => Err(TypeError::CannotSynthesize),
     }
 }

@@ -1,12 +1,22 @@
 //! Expression type checking.
 //!
 //! Provides check for verifying expressions against expected types.
+//!
+//! Organization:
+//! 1. Main check function - entry point for type checking
+//!    - Handles heap compatibility
+//!    - Dispatches to expression-specific checking rules
+//! 2. Helper functions - diagnostic emission, type hint checks
 
 use datalove_diagnostic::DiagnosticBuilder;
 use crate::ast::*;
 use super::context::TypeContext;
 use super::synthesize::synthesize;
 use super::types::*;
+
+// ============================================================================
+// Type Checking
+// ============================================================================
 
 /// Check an expression against an expected type.
 pub fn check<'db>(

@@ -2,6 +2,11 @@
 //!
 //! Provides check_expr for checking expressions against expected types,
 //! and helpers for checking collection elements.
+//!
+//! Organization (parallel to datalit/tycheck/check.rs):
+//! 1. Element checking helper - type and heap compatibility for collection elements
+//! 2. Main check_expr function - entry point for type checking
+//! 3. Collection checking helpers - list, set, map, tensor, tuple, struct, enum
 
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
@@ -54,6 +59,10 @@ fn check_element_type_and_heap<'db>(
     Ok(())
 }
 
+
+// ============================================================================
+// Type Checking
+// ============================================================================
 
 /// Check an expression against an expected type.
 pub fn check_expr<'db>(
@@ -292,6 +301,10 @@ fn check_type_coercion<'db>(
 ) -> Result<(), TypeError> {
     datalit::tycheck::check_type_coercion(db, actual, expected.ty(db)).map_err(TypeError::from)
 }
+
+// ============================================================================
+// Collection Checking Helpers
+// ============================================================================
 
 /// Check list elements against expected type.
 pub fn check_list_elements<'db>(
