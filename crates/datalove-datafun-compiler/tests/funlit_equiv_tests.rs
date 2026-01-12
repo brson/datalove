@@ -14,7 +14,7 @@ use datalove_datalit::ast_gen::{AstGenConfig, gen_expr_full_seeded};
 
 /// Extract expression from a let statement in a ParsedStatements.
 fn extract_let_value<'db>(
-    db: &'db datalove_datafun_compiler::Database,
+    _db: &'db datalove_datafun_compiler::Database,
     parsed: datalove_datafun_ast::ast::ParsedStatements<'db>,
 ) -> Result<datalove_datafun_ast::ast::ExprFun<'db>, String> {
     let statements = parsed.statements;
@@ -254,9 +254,7 @@ fn test_funlit_equiv_generated_parse() {
     }
 }
 
-/// Temporarily ignored due to differences in Option/Result coercion handling.
 #[test]
-#[ignore = "needs investigation after coercion removal"]
 fn test_funlit_equiv_generated_typecheck() {
     let db = datalove_datafun_compiler::Database::default();
     let config = make_compatible_config();

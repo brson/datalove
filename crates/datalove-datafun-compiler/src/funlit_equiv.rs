@@ -30,7 +30,7 @@ impl std::error::Error for ConversionError {}
 
 /// Extract a single expression from a ParsedStatements that contains exactly one Ret statement.
 pub fn extract_expr_from_parsed<'db>(
-    db: &'db dyn salsa::Database,
+    _db: &'db dyn salsa::Database,
     parsed: ast::ParsedStatements<'db>,
 ) -> Result<ast::ExprFun<'db>, ConversionError> {
     let statements = parsed.statements;
