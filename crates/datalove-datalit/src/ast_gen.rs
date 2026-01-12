@@ -715,13 +715,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             } else {
                 // Error case: generate Expr::Er with Expr::Error payload.
                 // Er payload must be an error expression (Expr::Error or Expr::Data).
-                let error_msg = gen_string_expr(db, rng);
-                let error_msg_full = ExprFull::new(
-                    db,
-                    None,
-                    ExprAndHeap { heap: Heap::Omitted, expr: error_msg },
-                );
-                let error_expr = Expr::Error(ExprError { value: error_msg_full });
+                // Generate arbitrary type for error payload.
+                let error_inner_type = gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1);
+                let error_inner_value = gen_expr_full_with_heap(db, rng, error_inner_type, heap, config, depth + 1);
+                let error_expr = Expr::Error(ExprError { value: error_inner_value });
                 let er_payload = ExprFull::new(
                     db,
                     None,
@@ -772,13 +769,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             (Expr::Data(ExprData { value }), heap)
         }
         TypeHint::Error => {
-            let error_msg = gen_string_expr(db, rng);
-            let error_expr_full = ExprFull::new(
-                db,
-                None,
-                ExprAndHeap { heap: Heap::Omitted, expr: error_msg },
-            );
-            (Expr::Error(ExprError { value: error_expr_full }), heap)
+            // Generate arbitrary payload for error expression.
+            let inner_type = gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1);
+            let value = gen_expr_full_with_heap(db, rng, inner_type, heap, config, depth + 1);
+            (Expr::Error(ExprError { value }), heap)
         }
         TypeHint::ParseError(_) => (Expr::None, heap),
     }
