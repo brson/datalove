@@ -20,6 +20,49 @@ use crate::types::*;
 pub use crate::{Type, TypeAndHeap, TypeError, is_copy_type};
 
 // ============================================================================
+// Operator Display Helpers
+// ============================================================================
+
+/// Convert BinOp to its source syntax.
+fn binop_to_str(op: BinOp) -> &'static str {
+    use BinOp::*;
+    match op {
+        Add => "+",
+        Sub => "-",
+        Mul => "*",
+        Div => "/",
+        AddChecked => "+!",
+        SubChecked => "-!",
+        MulChecked => "*!",
+        DivChecked => "/!",
+        AddOptional => "+?",
+        SubOptional => "-?",
+        MulOptional => "*?",
+        DivOptional => "/?",
+        Lt => ".<",
+        Gt => ".>",
+        Le => "<=",
+        Ge => ">=",
+        Eq => "==",
+        Ne => "!=",
+        And => "and",
+        Or => "or",
+        Xor => "xor",
+    }
+}
+
+/// Convert UnaryOp to its source syntax.
+fn unaryop_to_str(op: UnaryOp) -> &'static str {
+    use UnaryOp::*;
+    match op {
+        Neg => "-",
+        NegOptional => "-?",
+        NegResult => "-!",
+        Not => "not",
+    }
+}
+
+// ============================================================================
 // Return Type Checking Helpers
 // ============================================================================
 
@@ -432,7 +475,7 @@ fn synthesize_binop<'db>(
         if !is_bool_type(operand_ty) {
             return Err(ctx.error_invalid_operand_type(
                 expr,
-                &format!("{:?}", op),
+                binop_to_str(op),
                 &type_to_string(db, operand_ty)
             ));
         }
@@ -441,7 +484,7 @@ fn synthesize_binop<'db>(
         if !is_numeric_type(operand_ty) {
             return Err(ctx.error_invalid_operand_type(
                 expr,
-                &format!("{:?}", op),
+                binop_to_str(op),
                 &type_to_string(db, operand_ty)
             ));
         }
@@ -465,7 +508,7 @@ fn synthesize_binop<'db>(
             } else {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
-                    &format!("{:?}", op),
+                    binop_to_str(op),
                     &type_to_string(db, operand_ty)
                 ));
             }
@@ -476,7 +519,7 @@ fn synthesize_binop<'db>(
             if !is_float_type(operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
-                    &format!("{:?}", op),
+                    binop_to_str(op),
                     &type_to_string(db, operand_ty)
                 ));
             }
@@ -490,11 +533,11 @@ fn synthesize_binop<'db>(
             if !is_fixed_int_type(operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
-                    &format!("{:?}", op),
+                    binop_to_str(op),
                     &type_to_string(db, operand_ty)
                 ));
             }
-            require_result_return_type(ctx, expr, &format!("{:?}", op))?;
+            require_result_return_type(ctx, expr, binop_to_str(op))?;
             lhs_ty
         }
 
@@ -502,11 +545,11 @@ fn synthesize_binop<'db>(
             if !is_fixed_int_type(operand_ty) && !is_bigint_type(operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
-                    &format!("{:?}", op),
+                    binop_to_str(op),
                     &type_to_string(db, operand_ty)
                 ));
             }
-            require_result_return_type(ctx, expr, &format!("{:?}", op))?;
+            require_result_return_type(ctx, expr, binop_to_str(op))?;
             lhs_ty
         }
 
@@ -515,11 +558,11 @@ fn synthesize_binop<'db>(
             if !is_fixed_int_type(operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
-                    &format!("{:?}", op),
+                    binop_to_str(op),
                     &type_to_string(db, operand_ty)
                 ));
             }
-            require_option_return_type(ctx, expr, &format!("{:?}", op))?;
+            require_option_return_type(ctx, expr, binop_to_str(op))?;
             lhs_ty
         }
 
@@ -527,11 +570,11 @@ fn synthesize_binop<'db>(
             if !is_fixed_int_type(operand_ty) && !is_bigint_type(operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
-                    &format!("{:?}", op),
+                    binop_to_str(op),
                     &type_to_string(db, operand_ty)
                 ));
             }
-            require_option_return_type(ctx, expr, &format!("{:?}", op))?;
+            require_option_return_type(ctx, expr, binop_to_str(op))?;
             lhs_ty
         }
 
@@ -574,7 +617,7 @@ fn synthesize_unaryop<'db>(
         if !is_bool_type(operand_type) {
             return Err(ctx.error_invalid_operand_type(
                 expr,
-                &format!("{:?}", op),
+                unaryop_to_str(op),
                 &type_to_string(db, operand_type)
             ));
         }
@@ -583,7 +626,7 @@ fn synthesize_unaryop<'db>(
         if !is_numeric_type(operand_type) {
             return Err(ctx.error_invalid_operand_type(
                 expr,
-                &format!("{:?}", op),
+                unaryop_to_str(op),
                 &type_to_string(db, operand_type)
             ));
         }
@@ -596,7 +639,7 @@ fn synthesize_unaryop<'db>(
             if !is_float_type(operand_type) && !is_bigint_type(operand_type) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
-                    &format!("{:?}", op),
+                    unaryop_to_str(op),
                     &type_to_string(db, operand_type)
                 ));
             }
@@ -609,11 +652,11 @@ fn synthesize_unaryop<'db>(
             if !is_fixed_int_type(operand_type) || is_unsigned_int_type(operand_type) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
-                    &format!("{:?}", op),
+                    unaryop_to_str(op),
                     &type_to_string(db, operand_type)
                 ));
             }
-            require_option_return_type(ctx, expr, &format!("{:?}", op))?;
+            require_option_return_type(ctx, expr, unaryop_to_str(op))?;
             operand_ty
         }
 
@@ -623,11 +666,11 @@ fn synthesize_unaryop<'db>(
             if !is_fixed_int_type(operand_type) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
-                    &format!("{:?}", op),
+                    unaryop_to_str(op),
                     &type_to_string(db, operand_type)
                 ));
             }
-            require_result_return_type(ctx, expr, &format!("{:?}", op))?;
+            require_result_return_type(ctx, expr, unaryop_to_str(op))?;
             operand_ty
         }
 

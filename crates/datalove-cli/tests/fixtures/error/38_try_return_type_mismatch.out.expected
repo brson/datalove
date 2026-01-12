@@ -1,0 +1,10 @@
+[31m[F049] Error:[0m try operator `!` requires function to return Result, found `u32`
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/38_try_return_type_mismatch.dfs:3:10[38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m3 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mx[0m[38;5;201m![0m
+ [38;5;240m  │[0m          [38;5;201m┬[0m  
+ [38;5;240m  │[0m          [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m try operator here
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: function must return Result to use `!` operator
+[38;5;246m───╯[0m
+Error: Type error

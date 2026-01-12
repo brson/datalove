@@ -1,0 +1,6 @@
+fun test(a: ?@u32): u32
+    if a |x
+        ret x
+    end if
+    ret 0
+end fun
