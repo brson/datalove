@@ -264,37 +264,6 @@ impl IrInterpreter {
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
-        self.call_in_context_impl(func, args, ret_dest, ctx, registry, frames, false)
-    }
-
-    /// Execute a function called from JIT code via the trampoline.
-    ///
-    /// All arguments are treated as borrowed because the JIT caller is responsible
-    /// for its own frame values. The JIT calling convention doesn't have the same
-    /// ownership transfer semantics as interpreter-to-interpreter calls.
-    pub fn call_in_context_jit(
-        &mut self,
-        func: &IrFunction,
-        args: Vec<Value>,
-        ret_dest: Destination,
-        ctx: &ExecutionContext,
-        registry: &FunctionRegistry,
-        frames: &mut FrameStore,
-    ) -> Result<(), InterpError> {
-        self.call_in_context_impl(func, args, ret_dest, ctx, registry, frames, true)
-    }
-
-    /// Implementation for call_in_context and call_in_context_jit.
-    fn call_in_context_impl(
-        &mut self,
-        func: &IrFunction,
-        args: Vec<Value>,
-        ret_dest: Destination,
-        ctx: &ExecutionContext,
-        registry: &FunctionRegistry,
-        frames: &mut FrameStore,
-        jit_caller: bool,
-    ) -> Result<(), InterpError> {
         // Compute layout.
         let layout = IrLayout::compute(
             &func.value_types,
@@ -319,11 +288,9 @@ impl IrInterpreter {
                 // Borrowed semantics (caller retains ownership, callee doesn't destroy):
                 // - Ref/Mut/Out modes: caller retains ownership
                 // - Copy types with In mode: callee makes a copy, caller retains original
-                // - JIT caller: all params borrowed (JIT handles its own frame)
                 // Non-borrowed (callee destroys):
                 // - Non-Copy types with In mode: ownership transfers to callee
-                let borrowed = jit_caller
-                    || matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out)
+                let borrowed = matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out)
                     || param_type.is_copy();
 
                 // Initialized: true for In/Ref/Mut (data exists), false for Out (callee writes first).
