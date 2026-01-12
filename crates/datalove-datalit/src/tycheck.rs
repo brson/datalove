@@ -821,247 +821,26 @@ fn check<'db>(
             Ok(())
         }
 
-        // Rule: Check-Int
-        (Expr::Int(i), Type::U8) => {
+        // Rule: Check-Int - integer literals against integer types.
+        (Expr::Int(i), expected_int_ty) if is_fixed_int_type(expected_int_ty) || is_bigint_type(expected_int_ty) => {
             let value_str = i.value.as_str(db);
-            if value_str.parse::<u8>().is_ok() {
-                Ok(())
-            } else {
-                // T005: Integer out of range for u8.
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "integer literal out of range for type u8")
-                        .code("T005")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("u8 can represent values from 0 to 255")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
+            check_int_fits_type(value_str, expected_int_ty).map_err(|e| {
+                emit_int_range_error(ctx, expr, expected_int_ty);
+                e
+            })
         }
-
-        (Expr::Int(i), Type::I8) => {
-            let value_str = i.value.as_str(db);
-            if value_str.parse::<i8>().is_ok() {
-                Ok(())
-            } else {
-                // T006: Integer out of range for i8.
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "integer literal out of range for type i8")
-                        .code("T006")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("i8 can represent values from -128 to 127")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
-        }
-
-        (Expr::Int(i), Type::U16) => {
-            let value_str = i.value.as_str(db);
-            if value_str.parse::<u16>().is_ok() {
-                Ok(())
-            } else {
-                // T007: Integer out of range for u16.
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "integer literal out of range for type u16")
-                        .code("T007")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("u16 can represent values from 0 to 65,535")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
-        }
-
-        (Expr::Int(i), Type::I16) => {
-            let value_str = i.value.as_str(db);
-            if value_str.parse::<i16>().is_ok() {
-                Ok(())
-            } else {
-                // T008: Integer out of range for i16.
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "integer literal out of range for type i16")
-                        .code("T008")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("i16 can represent values from -32,768 to 32,767")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
-        }
-
-        (Expr::Int(i), Type::U32) => {
-            let value_str = i.value.as_str(db);
-            if value_str.parse::<u32>().is_ok() {
-                Ok(())
-            } else {
-                // T009: Integer out of range for u32.
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "integer literal out of range for type u32")
-                        .code("T009")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("u32 can represent values from 0 to 4,294,967,295")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
-        }
-
-        (Expr::Int(i), Type::I32) => {
-            let value_str = i.value.as_str(db);
-            if value_str.parse::<i32>().is_ok() {
-                Ok(())
-            } else {
-                // T010: Integer out of range for i32.
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "integer literal out of range for type i32")
-                        .code("T010")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("i32 can represent values from -2,147,483,648 to 2,147,483,647")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
-        }
-
-        (Expr::Int(i), Type::U64) => {
-            let value_str = i.value.as_str(db);
-            if value_str.parse::<u64>().is_ok() {
-                Ok(())
-            } else {
-                // T011: Integer out of range for u64.
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "integer literal out of range for type u64")
-                        .code("T011")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("u64 can represent values from 0 to 18,446,744,073,709,551,615")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
-        }
-
-        (Expr::Int(i), Type::I64) => {
-            let value_str = i.value.as_str(db);
-            if value_str.parse::<i64>().is_ok() {
-                Ok(())
-            } else {
-                // T012: Integer out of range for i64.
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "integer literal out of range for type i64")
-                        .code("T012")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("i64 can represent values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
-        }
-
-        (Expr::Int(_), Type::Int) => Ok(()),
 
         // Rule: Check-Float
         (Expr::Float(_), Type::F32) => Ok(()),
         (Expr::Float(_), Type::F64) => Ok(()),
 
-        // Rule: Check-Hex - hex literals can check against integer types or f32 (bit pattern).
-        (Expr::Hex(h), Type::U8) => {
+        // Rule: Check-Hex - hex literals against integer types or float bit patterns.
+        (Expr::Hex(h), expected_hex_ty) if is_fixed_int_type(expected_hex_ty) || is_bigint_type(expected_hex_ty) || is_float_type(expected_hex_ty) => {
             let value_str = h.value.as_str(db);
-            let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
-            if u8::from_str_radix(hex_part, 16).is_ok() {
-                Ok(())
-            } else {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "hex literal out of range for type u8")
-                        .code("T005")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("u8 can represent hex values from 0x00 to 0xFF")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
-        }
-        (Expr::Hex(h), Type::U16) => {
-            let value_str = h.value.as_str(db);
-            let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
-            if u16::from_str_radix(hex_part, 16).is_ok() {
-                Ok(())
-            } else {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "hex literal out of range for type u16")
-                        .code("T007")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("u16 can represent hex values from 0x0000 to 0xFFFF")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
-        }
-        (Expr::Hex(h), Type::U32) => {
-            let value_str = h.value.as_str(db);
-            let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
-            if u32::from_str_radix(hex_part, 16).is_ok() {
-                Ok(())
-            } else {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "hex literal out of range for type u32")
-                        .code("T009")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("u32 can represent hex values from 0x00000000 to 0xFFFFFFFF")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
-        }
-        (Expr::Hex(h), Type::U64) => {
-            let value_str = h.value.as_str(db);
-            let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
-            if u64::from_str_radix(hex_part, 16).is_ok() {
-                Ok(())
-            } else {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "hex literal out of range for type u64")
-                        .code("T011")
-                        .primary_label(ts.clone(), "value out of range")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
-        }
-        (Expr::Hex(_), Type::Int) => Ok(()),
-        // Hex as f32 bit pattern - any 32-bit hex value is valid.
-        (Expr::Hex(h), Type::F32) => {
-            let value_str = h.value.as_str(db);
-            let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
-            if u32::from_str_radix(hex_part, 16).is_ok() {
-                Ok(())
-            } else {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "hex literal out of range for f32 bit pattern")
-                        .code("T013")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("f32 bit patterns must be 32-bit hex values (0x00000000 to 0xFFFFFFFF)")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
-        }
-        // Hex as f64 bit pattern - any 64-bit hex value is valid.
-        (Expr::Hex(h), Type::F64) => {
-            let value_str = h.value.as_str(db);
-            let hex_part = value_str.trim_start_matches("0x").trim_start_matches("0X");
-            if u64::from_str_radix(hex_part, 16).is_ok() {
-                Ok(())
-            } else {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "hex literal out of range for f64 bit pattern")
-                        .code("T014")
-                        .primary_label(ts.clone(), "value out of range")
-                        .note("f64 bit patterns must be 64-bit hex values (0x0000000000000000 to 0xFFFFFFFFFFFFFFFF)")
-                        .emit_type();
-                }
-                Err(TypeError::IntOutOfRange)
-            }
+            check_hex_fits_type(value_str, expected_hex_ty).map_err(|e| {
+                emit_hex_range_error(ctx, expr, expected_hex_ty);
+                e
+            })
         }
 
         // Rule: Check-AnonTuple
@@ -1752,6 +1531,72 @@ pub fn check_hex_fits_wrapped_type<'db>(
         Type::Option(opt) => check_hex_fits_wrapped_type(value_str, opt.inner_type.ty(db), db),
         Type::Result(res) => check_hex_fits_wrapped_type(value_str, res.inner_type.ty(db), db),
         _ => check_hex_fits_type(value_str, ty),
+    }
+}
+
+// ============================================================================
+// Diagnostic Helpers
+// ============================================================================
+
+/// Get the diagnostic code and range note for an integer type.
+fn int_type_range_info(ty: &Type<'_>) -> (&'static str, &'static str) {
+    match ty {
+        Type::U8 => ("T005", "u8 can represent values from 0 to 255"),
+        Type::I8 => ("T006", "i8 can represent values from -128 to 127"),
+        Type::U16 => ("T007", "u16 can represent values from 0 to 65,535"),
+        Type::I16 => ("T008", "i16 can represent values from -32,768 to 32,767"),
+        Type::U32 => ("T009", "u32 can represent values from 0 to 4,294,967,295"),
+        Type::I32 => ("T010", "i32 can represent values from -2,147,483,648 to 2,147,483,647"),
+        Type::U64 => ("T011", "u64 can represent values from 0 to 18,446,744,073,709,551,615"),
+        Type::I64 => ("T012", "i64 can represent values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807"),
+        Type::Int => ("T000", "int is arbitrary precision"),
+        _ => ("T000", ""),
+    }
+}
+
+/// Get the diagnostic code and range note for a hex literal target type.
+fn hex_type_range_info(ty: &Type<'_>) -> (&'static str, &'static str) {
+    match ty {
+        Type::U8 => ("T005", "u8 can represent hex values from 0x00 to 0xFF"),
+        Type::U16 => ("T007", "u16 can represent hex values from 0x0000 to 0xFFFF"),
+        Type::U32 => ("T009", "u32 can represent hex values from 0x00000000 to 0xFFFFFFFF"),
+        Type::U64 => ("T011", "u64 can represent hex values from 0x0000000000000000 to 0xFFFFFFFFFFFFFFFF"),
+        Type::I8 => ("T006", "i8 can represent hex values from -0x80 to 0x7F"),
+        Type::I16 => ("T008", "i16 can represent hex values from -0x8000 to 0x7FFF"),
+        Type::I32 => ("T010", "i32 can represent hex values from -0x80000000 to 0x7FFFFFFF"),
+        Type::I64 => ("T012", "i64 can represent hex values from -0x8000000000000000 to 0x7FFFFFFFFFFFFFFF"),
+        Type::Int => ("T000", "int is arbitrary precision"),
+        Type::F32 => ("T013", "f32 bit patterns must be 32-bit hex values (0x00000000 to 0xFFFFFFFF)"),
+        Type::F64 => ("T014", "f64 bit patterns must be 64-bit hex values (0x0000000000000000 to 0xFFFFFFFFFFFFFFFF)"),
+        _ => ("T000", ""),
+    }
+}
+
+/// Emit a diagnostic for integer literal out of range.
+fn emit_int_range_error<'db>(ctx: &TypeContext<'db>, expr: ExprFull<'db>, ty: &Type<'db>) {
+    let db = ctx.db;
+    let (code, note) = int_type_range_info(ty);
+    let type_name = type_to_string(db, ty);
+    if let Some(ts) = ctx.get_span(expr) {
+        DiagnosticBuilder::error(db, &format!("integer literal out of range for type {}", type_name))
+            .code(code)
+            .primary_label(ts.clone(), "value out of range")
+            .note(note)
+            .emit_type();
+    }
+}
+
+/// Emit a diagnostic for hex literal out of range.
+fn emit_hex_range_error<'db>(ctx: &TypeContext<'db>, expr: ExprFull<'db>, ty: &Type<'db>) {
+    let db = ctx.db;
+    let (code, note) = hex_type_range_info(ty);
+    let type_name = type_to_string(db, ty);
+    if let Some(ts) = ctx.get_span(expr) {
+        DiagnosticBuilder::error(db, &format!("hex literal out of range for type {}", type_name))
+            .code(code)
+            .primary_label(ts.clone(), "value out of range")
+            .note(note)
+            .emit_type();
     }
 }
 
