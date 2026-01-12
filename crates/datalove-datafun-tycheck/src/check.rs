@@ -170,6 +170,29 @@ pub fn check_expr<'db>(
             }
         }
 
+        // Handle tuple expressions - check elements against expected field types.
+        ExprFunKind::AnonTuple(tuple_expr) => {
+            match expected.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::AnonTuple(_)) => {
+                    // Check elements against expected field types.
+                    check_tuple_elements(ctx, &tuple_expr.elements, expected)?;
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                Type::Datalit(datalit::tycheck::Type::Data) => {
+                    // Any type can coerce to Data.
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
         // Handle integer literals specially - they can coerce to expected integer types.
         ExprFunKind::Int(_int_expr) => {
             match expected.ty(db) {
@@ -329,39 +352,15 @@ pub fn check_list_elements<'db>(
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
 
-    // Check each element against expected element type.
+    // Check each element against expected element type using bidirectional checking.
+    // elem_type is already TypeAndHeap, and we need to wrap it in Type::Datalit for check_expr.
+    let expected_elem_ty = TypeAndHeap::new(
+        db,
+        elem_type.heap(db),
+        Type::Datalit(elem_type.ty(db).clone()),
+    );
     for elem in elements {
-        let elem_ty = ctx.synthesize_expr(*elem)?;
-
-        // Extract actual datalit type.
-        let actual_datalit_ty = match elem_ty.ty(db) {
-            Type::Datalit(dt) => dt,
-            _ => continue, // Skip non-datalit types.
-        };
-
-        // Check type compatibility with coercion.
-        if let Err(err) = check_type_coercion(db, actual_datalit_ty, &elem_type) {
-            return Err(TypeError::from(err));
-        }
-
-        // Check heap compatibility (use inner heap for Option/Result).
-        let expected_heap = unwrap_wrapper_heap_datalit(db, elem_type);
-        if !heaps_compatible(expected_heap, elem_ty.heap(db)) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_heap),
-                actual_heap: heap_to_string(elem_ty.heap(db)),
-            });
-        }
-
-        // Also check expression's outer heap (for cases where type hint provides heap
-        // but the expression literal has a different heap, e.g. `@{...}` vs `#{...}`).
-        let expr_heap = get_expr_heap(db, *elem);
-        if !heaps_compatible(expected_heap, expr_heap) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_heap),
-                actual_heap: heap_to_string(expr_heap),
-            });
-        }
+        check_expr(ctx, *elem, expected_elem_ty)?;
     }
 
     Ok(())
@@ -610,38 +609,15 @@ pub fn check_tuple_elements<'db>(
         });
     }
 
-    // Check each element against expected field type.
+    // Check each element against expected field type using bidirectional checking.
+    // expected_field is already TypeAndHeap, wrap in Type::Datalit for check_expr.
     for (elem, expected_field) in elements.iter().zip(expected_fields.iter()) {
-        let elem_ty = ctx.synthesize_expr(*elem)?;
-
-        // Extract actual datalit type.
-        let actual_datalit_ty = match elem_ty.ty(db) {
-            Type::Datalit(dt) => dt,
-            _ => continue, // Skip non-datalit types.
-        };
-
-        // Check type compatibility with coercion.
-        if let Err(err) = check_type_coercion(db, actual_datalit_ty, expected_field) {
-            return Err(TypeError::from(err));
-        }
-
-        // Check heap compatibility.
-        let expected_heap = unwrap_wrapper_heap_datalit(db, *expected_field);
-        if !heaps_compatible(expected_heap, elem_ty.heap(db)) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_heap),
-                actual_heap: heap_to_string(elem_ty.heap(db)),
-            });
-        }
-
-        // Also check expression's outer heap.
-        let expr_heap = get_expr_heap(db, *elem);
-        if !heaps_compatible(expected_heap, expr_heap) {
-            return Err(TypeError::HeapMismatch {
-                expected_heap: heap_to_string(expected_heap),
-                actual_heap: heap_to_string(expr_heap),
-            });
-        }
+        let expected_elem_ty = TypeAndHeap::new(
+            db,
+            expected_field.heap(db),
+            Type::Datalit(expected_field.ty(db).clone()),
+        );
+        check_expr(ctx, *elem, expected_elem_ty)?;
     }
 
     Ok(())

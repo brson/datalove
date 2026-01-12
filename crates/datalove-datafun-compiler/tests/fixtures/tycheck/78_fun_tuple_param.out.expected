@@ -15,7 +15,7 @@
     {
       "kind": "variable",
       "name": "pair",
-      "type": "(u32, u32)"
+      "type": "(@u32, @u32)"
     },
     {
       "kind": "variable",

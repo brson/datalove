@@ -1,0 +1,10 @@
+{
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "l",
+      "type": "[@int]"
+    }
+  ]
+}
