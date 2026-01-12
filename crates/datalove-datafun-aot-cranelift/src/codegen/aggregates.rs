@@ -331,31 +331,33 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), AotError> {
         use datalove_datafun_ir::SlotDest;
 
-        // Get base address of the slot.
-        let base = match slot {
+        // Get base address and type.
+        let (base, slot_ty) = match slot {
             SlotDest::Local(slot_id) => {
                 let frame_slot = self.frame_slot.ok_or_else(|| {
                     AotError::Codegen("no frame slot for set_field".into())
                 })?;
                 let slot_offset = self.layout.slot_offset(slot_id.0);
-                builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32)
+                let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                let ty = self.func.slot_types.get(slot_id.0 as usize)
+                    .cloned()
+                    .ok_or_else(|| AotError::Codegen(format!("slot {:?} type not found", slot_id)))?;
+                (addr, ty)
             }
             SlotDest::External { unit: _, slot: _ } => {
                 return Err(AotError::Unsupported(
                     "set_field on external slot".into()
                 ));
             }
-        };
-
-        // Get slot type.
-        let slot_ty = match slot {
-            SlotDest::Local(slot_id) => {
-                self.func.slot_types.get(slot_id.0 as usize)
+            SlotDest::Param(param_id) => {
+                // Param pointer is already in param_values.
+                let addr = self.param_values.get(param_id).copied().ok_or_else(|| {
+                    AotError::Codegen(format!("param {:?} not found in param_values", param_id))
+                })?;
+                let ty = self.func.param_types.get(param_id.0 as usize)
                     .cloned()
-                    .ok_or_else(|| AotError::Codegen(format!("slot {:?} type not found", slot_id)))?
-            }
-            SlotDest::External { .. } => {
-                return Err(AotError::Unsupported("external slot".into()));
+                    .ok_or_else(|| AotError::Codegen(format!("param {:?} type not found", param_id)))?;
+                (addr, ty)
             }
         };
 

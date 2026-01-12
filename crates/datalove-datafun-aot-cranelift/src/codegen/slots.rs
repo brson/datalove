@@ -27,6 +27,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     unit, slot
                 )));
             }
+            SlotDest::Param(_) => {
+                // SlotStore to param should use ParamStore instruction instead.
+                return Err(AotError::Codegen(
+                    "SlotStore with Param destination not supported, use ParamStore".into()
+                ));
+            }
         };
 
         let frame_slot = self.frame_slot.ok_or_else(|| {

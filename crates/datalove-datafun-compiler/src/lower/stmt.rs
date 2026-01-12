@@ -576,11 +576,19 @@ fn lower_set<'db>(
                     });
                     Ok(())
                 }
-                Some(Operand::Param(_)) => {
-                    // TODO: Support SetField on mut params.
-                    Err(LowerError::NotImplemented(
-                        "field projection set on mutable parameters".to_string()
-                    ))
+                Some(Operand::Param(param)) => {
+                    // Only Mut params can have field projections set.
+                    let mode = ctx.param_mode(param);
+                    if mode == Some(ParamMode::Mut) {
+                        ctx.emit(Instruction::SetField {
+                            slot: SlotDest::Param(param),
+                            field_path,
+                            value: Operand::Value(value_id),
+                        });
+                        Ok(())
+                    } else {
+                        Err(LowerError::VariableNotMutable(root_name_str))
+                    }
                 }
                 _ => Err(LowerError::VariableNotMutable(root_name_str)),
             }
@@ -599,9 +607,9 @@ pub(super) fn collect_field_path<'db>(
     // First, collect all the field selectors from root to leaf.
     let (root_name, selectors) = collect_selectors(ctx.db, proj);
 
-    // Look up the root variable's type.
+    // Look up the root variable's type (works for slots and params).
     let root_name_str = root_name.text(ctx.db).to_string();
-    let root_type = ctx.slot_type_by_name(&root_name_str)
+    let root_type = ctx.var_type_by_name(&root_name_str)
         .ok_or_else(|| LowerError::VariableNotFound(root_name_str.clone()))?;
 
     // Now resolve each selector to a field index by walking through the types.

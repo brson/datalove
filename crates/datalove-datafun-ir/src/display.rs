@@ -91,6 +91,7 @@ impl fmt::Display for SlotDest {
         match self {
             SlotDest::Local(s) => write!(f, "{}", s),
             SlotDest::External { unit, slot } => write!(f, "unit{}.{}", unit, slot),
+            SlotDest::Param(p) => write!(f, "{}", p),
         }
     }
 }

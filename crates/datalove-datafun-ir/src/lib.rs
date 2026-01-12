@@ -456,14 +456,16 @@ pub enum Operand {
 
 /// Destination for slot store operations.
 ///
-/// Distinguishes between local slots (in current unit) and external slots
-/// (in a previous script unit).
+/// Distinguishes between local slots (in current unit), external slots
+/// (in a previous script unit), and mutable parameters.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum SlotDest {
     /// Local slot in current unit.
     Local(SlotId),
     /// Slot in a previous script unit.
     External { unit: u32, slot: SlotId },
+    /// Mutable parameter (writes through to caller's data).
+    Param(ParamId),
 }
 
 /// Constant value that can be loaded.

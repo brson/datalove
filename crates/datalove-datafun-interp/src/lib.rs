@@ -622,6 +622,12 @@ impl IrInterpreter {
                             Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                         }
                     }
+                    SlotDest::Param(_) => {
+                        // SlotStore to param should use ParamStore instruction instead.
+                        return Err(InterpError::RuntimeError(
+                            "SlotStore with Param destination not supported, use ParamStore".into()
+                        ));
+                    }
                 }
             }
             Instruction::ParamStore { param, value } => {
@@ -1189,6 +1195,7 @@ impl IrInterpreter {
                             unit, ext_slot
                         )));
                     }
+                    SlotDest::Param(id) => frame.param_dest(*id)?,
                 };
 
                 // Navigate field path to find target field.
