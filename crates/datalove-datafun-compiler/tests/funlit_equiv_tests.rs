@@ -200,6 +200,7 @@ fn make_compatible_config() -> AstGenConfig {
             i64_type: 10,
             // Float works after fixing parser to consume dot before checking decimal.
             f32_type: 10,
+            f64_type: 10,
             // BigInt works with SmallNonNegative strategy.
             int_type: 10,
             string_type: 10,

@@ -83,6 +83,7 @@ pub struct TypeWeights {
     pub u64_type: u32,
     pub i64_type: u32,
     pub f32_type: u32,
+    pub f64_type: u32,
     pub int_type: u32,
     pub string_type: u32,
     pub list_type: u32,
@@ -114,6 +115,7 @@ impl Default for TypeWeights {
             u64_type: 5,
             i64_type: 5,
             f32_type: 5,
+            f64_type: 5,
             int_type: 5,
             string_type: 10,
             list_type: 5,
@@ -148,6 +150,7 @@ impl TypeWeights {
             u64_type: 5,
             i64_type: 5,
             f32_type: 5,
+            f64_type: 5,
             int_type: 5,
             string_type: 10,
             list_type: 0,
@@ -265,6 +268,7 @@ pub fn gen_type_hint<'db, R: Rng>(
         if config.type_weights.u64_type == 0 { leaf.u64_type = 0; }
         if config.type_weights.i64_type == 0 { leaf.i64_type = 0; }
         if config.type_weights.f32_type == 0 { leaf.f32_type = 0; }
+        if config.type_weights.f64_type == 0 { leaf.f64_type = 0; }
         if config.type_weights.int_type == 0 { leaf.int_type = 0; }
         if config.type_weights.string_type == 0 { leaf.string_type = 0; }
         leaf
@@ -290,19 +294,20 @@ pub fn gen_type_hint<'db, R: Rng>(
     add_choice(weights.u64_type, 7);
     add_choice(weights.i64_type, 8);
     add_choice(weights.f32_type, 9);
-    add_choice(weights.int_type, 10);
-    add_choice(weights.string_type, 11);
-    add_choice(weights.list_type, 12);
-    add_choice(weights.map_type, 13);
-    add_choice(weights.set_type, 14);
-    add_choice(weights.option_type, 15);
-    add_choice(weights.result_type, 16);
-    add_choice(weights.tensor_type, 17);
-    add_choice(weights.anon_tuple_type, 18);
-    add_choice(weights.anon_struct_type, 19);
-    add_choice(weights.anon_enum_type, 20);
-    add_choice(weights.data_type, 21);
-    add_choice(weights.error_type, 22);
+    add_choice(weights.f64_type, 10);
+    add_choice(weights.int_type, 11);
+    add_choice(weights.string_type, 12);
+    add_choice(weights.list_type, 13);
+    add_choice(weights.map_type, 14);
+    add_choice(weights.set_type, 15);
+    add_choice(weights.option_type, 16);
+    add_choice(weights.result_type, 17);
+    add_choice(weights.tensor_type, 18);
+    add_choice(weights.anon_tuple_type, 19);
+    add_choice(weights.anon_struct_type, 20);
+    add_choice(weights.anon_enum_type, 21);
+    add_choice(weights.data_type, 22);
+    add_choice(weights.error_type, 23);
 
     if choices.is_empty() {
         return TypeHint::Bool;
@@ -321,42 +326,43 @@ pub fn gen_type_hint<'db, R: Rng>(
         7 => TypeHint::U64,
         8 => TypeHint::I64,
         9 => TypeHint::F32,
-        10 => TypeHint::Int,
-        11 => TypeHint::String,
-        12 => {
+        10 => TypeHint::F64,
+        11 => TypeHint::Int,
+        12 => TypeHint::String,
+        13 => {
             let element_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
             TypeHint::List(TypeHintList { element_type })
         }
-        13 => {
+        14 => {
             let key_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
             let value_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
             TypeHint::Map(TypeHintMap { key_type, value_type })
         }
-        14 => {
+        15 => {
             let element_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
             TypeHint::Set(TypeHintSet { element_type })
         }
-        15 => {
+        16 => {
             let inner_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
             TypeHint::Option(TypeHintOption { inner_type })
         }
-        16 => {
+        17 => {
             let inner_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
             TypeHint::Result(TypeHintResult { inner_type })
         }
-        17 => {
+        18 => {
             let element_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
             let rank = rng.gen_range(1..=config.tensor_config.max_rank);
             TypeHint::Tensor(TypeHintTensor { element_type, rank })
         }
-        18 => {
+        19 => {
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let fields: Vec<_> = (0..count)
                 .map(|_| gen_type_hint_and_heap(db, rng, config, depth + 1))
                 .collect();
             TypeHint::AnonTuple(TypeHintAnonTuple { fields })
         }
-        19 => {
+        20 => {
             // Cap count to available unique field names to prevent infinite loops.
             let max_count = config.max_collection_size.min(MAX_UNIQUE_FIELD_NAMES);
             let count = rng.gen_range(config.min_collection_size..=max_count);
@@ -376,7 +382,7 @@ pub fn gen_type_hint<'db, R: Rng>(
                 .collect();
             TypeHint::AnonStruct(TypeHintAnonStruct { fields })
         }
-        20 => {
+        21 => {
             let count = rng.gen_range(1..=config.max_collection_size.max(1));
             let mut used_names = std::collections::HashSet::new();
             let variants: Vec<_> = (0..count)
@@ -399,8 +405,8 @@ pub fn gen_type_hint<'db, R: Rng>(
                 .collect();
             TypeHint::AnonEnum(TypeHintAnonEnum { variants })
         }
-        21 => TypeHint::Data,
-        22 => TypeHint::Error,
+        22 => TypeHint::Data,
+        23 => TypeHint::Error,
         _ => TypeHint::Bool,
     }
 }
@@ -437,6 +443,7 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
         if config.type_weights.u64_type == 0 { leaf.u64_type = 0; }
         if config.type_weights.i64_type == 0 { leaf.i64_type = 0; }
         if config.type_weights.f32_type == 0 { leaf.f32_type = 0; }
+        if config.type_weights.f64_type == 0 { leaf.f64_type = 0; }
         if config.type_weights.int_type == 0 { leaf.int_type = 0; }
         if config.type_weights.string_type == 0 { leaf.string_type = 0; }
         leaf
@@ -461,19 +468,20 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
     add_choice(weights.u64_type, 7);
     add_choice(weights.i64_type, 8);
     add_choice(weights.f32_type, 9);
-    add_choice(weights.int_type, 10);
-    add_choice(weights.string_type, 11);
-    add_choice(weights.list_type, 12);
-    add_choice(weights.map_type, 13);
-    add_choice(weights.set_type, 14);
-    add_choice(weights.option_type, 15);
-    add_choice(weights.result_type, 16);
-    add_choice(weights.tensor_type, 17);
-    add_choice(weights.anon_tuple_type, 18);
-    add_choice(weights.anon_struct_type, 19);
-    add_choice(weights.anon_enum_type, 20);
-    add_choice(weights.data_type, 21);
-    add_choice(weights.error_type, 22);
+    add_choice(weights.f64_type, 10);
+    add_choice(weights.int_type, 11);
+    add_choice(weights.string_type, 12);
+    add_choice(weights.list_type, 13);
+    add_choice(weights.map_type, 14);
+    add_choice(weights.set_type, 15);
+    add_choice(weights.option_type, 16);
+    add_choice(weights.result_type, 17);
+    add_choice(weights.tensor_type, 18);
+    add_choice(weights.anon_tuple_type, 19);
+    add_choice(weights.anon_struct_type, 20);
+    add_choice(weights.anon_enum_type, 21);
+    add_choice(weights.data_type, 22);
+    add_choice(weights.error_type, 23);
 
     if choices.is_empty() {
         return TypeHint::Bool;
@@ -492,42 +500,43 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
         7 => TypeHint::U64,
         8 => TypeHint::I64,
         9 => TypeHint::F32,
-        10 => TypeHint::Int,
-        11 => TypeHint::String,
-        12 => {
+        10 => TypeHint::F64,
+        11 => TypeHint::Int,
+        12 => TypeHint::String,
+        13 => {
             let element_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
             TypeHint::List(TypeHintList { element_type })
         }
-        13 => {
+        14 => {
             let key_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
             let value_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
             TypeHint::Map(TypeHintMap { key_type, value_type })
         }
-        14 => {
+        15 => {
             let element_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
             TypeHint::Set(TypeHintSet { element_type })
         }
-        15 => {
+        16 => {
             let inner_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
             TypeHint::Option(TypeHintOption { inner_type })
         }
-        16 => {
+        17 => {
             let inner_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
             TypeHint::Result(TypeHintResult { inner_type })
         }
-        17 => {
+        18 => {
             let element_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
             let rank = rng.gen_range(1..=config.tensor_config.max_rank);
             TypeHint::Tensor(TypeHintTensor { element_type, rank })
         }
-        18 => {
+        19 => {
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let fields: Vec<_> = (0..count)
                 .map(|_| TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1)))
                 .collect();
             TypeHint::AnonTuple(TypeHintAnonTuple { fields })
         }
-        19 => {
+        20 => {
             // Cap count to available unique field names to prevent infinite loops.
             let max_count = config.max_collection_size.min(MAX_UNIQUE_FIELD_NAMES);
             let count = rng.gen_range(config.min_collection_size..=max_count);
@@ -547,7 +556,7 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
                 .collect();
             TypeHint::AnonStruct(TypeHintAnonStruct { fields })
         }
-        20 => {
+        21 => {
             let count = rng.gen_range(1..=config.max_collection_size.max(1));
             let mut used_names = std::collections::HashSet::new();
             let variants: Vec<_> = (0..count)
@@ -570,8 +579,8 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
                 .collect();
             TypeHint::AnonEnum(TypeHintAnonEnum { variants })
         }
-        21 => TypeHint::Data,
-        22 => TypeHint::Error,
+        22 => TypeHint::Data,
+        23 => TypeHint::Error,
         _ => TypeHint::Bool,
     }
 }
@@ -736,15 +745,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let mut shape: Vec<u32> = Vec::with_capacity(rank as usize);
             let mut total_elements = 1usize;
             for i in 0..rank {
-                let remaining_dims = rank - i;
-                let max_dim = if remaining_dims == 1 {
-                    // Last dimension: use all remaining budget.
-                    config.max_collection_size / total_elements.max(1)
-                } else {
-                    // Not last: leave room for other dimensions.
-                    config.tensor_config.max_dim_size as usize
-                };
-                let dim_size = rng.gen_range(1..=max_dim.min(config.tensor_config.max_dim_size as usize).max(1)) as u32;
+                // Calculate max dimension size respecting both tensor config and collection budget.
+                let budget_dim = config.max_collection_size / total_elements.max(1);
+                let max_dim = budget_dim.min(config.tensor_config.max_dim_size as usize);
+                let dim_size = rng.gen_range(1..=max_dim.max(1)) as u32;
                 shape.push(dim_size);
                 total_elements *= dim_size as usize;
                 // If we've hit the limit, make remaining dimensions size 1.

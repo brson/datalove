@@ -370,6 +370,7 @@ fn test_type_weight_configuration() {
             u64_type: 0,
             i64_type: 0,
             f32_type: 0,
+            f64_type: 0,
             int_type: 0,
             string_type: 0,
             list_type: 0,
