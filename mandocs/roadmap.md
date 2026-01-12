@@ -1,21 +1,23 @@
 # Datalove Roadmap
 
-The MVP is a working bare datafun language with:
+
+## Next goal
 
 - documentation
-- modules
+- diagnostics
+- full module and script compile/interpret reactivity
+- tables
 - closures
 - clone ops
 - type aliases
 - generic functions for built-in generic types
-- repl, script runner
+- basic repl, script runner
 - pipeline tools
 - interpreter, jit, aot
 - compute-only core library
 - core->runtime calls
-- decent diagnostics
 - heap types, examples omit
-- field projections
+- [x] field projections
 - match for enums
 
 
@@ -23,8 +25,8 @@ The MVP is a working bare datafun language with:
 
 # in progress
 
-- field projections
 - human docs
+- diagnostics
 
 
 
@@ -40,11 +42,6 @@ The MVP is a working bare datafun language with:
 - generics
 - type aliases
 - runtime calls
-- script unit undo / redo
-- analysis caching
-- sourceless tokens and whitespace-free tokens
-- sourceless parsing
-- separate parsing from analysis
 
 
 ----------
@@ -53,6 +50,8 @@ The MVP is a working bare datafun language with:
 
 # future
 
+- analysis caching
+- sourceless parsing
 - clean up demo files in style of learn x in y minutes
 - datafun ast roundtrip
 - updates feed
