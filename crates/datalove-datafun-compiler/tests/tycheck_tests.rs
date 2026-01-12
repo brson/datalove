@@ -234,7 +234,43 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     let script = datalove_datafun_parser::parse_for_diagnostics(&db, source);
     let spans = datalove_datafun_parser::datafun_spans(&db, source);
-    let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source, spans, script.clone());
+
+    // Use the tracked functions directly so we can get accumulated diagnostics.
+    let unit_spec = datalove_datafun_tycheck::ScriptUnitSpec::new(
+        source,
+        spans,
+        datalove_datafun_tycheck::ScriptUnitKind::Fragment(script.clone()),
+    );
+    let batch_spec = datalove_datafun_tycheck::create_batch_spec(&db, source, vec![unit_spec], vec![]);
+    let results = datalove_datafun_tycheck::type_check_script_units(&db, batch_spec);
+    let tycheck_result = results.results(&db)[0];
+
+    // Collect accumulated type diagnostics.
+    let type_diagnostics = datalove_datafun_tycheck::type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, batch_spec);
+    let diagnostics: Vec<_> = type_diagnostics
+        .iter()
+        .map(|d| {
+            let diag = d.to_diagnostic(&db);
+            let code = diag.code.map(|c| c.as_str(&db).to_string());
+            let labels: Vec<_> = diag.labels.iter().map(|label| {
+                json!({
+                    "span": [label.span.start, label.span.end],
+                    "text": source_text[label.span.clone()].to_string(),
+                    "message": label.message.map(|m| m.as_str(&db).to_string())
+                })
+            }).collect();
+            let notes: Vec<_> = diag.notes.iter().map(|n| n.as_str(&db).to_string()).collect();
+            let mut obj = json!({
+                "code": code,
+                "message": diag.message.as_str(&db),
+                "labels": labels
+            });
+            if !notes.is_empty() {
+                obj["notes"] = json!(notes);
+            }
+            obj
+        })
+        .collect();
 
     // Collect type judgements for variables and functions.
     let mut judgements = Vec::new();
@@ -295,7 +331,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     let output = json!({
         "judgements": judgements,
-        "errors": errors
+        "errors": errors,
+        "diagnostics": diagnostics
     });
 
     Ok(rmx::serde_json::to_string_pretty(&output).X())

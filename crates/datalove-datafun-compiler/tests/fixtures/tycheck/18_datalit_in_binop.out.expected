@@ -1,4 +1,20 @@
 {
+  "diagnostics": [
+    {
+      "code": "F026",
+      "labels": [
+        {
+          "message": "operator `+` cannot be applied to type `(u32, u32)`",
+          "span": [
+            40,
+            45
+          ],
+          "text": "a + b"
+        }
+      ],
+      "message": "invalid operand type `(u32, u32)` for operator `+`"
+    }
+  ],
   "errors": [
     {
       "kind": "InvalidOperandType",

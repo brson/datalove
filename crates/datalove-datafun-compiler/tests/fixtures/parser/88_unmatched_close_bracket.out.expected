@@ -1,0 +1,35 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "heap": "Local",
+            "kind": "Int",
+            "type_hint": null,
+            "value": "42"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P050",
+      "labels": [
+        {
+          "message": "this ']' has no matching '['",
+          "span": [
+            11,
+            12
+          ],
+          "text": "]"
+        }
+      ],
+      "message": "unmatched ']'"
+    }
+  ]
+}

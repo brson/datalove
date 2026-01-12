@@ -193,7 +193,7 @@ pub fn synthesize_expr<'db>(
         }
 
         ExprFunKind::ParseError(_) => {
-            Err(ctx.error_cannot_synthesize(expr, "cannot type check parse error"))
+            Err(ctx.error_cannot_synthesize(expr, "type inference blocked by syntax error"))
         }
 
         // New inline variants - simple literals.

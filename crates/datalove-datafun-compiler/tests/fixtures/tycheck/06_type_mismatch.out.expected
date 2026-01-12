@@ -1,4 +1,20 @@
 {
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            38,
+            44
+          ],
+          "text": "a + @0"
+        }
+      ],
+      "message": "mismatched types: expected `bool`, found `int`"
+    }
+  ],
   "errors": [
     {
       "actual": "int",

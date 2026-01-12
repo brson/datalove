@@ -1,4 +1,20 @@
 {
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            102,
+            103
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "mismatched types: expected `@!string`, found `error`"
+    }
+  ],
   "errors": [
     {
       "actual": "error",

@@ -1,0 +1,47 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "fields": [
+              {
+                "name": "a",
+                "value": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "42"
+                  }
+                }
+              }
+            ],
+            "heap": "Omitted",
+            "kind": "AnonStruct",
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P051",
+      "labels": [
+        {
+          "message": "this '{' is never closed",
+          "span": [
+            8,
+            9
+          ],
+          "text": "{"
+        }
+      ],
+      "message": "unclosed '{'"
+    }
+  ]
+}

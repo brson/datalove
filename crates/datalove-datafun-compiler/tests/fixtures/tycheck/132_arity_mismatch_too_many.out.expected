@@ -1,0 +1,61 @@
+{
+  "diagnostics": [
+    {
+      "code": "F011",
+      "labels": [
+        {
+          "message": "cannot infer type",
+          "span": [
+            37,
+            38
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "type inference blocked by syntax error"
+    },
+    {
+      "code": "F045",
+      "labels": [
+        {
+          "message": "expected 1 argument",
+          "span": [
+            75,
+            81
+          ],
+          "text": "double"
+        }
+      ],
+      "message": "this function takes 1 argument but 3 were supplied"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    },
+    {
+      "actual": 3,
+      "expected": 1,
+      "kind": "ArityMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "double",
+      "params": [
+        {
+          "name": "x",
+          "type": "@u32"
+        }
+      ],
+      "return_type": "@u32"
+    },
+    {
+      "kind": "function",
+      "name": "test",
+      "params": [],
+      "return_type": "@u32"
+    }
+  ]
+}

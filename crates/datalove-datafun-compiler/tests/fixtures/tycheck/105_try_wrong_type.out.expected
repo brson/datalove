@@ -1,4 +1,34 @@
 {
+  "diagnostics": [
+    {
+      "code": "F048",
+      "labels": [
+        {
+          "message": "expected Option, found `u32`",
+          "span": [
+            53,
+            54
+          ],
+          "text": "?"
+        }
+      ],
+      "message": "try operator `?` requires Option type, found `u32`"
+    },
+    {
+      "code": "F011",
+      "labels": [
+        {
+          "message": "cannot infer type",
+          "span": [
+            61,
+            67
+          ],
+          "text": "result"
+        }
+      ],
+      "message": "type inference blocked by syntax error"
+    }
+  ],
   "errors": [
     {
       "actual_type": "u32",

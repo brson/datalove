@@ -1,4 +1,20 @@
 {
+  "diagnostics": [
+    {
+      "code": "F001",
+      "labels": [
+        {
+          "message": "not found in this scope",
+          "span": [
+            80,
+            81
+          ],
+          "text": "i"
+        }
+      ],
+      "message": "cannot find value `i` in this scope"
+    }
+  ],
   "errors": [
     {
       "kind": "UnresolvedName",

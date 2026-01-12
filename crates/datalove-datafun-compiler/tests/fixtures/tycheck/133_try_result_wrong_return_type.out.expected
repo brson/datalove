@@ -1,0 +1,61 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            36,
+            37
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "mismatched types: expected `@!@u32`, found `u32`"
+    },
+    {
+      "code": "F049",
+      "labels": [
+        {
+          "message": "try operator here",
+          "span": [
+            90,
+            91
+          ],
+          "text": "!"
+        }
+      ],
+      "message": "try operator `!` requires function to return Result, found `u32`",
+      "notes": [
+        "function must return Result to use `!` operator"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "actual": "u32",
+      "expected": "@!@u32",
+      "kind": "TypeMismatch"
+    },
+    {
+      "kind": "TryReturnTypeMismatch",
+      "operator": "!",
+      "return_type": "u32"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "returns_result",
+      "params": [],
+      "return_type": "!@u32"
+    },
+    {
+      "kind": "function",
+      "name": "test",
+      "params": [],
+      "return_type": "@u32"
+    }
+  ]
+}

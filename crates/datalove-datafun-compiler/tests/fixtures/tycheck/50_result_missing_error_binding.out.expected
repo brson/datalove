@@ -1,4 +1,23 @@
 {
+  "diagnostics": [
+    {
+      "code": "F046",
+      "labels": [
+        {
+          "message": "Result type here",
+          "span": [
+            58,
+            59
+          ],
+          "text": "a"
+        }
+      ],
+      "message": "Result destructuring requires an else binding",
+      "notes": [
+        "use `if result |value| ... else |err| ... end if` to handle both cases"
+      ]
+    }
+  ],
   "errors": [
     "ResultRequiresErrorBinding"
   ],

@@ -132,9 +132,14 @@ impl<'db> TypeContext<'db> {
                 actual,
                 if actual == 1 { "was" } else { "were" }
             );
+            let label = format!(
+                "expected {} argument{}",
+                expected,
+                if expected == 1 { "" } else { "s" }
+            );
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F045")
-                .primary_label(ts.clone(), &format!("expected {} arguments", expected))
+                .primary_label(ts.clone(), &label)
                 .emit_type();
         }
         TypeError::ArityMismatch { expected, actual }
