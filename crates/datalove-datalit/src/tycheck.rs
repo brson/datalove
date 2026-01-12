@@ -834,8 +834,9 @@ fn check<'db>(
         (Expr::Float(_), Type::F32) => Ok(()),
         (Expr::Float(_), Type::F64) => Ok(()),
 
-        // Rule: Check-Hex - hex literals against integer types or float bit patterns.
-        (Expr::Hex(h), expected_hex_ty) if is_fixed_int_type(expected_hex_ty) || is_bigint_type(expected_hex_ty) || is_float_type(expected_hex_ty) => {
+        // Rule: Check-Hex - hex literals against unsigned integer types, bigint, or float bit patterns.
+        // Note: signed types fall through to synthesis to get TypeMismatch errors.
+        (Expr::Hex(h), expected_hex_ty) if is_unsigned_int_type(expected_hex_ty) || is_bigint_type(expected_hex_ty) || is_float_type(expected_hex_ty) => {
             let value_str = h.value.as_str(db);
             check_hex_fits_type(value_str, expected_hex_ty).map_err(|e| {
                 emit_hex_range_error(ctx, expr, expected_hex_ty);
@@ -1590,9 +1591,14 @@ fn emit_int_range_error<'db>(ctx: &TypeContext<'db>, expr: ExprFull<'db>, ty: &T
 fn emit_hex_range_error<'db>(ctx: &TypeContext<'db>, expr: ExprFull<'db>, ty: &Type<'db>) {
     let db = ctx.db;
     let (code, note) = hex_type_range_info(ty);
-    let type_name = type_to_string(db, ty);
+    // Float types use "bit pattern" terminology.
+    let message = match ty {
+        Type::F32 => "hex literal out of range for f32 bit pattern".to_string(),
+        Type::F64 => "hex literal out of range for f64 bit pattern".to_string(),
+        _ => format!("hex literal out of range for type {}", type_to_string(db, ty)),
+    };
     if let Some(ts) = ctx.get_span(expr) {
-        DiagnosticBuilder::error(db, &format!("hex literal out of range for type {}", type_name))
+        DiagnosticBuilder::error(db, &message)
             .code(code)
             .primary_label(ts.clone(), "value out of range")
             .note(note)
