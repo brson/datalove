@@ -585,7 +585,9 @@ impl<'db> Parser<'db> {
             };
             if !self.eat_sigil(Sigil::Pipe) {
                 self.had_error = true;
-                let ts = self.peek_text_span();
+                // Use position after binding name, not peek position (which may be 0 at end of line).
+                let pos = self.last_byte_end();
+                let ts = TextSpan::new(self.source_text(), pos..pos);
                 DiagnosticBuilder::error(self.db, "expected '|' after binding name")
                     .code("P020")
                     .primary_label(ts, "expected '|'")
@@ -651,7 +653,9 @@ impl<'db> Parser<'db> {
                 };
                 if !else_sub.eat_sigil(Sigil::Pipe) {
                     else_sub.had_error = true;
-                    let ts = else_sub.peek_text_span();
+                    // Use position after binding name, not peek position (which may be 0 at end of line).
+                    let pos = else_sub.last_byte_end();
+                    let ts = TextSpan::new(else_sub.source_text(), pos..pos);
                     DiagnosticBuilder::error(else_sub.db, "expected '|' after binding name")
                         .code("P020")
                         .primary_label(ts, "expected '|'")

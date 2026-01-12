@@ -22,8 +22,8 @@
         {
           "message": "expected '|'",
           "span": [
-            0,
-            0
+            15,
+            15
           ],
           "text": ""
         }

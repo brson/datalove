@@ -146,7 +146,7 @@ impl<'db> TypeContext<'db> {
             datalove_diagnostic::DiagnosticBuilder::error(self.db, "Result destructuring requires an else binding")
                 .code("F046")
                 .primary_label(ts.clone(), "Result type here")
-                .note("use `if let ok(x) = result { ... } else error(e) { ... }` to handle both cases")
+                .note("use `if result |value| ... else |err| ... end if` to handle both cases")
                 .emit_type();
         }
         TypeError::ResultRequiresErrorBinding
