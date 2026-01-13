@@ -24,6 +24,14 @@
             84
           ],
           "text": "add"
+        },
+        {
+          "message": "function `add` defined here with 2 parameters",
+          "span": [
+            0,
+            3
+          ],
+          "text": "fun"
         }
       ],
       "message": "this function takes 2 arguments but 1 was supplied"

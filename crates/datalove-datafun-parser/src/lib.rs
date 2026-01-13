@@ -183,6 +183,7 @@ fn parse_bracer<'db>(
         continue_spans: spans.continue_spans,
         ret_spans: spans.ret_spans,
         set_spans: spans.set_spans,
+        fun_spans: spans.fun_spans,
     }
 }
 
@@ -204,6 +205,7 @@ struct ParsedSpans {
     continue_spans: Vec<datalove_diagnostic::SpanEntry>,
     ret_spans: Vec<datalove_diagnostic::SpanEntry>,
     set_spans: Vec<datalove_diagnostic::SpanEntry>,
+    fun_spans: Vec<datalove_diagnostic::SpanEntry>,
 }
 
 /// Parse statements from lines, creating a Parser for each line.
@@ -221,6 +223,7 @@ fn parse_statements<'db>(
     let mut all_continue_spans = vec![];
     let mut all_ret_spans = vec![];
     let mut all_set_spans = vec![];
+    let mut all_fun_spans = vec![];
     let mut line_iter = lines.enumerate().peekable();
 
     while let Some((_line_num, line)) = line_iter.next() {
@@ -236,6 +239,7 @@ fn parse_statements<'db>(
         all_continue_spans.extend(parser.take_continue_spans());
         all_ret_spans.extend(parser.take_ret_spans());
         all_set_spans.extend(parser.take_set_spans());
+        all_fun_spans.extend(parser.take_fun_spans());
     }
 
     let spans = ParsedSpans {
@@ -244,6 +248,7 @@ fn parse_statements<'db>(
         continue_spans: all_continue_spans,
         ret_spans: all_ret_spans,
         set_spans: all_set_spans,
+        fun_spans: all_fun_spans,
     };
     (statements, spans)
 }
@@ -311,5 +316,6 @@ pub fn datafun_spans<'db>(
         parse_result.continue_spans.clone(),
         parse_result.ret_spans.clone(),
         parse_result.set_spans.clone(),
+        parse_result.fun_spans.clone(),
     )
 }

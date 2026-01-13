@@ -708,7 +708,7 @@ fn synthesize_function_call<'db>(
 
     // F045: Function arity mismatch.
     if args.len() != param_types.len() {
-        return Err(ctx.error_arity_mismatch(expr, param_types.len(), args.len()));
+        return Err(ctx.error_arity_mismatch(expr, name, param_types.len(), args.len()));
     }
 
     // Check each argument type, setting ref context for ref/mut/out params.

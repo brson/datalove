@@ -24,6 +24,14 @@
             81
           ],
           "text": "double"
+        },
+        {
+          "message": "function `double` defined here with 1 parameter",
+          "span": [
+            0,
+            3
+          ],
+          "text": "fun"
         }
       ],
       "message": "this function takes 1 argument but 3 were supplied"

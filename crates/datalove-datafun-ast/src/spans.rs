@@ -28,6 +28,8 @@ pub struct DatafunSpans {
     pub ret_spans: Vec<SpanEntry>,
     /// Set statement spans, indexed by local_index.
     pub set_spans: Vec<SpanEntry>,
+    /// Function definition spans, indexed by local_index.
+    pub fun_spans: Vec<SpanEntry>,
 }
 
 impl DatafunSpans {
@@ -39,6 +41,7 @@ impl DatafunSpans {
             continue_spans: vec![],
             ret_spans: vec![],
             set_spans: vec![],
+            fun_spans: vec![],
         }
     }
 
@@ -49,8 +52,9 @@ impl DatafunSpans {
         continue_spans: Vec<SpanEntry>,
         ret_spans: Vec<SpanEntry>,
         set_spans: Vec<SpanEntry>,
+        fun_spans: Vec<SpanEntry>,
     ) -> Self {
-        Self { entries, break_spans, continue_spans, ret_spans, set_spans }
+        Self { entries, break_spans, continue_spans, ret_spans, set_spans, fun_spans }
     }
 
     /// Look up span for an expression.
@@ -80,5 +84,10 @@ impl DatafunSpans {
     /// Look up span for a set statement by local_index.
     pub fn lookup_set(&self, index: u32) -> Option<&SpanEntry> {
         self.set_spans.get(index as usize)
+    }
+
+    /// Look up span for a function definition by local_index.
+    pub fn lookup_fun(&self, index: u32) -> Option<&SpanEntry> {
+        self.fun_spans.get(index as usize)
     }
 }

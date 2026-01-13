@@ -123,7 +123,13 @@ impl<'db> TypeContext<'db> {
     }
 
     /// F045: Function arity mismatch.
-    pub fn error_arity_mismatch(&self, expr: ExprFun<'db>, expected: usize, actual: usize) -> TypeError {
+    pub fn error_arity_mismatch(
+        &self,
+        expr: ExprFun<'db>,
+        func_name: InternedText<'db>,
+        expected: usize,
+        actual: usize,
+    ) -> TypeError {
         if let Some(ts) = self.get_span(expr) {
             let msg = format!(
                 "this function takes {} argument{} but {} {} supplied",
@@ -137,10 +143,27 @@ impl<'db> TypeContext<'db> {
                 expected,
                 if expected == 1 { "" } else { "s" }
             );
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+            let mut builder = datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F045")
-                .primary_label(ts.clone(), &label)
-                .emit_type();
+                .primary_label(ts.clone(), &label);
+
+            // Add secondary label pointing to function definition if available.
+            if let Some((func_ast, _)) = self.lookup_function_ast(func_name) {
+                let local_index = func_ast.local_index(self.db);
+                if let Some(entry) = self.spans.lookup_fun(local_index) {
+                    let (text, span) = entry.to_text_and_span(self.db);
+                    let def_span = TextSpan::new(text, span);
+                    let def_label = format!(
+                        "function `{}` defined here with {} parameter{}",
+                        func_name.as_str(self.db),
+                        expected,
+                        if expected == 1 { "" } else { "s" }
+                    );
+                    builder = builder.secondary_label(def_span, &def_label);
+                }
+            }
+
+            builder.emit_type();
         }
         TypeError::ArityMismatch { expected, actual }
     }

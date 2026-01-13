@@ -40,6 +40,8 @@ pub struct ParseResult<'db> {
     pub ret_spans: Vec<SpanEntry>,
     /// Set statement spans, indexed by local_index.
     pub set_spans: Vec<SpanEntry>,
+    /// Function definition spans, indexed by local_index.
+    pub fun_spans: Vec<SpanEntry>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -120,6 +122,8 @@ pub struct StmtFun<'db> {
     #[tracked]
     #[returns(ref)]
     pub body: Vec<Statement<'db>>,
+    /// Index for span lookup in DatafunSpans.fun_spans.
+    pub local_index: u32,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

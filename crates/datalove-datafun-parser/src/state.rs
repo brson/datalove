@@ -53,6 +53,8 @@ pub(super) struct Parser<'db> {
     ret_spans: Vec<SpanEntry>,
     /// Accumulated set statement spans, indexed by local_index.
     set_spans: Vec<SpanEntry>,
+    /// Accumulated function definition spans, indexed by local_index.
+    fun_spans: Vec<SpanEntry>,
     /// Optional context for error messages showing the enclosing branch's opening token.
     branch_context: Option<(TextSpan<'db>, &'static str)>,
     /// Current function name for expression identity (None for script-level).
@@ -84,6 +86,7 @@ impl<'db> Parser<'db> {
             continue_spans: Vec::new(),
             ret_spans: Vec::new(),
             set_spans: Vec::new(),
+            fun_spans: Vec::new(),
             branch_context: None,
             current_fn_name: None,
             expr_counter: 0,
@@ -123,6 +126,7 @@ impl<'db> Parser<'db> {
             continue_spans: Vec::new(),
             ret_spans: Vec::new(),
             set_spans: Vec::new(),
+            fun_spans: Vec::new(),
             branch_context: context,
             current_fn_name: None,
             expr_counter: 0,
@@ -157,6 +161,7 @@ impl<'db> Parser<'db> {
             continue_spans: Vec::new(),
             ret_spans: Vec::new(),
             set_spans: Vec::new(),
+            fun_spans: Vec::new(),
             branch_context: context,
             current_fn_name: self.current_fn_name,
             expr_counter: self.expr_counter,
@@ -383,6 +388,11 @@ impl<'db> Parser<'db> {
         rmx::std::mem::take(&mut self.set_spans)
     }
 
+    /// Take the accumulated function definition spans (consumes them).
+    pub(super) fn take_fun_spans(&mut self) -> Vec<SpanEntry> {
+        rmx::std::mem::take(&mut self.fun_spans)
+    }
+
     /// Merge spans from a sub-parser into this parser.
     pub(super) fn merge_spans_from(&mut self, sub: &mut Self) {
         self.expr_spans.append(&mut sub.expr_spans);
@@ -390,6 +400,7 @@ impl<'db> Parser<'db> {
         self.continue_spans.append(&mut sub.continue_spans);
         self.ret_spans.append(&mut sub.ret_spans);
         self.set_spans.append(&mut sub.set_spans);
+        self.fun_spans.append(&mut sub.fun_spans);
     }
 
     /// Get next statement index and increment counter.
@@ -428,6 +439,14 @@ impl<'db> Parser<'db> {
         use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
         self.set_spans.push(SpanEntry::new(ts.text.as_id(), ts.span));
+        index
+    }
+
+    /// Record a function definition span and return its local_index.
+    pub(super) fn record_fun_span(&mut self, ts: TextSpan<'db>) -> u32 {
+        use salsa::plumbing::AsId;
+        let index = self.next_stmt_index();
+        self.fun_spans.push(SpanEntry::new(ts.text.as_id(), ts.span));
         index
     }
 

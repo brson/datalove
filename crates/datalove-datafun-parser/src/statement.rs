@@ -240,6 +240,9 @@ impl<'db> Parser<'db> {
         &mut self,
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
     ) -> ast::Statement<'db> {
+        // Record function span starting at 'fun' keyword.
+        let fun_span = self.peek_text_span();
+        let local_index = self.record_fun_span(fun_span);
         self.eat_word("fun");
 
         let name = match self.eat_name() {
@@ -324,6 +327,7 @@ impl<'db> Parser<'db> {
             params,
             return_type,
             body,
+            local_index,
         ))
     }
 
