@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "cannot move \'b\' in loop - value would be invalid on next iteration",
+                message: "error[D007]: cannot move `b` in loop",
             ),
             output: "",
         ),

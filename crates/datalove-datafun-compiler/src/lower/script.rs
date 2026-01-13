@@ -10,35 +10,12 @@ use datalove_datafun_ir::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
     ExportBinding, BlockId, IrModuleId, FuncId,
 };
-use crate::drop_analysis::{ScriptFunctionAnalyses, analyze_script_statements, AnalysisError};
+use crate::drop_analysis::{ScriptFunctionAnalyses, analyze_script_statements, format_analysis_errors};
 use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;
 use super::stmt::collect_field_path;
 use super::LowerError;
-
-/// Format analysis errors into a single error message.
-fn format_analysis_errors(errors: &[AnalysisError]) -> String {
-    errors.iter()
-        .map(|e| match e {
-            AnalysisError::UseAfterMove { name, .. } =>
-                format!("use of moved value: {}", name),
-            AnalysisError::DoubleMove { name, .. } =>
-                format!("value moved twice: {}", name),
-            AnalysisError::CannotMoveRefParam { name, .. } =>
-                format!("cannot move borrowed value: {}", name),
-            AnalysisError::CannotMutFromRef { name, .. } =>
-                format!("cannot get mutable reference from immutable: {}", name),
-            AnalysisError::ReadUninitializedOutParam { name, .. } =>
-                format!("read of uninitialized out parameter: {}", name),
-            AnalysisError::OutParamNotInitialized { name, .. } =>
-                format!("out parameter not initialized: {}", name),
-            AnalysisError::MoveInLoop { name, .. } =>
-                format!("cannot move '{}' in loop - value would be invalid on next iteration", name),
-        })
-        .collect::<Vec<_>>()
-        .join("; ")
-}
 
 /// Lower a script unit.
 ///

@@ -713,16 +713,16 @@ impl<'db> ScriptCompilationContext<'db> {
         let func_analyses = match drop_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts) {
             Ok(analyses) => analyses,
             Err(errors) => {
+                // Format error messages for function-level drop analysis errors.
                 let error_msgs: Vec<String> = errors.into_iter()
                     .map(|(func_name, errs)| {
-                        let errs_str: Vec<String> = errs.iter().map(|e| format!("{:?}", e)).collect();
-                        format!("{}: {}", func_name, errs_str.join("; "))
+                        format!("{}: {}", func_name, drop_analysis::format_analysis_errors(&errs))
                     })
                     .collect();
                 return ScriptLowerResult {
                     typecheck: TypecheckResult::Success,
                     lowering: LoweringResult::Error {
-                        message: format!("Drop analysis errors: {}", error_msgs.join(", ")),
+                        message: error_msgs.join("\n"),
                     },
                     ir_unit: None,
                 };
@@ -835,16 +835,16 @@ impl<'db> ScriptCompilationContext<'db> {
         let func_analyses = match drop_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts) {
             Ok(analyses) => analyses,
             Err(errors) => {
+                // Format error messages for function-level drop analysis errors.
                 let error_msgs: Vec<String> = errors.into_iter()
                     .map(|(func_name, errs)| {
-                        let errs_str: Vec<String> = errs.iter().map(|e| format!("{:?}", e)).collect();
-                        format!("{}: {}", func_name, errs_str.join("; "))
+                        format!("{}: {}", func_name, drop_analysis::format_analysis_errors(&errs))
                     })
                     .collect();
                 return ScriptUnitResult {
                     typecheck: TypecheckResult::Success,
                     lowering: LoweringResult::Error {
-                        message: format!("Drop analysis errors: {}", error_msgs.join(", ")),
+                        message: error_msgs.join("\n"),
                     },
                     ty: None,
                     output: String::new(),

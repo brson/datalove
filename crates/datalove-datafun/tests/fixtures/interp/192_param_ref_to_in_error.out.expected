@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "Drop analysis errors: CannotMoveRefParam { binding: BindingId(0), name: \"y\" }",
+                message: "Drop analysis errors: CannotMoveBorrowed { expr_id: 17416, name: \"y\" }",
             ),
             output: "",
         ),

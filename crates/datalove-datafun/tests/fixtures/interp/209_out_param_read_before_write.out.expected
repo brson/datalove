@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "Drop analysis errors: OutParamNotInitialized { binding: BindingId(0), name: \"x\" }; ReadUninitializedOutParam { binding: BindingId(0), name: \"x\" }",
+                message: "Drop analysis errors: OutParamNotInitialized { ret_stmt_idx: Some(0), name: \"x\" }; ReadUninitializedOutParam { expr_id: 17409, name: \"x\" }",
             ),
             output: "",
         ),

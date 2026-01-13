@@ -70,46 +70,93 @@ impl BindingInfo {
 }
 
 /// Error detected during drop analysis.
+///
+/// Each variant includes an `expr_id` for span lookup during diagnostic emission.
 #[derive(Clone, Debug)]
 pub enum AnalysisError {
     /// Using a value after it was moved.
+    /// D001
     UseAfterMove {
-        binding: BindingId,
+        expr_id: u32,
         name: String,
     },
     /// Moving a value multiple times.
+    /// D002
     DoubleMove {
-        binding: BindingId,
+        expr_id: u32,
         name: String,
     },
-    /// Attempting to move a ref parameter (borrowed, cannot be moved).
-    CannotMoveRefParam {
-        binding: BindingId,
+    /// Attempting to move a borrowed value (ref/mut/out parameter).
+    /// D003
+    CannotMoveBorrowed {
+        expr_id: u32,
         name: String,
     },
-    /// Attempting to pass a ref param to a mut param (can't get mutable from immutable).
+    /// Attempting to pass a ref param to a mut param.
+    /// D004
     CannotMutFromRef {
-        binding: BindingId,
+        expr_id: u32,
         name: String,
     },
     /// Reading Out param before it was written.
+    /// D005
     ReadUninitializedOutParam {
-        binding: BindingId,
+        expr_id: u32,
         name: String,
     },
     /// Function returns without initializing Out param.
+    /// D006
     OutParamNotInitialized {
-        binding: BindingId,
+        /// Statement index of return, or None for implicit return.
+        ret_stmt_idx: Option<usize>,
         name: String,
     },
     /// Moving an outer-scoped value inside a loop body.
-    ///
-    /// This is an error because the loop could iterate multiple times,
-    /// and on subsequent iterations the variable would be in Moved state.
+    /// D007
     MoveInLoop {
-        binding: BindingId,
+        /// Expression where the move occurred.
+        expr_id: u32,
         name: String,
     },
+}
+
+/// Format drop analysis errors as proper error messages.
+///
+/// Returns a formatted error string suitable for display.
+/// Note: This doesn't emit via Salsa accumulators since lowering
+/// is not a tracked function. The error messages use diagnostic-style
+/// formatting but are returned as strings.
+pub fn format_analysis_errors(errors: &[AnalysisError]) -> String {
+    errors.iter()
+        .map(|e| format_single_error(e))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn format_single_error(error: &AnalysisError) -> String {
+    match error {
+        AnalysisError::UseAfterMove { expr_id: _, name } => {
+            format!("error[D001]: use of moved value: `{}`", name)
+        }
+        AnalysisError::DoubleMove { expr_id: _, name } => {
+            format!("error[D002]: value moved twice: `{}`", name)
+        }
+        AnalysisError::CannotMoveBorrowed { expr_id: _, name } => {
+            format!("error[D003]: cannot move borrowed value: `{}`", name)
+        }
+        AnalysisError::CannotMutFromRef { expr_id: _, name } => {
+            format!("error[D004]: cannot get mutable reference from immutable: `{}`", name)
+        }
+        AnalysisError::ReadUninitializedOutParam { expr_id: _, name } => {
+            format!("error[D005]: read of uninitialized out parameter: `{}`", name)
+        }
+        AnalysisError::OutParamNotInitialized { ret_stmt_idx: _, name } => {
+            format!("error[D006]: out parameter not initialized: `{}`", name)
+        }
+        AnalysisError::MoveInLoop { expr_id: _, name } => {
+            format!("error[D007]: cannot move `{}` in loop", name)
+        }
+    }
 }
 
 /// Drop schedule computed by analysis.
@@ -190,6 +237,8 @@ struct ScopeFrame {
     current_state: HashMap<BindingId, BindingState>,
     /// Initialization state for Out params.
     out_param_init: HashMap<BindingId, OutParamInitState>,
+    /// Where each binding was moved (expr_id), for error reporting.
+    moved_at: HashMap<BindingId, u32>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -259,12 +308,16 @@ impl<'db> AnalysisCtx<'db> {
         let out_param_init = self.scope_stack.last()
             .map(|f| f.out_param_init.clone())
             .unwrap_or_default();
+        let moved_at = self.scope_stack.last()
+            .map(|f| f.moved_at.clone())
+            .unwrap_or_default();
 
         self.scope_stack.push(ScopeFrame {
             bindings: Vec::new(),
             kind,
             current_state,
             out_param_init,
+            moved_at,
         });
     }
 
@@ -310,6 +363,12 @@ impl<'db> AnalysisCtx<'db> {
                     parent.out_param_init.insert(id, state);
                 }
             }
+            // Propagate moved_at tracking.
+            for (id, expr_id) in frame.moved_at {
+                if parent.current_state.contains_key(&id) && !parent.moved_at.contains_key(&id) {
+                    parent.moved_at.insert(id, expr_id);
+                }
+            }
         }
 
         to_drop
@@ -339,29 +398,42 @@ impl<'db> AnalysisCtx<'db> {
         }
     }
 
+    /// Get where a binding was moved (expr_id).
+    fn get_moved_at(&self, id: BindingId) -> Option<u32> {
+        self.scope_stack.last()?.moved_at.get(&id).copied()
+    }
+
+    /// Record where a binding was moved.
+    fn set_moved_at(&mut self, id: BindingId, expr_id: u32) {
+        if let Some(frame) = self.scope_stack.last_mut() {
+            frame.moved_at.insert(id, expr_id);
+        }
+    }
+
     /// Look up a binding by name.
     fn lookup(&self, name: &str) -> Option<BindingId> {
         self.name_to_binding.get(name).copied()
     }
 
-    /// Mark a binding as moved.
-    fn mark_moved(&mut self, id: BindingId) {
+    /// Mark a binding as moved at the given expression.
+    fn mark_moved(&mut self, id: BindingId, expr_id: u32) {
         // Borrowed params (Ref/Mut) cannot be moved - caller retains ownership.
         if self.bindings[id.0 as usize].is_borrowed() {
             let name = self.bindings[id.0 as usize].name.clone();
-            self.errors.push(AnalysisError::CannotMoveRefParam { binding: id, name });
+            self.errors.push(AnalysisError::CannotMoveBorrowed { expr_id, name });
             return;
         }
 
         if self.get_state(id) == Some(BindingState::Moved) {
             // Double move error.
             let name = self.bindings[id.0 as usize].name.clone();
-            self.errors.push(AnalysisError::DoubleMove { binding: id, name });
+            self.errors.push(AnalysisError::DoubleMove { expr_id, name });
         } else {
             // Track the move for error detection.
             // Note: ScriptUnit bindings are tracked for error detection (e.g., move in loop)
             // but are NOT scheduled for drops since they're exported.
             self.set_state(id, BindingState::Moved);
+            self.set_moved_at(id, expr_id);
         }
     }
 
@@ -514,6 +586,7 @@ impl<'db> AnalysisCtx<'db> {
     ///
     /// Returns the binding ID if the expression is a simple move of a binding.
     fn analyze_expr_moves(&mut self, expr: ExprFun<'db>, is_consumed: bool) -> Option<BindingId> {
+        let expr_id = expr.as_id().index();
         match expr.expr(self.db) {
             ExprFunKind::Name(name) => {
                 let name_str = name.text(self.db);
@@ -522,19 +595,19 @@ impl<'db> AnalysisCtx<'db> {
                     if self.bindings[id.0 as usize].param_mode == Some(ParamMode::Out) {
                         if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
                             let name = self.bindings[id.0 as usize].name.clone();
-                            self.errors.push(AnalysisError::ReadUninitializedOutParam { binding: id, name });
+                            self.errors.push(AnalysisError::ReadUninitializedOutParam { expr_id, name });
                             return None;
                         }
                     }
                     // Check for use after move.
                     if self.get_state(id) == Some(BindingState::Moved) {
                         let name = self.bindings[id.0 as usize].name.clone();
-                        self.errors.push(AnalysisError::UseAfterMove { binding: id, name });
+                        self.errors.push(AnalysisError::UseAfterMove { expr_id, name });
                         return None;
                     }
                     if is_consumed && !self.bindings[id.0 as usize].ty.is_copy() {
                         // This is a move.
-                        self.mark_moved(id);
+                        self.mark_moved(id, expr_id);
                         return Some(id);
                     }
                 }
@@ -577,8 +650,9 @@ impl<'db> AnalysisCtx<'db> {
                         if let Some(binding_id) = self.expr_to_binding(*arg) {
                             if self.bindings[binding_id.0 as usize].param_mode == Some(ParamMode::Ref) {
                                 let name = self.bindings[binding_id.0 as usize].name.clone();
+                                let arg_expr_id = arg.as_id().index();
                                 self.errors.push(AnalysisError::CannotMutFromRef {
-                                    binding: binding_id,
+                                    expr_id: arg_expr_id,
                                     name,
                                 });
                             }
@@ -943,7 +1017,10 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtRet<'db>, stmt_idx
             let id = BindingId(idx as u32);
             if ctx.get_out_param_init(id) != Some(OutParamInitState::Initialized) {
                 let name = info.name.clone();
-                ctx.errors.push(AnalysisError::OutParamNotInitialized { binding: id, name });
+                ctx.errors.push(AnalysisError::OutParamNotInitialized {
+                    ret_stmt_idx: Some(stmt_idx),
+                    name,
+                });
             }
         }
     }
@@ -1112,8 +1189,9 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
             if then_init != else_init {
                 // Initialized in one branch but not the other.
                 let name = ctx.bindings[id.0 as usize].name.clone();
+                // No specific return statement - this is a branch convergence issue.
                 ctx.errors.push(AnalysisError::OutParamNotInitialized {
-                    binding: id,
+                    ret_stmt_idx: None,
                     name,
                 });
             }
@@ -1154,7 +1232,9 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLoop<'db>, stmt_idx:
     for id in &outer_live_bindings {
         if ctx.get_state(*id) == Some(BindingState::Moved) {
             let name = ctx.bindings[id.0 as usize].name.clone();
-            ctx.errors.push(AnalysisError::MoveInLoop { binding: *id, name });
+            // Use the recorded move location for the error span.
+            let expr_id = ctx.get_moved_at(*id).unwrap_or(0);
+            ctx.errors.push(AnalysisError::MoveInLoop { expr_id, name });
         }
     }
 
@@ -1285,11 +1365,11 @@ end fun
         // Should have an error for moving the ref param.
         assert!(!analysis.errors.is_empty(), "should have error for moving ref param");
 
-        // Check that it's specifically a CannotMoveRefParam error.
+        // Check that it's specifically a CannotMoveBorrowed error.
         let has_cannot_move_error = analysis.errors.iter().any(|e| {
-            matches!(e, AnalysisError::CannotMoveRefParam { name, .. } if name == "x")
+            matches!(e, AnalysisError::CannotMoveBorrowed { name, .. } if name == "x")
         });
-        assert!(has_cannot_move_error, "error should be CannotMoveRefParam for 'x'");
+        assert!(has_cannot_move_error, "error should be CannotMoveBorrowed for 'x'");
     }
 
     #[test]
