@@ -94,6 +94,39 @@ pub enum TypeError {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub enum PendingDiagnostic<'db> {
+    /// F001: Undefined variable.
+    UndefinedVariable {
+        expr_id: u32,
+        module_id: ModuleId,
+        name: InternedText<'db>,
+    },
+    /// F002: Undefined function.
+    UndefinedFunction {
+        expr_id: u32,
+        module_id: ModuleId,
+        name: InternedText<'db>,
+    },
+    /// F011: Cannot synthesize type.
+    CannotSynthesize {
+        expr_id: u32,
+        module_id: ModuleId,
+        message: InternedText<'db>,
+    },
+    /// F016: Type mismatch.
+    TypeMismatch {
+        expr_id: u32,
+        module_id: ModuleId,
+        expected: InternedText<'db>,
+        actual: InternedText<'db>,
+        label: InternedText<'db>,
+    },
+    /// F026: Invalid operand type.
+    InvalidOperandType {
+        expr_id: u32,
+        module_id: ModuleId,
+        op: InternedText<'db>,
+        ty: InternedText<'db>,
+    },
     /// F045: Function arity mismatch.
     ArityMismatch {
         /// Salsa ID of the call expression (for primary span lookup).
@@ -110,6 +143,27 @@ pub enum PendingDiagnostic<'db> {
         expected: usize,
         /// Actual number of arguments supplied.
         actual: usize,
+    },
+    /// F046: Result destructuring requires error binding.
+    ResultRequiresBinding {
+        expr_id: u32,
+        module_id: ModuleId,
+    },
+    /// F048: Try operator type mismatch.
+    TryTypeMismatch {
+        expr_id: u32,
+        module_id: ModuleId,
+        operator: InternedText<'db>,
+        expected: InternedText<'db>,
+        actual: InternedText<'db>,
+    },
+    /// F049: Try operator return type mismatch.
+    TryReturnTypeMismatch {
+        expr_id: u32,
+        module_id: ModuleId,
+        operator: InternedText<'db>,
+        expected: InternedText<'db>,
+        actual: InternedText<'db>,
     },
 }
 

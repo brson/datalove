@@ -235,7 +235,8 @@ pub fn check_statement<'db>(
                 }
                 (Some(value), None) => {
                     // F011: Cannot synthesize return type.
-                    ctx.add_error(ctx.error_cannot_synthesize(value, "cannot infer return type"));
+                    let err = ctx.error_cannot_synthesize(value, "cannot infer return type");
+                    ctx.add_error(err);
                 }
                 (None, None) => {
                     // Bare ret outside function - already an error from earlier checks.
@@ -278,19 +279,21 @@ pub fn check_statement<'db>(
                     Type::Datalit(datalit::tycheck::Type::Result(res)) => {
                         // F046: Result destructuring requires error-binding else branch.
                         if else_body.is_none() || else_binding.is_none() {
-                            ctx.add_error(ctx.error_result_requires_binding(condition));
+                            let err = ctx.error_result_requires_binding(condition);
+                            ctx.add_error(err);
                             return;
                         }
                         res.inner_type
                     }
                     _ => {
                         // F017: If/match condition type mismatch.
-                        ctx.add_error(ctx.error_type_mismatch(
+                        let err = ctx.error_type_mismatch(
                             condition,
                             "Option or Result",
                             "other type",
                             "expected Option or Result type for destructuring"
-                        ));
+                        );
+                        ctx.add_error(err);
                         return;
                     }
                 };
@@ -340,12 +343,13 @@ pub fn check_statement<'db>(
                             }
                         } else {
                             let actual_type = type_to_string(db, condition_ty.ty(db));
-                            ctx.add_error(ctx.error_type_mismatch(
+                            let err = ctx.error_type_mismatch(
                                 condition,
                                 "Result",
                                 &actual_type,
                                 "else binding requires Result type"
-                            ));
+                            );
+                            ctx.add_error(err);
                         }
                     } else {
                         for stmt in else_stmts {

@@ -1,6 +1,20 @@
 {
   "diagnostics": [
     {
+      "code": "F011",
+      "labels": [
+        {
+          "message": "cannot infer type",
+          "span": [
+            42,
+            43
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "type inference blocked by syntax error"
+    },
+    {
       "code": "F045",
       "labels": [
         {

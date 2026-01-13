@@ -94,48 +94,74 @@ impl<'db> TypeContext<'db> {
     // Error emission helpers that both emit diagnostics and return TypeError.
 
     /// F001: Undefined variable.
-    pub fn error_undefined_variable(&self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
+    pub fn error_undefined_variable(&mut self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
         if let Some(ts) = self.get_span(expr) {
             let msg = format!("cannot find value `{}` in this scope", name.as_str(self.db));
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F001")
                 .primary_label(ts.clone(), "not found in this scope")
                 .emit_type();
+        } else if let Some(module_id) = self.current_module_id {
+            self.pending_diagnostics.push(PendingDiagnostic::UndefinedVariable {
+                expr_id: expr.as_id().index(),
+                module_id,
+                name,
+            });
         }
         TypeError::UnresolvedName(name.as_str(self.db).to_string())
     }
 
     /// F002: Undefined function.
-    pub fn error_undefined_function(&self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
+    pub fn error_undefined_function(&mut self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
         if let Some(ts) = self.get_span(expr) {
             let msg = format!("cannot find function `{}` in this scope", name.as_str(self.db));
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F002")
                 .primary_label(ts.clone(), "not found in this scope")
                 .emit_type();
+        } else if let Some(module_id) = self.current_module_id {
+            self.pending_diagnostics.push(PendingDiagnostic::UndefinedFunction {
+                expr_id: expr.as_id().index(),
+                module_id,
+                name,
+            });
         }
         TypeError::UnresolvedName(name.as_str(self.db).to_string())
     }
 
     /// F011: Cannot synthesize type.
-    pub fn error_cannot_synthesize(&self, expr: ExprFun<'db>, message: &str) -> TypeError {
+    pub fn error_cannot_synthesize(&mut self, expr: ExprFun<'db>, message: &str) -> TypeError {
         if let Some(ts) = self.get_span(expr) {
             datalove_diagnostic::DiagnosticBuilder::error(self.db, message)
                 .code("F011")
                 .primary_label(ts.clone(), "cannot infer type")
                 .emit_type();
+        } else if let Some(module_id) = self.current_module_id {
+            self.pending_diagnostics.push(PendingDiagnostic::CannotSynthesize {
+                expr_id: expr.as_id().index(),
+                module_id,
+                message: InternedText::new(self.db, message.to_string()),
+            });
         }
         TypeError::CannotSynthesize
     }
 
     /// F016: Type mismatch.
-    pub fn error_type_mismatch(&self, expr: ExprFun<'db>, expected: &str, actual: &str, label: &str) -> TypeError {
+    pub fn error_type_mismatch(&mut self, expr: ExprFun<'db>, expected: &str, actual: &str, label: &str) -> TypeError {
         if let Some(ts) = self.get_span(expr) {
             let msg = format!("mismatched types: expected `{}`, found `{}`", expected, actual);
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F016")
                 .primary_label(ts.clone(), label)
                 .emit_type();
+        } else if let Some(module_id) = self.current_module_id {
+            self.pending_diagnostics.push(PendingDiagnostic::TypeMismatch {
+                expr_id: expr.as_id().index(),
+                module_id,
+                expected: InternedText::new(self.db, expected.to_string()),
+                actual: InternedText::new(self.db, actual.to_string()),
+                label: InternedText::new(self.db, label.to_string()),
+            });
         }
         TypeError::TypeMismatch {
             expected: expected.to_string(),
@@ -206,25 +232,37 @@ impl<'db> TypeContext<'db> {
     }
 
     /// F046: Result destructuring requires error binding.
-    pub fn error_result_requires_binding(&self, expr: ExprFun<'db>) -> TypeError {
+    pub fn error_result_requires_binding(&mut self, expr: ExprFun<'db>) -> TypeError {
         if let Some(ts) = self.get_span(expr) {
             datalove_diagnostic::DiagnosticBuilder::error(self.db, "Result destructuring requires an else binding")
                 .code("F046")
                 .primary_label(ts.clone(), "Result type here")
                 .note("use `if result |value| ... else |err| ... end if` to handle both cases")
                 .emit_type();
+        } else if let Some(module_id) = self.current_module_id {
+            self.pending_diagnostics.push(PendingDiagnostic::ResultRequiresBinding {
+                expr_id: expr.as_id().index(),
+                module_id,
+            });
         }
         TypeError::ResultRequiresErrorBinding
     }
 
     /// F026: Invalid operand type for operator.
-    pub fn error_invalid_operand_type(&self, expr: ExprFun<'db>, op: &str, ty: &str) -> TypeError {
+    pub fn error_invalid_operand_type(&mut self, expr: ExprFun<'db>, op: &str, ty: &str) -> TypeError {
         if let Some(ts) = self.get_span(expr) {
             let msg = format!("invalid operand type `{}` for operator `{}`", ty, op);
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F026")
                 .primary_label(ts.clone(), &format!("operator `{}` cannot be applied to type `{}`", op, ty))
                 .emit_type();
+        } else if let Some(module_id) = self.current_module_id {
+            self.pending_diagnostics.push(PendingDiagnostic::InvalidOperandType {
+                expr_id: expr.as_id().index(),
+                module_id,
+                op: InternedText::new(self.db, op.to_string()),
+                ty: InternedText::new(self.db, ty.to_string()),
+            });
         }
         TypeError::InvalidOperandType {
             op: op.to_string(),
@@ -233,13 +271,21 @@ impl<'db> TypeContext<'db> {
     }
 
     /// F048: Try operator type mismatch.
-    pub fn error_try_type_mismatch(&self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
+    pub fn error_try_type_mismatch(&mut self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
         if let Some(ts) = self.get_span(expr) {
             let msg = format!("try operator `{}` requires {} type, found `{}`", operator, expected, actual);
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
                 .code("F048")
                 .primary_label(ts.clone(), &format!("expected {}, found `{}`", expected, actual))
                 .emit_type();
+        } else if let Some(module_id) = self.current_module_id {
+            self.pending_diagnostics.push(PendingDiagnostic::TryTypeMismatch {
+                expr_id: expr.as_id().index(),
+                module_id,
+                operator: InternedText::new(self.db, operator.to_string()),
+                expected: InternedText::new(self.db, expected.to_string()),
+                actual: InternedText::new(self.db, actual.to_string()),
+            });
         }
         TypeError::TryTypeMismatch {
             operator: operator.to_string(),
@@ -248,7 +294,7 @@ impl<'db> TypeContext<'db> {
     }
 
     /// F049: Try operator return type mismatch.
-    pub fn error_try_return_type_mismatch(&self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
+    pub fn error_try_return_type_mismatch(&mut self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
         if let Some(ts) = self.get_span(expr) {
             let msg = format!("try operator `{}` requires function to return {}, found `{}`", operator, expected, actual);
             datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
@@ -256,6 +302,14 @@ impl<'db> TypeContext<'db> {
                 .primary_label(ts.clone(), "try operator here")
                 .note(&format!("function must return {} to use `{}` operator", expected, operator))
                 .emit_type();
+        } else if let Some(module_id) = self.current_module_id {
+            self.pending_diagnostics.push(PendingDiagnostic::TryReturnTypeMismatch {
+                expr_id: expr.as_id().index(),
+                module_id,
+                operator: InternedText::new(self.db, operator.to_string()),
+                expected: InternedText::new(self.db, expected.to_string()),
+                actual: InternedText::new(self.db, actual.to_string()),
+            });
         }
         TypeError::TryReturnTypeMismatch {
             operator: operator.to_string(),

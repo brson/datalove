@@ -70,7 +70,7 @@ fn unaryop_to_str(op: UnaryOp) -> &'static str {
 ///
 /// Used for operators like `?`, `+?`, `-?`, `*?`, `/?`, `-?` that early-return None.
 fn require_option_return_type<'db>(
-    ctx: &TypeContext<'db>,
+    ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
     op_str: &str,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
@@ -93,7 +93,7 @@ fn require_option_return_type<'db>(
 ///
 /// Used for operators like `!`, `+!`, `-!`, `*!`, `/!`, `-!` that early-return Err.
 fn require_result_return_type<'db>(
-    ctx: &TypeContext<'db>,
+    ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
     op_str: &str,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
