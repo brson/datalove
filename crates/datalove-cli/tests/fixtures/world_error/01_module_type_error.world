@@ -1,0 +1,15 @@
+----------
+module local/test/main
+----------
+
+fun add(x: @int, y: @int): @int
+  ret x + y
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.add
+let output = add(@5, @true)

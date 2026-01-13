@@ -42,6 +42,8 @@ enum Command {
     TypecheckStd(TypecheckStdCommand),
     /// Generate HTML documentation from mandocs/.
     Docs(DocsCommand),
+    /// Execute a worldfile containing modules and a script section.
+    ScriptWorld(ScriptWorldCommand),
 }
 
 #[derive(clap::Args)]
@@ -118,6 +120,15 @@ struct TypecheckStdCommand {
 struct DocsCommand {
 }
 
+#[derive(clap::Args)]
+struct ScriptWorldCommand {
+    /// Path to the worldfile (.world) to execute.
+    file_path: PathBuf,
+    /// Run without loading the sys library.
+    #[arg(long)]
+    no_sys: bool,
+}
+
 impl Cli {
     fn run(&self) -> AnyResult<()> {
         match &self.cmd {
@@ -130,6 +141,7 @@ impl Cli {
             Command::AotCompile(cmd) => cmd.run(&self.args),
             Command::TypecheckStd(cmd) => cmd.run(&self.args),
             Command::Docs(cmd) => cmd.run(&self.args),
+            Command::ScriptWorld(cmd) => cmd.run(&self.args),
         }
     }
 }
@@ -512,6 +524,98 @@ impl AotCompileCommand {
         }
 
         ctx.destroy_all();
+        Ok(())
+    }
+}
+
+impl ScriptWorldCommand {
+    fn run(&self, _args: &Args) -> AnyResult<()> {
+        use datalove_datafun as datafun;
+        use datafun::pipeline::ModuleCompilationPipeline;
+        use datalove_datafun_pkg::package_load_worldfile::{parse_worldfile_sections, WorldfileSection};
+
+        let db = datafun::Database::default();
+
+        // Read and parse the worldfile.
+        let file_contents = rmx::std::fs::read_to_string(&self.file_path)
+            .with_context(|| format!("Failed to read worldfile: {}", self.file_path.display()))?;
+        let parsed = parse_worldfile_sections(file_contents.as_bytes())
+            .with_context(|| format!("Failed to parse worldfile: {}", self.file_path.display()))?;
+
+        // Validate: must have exactly one script section (scriptunit-fragment or scriptunit-expr).
+        let script_sections: Vec<_> = parsed.sections.iter()
+            .filter(|s| matches!(s, WorldfileSection::ScriptFragment { .. } | WorldfileSection::ScriptExpr { .. }))
+            .collect();
+        if script_sections.len() != 1 {
+            bail!(
+                "Worldfile must have exactly one script section (scriptunit-fragment or scriptunit-expr), found {}",
+                script_sections.len()
+            );
+        }
+
+        // Build pipeline from module sections.
+        let mut pipeline = ModuleCompilationPipeline::new();
+        if !self.no_sys {
+            rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
+        }
+        pipeline.add_modules_from_sections(&db, &parsed.sections);
+
+        // Compile modules.
+        let compiled = pipeline.compile_fresh(&db);
+
+        // Check for module compilation errors.
+        let cwd = rmx::std::env::current_dir().unwrap_or_default();
+        if compiled.has_errors() {
+            // Render module errors. For now, render them as plain text since we don't have
+            // module-level diagnostic rendering with ariadne yet.
+            let errors = compiled.all_errors();
+            for error in &errors {
+                eprintln!("{}", error);
+            }
+            bail!("Module compilation error");
+        }
+
+        // Create script compilation context.
+        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr);
+
+        // Execute the script section.
+        let script_section = script_sections[0];
+        let result = match script_section {
+            WorldfileSection::ScriptFragment { source } => {
+                ctx.eval_fragment(source)
+            }
+            WorldfileSection::ScriptExpr { source } => {
+                ctx.eval_expr(source)
+            }
+            _ => unreachable!(),
+        };
+
+        // Check for script errors and render diagnostics.
+        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &result.typecheck {
+            let parse_diags = ctx.get_parse_diagnostics();
+            render::render_parse_diagnostics(ctx.db(), &parse_diags, &self.file_path, &cwd);
+            bail!("Parse error");
+        }
+        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &result.typecheck {
+            let type_diags = ctx.get_type_diagnostics();
+            render::render_type_diagnostics(ctx.db(), &type_diags, &self.file_path, &cwd);
+            bail!("Type error");
+        }
+        if let datafun::pipeline::LoweringResult::Error { message } = &result.lowering {
+            bail!("Lowering error: {}", message);
+        }
+        if result.output.starts_with("Error:") {
+            bail!("{}", result.output);
+        }
+
+        // Print output if any (for scriptunit-expr).
+        if !result.output.is_empty() && result.output != "(fragment executed)" {
+            println!("{}", result.output);
+        }
+
+        // Cleanup.
+        ctx.destroy_all();
+
         Ok(())
     }
 }

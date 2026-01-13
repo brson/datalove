@@ -18,6 +18,7 @@ datalove-datafun-parser.path = "../datalove-datafun-parser"
 datalove-rt.path = "../datalove-rt"
 datalove-repl.path = "../datalove-repl"
 datalove-repl-term.path = "../datalove-repl-term"
+datalove-datafun-pkg.path = "../datalove-datafun-pkg"
 pulldown-cmark = "0.12"
 comrak = "0.32"
 tera = "1.20"
@@ -45,4 +46,9 @@ harness = false
 [[test]]
 name = "aot_run_tests"
 path = "tests/aot_run_tests.rs"
+harness = false
+
+[[test]]
+name = "world_error_tests"
+path = "tests/world_error_tests.rs"
 harness = false
