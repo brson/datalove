@@ -26,13 +26,13 @@
 # in progress
 
 - human docs
-- diagnostics
 
 
 
 
 # on deck
 
+- lsp
 - tables
 - multiple scripts
 - fully reactive scripts
