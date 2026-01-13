@@ -1,0 +1,24 @@
+----------
+module local/test/math
+----------
+
+fun add(a: int, b: int, c: int): int
+  ret a + b + c
+end fun
+
+----------
+module local/test/main
+----------
+
+require module local/test/math
+import math.add
+
+fun broken(): int
+  ret add(1)
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

@@ -448,6 +448,11 @@ impl<'db> CompiledModules<'db> {
             .collect()
     }
 
+    /// Get module type diagnostics with spans for rendering.
+    pub fn get_module_type_diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<&'db datalove_diagnostic::TypeDiagnostic> {
+        typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(db, self.parsed_graph)
+    }
+
     /// Create a context for compiling and executing scripts against these modules.
     pub fn script_context(
         self,

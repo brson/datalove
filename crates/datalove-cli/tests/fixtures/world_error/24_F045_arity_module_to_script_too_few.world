@@ -1,0 +1,15 @@
+----------
+module local/test/math
+----------
+
+fun add(a: int, b: int, c: int): int
+  ret a + b + c
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/math
+import math.add
+let output = add(1)

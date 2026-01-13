@@ -1,0 +1,13 @@
+----------
+module local/test/main
+----------
+
+fun broken(): int
+  ret nonexistent_func(42)
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

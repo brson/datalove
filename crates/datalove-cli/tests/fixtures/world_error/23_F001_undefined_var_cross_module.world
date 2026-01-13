@@ -1,0 +1,24 @@
+----------
+module local/test/lib
+----------
+
+fun get_value(): int
+  ret 42
+end fun
+
+----------
+module local/test/main
+----------
+
+require module local/test/lib
+import lib.get_value
+
+fun broken(): int
+  ret undefined_from_lib
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

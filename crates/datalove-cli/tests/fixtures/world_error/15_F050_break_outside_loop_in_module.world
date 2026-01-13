@@ -1,0 +1,13 @@
+----------
+module local/test/main
+----------
+
+fun broken()
+  break
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

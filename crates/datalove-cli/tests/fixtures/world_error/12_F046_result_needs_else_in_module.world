@@ -1,0 +1,16 @@
+----------
+module local/test/main
+----------
+
+fun test_result(a: @!u8): u8
+  if a |value|
+    ret value
+  end if
+  ret 0
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

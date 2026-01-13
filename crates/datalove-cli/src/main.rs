@@ -566,12 +566,17 @@ impl ScriptWorldCommand {
         // Check for module compilation errors.
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
         if compiled.has_errors() {
-            // Render module errors. For now, render them as plain text since we don't have
-            // module-level diagnostic rendering with ariadne yet.
-            let errors = compiled.all_errors();
-            for error in &errors {
+            // Render module type diagnostics with ariadne.
+            let type_diags = compiled.get_module_type_diagnostics(&db);
+            if !type_diags.is_empty() {
+                render::render_module_type_diagnostics(&db, &type_diags, &self.file_path, &cwd);
+            }
+
+            // Also report any drop analysis errors that don't have diagnostics yet.
+            for error in compiled.all_drop_analysis_errors() {
                 eprintln!("{}", error);
             }
+
             bail!("Module compilation error");
         }
 

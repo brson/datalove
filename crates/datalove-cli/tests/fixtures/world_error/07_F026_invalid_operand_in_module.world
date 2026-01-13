@@ -1,0 +1,13 @@
+----------
+module local/test/main
+----------
+
+fun broken(): int
+  ret "hello" + "world"
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

@@ -1,0 +1,13 @@
+----------
+module local/test/main
+----------
+
+fun broken(): @u32
+  ret
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

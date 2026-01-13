@@ -1,0 +1,15 @@
+----------
+module local/test/math
+----------
+
+fun get_int(): int
+  ret 42
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/math
+import math.get_int
+let output: bool = get_int()

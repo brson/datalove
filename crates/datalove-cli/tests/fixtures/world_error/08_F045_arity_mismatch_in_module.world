@@ -1,0 +1,17 @@
+----------
+module local/test/main
+----------
+
+fun add(a: int, b: int): int
+  ret a + b
+end fun
+
+fun broken(): int
+  ret add(1, 2, 3)
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

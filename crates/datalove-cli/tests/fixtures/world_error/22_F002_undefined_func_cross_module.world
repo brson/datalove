@@ -1,0 +1,24 @@
+----------
+module local/test/lib
+----------
+
+fun existing(): int
+  ret 42
+end fun
+
+----------
+module local/test/main
+----------
+
+require module local/test/lib
+import lib.existing
+
+fun broken(): int
+  ret nonexistent()
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

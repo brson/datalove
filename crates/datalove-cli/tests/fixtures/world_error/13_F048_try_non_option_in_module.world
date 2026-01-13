@@ -1,0 +1,14 @@
+----------
+module local/test/main
+----------
+
+fun broken(): ?int
+  let x = 42
+  ret x?
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0
