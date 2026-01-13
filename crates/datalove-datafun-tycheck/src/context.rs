@@ -11,6 +11,7 @@ use datalove_datafun_ast::ast::*;
 
 pub use crate::{
     DatafunSpans,
+    PendingDiagnostic,
     TypeAndHeap,
     TypeFunction,
     TypeError,
@@ -23,6 +24,8 @@ pub struct TypeContext<'db> {
     pub(crate) db: &'db dyn crate::Db,
     /// Pre-computed spans for error reporting.
     pub(crate) spans: DatafunSpans,
+    /// Current module being typechecked (for pending diagnostics).
+    pub(crate) current_module_id: Option<ModuleId>,
     /// Variable bindings (name -> type).
     pub(crate) variables: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
     /// Function signatures (name -> function type).
@@ -34,6 +37,8 @@ pub struct TypeContext<'db> {
     /// Whether current function has no declared return type (void function).
     pub(crate) is_void_function: bool,
     pub(crate) errors: Vec<TypeError>,
+    /// Pending diagnostics for post-hoc span enrichment.
+    pub(crate) pending_diagnostics: Vec<PendingDiagnostic<'db>>,
     /// Expression types, indexed by ExprFun ID.
     pub(crate) expr_types: Vec<Option<TypeAndHeap<'db>>>,
     /// Resolved call targets, indexed by ExprFunctionCall ID.
@@ -50,20 +55,36 @@ impl<'db> TypeContext<'db> {
         db: &'db dyn crate::Db,
         spans: DatafunSpans,
     ) -> Self {
+        Self::with_module_id(db, spans, None)
+    }
+
+    /// Create a TypeContext for a specific module.
+    pub fn with_module_id(
+        db: &'db dyn crate::Db,
+        spans: DatafunSpans,
+        module_id: Option<ModuleId>,
+    ) -> Self {
         TypeContext {
             db,
             spans,
+            current_module_id: module_id,
             variables: HashMap::new(),
             functions: HashMap::new(),
             function_asts: HashMap::new(),
             expected_return_type: None,
             is_void_function: false,
             errors: Vec::new(),
+            pending_diagnostics: Vec::new(),
             expr_types: Vec::new(),
             call_targets: Vec::new(),
             loop_depth: 0,
             ref_context: false,
         }
+    }
+
+    /// Check if spans are available for immediate diagnostic emission.
+    pub fn has_spans(&self) -> bool {
+        !self.spans.entries.is_empty() || !self.spans.fun_spans.is_empty()
     }
 
     pub fn add_error(&mut self, error: TypeError) {
@@ -124,13 +145,14 @@ impl<'db> TypeContext<'db> {
 
     /// F045: Function arity mismatch.
     pub fn error_arity_mismatch(
-        &self,
+        &mut self,
         expr: ExprFun<'db>,
         func_name: InternedText<'db>,
         expected: usize,
         actual: usize,
     ) -> TypeError {
         if let Some(ts) = self.get_span(expr) {
+            // Spans available - emit diagnostic immediately.
             let msg = format!(
                 "this function takes {} argument{} but {} {} supplied",
                 expected,
@@ -164,6 +186,21 @@ impl<'db> TypeContext<'db> {
             }
 
             builder.emit_type();
+        } else if let Some(call_module_id) = self.current_module_id {
+            // No spans available - collect pending diagnostic for post-hoc enrichment.
+            let (func_local_index, func_module_id) = self.lookup_function_ast(func_name)
+                .map(|(func_ast, mod_id)| (func_ast.local_index(self.db), mod_id))
+                .unwrap_or((0, None));
+
+            self.pending_diagnostics.push(PendingDiagnostic::ArityMismatch {
+                call_expr_id: expr.as_id().index(),
+                call_module_id,
+                func_name,
+                func_local_index,
+                func_module_id,
+                expected,
+                actual,
+            });
         }
         TypeError::ArityMismatch { expected, actual }
     }

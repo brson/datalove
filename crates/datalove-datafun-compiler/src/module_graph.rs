@@ -54,15 +54,22 @@ pub fn parse_module_ast<'db>(
 
 /// Parse a single module and return the full result including spans.
 ///
-/// This is NOT a tracked function - spans change with whitespace and we don't
-/// want that to invalidate downstream memoization.
+/// This is tracked so that parsing is memoized per module. The result includes
+/// both statements and spans from the same parse, ensuring expr IDs match.
+#[salsa::tracked]
 pub fn parse_module_full<'db>(
     db: &'db dyn salsa::Database,
     module: Module,
 ) -> ParseResult<'db> {
     let module_id = module.id(db);
+    let module_path = module_id.path(db);
     let source = module.source(db);
-    datalove_datafun_parser::parse_with_module_id(db, source, Some(module_id))
+
+    log_query("parse", module_path, QueryPhase::Start);
+    let result = datalove_datafun_parser::parse_with_module_id(db, source, Some(module_id));
+    log_query("parse", module_path, QueryPhase::End);
+
+    result
 }
 
 /// Parse all modules in a graph with resolved requires.
@@ -70,27 +77,35 @@ pub fn parse_module_full<'db>(
 /// Returns a ParsedModuleGraph containing the original graph, pre-parsed statements,
 /// spans, and resolved require aliases from package resolution.
 ///
-/// Note: This function uses parse_module_ast (tracked) to get AST only. Spans are NOT
-/// fetched inside this tracked function to avoid creating dependencies on span data
-/// (which changes with whitespace). Spans are empty - they can be fetched separately
-/// outside the memoization chain if needed for diagnostics.
+/// Uses parse_module_full to get both statements and spans from the same parse,
+/// ensuring expression IDs match between statements and spans for diagnostic lookup.
 #[salsa::tracked]
 pub fn parse_module_graph<'db>(
     db: &'db dyn salsa::Database,
     graph: ModuleGraph,
     resolved_requires_str: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
 ) -> ParsedModuleGraph<'db> {
-    use datalove_datafun_parser::DatafunSpans;
-
-    // Collect only statements. Spans are NOT fetched here to avoid memoization issues.
+    // Collect statements and spans from the SAME parse to ensure expr IDs match.
     let mut statements_only = Vec::new();
     let mut spans_list = Vec::new();
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
-        // Get AST from tracked function (memoized).
-        let parsed = parse_module_ast(db, module);
-        // Use empty spans - diagnostics won't have source locations but memoization works.
-        let spans = DatafunSpans::new(vec![]);
+        // Get full parse result - both statements and spans from same parse.
+        let full_result = parse_module_full(db, module);
+        let parsed = full_result.parsed;
+        let spans = datalove_datafun_parser::DatafunSpans::with_stmt_spans(
+            full_result.expr_spans.iter().map(|e| {
+                datalove_datafun_parser::SpanMapEntry {
+                    expr_id: e.expr_id,
+                    entry: datalove_diagnostic::SpanEntry::new(e.text_id, e.span.clone()),
+                }
+            }).collect(),
+            full_result.break_spans.clone(),
+            full_result.continue_spans.clone(),
+            full_result.ret_spans.clone(),
+            full_result.set_spans.clone(),
+            full_result.fun_spans.clone(),
+        );
         statements_only.push((module_id, parsed));
         spans_list.push((module_id, spans));
     }

@@ -86,6 +86,33 @@ pub enum TypeError {
     UndefinedVariable,
 }
 
+/// Pending diagnostic for post-hoc span enrichment.
+///
+/// When typechecking module graphs, spans are not available during the tracked
+/// typecheck function (to preserve Salsa memoization). Instead, we collect
+/// pending diagnostics that can be emitted later with full span information.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub enum PendingDiagnostic<'db> {
+    /// F045: Function arity mismatch.
+    ArityMismatch {
+        /// Salsa ID of the call expression (for primary span lookup).
+        call_expr_id: u32,
+        /// Module where the call occurs.
+        call_module_id: ModuleId,
+        /// Name of the function being called.
+        func_name: InternedText<'db>,
+        /// local_index of the function definition (for secondary span lookup).
+        func_local_index: u32,
+        /// Module where the function is defined (None for script-local functions).
+        func_module_id: Option<ModuleId>,
+        /// Expected number of arguments.
+        expected: usize,
+        /// Actual number of arguments supplied.
+        actual: usize,
+    },
+}
+
 /// Check if a datalit type is a copy type (can be safely copied without cloning).
 ///
 /// Copy types are:
@@ -346,6 +373,13 @@ pub struct SingleModuleTypecheckResult<'db> {
     /// Type errors encountered.
     #[returns(ref)]
     pub errors: Vec<TypeError>,
+
+    /// Pending diagnostics for post-hoc span enrichment.
+    ///
+    /// These are collected when spans are not available during typechecking
+    /// (module graph path) and can be emitted later with full span information.
+    #[returns(ref)]
+    pub pending_diagnostics: Vec<PendingDiagnostic<'db>>,
 
     /// Exported function signatures.
     #[returns(ref)]

@@ -1,0 +1,61 @@
+{
+  "diagnostics": [
+    {
+      "code": "F045",
+      "labels": [
+        {
+          "message": "expected 2 arguments",
+          "span": [
+            73,
+            76
+          ],
+          "text": "add"
+        },
+        {
+          "message": "function `add` defined here with 2 parameters",
+          "span": [
+            1,
+            4
+          ],
+          "text": "fun"
+        }
+      ],
+      "message": "this function takes 2 arguments but 3 were supplied"
+    }
+  ],
+  "modules": {
+    "calc": {
+      "errors": [
+        {
+          "actual": 3,
+          "expected": 2,
+          "kind": "ArityMismatch"
+        }
+      ],
+      "functions": [
+        {
+          "name": "compute",
+          "params": [],
+          "return_type": "@u32"
+        }
+      ]
+    },
+    "math": {
+      "errors": [
+        {
+          "kind": "CannotSynthesize"
+        }
+      ],
+      "functions": [
+        {
+          "name": "add",
+          "params": [
+            "@u32",
+            "@u32"
+          ],
+          "return_type": "@u32"
+        }
+      ]
+    }
+  }
+}

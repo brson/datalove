@@ -1,0 +1,19 @@
+----------
+module sys/std/math
+----------
+
+fun add(a: @u32, b: @u32): @u32
+  ret a +@ b
+end fun
+
+----------
+module sys/util/calc
+----------
+
+require module sys/std/math
+
+import math.add
+
+fun compute(): @u32
+  ret add(@1, @2, @3)
+end fun

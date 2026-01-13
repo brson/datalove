@@ -4,8 +4,9 @@
 //! scripts, expressions, and module graphs.
 
 use std::collections::{HashMap, BTreeMap};
-use bct::text::InternedText;
+use bct::text::{InternedText, TextSpan};
 use datalove_ct::query_log::{log_query, QueryPhase};
+use salsa::plumbing::FromId;
 
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
@@ -15,6 +16,7 @@ use crate::types::{convert_type_hint, unit_type};
 
 pub use crate::{
     DatafunSpans,
+    PendingDiagnostic,
     Type,
     TypeAndHeap,
     TypeFunction,
@@ -476,8 +478,8 @@ pub fn typecheck_module<'db>(
 
     log_query("typecheck", module_path, QueryPhase::Start);
 
-    // Create type context for this module.
-    let mut ctx = TypeContext::new(db, spans);
+    // Create type context for this module with module_id for pending diagnostics.
+    let mut ctx = TypeContext::with_module_id(db, spans, Some(module_id));
 
     // Add imported functions to context.
     for import in &resolved_imports {
@@ -518,6 +520,7 @@ pub fn typecheck_module<'db>(
         db,
         module_id,
         ctx.errors.clone(),
+        ctx.pending_diagnostics.clone(),
         exports,
         imports,
         ctx.expr_types.clone(),
@@ -689,9 +692,115 @@ pub fn typecheck_module_graph<'db>(
                 combined_call_targets[i] = *target;
             }
         }
+
+        // Process pending diagnostics with span enrichment.
+        emit_pending_diagnostics(db, &parsed_graph, result.pending_diagnostics(db));
     }
 
     ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, combined_expr_types, combined_call_targets)
+}
+
+/// Emit pending diagnostics with full span information.
+///
+/// Called after typechecking to enrich diagnostics with spans from all modules.
+fn emit_pending_diagnostics<'db>(
+    db: &'db dyn crate::Db,
+    parsed_graph: &ParsedModuleGraph<'db>,
+    pending: &[PendingDiagnostic<'db>],
+) {
+    for diag in pending {
+        match diag {
+            PendingDiagnostic::ArityMismatch {
+                call_expr_id,
+                call_module_id,
+                func_name,
+                func_local_index,
+                func_module_id,
+                expected,
+                actual,
+            } => {
+                emit_arity_mismatch_diagnostic(
+                    db,
+                    parsed_graph,
+                    *call_expr_id,
+                    *call_module_id,
+                    *func_name,
+                    *func_local_index,
+                    *func_module_id,
+                    *expected,
+                    *actual,
+                );
+            }
+        }
+    }
+}
+
+/// Emit F045 arity mismatch diagnostic with full span information.
+#[allow(clippy::too_many_arguments)]
+fn emit_arity_mismatch_diagnostic<'db>(
+    db: &'db dyn crate::Db,
+    parsed_graph: &ParsedModuleGraph<'db>,
+    call_expr_id: u32,
+    call_module_id: ModuleId,
+    func_name: InternedText<'db>,
+    func_local_index: u32,
+    func_module_id: Option<ModuleId>,
+    expected: usize,
+    actual: usize,
+) {
+    let msg = format!(
+        "this function takes {} argument{} but {} {} supplied",
+        expected,
+        if expected == 1 { "" } else { "s" },
+        actual,
+        if actual == 1 { "was" } else { "were" }
+    );
+    let label = format!(
+        "expected {} argument{}",
+        expected,
+        if expected == 1 { "" } else { "s" }
+    );
+
+    // Look up primary span (call site) from caller module's spans.
+    let call_spans = parsed_graph.get_spans(db, call_module_id);
+    let primary_span = call_spans.as_ref().and_then(|spans| {
+        // Convert expr_id back to ExprFun for span lookup.
+        // SAFETY: The call_expr_id was obtained from a valid ExprFun via as_id().index().
+        let expr_id = unsafe { salsa::Id::from_index(call_expr_id) };
+        let expr = ExprFun::from_id(expr_id);
+        spans.lookup(expr).map(|entry| {
+            let (text, span) = entry.to_text_and_span(db);
+            TextSpan::new(text, span)
+        })
+    });
+
+    let Some(primary_ts) = primary_span else {
+        // No span available - can't emit diagnostic.
+        return;
+    };
+
+    let mut builder = datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
+        .code("F045")
+        .primary_label(primary_ts, &label);
+
+    // Look up secondary span (function definition) from the function's module.
+    if let Some(source_module_id) = func_module_id {
+        if let Some(func_spans) = parsed_graph.get_spans(db, source_module_id) {
+            if let Some(entry) = func_spans.lookup_fun(func_local_index) {
+                let (text, span) = entry.to_text_and_span(db);
+                let def_span = TextSpan::new(text, span);
+                let def_label = format!(
+                    "function `{}` defined here with {} parameter{}",
+                    func_name.as_str(db),
+                    expected,
+                    if expected == 1 { "" } else { "s" }
+                );
+                builder = builder.secondary_label(def_span, &def_label);
+            }
+        }
+    }
+
+    builder.emit_type();
 }
 
 /// Build module alias map from require module statements for ModuleGraph.
