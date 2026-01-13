@@ -11,6 +11,12 @@
 - complex?
 - real?
 
+## Apache Arrow types
+
+- decimal
+- date, time, timestamp, duration, interval
+
+
 ## Datafun / library types
 
 - queues

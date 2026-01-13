@@ -162,7 +162,70 @@ while modules are expected to be more careful with overflow.
 
 ## Maps and sets
 
+
 ## Tensors
+
+Current syntax:
+
+```datalove
+let data: tensor<f32, 2> = tensor [2 2] [1 2, 3 4]
+```
+
+New tensor syntax proposal:
+
+```datalove
+let data: [|f32, 2|] = [|1 2, 3 4|]
+```
+
+
+## Tables
+
+Tables, a.k.a. dataframes ala Pandas / Polars / Arrow.
+Tables provide "struct-of-array" semantics.
+
+```datalove
+let data: {|
+  x: int,
+  t: int,
+|} = {|
+  1, 2  
+  3, 4
+|}
+```
+
+Note that the `{|` opening bracket enters a line-oriented
+parsing context, one row per line.
+This allows a natural CSV-like presentation for tables,
+taking advantage of Datalove's mixed-mode brace-matched parser.
+
+The type reads like a struct;
+the expression is a table each row, each an instance of that struct.
+
+Table column projections,
+analogous to struct field projections;
+have type "list of field type",
+but can't be mutated or moved.
+They can be passed to reference destinations.
+
+```datalove
+let data: {|
+  x: int,
+  t: int,
+|} = {|
+  1, 2  
+  3, 4
+|}
+
+// Hypothetical reference binding
+let ref xs: [int] = data.x
+
+// Or pass to a ref param
+fun process(ref xs: [int]): int
+end fun
+
+let p = process(data.x)
+```
+
 
 ## Optional types
 
