@@ -21,9 +21,13 @@ pub use datalove_datafun_ast::spans::DatafunSpans;
 mod api;
 mod check;
 mod context;
+mod emit;
 mod statement;
 pub mod synthesize;
 pub mod types;
+
+// Re-export emit infrastructure.
+pub use emit::{SpanLookup, LocalSpanLookup, ModuleGraphSpanLookup, emit_pending_diagnostics};
 
 /// Type representation for datafun (extends datalit types with function types).
 #[derive(Clone, Hash, PartialEq, Eq)]
