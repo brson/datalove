@@ -142,7 +142,8 @@ pub fn check_statement<'db>(
                         }
                         None => {
                             // Variable not found.
-                            ctx.add_error(ctx.error_undefined_variable_set(stmt, name.text(db).as_str()));
+                            let err = ctx.error_undefined_variable_set(stmt, name.text(db).as_str());
+                            ctx.add_error(err);
                         }
                     }
                 }
@@ -217,7 +218,8 @@ pub fn check_statement<'db>(
                     // Has value - check if void (no declared return type).
                     if ctx.is_void_function {
                         // Void function with value - ERROR.
-                        ctx.add_error(ctx.error_void_function_returns_value(stmt));
+                        let err = ctx.error_void_function_returns_value(stmt);
+                        ctx.add_error(err);
                     } else {
                         // Non-void function with value - check type.
                         if let Err(e) = check_expr(ctx, value, expected_ret_ty) {
@@ -229,7 +231,8 @@ pub fn check_statement<'db>(
                     // Bare ret - check if void (no declared return type).
                     if !ctx.is_void_function {
                         // Non-void function with bare ret - ERROR.
-                        ctx.add_error(ctx.error_function_requires_return_value(stmt));
+                        let err = ctx.error_function_requires_return_value(stmt);
+                        ctx.add_error(err);
                     }
                     // Void function with bare ret - OK.
                 }
@@ -412,13 +415,15 @@ pub fn check_statement<'db>(
 
         Statement::Break(stmt) => {
             if ctx.loop_depth == 0 {
-                ctx.add_error(ctx.error_break_outside_loop(stmt));
+                let err = ctx.error_break_outside_loop(stmt);
+                ctx.add_error(err);
             }
         }
 
         Statement::Continue(stmt) => {
             if ctx.loop_depth == 0 {
-                ctx.add_error(ctx.error_continue_outside_loop(stmt));
+                let err = ctx.error_continue_outside_loop(stmt);
+                ctx.add_error(err);
             }
         }
 

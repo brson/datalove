@@ -86,36 +86,38 @@ pub enum TypeError {
     UndefinedVariable,
 }
 
-/// Pending diagnostic for post-hoc span enrichment.
+/// Pending diagnostic for unified diagnostic emission.
 ///
-/// When typechecking module graphs, spans are not available during the tracked
-/// typecheck function (to preserve Salsa memoization). Instead, we collect
-/// pending diagnostics that can be emitted later with full span information.
+/// All type errors are collected as pending diagnostics during typechecking,
+/// then emitted at the end with span information. For module graph typechecking,
+/// module_id is Some and spans are looked up from ParsedModuleGraph. For
+/// non-module-graph paths, module_id is None and spans are looked up from
+/// TypeContext.spans.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub enum PendingDiagnostic<'db> {
     /// F001: Undefined variable.
     UndefinedVariable {
         expr_id: u32,
-        module_id: ModuleId,
+        module_id: Option<ModuleId>,
         name: InternedText<'db>,
     },
     /// F002: Undefined function.
     UndefinedFunction {
         expr_id: u32,
-        module_id: ModuleId,
+        module_id: Option<ModuleId>,
         name: InternedText<'db>,
     },
     /// F011: Cannot synthesize type.
     CannotSynthesize {
         expr_id: u32,
-        module_id: ModuleId,
+        module_id: Option<ModuleId>,
         message: InternedText<'db>,
     },
     /// F016: Type mismatch.
     TypeMismatch {
         expr_id: u32,
-        module_id: ModuleId,
+        module_id: Option<ModuleId>,
         expected: InternedText<'db>,
         actual: InternedText<'db>,
         label: InternedText<'db>,
@@ -123,7 +125,7 @@ pub enum PendingDiagnostic<'db> {
     /// F026: Invalid operand type.
     InvalidOperandType {
         expr_id: u32,
-        module_id: ModuleId,
+        module_id: Option<ModuleId>,
         op: InternedText<'db>,
         ty: InternedText<'db>,
     },
@@ -131,8 +133,8 @@ pub enum PendingDiagnostic<'db> {
     ArityMismatch {
         /// Salsa ID of the call expression (for primary span lookup).
         call_expr_id: u32,
-        /// Module where the call occurs.
-        call_module_id: ModuleId,
+        /// Module where the call occurs (None for non-module-graph paths).
+        call_module_id: Option<ModuleId>,
         /// Name of the function being called.
         func_name: InternedText<'db>,
         /// local_index of the function definition (for secondary span lookup).
@@ -147,12 +149,12 @@ pub enum PendingDiagnostic<'db> {
     /// F046: Result destructuring requires error binding.
     ResultRequiresBinding {
         expr_id: u32,
-        module_id: ModuleId,
+        module_id: Option<ModuleId>,
     },
     /// F048: Try operator type mismatch.
     TryTypeMismatch {
         expr_id: u32,
-        module_id: ModuleId,
+        module_id: Option<ModuleId>,
         operator: InternedText<'db>,
         expected: InternedText<'db>,
         actual: InternedText<'db>,
@@ -160,10 +162,36 @@ pub enum PendingDiagnostic<'db> {
     /// F049: Try operator return type mismatch.
     TryReturnTypeMismatch {
         expr_id: u32,
-        module_id: ModuleId,
+        module_id: Option<ModuleId>,
         operator: InternedText<'db>,
         expected: InternedText<'db>,
         actual: InternedText<'db>,
+    },
+    /// F050: Break outside loop.
+    BreakOutsideLoop {
+        local_index: u32,
+        module_id: Option<ModuleId>,
+    },
+    /// F051: Continue outside loop.
+    ContinueOutsideLoop {
+        local_index: u32,
+        module_id: Option<ModuleId>,
+    },
+    /// F052: Void function returns value.
+    VoidFunctionReturnsValue {
+        local_index: u32,
+        module_id: Option<ModuleId>,
+    },
+    /// F053: Non-void function requires return value.
+    FunctionRequiresReturnValue {
+        local_index: u32,
+        module_id: Option<ModuleId>,
+    },
+    /// F054: Undefined variable in set statement.
+    UndefinedVariableSet {
+        local_index: u32,
+        module_id: Option<ModuleId>,
+        name: InternedText<'db>,
     },
 }
 

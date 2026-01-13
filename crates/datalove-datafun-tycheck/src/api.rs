@@ -251,6 +251,9 @@ pub fn type_check_script_units<'db>(
             }
         }
 
+        // Emit pending diagnostics with local spans.
+        ctx.emit_pending_diagnostics();
+
         // Build result for this unit.
         let errors = ctx.errors.into_iter()
             .map(|e| TypeErrorEntry::new(db, e))
@@ -309,6 +312,9 @@ pub fn type_check_script_with_context<'db>(
         check_statement(&mut ctx, &statement);
     }
 
+    // Emit pending diagnostics with local spans.
+    ctx.emit_pending_diagnostics();
+
     ScriptTypecheckResultRaw {
         root_parsed: parsed,
         errors: ctx.errors,
@@ -338,6 +344,9 @@ pub fn type_check_expr_with_context<'db>(
     }
 
     let _ = ctx.synthesize_expr(expr);
+
+    // Emit pending diagnostics with local spans.
+    ctx.emit_pending_diagnostics();
 
     ExprTypecheckResultRaw {
         errors: ctx.errors,
@@ -441,6 +450,9 @@ pub fn type_check_with_module_graph<'db>(
     for statement in &parsed.statements {
         check_statement(&mut ctx, &statement);
     }
+
+    // Emit pending diagnostics with local spans.
+    ctx.emit_pending_diagnostics();
 
     let errors = ctx
         .errors
@@ -700,9 +712,10 @@ pub fn typecheck_module_graph<'db>(
     ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, combined_expr_types, combined_call_targets)
 }
 
-/// Emit pending diagnostics with full span information.
+/// Emit pending diagnostics with full span information from module graph.
 ///
 /// Called after typechecking to enrich diagnostics with spans from all modules.
+/// Only handles diagnostics with Some(module_id) - those are from module graph path.
 fn emit_pending_diagnostics<'db>(
     db: &'db dyn crate::Db,
     parsed_graph: &ParsedModuleGraph<'db>,
@@ -710,7 +723,7 @@ fn emit_pending_diagnostics<'db>(
 ) {
     for diag in pending {
         match diag {
-            PendingDiagnostic::UndefinedVariable { expr_id, module_id, name } => {
+            PendingDiagnostic::UndefinedVariable { expr_id, module_id: Some(module_id), name } => {
                 if let Some(ts) = lookup_expr_span(db, parsed_graph, *expr_id, *module_id) {
                     let msg = format!("cannot find value `{}` in this scope", name.as_str(db));
                     datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
@@ -719,7 +732,7 @@ fn emit_pending_diagnostics<'db>(
                         .emit_type();
                 }
             }
-            PendingDiagnostic::UndefinedFunction { expr_id, module_id, name } => {
+            PendingDiagnostic::UndefinedFunction { expr_id, module_id: Some(module_id), name } => {
                 if let Some(ts) = lookup_expr_span(db, parsed_graph, *expr_id, *module_id) {
                     let msg = format!("cannot find function `{}` in this scope", name.as_str(db));
                     datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
@@ -728,7 +741,7 @@ fn emit_pending_diagnostics<'db>(
                         .emit_type();
                 }
             }
-            PendingDiagnostic::CannotSynthesize { expr_id, module_id, message } => {
+            PendingDiagnostic::CannotSynthesize { expr_id, module_id: Some(module_id), message } => {
                 if let Some(ts) = lookup_expr_span(db, parsed_graph, *expr_id, *module_id) {
                     datalove_diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
                         .code("F011")
@@ -736,7 +749,7 @@ fn emit_pending_diagnostics<'db>(
                         .emit_type();
                 }
             }
-            PendingDiagnostic::TypeMismatch { expr_id, module_id, expected, actual, label } => {
+            PendingDiagnostic::TypeMismatch { expr_id, module_id: Some(module_id), expected, actual, label } => {
                 if let Some(ts) = lookup_expr_span(db, parsed_graph, *expr_id, *module_id) {
                     let msg = format!("mismatched types: expected `{}`, found `{}`", expected.as_str(db), actual.as_str(db));
                     datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
@@ -745,7 +758,7 @@ fn emit_pending_diagnostics<'db>(
                         .emit_type();
                 }
             }
-            PendingDiagnostic::InvalidOperandType { expr_id, module_id, op, ty } => {
+            PendingDiagnostic::InvalidOperandType { expr_id, module_id: Some(module_id), op, ty } => {
                 if let Some(ts) = lookup_expr_span(db, parsed_graph, *expr_id, *module_id) {
                     let msg = format!("invalid operand type `{}` for operator `{}`", ty.as_str(db), op.as_str(db));
                     datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
@@ -756,7 +769,7 @@ fn emit_pending_diagnostics<'db>(
             }
             PendingDiagnostic::ArityMismatch {
                 call_expr_id,
-                call_module_id,
+                call_module_id: Some(call_module_id),
                 func_name,
                 func_local_index,
                 func_module_id,
@@ -775,7 +788,7 @@ fn emit_pending_diagnostics<'db>(
                     *actual,
                 );
             }
-            PendingDiagnostic::ResultRequiresBinding { expr_id, module_id } => {
+            PendingDiagnostic::ResultRequiresBinding { expr_id, module_id: Some(module_id) } => {
                 if let Some(ts) = lookup_expr_span(db, parsed_graph, *expr_id, *module_id) {
                     datalove_diagnostic::DiagnosticBuilder::error(db, "Result destructuring requires an else binding")
                         .code("F046")
@@ -784,7 +797,7 @@ fn emit_pending_diagnostics<'db>(
                         .emit_type();
                 }
             }
-            PendingDiagnostic::TryTypeMismatch { expr_id, module_id, operator, expected, actual } => {
+            PendingDiagnostic::TryTypeMismatch { expr_id, module_id: Some(module_id), operator, expected, actual } => {
                 if let Some(ts) = lookup_expr_span(db, parsed_graph, *expr_id, *module_id) {
                     let msg = format!("try operator `{}` requires {} type, found `{}`", operator.as_str(db), expected.as_str(db), actual.as_str(db));
                     datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
@@ -793,7 +806,7 @@ fn emit_pending_diagnostics<'db>(
                         .emit_type();
                 }
             }
-            PendingDiagnostic::TryReturnTypeMismatch { expr_id, module_id, operator, expected, actual } => {
+            PendingDiagnostic::TryReturnTypeMismatch { expr_id, module_id: Some(module_id), operator, expected, actual } => {
                 if let Some(ts) = lookup_expr_span(db, parsed_graph, *expr_id, *module_id) {
                     let msg = format!("try operator `{}` requires function to return {}, found `{}`", operator.as_str(db), expected.as_str(db), actual.as_str(db));
                     datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
@@ -803,6 +816,73 @@ fn emit_pending_diagnostics<'db>(
                         .emit_type();
                 }
             }
+            PendingDiagnostic::BreakOutsideLoop { local_index, module_id: Some(module_id) } => {
+                if let Some(spans) = parsed_graph.get_spans(db, *module_id) {
+                    if let Some(entry) = spans.lookup_break(*local_index) {
+                        let (text, span) = entry.to_text_and_span(db);
+                        let ts = TextSpan::new(text, span);
+                        datalove_diagnostic::DiagnosticBuilder::error(db, "`break` used outside of loop")
+                            .code("F050")
+                            .primary_label(ts, "break statement here")
+                            .note("break can only be used inside loop blocks")
+                            .emit_type();
+                    }
+                }
+            }
+            PendingDiagnostic::ContinueOutsideLoop { local_index, module_id: Some(module_id) } => {
+                if let Some(spans) = parsed_graph.get_spans(db, *module_id) {
+                    if let Some(entry) = spans.lookup_continue(*local_index) {
+                        let (text, span) = entry.to_text_and_span(db);
+                        let ts = TextSpan::new(text, span);
+                        datalove_diagnostic::DiagnosticBuilder::error(db, "`continue` used outside of loop")
+                            .code("F051")
+                            .primary_label(ts, "continue statement here")
+                            .note("continue can only be used inside loop blocks")
+                            .emit_type();
+                    }
+                }
+            }
+            PendingDiagnostic::VoidFunctionReturnsValue { local_index, module_id: Some(module_id) } => {
+                if let Some(spans) = parsed_graph.get_spans(db, *module_id) {
+                    if let Some(entry) = spans.lookup_ret(*local_index) {
+                        let (text, span) = entry.to_text_and_span(db);
+                        let ts = TextSpan::new(text, span);
+                        datalove_diagnostic::DiagnosticBuilder::error(db, "void function cannot return a value")
+                            .code("F052")
+                            .primary_label(ts, "return with value in void function")
+                            .note("remove the return value or add a return type to the function")
+                            .emit_type();
+                    }
+                }
+            }
+            PendingDiagnostic::FunctionRequiresReturnValue { local_index, module_id: Some(module_id) } => {
+                if let Some(spans) = parsed_graph.get_spans(db, *module_id) {
+                    if let Some(entry) = spans.lookup_ret(*local_index) {
+                        let (text, span) = entry.to_text_and_span(db);
+                        let ts = TextSpan::new(text, span);
+                        datalove_diagnostic::DiagnosticBuilder::error(db, "function requires return value")
+                            .code("F053")
+                            .primary_label(ts, "bare return in non-void function")
+                            .note("add a return value or change the function to void")
+                            .emit_type();
+                    }
+                }
+            }
+            PendingDiagnostic::UndefinedVariableSet { local_index, module_id: Some(module_id), name } => {
+                if let Some(spans) = parsed_graph.get_spans(db, *module_id) {
+                    if let Some(entry) = spans.lookup_set(*local_index) {
+                        let (text, span) = entry.to_text_and_span(db);
+                        let ts = TextSpan::new(text, span);
+                        datalove_diagnostic::DiagnosticBuilder::error(db, &format!("undefined variable: {}", name.as_str(db)))
+                            .code("F054")
+                            .primary_label(ts, "variable not defined")
+                            .note("declare the variable with 'var' before assigning to it")
+                            .emit_type();
+                    }
+                }
+            }
+            // Skip diagnostics with module_id: None - those are handled by TypeContext::emit_pending_diagnostics.
+            _ => {}
         }
     }
 }

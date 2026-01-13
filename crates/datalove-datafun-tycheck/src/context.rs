@@ -82,87 +82,52 @@ impl<'db> TypeContext<'db> {
         }
     }
 
-    /// Check if spans are available for immediate diagnostic emission.
-    pub fn has_spans(&self) -> bool {
-        !self.spans.entries.is_empty() || !self.spans.fun_spans.is_empty()
-    }
-
     pub fn add_error(&mut self, error: TypeError) {
         self.errors.push(error);
     }
 
-    // Error emission helpers that both emit diagnostics and return TypeError.
+    // Error collection helpers that collect pending diagnostics and return TypeError.
+    // Diagnostics are emitted at the end of typechecking via emit_pending_diagnostics().
 
     /// F001: Undefined variable.
     pub fn error_undefined_variable(&mut self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
-        if let Some(ts) = self.get_span(expr) {
-            let msg = format!("cannot find value `{}` in this scope", name.as_str(self.db));
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
-                .code("F001")
-                .primary_label(ts.clone(), "not found in this scope")
-                .emit_type();
-        } else if let Some(module_id) = self.current_module_id {
-            self.pending_diagnostics.push(PendingDiagnostic::UndefinedVariable {
-                expr_id: expr.as_id().index(),
-                module_id,
-                name,
-            });
-        }
+        self.pending_diagnostics.push(PendingDiagnostic::UndefinedVariable {
+            expr_id: expr.as_id().index(),
+            module_id: self.current_module_id,
+            name,
+        });
         TypeError::UnresolvedName(name.as_str(self.db).to_string())
     }
 
     /// F002: Undefined function.
     pub fn error_undefined_function(&mut self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
-        if let Some(ts) = self.get_span(expr) {
-            let msg = format!("cannot find function `{}` in this scope", name.as_str(self.db));
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
-                .code("F002")
-                .primary_label(ts.clone(), "not found in this scope")
-                .emit_type();
-        } else if let Some(module_id) = self.current_module_id {
-            self.pending_diagnostics.push(PendingDiagnostic::UndefinedFunction {
-                expr_id: expr.as_id().index(),
-                module_id,
-                name,
-            });
-        }
+        self.pending_diagnostics.push(PendingDiagnostic::UndefinedFunction {
+            expr_id: expr.as_id().index(),
+            module_id: self.current_module_id,
+            name,
+        });
         TypeError::UnresolvedName(name.as_str(self.db).to_string())
     }
 
     /// F011: Cannot synthesize type.
     pub fn error_cannot_synthesize(&mut self, expr: ExprFun<'db>, message: &str) -> TypeError {
-        if let Some(ts) = self.get_span(expr) {
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, message)
-                .code("F011")
-                .primary_label(ts.clone(), "cannot infer type")
-                .emit_type();
-        } else if let Some(module_id) = self.current_module_id {
-            self.pending_diagnostics.push(PendingDiagnostic::CannotSynthesize {
-                expr_id: expr.as_id().index(),
-                module_id,
-                message: InternedText::new(self.db, message.to_string()),
-            });
-        }
+        self.pending_diagnostics.push(PendingDiagnostic::CannotSynthesize {
+            expr_id: expr.as_id().index(),
+            module_id: self.current_module_id,
+            message: InternedText::new(self.db, message.to_string()),
+        });
         TypeError::CannotSynthesize
     }
 
     /// F016: Type mismatch.
     pub fn error_type_mismatch(&mut self, expr: ExprFun<'db>, expected: &str, actual: &str, label: &str) -> TypeError {
-        if let Some(ts) = self.get_span(expr) {
-            let msg = format!("mismatched types: expected `{}`, found `{}`", expected, actual);
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
-                .code("F016")
-                .primary_label(ts.clone(), label)
-                .emit_type();
-        } else if let Some(module_id) = self.current_module_id {
-            self.pending_diagnostics.push(PendingDiagnostic::TypeMismatch {
-                expr_id: expr.as_id().index(),
-                module_id,
-                expected: InternedText::new(self.db, expected.to_string()),
-                actual: InternedText::new(self.db, actual.to_string()),
-                label: InternedText::new(self.db, label.to_string()),
-            });
-        }
+        self.pending_diagnostics.push(PendingDiagnostic::TypeMismatch {
+            expr_id: expr.as_id().index(),
+            module_id: self.current_module_id,
+            expected: InternedText::new(self.db, expected.to_string()),
+            actual: InternedText::new(self.db, actual.to_string()),
+            label: InternedText::new(self.db, label.to_string()),
+        });
         TypeError::TypeMismatch {
             expected: expected.to_string(),
             actual: actual.to_string(),
@@ -177,93 +142,39 @@ impl<'db> TypeContext<'db> {
         expected: usize,
         actual: usize,
     ) -> TypeError {
-        if let Some(ts) = self.get_span(expr) {
-            // Spans available - emit diagnostic immediately.
-            let msg = format!(
-                "this function takes {} argument{} but {} {} supplied",
-                expected,
-                if expected == 1 { "" } else { "s" },
-                actual,
-                if actual == 1 { "was" } else { "were" }
-            );
-            let label = format!(
-                "expected {} argument{}",
-                expected,
-                if expected == 1 { "" } else { "s" }
-            );
-            let mut builder = datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
-                .code("F045")
-                .primary_label(ts.clone(), &label);
+        let (func_local_index, func_module_id) = self.lookup_function_ast(func_name)
+            .map(|(func_ast, mod_id)| (func_ast.local_index(self.db), mod_id))
+            .unwrap_or((0, None));
 
-            // Add secondary label pointing to function definition if available.
-            if let Some((func_ast, _)) = self.lookup_function_ast(func_name) {
-                let local_index = func_ast.local_index(self.db);
-                if let Some(entry) = self.spans.lookup_fun(local_index) {
-                    let (text, span) = entry.to_text_and_span(self.db);
-                    let def_span = TextSpan::new(text, span);
-                    let def_label = format!(
-                        "function `{}` defined here with {} parameter{}",
-                        func_name.as_str(self.db),
-                        expected,
-                        if expected == 1 { "" } else { "s" }
-                    );
-                    builder = builder.secondary_label(def_span, &def_label);
-                }
-            }
-
-            builder.emit_type();
-        } else if let Some(call_module_id) = self.current_module_id {
-            // No spans available - collect pending diagnostic for post-hoc enrichment.
-            let (func_local_index, func_module_id) = self.lookup_function_ast(func_name)
-                .map(|(func_ast, mod_id)| (func_ast.local_index(self.db), mod_id))
-                .unwrap_or((0, None));
-
-            self.pending_diagnostics.push(PendingDiagnostic::ArityMismatch {
-                call_expr_id: expr.as_id().index(),
-                call_module_id,
-                func_name,
-                func_local_index,
-                func_module_id,
-                expected,
-                actual,
-            });
-        }
+        self.pending_diagnostics.push(PendingDiagnostic::ArityMismatch {
+            call_expr_id: expr.as_id().index(),
+            call_module_id: self.current_module_id,
+            func_name,
+            func_local_index,
+            func_module_id,
+            expected,
+            actual,
+        });
         TypeError::ArityMismatch { expected, actual }
     }
 
     /// F046: Result destructuring requires error binding.
     pub fn error_result_requires_binding(&mut self, expr: ExprFun<'db>) -> TypeError {
-        if let Some(ts) = self.get_span(expr) {
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, "Result destructuring requires an else binding")
-                .code("F046")
-                .primary_label(ts.clone(), "Result type here")
-                .note("use `if result |value| ... else |err| ... end if` to handle both cases")
-                .emit_type();
-        } else if let Some(module_id) = self.current_module_id {
-            self.pending_diagnostics.push(PendingDiagnostic::ResultRequiresBinding {
-                expr_id: expr.as_id().index(),
-                module_id,
-            });
-        }
+        self.pending_diagnostics.push(PendingDiagnostic::ResultRequiresBinding {
+            expr_id: expr.as_id().index(),
+            module_id: self.current_module_id,
+        });
         TypeError::ResultRequiresErrorBinding
     }
 
     /// F026: Invalid operand type for operator.
     pub fn error_invalid_operand_type(&mut self, expr: ExprFun<'db>, op: &str, ty: &str) -> TypeError {
-        if let Some(ts) = self.get_span(expr) {
-            let msg = format!("invalid operand type `{}` for operator `{}`", ty, op);
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
-                .code("F026")
-                .primary_label(ts.clone(), &format!("operator `{}` cannot be applied to type `{}`", op, ty))
-                .emit_type();
-        } else if let Some(module_id) = self.current_module_id {
-            self.pending_diagnostics.push(PendingDiagnostic::InvalidOperandType {
-                expr_id: expr.as_id().index(),
-                module_id,
-                op: InternedText::new(self.db, op.to_string()),
-                ty: InternedText::new(self.db, ty.to_string()),
-            });
-        }
+        self.pending_diagnostics.push(PendingDiagnostic::InvalidOperandType {
+            expr_id: expr.as_id().index(),
+            module_id: self.current_module_id,
+            op: InternedText::new(self.db, op.to_string()),
+            ty: InternedText::new(self.db, ty.to_string()),
+        });
         TypeError::InvalidOperandType {
             op: op.to_string(),
             ty: ty.to_string(),
@@ -272,21 +183,13 @@ impl<'db> TypeContext<'db> {
 
     /// F048: Try operator type mismatch.
     pub fn error_try_type_mismatch(&mut self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
-        if let Some(ts) = self.get_span(expr) {
-            let msg = format!("try operator `{}` requires {} type, found `{}`", operator, expected, actual);
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
-                .code("F048")
-                .primary_label(ts.clone(), &format!("expected {}, found `{}`", expected, actual))
-                .emit_type();
-        } else if let Some(module_id) = self.current_module_id {
-            self.pending_diagnostics.push(PendingDiagnostic::TryTypeMismatch {
-                expr_id: expr.as_id().index(),
-                module_id,
-                operator: InternedText::new(self.db, operator.to_string()),
-                expected: InternedText::new(self.db, expected.to_string()),
-                actual: InternedText::new(self.db, actual.to_string()),
-            });
-        }
+        self.pending_diagnostics.push(PendingDiagnostic::TryTypeMismatch {
+            expr_id: expr.as_id().index(),
+            module_id: self.current_module_id,
+            operator: InternedText::new(self.db, operator.to_string()),
+            expected: InternedText::new(self.db, expected.to_string()),
+            actual: InternedText::new(self.db, actual.to_string()),
+        });
         TypeError::TryTypeMismatch {
             operator: operator.to_string(),
             actual_type: actual.to_string(),
@@ -295,22 +198,13 @@ impl<'db> TypeContext<'db> {
 
     /// F049: Try operator return type mismatch.
     pub fn error_try_return_type_mismatch(&mut self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
-        if let Some(ts) = self.get_span(expr) {
-            let msg = format!("try operator `{}` requires function to return {}, found `{}`", operator, expected, actual);
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
-                .code("F049")
-                .primary_label(ts.clone(), "try operator here")
-                .note(&format!("function must return {} to use `{}` operator", expected, operator))
-                .emit_type();
-        } else if let Some(module_id) = self.current_module_id {
-            self.pending_diagnostics.push(PendingDiagnostic::TryReturnTypeMismatch {
-                expr_id: expr.as_id().index(),
-                module_id,
-                operator: InternedText::new(self.db, operator.to_string()),
-                expected: InternedText::new(self.db, expected.to_string()),
-                actual: InternedText::new(self.db, actual.to_string()),
-            });
-        }
+        self.pending_diagnostics.push(PendingDiagnostic::TryReturnTypeMismatch {
+            expr_id: expr.as_id().index(),
+            module_id: self.current_module_id,
+            operator: InternedText::new(self.db, operator.to_string()),
+            expected: InternedText::new(self.db, expected.to_string()),
+            actual: InternedText::new(self.db, actual.to_string()),
+        });
         TypeError::TryReturnTypeMismatch {
             operator: operator.to_string(),
             return_type: actual.to_string(),
@@ -325,73 +219,249 @@ impl<'db> TypeContext<'db> {
         })
     }
 
-    /// F050: Break outside loop.
-    pub fn error_break_outside_loop(&self, stmt: &StmtBreak) -> TypeError {
-        if let Some(entry) = self.spans.lookup_break(stmt.local_index) {
-            let (text, span) = entry.to_text_and_span(self.db);
-            let ts = TextSpan::new(text, span);
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, "`break` used outside of loop")
-                .code("F050")
-                .primary_label(ts, "break statement here")
-                .note("break can only be used inside loop blocks")
-                .emit_type();
+    /// Emit all pending diagnostics using local spans.
+    ///
+    /// Called at the end of typechecking for non-module-graph paths.
+    /// For module-graph paths, use api::emit_pending_diagnostics instead.
+    pub fn emit_pending_diagnostics(&self) {
+        use salsa::plumbing::FromId;
+
+        for diag in &self.pending_diagnostics {
+            match diag {
+                PendingDiagnostic::UndefinedVariable { expr_id, module_id: _, name } => {
+                    let id = unsafe { salsa::Id::from_index(*expr_id) };
+                    let expr = ExprFun::from_id(id);
+                    if let Some(ts) = self.get_span(expr) {
+                        let msg = format!("cannot find value `{}` in this scope", name.as_str(self.db));
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                            .code("F001")
+                            .primary_label(ts, "not found in this scope")
+                            .emit_type();
+                    }
+                }
+                PendingDiagnostic::UndefinedFunction { expr_id, module_id: _, name } => {
+                    let id = unsafe { salsa::Id::from_index(*expr_id) };
+                    let expr = ExprFun::from_id(id);
+                    if let Some(ts) = self.get_span(expr) {
+                        let msg = format!("cannot find function `{}` in this scope", name.as_str(self.db));
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                            .code("F002")
+                            .primary_label(ts, "not found in this scope")
+                            .emit_type();
+                    }
+                }
+                PendingDiagnostic::CannotSynthesize { expr_id, module_id: _, message } => {
+                    let id = unsafe { salsa::Id::from_index(*expr_id) };
+                    let expr = ExprFun::from_id(id);
+                    if let Some(ts) = self.get_span(expr) {
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, message.as_str(self.db))
+                            .code("F011")
+                            .primary_label(ts, "cannot infer type")
+                            .emit_type();
+                    }
+                }
+                PendingDiagnostic::TypeMismatch { expr_id, module_id: _, expected, actual, label } => {
+                    let id = unsafe { salsa::Id::from_index(*expr_id) };
+                    let expr = ExprFun::from_id(id);
+                    if let Some(ts) = self.get_span(expr) {
+                        let msg = format!("mismatched types: expected `{}`, found `{}`", expected.as_str(self.db), actual.as_str(self.db));
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                            .code("F016")
+                            .primary_label(ts, label.as_str(self.db))
+                            .emit_type();
+                    }
+                }
+                PendingDiagnostic::InvalidOperandType { expr_id, module_id: _, op, ty } => {
+                    let id = unsafe { salsa::Id::from_index(*expr_id) };
+                    let expr = ExprFun::from_id(id);
+                    if let Some(ts) = self.get_span(expr) {
+                        let msg = format!("invalid operand type `{}` for operator `{}`", ty.as_str(self.db), op.as_str(self.db));
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                            .code("F026")
+                            .primary_label(ts, &format!("operator `{}` cannot be applied to type `{}`", op.as_str(self.db), ty.as_str(self.db)))
+                            .emit_type();
+                    }
+                }
+                PendingDiagnostic::ArityMismatch {
+                    call_expr_id,
+                    call_module_id: _,
+                    func_name,
+                    func_local_index,
+                    func_module_id: _,
+                    expected,
+                    actual,
+                } => {
+                    let id = unsafe { salsa::Id::from_index(*call_expr_id) };
+                    let expr = ExprFun::from_id(id);
+                    if let Some(ts) = self.get_span(expr) {
+                        let msg = format!(
+                            "this function takes {} argument{} but {} {} supplied",
+                            expected,
+                            if *expected == 1 { "" } else { "s" },
+                            actual,
+                            if *actual == 1 { "was" } else { "were" }
+                        );
+                        let label = format!(
+                            "expected {} argument{}",
+                            expected,
+                            if *expected == 1 { "" } else { "s" }
+                        );
+                        let mut builder = datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                            .code("F045")
+                            .primary_label(ts, &label);
+
+                        // Add secondary label for function definition.
+                        if let Some(entry) = self.spans.lookup_fun(*func_local_index) {
+                            let (text, span) = entry.to_text_and_span(self.db);
+                            let def_span = TextSpan::new(text, span);
+                            let def_label = format!(
+                                "function `{}` defined here with {} parameter{}",
+                                func_name.as_str(self.db),
+                                expected,
+                                if *expected == 1 { "" } else { "s" }
+                            );
+                            builder = builder.secondary_label(def_span, &def_label);
+                        }
+
+                        builder.emit_type();
+                    }
+                }
+                PendingDiagnostic::ResultRequiresBinding { expr_id, module_id: _ } => {
+                    let id = unsafe { salsa::Id::from_index(*expr_id) };
+                    let expr = ExprFun::from_id(id);
+                    if let Some(ts) = self.get_span(expr) {
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, "Result destructuring requires an else binding")
+                            .code("F046")
+                            .primary_label(ts, "Result type here")
+                            .note("use `if result |value| ... else |err| ... end if` to handle both cases")
+                            .emit_type();
+                    }
+                }
+                PendingDiagnostic::TryTypeMismatch { expr_id, module_id: _, operator, expected, actual } => {
+                    let id = unsafe { salsa::Id::from_index(*expr_id) };
+                    let expr = ExprFun::from_id(id);
+                    if let Some(ts) = self.get_span(expr) {
+                        let msg = format!("try operator `{}` requires {} type, found `{}`", operator.as_str(self.db), expected.as_str(self.db), actual.as_str(self.db));
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                            .code("F048")
+                            .primary_label(ts, &format!("expected {}, found `{}`", expected.as_str(self.db), actual.as_str(self.db)))
+                            .emit_type();
+                    }
+                }
+                PendingDiagnostic::TryReturnTypeMismatch { expr_id, module_id: _, operator, expected, actual } => {
+                    let id = unsafe { salsa::Id::from_index(*expr_id) };
+                    let expr = ExprFun::from_id(id);
+                    if let Some(ts) = self.get_span(expr) {
+                        let msg = format!("try operator `{}` requires function to return {}, found `{}`", operator.as_str(self.db), expected.as_str(self.db), actual.as_str(self.db));
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, &msg)
+                            .code("F049")
+                            .primary_label(ts, "try operator here")
+                            .note(&format!("function must return {} to use `{}` operator", expected.as_str(self.db), operator.as_str(self.db)))
+                            .emit_type();
+                    }
+                }
+                PendingDiagnostic::BreakOutsideLoop { local_index, module_id: _ } => {
+                    if let Some(entry) = self.spans.lookup_break(*local_index) {
+                        let (text, span) = entry.to_text_and_span(self.db);
+                        let ts = TextSpan::new(text, span);
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, "`break` used outside of loop")
+                            .code("F050")
+                            .primary_label(ts, "break statement here")
+                            .note("break can only be used inside loop blocks")
+                            .emit_type();
+                    }
+                }
+                PendingDiagnostic::ContinueOutsideLoop { local_index, module_id: _ } => {
+                    if let Some(entry) = self.spans.lookup_continue(*local_index) {
+                        let (text, span) = entry.to_text_and_span(self.db);
+                        let ts = TextSpan::new(text, span);
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, "`continue` used outside of loop")
+                            .code("F051")
+                            .primary_label(ts, "continue statement here")
+                            .note("continue can only be used inside loop blocks")
+                            .emit_type();
+                    }
+                }
+                PendingDiagnostic::VoidFunctionReturnsValue { local_index, module_id: _ } => {
+                    if let Some(entry) = self.spans.lookup_ret(*local_index) {
+                        let (text, span) = entry.to_text_and_span(self.db);
+                        let ts = TextSpan::new(text, span);
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, "void function cannot return a value")
+                            .code("F052")
+                            .primary_label(ts, "return with value in void function")
+                            .note("remove the return value or add a return type to the function")
+                            .emit_type();
+                    }
+                }
+                PendingDiagnostic::FunctionRequiresReturnValue { local_index, module_id: _ } => {
+                    if let Some(entry) = self.spans.lookup_ret(*local_index) {
+                        let (text, span) = entry.to_text_and_span(self.db);
+                        let ts = TextSpan::new(text, span);
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, "function requires return value")
+                            .code("F053")
+                            .primary_label(ts, "bare return in non-void function")
+                            .note("add a return value or change the function to void")
+                            .emit_type();
+                    }
+                }
+                PendingDiagnostic::UndefinedVariableSet { local_index, module_id: _, name } => {
+                    if let Some(entry) = self.spans.lookup_set(*local_index) {
+                        let (text, span) = entry.to_text_and_span(self.db);
+                        let ts = TextSpan::new(text, span);
+                        datalove_diagnostic::DiagnosticBuilder::error(self.db, &format!("undefined variable: {}", name.as_str(self.db)))
+                            .code("F054")
+                            .primary_label(ts, "variable not defined")
+                            .note("declare the variable with 'var' before assigning to it")
+                            .emit_type();
+                    }
+                }
+            }
         }
+    }
+
+    /// F050: Break outside loop.
+    pub fn error_break_outside_loop(&mut self, stmt: &StmtBreak) -> TypeError {
+        self.pending_diagnostics.push(PendingDiagnostic::BreakOutsideLoop {
+            local_index: stmt.local_index,
+            module_id: self.current_module_id,
+        });
         TypeError::BreakOutsideLoop
     }
 
     /// F051: Continue outside loop.
-    pub fn error_continue_outside_loop(&self, stmt: &StmtContinue) -> TypeError {
-        if let Some(entry) = self.spans.lookup_continue(stmt.local_index) {
-            let (text, span) = entry.to_text_and_span(self.db);
-            let ts = TextSpan::new(text, span);
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, "`continue` used outside of loop")
-                .code("F051")
-                .primary_label(ts, "continue statement here")
-                .note("continue can only be used inside loop blocks")
-                .emit_type();
-        }
+    pub fn error_continue_outside_loop(&mut self, stmt: &StmtContinue) -> TypeError {
+        self.pending_diagnostics.push(PendingDiagnostic::ContinueOutsideLoop {
+            local_index: stmt.local_index,
+            module_id: self.current_module_id,
+        });
         TypeError::ContinueOutsideLoop
     }
 
     /// F052: Void function cannot return a value.
-    pub fn error_void_function_returns_value(&self, stmt: &StmtRet) -> TypeError {
-        if let Some(entry) = self.spans.lookup_ret(stmt.local_index) {
-            let (text, span) = entry.to_text_and_span(self.db);
-            let ts = TextSpan::new(text, span);
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, "void function cannot return a value")
-                .code("F052")
-                .primary_label(ts, "return with value in void function")
-                .note("remove the return value or add a return type to the function")
-                .emit_type();
-        }
+    pub fn error_void_function_returns_value(&mut self, stmt: &StmtRet) -> TypeError {
+        self.pending_diagnostics.push(PendingDiagnostic::VoidFunctionReturnsValue {
+            local_index: stmt.local_index,
+            module_id: self.current_module_id,
+        });
         TypeError::VoidFunctionReturnsValue
     }
 
     /// F053: Non-void function requires return value.
-    pub fn error_function_requires_return_value(&self, stmt: &StmtRet) -> TypeError {
-        if let Some(entry) = self.spans.lookup_ret(stmt.local_index) {
-            let (text, span) = entry.to_text_and_span(self.db);
-            let ts = TextSpan::new(text, span);
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, "function requires return value")
-                .code("F053")
-                .primary_label(ts, "bare return in non-void function")
-                .note("add a return value or change the function to void")
-                .emit_type();
-        }
+    pub fn error_function_requires_return_value(&mut self, stmt: &StmtRet) -> TypeError {
+        self.pending_diagnostics.push(PendingDiagnostic::FunctionRequiresReturnValue {
+            local_index: stmt.local_index,
+            module_id: self.current_module_id,
+        });
         TypeError::FunctionRequiresReturnValue
     }
 
     /// F054: Undefined variable in set statement.
-    pub fn error_undefined_variable_set(&self, stmt: &StmtSet, name: &str) -> TypeError {
-        if let Some(entry) = self.spans.lookup_set(stmt.local_index) {
-            let (text, span) = entry.to_text_and_span(self.db);
-            let ts = TextSpan::new(text, span);
-            datalove_diagnostic::DiagnosticBuilder::error(self.db, &format!("undefined variable: {}", name))
-                .code("F054")
-                .primary_label(ts, "variable not defined")
-                .note("declare the variable with 'var' before assigning to it")
-                .emit_type();
-        }
+    pub fn error_undefined_variable_set(&mut self, stmt: &StmtSet, name: &str) -> TypeError {
+        self.pending_diagnostics.push(PendingDiagnostic::UndefinedVariableSet {
+            local_index: stmt.local_index,
+            module_id: self.current_module_id,
+            name: InternedText::new(self.db, name.to_string()),
+        });
         TypeError::UndefinedVariable
     }
 
