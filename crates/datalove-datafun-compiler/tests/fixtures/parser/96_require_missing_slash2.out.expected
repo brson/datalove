@@ -3,24 +3,24 @@
     "statements": [
       {
         "kind": "ParseError",
-        "message": "expected item name after '.'"
+        "message": "expected '/' after package alias"
       }
     ]
   },
   "diagnostics": [
     {
-      "code": "P018",
+      "code": "P004",
       "labels": [
         {
-          "message": "expected item name",
+          "message": "expected '/' after package alias",
           "span": [
-            11,
-            11
+            23,
+            23
           ],
           "text": ""
         }
       ],
-      "message": "expected item name after '.'"
+      "message": "expected '/' after package alias"
     }
   ]
 }

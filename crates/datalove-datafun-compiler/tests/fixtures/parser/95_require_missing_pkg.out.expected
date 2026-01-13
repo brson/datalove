@@ -3,24 +3,24 @@
     "statements": [
       {
         "kind": "ParseError",
-        "message": "expected item name after '.'"
+        "message": "expected package name after '/'"
       }
     ]
   },
   "diagnostics": [
     {
-      "code": "P018",
+      "code": "P014",
       "labels": [
         {
-          "message": "expected item name",
+          "message": "expected package name",
           "span": [
-            11,
-            11
+            19,
+            19
           ],
           "text": ""
         }
       ],
-      "message": "expected item name after '.'"
+      "message": "expected package name after '/'"
     }
   ]
 }

@@ -21,6 +21,8 @@ enum TokenSource<'db> {
     Vec {
         tokens: Vec<TreeToken<'db>>,
         pos: usize,
+        /// Last consumed token for span tracking.
+        last_token: Option<TreeToken<'db>>,
     },
     /// Iterator-backed with lookahead buffer (zero allocation).
     Iter {
@@ -73,7 +75,7 @@ impl<'db> Parser<'db> {
     ) -> Self {
         Parser {
             db,
-            source: TokenSource::Vec { tokens, pos: 0 },
+            source: TokenSource::Vec { tokens, pos: 0, last_token: None },
             had_error: false,
             source_text,
             module_id,
@@ -308,38 +310,14 @@ impl<'db> Parser<'db> {
             self.extract_text_span(token).start()
         } else {
             // At end of input, return end of last token.
-            match &self.source {
-                TokenSource::Vec { tokens, pos } => {
-                    if *pos > 0 {
-                        if let Some(token) = tokens.get(pos - 1) {
-                            return self.extract_text_span(token).end();
-                        }
-                    }
-                    0
-                }
-                TokenSource::Iter { last_token, .. } => {
-                    if let Some(token) = last_token {
-                        self.extract_text_span(token).end()
-                    } else {
-                        0
-                    }
-                }
-            }
+            self.last_byte_end()
         }
     }
 
     /// Get the byte position at end of previous token (after consuming).
     pub(super) fn last_byte_end(&self) -> usize {
         match &self.source {
-            TokenSource::Vec { tokens, pos } => {
-                if *pos > 0 {
-                    if let Some(token) = tokens.get(pos - 1) {
-                        return self.extract_text_span(token).end();
-                    }
-                }
-                0
-            }
-            TokenSource::Iter { last_token, .. } => {
+            TokenSource::Vec { last_token, .. } | TokenSource::Iter { last_token, .. } => {
                 if let Some(token) = last_token {
                     self.extract_text_span(token).end()
                 } else {
@@ -347,6 +325,19 @@ impl<'db> Parser<'db> {
                 }
             }
         }
+    }
+
+    /// Get span for error reporting.
+    ///
+    /// Prefers current peek token; falls back to end of last consumed token.
+    /// Use this instead of `peek_text_span()` when the error might occur at EOF.
+    pub(super) fn error_span(&self) -> TextSpan<'db> {
+        if let Some(token) = self.peek() {
+            return self.extract_text_span(token);
+        }
+        // At EOF: zero-width span at end of last token.
+        let end = self.last_byte_end();
+        TextSpan::new(self.source_text, end..end)
     }
 
     /// Create an expression and record its span in the side table.
@@ -463,17 +454,19 @@ impl<'db> TokenStream<'db> for Parser<'db> {
 
     fn peek(&self) -> Option<&TreeToken<'db>> {
         match &self.source {
-            TokenSource::Vec { tokens, pos } => tokens.get(*pos),
+            TokenSource::Vec { tokens, pos, .. } => tokens.get(*pos),
             TokenSource::Iter { buffer, .. } => buffer[0].as_ref(),
         }
     }
 
     fn next(&mut self) -> Option<TreeToken<'db>> {
         match &mut self.source {
-            TokenSource::Vec { tokens, pos } => {
+            TokenSource::Vec { tokens, pos, last_token } => {
                 let token = tokens.get(*pos).cloned();
                 if token.is_some() {
                     *pos += 1;
+                    // Remember last consumed token.
+                    *last_token = token.clone();
                 }
                 token
             }

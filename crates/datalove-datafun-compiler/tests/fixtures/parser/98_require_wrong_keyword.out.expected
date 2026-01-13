@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "expected 'module' or 'data' after 'require'"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P005",
+      "labels": [
+        {
+          "message": "expected 'module' or 'data'",
+          "span": [
+            8,
+            11
+          ],
+          "text": "foo"
+        }
+      ],
+      "message": "expected 'module' or 'data' after 'require'"
+    }
+  ]
+}

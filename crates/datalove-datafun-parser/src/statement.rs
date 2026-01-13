@@ -261,7 +261,7 @@ impl<'db> Parser<'db> {
                 self.parse_fun_params(inner, Some((open_span, "in this parameter list")))
             }
             _ => {
-                let ts = self.peek_text_span();
+                let ts = self.error_span();
                 return self.emit_stmt_error(ts,
                     "expected parameter list",
                     "P002",
@@ -423,7 +423,7 @@ impl<'db> Parser<'db> {
 
                 // Need forward slash.
                 if !self.peek_sigil(Sigil::SlashForward) {
-                    let ts = self.peek_text_span();
+                    let ts = self.error_span();
                     return self.emit_stmt_error(ts,
                         "expected '/' after import space",
                         "P003",
@@ -435,7 +435,7 @@ impl<'db> Parser<'db> {
                 let package_alias = match self.eat_name() {
                     Some(n) => n,
                     None => {
-                        let ts = self.peek_text_span();
+                        let ts = self.error_span();
                         return self.emit_stmt_error(ts,
                             "expected package name after '/'",
                             "P014",
@@ -446,7 +446,7 @@ impl<'db> Parser<'db> {
 
                 // Need forward slash.
                 if !self.peek_sigil(Sigil::SlashForward) {
-                    let ts = self.peek_text_span();
+                    let ts = self.error_span();
                     return self.emit_stmt_error(ts,
                         "expected '/' after package alias",
                         "P004",
@@ -458,7 +458,7 @@ impl<'db> Parser<'db> {
                 let module_alias = match self.eat_name() {
                     Some(n) => n,
                     None => {
-                        let ts = self.peek_text_span();
+                        let ts = self.error_span();
                         return self.emit_stmt_error(ts,
                             "expected module name after '/'",
                             "P015",
@@ -534,7 +534,7 @@ impl<'db> Parser<'db> {
 
         // Need dot sigil.
         if !self.peek_sigil(Sigil::Dot) {
-            let ts = self.peek_text_span();
+            let ts = self.error_span();
             return self.emit_stmt_error(ts,
                 "expected '.' after module name",
                 "P006",
@@ -547,7 +547,7 @@ impl<'db> Parser<'db> {
         let item_name = match self.eat_name() {
             Some(n) => n,
             None => {
-                let ts = self.peek_text_span();
+                let ts = self.error_span();
                 return self.emit_stmt_error(ts,
                     "expected item name after '.'",
                     "P018",

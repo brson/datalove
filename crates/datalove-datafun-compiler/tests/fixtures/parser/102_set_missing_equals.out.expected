@@ -1,0 +1,47 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Var",
+            "name": "x",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "heap": "Local",
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            }
+          },
+          {
+            "kind": "ParseError",
+            "message": "expected '=' after set target"
+          }
+        ],
+        "kind": "Fun",
+        "name": "test",
+        "params": [],
+        "return_type": null
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D025",
+      "labels": [
+        {
+          "message": "expected '='",
+          "span": [
+            36,
+            37
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "expected '=' after set target"
+    }
+  ]
+}

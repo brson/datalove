@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "expected '=' after let binding"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D023",
+      "labels": [
+        {
+          "message": "expected '='",
+          "span": [
+            6,
+            7
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "expected '=' after let binding"
+    }
+  ]
+}

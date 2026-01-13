@@ -3,24 +3,24 @@
     "statements": [
       {
         "kind": "ParseError",
-        "message": "expected item name after '.'"
+        "message": "expected '/' after import space"
       }
     ]
   },
   "diagnostics": [
     {
-      "code": "P018",
+      "code": "P003",
       "labels": [
         {
-          "message": "expected item name",
+          "message": "expected '/' after import space",
           "span": [
-            11,
-            11
+            18,
+            18
           ],
           "text": ""
         }
       ],
-      "message": "expected item name after '.'"
+      "message": "expected '/' after import space"
     }
   ]
 }

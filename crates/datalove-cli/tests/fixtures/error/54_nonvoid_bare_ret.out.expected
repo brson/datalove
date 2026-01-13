@@ -1,0 +1,10 @@
+[31m[F053] Error:[0m function requires return value
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/54_nonvoid_bare_ret.dfs:2:5[38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m2 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;201mr[0m[38;5;201me[0m[38;5;201mt[0m
+ [38;5;240m  │[0m     [38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m  
+ [38;5;240m  │[0m      [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m bare return in non-void function
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: add a return value or change the function to void
+[38;5;246m───╯[0m
+Error: Type error
