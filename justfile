@@ -10,6 +10,8 @@ test-slow:
     cargo test -p datalove-datafun-compiler --features slow_tests
     just check-wasm
 
+test-ci: test test-slow
+
 # Time all tests, showing only tests that take over 1 second.
 test-time:
     env RUST_TEST_TIME_UNIT=1000,10000 \
