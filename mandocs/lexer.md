@@ -1,4 +1,4 @@
-# Datalove's lexical structure
+# Datalove's Lexical Structure
 
 
 ## Source maps

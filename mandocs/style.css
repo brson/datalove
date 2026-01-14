@@ -175,6 +175,14 @@ main {
     padding: 0 2rem 2rem 2rem;
 }
 
+h1 {
+    text-align: center;
+    width: 50%;
+    min-width: 200px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 h1, h2, h3, h4 {
     color: var(--accent);
     margin-top: 2rem;

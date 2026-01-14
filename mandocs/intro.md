@@ -1,4 +1,4 @@
-# A 10 Minute intro to the Datalove language
+# A 10 Minute Intro to the Datalove Language
 
 As a Rust programmer who sometimes
 scripts and prototypes in Python,
