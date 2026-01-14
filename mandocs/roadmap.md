@@ -34,7 +34,6 @@
 
 - lsp
 - tables
-- multiple scripts
 - fully reactive scripts
 - clone, working heap types, and default syntax everywhere
 - jit
@@ -50,6 +49,7 @@
 
 # future
 
+- multiple scripts
 - analysis caching
 - sourceless parsing
 - clean up demo files in style of learn x in y minutes
