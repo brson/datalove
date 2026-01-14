@@ -141,7 +141,6 @@ but I do have a [vision](vision.md) about what it will be.
 ---
 
 - [Features](features.md)
-- [Datalove Compared To...](comparisons.md)
 - [Design Notes](design-notes.md)
 - [Novelties](novelties.md)
 - [Datalit Runtime Types](datalit-runtime-types.md)
