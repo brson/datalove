@@ -52,16 +52,16 @@ use datalove_datafun_ir::{IrModuleId, FuncId, IrType, IrScriptUnit};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_compiler::drop_analysis;
 use datalove_datafun_tycheck::{
-    typecheck_module_graph, type_check_script_units, create_batch_spec,
+    typecheck_module_graph, typecheck_module_graph_with_mode,
+    type_check_script_units, create_batch_spec,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
     UnitTypecheckResultTracked,
+    DbClone, ParallelMode, parallel_mode_from_env,
 };
 use datalove_datafun_compiler::module_graph::{
     ModuleGraph, ModuleGraphTypecheckResult, ModuleId,
-    ParsedModuleGraph, parse_module_graph, parse_module_graph_with_mode,
-    ParallelMode,
+    ParsedModuleGraph, parse_module_graph_with_mode,
 };
-use datalove_datafun_tycheck::DbClone;
 use datalove_datafun_interp::{CallDispatcher, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;
 use drop_analysis::FunctionDropAnalysis;
@@ -209,15 +209,15 @@ impl ModuleCompilationPipeline {
         self.world.update_source(db, &path, source);
     }
 
-    /// Compile all modules (first compilation, only needs `&db`).
-    pub fn compile_fresh<'db>(&mut self, db: &'db dyn salsa::Database) -> CompiledModules<'db> {
-        let (module_graph, resolved_requires) = self.world.build_fresh(db);
-        self.compile_impl(db, module_graph, resolved_requires)
+    /// Compile all modules (first compilation).
+    ///
+    /// Uses `DATALOVE_PARALLEL` env var to determine parallelism mode.
+    pub fn compile_fresh<'db>(&mut self, db: &'db dyn DbClone) -> CompiledModules<'db> {
+        let mode = parallel_mode_from_env();
+        self.compile_fresh_with_mode(db, mode)
     }
 
-    /// Compile all modules with configurable parallelism.
-    ///
-    /// Use this for benchmarking parallel vs sequential parsing.
+    /// Compile all modules with explicit parallelism mode.
     pub fn compile_fresh_with_mode<'db>(
         &mut self,
         db: &'db dyn DbClone,
@@ -228,28 +228,30 @@ impl ModuleCompilationPipeline {
     }
 
     /// Compile all modules (incremental, needs `&mut db`).
-    pub fn compile<'db>(
+    ///
+    /// Uses `DATALOVE_PARALLEL` env var to determine parallelism mode.
+    /// Requires a concrete type implementing `DbClone` for potential parallelism.
+    pub fn compile<'db, D: DbClone>(
         &mut self,
-        db: &'db mut dyn salsa::Database,
-    ) -> (CompiledModules<'db>, &'db dyn salsa::Database) {
+        db: &'db mut D,
+    ) -> (CompiledModules<'db>, &'db D) {
+        let mode = parallel_mode_from_env();
+        self.compile_with_mode(db, mode)
+    }
+
+    /// Compile all modules with explicit parallelism mode (incremental).
+    pub fn compile_with_mode<'db, D: DbClone>(
+        &mut self,
+        db: &'db mut D,
+        mode: ParallelMode,
+    ) -> (CompiledModules<'db>, &'db D) {
         let (module_graph, resolved_requires) = self.world.prepare_for_compile(db);
 
         // Reborrow as immutable for the rest of compilation.
-        let db: &'db dyn salsa::Database = &*db;
+        let db_ref: &'db D = &*db;
 
-        let compiled = self.compile_impl(db, module_graph, resolved_requires);
-        (compiled, db)
-    }
-
-    /// Internal compilation implementation (sequential).
-    fn compile_impl<'db>(
-        &self,
-        db: &'db dyn salsa::Database,
-        module_graph: ModuleGraph,
-        resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
-    ) -> CompiledModules<'db> {
-        let parsed_graph = parse_module_graph(db, module_graph.clone(), resolved_requires);
-        self.compile_from_parsed(db, module_graph, parsed_graph)
+        let compiled = self.compile_impl_with_mode(db_ref, module_graph, resolved_requires, mode);
+        (compiled, db_ref)
     }
 
     /// Internal compilation implementation with configurable parallelism.
@@ -261,18 +263,18 @@ impl ModuleCompilationPipeline {
         mode: ParallelMode,
     ) -> CompiledModules<'db> {
         let parsed_graph = parse_module_graph_with_mode(db, module_graph.clone(), resolved_requires, mode);
-        self.compile_from_parsed(db.as_salsa_db(), module_graph, parsed_graph)
+        let graph_typecheck = typecheck_module_graph_with_mode(db, parsed_graph, mode);
+        self.compile_from_typecheck_result(db.as_salsa_db(), module_graph, parsed_graph, graph_typecheck)
     }
 
-    /// Compile from a parsed module graph (shared implementation).
-    fn compile_from_parsed<'db>(
+    /// Compile from parsed and typechecked module graph.
+    fn compile_from_typecheck_result<'db>(
         &self,
         db: &'db dyn salsa::Database,
         module_graph: ModuleGraph,
         parsed_graph: ParsedModuleGraph<'db>,
+        graph_typecheck: ModuleGraphTypecheckResult<'db>,
     ) -> CompiledModules<'db> {
-        let _ = module_graph; // Consumed by parse_module_graph; retained for future use.
-        let graph_typecheck = typecheck_module_graph(db, parsed_graph);
 
         let combined_expr_types = graph_typecheck.expr_types(db);
         let combined_call_targets = graph_typecheck.call_targets(db);

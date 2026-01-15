@@ -38,7 +38,7 @@ pub struct ModulesAnalysis {
 /// 5. Executes the `main` function (with access to all other functions)
 /// 6. Returns the output value
 pub fn analyze_modules_worldfile(
-    db: &mut dyn salsa::Database,
+    db: &mut crate::Database,
     parsed: ParsedWorldfile,
 ) -> AnyResult<ModulesAnalysis> {
     // Validate: only module sections allowed.

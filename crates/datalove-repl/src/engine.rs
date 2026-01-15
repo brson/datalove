@@ -7,7 +7,7 @@ use datalove_datafun as datafun;
 use datafun::pipeline::{ModuleCompilationPipeline, ScriptCompilationContext, TypecheckResult, LoweringResult};
 
 pub struct Engine<'db> {
-    db: &'db dyn datafun::Db,
+    db: &'db datafun::Database,
     history: ReplHistory,
     /// Script compilation context for incremental evaluation.
     ctx: ScriptCompilationContext<'db>,
@@ -38,7 +38,7 @@ impl ReplHistory {
 }
 
 impl<'db> Engine<'db> {
-    pub fn new(db: &'db dyn datafun::Db) -> AnyResult<Engine<'db>> {
+    pub fn new(db: &'db datafun::Database) -> AnyResult<Engine<'db>> {
         // Create an empty module pipeline and compile.
         let mut pipeline = ModuleCompilationPipeline::new();
         let compiled = pipeline.compile_fresh(db);
@@ -278,7 +278,7 @@ impl<'db> Engine<'db> {
     }
 
     /// Execute a script file line by line and output JSON results.
-    pub fn run_script(db: &'db dyn datafun::Db, script_path: &std::path::Path) -> AnyResult<()> {
+    pub fn run_script(db: &'db datafun::Database, script_path: &std::path::Path) -> AnyResult<()> {
         let mut engine = Self::new(db)?;
         let contents = std::fs::read_to_string(script_path)
             .context("failed to read script file")?;

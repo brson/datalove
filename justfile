@@ -12,6 +12,10 @@ test-slow:
 
 test-ci: test test-slow
 
+# Run tests with parallelism enabled.
+test-parallel:
+    DATALOVE_PARALLEL=1 cargo test --all --all-targets
+
 # Time all tests, showing only tests that take over 1 second.
 test-time:
     env RUST_TEST_TIME_UNIT=1000,10000 \
@@ -28,19 +32,19 @@ test-time-all:
 
 # Benchmark parallel vs sequential module parsing.
 bench-parse:
-    cargo test -p datalove-datafun-compiler --release bench_parallel_parsing -- --nocapture --ignored
+    cargo test -p datalove-datafun-compiler --lib --release bench_parallel_parsing -- --nocapture --ignored
 
 # Benchmark parallel vs sequential module parsing (debug mode).
 bench-parse-debug:
-    cargo test -p datalove-datafun-compiler bench_parallel_parsing -- --nocapture --ignored
+    cargo test -p datalove-datafun-compiler --lib bench_parallel_parsing -- --nocapture --ignored
 
 # Benchmark parallel vs sequential typechecking.
 bench-typecheck:
-    cargo test -p datalove-datafun-compiler --release bench_parallel_typechecking -- --nocapture --ignored
+    cargo test -p datalove-datafun-compiler --lib --release bench_parallel_typechecking -- --nocapture --ignored
 
 # Benchmark parallel vs sequential typechecking (debug mode).
 bench-typecheck-debug:
-    cargo test -p datalove-datafun-compiler bench_parallel_typechecking -- --nocapture --ignored
+    cargo test -p datalove-datafun-compiler --lib bench_parallel_typechecking -- --nocapture --ignored
 
 # Run all parallelization benchmarks.
 bench-parallel:

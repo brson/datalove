@@ -25,19 +25,11 @@ pub use datalove_datafun_tycheck::{
     ModuleImports,
     ModuleGraphTypecheckResult,
     ParsedModuleGraph,
+    ParallelMode,
+    parallel_mode_from_env,
 };
 
 use datalove_datafun_ast::ast::{ParseResult, ParsedStatements};
-
-/// Controls whether module parsing runs sequentially or in parallel.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum ParallelMode {
-    /// Sequential parsing (default, salsa-tracked).
-    #[default]
-    Sequential,
-    /// Parallel parsing with rayon (warms cache, then delegates to sequential).
-    Parallel,
-}
 
 /// Parse a single module and return only the AST (no spans).
 ///

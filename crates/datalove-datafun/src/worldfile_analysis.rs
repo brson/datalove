@@ -51,7 +51,7 @@ pub struct SectionResult {
 /// Script units share a `ScriptLowerContext` (for cross-unit name resolution during lowering)
 /// and a `ScriptEnvironment` (for cross-unit value/function access during execution).
 pub fn analyze_worldfile(
-    db: &mut dyn salsa::Database,
+    db: &mut crate::Database,
     parsed: ParsedWorldfile,
 ) -> AnyResult<Analysis> {
     let mut results = Vec::new();

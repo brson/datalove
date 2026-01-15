@@ -35,14 +35,25 @@ pub trait DbClone: salsa::Database {
     fn as_salsa_db(&self) -> &dyn salsa::Database;
 }
 
-/// Controls whether typechecking runs sequentially or in parallel.
+/// Controls whether compilation runs sequentially or in parallel.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ParallelMode {
-    /// Sequential typechecking (default, salsa-tracked).
+    /// Sequential compilation (default, salsa-tracked).
     #[default]
     Sequential,
-    /// Parallel typechecking with rayon (warms cache, then delegates to sequential).
+    /// Parallel compilation with rayon (warms cache, then delegates to sequential).
     Parallel,
+}
+
+/// Read parallel mode from `DATALOVE_PARALLEL` environment variable.
+///
+/// Returns `ParallelMode::Parallel` if the env var is set (to any value),
+/// otherwise returns `ParallelMode::Sequential`.
+pub fn parallel_mode_from_env() -> ParallelMode {
+    match rmx::std::env::var("DATALOVE_PARALLEL") {
+        Ok(_) => ParallelMode::Parallel,
+        Err(_) => ParallelMode::Sequential,
+    }
 }
 
 // Implementation modules.

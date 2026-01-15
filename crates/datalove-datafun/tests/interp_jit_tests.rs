@@ -43,7 +43,7 @@ pub struct SectionResult {
 ///
 /// JIT threshold is set to 1, so functions are compiled on first call.
 pub fn analyze_worldfile_with_jit(
-    db: &dyn salsa::Database,
+    db: &datafun::Database,
     parsed: ParsedWorldfile,
 ) -> AnyResult<Analysis> {
     let mut results = Vec::new();

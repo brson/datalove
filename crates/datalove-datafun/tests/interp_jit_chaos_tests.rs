@@ -25,7 +25,7 @@ struct UnitOutput {
 
 /// Run a worldfile with pure interpreter (no JIT).
 fn run_with_interpreter(
-    db: &dyn salsa::Database,
+    db: &datafun::Database,
     parsed: &ParsedWorldfile,
 ) -> Vec<UnitOutput> {
     let mut results = Vec::new();
@@ -82,7 +82,7 @@ fn run_with_interpreter(
 
 /// Run a worldfile with JIT (threshold=1, compile immediately).
 fn run_with_jit(
-    db: &dyn salsa::Database,
+    db: &datafun::Database,
     parsed: &ParsedWorldfile,
 ) -> Vec<UnitOutput> {
     let mut results = Vec::new();
@@ -140,7 +140,7 @@ fn run_with_jit(
 
 /// Run a worldfile with chaos JIT.
 fn run_with_chaos(
-    db: &dyn salsa::Database,
+    db: &datafun::Database,
     parsed: &ParsedWorldfile,
     seed: u64,
 ) -> Vec<UnitOutput> {
