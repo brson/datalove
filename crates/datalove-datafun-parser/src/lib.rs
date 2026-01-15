@@ -22,7 +22,7 @@ use bct::{
 
 use datalove_datafun_ast::ast;
 use datalove_datafun_ast::script;
-use datalove_diagnostic::DiagnosticBuilder;
+use datalove_diagnostic::{DiagnosticBuilder, DiagnosticBuilderExt};
 use state::Parser;
 
 /// Re-export Db trait for convenience.

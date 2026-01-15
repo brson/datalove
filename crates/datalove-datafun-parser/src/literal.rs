@@ -13,7 +13,7 @@ use bct::{
 use datalove_datafun_ast::ast;
 use datalove_datalit as datalit;
 use datalove_datalit::parser_util::{TokenStream, TokenStreamExt};
-use datalove_diagnostic::DiagnosticBuilder;
+use datalove_diagnostic::{DiagnosticBuilder, DiagnosticBuilderExt};
 use super::state::Parser;
 
 impl<'db> Parser<'db> {

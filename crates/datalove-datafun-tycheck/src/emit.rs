@@ -4,6 +4,7 @@
 //! that can be used with either local spans or module graph spans.
 
 use bct::text::{InternedText, TextSpan};
+use datalove_diagnostic::DiagnosticBuilderExt;
 use salsa::plumbing::FromId;
 
 use datalove_datafun_ast::ast::ExprFun;

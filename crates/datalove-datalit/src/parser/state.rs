@@ -10,7 +10,7 @@ use bct::{
 
 use crate::ast;
 use crate::parser_util::{TextSpan, TokenStream, TokenStreamExt};
-use datalove_diagnostic::DiagnosticBuilder;
+use datalove_diagnostic::{DiagnosticBuilder, DiagnosticBuilderExt};
 
 /// Token source for parser - either Vec-backed or iterator-backed.
 enum TokenSource<'db> {

@@ -8,7 +8,7 @@ use bct::{
     bracer::{BracerIter, TreeToken},
     text::InternedText,
 };
-use datalove_diagnostic::DiagnosticBuilder;
+use datalove_diagnostic::{DiagnosticBuilder, DiagnosticBuilderExt};
 
 use datalove_datafun_ast::ast;
 use datalove_datalit as datalit;
@@ -815,7 +815,7 @@ impl<'db> Parser<'db> {
         if consumed < collected_len {
             if !matches!(type_hint.type_hint(self.db), datalit::ast::TypeHint::ParseError(_)) {
                 use bct::text::{InternedText, TextSpan};
-                use datalove_diagnostic::DiagnosticBuilder;
+                use datalove_diagnostic::{DiagnosticBuilder, DiagnosticBuilderExt};
 
                 // Get text/span info for the error.
                 let text = self.source_text();

@@ -271,7 +271,7 @@ impl<'db> Parser<'db> {
 
     fn parse_type_hint_enum_variant(&mut self) -> ast::TypeHintEnumVariant<'db> {
         use rmx::prelude::*;
-        use datalove_diagnostic::DiagnosticBuilder;
+        use datalove_diagnostic::{DiagnosticBuilder, DiagnosticBuilderExt};
 
         let name = match self.eat_name() {
             Some(n) => n,

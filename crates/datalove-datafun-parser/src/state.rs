@@ -11,7 +11,7 @@ use bct::{
 
 use datalove_datafun_ast::ast;
 use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
-use datalove_diagnostic::{DiagnosticBuilder, SpanEntry};
+use datalove_diagnostic::{DiagnosticBuilder, DiagnosticBuilderExt, SpanEntry};
 
 use super::Db;
 
