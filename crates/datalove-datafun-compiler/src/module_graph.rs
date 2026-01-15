@@ -29,6 +29,16 @@ pub use datalove_datafun_tycheck::{
 
 use datalove_datafun_ast::ast::{ParseResult, ParsedStatements};
 
+/// Controls whether module parsing runs sequentially or in parallel.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ParallelMode {
+    /// Sequential parsing (default, salsa-tracked).
+    #[default]
+    Sequential,
+    /// Parallel parsing with rayon (warms cache, then delegates to sequential).
+    Parallel,
+}
+
 /// Parse a single module and return only the AST (no spans).
 ///
 /// This is a tracked function so Salsa can cache per-module.
@@ -161,6 +171,23 @@ pub fn parse_module_graph_parallel<'db>(
     // Delegate to tracked function which can create ParsedModuleGraph.
     // All parse_module_full calls will be cache hits from the parallel phase.
     parse_module_graph(db_salsa, graph, resolved_requires_str)
+}
+
+/// Parse module graph with configurable parallelism.
+///
+/// This is the main entry point for parsing. Use `ParallelMode::Sequential` for
+/// standard salsa-tracked behavior, or `ParallelMode::Parallel` to enable rayon
+/// parallelization (useful for benchmarking).
+pub fn parse_module_graph_with_mode<'db>(
+    db: &'db dyn DbClone,
+    graph: ModuleGraph,
+    resolved_requires_str: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+    mode: ParallelMode,
+) -> ParsedModuleGraph<'db> {
+    match mode {
+        ParallelMode::Sequential => parse_module_graph(db.as_salsa_db(), graph, resolved_requires_str),
+        ParallelMode::Parallel => parse_module_graph_parallel(db, graph, resolved_requires_str),
+    }
 }
 
 /// Compute recursive content hashes for each module in the graph.
@@ -1126,5 +1153,112 @@ mod tests {
             parse_queries
         );
         eprintln!("Second parse: {} total events, {} parse queries", second_executed.len(), parse_queries.len());
+    }
+
+    /// Generate source code for a module with many functions.
+    fn generate_module_source(module_idx: usize, num_functions: usize) -> String {
+        let mut source = String::new();
+
+        for func_idx in 0..num_functions {
+            // Generate a function with some arithmetic and control flow.
+            source.push_str(&format!(
+                "fun func_{}_{}(a: @i32, b: @i32): @i32\n",
+                module_idx, func_idx
+            ));
+            source.push_str("  let x = a +? b\n");
+            source.push_str("  let y = x *? @2\n");
+            source.push_str("  if y >? @100\n");
+            source.push_str("    ret y -? @50\n");
+            source.push_str("  else\n");
+            source.push_str("    ret y +? @50\n");
+            source.push_str("  end if\n");
+            source.push_str("end fun\n\n");
+        }
+
+        source
+    }
+
+    /// Benchmark test for comparing sequential vs parallel parsing.
+    ///
+    /// Run with: cargo test -p datalove-datafun-compiler bench_parallel_parsing -- --nocapture --ignored
+    #[test]
+    #[ignore] // Run manually for benchmarking
+    fn bench_parallel_parsing() {
+        use std::time::Instant;
+
+        // Configuration: adjust these to control benchmark size.
+        const NUM_MODULES: usize = 20;
+        const FUNCTIONS_PER_MODULE: usize = 50;
+
+        eprintln!("\n=== Parallel Parsing Benchmark ===");
+        eprintln!("Modules: {}, Functions per module: {}", NUM_MODULES, FUNCTIONS_PER_MODULE);
+        eprintln!("Total functions: {}\n", NUM_MODULES * FUNCTIONS_PER_MODULE);
+
+        // Generate module sources.
+        let sources: Vec<(String, String)> = (0..NUM_MODULES)
+            .map(|i| {
+                let path = format!("bench/module_{}", i);
+                let source = generate_module_source(i, FUNCTIONS_PER_MODULE);
+                (path, source)
+            })
+            .collect();
+
+        // Print sample source size.
+        let total_chars: usize = sources.iter().map(|(_, s)| s.len()).sum();
+        eprintln!("Total source size: {} KB\n", total_chars / 1024);
+
+        // Benchmark sequential parsing (fresh db each time).
+        let mut sequential_times = Vec::new();
+        for run in 0..3 {
+            let db = Database::default();
+            let mut builder = ModuleGraphBuilder::new(&db);
+            for (path, source) in &sources {
+                let src = bct::input::Source::new(&db, source.clone());
+                builder.add_module(path.clone(), src);
+            }
+            let graph = builder.build();
+
+            let start = Instant::now();
+            let _parsed = parse_module_graph_with_mode(&db, graph, BTreeMap::new(), ParallelMode::Sequential);
+            let elapsed = start.elapsed();
+            sequential_times.push(elapsed);
+            eprintln!("Sequential run {}: {:?}", run + 1, elapsed);
+        }
+
+        eprintln!();
+
+        // Benchmark parallel parsing (fresh db each time).
+        let mut parallel_times = Vec::new();
+        for run in 0..3 {
+            let db = Database::default();
+            let mut builder = ModuleGraphBuilder::new(&db);
+            for (path, source) in &sources {
+                let src = bct::input::Source::new(&db, source.clone());
+                builder.add_module(path.clone(), src);
+            }
+            let graph = builder.build();
+
+            let start = Instant::now();
+            let _parsed = parse_module_graph_with_mode(&db, graph, BTreeMap::new(), ParallelMode::Parallel);
+            let elapsed = start.elapsed();
+            parallel_times.push(elapsed);
+            eprintln!("Parallel run {}: {:?}", run + 1, elapsed);
+        }
+
+        // Calculate and print summary.
+        let seq_avg: std::time::Duration = sequential_times.iter().sum::<std::time::Duration>() / sequential_times.len() as u32;
+        let par_avg: std::time::Duration = parallel_times.iter().sum::<std::time::Duration>() / parallel_times.len() as u32;
+
+        eprintln!("\n=== Summary ===");
+        eprintln!("Sequential average: {:?}", seq_avg);
+        eprintln!("Parallel average:   {:?}", par_avg);
+
+        if par_avg < seq_avg {
+            let speedup = seq_avg.as_secs_f64() / par_avg.as_secs_f64();
+            eprintln!("Parallel is {:.2}x faster", speedup);
+        } else {
+            let slowdown = par_avg.as_secs_f64() / seq_avg.as_secs_f64();
+            eprintln!("Parallel is {:.2}x slower (overhead dominates)", slowdown);
+        }
     }
 }

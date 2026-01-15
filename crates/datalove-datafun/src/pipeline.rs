@@ -58,8 +58,10 @@ use datalove_datafun_tycheck::{
 };
 use datalove_datafun_compiler::module_graph::{
     ModuleGraph, ModuleGraphTypecheckResult, ModuleId,
-    ParsedModuleGraph, parse_module_graph,
+    ParsedModuleGraph, parse_module_graph, parse_module_graph_with_mode,
+    ParallelMode,
 };
+use datalove_datafun_tycheck::DbClone;
 use datalove_datafun_interp::{CallDispatcher, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;
 use drop_analysis::FunctionDropAnalysis;
@@ -213,6 +215,18 @@ impl ModuleCompilationPipeline {
         self.compile_impl(db, module_graph, resolved_requires)
     }
 
+    /// Compile all modules with configurable parallelism.
+    ///
+    /// Use this for benchmarking parallel vs sequential parsing.
+    pub fn compile_fresh_with_mode<'db>(
+        &mut self,
+        db: &'db dyn DbClone,
+        mode: ParallelMode,
+    ) -> CompiledModules<'db> {
+        let (module_graph, resolved_requires) = self.world.build_fresh(db.as_salsa_db());
+        self.compile_impl_with_mode(db, module_graph, resolved_requires, mode)
+    }
+
     /// Compile all modules (incremental, needs `&mut db`).
     pub fn compile<'db>(
         &mut self,
@@ -227,7 +241,7 @@ impl ModuleCompilationPipeline {
         (compiled, db)
     }
 
-    /// Internal compilation implementation.
+    /// Internal compilation implementation (sequential).
     fn compile_impl<'db>(
         &self,
         db: &'db dyn salsa::Database,
@@ -235,6 +249,29 @@ impl ModuleCompilationPipeline {
         resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
     ) -> CompiledModules<'db> {
         let parsed_graph = parse_module_graph(db, module_graph.clone(), resolved_requires);
+        self.compile_from_parsed(db, module_graph, parsed_graph)
+    }
+
+    /// Internal compilation implementation with configurable parallelism.
+    fn compile_impl_with_mode<'db>(
+        &self,
+        db: &'db dyn DbClone,
+        module_graph: ModuleGraph,
+        resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+        mode: ParallelMode,
+    ) -> CompiledModules<'db> {
+        let parsed_graph = parse_module_graph_with_mode(db, module_graph.clone(), resolved_requires, mode);
+        self.compile_from_parsed(db.as_salsa_db(), module_graph, parsed_graph)
+    }
+
+    /// Compile from a parsed module graph (shared implementation).
+    fn compile_from_parsed<'db>(
+        &self,
+        db: &'db dyn salsa::Database,
+        module_graph: ModuleGraph,
+        parsed_graph: ParsedModuleGraph<'db>,
+    ) -> CompiledModules<'db> {
+        let _ = module_graph; // Consumed by parse_module_graph; retained for future use.
         let graph_typecheck = typecheck_module_graph(db, parsed_graph);
 
         let combined_expr_types = graph_typecheck.expr_types(db);
