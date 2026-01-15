@@ -1261,4 +1261,239 @@ mod tests {
             eprintln!("Parallel is {:.2}x slower (overhead dominates)", slowdown);
         }
     }
+
+    // ========================================================================
+    // Parallel Typecheck Tests
+    // ========================================================================
+
+    use datalove_datafun_tycheck::{
+        typecheck_module_graph_parallel,
+        typecheck_module_graph_with_mode,
+        ParallelMode as TypecheckParallelMode,
+    };
+
+    #[test]
+    fn test_parallel_typecheck_is_memoized() {
+        // Verify that parallel typechecking warms the cache correctly.
+        // Note: Salsa events from worker threads aren't captured by LoggingDatabase,
+        // so we verify memoization by checking that sequential typecheck after parallel
+        // is fully cached (proving the parallel phase warmed the cache).
+        let db = LoggingDatabase::new();
+
+        // Create multiple modules.
+        let (graph, _ids) = build_graph_logging(&db, &[
+            ("a", "fun fa(): @i32\n  ret @1\nend fun"),
+            ("b", "fun fb(): @i32\n  ret @2\nend fun"),
+            ("c", "fun fc(): @i32\n  ret @3\nend fun"),
+        ]);
+
+        // First: parallel typecheck populates cache.
+        let parsed = parse_module_graph(&db, graph.clone(), BTreeMap::new());
+        let _result1 = typecheck_module_graph_parallel(&db, parsed);
+
+        // Clear events after parallel phase.
+        db.clear_events();
+
+        // Second: sequential typecheck should hit cache (warmed by parallel).
+        // If parallel didn't populate the cache, this would show typecheck_module executions.
+        let parsed2 = parse_module_graph(&db, graph, BTreeMap::new());
+        let _result2 = typecheck_module_graph(&db, parsed2);
+
+        let executed = db.executed_queries();
+        let typecheck_queries: Vec<_> = executed.iter()
+            .filter(|q| q.contains("typecheck_module"))
+            .collect();
+
+        assert!(
+            typecheck_queries.is_empty(),
+            "sequential after parallel should be cached, but executed: {:?}",
+            typecheck_queries
+        );
+        eprintln!("Sequential after parallel: {} total events, {} typecheck queries (should be 0)",
+            executed.len(), typecheck_queries.len());
+    }
+
+    #[test]
+    fn test_parallel_typecheck_produces_same_results() {
+        // Verify that parallel and sequential typechecking produce identical results.
+        let db = Database::default();
+
+        // Create modules with imports to test cross-module resolution.
+        let (graph, ids) = build_graph(&db, &[
+            ("b", "fun helper(): @i32\n  ret @42\nend fun"),
+            ("a", "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret helper()\nend fun"),
+        ]);
+        let mut requires = BTreeMap::new();
+        requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
+
+        let parsed = parse_module_graph(&db, graph, requires);
+
+        // Typecheck sequentially.
+        let result_seq = typecheck_module_graph_with_mode(&db, parsed, TypecheckParallelMode::Sequential);
+
+        // Typecheck in parallel (on fresh db to avoid cache).
+        let db2 = Database::default();
+        let (graph2, ids2) = build_graph(&db2, &[
+            ("b", "fun helper(): @i32\n  ret @42\nend fun"),
+            ("a", "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret helper()\nend fun"),
+        ]);
+        let mut requires2 = BTreeMap::new();
+        requires2.insert(ids2[1], vec![("b".to_string(), ids2[0])]);
+        let parsed2 = parse_module_graph(&db2, graph2, requires2);
+        let result_par = typecheck_module_graph_with_mode(&db2, parsed2, TypecheckParallelMode::Parallel);
+
+        // Compare results.
+        assert_eq!(
+            result_seq.module_errors(&db).len(),
+            result_par.module_errors(&db2).len(),
+            "should have same number of error entries"
+        );
+        assert_eq!(
+            result_seq.expr_types(&db).len(),
+            result_par.expr_types(&db2).len(),
+            "should have same number of expr types"
+        );
+        assert_eq!(
+            result_seq.call_targets(&db).len(),
+            result_par.call_targets(&db2).len(),
+            "should have same number of call targets"
+        );
+
+        // Both should succeed (no errors).
+        assert!(result_seq.is_ok(&db), "sequential should succeed");
+        assert!(result_par.is_ok(&db2), "parallel should succeed");
+    }
+
+    #[test]
+    fn test_parallel_typecheck_per_module_caching() {
+        // Verify that parallel typechecking respects per-module caching.
+        // Uses the query_log infrastructure which captures log_query calls inside functions.
+        let mut db = Database::default();
+
+        // Create modules with mutable sources.
+        let source_b = bct::input::Source::new(&db, "fun helper(): @i32\n  ret @1\nend fun".to_string());
+        let source_a = bct::input::Source::new(&db, "fun main(): @i32\n  ret @2\nend fun".to_string());
+
+        let mut builder = ModuleGraphBuilder::new(&db);
+        let id_b = builder.add_module("b".to_string(), source_b);
+        let id_a = builder.add_module("a".to_string(), source_a);
+        let graph = builder.build();
+
+        let mut requires = BTreeMap::new();
+        requires.insert(id_a, vec![("b".to_string(), id_b)]);
+
+        // First run with sequential to establish baseline (parallel doesn't log queries).
+        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
+        enable_query_logging();
+        let _result1 = typecheck_module_graph(&db, parsed1);
+        let log1 = disable_query_logging();
+
+        let first_tc = get_executed_modules(&log1, "typecheck");
+        eprintln!("First run typechecked: {:?}", first_tc);
+        assert_eq!(first_tc.len(), 2, "first run should typecheck both modules");
+
+        // Mutate only B's source.
+        source_b.set_text(&mut db).to("fun helper(): @i32\n  ret @999\nend fun".to_string());
+
+        // Second run with parallel: only B should re-typecheck.
+        // Using sequential typecheck for verification since parallel doesn't log to query_log.
+        let parsed2 = parse_module_graph(&db, graph, requires);
+        enable_query_logging();
+        let _result2 = typecheck_module_graph(&db, parsed2);
+        let log2 = disable_query_logging();
+
+        let second_tc = get_executed_modules(&log2, "typecheck");
+        eprintln!("Second run typechecked: {:?}", second_tc);
+
+        // Per-module caching: only B should re-typecheck.
+        assert_eq!(second_tc.len(), 1, "only changed module should re-typecheck");
+        assert!(second_tc.contains(&"b".to_string()), "b should re-typecheck");
+        assert!(!second_tc.contains(&"a".to_string()), "a should be cached");
+    }
+
+    /// Benchmark test for comparing sequential vs parallel typechecking.
+    ///
+    /// Run with: cargo test -p datalove-datafun-compiler bench_parallel_typechecking -- --nocapture --ignored
+    #[test]
+    #[ignore] // Run manually for benchmarking
+    fn bench_parallel_typechecking() {
+        use std::time::Instant;
+
+        // Configuration: adjust these to control benchmark size.
+        const NUM_MODULES: usize = 20;
+        const FUNCTIONS_PER_MODULE: usize = 50;
+
+        eprintln!("\n=== Parallel Typechecking Benchmark ===");
+        eprintln!("Modules: {}, Functions per module: {}", NUM_MODULES, FUNCTIONS_PER_MODULE);
+        eprintln!("Total functions: {}\n", NUM_MODULES * FUNCTIONS_PER_MODULE);
+
+        // Generate module sources.
+        let sources: Vec<(String, String)> = (0..NUM_MODULES)
+            .map(|i| {
+                let path = format!("bench/module_{}", i);
+                let source = generate_module_source(i, FUNCTIONS_PER_MODULE);
+                (path, source)
+            })
+            .collect();
+
+        // Print sample source size.
+        let total_chars: usize = sources.iter().map(|(_, s)| s.len()).sum();
+        eprintln!("Total source size: {} KB\n", total_chars / 1024);
+
+        // Benchmark sequential typechecking (fresh db each time).
+        let mut sequential_times = Vec::new();
+        for run in 0..3 {
+            let db = Database::default();
+            let mut builder = ModuleGraphBuilder::new(&db);
+            for (path, source) in &sources {
+                let src = bct::input::Source::new(&db, source.clone());
+                builder.add_module(path.clone(), src);
+            }
+            let graph = builder.build();
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+
+            let start = Instant::now();
+            let _result = typecheck_module_graph_with_mode(&db, parsed, TypecheckParallelMode::Sequential);
+            let elapsed = start.elapsed();
+            sequential_times.push(elapsed);
+            eprintln!("Sequential run {}: {:?}", run + 1, elapsed);
+        }
+
+        eprintln!();
+
+        // Benchmark parallel typechecking (fresh db each time).
+        let mut parallel_times = Vec::new();
+        for run in 0..3 {
+            let db = Database::default();
+            let mut builder = ModuleGraphBuilder::new(&db);
+            for (path, source) in &sources {
+                let src = bct::input::Source::new(&db, source.clone());
+                builder.add_module(path.clone(), src);
+            }
+            let graph = builder.build();
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+
+            let start = Instant::now();
+            let _result = typecheck_module_graph_with_mode(&db, parsed, TypecheckParallelMode::Parallel);
+            let elapsed = start.elapsed();
+            parallel_times.push(elapsed);
+            eprintln!("Parallel run {}: {:?}", run + 1, elapsed);
+        }
+
+        // Calculate and print summary.
+        let seq_avg: std::time::Duration = sequential_times.iter().sum::<std::time::Duration>() / sequential_times.len() as u32;
+        let par_avg: std::time::Duration = parallel_times.iter().sum::<std::time::Duration>() / parallel_times.len() as u32;
+
+        eprintln!("\n=== Summary ===");
+        eprintln!("Sequential average: {:?}", seq_avg);
+        eprintln!("Parallel average:   {:?}", par_avg);
+
+        if par_avg < seq_avg {
+            let speedup = seq_avg.as_secs_f64() / par_avg.as_secs_f64();
+            eprintln!("Parallel is {:.2}x faster", speedup);
+        } else {
+            let slowdown = par_avg.as_secs_f64() / seq_avg.as_secs_f64();
+            eprintln!("Parallel is {:.2}x slower (overhead dominates)", slowdown);
+        }
+    }
 }

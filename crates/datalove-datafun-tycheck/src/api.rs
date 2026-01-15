@@ -411,21 +411,27 @@ pub fn type_check_with_module_graph<'db>(
 /// ModuleGraph abstraction. Modules are processed in dependency order.
 use bct::module_graph::Module;
 
-use crate::ResolvedImport;
+/// Resolved import data as plain tuple (not tracked).
+///
+/// Contains: (local_name, func_type, func_ast, source_module)
+pub type ResolvedImportData<'db> = (InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId);
 
 /// Typecheck a single module with logging.
 ///
 /// This is a tracked function so Salsa can observe per-module execution.
 /// The logging only fires when the function actually executes.
 ///
-/// Takes resolved imports from the caller (resolved using exports from pass 1).
+/// Takes resolved imports as plain data (not tracked structs) so they can be
+/// created outside tracked functions for parallel execution. Each module's
+/// typecheck only depends on its own imports, enabling proper per-module caching.
 #[salsa::tracked]
 pub fn typecheck_module<'db>(
     db: &'db dyn crate::Db,
     module: Module,
     parsed: ParsedStatements<'db>,
     spans: DatafunSpans,
-    resolved_imports: Vec<ResolvedImport<'db>>,
+    resolved_imports: Vec<ResolvedImportData<'db>>,
+    import_errors: Vec<TypeError>,
 ) -> SingleModuleTypecheckResult<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -435,16 +441,17 @@ pub fn typecheck_module<'db>(
     // Create type context for this module with module_id for pending diagnostics.
     let mut ctx = TypeContext::with_module_id(db, spans, Some(module_id));
 
-    // Add imported functions to context.
-    for import in &resolved_imports {
-        let local_name = import.local_name(db);
-        let func_type = import.func_type(db);
-        let source_module = import.source_module(db);
+    // Add import errors to context.
+    for err in import_errors {
+        ctx.add_error(err);
+    }
 
-        if let Some(func_ast) = import.func_ast(db) {
-            ctx.add_imported_function(local_name, func_type, func_ast, source_module);
+    // Add imported functions to context.
+    for (local_name, func_type, func_ast, source_module) in &resolved_imports {
+        if let Some(ast) = func_ast {
+            ctx.add_imported_function(*local_name, *func_type, *ast, *source_module);
         } else {
-            ctx.add_function(local_name, func_type);
+            ctx.add_function(*local_name, *func_type);
         }
     }
 
@@ -465,7 +472,7 @@ pub fn typecheck_module<'db>(
 
     // Build imports list for result.
     let imports: Vec<_> = resolved_imports.iter()
-        .map(|imp| (imp.local_name(db), imp.source_module(db), imp.source_name(db)))
+        .map(|(local_name, _, _, source_module)| (*local_name, *source_module, *local_name))
         .collect();
 
     log_query("typecheck", module_path, QueryPhase::End);
@@ -482,13 +489,11 @@ pub fn typecheck_module<'db>(
     )
 }
 
-/// Typecheck a module graph using a two-pass approach.
+/// Typecheck a module graph.
 ///
-/// Pass 1 (Name Resolution): Collect exports from all modules, then resolve imports.
-/// Pass 2 (Type Checking): Typecheck each module with resolved imports.
-///
-/// The name resolution pass is factored out into separate functions to enable
-/// per-module caching of export collection via `resolve_module_exports`.
+/// Collects exports from all modules, resolves imports for each module,
+/// then typechecks each module. Each module's typecheck only depends on
+/// its own parsed statements and resolved imports, enabling per-module caching.
 #[salsa::tracked]
 pub fn typecheck_module_graph<'db>(
     db: &'db dyn crate::Db,
@@ -497,10 +502,10 @@ pub fn typecheck_module_graph<'db>(
     let graph = parsed_graph.graph(db);
 
     // Build module lookup map.
-    let mut module_to_module_obj: HashMap<ModuleId, Module> = HashMap::new();
-    for module in graph.iter_modules(db) {
-        module_to_module_obj.insert(module.id(db), module);
-    }
+    let module_to_module_obj: HashMap<ModuleId, Module> = graph
+        .iter_modules(db)
+        .map(|m| (m.id(db), m))
+        .collect();
 
     // Build parsed statements map.
     let module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = parsed_graph.statements_only(db)
@@ -512,10 +517,10 @@ pub fn typecheck_module_graph<'db>(
     // NAME RESOLUTION PASS
     // ========================================================================
 
-    // Pass 1a: Collect exports from all modules (cached per-module).
+    // Collect exports from all modules (cached per-module via resolve_module_exports).
     let all_exports = resolve_all_exports(db, parsed_graph, &module_to_module_obj);
 
-    // Build function AST maps (needed for inlining).
+    // Build function AST maps for inlining.
     let module_function_asts = build_function_ast_maps(db, &parsed_graph);
 
     // ========================================================================
@@ -534,12 +539,8 @@ pub fn typecheck_module_graph<'db>(
             .cloned()
             .expect("module should have been parsed");
 
-        // Use empty spans inside tracked function - diagnostics won't have source locations
-        // but typecheck results will be correct and properly memoized.
-        let spans = DatafunSpans::new(vec![]);
-
-        // Resolve imports for this module using the name resolution pass.
-        let (resolved_imports, import_errors) = resolve_module_imports(
+        // Resolve imports for this module.
+        let (resolved_imports, import_errors) = resolve_module_imports_internal(
             db,
             module_id,
             &parsed,
@@ -548,11 +549,14 @@ pub fn typecheck_module_graph<'db>(
             &module_function_asts,
         );
 
+        // Use empty spans inside tracked function.
+        let spans = DatafunSpans::new(vec![]);
+
         // Call the tracked typecheck function.
-        let result = typecheck_module(db, module, parsed, spans, resolved_imports);
-        // Collect errors (import errors + typecheck errors).
-        let mut errors = import_errors;
-        errors.extend(result.errors(db).iter().cloned());
+        let result = typecheck_module(db, module, parsed, spans, resolved_imports, import_errors);
+
+        // Collect errors from typecheck result.
+        let errors = result.errors(db).clone();
         if !errors.is_empty() {
             module_errors.insert(module_id, errors);
         }
@@ -592,6 +596,99 @@ pub fn typecheck_module_graph<'db>(
     }
 
     ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, combined_expr_types, combined_call_targets)
+}
+
+/// Typecheck a module graph using parallel execution.
+///
+/// This function typechecks modules in parallel using rayon to warm salsa's memoization
+/// cache, then delegates to the tracked `typecheck_module_graph` function. The tracked
+/// function will hit the warmed cache for all `typecheck_module` calls.
+///
+/// Requires `&dyn DbClone` to enable database cloning for parallel execution.
+pub fn typecheck_module_graph_parallel<'db>(
+    db: &'db dyn crate::DbClone,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> ModuleGraphTypecheckResult<'db> {
+    use rayon::prelude::*;
+
+    let db_salsa = db.as_salsa_db();
+    let graph = parsed_graph.graph(db_salsa);
+
+    // Build module lookup map.
+    let module_to_module_obj: HashMap<ModuleId, Module> = graph
+        .iter_modules(db_salsa)
+        .map(|m| (m.id(db_salsa), m))
+        .collect();
+
+    // Build parsed statements map.
+    let module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = parsed_graph
+        .statements_only(db_salsa)
+        .iter()
+        .map(|(id, parsed)| (*id, parsed.clone()))
+        .collect();
+
+    // ========================================================================
+    // NAME RESOLUTION PASS (sequential - prepares data for parallel phase)
+    // ========================================================================
+
+    // Collect exports from all modules.
+    let all_exports = resolve_all_exports(db_salsa, parsed_graph, &module_to_module_obj);
+
+    // Build function AST maps.
+    let module_function_asts = build_function_ast_maps(db_salsa, &parsed_graph);
+
+    // ========================================================================
+    // PARALLEL TYPECHECK PASS (warms salsa cache)
+    // ========================================================================
+
+    // Prepare work items with resolved imports.
+    let work: Vec<_> = graph
+        .iter_modules(db_salsa)
+        .map(|module| {
+            let module_id = module.id(db_salsa);
+            let parsed = module_parsed
+                .get(&module_id)
+                .cloned()
+                .expect("module should have been parsed");
+
+            // Resolve imports for this module.
+            let (resolved_imports, import_errors) = resolve_module_imports_internal(
+                db_salsa,
+                module_id,
+                &parsed,
+                &parsed_graph,
+                &all_exports,
+                &module_function_asts,
+            );
+
+            (db.dyn_clone(), module, parsed, resolved_imports, import_errors)
+        })
+        .collect();
+
+    // Typecheck modules in parallel - populates salsa's memoization cache.
+    work.into_par_iter().for_each(|(db_clone, module, parsed, resolved_imports, import_errors)| {
+        let spans = DatafunSpans::new(vec![]);
+        let _ = typecheck_module(db_clone.as_salsa_db(), module, parsed, spans, resolved_imports, import_errors);
+    });
+
+    // Delegate to tracked function which aggregates results.
+    // All typecheck_module calls will be cache hits from the parallel phase.
+    typecheck_module_graph(db_salsa, parsed_graph)
+}
+
+/// Typecheck module graph with configurable parallelism.
+///
+/// Use `ParallelMode::Sequential` for standard salsa-tracked behavior, or
+/// `ParallelMode::Parallel` to enable rayon parallelization.
+pub fn typecheck_module_graph_with_mode<'db>(
+    db: &'db dyn crate::DbClone,
+    parsed_graph: ParsedModuleGraph<'db>,
+    mode: crate::ParallelMode,
+) -> ModuleGraphTypecheckResult<'db> {
+    match mode {
+        crate::ParallelMode::Sequential => typecheck_module_graph(db.as_salsa_db(), parsed_graph),
+        crate::ParallelMode::Parallel => typecheck_module_graph_parallel(db, parsed_graph),
+    }
 }
 
 /// Emit pending diagnostics for a module using spans from the parsed module graph.
@@ -701,19 +798,20 @@ fn build_function_ast_maps<'db>(
     module_function_asts
 }
 
-/// Resolve imports for a single module.
+/// Internal import resolution returning plain data (no tracked structs).
 ///
-/// Takes pre-computed exports from all modules and resolves this module's
-/// import statements to ResolvedImport objects. Returns both the resolved
-/// imports and any import resolution errors.
-fn resolve_module_imports<'db>(
+/// Returns tuples of (local_name, func_type, func_ast, source_module) instead of
+/// ResolvedImport tracked structs. This allows the function to be called from
+/// inside tracked functions without the "cannot create tracked struct outside
+/// tracked function" issue.
+fn resolve_module_imports_internal<'db>(
     db: &'db dyn crate::Db,
     module_id: ModuleId,
     parsed: &ParsedStatements<'db>,
     parsed_graph: &ParsedModuleGraph<'db>,
     all_exports: &HashMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
     module_function_asts: &HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>>,
-) -> (Vec<ResolvedImport<'db>>, Vec<TypeError>) {
+) -> (Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId)>, Vec<TypeError>) {
     // Build module alias map from pre-resolved requires.
     let resolved_requires = parsed_graph.get_requires(db, module_id);
     let alias_map: HashMap<InternedText<'db>, ModuleId> = resolved_requires.iter()
@@ -742,14 +840,7 @@ fn resolve_module_imports<'db>(
                             .and_then(|funcs| funcs.get(&item_name))
                             .cloned();
 
-                        resolved_imports.push(ResolvedImport::new(
-                            db,
-                            item_name,
-                            func_type,
-                            func_ast,
-                            source_module_id,
-                            item_name,
-                        ));
+                        resolved_imports.push((item_name, func_type, func_ast, source_module_id));
                     } else {
                         import_errors.push(TypeError::UnresolvedName(
                             format!("{}.{}", module_name.as_str(db), item_name.as_str(db))

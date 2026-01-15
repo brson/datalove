@@ -35,6 +35,16 @@ pub trait DbClone: salsa::Database {
     fn as_salsa_db(&self) -> &dyn salsa::Database;
 }
 
+/// Controls whether typechecking runs sequentially or in parallel.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ParallelMode {
+    /// Sequential typechecking (default, salsa-tracked).
+    #[default]
+    Sequential,
+    /// Parallel typechecking with rayon (warms cache, then delegates to sequential).
+    Parallel,
+}
+
 // Implementation modules.
 mod api;
 mod check;
@@ -652,6 +662,8 @@ pub use api::{
     type_check_expr_with_context,
     type_check_with_module_graph,
     typecheck_module_graph,
+    typecheck_module_graph_parallel,
+    typecheck_module_graph_with_mode,
     resolve_module_exports,
 };
 

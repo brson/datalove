@@ -34,6 +34,19 @@ bench-parse:
 bench-parse-debug:
     cargo test -p datalove-datafun-compiler bench_parallel_parsing -- --nocapture --ignored
 
+# Benchmark parallel vs sequential typechecking.
+bench-typecheck:
+    cargo test -p datalove-datafun-compiler --release bench_parallel_typechecking -- --nocapture --ignored
+
+# Benchmark parallel vs sequential typechecking (debug mode).
+bench-typecheck-debug:
+    cargo test -p datalove-datafun-compiler bench_parallel_typechecking -- --nocapture --ignored
+
+# Run all parallelization benchmarks.
+bench-parallel:
+    just bench-parse
+    just bench-typecheck
+
 test-sanitizers-all:
     just test-sanitizers-stable
     just test-sanitizers-nightly
