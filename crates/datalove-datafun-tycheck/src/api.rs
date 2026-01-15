@@ -86,34 +86,8 @@ pub fn type_check_script_units<'db>(
 
     let _batch = ScriptUnitBatch::new(db, units.clone(), modules.clone());
 
-    // Build module function info for import resolution.
-    // Map: module_path -> (function_name -> (signature, ast))
-    let mut module_functions: HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>> = HashMap::new();
-    // Map: module_path -> ModuleId (for call target resolution).
-    let mut path_to_module_id: HashMap<String, ModuleId> = HashMap::new();
-    for (module_info, module_spec) in modules.iter().zip(spec.modules(db).iter()) {
-        let mut funcs = HashMap::new();
-        // First pass: collect function signatures.
-        let module_spans = module_spec.spans.clone();
-        let mut temp_ctx = TypeContext::new(db, module_spans);
-        for statement in &module_info.parsed(db).statements {
-            if let Statement::Fun(stmt) = statement {
-                collect_function_signature(&mut temp_ctx, stmt, None);
-            }
-        }
-        // Extract function info.
-        for statement in &module_info.parsed(db).statements {
-            if let Statement::Fun(stmt) = statement {
-                let name = stmt.name(db);
-                if let Some(func_ty) = temp_ctx.functions.get(&name) {
-                    funcs.insert(name, (*func_ty, *stmt));
-                }
-            }
-        }
-        let path = module_info.path(db).clone();
-        path_to_module_id.insert(path.clone(), module_info.module_id(db));
-        module_functions.insert(path, funcs);
-    }
+    // Build module function info for import resolution using shared helper.
+    let (module_functions, path_to_module_id) = build_script_module_functions(db, spec.modules(db));
 
     let mut accumulated_vars: HashMap<InternedText<'db>, TypeAndHeap<'db>> = HashMap::new();
     let mut accumulated_fns: HashMap<InternedText<'db>, TypeFunction<'db>> = HashMap::new();
@@ -161,55 +135,23 @@ pub fn type_check_script_units<'db>(
                     }
                 }
 
-                // Build alias map from require statements.
-                // Maps module alias (e.g., "utils") to full path (e.g., "local/test/utils").
-                let mut alias_to_path: HashMap<InternedText<'db>, String> = HashMap::new();
-                for statement in &script.statements {
-                    if let Statement::Require(StmtRequire::Module(req)) = statement {
-                        let import_space = req.import_space;
-                        let package_alias = req.package_alias;
-                        let module_alias = req.module_alias;
-                        let full_path = format!(
-                            "{}/{}/{}",
-                            import_space.as_str(db),
-                            package_alias.as_str(db),
-                            module_alias.as_str(db)
-                        );
-                        alias_to_path.insert(module_alias, full_path);
-                    }
+                // Resolve imports using shared helper.
+                let (resolved_imports, import_errors) = resolve_script_imports(
+                    db, script, &module_functions, &path_to_module_id
+                );
+
+                // Add resolved imports to context and accumulated state.
+                for (item_name, func_ty, func_ast, source_module_id) in resolved_imports {
+                    ctx.add_function(item_name, func_ty);
+                    ctx.function_asts.insert(item_name, (func_ast, source_module_id));
+                    // Also add to accumulated so subsequent units can use it.
+                    accumulated_fns.insert(item_name, func_ty);
+                    accumulated_fn_asts.insert(item_name, (func_ast, source_module_id));
                 }
 
-                // Process import statements.
-                for statement in &script.statements {
-                    if let Statement::Import(import) = statement {
-                        let module_alias = import.module_name;
-                        let item_name = import.item_name;
-
-                        // Look up the full path from the alias.
-                        let module_path = alias_to_path.get(&module_alias)
-                            .map(|s| s.as_str())
-                            .unwrap_or(module_alias.as_str(db));
-
-                        if let Some(funcs) = module_functions.get(module_path) {
-                            if let Some((func_ty, func_ast)) = funcs.get(&item_name) {
-                                // Get the source module's ModuleId for call target resolution.
-                                let source_module_id = path_to_module_id.get(module_path).cloned();
-                                ctx.add_function(item_name, *func_ty);
-                                ctx.function_asts.insert(item_name, (*func_ast, source_module_id));
-                                // Also add to accumulated so subsequent units can use it.
-                                accumulated_fns.insert(item_name, *func_ty);
-                                accumulated_fn_asts.insert(item_name, (*func_ast, source_module_id));
-                            } else {
-                                ctx.add_error(TypeError::UnresolvedName(
-                                    format!("{}.{}", module_path, item_name.as_str(db))
-                                ));
-                            }
-                        } else {
-                            ctx.add_error(TypeError::UnresolvedName(
-                                format!("module {}", module_path)
-                            ));
-                        }
-                    }
+                // Add import errors to context.
+                for error in import_errors {
+                    ctx.add_error(error);
                 }
 
                 // Second pass: typecheck all statements.
@@ -896,4 +838,104 @@ fn collect_module_exports<'db>(
     parsed: ParsedStatements<'db>,
 ) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
     collect_module_exports_impl(db, parsed)
+}
+
+/// Build module function info for script import resolution.
+///
+/// Collects function signatures and ASTs from modules, keyed by module path.
+/// Returns two maps: one for function info (signature + AST), one for path to ModuleId.
+fn build_script_module_functions<'db>(
+    db: &'db dyn crate::Db,
+    modules: &[ModuleSpec<'db>],
+) -> (
+    HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>>,
+    HashMap<String, ModuleId>,
+) {
+    let mut module_functions: HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>> = HashMap::new();
+    let mut path_to_module_id: HashMap<String, ModuleId> = HashMap::new();
+
+    for module_spec in modules {
+        // Use collect_module_exports_impl to get function signatures.
+        let exports = collect_module_exports_impl(db, module_spec.parsed.clone());
+
+        // Build function info map with ASTs.
+        let mut funcs = HashMap::new();
+        for (name, func_ty) in exports {
+            // Find the corresponding AST.
+            for statement in &module_spec.parsed.statements {
+                if let Statement::Fun(stmt) = statement {
+                    if stmt.name(db) == name {
+                        funcs.insert(name, (func_ty, *stmt));
+                        break;
+                    }
+                }
+            }
+        }
+
+        path_to_module_id.insert(module_spec.path.clone(), module_spec.module_id);
+        module_functions.insert(module_spec.path.clone(), funcs);
+    }
+
+    (module_functions, path_to_module_id)
+}
+
+/// Resolve imports for a script unit using path-based module lookup.
+///
+/// Parses require statements to build alias-to-path map, then resolves import
+/// statements against the provided module functions.
+fn resolve_script_imports<'db>(
+    db: &'db dyn crate::Db,
+    script: &ParsedStatements<'db>,
+    module_functions: &HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>>,
+    path_to_module_id: &HashMap<String, ModuleId>,
+) -> (Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId>)>, Vec<TypeError>) {
+    // Build alias map from require statements.
+    let mut alias_to_path: HashMap<InternedText<'db>, String> = HashMap::new();
+    for statement in &script.statements {
+        if let Statement::Require(StmtRequire::Module(req)) = statement {
+            let import_space = req.import_space;
+            let package_alias = req.package_alias;
+            let module_alias = req.module_alias;
+            let full_path = format!(
+                "{}/{}/{}",
+                import_space.as_str(db),
+                package_alias.as_str(db),
+                module_alias.as_str(db)
+            );
+            alias_to_path.insert(module_alias, full_path);
+        }
+    }
+
+    // Resolve import statements.
+    let mut resolved = Vec::new();
+    let mut errors = Vec::new();
+
+    for statement in &script.statements {
+        if let Statement::Import(import) = statement {
+            let module_alias = import.module_name;
+            let item_name = import.item_name;
+
+            // Look up the full path from the alias.
+            let module_path = alias_to_path.get(&module_alias)
+                .map(|s| s.as_str())
+                .unwrap_or(module_alias.as_str(db));
+
+            if let Some(funcs) = module_functions.get(module_path) {
+                if let Some((func_ty, func_ast)) = funcs.get(&item_name) {
+                    let source_module_id = path_to_module_id.get(module_path).cloned();
+                    resolved.push((item_name, *func_ty, *func_ast, source_module_id));
+                } else {
+                    errors.push(TypeError::UnresolvedName(
+                        format!("{}.{}", module_path, item_name.as_str(db))
+                    ));
+                }
+            } else {
+                errors.push(TypeError::UnresolvedName(
+                    format!("module {}", module_path)
+                ));
+            }
+        }
+    }
+
+    (resolved, errors)
 }
