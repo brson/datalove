@@ -489,6 +489,44 @@ pub fn typecheck_module<'db>(
     )
 }
 
+/// Prepared data for typechecking a module graph.
+struct TypecheckPreparation<'db> {
+    graph: bct::module_graph::ModuleGraph,
+    module_parsed: HashMap<ModuleId, ParsedStatements<'db>>,
+    all_exports: AllModuleExports<'db>,
+    all_function_asts: AllModuleFunctionAsts<'db>,
+}
+
+/// Prepare data structures needed for typechecking.
+///
+/// Collects exports from all modules and builds function AST maps.
+/// This is shared between sequential and parallel typecheck paths.
+fn prepare_typecheck<'db>(
+    db: &'db dyn crate::Db,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> TypecheckPreparation<'db> {
+    let graph = parsed_graph.graph(db);
+
+    // Build parsed statements map.
+    let module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = parsed_graph.statements_only(db)
+        .iter()
+        .map(|(id, parsed)| (*id, parsed.clone()))
+        .collect();
+
+    // Collect exports from all modules (cached per-module via resolve_module_exports).
+    let all_exports = resolve_all_exports(db, parsed_graph);
+
+    // Build function AST maps for inlining.
+    let all_function_asts = build_all_function_ast_maps(db, parsed_graph);
+
+    TypecheckPreparation {
+        graph,
+        module_parsed,
+        all_exports,
+        all_function_asts,
+    }
+}
+
 /// Typecheck a module graph.
 ///
 /// Collects exports from all modules, resolves imports for each module,
@@ -499,25 +537,8 @@ pub fn typecheck_module_graph<'db>(
     db: &'db dyn crate::Db,
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> ModuleGraphTypecheckResult<'db> {
-    let graph = parsed_graph.graph(db);
-
-    // Build parsed statements map.
-    let module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = parsed_graph.statements_only(db)
-        .iter()
-        .map(|(id, parsed)| (*id, parsed.clone()))
-        .collect();
-
-    // ========================================================================
-    // NAME RESOLUTION PASS
-    // ========================================================================
-
-    // Collect exports from all modules (cached per-module via resolve_module_exports).
-    let all_exports = resolve_all_exports(db, parsed_graph);
-    let all_exports_map = all_exports.exports(db);
-
-    // Build function AST maps for inlining.
-    let all_function_asts = build_all_function_ast_maps(db, parsed_graph);
-    let module_function_asts = build_function_ast_map_from_tracked(db, all_function_asts.asts(db));
+    let prep = prepare_typecheck(db, parsed_graph);
+    let all_exports_map = prep.all_exports.exports(db);
 
     // ========================================================================
     // TYPECHECK PASS
@@ -528,10 +549,10 @@ pub fn typecheck_module_graph<'db>(
     let mut combined_expr_types: Vec<Option<TypeAndHeap<'db>>> = Vec::new();
     let mut combined_call_targets: Vec<Option<ResolvedCallTarget<'db>>> = Vec::new();
 
-    for module in graph.iter_modules(db) {
+    for module in prep.graph.iter_modules(db) {
         let module_id = module.id(db);
 
-        let parsed = module_parsed.get(&module_id)
+        let parsed = prep.module_parsed.get(&module_id)
             .cloned()
             .expect("module should have been parsed");
 
@@ -542,7 +563,7 @@ pub fn typecheck_module_graph<'db>(
             &parsed,
             &parsed_graph,
             all_exports_map,
-            &module_function_asts,
+            prep.all_function_asts.asts(db),
         );
 
         // Use empty spans inside tracked function.
@@ -591,7 +612,7 @@ pub fn typecheck_module_graph<'db>(
         emit_pending_diagnostics_for_module(db, &parsed_graph, module_id, result.pending_diagnostics(db));
     }
 
-    ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, combined_expr_types, combined_call_targets)
+    ModuleGraphTypecheckResult::new(db, prep.graph, module_errors, module_exports_map, module_imports_map, combined_expr_types, combined_call_targets)
 }
 
 /// Typecheck a module graph using parallel execution.
@@ -608,37 +629,19 @@ pub fn typecheck_module_graph_parallel<'db>(
     use rayon::prelude::*;
 
     let db_salsa = db.as_salsa_db();
-    let graph = parsed_graph.graph(db_salsa);
-
-    // Build parsed statements map.
-    let module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = parsed_graph
-        .statements_only(db_salsa)
-        .iter()
-        .map(|(id, parsed)| (*id, parsed.clone()))
-        .collect();
-
-    // ========================================================================
-    // NAME RESOLUTION PASS (sequential - prepares data for parallel phase)
-    // ========================================================================
-
-    // Collect exports from all modules.
-    let all_exports = resolve_all_exports(db_salsa, parsed_graph);
-    let all_exports_map = all_exports.exports(db_salsa);
-
-    // Build function AST maps.
-    let all_function_asts = build_all_function_ast_maps(db_salsa, parsed_graph);
-    let module_function_asts = build_function_ast_map_from_tracked(db_salsa, all_function_asts.asts(db_salsa));
+    let prep = prepare_typecheck(db_salsa, parsed_graph);
+    let all_exports_map = prep.all_exports.exports(db_salsa);
 
     // ========================================================================
     // PARALLEL TYPECHECK PASS (warms salsa cache)
     // ========================================================================
 
     // Prepare work items with resolved imports.
-    let work: Vec<_> = graph
+    let work: Vec<_> = prep.graph
         .iter_modules(db_salsa)
         .map(|module| {
             let module_id = module.id(db_salsa);
-            let parsed = module_parsed
+            let parsed = prep.module_parsed
                 .get(&module_id)
                 .cloned()
                 .expect("module should have been parsed");
@@ -650,7 +653,7 @@ pub fn typecheck_module_graph_parallel<'db>(
                 &parsed,
                 &parsed_graph,
                 all_exports_map,
-                &module_function_asts,
+                prep.all_function_asts.asts(db_salsa),
             );
 
             (db.dyn_clone(), module, parsed, resolved_imports, import_errors)
@@ -810,21 +813,6 @@ pub fn build_all_function_ast_maps<'db>(
     AllModuleFunctionAsts::new(db, module_function_asts)
 }
 
-/// Convert tracked function AST format to HashMap format for import resolution.
-fn build_function_ast_map_from_tracked<'db>(
-    _db: &'db dyn crate::Db,
-    asts: &BTreeMap<ModuleId, Vec<(InternedText<'db>, StmtFun<'db>)>>,
-) -> HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> {
-    asts.iter()
-        .map(|(module_id, funcs)| {
-            let func_map: HashMap<_, _> = funcs.iter()
-                .map(|(name, ast)| (*name, *ast))
-                .collect();
-            (*module_id, func_map)
-        })
-        .collect()
-}
-
 /// Internal import resolution returning plain data (no tracked structs).
 ///
 /// Returns tuples of (local_name, func_type, func_ast, source_module) instead of
@@ -837,7 +825,7 @@ fn resolve_module_imports_internal<'db>(
     parsed: &ParsedStatements<'db>,
     parsed_graph: &ParsedModuleGraph<'db>,
     all_exports: &BTreeMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
-    module_function_asts: &HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>>,
+    module_function_asts: &BTreeMap<ModuleId, Vec<(InternedText<'db>, StmtFun<'db>)>>,
 ) -> (Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId)>, Vec<TypeError>) {
     // Build module alias map from pre-resolved requires.
     let resolved_requires = parsed_graph.get_requires(db, module_id);
@@ -861,11 +849,11 @@ fn resolve_module_imports_internal<'db>(
                         .map(|(_, func_type)| *func_type);
 
                     if let Some(func_type) = func_opt {
-                        // Look up the function AST.
+                        // Look up the function AST (linear search, n is small).
                         let func_ast = module_function_asts
                             .get(&source_module_id)
-                            .and_then(|funcs| funcs.get(&item_name))
-                            .cloned();
+                            .and_then(|funcs| funcs.iter().find(|(n, _)| *n == item_name))
+                            .map(|(_, ast)| *ast);
 
                         resolved_imports.push((item_name, func_type, func_ast, source_module_id));
                     } else {
