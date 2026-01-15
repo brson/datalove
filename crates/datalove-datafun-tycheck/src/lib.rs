@@ -676,6 +676,10 @@ pub use api::{
     typecheck_module_graph_parallel,
     typecheck_module_graph_with_mode,
     resolve_module_exports,
+    resolve_all_exports,
+    AllModuleExports,
+    build_all_function_ast_maps,
+    AllModuleFunctionAsts,
 };
 
 // Re-export context types.

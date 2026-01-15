@@ -501,12 +501,6 @@ pub fn typecheck_module_graph<'db>(
 ) -> ModuleGraphTypecheckResult<'db> {
     let graph = parsed_graph.graph(db);
 
-    // Build module lookup map.
-    let module_to_module_obj: HashMap<ModuleId, Module> = graph
-        .iter_modules(db)
-        .map(|m| (m.id(db), m))
-        .collect();
-
     // Build parsed statements map.
     let module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = parsed_graph.statements_only(db)
         .iter()
@@ -518,10 +512,12 @@ pub fn typecheck_module_graph<'db>(
     // ========================================================================
 
     // Collect exports from all modules (cached per-module via resolve_module_exports).
-    let all_exports = resolve_all_exports(db, parsed_graph, &module_to_module_obj);
+    let all_exports = resolve_all_exports(db, parsed_graph);
+    let all_exports_map = all_exports.exports(db);
 
     // Build function AST maps for inlining.
-    let module_function_asts = build_function_ast_maps(db, &parsed_graph);
+    let all_function_asts = build_all_function_ast_maps(db, parsed_graph);
+    let module_function_asts = build_function_ast_map_from_tracked(db, all_function_asts.asts(db));
 
     // ========================================================================
     // TYPECHECK PASS
@@ -545,7 +541,7 @@ pub fn typecheck_module_graph<'db>(
             module_id,
             &parsed,
             &parsed_graph,
-            &all_exports,
+            all_exports_map,
             &module_function_asts,
         );
 
@@ -614,12 +610,6 @@ pub fn typecheck_module_graph_parallel<'db>(
     let db_salsa = db.as_salsa_db();
     let graph = parsed_graph.graph(db_salsa);
 
-    // Build module lookup map.
-    let module_to_module_obj: HashMap<ModuleId, Module> = graph
-        .iter_modules(db_salsa)
-        .map(|m| (m.id(db_salsa), m))
-        .collect();
-
     // Build parsed statements map.
     let module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = parsed_graph
         .statements_only(db_salsa)
@@ -632,10 +622,12 @@ pub fn typecheck_module_graph_parallel<'db>(
     // ========================================================================
 
     // Collect exports from all modules.
-    let all_exports = resolve_all_exports(db_salsa, parsed_graph, &module_to_module_obj);
+    let all_exports = resolve_all_exports(db_salsa, parsed_graph);
+    let all_exports_map = all_exports.exports(db_salsa);
 
     // Build function AST maps.
-    let module_function_asts = build_function_ast_maps(db_salsa, &parsed_graph);
+    let all_function_asts = build_all_function_ast_maps(db_salsa, parsed_graph);
+    let module_function_asts = build_function_ast_map_from_tracked(db_salsa, all_function_asts.asts(db_salsa));
 
     // ========================================================================
     // PARALLEL TYPECHECK PASS (warms salsa cache)
@@ -657,7 +649,7 @@ pub fn typecheck_module_graph_parallel<'db>(
                 module_id,
                 &parsed,
                 &parsed_graph,
-                &all_exports,
+                all_exports_map,
                 &module_function_asts,
             );
 
@@ -755,16 +747,28 @@ pub fn resolve_module_exports<'db>(
     collect_module_exports_impl(db, parsed)
 }
 
+/// All module exports collected from the graph.
+#[salsa::tracked]
+pub struct AllModuleExports<'db> {
+    #[returns(ref)]
+    pub exports: BTreeMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
+}
+
 /// Collect exports from all modules in the graph.
 ///
 /// Calls the tracked `resolve_module_exports` for each module, enabling
 /// per-module caching of export collection.
-fn resolve_all_exports<'db>(
+#[salsa::tracked]
+pub fn resolve_all_exports<'db>(
     db: &'db dyn crate::Db,
     parsed_graph: ParsedModuleGraph<'db>,
-    module_to_module_obj: &HashMap<ModuleId, Module>,
-) -> HashMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>> {
-    let mut all_exports = HashMap::new();
+) -> AllModuleExports<'db> {
+    let graph = parsed_graph.graph(db);
+    let module_to_module_obj: HashMap<ModuleId, Module> = graph.iter_modules(db)
+        .map(|m| (m.id(db), m))
+        .collect();
+
+    let mut all_exports = BTreeMap::new();
 
     for (module_id, parsed) in parsed_graph.statements_only(db) {
         let module = module_to_module_obj.get(module_id)
@@ -773,29 +777,52 @@ fn resolve_all_exports<'db>(
         all_exports.insert(*module_id, exports);
     }
 
-    all_exports
+    AllModuleExports::new(db, all_exports)
+}
+
+/// All function ASTs collected from the graph.
+#[salsa::tracked]
+pub struct AllModuleFunctionAsts<'db> {
+    #[returns(ref)]
+    pub asts: BTreeMap<ModuleId, Vec<(InternedText<'db>, StmtFun<'db>)>>,
 }
 
 /// Build function AST maps for all modules.
 ///
 /// Used for function inlining - maps module ID to function name to AST.
-fn build_function_ast_maps<'db>(
+#[salsa::tracked]
+pub fn build_all_function_ast_maps<'db>(
     db: &'db dyn crate::Db,
-    parsed_graph: &ParsedModuleGraph<'db>,
-) -> HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> {
-    let mut module_function_asts = HashMap::new();
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> AllModuleFunctionAsts<'db> {
+    let mut module_function_asts = BTreeMap::new();
 
     for (module_id, parsed) in parsed_graph.statements_only(db) {
-        let mut funcs = HashMap::new();
+        let mut funcs = Vec::new();
         for statement in &parsed.statements {
             if let Statement::Fun(func) = statement {
-                funcs.insert(func.name(db), *func);
+                funcs.push((func.name(db), *func));
             }
         }
         module_function_asts.insert(*module_id, funcs);
     }
 
-    module_function_asts
+    AllModuleFunctionAsts::new(db, module_function_asts)
+}
+
+/// Convert tracked function AST format to HashMap format for import resolution.
+fn build_function_ast_map_from_tracked<'db>(
+    _db: &'db dyn crate::Db,
+    asts: &BTreeMap<ModuleId, Vec<(InternedText<'db>, StmtFun<'db>)>>,
+) -> HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> {
+    asts.iter()
+        .map(|(module_id, funcs)| {
+            let func_map: HashMap<_, _> = funcs.iter()
+                .map(|(name, ast)| (*name, *ast))
+                .collect();
+            (*module_id, func_map)
+        })
+        .collect()
 }
 
 /// Internal import resolution returning plain data (no tracked structs).
@@ -809,7 +836,7 @@ fn resolve_module_imports_internal<'db>(
     module_id: ModuleId,
     parsed: &ParsedStatements<'db>,
     parsed_graph: &ParsedModuleGraph<'db>,
-    all_exports: &HashMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
+    all_exports: &BTreeMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
     module_function_asts: &HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>>,
 ) -> (Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId)>, Vec<TypeError>) {
     // Build module alias map from pre-resolved requires.
