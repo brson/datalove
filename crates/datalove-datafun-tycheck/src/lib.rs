@@ -630,6 +630,8 @@ pub use api::{
     type_check_with_module_graph,
     typecheck_module_graph,
     resolve_module_exports,
+    resolve_all_module_imports,
+    ResolvedModuleImports,
 };
 
 // Re-export context types.

@@ -482,13 +482,10 @@ pub fn typecheck_module<'db>(
     )
 }
 
-/// Typecheck a module graph using a two-pass approach.
+/// Typecheck a module graph.
 ///
-/// Pass 1 (Name Resolution): Collect exports from all modules, then resolve imports.
-/// Pass 2 (Type Checking): Typecheck each module with resolved imports.
-///
-/// The name resolution pass is factored out into separate functions to enable
-/// per-module caching of export collection via `resolve_module_exports`.
+/// Import resolution is done via `resolve_all_module_imports` which is cached
+/// separately, so typechecking only sees pre-resolved imports.
 #[salsa::tracked]
 pub fn typecheck_module_graph<'db>(
     db: &'db dyn crate::Db,
@@ -496,11 +493,8 @@ pub fn typecheck_module_graph<'db>(
 ) -> ModuleGraphTypecheckResult<'db> {
     let graph = parsed_graph.graph(db);
 
-    // Build module lookup map.
-    let mut module_to_module_obj: HashMap<ModuleId, Module> = HashMap::new();
-    for module in graph.iter_modules(db) {
-        module_to_module_obj.insert(module.id(db), module);
-    }
+    // Pre-resolve all imports (cached separately).
+    let resolved_imports = resolve_all_module_imports(db, parsed_graph);
 
     // Build parsed statements map.
     let module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = parsed_graph.statements_only(db)
@@ -508,19 +502,7 @@ pub fn typecheck_module_graph<'db>(
         .map(|(id, parsed)| (*id, parsed.clone()))
         .collect();
 
-    // ========================================================================
-    // NAME RESOLUTION PASS
-    // ========================================================================
-
-    // Pass 1a: Collect exports from all modules (cached per-module).
-    let all_exports = resolve_all_exports(db, parsed_graph, &module_to_module_obj);
-
-    // Build function AST maps (needed for inlining).
-    let module_function_asts = build_function_ast_maps(db, &parsed_graph);
-
-    // ========================================================================
-    // TYPECHECK PASS
-    // ========================================================================
+    // Typecheck each module with pre-resolved imports.
     let mut module_errors: BTreeMap<ModuleId, Vec<TypeError>> = BTreeMap::new();
     let mut module_exports_map: BTreeMap<ModuleId, ModuleExports<'db>> = BTreeMap::new();
     let mut module_imports_map: BTreeMap<ModuleId, ModuleImports<'db>> = BTreeMap::new();
@@ -538,18 +520,18 @@ pub fn typecheck_module_graph<'db>(
         // but typecheck results will be correct and properly memoized.
         let spans = DatafunSpans::new(vec![]);
 
-        // Resolve imports for this module using the name resolution pass.
-        let (resolved_imports, import_errors) = resolve_module_imports(
-            db,
-            module_id,
-            &parsed,
-            &parsed_graph,
-            &all_exports,
-            &module_function_asts,
-        );
+        // Get pre-resolved imports (no re-resolution needed).
+        let imports = resolved_imports.imports(db)
+            .get(&module_id)
+            .cloned()
+            .unwrap_or_default();
+        let import_errors = resolved_imports.errors(db)
+            .get(&module_id)
+            .cloned()
+            .unwrap_or_default();
 
         // Call the tracked typecheck function.
-        let result = typecheck_module(db, module, parsed, spans, resolved_imports);
+        let result = typecheck_module(db, module, parsed, spans, imports);
 
         // Collect errors (import errors + typecheck errors).
         let mut errors = import_errors;
@@ -770,6 +752,62 @@ fn resolve_module_imports<'db>(
     }
 
     (resolved_imports, import_errors)
+}
+
+/// Pre-resolved imports for all modules in a graph.
+#[salsa::tracked]
+pub struct ResolvedModuleImports<'db> {
+    /// Resolved imports per module.
+    #[returns(ref)]
+    pub imports: BTreeMap<ModuleId, Vec<ResolvedImport<'db>>>,
+    /// Import resolution errors per module.
+    #[returns(ref)]
+    pub errors: BTreeMap<ModuleId, Vec<TypeError>>,
+}
+
+/// Build a map from ModuleId to Module object.
+fn build_module_map<'db>(
+    db: &'db dyn crate::Db,
+    parsed_graph: &ParsedModuleGraph<'db>,
+) -> HashMap<ModuleId, Module> {
+    let graph = parsed_graph.graph(db);
+    let mut map = HashMap::new();
+    for module in graph.iter_modules(db) {
+        map.insert(module.id(db), module);
+    }
+    map
+}
+
+/// Resolve all imports for all modules in the graph.
+///
+/// This is done once before typechecking, avoiding redundant import
+/// resolution during per-module typecheck.
+#[salsa::tracked]
+pub fn resolve_all_module_imports<'db>(
+    db: &'db dyn crate::Db,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> ResolvedModuleImports<'db> {
+    // Collect exports from all modules.
+    let module_to_module_obj = build_module_map(db, &parsed_graph);
+    let all_exports = resolve_all_exports(db, parsed_graph, &module_to_module_obj);
+    let module_function_asts = build_function_ast_maps(db, &parsed_graph);
+
+    let mut all_imports = BTreeMap::new();
+    let mut all_errors = BTreeMap::new();
+
+    for (module_id, parsed) in parsed_graph.statements_only(db) {
+        let (resolved, errors) = resolve_module_imports(
+            db, *module_id, parsed, &parsed_graph, &all_exports, &module_function_asts
+        );
+        if !resolved.is_empty() {
+            all_imports.insert(*module_id, resolved);
+        }
+        if !errors.is_empty() {
+            all_errors.insert(*module_id, errors);
+        }
+    }
+
+    ResolvedModuleImports::new(db, all_imports, all_errors)
 }
 
 /// Implementation of export collection (non-tracked).
