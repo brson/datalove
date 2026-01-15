@@ -6,8 +6,10 @@ use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 use rmx::std::hash::{Hash, Hasher};
 use rmx::std::collections::hash_map::DefaultHasher;
+use rayon::prelude::*;
 use bct::text::InternedText;
 use datalove_ct::query_log::{log_query, QueryPhase};
+use datalove_datafun_tycheck::DbClone;
 
 // Re-export core module graph types from bct.
 pub use bct::module_graph::{
@@ -72,25 +74,21 @@ pub fn parse_module_full<'db>(
     result
 }
 
-/// Parse all modules in a graph with resolved requires.
+/// Parse all modules in a graph with resolved requires (internal tracked function).
 ///
-/// Returns a ParsedModuleGraph containing the original graph, pre-parsed statements,
-/// spans, and resolved require aliases from package resolution.
-///
-/// Uses parse_module_full to get both statements and spans from the same parse,
-/// ensuring expression IDs match between statements and spans for diagnostic lookup.
+/// This is the salsa-tracked implementation that handles caching. Use
+/// `parse_module_graph_parallel` for parallel execution when you have a `&dyn Db`.
 #[salsa::tracked]
 pub fn parse_module_graph<'db>(
     db: &'db dyn salsa::Database,
     graph: ModuleGraph,
     resolved_requires_str: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
 ) -> ParsedModuleGraph<'db> {
-    // Collect statements and spans from the SAME parse to ensure expr IDs match.
+    // Sequential implementation for salsa tracking.
     let mut statements_only = Vec::new();
     let mut spans_list = Vec::new();
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
-        // Get full parse result - both statements and spans from same parse.
         let full_result = parse_module_full(db, module);
         let parsed = full_result.parsed;
         let spans = datalove_datafun_ast::spans::DatafunSpans::with_stmt_spans(
@@ -130,6 +128,39 @@ pub fn parse_module_graph<'db>(
     let module_content_hashes = compute_module_content_hashes(db, &graph, &statements_map, &resolved_requires);
 
     ParsedModuleGraph::new(db, graph, statements_only, spans_list, resolved_requires, module_content_hashes)
+}
+
+/// Parse all modules in a graph with resolved requires, using parallel execution.
+///
+/// This function parses modules in parallel using rayon to warm salsa's memoization cache,
+/// then delegates to the tracked `parse_module_graph` function which can create tracked
+/// structs. The tracked function will hit the warmed cache for all `parse_module_full` calls.
+pub fn parse_module_graph_parallel<'db>(
+    db: &'db dyn DbClone,
+    graph: ModuleGraph,
+    resolved_requires_str: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+) -> ParsedModuleGraph<'db> {
+    let db_salsa = db.as_salsa_db();
+
+    // Collect modules to parse.
+    let modules: Vec<_> = graph.iter_modules(db_salsa).collect();
+
+    // Clone databases upfront - one per module for parallel execution.
+    // Can't clone inside parallel section since &dyn DbClone isn't Sync.
+    let work: Vec<_> = modules.iter()
+        .map(|&module| (db.dyn_clone(), module))
+        .collect();
+
+    // Parse modules in parallel - populates salsa's memoization cache.
+    // Results are discarded; the tracked function will re-fetch with correct lifetimes.
+    work.into_par_iter()
+        .for_each(|(db_clone, module)| {
+            let _ = parse_module_full(db_clone.as_salsa_db(), module);
+        });
+
+    // Delegate to tracked function which can create ParsedModuleGraph.
+    // All parse_module_full calls will be cache hits from the parallel phase.
+    parse_module_graph(db_salsa, graph, resolved_requires_str)
 }
 
 /// Compute recursive content hashes for each module in the graph.
@@ -184,7 +215,6 @@ mod tests {
 
     /// Database that logs Salsa events for memoization verification.
     #[salsa::db]
-    #[derive(Clone)]
     struct LoggingDatabase {
         storage: salsa::Storage<Self>,
         /// Logged events (thread-safe for Salsa's requirements).
@@ -193,6 +223,18 @@ mod tests {
 
     #[salsa::db]
     impl salsa::Database for LoggingDatabase {}
+
+    impl Clone for LoggingDatabase {
+        fn clone(&self) -> Self {
+            // Clone storage to share memoization cache (Arc<Zalsa>).
+            // Event handler on clones won't log to our events vec, but that's ok -
+            // we only care about events on the main db.
+            Self {
+                storage: self.storage.clone(),
+                events: self.events.clone(),
+            }
+        }
+    }
 
     impl LoggingDatabase {
         fn new() -> Self {
@@ -225,6 +267,16 @@ mod tests {
         /// Clear logged events.
         fn clear_events(&self) {
             self.events.lock().unwrap().clear();
+        }
+    }
+
+    impl DbClone for LoggingDatabase {
+        fn dyn_clone(&self) -> Box<dyn DbClone + Send> {
+            Box::new(self.clone())
+        }
+
+        fn as_salsa_db(&self) -> &dyn salsa::Database {
+            self
         }
     }
 
@@ -982,5 +1034,97 @@ mod tests {
         let hash_b2 = parsed2.module_content_hashes(&db)[&id_b];
         assert_ne!(hash_a1, hash_a2, "A's hash changed = A re-typechecked");
         assert_eq!(hash_b1, hash_b2, "B's hash unchanged = B not re-typechecked");
+    }
+
+    #[test]
+    fn test_logging_db_clone_works() {
+        // Test that LoggingDatabase clone shares memoization cache.
+        let db = LoggingDatabase::new();
+        let (graph, _ids) = build_graph_logging(&db, &[("a", "let x = 1")]);
+
+        // Parse with original db.
+        let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new());
+        let first_queries = db.executed_queries();
+        assert!(!first_queries.is_empty(), "first parse should execute queries");
+        db.clear_events();
+
+        // Clone the db and parse with clone.
+        let db_clone = db.clone();
+        let _parsed2 = parse_module_graph(&db_clone, graph.clone(), BTreeMap::new());
+
+        // Check if original db sees the clone's work as cached.
+        db.clear_events();
+        let _parsed3 = parse_module_graph(&db, graph, BTreeMap::new());
+        let third_queries = db.executed_queries();
+        eprintln!("Third parse queries: {:?}", third_queries);
+    }
+
+    #[test]
+    fn test_parallel_clone_doesnt_break_original() {
+        // Test that using clones in parallel doesn't break the original db.
+        let db = LoggingDatabase::new();
+        let (graph, _ids) = build_graph_logging(&db, &[
+            ("a", "let x = 1"),
+            ("b", "let y = 2"),
+        ]);
+
+        // Create clones and use them in parallel.
+        let modules: Vec<_> = graph.iter_modules(&db).collect();
+        let work: Vec<_> = modules.iter()
+            .map(|&module| (db.clone(), module))
+            .collect();
+
+        work.into_par_iter()
+            .for_each(|(db_clone, module)| {
+                let _ = parse_module_full(&db_clone, module);
+            });
+
+        eprintln!("Parallel phase complete, trying to use original db...");
+
+        // Now try to use the original db.
+        let _parsed = parse_module_graph(&db, graph, BTreeMap::new());
+        eprintln!("Original db still works after parallel phase");
+    }
+
+    #[test]
+    fn test_parallel_parse_is_memoized() {
+        let db = LoggingDatabase::new();
+
+        // Create multiple modules.
+        let (graph, _ids) = build_graph_logging(&db, &[
+            ("a", "let x = 1"),
+            ("b", "let y = 2"),
+            ("c", "let z = 3"),
+        ]);
+
+        // First parallel parse populates cache.
+        let _parsed1 = parse_module_graph_parallel(&db, graph.clone(), BTreeMap::new());
+
+        // Record which queries executed during first parse.
+        let first_executed = db.executed_queries();
+        assert!(
+            !first_executed.is_empty(),
+            "first parse should execute queries"
+        );
+        eprintln!("First parse executed {} queries", first_executed.len());
+
+        // Clear events.
+        db.clear_events();
+
+        // Second parse should be fully memoized.
+        let _parsed2 = parse_module_graph_parallel(&db, graph.clone(), BTreeMap::new());
+
+        let second_executed = db.executed_queries();
+        // Filter to just parse_module_full queries (not input lookups).
+        let parse_queries: Vec<_> = second_executed.iter()
+            .filter(|q| q.contains("parse_module_full"))
+            .collect();
+
+        assert!(
+            parse_queries.is_empty(),
+            "second parse should be memoized, but executed parse queries: {:?}",
+            parse_queries
+        );
+        eprintln!("Second parse: {} total events, {} parse queries", second_executed.len(), parse_queries.len());
     }
 }

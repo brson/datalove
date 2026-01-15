@@ -24,3 +24,13 @@ pub struct Database {
 #[salsa::db]
 impl salsa::Database for Database {
 }
+
+impl datalove_datafun_tycheck::DbClone for Database {
+    fn dyn_clone(&self) -> Box<dyn datalove_datafun_tycheck::DbClone + Send> {
+        Box::new(self.clone())
+    }
+
+    fn as_salsa_db(&self) -> &dyn salsa::Database {
+        self
+    }
+}

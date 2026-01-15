@@ -550,7 +550,6 @@ pub fn typecheck_module_graph<'db>(
 
         // Call the tracked typecheck function.
         let result = typecheck_module(db, module, parsed, spans, resolved_imports);
-
         // Collect errors (import errors + typecheck errors).
         let mut errors = import_errors;
         errors.extend(result.errors(db).iter().cloned());

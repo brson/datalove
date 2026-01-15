@@ -12,6 +12,29 @@ use salsa::Database as Db;
 use bct::module_graph::{ModuleId, ModuleGraph};
 use datalove_datafun_ast::spans::DatafunSpans;
 
+/// Extension trait for database cloning in parallel execution.
+///
+/// This trait provides a `dyn_clone` method that enables cloning the database
+/// through a trait object. When a database is cloned, salsa creates a new
+/// ZalsaLocal (thread-local state) while sharing the Arc<Zalsa> (global state).
+/// This allows safe parallel query execution across threads.
+///
+/// Implement this trait for your concrete Database types to enable parallel
+/// query execution with rayon.
+pub trait DbClone: salsa::Database {
+    /// Clone the database for use on another thread.
+    ///
+    /// Returns a boxed clone that can be sent to another thread. Each clone
+    /// has its own ZalsaLocal but shares the underlying Zalsa state.
+    fn dyn_clone(&self) -> Box<dyn DbClone + Send>;
+
+    /// Get a reference to self as a salsa::Database trait object.
+    ///
+    /// This allows passing the cloned database to salsa tracked functions
+    /// that expect `&dyn salsa::Database`.
+    fn as_salsa_db(&self) -> &dyn salsa::Database;
+}
+
 // Implementation modules.
 mod api;
 mod check;

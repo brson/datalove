@@ -1157,6 +1157,7 @@ dependencies = [
  "datalove-rt",
  "datalove-rtdt",
  "rand 0.8.5",
+ "rayon",
  "ron",
  "rustmax",
  "salsa",
@@ -1232,6 +1233,7 @@ dependencies = [
  "datalove-datafun-ast",
  "datalove-datalit",
  "datalove-diagnostic",
+ "rayon",
  "rustmax",
  "salsa",
 ]
