@@ -641,16 +641,28 @@ pub fn resolve_module_exports<'db>(
     collect_module_exports_impl(db, parsed)
 }
 
+/// All module exports collected from the graph.
+#[salsa::tracked]
+pub struct AllModuleExports<'db> {
+    #[returns(ref)]
+    pub exports: BTreeMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
+}
+
 /// Collect exports from all modules in the graph.
 ///
 /// Calls the tracked `resolve_module_exports` for each module, enabling
 /// per-module caching of export collection.
-fn resolve_all_exports<'db>(
+#[salsa::tracked]
+pub fn resolve_all_exports<'db>(
     db: &'db dyn crate::Db,
     parsed_graph: ParsedModuleGraph<'db>,
-    module_to_module_obj: &HashMap<ModuleId, Module>,
-) -> HashMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>> {
-    let mut all_exports = HashMap::new();
+) -> AllModuleExports<'db> {
+    let graph = parsed_graph.graph(db);
+    let module_to_module_obj: HashMap<ModuleId, Module> = graph.iter_modules(db)
+        .map(|m| (m.id(db), m))
+        .collect();
+
+    let mut all_exports = BTreeMap::new();
 
     for (module_id, parsed) in parsed_graph.statements_only(db) {
         let module = module_to_module_obj.get(module_id)
@@ -659,44 +671,72 @@ fn resolve_all_exports<'db>(
         all_exports.insert(*module_id, exports);
     }
 
-    all_exports
+    AllModuleExports::new(db, all_exports)
+}
+
+/// All function ASTs collected from the graph.
+#[salsa::tracked]
+pub struct AllModuleFunctionAsts<'db> {
+    #[returns(ref)]
+    pub asts: BTreeMap<ModuleId, Vec<(InternedText<'db>, StmtFun<'db>)>>,
 }
 
 /// Build function AST maps for all modules.
 ///
 /// Used for function inlining - maps module ID to function name to AST.
-fn build_function_ast_maps<'db>(
+#[salsa::tracked]
+pub fn build_all_function_ast_maps<'db>(
     db: &'db dyn crate::Db,
-    parsed_graph: &ParsedModuleGraph<'db>,
-) -> HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> {
-    let mut module_function_asts = HashMap::new();
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> AllModuleFunctionAsts<'db> {
+    let mut module_function_asts = BTreeMap::new();
 
     for (module_id, parsed) in parsed_graph.statements_only(db) {
-        let mut funcs = HashMap::new();
+        let mut funcs = Vec::new();
         for statement in &parsed.statements {
             if let Statement::Fun(func) = statement {
-                funcs.insert(func.name(db), *func);
+                funcs.push((func.name(db), *func));
             }
         }
         module_function_asts.insert(*module_id, funcs);
     }
 
-    module_function_asts
+    AllModuleFunctionAsts::new(db, module_function_asts)
+}
+
+/// Resolved imports for a single module.
+#[salsa::tracked]
+pub struct ModuleImportResolution<'db> {
+    #[returns(ref)]
+    pub imports: Vec<ResolvedImport<'db>>,
+    #[returns(ref)]
+    pub errors: Vec<TypeError>,
 }
 
 /// Resolve imports for a single module.
 ///
-/// Takes pre-computed exports from all modules and resolves this module's
-/// import statements to ResolvedImport objects. Returns both the resolved
-/// imports and any import resolution errors.
-fn resolve_module_imports<'db>(
+/// This is a tracked function enabling per-module caching of import resolution.
+/// Internally calls `resolve_all_exports` and `build_all_function_ast_maps`
+/// which are also tracked and cached.
+#[salsa::tracked]
+pub fn resolve_module_imports<'db>(
     db: &'db dyn crate::Db,
-    module_id: ModuleId,
-    parsed: &ParsedStatements<'db>,
-    parsed_graph: &ParsedModuleGraph<'db>,
-    all_exports: &HashMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
-    module_function_asts: &HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>>,
-) -> (Vec<ResolvedImport<'db>>, Vec<TypeError>) {
+    module: Module,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> ModuleImportResolution<'db> {
+    let module_id = module.id(db);
+
+    // Get parsed statements for this module.
+    let parsed = parsed_graph.statements_only(db)
+        .iter()
+        .find(|(id, _)| *id == module_id)
+        .map(|(_, p)| p.clone())
+        .expect("module should have been parsed");
+
+    // Get cached exports and ASTs.
+    let all_exports = resolve_all_exports(db, parsed_graph);
+    let all_asts = build_all_function_ast_maps(db, parsed_graph);
+
     // Build module alias map from pre-resolved requires.
     let resolved_requires = parsed_graph.get_requires(db, module_id);
     let alias_map: HashMap<InternedText<'db>, ModuleId> = resolved_requires.iter()
@@ -712,18 +752,18 @@ fn resolve_module_imports<'db>(
             let item_name = import.item_name;
 
             if let Some(&source_module_id) = alias_map.get(&module_name) {
-                // Look up the function in pre-computed exports.
-                if let Some(exports) = all_exports.get(&source_module_id) {
+                // Look up the function in cached exports.
+                if let Some(exports) = all_exports.exports(db).get(&source_module_id) {
                     let func_opt = exports.iter()
                         .find(|(name, _)| *name == item_name)
                         .map(|(_, func_type)| *func_type);
 
                     if let Some(func_type) = func_opt {
                         // Look up the function AST.
-                        let func_ast = module_function_asts
+                        let func_ast = all_asts.asts(db)
                             .get(&source_module_id)
-                            .and_then(|funcs| funcs.get(&item_name))
-                            .cloned();
+                            .and_then(|funcs| funcs.iter().find(|(name, _)| *name == item_name))
+                            .map(|(_, ast)| *ast);
 
                         resolved_imports.push(ResolvedImport::new(
                             db,
@@ -751,7 +791,7 @@ fn resolve_module_imports<'db>(
         }
     }
 
-    (resolved_imports, import_errors)
+    ModuleImportResolution::new(db, resolved_imports, import_errors)
 }
 
 /// Pre-resolved imports for all modules in a graph.
@@ -765,45 +805,32 @@ pub struct ResolvedModuleImports<'db> {
     pub errors: BTreeMap<ModuleId, Vec<TypeError>>,
 }
 
-/// Build a map from ModuleId to Module object.
-fn build_module_map<'db>(
-    db: &'db dyn crate::Db,
-    parsed_graph: &ParsedModuleGraph<'db>,
-) -> HashMap<ModuleId, Module> {
-    let graph = parsed_graph.graph(db);
-    let mut map = HashMap::new();
-    for module in graph.iter_modules(db) {
-        map.insert(module.id(db), module);
-    }
-    map
-}
-
 /// Resolve all imports for all modules in the graph.
 ///
-/// This is done once before typechecking, avoiding redundant import
-/// resolution during per-module typecheck.
+/// Calls the tracked `resolve_module_imports` for each module, enabling
+/// per-module caching of import resolution.
 #[salsa::tracked]
 pub fn resolve_all_module_imports<'db>(
     db: &'db dyn crate::Db,
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> ResolvedModuleImports<'db> {
-    // Collect exports from all modules.
-    let module_to_module_obj = build_module_map(db, &parsed_graph);
-    let all_exports = resolve_all_exports(db, parsed_graph, &module_to_module_obj);
-    let module_function_asts = build_function_ast_maps(db, &parsed_graph);
+    let graph = parsed_graph.graph(db);
 
     let mut all_imports = BTreeMap::new();
     let mut all_errors = BTreeMap::new();
 
-    for (module_id, parsed) in parsed_graph.statements_only(db) {
-        let (resolved, errors) = resolve_module_imports(
-            db, *module_id, parsed, &parsed_graph, &all_exports, &module_function_asts
-        );
-        if !resolved.is_empty() {
-            all_imports.insert(*module_id, resolved);
+    for module in graph.iter_modules(db) {
+        let module_id = module.id(db);
+        // Call the tracked per-module import resolution.
+        let resolution = resolve_module_imports(db, module, parsed_graph);
+        let imports = resolution.imports(db);
+        let errors = resolution.errors(db);
+
+        if !imports.is_empty() {
+            all_imports.insert(module_id, imports.clone());
         }
         if !errors.is_empty() {
-            all_errors.insert(*module_id, errors);
+            all_errors.insert(module_id, errors.clone());
         }
     }
 

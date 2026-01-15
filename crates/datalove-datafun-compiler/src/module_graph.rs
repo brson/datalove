@@ -983,4 +983,140 @@ mod tests {
         assert_ne!(hash_a1, hash_a2, "A's hash changed = A re-typechecked");
         assert_eq!(hash_b1, hash_b2, "B's hash unchanged = B not re-typechecked");
     }
+
+    #[test]
+    fn test_resolve_module_imports_cached_when_unchanged() {
+        use datalove_datafun_tycheck::resolve_all_module_imports;
+
+        let db = LoggingDatabase::new();
+
+        // Create two modules: b exports a function, a imports from b.
+        let (graph, ids) = build_graph_logging(&db, &[
+            ("b", "fun helper(): @i32\n  ret @1\nend fun"),
+            ("a", "require module /test/b\nimport b.helper"),
+        ]);
+        let mut requires = BTreeMap::new();
+        requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
+
+        let parsed = parse_module_graph(&db, graph.clone(), requires.clone());
+
+        // First call to resolve imports.
+        let _result1 = resolve_all_module_imports(&db, parsed);
+
+        // Check that queries were executed on first run.
+        let first_queries = db.executed_queries();
+        assert!(!first_queries.is_empty(), "first run should execute queries: {:?}", first_queries);
+
+        db.clear_events();
+
+        // Second call with same inputs - should be fully cached.
+        let _result2 = resolve_all_module_imports(&db, parsed);
+
+        let second_queries = db.executed_queries();
+        assert!(
+            second_queries.is_empty(),
+            "second call should be fully cached, but executed: {:?}",
+            second_queries
+        );
+    }
+
+    #[test]
+    fn test_resolve_imports_unrelated_module_change_no_reresolve() {
+        use datalove_datafun_tycheck::resolve_all_module_imports;
+        use bct::input::Source;
+
+        let mut db = LoggingDatabase::new();
+
+        // Create three unrelated modules.
+        let source_a = Source::new(&db, "fun a_func(): @i32\n  ret @1\nend fun".to_string());
+        let source_b = Source::new(&db, "fun b_func(): @i32\n  ret @2\nend fun".to_string());
+        let source_c = Source::new(&db, "fun c_func(): @i32\n  ret @3\nend fun".to_string());
+
+        let mut builder = ModuleGraphBuilder::new(&db);
+        let _id_a = builder.add_module("a".to_string(), source_a);
+        let _id_b = builder.add_module("b".to_string(), source_b);
+        let _id_c = builder.add_module("c".to_string(), source_c);
+        let graph = builder.build();
+
+        let requires = BTreeMap::new();
+        let parsed = parse_module_graph(&db, graph.clone(), requires.clone());
+
+        // First call resolves all modules.
+        let _result1 = resolve_all_module_imports(&db, parsed);
+        db.clear_events();
+
+        // Change module A's source.
+        source_a.set_text(&mut db).to("fun a_func(): @i32\n  ret @999\nend fun".to_string());
+
+        // Re-parse and resolve.
+        let parsed2 = parse_module_graph(&db, graph, requires);
+        let _result2 = resolve_all_module_imports(&db, parsed2);
+
+        // Check which resolve_module_imports queries ran.
+        let queries = db.executed_queries();
+        let resolve_queries: Vec<_> = queries.iter()
+            .filter(|q| q.contains("resolve_module_imports"))
+            .collect();
+
+        // Only module A should have its imports re-resolved, not B or C.
+        // Check that no resolve_module_imports query mentions module b or c.
+        for q in &resolve_queries {
+            assert!(
+                !q.contains("\"b\"") && !q.contains("\"c\""),
+                "B and C should not re-resolve imports, but got: {:?}",
+                resolve_queries
+            );
+        }
+    }
+
+    #[test]
+    fn test_resolve_imports_dependency_change_no_reresolve() {
+        use datalove_datafun_tycheck::resolve_all_module_imports;
+        use bct::input::Source;
+
+        let mut db = LoggingDatabase::new();
+
+        // Create B exports a function, A imports from B.
+        let source_b = Source::new(&db, "fun helper(): @i32\n  ret @1\nend fun".to_string());
+        let source_a = Source::new(&db, "require module /test/b\nimport b.helper".to_string());
+
+        let mut builder = ModuleGraphBuilder::new(&db);
+        let id_b = builder.add_module("b".to_string(), source_b);
+        let id_a = builder.add_module("a".to_string(), source_a);
+        let graph = builder.build();
+
+        let mut requires = BTreeMap::new();
+        requires.insert(id_a, vec![("b".to_string(), id_b)]);
+
+        let parsed = parse_module_graph(&db, graph.clone(), requires.clone());
+
+        // First call resolves all modules.
+        let _result1 = resolve_all_module_imports(&db, parsed);
+        db.clear_events();
+
+        // Change module B's source (the dependency).
+        source_b.set_text(&mut db).to("fun helper(): @i32\n  ret @999\nend fun".to_string());
+
+        // Re-parse and resolve.
+        let parsed2 = parse_module_graph(&db, graph, requires);
+        let _result2 = resolve_all_module_imports(&db, parsed2);
+
+        // Check which resolve_module_imports queries ran.
+        let queries = db.executed_queries();
+        let resolve_queries: Vec<_> = queries.iter()
+            .filter(|q| q.contains("resolve_module_imports"))
+            .collect();
+
+        // Module A's import resolution should NOT re-run because:
+        // - A's source didn't change
+        // - A's import demands (resolved_requires) didn't change
+        // Only B might re-resolve (though B has no imports).
+        for q in &resolve_queries {
+            assert!(
+                !q.contains("\"a\""),
+                "A should not re-resolve imports when only B changed, but got: {:?}",
+                resolve_queries
+            );
+        }
+    }
 }
