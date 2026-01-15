@@ -32,6 +32,7 @@
 
 # on deck
 
+- parallel compilation
 - tables
 - fully reactive scripts
 - clone, working heap types, and default syntax everywhere
