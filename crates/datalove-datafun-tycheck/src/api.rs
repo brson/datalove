@@ -542,11 +542,11 @@ pub fn typecheck_module<'db>(
 
 /// Typecheck a module graph using a two-pass approach.
 ///
-/// Pass 1: Collect exports (function signatures) from all modules.
-/// Pass 2: Typecheck each module with full import context available.
+/// Pass 1 (Name Resolution): Collect exports from all modules, then resolve imports.
+/// Pass 2 (Type Checking): Typecheck each module with resolved imports.
 ///
-/// This structure allows per-module typechecking to be cached by Salsa,
-/// since all imports can be resolved before typechecking begins.
+/// The name resolution pass is factored out into separate functions to enable
+/// per-module caching of export collection via `resolve_module_exports`.
 #[salsa::tracked]
 pub fn typecheck_module_graph<'db>(
     db: &'db dyn crate::Db,
@@ -554,45 +554,30 @@ pub fn typecheck_module_graph<'db>(
 ) -> ModuleGraphTypecheckResult<'db> {
     let graph = parsed_graph.graph(db);
 
-    // Build maps for parsed statements and function ASTs from pre-parsed modules.
-    // Note: spans are NOT read here to avoid salsa dependency. Changes to spans
-    // (from whitespace) should not invalidate typecheck memoization.
-    let mut module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = HashMap::new();
-    let mut module_function_asts: HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> = HashMap::new();
+    // Build module lookup map.
     let mut module_to_module_obj: HashMap<ModuleId, Module> = HashMap::new();
-
-    // Populate statements (this is the field typecheck depends on).
-    for (module_id, parsed) in parsed_graph.statements_only(db) {
-        let mut funcs = HashMap::new();
-        for statement in &parsed.statements {
-            if let Statement::Fun(func) = statement {
-                funcs.insert(func.name(db), *func);
-            }
-        }
-        module_parsed.insert(*module_id, parsed.clone());
-        module_function_asts.insert(*module_id, funcs);
-    }
-
     for module in graph.iter_modules(db) {
         module_to_module_obj.insert(module.id(db), module);
     }
 
-    // ========================================================================
-    // PASS 1: Collect exports from all modules (just function signatures).
-    // ========================================================================
-    let mut all_exports: HashMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>> = HashMap::new();
-
-    for module in graph.iter_modules(db) {
-        let module_id = module.id(db);
-        let parsed = module_parsed.get(&module_id)
-            .cloned()
-            .expect("module should have been parsed");
-        let exports = collect_module_exports(db, parsed);
-        all_exports.insert(module_id, exports);
-    }
+    // Build parsed statements map.
+    let module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = parsed_graph.statements_only(db)
+        .iter()
+        .map(|(id, parsed)| (*id, parsed.clone()))
+        .collect();
 
     // ========================================================================
-    // PASS 2: Typecheck each module with full import context.
+    // NAME RESOLUTION PASS
+    // ========================================================================
+
+    // Pass 1a: Collect exports from all modules (cached per-module).
+    let all_exports = resolve_all_exports(db, parsed_graph, &module_to_module_obj);
+
+    // Build function AST maps (needed for inlining).
+    let module_function_asts = build_function_ast_maps(db, &parsed_graph);
+
+    // ========================================================================
+    // TYPECHECK PASS
     // ========================================================================
     let mut module_errors: BTreeMap<ModuleId, Vec<TypeError>> = BTreeMap::new();
     let mut module_exports_map: BTreeMap<ModuleId, ModuleExports<'db>> = BTreeMap::new();
@@ -606,64 +591,20 @@ pub fn typecheck_module_graph<'db>(
         let parsed = module_parsed.get(&module_id)
             .cloned()
             .expect("module should have been parsed");
+
         // Use empty spans inside tracked function - diagnostics won't have source locations
         // but typecheck results will be correct and properly memoized.
         let spans = DatafunSpans::new(vec![]);
 
-        // Build module alias map from pre-resolved requires.
-        let resolved_requires = parsed_graph.get_requires(db, module_id);
-        let alias_map: HashMap<InternedText<'db>, ModuleId> = resolved_requires.iter()
-            .map(|(alias, target_id)| (*alias, *target_id))
-            .collect();
-
-        // Resolve imports for this module using pass 1 exports.
-        let mut resolved_imports: Vec<ResolvedImport<'db>> = Vec::new();
-        let mut import_errors: Vec<TypeError> = Vec::new();
-
-        for statement in &parsed.statements {
-            if let Statement::Import(import) = statement {
-                let module_name = import.module_name;
-                let item_name = import.item_name;
-
-                if let Some(&source_module_id) = alias_map.get(&module_name) {
-                    // Look up the function in pass 1 exports.
-                    if let Some(exports) = all_exports.get(&source_module_id) {
-                        let func_opt = exports.iter()
-                            .find(|(name, _)| *name == item_name)
-                            .map(|(_, func_type)| *func_type);
-
-                        if let Some(func_type) = func_opt {
-                            // Look up the function AST.
-                            let func_ast = module_function_asts
-                                .get(&source_module_id)
-                                .and_then(|funcs| funcs.get(&item_name))
-                                .cloned();
-
-                            resolved_imports.push(ResolvedImport::new(
-                                db,
-                                item_name,
-                                func_type,
-                                func_ast,
-                                source_module_id,
-                                item_name,
-                            ));
-                        } else {
-                            import_errors.push(TypeError::UnresolvedName(
-                                format!("{}.{}", module_name.as_str(db), item_name.as_str(db))
-                            ));
-                        }
-                    } else {
-                        import_errors.push(TypeError::UnresolvedName(
-                            format!("module {} (exports not found)", module_name.as_str(db))
-                        ));
-                    }
-                } else {
-                    import_errors.push(TypeError::UnresolvedName(
-                        format!("module {} (not required)", module_name.as_str(db))
-                    ));
-                }
-            }
-        }
+        // Resolve imports for this module using the name resolution pass.
+        let (resolved_imports, import_errors) = resolve_module_imports(
+            db,
+            module_id,
+            &parsed,
+            &parsed_graph,
+            &all_exports,
+            &module_function_asts,
+        );
 
         // Call the tracked typecheck function.
         let result = typecheck_module(db, module, parsed, spans, resolved_imports);
@@ -758,8 +699,139 @@ fn build_module_alias_map_for_graph<'db>(
     alias_map
 }
 
+// ============================================================================
+// Name Resolution Pass
+// ============================================================================
+
 /// Collect function signatures exported from a module.
-fn collect_module_exports<'db>(
+///
+/// This is a tracked function so Salsa can cache per-module export collection.
+/// Only depends on parsed statements, not on any other module.
+#[salsa::tracked]
+pub fn resolve_module_exports<'db>(
+    db: &'db dyn crate::Db,
+    module: Module,
+    parsed: ParsedStatements<'db>,
+) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
+    let _ = module; // Used as memoization key.
+    collect_module_exports_impl(db, parsed)
+}
+
+/// Collect exports from all modules in the graph.
+///
+/// Calls the tracked `resolve_module_exports` for each module, enabling
+/// per-module caching of export collection.
+fn resolve_all_exports<'db>(
+    db: &'db dyn crate::Db,
+    parsed_graph: ParsedModuleGraph<'db>,
+    module_to_module_obj: &HashMap<ModuleId, Module>,
+) -> HashMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>> {
+    let mut all_exports = HashMap::new();
+
+    for (module_id, parsed) in parsed_graph.statements_only(db) {
+        let module = module_to_module_obj.get(module_id)
+            .expect("module should exist in graph");
+        let exports = resolve_module_exports(db, *module, parsed.clone());
+        all_exports.insert(*module_id, exports);
+    }
+
+    all_exports
+}
+
+/// Build function AST maps for all modules.
+///
+/// Used for function inlining - maps module ID to function name to AST.
+fn build_function_ast_maps<'db>(
+    db: &'db dyn crate::Db,
+    parsed_graph: &ParsedModuleGraph<'db>,
+) -> HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> {
+    let mut module_function_asts = HashMap::new();
+
+    for (module_id, parsed) in parsed_graph.statements_only(db) {
+        let mut funcs = HashMap::new();
+        for statement in &parsed.statements {
+            if let Statement::Fun(func) = statement {
+                funcs.insert(func.name(db), *func);
+            }
+        }
+        module_function_asts.insert(*module_id, funcs);
+    }
+
+    module_function_asts
+}
+
+/// Resolve imports for a single module.
+///
+/// Takes pre-computed exports from all modules and resolves this module's
+/// import statements to ResolvedImport objects. Returns both the resolved
+/// imports and any import resolution errors.
+fn resolve_module_imports<'db>(
+    db: &'db dyn crate::Db,
+    module_id: ModuleId,
+    parsed: &ParsedStatements<'db>,
+    parsed_graph: &ParsedModuleGraph<'db>,
+    all_exports: &HashMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
+    module_function_asts: &HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>>,
+) -> (Vec<ResolvedImport<'db>>, Vec<TypeError>) {
+    // Build module alias map from pre-resolved requires.
+    let resolved_requires = parsed_graph.get_requires(db, module_id);
+    let alias_map: HashMap<InternedText<'db>, ModuleId> = resolved_requires.iter()
+        .map(|(alias, target_id)| (*alias, *target_id))
+        .collect();
+
+    let mut resolved_imports = Vec::new();
+    let mut import_errors = Vec::new();
+
+    for statement in &parsed.statements {
+        if let Statement::Import(import) = statement {
+            let module_name = import.module_name;
+            let item_name = import.item_name;
+
+            if let Some(&source_module_id) = alias_map.get(&module_name) {
+                // Look up the function in pre-computed exports.
+                if let Some(exports) = all_exports.get(&source_module_id) {
+                    let func_opt = exports.iter()
+                        .find(|(name, _)| *name == item_name)
+                        .map(|(_, func_type)| *func_type);
+
+                    if let Some(func_type) = func_opt {
+                        // Look up the function AST.
+                        let func_ast = module_function_asts
+                            .get(&source_module_id)
+                            .and_then(|funcs| funcs.get(&item_name))
+                            .cloned();
+
+                        resolved_imports.push(ResolvedImport::new(
+                            db,
+                            item_name,
+                            func_type,
+                            func_ast,
+                            source_module_id,
+                            item_name,
+                        ));
+                    } else {
+                        import_errors.push(TypeError::UnresolvedName(
+                            format!("{}.{}", module_name.as_str(db), item_name.as_str(db))
+                        ));
+                    }
+                } else {
+                    import_errors.push(TypeError::UnresolvedName(
+                        format!("module {} (exports not found)", module_name.as_str(db))
+                    ));
+                }
+            } else {
+                import_errors.push(TypeError::UnresolvedName(
+                    format!("module {} (not required)", module_name.as_str(db))
+                ));
+            }
+        }
+    }
+
+    (resolved_imports, import_errors)
+}
+
+/// Implementation of export collection (non-tracked).
+fn collect_module_exports_impl<'db>(
     db: &'db dyn crate::Db,
     parsed: ParsedStatements<'db>,
 ) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
@@ -814,4 +886,14 @@ fn collect_module_exports<'db>(
     }
 
     functions
+}
+
+/// Collect function signatures exported from a module (legacy non-tracked version).
+///
+/// Used by `typecheck_module` for its internal export collection.
+fn collect_module_exports<'db>(
+    db: &'db dyn crate::Db,
+    parsed: ParsedStatements<'db>,
+) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
+    collect_module_exports_impl(db, parsed)
 }
