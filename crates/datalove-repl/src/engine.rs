@@ -3,7 +3,7 @@
 use rmx::prelude::*;
 
 use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, EvalFun, InputParse, Input};
-use crate::datafun;
+use datalove_datafun as datafun;
 use datafun::pipeline::{ModuleCompilationPipeline, ScriptCompilationContext, TypecheckResult, LoweringResult};
 
 pub struct Engine<'db> {

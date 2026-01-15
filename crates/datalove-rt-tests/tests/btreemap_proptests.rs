@@ -3,7 +3,7 @@
 #![cfg(feature = "slow_tests")]
 
 use rmx::prelude::*;
-use datalove_rt::rtdt;
+use datalove_rtdt as rtdt;
 use std::ptr;
 use proptest::prelude::*;
 

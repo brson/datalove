@@ -13,8 +13,10 @@ use crate::context::{TypeContext, ScriptTypeContext, ScriptTypecheckResultRaw, E
 use crate::statement::{check_statement, collect_function_signature};
 use crate::types::{convert_type_hint, unit_type};
 
+pub use datalove_datafun_ast::spans::DatafunSpans;
+pub use bct::module_graph::ModuleId;
+
 pub use crate::{
-    DatafunSpans,
     PendingDiagnostic,
     Type,
     TypeAndHeap,
@@ -33,7 +35,6 @@ pub use crate::{
     UnitTypecheckResultTracked,
     ScriptUnitsTypecheckResultTracked,
     ParsedModuleGraph,
-    ModuleId,
     ModuleExports,
     ModuleImports,
     ModuleGraphTypecheckResult,

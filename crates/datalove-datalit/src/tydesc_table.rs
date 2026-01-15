@@ -7,7 +7,7 @@
 use rmx::prelude::*;
 use std::collections::HashMap;
 use crate::tycheck::*;
-use crate::rtdt;
+use datalove_rtdt as rtdt;
 
 /// Table of type descriptors with deduplication.
 ///

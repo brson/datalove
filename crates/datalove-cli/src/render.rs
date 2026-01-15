@@ -5,7 +5,7 @@ use rmx::std::path::Path;
 use rmx::std::collections::HashMap;
 
 use ariadne::{Color, ColorGenerator, Label, Report, ReportKind, Source, Cache};
-use datalove_diagnostic::{Diagnostic, LabelStyle, Severity};
+use bct::diagnostic::{Diagnostic, LabelStyle, Severity};
 
 /// Render parse diagnostics to stderr using ariadne.
 pub fn render_parse_diagnostics<'db>(

@@ -62,7 +62,7 @@ pub use datalove_rt::c::DebugOutputMode;
 
 use std::cell::RefCell;
 
-use datalove_rt::rtdt;
+use datalove_rtdt as rtdt;
 use datalove_datafun_ir::{
     IrFunction, IrScriptUnit, IrBlock, IrType, Instruction, Terminator,
     BlockId, Operand, SlotDest, ConstValue, ParamMode,
@@ -1112,7 +1112,7 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest)?;
                 // Cast dest to Int buffer and call widen_to_int.
                 unsafe {
-                    let int_buf = &mut *(dest_slot.ptr as *mut datalove_rt::rtdt::Int);
+                    let int_buf = &mut *(dest_slot.ptr as *mut datalove_rtdt::Int);
                     self.widen_to_int(&src_val, int_buf)?;
                 }
                 frame.mark_value_initialized(*dest);

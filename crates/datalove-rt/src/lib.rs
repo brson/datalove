@@ -39,8 +39,6 @@
 //! Argument pointers are never null, they instead use the datalit option.
 
 
-pub use datalove_rtdt as rtdt;
-
 pub mod c;
 pub mod rust;
 pub mod impls;

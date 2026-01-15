@@ -1,5 +1,5 @@
 use crate::*;
-use datalove_rt::rtdt;
+use datalove_rtdt as rtdt;
 use datalove_datafun_ir::{IrType, IrBlock, Terminator, FuncRef, FuncId, ParamId, TypeRef, SlotId, SlotDest, BinOp, UnaryOp, ValueId};
 
 #[test]

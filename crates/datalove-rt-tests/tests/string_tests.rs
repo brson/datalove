@@ -1,7 +1,7 @@
 //! Tests for string runtime functions.
 
 use rmx::prelude::*;
-use datalove_rt::rtdt;
+use datalove_rtdt as rtdt;
 use datalove_rt::c::RtStatus;
 
 /// Create a String type descriptor.

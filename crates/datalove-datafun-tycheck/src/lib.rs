@@ -8,14 +8,9 @@ use bct::text::InternedText;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit;
 
-/// Re-export Db trait for convenience.
-pub use salsa::Database as Db;
-
-/// Re-export ModuleId and ModuleGraph from bct for convenience.
-pub use bct::module_graph::{ModuleId, ModuleGraph};
-
-/// Re-export DatafunSpans from AST crate.
-pub use datalove_datafun_ast::spans::DatafunSpans;
+use salsa::Database as Db;
+use bct::module_graph::{ModuleId, ModuleGraph};
+use datalove_datafun_ast::spans::DatafunSpans;
 
 // Implementation modules.
 mod api;

@@ -1,26 +1,9 @@
 //! Diagnostic system for Datalove compiler.
 //!
-//! Re-exports core diagnostic types from bcts and provides
-//! Datalove-specific Salsa accumulators for different compilation phases.
+//! Provides Datalove-specific Salsa accumulators for different compilation phases.
 
 use salsa::Accumulator;
-
-// Re-export core diagnostic types from bcts.
-pub use bct::diagnostic::{
-    byte_to_line_col,
-    Diagnostic,
-    DiagnosticBuilder,
-    DiagnosticLabel,
-    LabelStyle,
-    Severity,
-    SpanEntry,
-    StoredDiagnostic,
-    StoredLabel,
-    Suggestion,
-};
-
-// Re-export text types for convenience.
-pub use bct::text::{ByteSpan, TextSpan};
+use bct::diagnostic::{Diagnostic, DiagnosticBuilder, StoredDiagnostic};
 
 /// Salsa accumulator for parse diagnostics.
 #[salsa::accumulator]

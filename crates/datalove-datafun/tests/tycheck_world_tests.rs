@@ -3,7 +3,7 @@ use std::path::Path;
 use rmx::serde_json::json;
 use std::collections::BTreeMap;
 
-fn diagnostic_to_json(db: &dyn datalove_datafun::Db, diag: &datalove_diagnostic::Diagnostic) -> rmx::serde_json::Value {
+fn diagnostic_to_json(db: &dyn datalove_datafun::Db, diag: &bct::diagnostic::Diagnostic) -> rmx::serde_json::Value {
     let code = diag.code.map(|c| c.as_str(db).to_string());
     let labels: Vec<_> = diag.labels.iter().map(|label| {
         let source_text = label.text.text(db);

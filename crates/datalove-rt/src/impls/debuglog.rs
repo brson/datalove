@@ -1,6 +1,6 @@
 //! Debug log implementation.
 
-use crate::rtdt;
+use datalove_rtdt as rtdt;
 use crate::c::{LocalRtHandle, RtStatus};
 use crate::impls::rt_local::{RtLocal, DebugOutputMode};
 

@@ -1,7 +1,7 @@
 //! Boxing operations for Data and Error types.
 
 use crate::c::{LocalRtHandle, RtStatus};
-use crate::rtdt;
+use datalove_rtdt as rtdt;
 
 /// Create an Error from any value (moves the value to heap).
 ///

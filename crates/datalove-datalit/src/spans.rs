@@ -4,7 +4,7 @@
 
 use rmx::prelude::*;
 use bct::text::TextSpan;
-use datalove_diagnostic::SpanEntry;
+use bct::diagnostic::SpanEntry;
 use crate::ast::ExprFull;
 
 /// Entry pairing expression ID with span.

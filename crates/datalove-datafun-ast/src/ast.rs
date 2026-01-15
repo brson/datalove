@@ -2,8 +2,9 @@ use rmx::prelude::*;
 
 use bct::module_graph::ModuleId;
 use bct::text::{InternedText, Text};
-use datalove_diagnostic::{ByteSpan, SpanEntry};
-use crate::datalit;
+use bct::text::ByteSpan;
+use bct::diagnostic::SpanEntry;
+use datalove_datalit as datalit;
 
 /// Span entry for a parsed expression, using salsa IDs for storage.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]

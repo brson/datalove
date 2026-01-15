@@ -1,7 +1,8 @@
 //! Tensor operations.
 
 use crate::{c::RtStatus, impls::rt_local::RtLocal};
-use crate::rtdt::TyDescRef;
+use datalove_rtdt as rtdt;
+use datalove_rtdt::TyDescRef;
 
 // ============================================================================
 // Stride Computation Helpers
@@ -120,7 +121,7 @@ pub unsafe fn tensor_create_from_slice_impl(
         }
 
         // Extract shape from the moved-in List<u32>.
-        let shape_list_ptr = shape_in as *mut crate::rtdt::List;
+        let shape_list_ptr = shape_in as *mut rtdt::List;
         let shape_data = (*shape_list_ptr).data as *const u32;
         let rank = (*shape_list_ptr).size;
 
@@ -230,19 +231,19 @@ pub unsafe fn tensor_create_from_slice_impl(
         std::ptr::copy_nonoverlapping(shape_data, shape_array_ptr, rank as usize);
 
         // Compute and write strides based on layout.
-        let layout_enum = std::mem::transmute::<u8, crate::rtdt::TensorLayout>(layout);
+        let layout_enum = std::mem::transmute::<u8, rtdt::TensorLayout>(layout);
         let strides = match layout_enum {
-            crate::rtdt::TensorLayout::RowMajor | crate::rtdt::TensorLayout::ColMajorTransposed => {
+            rtdt::TensorLayout::RowMajor | rtdt::TensorLayout::ColMajorTransposed => {
                 compute_row_major_strides(shape_slice)
             }
-            crate::rtdt::TensorLayout::ColMajor | crate::rtdt::TensorLayout::RowMajorTransposed => {
+            rtdt::TensorLayout::ColMajor | rtdt::TensorLayout::RowMajorTransposed => {
                 compute_col_major_strides(shape_slice)
             }
         };
         std::ptr::copy_nonoverlapping(strides.as_ptr(), strides_array_ptr, rank as usize);
 
         // Initialize Tensor struct.
-        let tensor_ptr = tensor_value_out as *mut crate::rtdt::Tensor;
+        let tensor_ptr = tensor_value_out as *mut rtdt::Tensor;
         (*tensor_ptr).ptr_base = data_ptr;
         (*tensor_ptr).offset_elems = 0;
         (*tensor_ptr).capacity_elems = total_elems;
@@ -278,13 +279,13 @@ pub unsafe fn tensor_init_impl(
 
         // Handle empty tensor case.
         if rank == 0 || element_count == 0 {
-            let tensor_ptr = tensor_value_out as *mut crate::rtdt::Tensor;
+            let tensor_ptr = tensor_value_out as *mut rtdt::Tensor;
             (*tensor_ptr).ptr_base = std::ptr::null_mut();
             (*tensor_ptr).offset_elems = 0;
             (*tensor_ptr).capacity_elems = 0;
             (*tensor_ptr).shape = std::ptr::null();
             (*tensor_ptr).strides = std::ptr::null();
-            (*tensor_ptr).layout = crate::rtdt::TensorLayout::RowMajor;
+            (*tensor_ptr).layout = rtdt::TensorLayout::RowMajor;
             return RtStatus::Ok;
         }
 
@@ -358,13 +359,13 @@ pub unsafe fn tensor_init_impl(
         std::ptr::copy_nonoverlapping(strides.as_ptr(), strides_array_ptr, rank as usize);
 
         // Initialize Tensor struct.
-        let tensor_ptr = tensor_value_out as *mut crate::rtdt::Tensor;
+        let tensor_ptr = tensor_value_out as *mut rtdt::Tensor;
         (*tensor_ptr).ptr_base = data_ptr;
         (*tensor_ptr).offset_elems = 0;
         (*tensor_ptr).capacity_elems = total_elems;
         (*tensor_ptr).shape = shape_array_ptr;
         (*tensor_ptr).strides = strides_array_ptr;
-        (*tensor_ptr).layout = crate::rtdt::TensorLayout::RowMajor;
+        (*tensor_ptr).layout = rtdt::TensorLayout::RowMajor;
 
         RtStatus::Ok
     }
@@ -389,7 +390,7 @@ pub unsafe fn tensor_get_impl(
         let element_ty = tensor_tydesc_ref.tensor_element_ty();
         let rank = tensor_tydesc_ref.tensor_rank();
 
-        let tensor_ptr = tensor_value_ref as *const crate::rtdt::Tensor;
+        let tensor_ptr = tensor_value_ref as *const rtdt::Tensor;
         let ptr_base = (*tensor_ptr).ptr_base;
         let offset_elems = (*tensor_ptr).offset_elems;
         let shape_ptr = (*tensor_ptr).shape as *const u32;
@@ -455,7 +456,7 @@ pub unsafe fn tensor_set_impl(
         let element_ty = tensor_tydesc_ref.tensor_element_ty();
         let rank = tensor_tydesc_ref.tensor_rank();
 
-        let tensor_ptr = tensor_value_ref as *mut crate::rtdt::Tensor;
+        let tensor_ptr = tensor_value_ref as *mut rtdt::Tensor;
         let ptr_base = (*tensor_ptr).ptr_base;
         let offset_elems = (*tensor_ptr).offset_elems;
         let shape_ptr = (*tensor_ptr).shape as *const u32;
@@ -536,8 +537,8 @@ pub unsafe fn tensor_transpose_impl(
             return RtStatus::Error;
         }
 
-        let tensor_in_ptr = tensor_value_in as *mut crate::rtdt::Tensor;
-        let tensor_out_ptr = tensor_value_out as *mut crate::rtdt::Tensor;
+        let tensor_in_ptr = tensor_value_in as *mut rtdt::Tensor;
+        let tensor_out_ptr = tensor_value_out as *mut rtdt::Tensor;
 
         let ptr_base = (*tensor_in_ptr).ptr_base;
         let offset_elems = (*tensor_in_ptr).offset_elems;
@@ -601,10 +602,10 @@ pub unsafe fn tensor_transpose_impl(
         // For 2D transpose ([1, 0]): RowMajor <-> ColMajorTransposed, ColMajor <-> RowMajorTransposed
         let layout_out = if rank == 2 && perm_slice == [1, 0] {
             match layout_in {
-                crate::rtdt::TensorLayout::RowMajor => crate::rtdt::TensorLayout::ColMajorTransposed,
-                crate::rtdt::TensorLayout::ColMajor => crate::rtdt::TensorLayout::RowMajorTransposed,
-                crate::rtdt::TensorLayout::RowMajorTransposed => crate::rtdt::TensorLayout::ColMajor,
-                crate::rtdt::TensorLayout::ColMajorTransposed => crate::rtdt::TensorLayout::RowMajor,
+                rtdt::TensorLayout::RowMajor => rtdt::TensorLayout::ColMajorTransposed,
+                rtdt::TensorLayout::ColMajor => rtdt::TensorLayout::RowMajorTransposed,
+                rtdt::TensorLayout::RowMajorTransposed => rtdt::TensorLayout::ColMajor,
+                rtdt::TensorLayout::ColMajorTransposed => rtdt::TensorLayout::RowMajor,
             }
         } else {
             // For non-standard permutations, keep layout as-is (strides encode the transformation).
@@ -660,7 +661,7 @@ pub unsafe fn tensor_destroy_impl(
         let element_ty = tensor_tydesc_ref.tensor_element_ty();
         let rank = tensor_tydesc_ref.tensor_rank();
 
-        let tensor_ptr = tensor_value_in as *mut crate::rtdt::Tensor;
+        let tensor_ptr = tensor_value_in as *mut rtdt::Tensor;
         let ptr_base = (*tensor_ptr).ptr_base;
         let capacity_elems = (*tensor_ptr).capacity_elems;
         let shape_ptr = (*tensor_ptr).shape as *mut u32;
@@ -743,7 +744,7 @@ pub unsafe fn tensor_slice_impl(
     rt_ref: &mut RtLocal,
     tensor_value_in: *mut u8,
     tensor_tydesc_ref: TyDescRef,
-    ranges_ptr: *const crate::rtdt::SliceRange,
+    ranges_ptr: *const rtdt::SliceRange,
     result_value_out: *mut u8,
     result_tydesc_ref: TyDescRef,
 ) -> RtStatus {
@@ -754,7 +755,7 @@ pub unsafe fn tensor_slice_impl(
         }
 
         // Extract tensor fields.
-        let tensor_ptr = tensor_value_in as *mut crate::rtdt::Tensor;
+        let tensor_ptr = tensor_value_in as *mut rtdt::Tensor;
         let ptr_base = (*tensor_ptr).ptr_base;
         let capacity_elems = (*tensor_ptr).capacity_elems;
         let offset_elems = (*tensor_ptr).offset_elems;
@@ -871,9 +872,9 @@ pub unsafe fn tensor_slice_impl(
 
         // Construct output tensor.
         let out_tensor_ptr = compute_result_payload_ptr(result_value_out, result_tydesc_ref)
-            as *mut crate::rtdt::Tensor;
+            as *mut rtdt::Tensor;
 
-        let out_tensor = crate::rtdt::Tensor {
+        let out_tensor = rtdt::Tensor {
             ptr_base,
             capacity_elems,
             offset_elems: new_offset,
@@ -885,8 +886,8 @@ pub unsafe fn tensor_slice_impl(
         std::ptr::write(out_tensor_ptr, out_tensor);
 
         // Set Result tag to Ok.
-        let result_ptr = result_value_out as *mut crate::rtdt::Result;
-        std::ptr::write(&mut (*result_ptr).tag, crate::rtdt::ResultTag::Ok);
+        let result_ptr = result_value_out as *mut rtdt::Result;
+        std::ptr::write(&mut (*result_ptr).tag, rtdt::ResultTag::Ok);
 
         return RtStatus::Ok;
 
@@ -901,14 +902,14 @@ pub unsafe fn tensor_slice_impl(
             unsafe {
                 // Copy the tensor into the result's error payload.
                 let payload_ptr = compute_result_payload_ptr(result_value_out, result_tydesc_ref);
-                let tensor_src = tensor_value_in as *const crate::rtdt::Tensor;
-                let tensor_dst = payload_ptr as *mut crate::rtdt::Tensor;
+                let tensor_src = tensor_value_in as *const rtdt::Tensor;
+                let tensor_dst = payload_ptr as *mut rtdt::Tensor;
                 let tensor_value = std::ptr::read(tensor_src);
                 std::ptr::write(tensor_dst, tensor_value);
 
                 // Set Result tag to Err.
-                let result_ptr = result_value_out as *mut crate::rtdt::Result;
-                std::ptr::write(&mut (*result_ptr).tag, crate::rtdt::ResultTag::Err);
+                let result_ptr = result_value_out as *mut rtdt::Result;
+                std::ptr::write(&mut (*result_ptr).tag, rtdt::ResultTag::Err);
 
                 RtStatus::Ok
             }
@@ -924,7 +925,7 @@ pub unsafe fn tensor_slice_impl(
                 let ok_tydesc_ref = result_tydesc_ref.result_ok_ty();
 
                 let ok_align = ok_tydesc_ref.align();
-                let payload_offset = crate::rtdt::layout::result_payload_offset(ok_align);
+                let payload_offset = rtdt::layout::result_payload_offset(ok_align);
 
                 result_ptr.add(payload_offset as usize)
             }
@@ -957,7 +958,7 @@ pub unsafe fn tensor_reshape_impl(
         }
 
         // Extract new_shape from the moved-in List<u32>.
-        let new_shape_list_ptr = new_shape_in as *mut crate::rtdt::List;
+        let new_shape_list_ptr = new_shape_in as *mut rtdt::List;
         let new_shape_data = (*new_shape_list_ptr).data as *const u32;
         let new_rank = (*new_shape_list_ptr).size;
 
@@ -974,7 +975,7 @@ pub unsafe fn tensor_reshape_impl(
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
 
-        let tensor_ptr = tensor_value_in as *mut crate::rtdt::Tensor;
+        let tensor_ptr = tensor_value_in as *mut rtdt::Tensor;
         let ptr_base = (*tensor_ptr).ptr_base;
         let capacity_elems = (*tensor_ptr).capacity_elems;
         let offset_elems = (*tensor_ptr).offset_elems;
@@ -1070,9 +1071,9 @@ pub unsafe fn tensor_reshape_impl(
 
         // Construct output tensor.
         let payload_ptr = compute_result_payload_ptr(result_value_out, result_tydesc_ref);
-        let out_tensor_ptr = payload_ptr as *mut crate::rtdt::Tensor;
+        let out_tensor_ptr = payload_ptr as *mut rtdt::Tensor;
 
-        let out_tensor = crate::rtdt::Tensor {
+        let out_tensor = rtdt::Tensor {
             ptr_base,
             capacity_elems,
             offset_elems: 0,
@@ -1084,8 +1085,8 @@ pub unsafe fn tensor_reshape_impl(
         std::ptr::write(out_tensor_ptr, out_tensor);
 
         // Set Result tag to Ok.
-        let result_ptr = result_value_out as *mut crate::rtdt::Result;
-        std::ptr::write(&mut (*result_ptr).tag, crate::rtdt::ResultTag::Ok);
+        let result_ptr = result_value_out as *mut rtdt::Result;
+        std::ptr::write(&mut (*result_ptr).tag, rtdt::ResultTag::Ok);
 
         return RtStatus::Ok;
 
@@ -1100,14 +1101,14 @@ pub unsafe fn tensor_reshape_impl(
             unsafe {
                 // Copy the tensor into the result's error payload.
                 let payload_ptr = compute_result_payload_ptr(result_value_out, result_tydesc_ref);
-                let tensor_src = tensor_value_in as *const crate::rtdt::Tensor;
-                let tensor_dst = payload_ptr as *mut crate::rtdt::Tensor;
+                let tensor_src = tensor_value_in as *const rtdt::Tensor;
+                let tensor_dst = payload_ptr as *mut rtdt::Tensor;
                 let tensor_value = std::ptr::read(tensor_src);
                 std::ptr::write(tensor_dst, tensor_value);
 
                 // Set Result tag to Err.
-                let result_ptr = result_value_out as *mut crate::rtdt::Result;
-                std::ptr::write(&mut (*result_ptr).tag, crate::rtdt::ResultTag::Err);
+                let result_ptr = result_value_out as *mut rtdt::Result;
+                std::ptr::write(&mut (*result_ptr).tag, rtdt::ResultTag::Err);
 
                 RtStatus::Ok
             }
@@ -1123,7 +1124,7 @@ pub unsafe fn tensor_reshape_impl(
                 let ok_tydesc_ref = result_tydesc_ref.result_ok_ty();
 
                 let ok_align = ok_tydesc_ref.align();
-                let payload_offset = crate::rtdt::layout::result_payload_offset(ok_align);
+                let payload_offset = rtdt::layout::result_payload_offset(ok_align);
 
                 result_ptr.add(payload_offset as usize)
             }

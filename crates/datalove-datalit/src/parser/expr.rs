@@ -10,7 +10,8 @@ use bct::{
 
 use crate::ast;
 use crate::parser_util::{self, TokenStream, TokenStreamExt};
-use datalove_diagnostic::{DiagnosticBuilder, DiagnosticBuilderExt};
+use bct::diagnostic::DiagnosticBuilder;
+use datalove_diagnostic::DiagnosticBuilderExt;
 use super::state::Parser;
 
 impl<'db> Parser<'db> {

@@ -214,7 +214,7 @@ fn emit_single_diagnostic<'db>(
         PendingDiagnostic::UndefinedVariable { expr_id, module_id: _, name } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_id) {
                 let msg = format!("cannot find value `{}` in this scope", name.as_str(db));
-                datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("F001")
                     .primary_label(ts, "not found in this scope")
                     .emit_type();
@@ -223,7 +223,7 @@ fn emit_single_diagnostic<'db>(
         PendingDiagnostic::UndefinedFunction { expr_id, module_id: _, name } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_id) {
                 let msg = format!("cannot find function `{}` in this scope", name.as_str(db));
-                datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("F002")
                     .primary_label(ts, "not found in this scope")
                     .emit_type();
@@ -231,7 +231,7 @@ fn emit_single_diagnostic<'db>(
         }
         PendingDiagnostic::CannotSynthesize { expr_id, module_id: _, message } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_id) {
-                datalove_diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
+                bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
                     .code("F011")
                     .primary_label(ts, "cannot infer type")
                     .emit_type();
@@ -244,7 +244,7 @@ fn emit_single_diagnostic<'db>(
                     expected.as_str(db),
                     actual.as_str(db)
                 );
-                datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("F016")
                     .primary_label(ts, label.as_str(db))
                     .emit_type();
@@ -257,7 +257,7 @@ fn emit_single_diagnostic<'db>(
                     ty.as_str(db),
                     op.as_str(db)
                 );
-                datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("F026")
                     .primary_label(
                         ts,
@@ -283,7 +283,7 @@ fn emit_single_diagnostic<'db>(
         }
         PendingDiagnostic::ResultRequiresBinding { expr_id, module_id: _ } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_id) {
-                datalove_diagnostic::DiagnosticBuilder::error(db, "Result destructuring requires an else binding")
+                bct::diagnostic::DiagnosticBuilder::error(db, "Result destructuring requires an else binding")
                     .code("F046")
                     .primary_label(ts, "Result type here")
                     .note("use `if result |value| ... else |err| ... end if` to handle both cases")
@@ -298,7 +298,7 @@ fn emit_single_diagnostic<'db>(
                     expected.as_str(db),
                     actual.as_str(db)
                 );
-                datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("F048")
                     .primary_label(
                         ts,
@@ -315,7 +315,7 @@ fn emit_single_diagnostic<'db>(
                     expected.as_str(db),
                     actual.as_str(db)
                 );
-                datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("F049")
                     .primary_label(ts, "try operator here")
                     .note(&format!(
@@ -328,7 +328,7 @@ fn emit_single_diagnostic<'db>(
         }
         PendingDiagnostic::BreakOutsideLoop { local_index, module_id: _ } => {
             if let Some(ts) = spans.lookup_break(db, *local_index) {
-                datalove_diagnostic::DiagnosticBuilder::error(db, "`break` used outside of loop")
+                bct::diagnostic::DiagnosticBuilder::error(db, "`break` used outside of loop")
                     .code("F050")
                     .primary_label(ts, "break statement here")
                     .note("break can only be used inside loop blocks")
@@ -337,7 +337,7 @@ fn emit_single_diagnostic<'db>(
         }
         PendingDiagnostic::ContinueOutsideLoop { local_index, module_id: _ } => {
             if let Some(ts) = spans.lookup_continue(db, *local_index) {
-                datalove_diagnostic::DiagnosticBuilder::error(db, "`continue` used outside of loop")
+                bct::diagnostic::DiagnosticBuilder::error(db, "`continue` used outside of loop")
                     .code("F051")
                     .primary_label(ts, "continue statement here")
                     .note("continue can only be used inside loop blocks")
@@ -346,7 +346,7 @@ fn emit_single_diagnostic<'db>(
         }
         PendingDiagnostic::VoidFunctionReturnsValue { local_index, module_id: _ } => {
             if let Some(ts) = spans.lookup_ret(db, *local_index) {
-                datalove_diagnostic::DiagnosticBuilder::error(db, "void function cannot return a value")
+                bct::diagnostic::DiagnosticBuilder::error(db, "void function cannot return a value")
                     .code("F052")
                     .primary_label(ts, "return with value in void function")
                     .note("remove the return value or add a return type to the function")
@@ -355,7 +355,7 @@ fn emit_single_diagnostic<'db>(
         }
         PendingDiagnostic::FunctionRequiresReturnValue { local_index, module_id: _ } => {
             if let Some(ts) = spans.lookup_ret(db, *local_index) {
-                datalove_diagnostic::DiagnosticBuilder::error(db, "function requires return value")
+                bct::diagnostic::DiagnosticBuilder::error(db, "function requires return value")
                     .code("F053")
                     .primary_label(ts, "bare return in non-void function")
                     .note("add a return value or change the function to void")
@@ -364,7 +364,7 @@ fn emit_single_diagnostic<'db>(
         }
         PendingDiagnostic::UndefinedVariableSet { local_index, module_id: _, name } => {
             if let Some(ts) = spans.lookup_set(db, *local_index) {
-                datalove_diagnostic::DiagnosticBuilder::error(
+                bct::diagnostic::DiagnosticBuilder::error(
                     db,
                     &format!("undefined variable: {}", name.as_str(db)),
                 )
@@ -406,7 +406,7 @@ fn emit_arity_mismatch<'db>(
         if expected == 1 { "" } else { "s" }
     );
 
-    let mut builder = datalove_diagnostic::DiagnosticBuilder::error(db, &msg)
+    let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
         .code("F045")
         .primary_label(primary_ts, &label);
 

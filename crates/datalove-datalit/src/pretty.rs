@@ -23,7 +23,7 @@ pub fn pretty_print_runtime_value<'db>(
     db: &'db dyn crate::Db,
     ty: &TypeAndHeap<'db>,
     value_ptr: *const u8,
-    tydesc_ptr: *const datalove_rt::rtdt::TyDesc,
+    tydesc_ptr: *const datalove_rtdt::TyDesc,
 ) -> Result<String, String> {
     unsafe {
         // Initialize runtime for pretty printing.
@@ -33,17 +33,17 @@ pub fn pretty_print_runtime_value<'db>(
         }
 
         // Create string tydesc.
-        let string_tydesc = datalove_rt::rtdt::TyDesc {
-            type_tag: datalove_rt::rtdt::TyTag::String,
-            size: std::mem::size_of::<datalove_rt::rtdt::String>() as u32,
-            align: std::mem::align_of::<datalove_rt::rtdt::String>() as u32,
-            type_info: datalove_rt::rtdt::TyInfo {
-                nothing: datalove_rt::rtdt::TyInfoNothing,
+        let string_tydesc = datalove_rtdt::TyDesc {
+            type_tag: datalove_rtdt::TyTag::String,
+            size: std::mem::size_of::<datalove_rtdt::String>() as u32,
+            align: std::mem::align_of::<datalove_rtdt::String>() as u32,
+            type_info: datalove_rtdt::TyInfo {
+                nothing: datalove_rtdt::TyInfoNothing,
             },
         };
 
         // Create output string.
-        let mut output_string = std::mem::MaybeUninit::<datalove_rt::rtdt::String>::uninit();
+        let mut output_string = std::mem::MaybeUninit::<datalove_rtdt::String>::uninit();
         let status = datalove_rt::c::dtlv_rti_string_create_local(
             rt_handle,
             output_string.as_mut_ptr() as *mut u8,
@@ -62,14 +62,14 @@ pub fn pretty_print_runtime_value<'db>(
             rt_handle,
             value_ptr,
             tydesc_ptr,
-            &mut output_string as *mut datalove_rt::rtdt::String as *mut u8,
+            &mut output_string as *mut datalove_rtdt::String as *mut u8,
             &string_tydesc,
         );
 
         if status != datalove_rt::c::RtStatus::Ok {
             datalove_rt::c::dtlv_rti_string_destroy_local(
                 rt_handle,
-                &mut output_string as *mut datalove_rt::rtdt::String as *mut u8,
+                &mut output_string as *mut datalove_rtdt::String as *mut u8,
                 &string_tydesc,
             );
             datalove_rt::c::dtlv_rti_shutdown(rt_handle);
@@ -87,7 +87,7 @@ pub fn pretty_print_runtime_value<'db>(
         // Cleanup runtime string.
         datalove_rt::c::dtlv_rti_string_destroy_local(
             rt_handle,
-            &mut output_string as *mut datalove_rt::rtdt::String as *mut u8,
+            &mut output_string as *mut datalove_rtdt::String as *mut u8,
             &string_tydesc,
         );
         datalove_rt::c::dtlv_rti_shutdown(rt_handle);

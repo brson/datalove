@@ -2,6 +2,7 @@ use rmx::prelude::*;
 use std::path::Path;
 use datalove_datalit as datalit;
 use datalove_rt as rt;
+use datalove_rtdt as rtdt;
 
 /// Compare two types for structural equality, recursively comparing nested types.
 fn types_equal<'db>(
@@ -137,7 +138,7 @@ fn rt_pretty_print<'db>(
     db: &'db datalit::Database,
     ty: &datalit::tycheck::TypeAndHeap<'db>,
     value_ref: *const u8,
-    tydesc_ref: *const rt::rtdt::TyDesc,
+    tydesc_ref: *const rtdt::TyDesc,
 ) -> Result<String, String> {
     datalit::pretty::pretty_print_runtime_value(db, ty, value_ref, tydesc_ref)
 }

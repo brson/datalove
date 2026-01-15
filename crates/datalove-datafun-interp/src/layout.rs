@@ -3,7 +3,7 @@
 //! Computes byte offsets for values and slots within a frame buffer,
 //! respecting alignment requirements from type descriptors.
 
-use datalove_rt::rtdt::TyDesc;
+use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::IrType;
 use crate::tydesc::IrTyDescTable;
 

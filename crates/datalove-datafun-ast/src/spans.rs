@@ -4,7 +4,7 @@
 //! is in datalove-datafun-compiler since it depends on the parser.
 
 use rmx::prelude::*;
-use datalove_diagnostic::SpanEntry;
+use bct::diagnostic::SpanEntry;
 use crate::ast::ExprFun;
 
 /// Entry pairing expression ID with span.

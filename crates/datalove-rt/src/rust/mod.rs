@@ -7,6 +7,7 @@ mod aligned_buffer;
 pub use aligned_buffer::AlignedBuffer;
 
 use crate::c::{LocalRtHandle, RtStatus};
+use datalove_rtdt as rtdt;
 
 /// Safe wrapper around a Datalove runtime instance.
 ///
@@ -60,14 +61,14 @@ impl Drop for Runtime {
 /// Does NOT call destroy - use this for uninitialized memory.
 pub struct MemGuard {
     rt: LocalRtHandle,
-    tydesc: *const crate::rtdt::TyDesc,
+    tydesc: *const rtdt::TyDesc,
     count: u32,
     ptr: *mut u8,
 }
 
 impl MemGuard {
     /// Allocate typed memory. Returns None if allocation fails.
-    pub fn new(rt: LocalRtHandle, tydesc: *const crate::rtdt::TyDesc, count: u32) -> Option<Self> {
+    pub fn new(rt: LocalRtHandle, tydesc: *const rtdt::TyDesc, count: u32) -> Option<Self> {
         let ptr = unsafe { crate::c::dtlv_rti_mem_alloc_local(rt, tydesc, count) };
         if ptr.is_null() {
             None
@@ -82,7 +83,7 @@ impl MemGuard {
     }
 
     /// Get the type descriptor.
-    pub fn tydesc(&self) -> *const crate::rtdt::TyDesc {
+    pub fn tydesc(&self) -> *const rtdt::TyDesc {
         self.tydesc
     }
 
@@ -125,7 +126,7 @@ impl Drop for MemGuard {
 /// Use this when you have ownership of an initialized value.
 pub struct ValueGuard {
     rt: LocalRtHandle,
-    tydesc: *const crate::rtdt::TyDesc,
+    tydesc: *const rtdt::TyDesc,
     ptr: *mut u8,
 }
 
@@ -137,7 +138,7 @@ impl ValueGuard {
     /// allocated with the given runtime.
     pub unsafe fn from_raw(
         rt: LocalRtHandle,
-        tydesc: *const crate::rtdt::TyDesc,
+        tydesc: *const rtdt::TyDesc,
         ptr: *mut u8,
     ) -> Self {
         debug_assert!(!ptr.is_null());
@@ -150,7 +151,7 @@ impl ValueGuard {
     }
 
     /// Get the type descriptor.
-    pub fn tydesc(&self) -> *const crate::rtdt::TyDesc {
+    pub fn tydesc(&self) -> *const rtdt::TyDesc {
         self.tydesc
     }
 

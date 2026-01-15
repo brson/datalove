@@ -1,6 +1,6 @@
 use rmx::prelude::*;
 use bct::text::{InternedText, Text};
-use datalove_diagnostic::ByteSpan;
+use bct::text::ByteSpan;
 
 /// Span entry for a parsed expression, using salsa IDs for storage.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]

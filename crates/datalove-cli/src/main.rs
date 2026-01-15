@@ -332,7 +332,7 @@ impl LitOpCommand {
 impl ReplCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         if let Some(script_path) = &self.script {
-            let db = datalove_repl::datafun::Database::default();
+            let db = datalove_datafun::Database::default();
             datalove_repl::Engine::run_script(&db, script_path)
         } else {
             datalove_repl_term::run()

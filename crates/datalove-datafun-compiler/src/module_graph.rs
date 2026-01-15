@@ -93,11 +93,11 @@ pub fn parse_module_graph<'db>(
         // Get full parse result - both statements and spans from same parse.
         let full_result = parse_module_full(db, module);
         let parsed = full_result.parsed;
-        let spans = datalove_datafun_parser::DatafunSpans::with_stmt_spans(
+        let spans = datalove_datafun_ast::spans::DatafunSpans::with_stmt_spans(
             full_result.expr_spans.iter().map(|e| {
-                datalove_datafun_parser::SpanMapEntry {
+                datalove_datafun_ast::spans::SpanMapEntry {
                     expr_id: e.expr_id,
-                    entry: datalove_diagnostic::SpanEntry::new(e.text_id, e.span.clone()),
+                    entry: bct::diagnostic::SpanEntry::new(e.text_id, e.span.clone()),
                 }
             }).collect(),
             full_result.break_spans.clone(),

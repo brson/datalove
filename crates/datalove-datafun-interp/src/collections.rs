@@ -3,7 +3,8 @@
 //! Handles list, set, map, and tensor construction.
 
 use datalove_datafun_ir::Operand;
-use datalove_rt::rtdt::{self, TyDescRef};
+use datalove_rtdt as rtdt;
+use datalove_rtdt::TyDescRef;
 
 use crate::error::InterpError;
 use crate::frame::{Frame, FrameStore};

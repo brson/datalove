@@ -1,4 +1,3 @@
-
 use rmx::prelude::*;
 
 pub mod ast;
@@ -14,8 +13,6 @@ pub mod pretty;
 pub mod ast_gen;
 pub mod spans;
 pub mod mutation_gen;
-
-pub use datalove_rtdt as rtdt;
 
 use salsa::Database as Db;
 

@@ -22,11 +22,11 @@ use bct::{
 
 use datalove_datafun_ast::ast;
 use datalove_datafun_ast::script;
-use datalove_diagnostic::{DiagnosticBuilder, DiagnosticBuilderExt};
+use bct::diagnostic::DiagnosticBuilder;
+use datalove_diagnostic::DiagnosticBuilderExt;
 use state::Parser;
 
-/// Re-export Db trait for convenience.
-pub use salsa::Database as Db;
+use salsa::Database as Db;
 
 /// Parse a specific unit from a Script.
 ///
@@ -201,11 +201,11 @@ fn is_line_separator<'db>(db: &'db dyn Db, token: Token<'db>) -> bool {
 /// Parsed statement spans result.
 struct ParsedSpans {
     expr_spans: Vec<ast::ParseSpanEntry>,
-    break_spans: Vec<datalove_diagnostic::SpanEntry>,
-    continue_spans: Vec<datalove_diagnostic::SpanEntry>,
-    ret_spans: Vec<datalove_diagnostic::SpanEntry>,
-    set_spans: Vec<datalove_diagnostic::SpanEntry>,
-    fun_spans: Vec<datalove_diagnostic::SpanEntry>,
+    break_spans: Vec<bct::diagnostic::SpanEntry>,
+    continue_spans: Vec<bct::diagnostic::SpanEntry>,
+    ret_spans: Vec<bct::diagnostic::SpanEntry>,
+    set_spans: Vec<bct::diagnostic::SpanEntry>,
+    fun_spans: Vec<bct::diagnostic::SpanEntry>,
 }
 
 /// Parse statements from lines, creating a Parser for each line.
@@ -286,11 +286,7 @@ pub fn parse_for_diagnostics<'db>(
     parse(db, source).parsed
 }
 
-// Re-export span types from AST crate.
-pub use datalove_datafun_ast::spans::{
-    SpanMapEntry,
-    DatafunSpans,
-};
+use datalove_datafun_ast::spans::{SpanMapEntry, DatafunSpans};
 
 /// Extract datafun expression spans from a parsed source.
 ///
@@ -299,7 +295,7 @@ pub fn datafun_spans<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> DatafunSpans {
-    use datalove_diagnostic::SpanEntry;
+    use bct::diagnostic::SpanEntry;
 
     let parse_result = parse(db, source);
     let entries: Vec<SpanMapEntry> = parse_result.expr_spans

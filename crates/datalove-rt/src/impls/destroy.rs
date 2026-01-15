@@ -1,6 +1,7 @@
 //! Destructor implementation for all Datalove types.
 
-use crate::{impls::rt_local, rtdt};
+use crate::impls::rt_local;
+use datalove_rtdt as rtdt;
 use crate::c::{LocalRtHandle, RtStatus};
 
 /// Destroys any type of value, freeing allocations recursively.

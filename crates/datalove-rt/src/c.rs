@@ -22,7 +22,7 @@
 //! In debug builds, null pointers will trigger a `debug_assert!` panic.
 //! Allocation failures return `RtStatus::Error`.
 
-use crate::rtdt;
+use datalove_rtdt as rtdt;
 use crate::impls::rt_local;
 
 /// A runtime handle. Needed for all calls.

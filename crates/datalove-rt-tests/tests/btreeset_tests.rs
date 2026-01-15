@@ -1,7 +1,7 @@
 //! Tests for btreeset runtime functions.
 
 use rmx::prelude::*;
-use datalove_rt::rtdt;
+use datalove_rtdt as rtdt;
 use std::cell::RefCell;
 use std::ptr;
 

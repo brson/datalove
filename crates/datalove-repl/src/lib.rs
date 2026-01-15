@@ -1,10 +1,7 @@
 //! The Datalove REPL evaluation engine.
 
-
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
-
-pub use datalove_datafun as datafun;
 
 mod engine;
 pub use engine::Engine;

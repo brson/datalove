@@ -2,7 +2,7 @@
 //!
 //! Produces valid datalit syntax that can be parsed back.
 
-use crate::rtdt;
+use datalove_rtdt as rtdt;
 use crate::c::{LocalRtHandle, RtStatus};
 
 /// Pretty-prints a runtime value into a string.

@@ -3,7 +3,8 @@
 //! Uses a B+tree structure with fixed-capacity nodes aligned to allocator size classes.
 
 use crate::impls::rt_local::RtLocal;
-use crate::rtdt::{self, *};
+use datalove_rtdt as rtdt;
+use datalove_rtdt::*;
 use crate::c::RtStatus;
 use crate::rust::AlignedBuffer;
 

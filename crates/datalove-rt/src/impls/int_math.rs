@@ -1,6 +1,6 @@
 //! Bigint arithmetic operations for the Datalove runtime.
 
-use crate::rtdt;
+use datalove_rtdt as rtdt;
 use crate::impls::rt_local::RtLocal;
 use crate::c::RtStatus;
 

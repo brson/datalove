@@ -3,7 +3,7 @@
 use rmx::prelude::*;
 use crate::app::{ReplExecutor, WorkerResponse};
 use crate::{Input, Command};
-use crate::datafun;
+use datalove_datafun as datafun;
 use crate::engine::Engine;
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;

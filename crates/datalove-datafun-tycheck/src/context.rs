@@ -9,14 +9,15 @@ use salsa::plumbing::AsId;
 
 use datalove_datafun_ast::ast::*;
 
+pub use datalove_datafun_ast::spans::DatafunSpans;
+pub use bct::module_graph::ModuleId;
+
 pub use crate::{
-    DatafunSpans,
     PendingDiagnostic,
     TypeAndHeap,
     TypeFunction,
     TypeError,
     ResolvedCallTarget,
-    ModuleId,
 };
 
 /// Context for typechecking.

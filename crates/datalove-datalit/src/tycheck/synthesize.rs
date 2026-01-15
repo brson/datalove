@@ -7,7 +7,8 @@
 //!    - Handles type hint propagation
 //!    - Dispatches to expression-specific synthesis rules
 
-use datalove_diagnostic::{DiagnosticBuilder, DiagnosticBuilderExt};
+use bct::diagnostic::DiagnosticBuilder;
+use datalove_diagnostic::DiagnosticBuilderExt;
 use crate::ast::*;
 use super::context::TypeContext;
 use super::check::check;

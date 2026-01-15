@@ -4,7 +4,7 @@
 //! `FrameStore` accumulates frames from script units for cross-unit value access.
 
 use datalove_rt::rust::AlignedBuffer;
-use datalove_rt::rtdt::TyDesc;
+use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::{ValueId, SlotId, ParamId};
 use crate::error::InterpError;
 use crate::layout::IrLayout;

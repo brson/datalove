@@ -1,6 +1,7 @@
 //! Set operations for the Datalove runtime.
 
-use crate::rtdt::{self, TyDesc, Set, SetNode, SetNodeTag, SET_NODE_CAPACITY};
+use datalove_rtdt as rtdt;
+use datalove_rtdt::{TyDesc, Set, SetNode, SetNodeTag, SET_NODE_CAPACITY};
 use crate::impls::rt_local::RtLocal;
 use crate::c::RtStatus;
 use crate::rust::AlignedBuffer;

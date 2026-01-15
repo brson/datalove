@@ -3,7 +3,8 @@
 //! Uses a simple growable array structure with element-based capacity.
 
 use crate::impls::rt_local::RtLocal;
-use crate::rtdt::{self, *};
+use datalove_rtdt as rtdt;
+use datalove_rtdt::*;
 use crate::c::RtStatus;
 
 // ============================================================================

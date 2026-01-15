@@ -1,6 +1,7 @@
 //! Deep cloning for runtime values.
 
-use crate::{c::{LocalRtHandle, RtStatus}, impls::rt_local, rtdt};
+use crate::{c::{LocalRtHandle, RtStatus}, impls::rt_local};
+use datalove_rtdt as rtdt;
 
 /// Clone any type into the local heap.
 ///

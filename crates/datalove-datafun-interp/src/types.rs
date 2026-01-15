@@ -2,7 +2,8 @@
 //!
 //! Handles tuples, structs, enums, options, results, and Data/Error types.
 
-use datalove_rt::rtdt::{self, TyDescRef};
+use datalove_rtdt as rtdt;
+use datalove_rtdt::TyDescRef;
 
 use crate::error::InterpError;
 use crate::value::{Destination, Value};

@@ -26,7 +26,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let source_text = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    let db = repl::datafun::Database::default();
+    let db = datalove_datafun::Database::default();
     let mut engine = repl::Engine::new(&db)
         .map_err(|e| format!("Failed to create engine: {}", e))?;
 

@@ -30,7 +30,7 @@ use rmx::prelude::*;
 use crate::ast::*;
 use crate::resolve::ResolvedExpr;
 use crate::tycheck::*;
-use crate::rtdt;
+use datalove_rtdt as rtdt;
 use crate::tydesc_table::TyDescTable;
 
 /// An instantiated value with its type descriptor.

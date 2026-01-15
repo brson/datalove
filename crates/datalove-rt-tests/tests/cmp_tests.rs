@@ -20,7 +20,7 @@ fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_
 }
 
 /// Clean up an instantiated value.
-unsafe fn cleanup_value(rt: &Runtime, ptr: *const u8, tydesc: *const datalove_rt::rtdt::TyDesc) {
+unsafe fn cleanup_value(rt: &Runtime, ptr: *const u8, tydesc: *const datalove_rtdt::TyDesc) {
     unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr as *mut u8, tydesc);
         datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc, 1, ptr as *mut u8);

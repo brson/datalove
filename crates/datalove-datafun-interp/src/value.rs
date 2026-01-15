@@ -2,7 +2,7 @@
 //!
 //! Both are `(ptr, tydesc)` pairs - `Value` for reading, `Destination` for writing.
 
-use datalove_rt::rtdt::TyDesc;
+use datalove_rtdt::TyDesc;
 
 /// Readable value pointer with type descriptor.
 #[derive(Copy, Clone, Debug)]

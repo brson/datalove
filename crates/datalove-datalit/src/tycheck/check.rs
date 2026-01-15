@@ -8,7 +8,8 @@
 //!    - Dispatches to expression-specific checking rules
 //! 2. Helper functions - diagnostic emission, type hint checks
 
-use datalove_diagnostic::{DiagnosticBuilder, DiagnosticBuilderExt};
+use bct::diagnostic::DiagnosticBuilder;
+use datalove_diagnostic::DiagnosticBuilderExt;
 use crate::ast::*;
 use super::context::TypeContext;
 use super::synthesize::synthesize;

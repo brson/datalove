@@ -3,7 +3,8 @@
 //! Converts `IrType` to runtime `TyDesc` pointers. TyDescs provide size, alignment,
 //! and type-specific info (field offsets, element types) for runtime operations.
 
-use datalove_rt::rtdt::{self, TyDesc, TyDescRef};
+use datalove_rtdt as rtdt;
+use datalove_rtdt::{TyDesc, TyDescRef};
 use datalove_datafun_ir::IrType;
 
 /// Table for converting `IrType` to runtime `TyDesc` pointers.
