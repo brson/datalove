@@ -25,14 +25,15 @@
 
 # in progress
 
+- type syntax cleanup
 - human docs
+- parallel compilation
 
 
 
 
 # on deck
 
-- parallel compilation
 - tables
 - fully reactive scripts
 - clone, working heap types, and default syntax everywhere
