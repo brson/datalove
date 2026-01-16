@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2026-01-08
+Last verified: 2026-01-16
 
 ## Overview
 
@@ -35,6 +35,35 @@ Uses Salsa for incremental compilation. REPL-first design.
 | Map | `@map<@K, @V>` | `@map { 0 = 5, 2 = 2 }` | Implemented |
 | Set | `@set<@T>` | `@set { 1, 2, 3 }` | Implemented |
 | Tensor | `@tensor<@T, N>` | - | [PARTIAL: parsed only] |
+| Table | `{| col: @T, ... |}` | `{| x, y; 1, 2 |}` | Implemented |
+
+**Table Type:**
+
+Tables provide struct-of-array (columnar) memory layout, similar to dataframes in Pandas/Polars/Arrow.
+
+Type syntax: `{| col1: T1, col2: T2, ... |}`
+
+Expression syntax:
+```
+{|
+  col1, col2    // header row (column names required)
+  val1, val2    // data row 1
+  val3, val4    // data row 2
+|}
+```
+
+The `{|` opening bracket enters a line-oriented parsing context where rows are separated by newlines. Semicolons can be used for single-line format: `{| x, y; 1, 2; 3, 4 |}`.
+
+Example with type hint:
+```
+: {| x: u32, y: u32 |} / {|
+  x, y
+  @1, @2
+  @3, @4
+|}
+```
+
+Column projections (e.g., `table.x`) have type "list of column type" but cannot be mutated or moved. They can be passed to `ref`-mode function arguments.
 
 ### 1.3 Aggregate Types
 
@@ -375,7 +404,7 @@ i8 -> i16 -> i32 -> i64 -> int
 
 | Copy Types | Linear Types |
 |------------|--------------|
-| bool, u8-u64, i8-i64, f32 | int, string, list, map, set, data, error |
+| bool, u8-u64, i8-i64, f32 | int, string, list, map, set, tensor, table, data, error |
 
 Linear types have move semantics; copy types can be freely duplicated.
 
