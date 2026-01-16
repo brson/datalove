@@ -61,7 +61,7 @@ impl IrInterpreter {
 
                 // Heap-allocated types are never copy.
                 rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data | rtdt::TyTag::Error => false,
-                rtdt::TyTag::List | rtdt::TyTag::Set | rtdt::TyTag::Map | rtdt::TyTag::Tensor => false,
+                rtdt::TyTag::List | rtdt::TyTag::Set | rtdt::TyTag::Map | rtdt::TyTag::Tensor | rtdt::TyTag::Table => false,
                 rtdt::TyTag::Result => false,
 
                 // Tuple is copy if all fields are copy.

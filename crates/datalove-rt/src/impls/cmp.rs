@@ -237,6 +237,7 @@ fn eq_tydesc(
 
                 rank_a == rank_b && eq_tydesc(elem_ty_a, elem_ty_b)
             }
+            rtdt::TyTag::Table => todo!(),
             rtdt::TyTag::Option => {
                 let inner_ty_a = td_a.option_inner_ty();
                 let inner_ty_b = td_b.option_inner_ty();
@@ -618,6 +619,7 @@ unsafe fn eq_value(
                     eq_value(elem_a, elem_b, element_ty, float_policy)
                 }
             }
+            rtdt::TyTag::Table => todo!(),
             rtdt::TyTag::Data => {
                 // Compare Data values.
                 // Data uses a tagged encoding that can store values in three ways.
@@ -1196,6 +1198,7 @@ unsafe fn cmp_value(
                     cmp_value(elem_a, elem_b, element_ty, float_policy)
                 }
             }
+            rtdt::TyTag::Table => todo!(),
             rtdt::TyTag::Data => {
                 // Compare Data values.
                 // Data uses a tagged encoding that can store values in three ways.

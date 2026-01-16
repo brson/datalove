@@ -372,6 +372,9 @@ unsafe fn clone_impl(
             RtStatus::Ok
         }
 
+        // Table - not yet implemented.
+        TyTag::Table => todo!(),
+
         // Option - copy tag and clone payload if Some.
         TyTag::Option => {
             let opt_in = unsafe { &*(value_in as *const rtdt::Option) };

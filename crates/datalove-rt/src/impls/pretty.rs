@@ -75,6 +75,7 @@ unsafe fn pretty_value(
             rtdt::TyTag::Error => pretty_error(rt, value_ref, string_mut, string_tydesc),
 
             rtdt::TyTag::Tensor => pretty_tensor(rt, value_ref, tydesc, string_mut, string_tydesc),
+            rtdt::TyTag::Table => todo!(),
         }
     }
 }

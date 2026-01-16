@@ -149,6 +149,9 @@ pub unsafe fn any_destroy_local(
                 RtStatus::Ok
             }
 
+            // Table - not yet implemented.
+            rtdt::TyTag::Table => todo!(),
+
             // Tuple - recursively destroy fields.
             rtdt::TyTag::Tuple => {
                 for field in ty.iter_tuple_fields() {
