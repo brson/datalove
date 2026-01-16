@@ -359,6 +359,18 @@ pub fn synthesize<'db>(
             Type::Tensor(TypeTensor { element_type: first_type, rank })
         }
 
+        Expr::Table(_) => {
+            // T018: Cannot synthesize type for table expression.
+            if let Some(ts) = ctx.get_span(expr) {
+                DiagnosticBuilder::error(db, "cannot synthesize type for table expression")
+                    .code("T018")
+                    .primary_label(ts.clone(), "table requires type hint")
+                    .note("use a type hint to specify the table schema")
+                    .emit_type();
+            }
+            return Err(TypeError::CannotSynthesize);
+        }
+
         Expr::ParseError(_) => {
             // T017: Cannot synthesize type for parse error.
             if let Some(ts) = ctx.get_span(expr) {

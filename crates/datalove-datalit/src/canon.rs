@@ -234,9 +234,10 @@ fn expr_type_tag(expr: &Expr) -> u8 {
         Set(_) => 14,
         Map(_) => 15,
         Tensor(_) => 16,
-        Data(_) => 17,
-        Error(_) => 18,
-        ParseError(_) => 19,
+        Table(_) => 17,
+        Data(_) => 18,
+        Error(_) => 19,
+        ParseError(_) => 20,
     }
 }
 

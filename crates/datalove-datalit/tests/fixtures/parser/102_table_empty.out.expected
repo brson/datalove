@@ -1,0 +1,15 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Table": {
+          "header": [],
+          "rows": []
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": null
+  },
+  "diagnostics": []
+}

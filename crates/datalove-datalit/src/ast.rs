@@ -170,6 +170,7 @@ pub enum Expr<'db> {
     Map(ExprMap<'db>),
     Set(ExprSet<'db>),
     Tensor(ExprTensor<'db>),
+    Table(ExprTable<'db>),
     None,
     Some(ExprSome<'db>),
     Ok(ExprOk<'db>),
@@ -258,6 +259,19 @@ pub struct ExprSet<'db> {
 #[derive(salsa::Update)]
 pub struct ExprTensor<'db> {
     pub shape: Vec<u32>,
+    pub elements: Vec<ExprFull<'db>>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExprTable<'db> {
+    pub header: Vec<InternedText<'db>>,
+    pub rows: Vec<ExprTableRow<'db>>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExprTableRow<'db> {
     pub elements: Vec<ExprFull<'db>>,
 }
 

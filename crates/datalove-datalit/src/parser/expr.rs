@@ -117,8 +117,9 @@ impl<'db> Parser<'db> {
                 }
                 Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) |
                 Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) |
-                Some(TreeToken::Branch { sigil: Sigil::BraceOpen, .. }) => {
-                    // Bare branch (anonymous tuple, list, or struct) - use Omitted heap.
+                Some(TreeToken::Branch { sigil: Sigil::BraceOpen, .. }) |
+                Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
+                    // Bare branch (anonymous tuple, list, struct, or table) - use Omitted heap.
                     ast::Heap::Omitted
                 }
                 _ => {
@@ -522,6 +523,14 @@ impl<'db> Parser<'db> {
                 self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::List(ast::ExprList { elements })
             }
+            Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
+                // Table.
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { inner, .. }) => inner,
+                    _ => unreachable!(),
+                };
+                self.parse_table_expr(inner)
+            }
             _ => {
                 let ts = self.peek_text_span();
                 self.emit_expr_error(ts,
@@ -597,5 +606,130 @@ impl<'db> Parser<'db> {
         }
 
         rows
+    }
+
+    fn parse_table_expr(&mut self, iter: bct::bracer::BracerIter<'db>) -> ast::Expr<'db> {
+        // Collect all tokens including whitespace.
+        let all_tokens: Vec<_> = iter.collect();
+
+        // Split by row delimiters (newline in whitespace, or semicolon).
+        let rows = self.split_tokens_by_row(&all_tokens);
+
+        if rows.is_empty() {
+            // Empty table: {||}.
+            return ast::Expr::Table(ast::ExprTable {
+                header: vec![],
+                rows: vec![],
+            });
+        }
+
+        // First row is header (column names).
+        let header = self.parse_table_header(&rows[0]);
+        let num_columns = header.len();
+
+        // Remaining rows are data.
+        let mut data_rows = Vec::new();
+        for (row_idx, row_tokens) in rows.iter().skip(1).enumerate() {
+            let elements = self.parse_table_data_row(row_tokens);
+            if elements.len() != num_columns && !elements.is_empty() {
+                let ts = self.peek_text_span();
+                DiagnosticBuilder::error(self.db,
+                    &format!("row {} has {} columns but header has {}",
+                        row_idx + 1, elements.len(), num_columns))
+                    .code("D030")
+                    .primary_label(ts, "column count mismatch")
+                    .emit_parse();
+            }
+            data_rows.push(ast::ExprTableRow { elements });
+        }
+
+        ast::Expr::Table(ast::ExprTable { header, rows: data_rows })
+    }
+
+    fn split_tokens_by_row(&self, tokens: &[TreeToken<'db>]) -> Vec<Vec<TreeToken<'db>>> {
+        let mut rows = Vec::new();
+        let mut current_row = Vec::new();
+
+        for token in tokens {
+            match token {
+                // Semicolon is explicit row delimiter.
+                TreeToken::Token(tok) if tok.kind(self.db) == TokenKind::Sigil(Sigil::Semicolon) => {
+                    if !current_row.is_empty() {
+                        rows.push(std::mem::take(&mut current_row));
+                    }
+                }
+                // Whitespace containing newline is implicit row delimiter.
+                TreeToken::Token(tok) if tok.kind(self.db) == TokenKind::Whitespace => {
+                    let text = tok.text(self.db).as_str(self.db);
+                    if text.contains('\n') {
+                        if !current_row.is_empty() {
+                            rows.push(std::mem::take(&mut current_row));
+                        }
+                    } else {
+                        current_row.push(token.clone());
+                    }
+                }
+                _ => {
+                    current_row.push(token.clone());
+                }
+            }
+        }
+
+        if !current_row.is_empty() {
+            rows.push(current_row);
+        }
+
+        rows
+    }
+
+    fn parse_table_header(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<InternedText<'db>> {
+        // Filter out whitespace and split by comma.
+        let tokens_no_ws: Vec<_> = row_tokens.iter()
+            .filter_map(|t| t.clone().without_space(self.db))
+            .collect();
+
+        // Split by comma and extract names.
+        let parts = self.split_tokens_by_comma(&tokens_no_ws);
+        let mut names = Vec::new();
+
+        for part in parts {
+            // Each part should be a single name token.
+            if let Some(TreeToken::Token(tok)) = part.first() {
+                if let Some(name) = tok.word_str(self.db) {
+                    names.push(InternedText::new(self.db, name.S()));
+                    continue;
+                }
+            }
+            // Error: expected column name.
+            let ts = self.peek_text_span();
+            DiagnosticBuilder::error(self.db, "expected column name in table header")
+                .code("D031")
+                .primary_label(ts, "expected name")
+                .emit_parse();
+            names.push(InternedText::new(self.db, "<error>".S()));
+        }
+
+        names
+    }
+
+    fn parse_table_data_row(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<ast::ExprFull<'db>> {
+        // Filter out whitespace.
+        let tokens_no_ws: Vec<_> = row_tokens.iter()
+            .filter_map(|t| t.clone().without_space(self.db))
+            .collect();
+
+        // Split by comma and parse each element.
+        let parts = self.split_tokens_by_comma(&tokens_no_ws);
+        let mut elements = Vec::new();
+
+        for part in parts {
+            let mut sub_parser = Parser::new(self.db, part, self.source_text());
+            let expr = sub_parser.parse_expr_full();
+            sub_parser.error_if_not_exhausted();
+            self.expr_spans.extend(sub_parser.expr_spans);
+            elements.push(expr);
+        }
+
+        elements
     }
 }

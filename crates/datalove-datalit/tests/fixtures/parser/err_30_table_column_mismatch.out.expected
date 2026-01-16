@@ -1,0 +1,71 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Table": {
+          "header": [
+            "x",
+            "y"
+          ],
+          "rows": [
+            {
+              "elements": [
+                {
+                  "expr": {
+                    "expr": {
+                      "Int": {
+                        "value": "1"
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                },
+                {
+                  "expr": {
+                    "expr": {
+                      "Int": {
+                        "value": "2"
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                },
+                {
+                  "expr": {
+                    "expr": {
+                      "Int": {
+                        "value": "3"
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D030",
+      "labels": [
+        {
+          "message": "column count mismatch",
+          "span": [
+            0,
+            0
+          ],
+          "text": ""
+        }
+      ],
+      "message": "row 1 has 3 columns but header has 2"
+    }
+  ]
+}

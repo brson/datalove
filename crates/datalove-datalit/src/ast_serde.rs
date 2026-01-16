@@ -134,6 +134,7 @@ pub enum Expr {
     Map(ExprMap),
     Set(ExprSet),
     Tensor(ExprTensor),
+    Table(ExprTable),
     None,
     Some(ExprSome),
     Ok(ExprOk),
@@ -209,6 +210,17 @@ pub struct ExprSet {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprTensor {
     pub shape: Vec<u32>,
+    pub elements: Vec<ExprFull>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprTable {
+    pub header: Vec<String>,
+    pub rows: Vec<ExprTableRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprTableRow {
     pub elements: Vec<ExprFull>,
 }
 
@@ -426,6 +438,7 @@ impl Expr {
             crate::ast::Expr::Map(e) => Expr::Map(ExprMap::from_ast(db, e)),
             crate::ast::Expr::Set(e) => Expr::Set(ExprSet::from_ast(db, e)),
             crate::ast::Expr::Tensor(e) => Expr::Tensor(ExprTensor::from_ast(db, e)),
+            crate::ast::Expr::Table(e) => Expr::Table(ExprTable::from_ast(db, e)),
             crate::ast::Expr::None => Expr::None,
             crate::ast::Expr::Some(e) => Expr::Some(ExprSome::from_ast(db, e)),
             crate::ast::Expr::Ok(e) => Expr::Ok(ExprOk::from_ast(db, e)),
@@ -540,6 +553,23 @@ impl ExprTensor {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprTensor<'db>) -> Self {
         ExprTensor {
             shape: ast.shape.clone(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+        }
+    }
+}
+
+impl ExprTable {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprTable<'db>) -> Self {
+        ExprTable {
+            header: ast.header.iter().map(|n| n.as_str(db).S()).collect(),
+            rows: ast.rows.iter().map(|r| ExprTableRow::from_ast(db, r.clone())).collect(),
+        }
+    }
+}
+
+impl ExprTableRow {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprTableRow<'db>) -> Self {
+        ExprTableRow {
             elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
         }
     }

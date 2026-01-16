@@ -551,5 +551,27 @@ fn pretty_expr<'db>(
             out.push_str(e.message.as_str(db));
             out.push('>');
         }
+
+        Expr::Table(t) => {
+            out.push_str("{| ");
+            // Print header.
+            for (i, name) in t.header.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(name.as_str(db));
+            }
+            // Print rows.
+            for row in &t.rows {
+                out.push_str("; ");
+                for (i, elem) in row.elements.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    pretty_expr_full(db, *elem, out, indent);
+                }
+            }
+            out.push_str(" |}");
+        }
     }
 }
