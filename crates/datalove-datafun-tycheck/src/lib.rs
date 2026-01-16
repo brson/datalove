@@ -289,6 +289,9 @@ pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ty
         // Option/Result are copy if inner type is copy.
         DatalitType::Option(opt) => is_copy_type(db, opt.inner_type.ty(db)),
         DatalitType::Result(res) => is_copy_type(db, res.inner_type.ty(db)),
+
+        // Tables are not copy (they contain heap-allocated data).
+        DatalitType::Table(_) => false,
     }
 }
 

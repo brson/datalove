@@ -262,6 +262,9 @@ impl IrType {
                 let elem = Self::from_type_hint(db, &t.element_type);
                 IrType::Tensor(Box::new(elem), t.rank)
             }
+            TypeHint::Table(_) => {
+                todo!("table types not yet supported in datafun IR")
+            }
             TypeHint::ParseError(_) => {
                 IrType::Error
             }
@@ -348,6 +351,9 @@ impl IrType {
             DlType::Tensor(t) => {
                 let elem = Self::from_datalit_tyandheap(db, &t.element_type);
                 IrType::Tensor(Box::new(elem), t.rank)
+            }
+            DlType::Table(_) => {
+                todo!("table types not yet supported in datafun IR")
             }
         }
     }

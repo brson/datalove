@@ -83,6 +83,9 @@ fn type_hint_to_string(db: &dyn salsa::Database, type_hint: datalove_datalit::as
         TypeHint::ParseError(_) => {
             return "?".to_string();
         }
+        TypeHint::Table(_) => {
+            return format!("{}table", heap_prefix);
+        }
     };
 
     format!("{}{}", heap_prefix, base_type)

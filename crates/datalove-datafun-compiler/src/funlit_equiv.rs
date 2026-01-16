@@ -502,6 +502,7 @@ fn datalit_type_inner_to_serde<'db>(
         },
         Type::Data => TypeSerde::Data,
         Type::Error => TypeSerde::Error,
+        Type::Table(_) => todo!("table types not yet supported in funlit equiv"),
     }
 }
 

@@ -271,6 +271,7 @@ fn convert_type_hint_inner<'db>(
         }
 
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
+        TypeHint::Table(_) => todo!("table types not yet supported in datafun"),
     };
 
     Ok(TypeAndHeap::new(db, heap, ty))
