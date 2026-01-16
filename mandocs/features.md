@@ -1,5 +1,11 @@
 ## Features
 
+- Scalar types.
+- Option and result types.
+- List, map, set.
+- Tensors (multi-dimensional arrays).
+- Tables (dataframes / struct-of-arrays).
+- Dynamic types (`data` and `error`).
 - Memoized parsing, name resolution,
   typechecking, and IR lowering (via Salsa).
 - Parallelized parsing, name resolution,
