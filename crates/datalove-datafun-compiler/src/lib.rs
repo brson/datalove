@@ -9,6 +9,9 @@ pub mod ir_ext;
 // IR lowering from AST to IR.
 pub mod lower;
 
+// Salsa-tracked IR lowering functions.
+pub mod tracked_lower;
+
 // Drop analysis for IR lowering.
 pub mod drop_analysis;
 

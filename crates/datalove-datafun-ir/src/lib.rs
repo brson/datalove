@@ -492,6 +492,34 @@ pub enum ConstValue {
     String(String),
 }
 
+impl std::hash::Hash for ConstValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            ConstValue::Unit => {}
+            ConstValue::Bool(v) => v.hash(state),
+            ConstValue::U8(v) => v.hash(state),
+            ConstValue::U16(v) => v.hash(state),
+            ConstValue::U32(v) => v.hash(state),
+            ConstValue::U64(v) => v.hash(state),
+            ConstValue::I8(v) => v.hash(state),
+            ConstValue::I16(v) => v.hash(state),
+            ConstValue::I32(v) => v.hash(state),
+            ConstValue::I64(v) => v.hash(state),
+            ConstValue::Int { limbs, negative } => {
+                limbs.hash(state);
+                negative.hash(state);
+            }
+            ConstValue::F32(v) => v.to_bits().hash(state),
+            ConstValue::F64(v) => v.to_bits().hash(state),
+            ConstValue::String(v) => v.hash(state),
+        }
+    }
+}
+
+impl Eq for ConstValue {}
+// Note: PartialEq is derived and uses float comparison semantics.
+
 /// Binary operator.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum BinOp {
@@ -545,7 +573,7 @@ pub enum ParamMode {
 }
 
 /// Flat instruction - no nesting, 2-3 operands max.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Instruction {
     /// Load a constant value.
     Const { dest: ValueId, value: ConstValue },
@@ -727,7 +755,7 @@ pub enum Instruction {
 }
 
 /// Block terminator - how control leaves a basic block.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Terminator {
     /// Unconditional jump with block arguments.
     ///
@@ -761,7 +789,7 @@ pub enum Terminator {
 }
 
 /// A basic block - sequence of instructions followed by a terminator.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct IrBlock {
     pub id: BlockId,
     /// Block parameters (SSA values defined at block entry).
@@ -782,7 +810,7 @@ pub struct IrBlock {
 }
 
 /// IR for a single function.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct IrFunction {
     pub id: FuncId,
     pub name: String,
