@@ -476,3 +476,192 @@ pub fn compute_set_leaf_node_layout(
         keys_offset,
     }
 }
+
+/// Compute byte offset of a column within a table's data allocation.
+///
+/// Iterates through prior columns, accumulating their aligned sizes.
+#[inline]
+pub fn table_column_offset(
+    column_tydescs: &[&TyDesc],
+    column_index: usize,
+    capacity: u32,
+) -> u32 {
+    let mut offset = 0u32;
+    for i in 0..column_index {
+        offset = align_up(offset, column_tydescs[i].align);
+        offset += column_tydescs[i].size * capacity;
+    }
+    align_up(offset, column_tydescs[column_index].align)
+}
+
+/// Compute total allocation size for a table's data.
+#[inline]
+pub fn table_data_allocation_size(
+    column_tydescs: &[&TyDesc],
+    capacity: u32,
+) -> u32 {
+    if column_tydescs.is_empty() || capacity == 0 {
+        return 0;
+    }
+    let mut offset = 0u32;
+    let mut max_align = 1u32;
+    for tydesc in column_tydescs {
+        offset = align_up(offset, tydesc.align);
+        offset += tydesc.size * capacity;
+        max_align = max_align.max(tydesc.align);
+    }
+    align_up(offset, max_align)
+}
+
+/// Compute required alignment for a table's data allocation.
+#[inline]
+pub fn table_data_alignment(column_tydescs: &[&TyDesc]) -> u32 {
+    column_tydescs.iter().map(|td| td.align).max().unwrap_or(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_tydesc(size: u32, align: u32) -> TyDesc {
+        TyDesc {
+            type_tag: TyTag::U8,
+            size,
+            align,
+            type_info: TyInfo {
+                nothing: TyInfoNothing,
+            },
+        }
+    }
+
+    // table_column_offset tests
+
+    #[test]
+    fn test_table_column_offset_first_column() {
+        let td = make_tydesc(4, 4);
+        let tydescs: Vec<&TyDesc> = vec![&td];
+        assert_eq!(table_column_offset(&tydescs, 0, 10), 0);
+    }
+
+    #[test]
+    fn test_table_column_offset_second_column_same_align() {
+        let td1 = make_tydesc(4, 4);
+        let td2 = make_tydesc(4, 4);
+        let tydescs: Vec<&TyDesc> = vec![&td1, &td2];
+        // Column 0: 10 elements * 4 bytes = 40 bytes at offset 0.
+        // Column 1: starts at offset 40 (already aligned).
+        assert_eq!(table_column_offset(&tydescs, 1, 10), 40);
+    }
+
+    #[test]
+    fn test_table_column_offset_alignment_padding() {
+        let td1 = make_tydesc(1, 1); // u8
+        let td2 = make_tydesc(8, 8); // u64
+        let tydescs: Vec<&TyDesc> = vec![&td1, &td2];
+        // Column 0: 10 elements * 1 byte = 10 bytes at offset 0.
+        // Column 1: needs 8-byte alignment, so aligns 10 -> 16.
+        assert_eq!(table_column_offset(&tydescs, 1, 10), 16);
+    }
+
+    #[test]
+    fn test_table_column_offset_three_columns() {
+        let td1 = make_tydesc(1, 1); // u8
+        let td2 = make_tydesc(4, 4); // u32
+        let td3 = make_tydesc(8, 8); // u64
+        let tydescs: Vec<&TyDesc> = vec![&td1, &td2, &td3];
+        // Column 0: 5 elements * 1 byte = 5 bytes at offset 0.
+        // Column 1: needs 4-byte alignment, aligns 5 -> 8, then 5*4=20 bytes.
+        // Column 2: offset after col1 = 8 + 20 = 28, needs 8-byte alignment -> 32.
+        assert_eq!(table_column_offset(&tydescs, 0, 5), 0);
+        assert_eq!(table_column_offset(&tydescs, 1, 5), 8);
+        assert_eq!(table_column_offset(&tydescs, 2, 5), 32);
+    }
+
+    // table_data_allocation_size tests
+
+    #[test]
+    fn test_table_data_allocation_size_empty() {
+        let tydescs: Vec<&TyDesc> = vec![];
+        assert_eq!(table_data_allocation_size(&tydescs, 10), 0);
+    }
+
+    #[test]
+    fn test_table_data_allocation_size_zero_capacity() {
+        let td = make_tydesc(4, 4);
+        let tydescs: Vec<&TyDesc> = vec![&td];
+        assert_eq!(table_data_allocation_size(&tydescs, 0), 0);
+    }
+
+    #[test]
+    fn test_table_data_allocation_size_single_column() {
+        let td = make_tydesc(4, 4);
+        let tydescs: Vec<&TyDesc> = vec![&td];
+        // 10 elements * 4 bytes = 40 bytes, already aligned to 4.
+        assert_eq!(table_data_allocation_size(&tydescs, 10), 40);
+    }
+
+    #[test]
+    fn test_table_data_allocation_size_multiple_columns() {
+        let td1 = make_tydesc(1, 1); // u8
+        let td2 = make_tydesc(4, 4); // u32
+        let tydescs: Vec<&TyDesc> = vec![&td1, &td2];
+        // Column 0: 5 * 1 = 5 bytes at offset 0.
+        // Column 1: align 5 -> 8, then 5 * 4 = 20 bytes.
+        // Total: 8 + 20 = 28, align to max_align=4 -> 28.
+        assert_eq!(table_data_allocation_size(&tydescs, 5), 28);
+    }
+
+    #[test]
+    fn test_table_data_allocation_size_final_alignment() {
+        let td1 = make_tydesc(1, 1); // u8
+        let td2 = make_tydesc(8, 8); // u64
+        let tydescs: Vec<&TyDesc> = vec![&td1, &td2];
+        // Column 0: 3 * 1 = 3 bytes at offset 0.
+        // Column 1: align 3 -> 8, then 3 * 8 = 24 bytes.
+        // Total: 8 + 24 = 32, already aligned to max_align=8.
+        assert_eq!(table_data_allocation_size(&tydescs, 3), 32);
+    }
+
+    #[test]
+    fn test_table_data_allocation_size_needs_final_padding() {
+        let td1 = make_tydesc(8, 8); // u64
+        let td2 = make_tydesc(1, 1); // u8
+        let tydescs: Vec<&TyDesc> = vec![&td1, &td2];
+        // Column 0: 3 * 8 = 24 bytes at offset 0.
+        // Column 1: 3 * 1 = 3 bytes at offset 24.
+        // Total: 24 + 3 = 27, align to max_align=8 -> 32.
+        assert_eq!(table_data_allocation_size(&tydescs, 3), 32);
+    }
+
+    // table_data_alignment tests
+
+    #[test]
+    fn test_table_data_alignment_empty() {
+        let tydescs: Vec<&TyDesc> = vec![];
+        assert_eq!(table_data_alignment(&tydescs), 1);
+    }
+
+    #[test]
+    fn test_table_data_alignment_single_column() {
+        let td = make_tydesc(4, 4);
+        let tydescs: Vec<&TyDesc> = vec![&td];
+        assert_eq!(table_data_alignment(&tydescs), 4);
+    }
+
+    #[test]
+    fn test_table_data_alignment_max_of_columns() {
+        let td1 = make_tydesc(1, 1); // u8
+        let td2 = make_tydesc(8, 8); // u64
+        let td3 = make_tydesc(4, 4); // u32
+        let tydescs: Vec<&TyDesc> = vec![&td1, &td2, &td3];
+        assert_eq!(table_data_alignment(&tydescs), 8);
+    }
+
+    #[test]
+    fn test_table_data_alignment_all_same() {
+        let td1 = make_tydesc(4, 4);
+        let td2 = make_tydesc(4, 4);
+        let tydescs: Vec<&TyDesc> = vec![&td1, &td2];
+        assert_eq!(table_data_alignment(&tydescs), 4);
+    }
+}

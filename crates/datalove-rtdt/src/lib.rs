@@ -9,6 +9,7 @@ pub use tydesc_ref::{
     TupleInfo, TupleFieldRef, TupleFieldIter,
     StructInfo, StructFieldRef, StructFieldIter,
     EnumInfo, EnumVariantRef, EnumVariantIter,
+    TableColumnTyDescIter,
 };
 
 
@@ -105,6 +106,17 @@ pub struct List {
     pub data: *const u8, // type-aligned
     pub size: u32, // in elements,
     pub capacity: u32, // in elements,
+}
+
+/// Columnar table storage.
+///
+/// All column data stored in a single contiguous allocation. Column offsets
+/// are computed dynamically from the type descriptors in TyInfoTable.
+#[repr(C)]
+pub struct Table {
+    pub len: u32,
+    pub capacity: u32,
+    pub data: *const u8,
 }
 
 #[repr(C)]
@@ -394,6 +406,7 @@ pub enum TyTag {
     Map = 0x52,
     Set = 0x53,
     Tensor = 0x54,
+    Table = 0x55,
 
     Option = 0x60,
     Result = 0x61,
@@ -413,6 +426,7 @@ pub union TyInfo {
     pub map: TyInfoMap,
     pub set: TyInfoSet,
     pub tensor: TyInfoTensor,
+    pub table: TyInfoTable,
     pub option: TyInfoOption,
     pub result: TyInfoResult,
 }
@@ -491,6 +505,17 @@ pub struct TyInfoSet {
 pub struct TyInfoTensor {
     pub element_tydesc: *const TyDesc,
     pub rank: u32,
+}
+
+/// Type information for Table.
+///
+/// Column type descriptors determine the data layout. Column names
+/// are compile-time only and not stored at runtime.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoTable {
+    pub num_columns: u32,
+    pub column_tydescs: *const *const TyDesc,
 }
 
 #[repr(C)]

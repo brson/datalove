@@ -226,6 +226,29 @@ impl<'a> TyDescRef<'a> {
         }
     }
 
+    /// Returns the number of columns for a Table type.
+    ///
+    /// # Panics
+    /// Panics if this is not a Table type.
+    pub fn table_num_columns(&self) -> u32 {
+        assert_eq!(self.inner.type_tag, TyTag::Table);
+        unsafe { self.inner.type_info.table.num_columns }
+    }
+
+    /// Returns an iterator over column type descriptors for a Table type.
+    ///
+    /// # Panics
+    /// Panics if this is not a Table type.
+    pub fn table_column_tydescs(&self) -> TableColumnTyDescIter<'a> {
+        assert_eq!(self.inner.type_tag, TyTag::Table);
+        let info = unsafe { &self.inner.type_info.table };
+        TableColumnTyDescIter {
+            ptr: info.column_tydescs,
+            remaining: info.num_columns,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
     // Generic container accessors.
 
     /// Returns the inner type descriptor for an Option type.
@@ -517,3 +540,33 @@ impl<'a> Iterator for EnumVariantIter<'a> {
         }
     }
 }
+
+/// Iterator over column type descriptors in a Table.
+pub struct TableColumnTyDescIter<'a> {
+    ptr: *const *const TyDesc,
+    remaining: u32,
+    _marker: std::marker::PhantomData<&'a TyDesc>,
+}
+
+impl<'a> Iterator for TableColumnTyDescIter<'a> {
+    type Item = TyDescRef<'a>;
+
+    fn next(&mut self) -> core::option::Option<Self::Item> {
+        if self.remaining == 0 {
+            return core::option::Option::None;
+        }
+        unsafe {
+            let tydesc = *self.ptr;
+            self.ptr = self.ptr.add(1);
+            self.remaining -= 1;
+            core::option::Option::Some(TyDescRef::from_ptr(tydesc))
+        }
+    }
+
+    fn size_hint(&self) -> (usize, core::option::Option<usize>) {
+        let len = self.remaining as usize;
+        (len, core::option::Option::Some(len))
+    }
+}
+
+impl<'a> ExactSizeIterator for TableColumnTyDescIter<'a> {}
