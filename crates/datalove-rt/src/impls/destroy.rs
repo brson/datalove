@@ -149,8 +149,10 @@ pub unsafe fn any_destroy_local(
                 RtStatus::Ok
             }
 
-            // Table - not yet implemented.
-            rtdt::TyTag::Table => todo!(),
+            // Table - destroy columnar data.
+            rtdt::TyTag::Table => {
+                crate::impls::table::table_destroy_impl(rt, value_in, ty)
+            }
 
             // Tuple - recursively destroy fields.
             rtdt::TyTag::Tuple => {

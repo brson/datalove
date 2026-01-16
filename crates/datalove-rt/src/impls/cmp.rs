@@ -237,7 +237,19 @@ fn eq_tydesc(
 
                 rank_a == rank_b && eq_tydesc(elem_ty_a, elem_ty_b)
             }
-            rtdt::TyTag::Table => todo!(),
+            rtdt::TyTag::Table => {
+                let num_cols_a = td_a.table_num_columns();
+                let num_cols_b = td_b.table_num_columns();
+                if num_cols_a != num_cols_b {
+                    return false;
+                }
+                for (col_ty_a, col_ty_b) in td_a.table_column_tydescs().zip(td_b.table_column_tydescs()) {
+                    if !eq_tydesc(col_ty_a, col_ty_b) {
+                        return false;
+                    }
+                }
+                true
+            }
             rtdt::TyTag::Option => {
                 let inner_ty_a = td_a.option_inner_ty();
                 let inner_ty_b = td_b.option_inner_ty();
@@ -619,7 +631,46 @@ unsafe fn eq_value(
                     eq_value(elem_a, elem_b, element_ty, float_policy)
                 }
             }
-            rtdt::TyTag::Table => todo!(),
+            rtdt::TyTag::Table => {
+                let table_a = &*(value_a as *const rtdt::Table);
+                let table_b = &*(value_b as *const rtdt::Table);
+
+                // Compare lengths first.
+                if table_a.len != table_b.len {
+                    return false;
+                }
+
+                // Empty tables are equal.
+                if table_a.len == 0 {
+                    return true;
+                }
+
+                let column_tydescs = crate::impls::table::collect_column_tydescs(td);
+
+                // Compare element-by-element, row-major order.
+                for row in 0..table_a.len {
+                    for (col, col_ty) in td.table_column_tydescs().enumerate() {
+                        let elem_a = crate::impls::table::element_ptr(
+                            table_a.data,
+                            &column_tydescs,
+                            row,
+                            col,
+                            table_a.capacity,
+                        );
+                        let elem_b = crate::impls::table::element_ptr(
+                            table_b.data,
+                            &column_tydescs,
+                            row,
+                            col,
+                            table_b.capacity,
+                        );
+                        if !eq_value(elem_a, elem_b, col_ty, float_policy) {
+                            return false;
+                        }
+                    }
+                }
+                true
+            }
             rtdt::TyTag::Data => {
                 // Compare Data values.
                 // Data uses a tagged encoding that can store values in three ways.
@@ -1198,7 +1249,44 @@ unsafe fn cmp_value(
                     cmp_value(elem_a, elem_b, element_ty, float_policy)
                 }
             }
-            rtdt::TyTag::Table => todo!(),
+            rtdt::TyTag::Table => {
+                let table_a = &*(value_a as *const rtdt::Table);
+                let table_b = &*(value_b as *const rtdt::Table);
+
+                let column_tydescs = crate::impls::table::collect_column_tydescs(td);
+                let min_len = table_a.len.min(table_b.len);
+
+                // Compare element-by-element, row-major order (lexicographic).
+                for row in 0..min_len {
+                    for (col, col_ty) in td.table_column_tydescs().enumerate() {
+                        let elem_a = crate::impls::table::element_ptr(
+                            table_a.data,
+                            &column_tydescs,
+                            row,
+                            col,
+                            table_a.capacity,
+                        );
+                        let elem_b = crate::impls::table::element_ptr(
+                            table_b.data,
+                            &column_tydescs,
+                            row,
+                            col,
+                            table_b.capacity,
+                        );
+                        let ord = cmp_value(elem_a, elem_b, col_ty, float_policy);
+                        if ord != crate::c::RtOrdering::Equal {
+                            return ord;
+                        }
+                    }
+                }
+
+                // All compared elements equal - shorter table is less.
+                match table_a.len.cmp(&table_b.len) {
+                    std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
+                    std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
+                    std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
+                }
+            }
             rtdt::TyTag::Data => {
                 // Compare Data values.
                 // Data uses a tagged encoding that can store values in three ways.

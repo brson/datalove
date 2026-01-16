@@ -75,7 +75,7 @@ unsafe fn pretty_value(
             rtdt::TyTag::Error => pretty_error(rt, value_ref, string_mut, string_tydesc),
 
             rtdt::TyTag::Tensor => pretty_tensor(rt, value_ref, tydesc, string_mut, string_tydesc),
-            rtdt::TyTag::Table => todo!(),
+            rtdt::TyTag::Table => pretty_table(rt, value_ref, tydesc, string_mut, string_tydesc),
         }
     }
 }
@@ -677,6 +677,48 @@ unsafe fn pretty_tensor(
         }
 
         push_str(rt, string_mut, string_tydesc, b"]")
+    }
+}
+
+unsafe fn pretty_table(
+    rt: LocalRtHandle,
+    value_ref: *const u8,
+    tydesc: rtdt::TyDescRef,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let table = &*(value_ref as *const rtdt::Table);
+        let column_tydescs = crate::impls::table::collect_column_tydescs(tydesc);
+
+        // Format: {| val1, val2; val3, val4 |}
+        // Rows separated by ";", values by ",". No header (runtime has no column names).
+        push_str(rt, string_mut, string_tydesc, b"@table {| ")?;
+
+        if !table.data.is_null() && table.len > 0 {
+            for row in 0..table.len {
+                if row > 0 {
+                    push_str(rt, string_mut, string_tydesc, b"; ")?;
+                }
+
+                for (col, col_ty) in tydesc.table_column_tydescs().enumerate() {
+                    if col > 0 {
+                        push_str(rt, string_mut, string_tydesc, b", ")?;
+                    }
+
+                    let elem_ptr = crate::impls::table::element_ptr(
+                        table.data,
+                        &column_tydescs,
+                        row,
+                        col,
+                        table.capacity,
+                    );
+                    pretty_value(rt, elem_ptr, col_ty, string_mut, string_tydesc)?;
+                }
+            }
+        }
+
+        push_str(rt, string_mut, string_tydesc, b" |}")
     }
 }
 

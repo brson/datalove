@@ -1730,6 +1730,157 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_init_local(
 }
 
 // ============================================================================
+// Table Operations
+// ============================================================================
+
+/// Create an empty table.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_table_create_local(
+    rt: LocalRtHandle,
+    value_out: *mut u8,
+    tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!value_out.is_null(), "value_out is null");
+    debug_assert!(!tydesc.is_null(), "tydesc is null");
+    debug_assert_aligned(value_out, tydesc, "table_create:value_out");
+    unsafe {
+        let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
+        crate::impls::table::table_create_impl(rt, value_out, tydesc_ref)
+    }
+}
+
+/// Destroy a table and all its elements.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_table_destroy_local(
+    rt: LocalRtHandle,
+    value_in: *mut u8,
+    tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!value_in.is_null(), "value_in is null");
+    debug_assert!(!tydesc.is_null(), "tydesc is null");
+    debug_assert_aligned(value_in, tydesc, "table_destroy:value");
+    unsafe {
+        let tydesc_ref = rtdt::TyDescRef::from_ptr(tydesc);
+        crate::impls::table::table_destroy_impl(rt, value_in, tydesc_ref)
+    }
+}
+
+/// Push a row to a table.
+///
+/// The row is passed as a tuple with one field per column.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_table_push_row_local(
+    rt: LocalRtHandle,
+    table_mut: *mut u8,
+    table_tydesc: *const rtdt::TyDesc,
+    row_ref: *const u8,
+    row_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!table_mut.is_null(), "table_mut is null");
+    debug_assert!(!table_tydesc.is_null(), "table_tydesc is null");
+    debug_assert!(!row_ref.is_null(), "row_ref is null");
+    debug_assert!(!row_tydesc.is_null(), "row_tydesc is null");
+    debug_assert_aligned(table_mut, table_tydesc, "table_push_row:table");
+    debug_assert_aligned(row_ref, row_tydesc, "table_push_row:row");
+    unsafe {
+        let table_tydesc_ref = rtdt::TyDescRef::from_ptr(table_tydesc);
+        let row_tydesc_ref = rtdt::TyDescRef::from_ptr(row_tydesc);
+        crate::impls::table::table_push_row_impl(
+            rt,
+            table_mut,
+            table_tydesc_ref,
+            row_ref,
+            row_tydesc_ref,
+        )
+    }
+}
+
+/// Get a pointer to an element at (row, col).
+///
+/// Returns null if row or col is out of bounds.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_table_get_local(
+    _rt: LocalRtHandle,
+    table_ref: *const u8,
+    table_tydesc: *const rtdt::TyDesc,
+    row: u32,
+    col: u32,
+) -> *const u8 {
+    debug_assert!(!table_ref.is_null(), "table_ref is null");
+    debug_assert!(!table_tydesc.is_null(), "table_tydesc is null");
+    debug_assert_aligned(table_ref, table_tydesc, "table_get:table");
+    unsafe {
+        let tydesc_ref = rtdt::TyDescRef::from_ptr(table_tydesc);
+        crate::impls::table::table_get_element_ptr(table_ref, tydesc_ref, row, col)
+    }
+}
+
+/// Set an element at (row, col).
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_table_set_local(
+    rt: LocalRtHandle,
+    table_mut: *mut u8,
+    table_tydesc: *const rtdt::TyDesc,
+    row: u32,
+    col: u32,
+    value_ref: *const u8,
+    value_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!table_mut.is_null(), "table_mut is null");
+    debug_assert!(!table_tydesc.is_null(), "table_tydesc is null");
+    debug_assert!(!value_ref.is_null(), "value_ref is null");
+    debug_assert!(!value_tydesc.is_null(), "value_tydesc is null");
+    debug_assert_aligned(table_mut, table_tydesc, "table_set:table");
+    debug_assert_aligned(value_ref, value_tydesc, "table_set:value");
+    unsafe {
+        let tydesc_ref = rtdt::TyDescRef::from_ptr(table_tydesc);
+        crate::impls::table::table_set_element(
+            rt,
+            table_mut,
+            tydesc_ref,
+            row,
+            col,
+            value_ref,
+            value_tydesc,
+        )
+    }
+}
+
+/// Clear a table, destroying all elements but keeping capacity.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_table_clear_local(
+    rt: LocalRtHandle,
+    table_mut: *mut u8,
+    table_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!table_mut.is_null(), "table_mut is null");
+    debug_assert!(!table_tydesc.is_null(), "table_tydesc is null");
+    debug_assert_aligned(table_mut, table_tydesc, "table_clear:table");
+    unsafe {
+        let tydesc_ref = rtdt::TyDescRef::from_ptr(table_tydesc);
+        crate::impls::table::table_clear_impl(rt, table_mut, tydesc_ref)
+    }
+}
+
+/// Get the length (number of rows) of a table.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_table_len(
+    _rt: LocalRtHandle,
+    table_ref: *const u8,
+    _table_tydesc: *const rtdt::TyDesc,
+) -> u32 {
+    debug_assert!(!table_ref.is_null(), "table_ref is null");
+    unsafe {
+        crate::impls::table::table_len(table_ref)
+    }
+}
+
+// ============================================================================
 // Debug Log Operations
 // ============================================================================
 

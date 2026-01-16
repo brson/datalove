@@ -372,8 +372,93 @@ unsafe fn clone_impl(
             RtStatus::Ok
         }
 
-        // Table - not yet implemented.
-        TyTag::Table => todo!(),
+        // Table - clone columnar data.
+        TyTag::Table => {
+            let table_in = unsafe { &*(value_in as *const rtdt::Table) };
+            let table_out = unsafe { &mut *(value_out as *mut rtdt::Table) };
+
+            if table_in.len == 0 || table_in.data.is_null() {
+                table_out.len = 0;
+                table_out.capacity = 0;
+                table_out.data = std::ptr::null();
+                return RtStatus::Ok;
+            }
+
+            let column_tydescs = crate::impls::table::collect_column_tydescs(ty);
+            let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, table_in.len);
+            let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
+
+            let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
+            let new_data = if alloc_size > 0 {
+                unsafe { rt_ref.alloc.alloc(alloc_size, alloc_align, 1) }
+            } else {
+                std::ptr::null_mut()
+            };
+
+            if alloc_size > 0 && new_data.is_null() {
+                return RtStatus::Error;
+            }
+
+            // Clone column by column, row by row.
+            for (col, col_ty) in ty.table_column_tydescs().enumerate() {
+                for row in 0..table_in.len {
+                    let src = unsafe {
+                        crate::impls::table::element_ptr(
+                            table_in.data,
+                            &column_tydescs,
+                            row,
+                            col,
+                            table_in.capacity,
+                        )
+                    };
+                    let dst = unsafe {
+                        crate::impls::table::element_ptr_mut(
+                            new_data,
+                            &column_tydescs,
+                            row,
+                            col,
+                            table_in.len,
+                        )
+                    };
+                    let status = unsafe { clone_impl(rt, src, col_ty, dst) };
+                    if status != RtStatus::Ok {
+                        // Cleanup partial clone on failure.
+                        for cleanup_col in 0..=col {
+                            let cleanup_end_row = if cleanup_col == col { row } else { table_in.len };
+                            for cleanup_row in 0..cleanup_end_row {
+                                let cleanup_ptr = unsafe {
+                                    crate::impls::table::element_ptr_mut(
+                                        new_data,
+                                        &column_tydescs,
+                                        cleanup_row,
+                                        cleanup_col,
+                                        table_in.len,
+                                    )
+                                };
+                                let cleanup_ty = ty.table_column_tydescs().nth(cleanup_col).unwrap();
+                                unsafe {
+                                    let _ = crate::impls::destroy::any_destroy_local(
+                                        rt,
+                                        cleanup_ptr,
+                                        cleanup_ty.as_ptr(),
+                                    );
+                                }
+                            }
+                        }
+                        let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
+                        if alloc_size > 0 {
+                            unsafe { rt_ref.alloc.free(alloc_size, alloc_align, 1, new_data) };
+                        }
+                        return status;
+                    }
+                }
+            }
+
+            table_out.len = table_in.len;
+            table_out.capacity = table_in.len;
+            table_out.data = new_data;
+            RtStatus::Ok
+        }
 
         // Option - copy tag and clone payload if Some.
         TyTag::Option => {
