@@ -591,6 +591,13 @@ pub struct ModuleGraphTypecheckResult<'db> {
     /// for all function calls across all modules in the graph.
     #[returns(ref)]
     pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+
+    /// Per-module typecheck results (tracked structs with stable salsa IDs).
+    ///
+    /// Used by downstream phases (e.g., IR lowering) to get per-module type
+    /// information while preserving memoization.
+    #[returns(ref)]
+    pub module_results: BTreeMap<ModuleId, SingleModuleTypecheckResult<'db>>,
 }
 
 impl<'db> ModuleGraphTypecheckResult<'db> {

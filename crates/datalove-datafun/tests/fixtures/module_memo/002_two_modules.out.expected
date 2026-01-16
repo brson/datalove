@@ -12,10 +12,13 @@
           "parse_ok": true,
           "typechecked": true,
           "typecheck_ok": true,
+          "lowered": true,
+          "lower_ok": true,
           "hash_changed": true,
           "expected": {
             "parsed": true,
             "typechecked": true,
+            "lowered": true,
             "hash_changed": true
           },
           "correct": true
@@ -34,13 +37,16 @@
           "parse_ok": true,
           "typechecked": false,
           "typecheck_ok": true,
+          "lowered": true,
+          "lower_ok": true,
           "hash_changed": false,
           "expected": {
             "parsed": false,
             "typechecked": false,
+            "lowered": false,
             "hash_changed": false
           },
-          "correct": true
+          "correct": false
         },
         "local/test/b": {
           "is_direct": true,
@@ -49,10 +55,13 @@
           "parse_ok": true,
           "typechecked": true,
           "typecheck_ok": true,
+          "lowered": true,
+          "lower_ok": true,
           "hash_changed": true,
           "expected": {
             "parsed": true,
             "typechecked": true,
+            "lowered": true,
             "hash_changed": true
           },
           "correct": true
@@ -62,6 +71,6 @@
   ],
   "summary": {
     "total_steps": 2,
-    "all_correct": true
+    "all_correct": false
   }
 }

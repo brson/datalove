@@ -535,6 +535,7 @@ pub fn typecheck_module_graph<'db>(
     let mut module_errors: BTreeMap<ModuleId, Vec<TypeError>> = BTreeMap::new();
     let mut module_exports_map: BTreeMap<ModuleId, ModuleExports<'db>> = BTreeMap::new();
     let mut module_imports_map: BTreeMap<ModuleId, ModuleImports<'db>> = BTreeMap::new();
+    let mut module_results_map: BTreeMap<ModuleId, SingleModuleTypecheckResult<'db>> = BTreeMap::new();
     let mut combined_expr_types: Vec<Option<TypeAndHeap<'db>>> = Vec::new();
     let mut combined_call_targets: Vec<Option<ResolvedCallTarget<'db>>> = Vec::new();
 
@@ -594,9 +595,12 @@ pub fn typecheck_module_graph<'db>(
 
         // Process pending diagnostics with span enrichment.
         emit_pending_diagnostics_for_module(db, &parsed_graph, module_id, result.pending_diagnostics(db));
+
+        // Store the per-module result for use by downstream phases.
+        module_results_map.insert(module_id, result);
     }
 
-    ModuleGraphTypecheckResult::new(db, prep.graph, module_errors, module_exports_map, module_imports_map, combined_expr_types, combined_call_targets)
+    ModuleGraphTypecheckResult::new(db, prep.graph, module_errors, module_exports_map, module_imports_map, combined_expr_types, combined_call_targets, module_results_map)
 }
 
 /// Typecheck a module graph using parallel execution.

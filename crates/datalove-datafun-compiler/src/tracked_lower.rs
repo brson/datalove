@@ -261,11 +261,9 @@ pub fn lower_module_graph<'db>(
         .map(|m| (m.id(db), m))
         .collect();
 
-    // Get per-module typecheck results and exports.
-    let module_exports = typecheck_result.module_exports(db);
+    // Get per-module typecheck results.
     let typecheck_errors = typecheck_result.module_errors(db);
-    let graph_expr_types = typecheck_result.expr_types(db);
-    let graph_call_targets = typecheck_result.call_targets(db);
+    let typecheck_module_results = typecheck_result.module_results(db);
 
     // Lower each module.
     let mut module_results = BTreeMap::new();
@@ -281,21 +279,9 @@ pub fn lower_module_graph<'db>(
 
         let module = *module_map.get(module_id).expect("module should exist");
 
-        // Create per-module typecheck result.
-        // Note: expr_types and call_targets are graph-level arrays indexed by salsa ID,
-        // so we pass the full arrays to each module.
-        let single_typecheck = SingleModuleTypecheckResult::new(
-            db,
-            *module_id,
-            Vec::new(), // errors already checked above
-            Vec::new(), // pending diagnostics not needed for lowering
-            module_exports.get(module_id)
-                .map(|e| e.functions(db).clone())
-                .unwrap_or_default(),
-            Vec::new(), // imports not needed for lowering
-            graph_expr_types.to_vec(),
-            graph_call_targets.to_vec(),
-        );
+        // Get the tracked per-module typecheck result (preserves salsa ID for memoization).
+        let single_typecheck = *typecheck_module_results.get(module_id)
+            .expect("module should have typecheck result");
 
         let result = lower_module(
             db,
@@ -339,10 +325,8 @@ pub fn lower_module_graph_parallel<'db>(
         .map(|m| (m.id(db_salsa), m))
         .collect();
 
-    let module_exports = typecheck_result.module_exports(db_salsa);
     let typecheck_errors = typecheck_result.module_errors(db_salsa);
-    let graph_expr_types = typecheck_result.expr_types(db_salsa);
-    let graph_call_targets = typecheck_result.call_targets(db_salsa);
+    let typecheck_module_results = typecheck_result.module_results(db_salsa);
 
     // Prepare work items for parallel execution.
     let work: Vec<_> = parsed_graph.statements_only(db_salsa)
@@ -356,33 +340,22 @@ pub fn lower_module_graph_parallel<'db>(
 
             let module = *module_map.get(module_id)?;
 
+            // Get the tracked per-module typecheck result.
+            let single_typecheck = *typecheck_module_results.get(module_id)?;
+
             Some((
                 db.dyn_clone(),
                 module,
                 IrModuleId(ir_module_idx as u32),
-                *module_id,
                 parsed.clone(),
+                single_typecheck,
             ))
         })
         .collect();
 
     // Lower modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, module_id, parsed)| {
+    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck)| {
         let db_s = db_clone.as_salsa_db();
-
-        // Create per-module typecheck result.
-        let single_typecheck = SingleModuleTypecheckResult::new(
-            db_s,
-            module_id,
-            Vec::new(),
-            Vec::new(),
-            module_exports.get(&module_id)
-                .map(|e| e.functions(db_s).clone())
-                .unwrap_or_default(),
-            Vec::new(),
-            graph_expr_types.to_vec(),
-            graph_call_targets.to_vec(),
-        );
 
         // This populates the cache.
         let _ = lower_module(

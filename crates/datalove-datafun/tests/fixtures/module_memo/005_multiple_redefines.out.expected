@@ -12,10 +12,13 @@
           "parse_ok": true,
           "typechecked": true,
           "typecheck_ok": true,
+          "lowered": true,
+          "lower_ok": true,
           "hash_changed": true,
           "expected": {
             "parsed": true,
             "typechecked": true,
+            "lowered": true,
             "hash_changed": true
           },
           "correct": true
@@ -34,10 +37,13 @@
           "parse_ok": true,
           "typechecked": true,
           "typecheck_ok": true,
+          "lowered": true,
+          "lower_ok": true,
           "hash_changed": true,
           "expected": {
             "parsed": true,
             "typechecked": true,
+            "lowered": true,
             "hash_changed": true
           },
           "correct": true
@@ -56,10 +62,13 @@
           "parse_ok": true,
           "typechecked": true,
           "typecheck_ok": true,
+          "lowered": true,
+          "lower_ok": true,
           "hash_changed": true,
           "expected": {
             "parsed": true,
             "typechecked": true,
+            "lowered": true,
             "hash_changed": true
           },
           "correct": true
@@ -78,10 +87,13 @@
           "parse_ok": true,
           "typechecked": true,
           "typecheck_ok": true,
+          "lowered": true,
+          "lower_ok": true,
           "hash_changed": true,
           "expected": {
             "parsed": true,
             "typechecked": true,
+            "lowered": true,
             "hash_changed": true
           },
           "correct": true
