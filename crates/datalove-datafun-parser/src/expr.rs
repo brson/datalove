@@ -283,7 +283,7 @@ impl<'db> Parser<'db> {
                         if let Some(word) = token.word_str(self.db) {
                             // Check against datalit keywords - use new inline variants.
                             match word {
-                                "true" | "false" | "tuple" | "struct" | "enum" |
+                                "true" | "false" | "tuple" | "enum" |
                                 "option" | "result" | "error" | "map" | "set" | "none" | "data" |
                                 "tensor" => {
                                     // Capture span before parsing for diagnostic reporting.

@@ -32,7 +32,7 @@
           '("let" "var" "nil" "bool" "true" "false"
             "u8" "u16" "u32" "u64" "i8" "i16" "i32" "i64"
             "f32" "f64" "int" "float"
-            "string" "opt" "struct" "error" "tuple" "enum"
+            "string" "opt" "error" "tuple" "enum"
             "token" "map" "set" "list"
             "fun" "proc" "arena" "block"
             "require" "module" "data"
@@ -55,10 +55,9 @@
       ("\\<fun\s+\\([a-zA-Z_][a-zA-Z0-9_]*\\)" 1 font-lock-function-name-face)
       ("\\<proc\s+\\([a-zA-Z_][a-zA-Z0-9_]*\\)" 1 font-lock-function-name-face)
 
-      ;; Type annotations and struct/enum names.
-      ("\\<struct\s+\\([A-Z][a-zA-Z0-9_]*\\)" 1 font-lock-type-face)
+      ;; Type annotations and enum names.
       ("\\<enum\s+\\([A-Z][a-zA-Z0-9_]*\\)" 1 font-lock-type-face)
-      ("@\\(struct\\|enum\\)\s+\\([A-Z][a-zA-Z0-9_]*\\)" 2 font-lock-type-face)
+      ("@\\(enum\\)\s+\\([A-Z][a-zA-Z0-9_]*\\)" 2 font-lock-type-face)
 
       ;; Type names in type positions.
       ("@\\(u8\\|u16\\|u32\\|u64\\|i8\\|i16\\|i32\\|i64\\|f32\\|f64\\|int\\|float\\|bool\\|string\\)\\>" 1 font-lock-type-face)

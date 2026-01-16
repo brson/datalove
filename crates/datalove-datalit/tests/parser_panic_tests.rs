@@ -34,13 +34,6 @@ fn type_hint_tuple_missing_name() {
     assert_parse_error(&json, "tuple without name");
 }
 
-/// `struct` keyword without name or braces.
-#[test]
-fn type_hint_struct_missing_name() {
-    let json = parse(": struct / @42");
-    assert_parse_error(&json, "struct without name");
-}
-
 /// `enum` keyword without name or braces.
 #[test]
 fn type_hint_named_enum_missing_name() {
@@ -52,7 +45,7 @@ fn type_hint_named_enum_missing_name() {
 /// Struct field expects `name: type`.
 #[test]
 fn type_hint_struct_field_missing_name() {
-    let json = parse(": struct Foo { : i32 } / @42");
+    let json = parse(": { : i32 } / @42");
     assert_parse_error(&json, "struct field without name");
 }
 
@@ -85,7 +78,7 @@ fn type_hint_tensor_missing_comma() {
 /// Struct field expects `name: type`.
 #[test]
 fn type_hint_struct_field_missing_colon() {
-    let json = parse(": struct Foo { x i32 } / @42");
+    let json = parse(": { x i32 } / @42");
     assert_parse_error(&json, "struct field missing colon");
 }
 
@@ -110,10 +103,10 @@ fn expr_map_entry_missing_equals() {
 }
 
 /// Struct field missing equals between name and value.
-/// `struct Foo { x = v }` expects `=`.
+/// Struct field expects `name = value`.
 #[test]
 fn expr_struct_field_missing_equals() {
-    let json = parse("@struct Foo { x @42 }");
+    let json = parse("@{ x @42 }");
     assert_parse_error(&json, "struct field missing equals");
 }
 
@@ -125,14 +118,6 @@ fn expr_tuple_missing_name() {
     assert_parse_error(&json, "tuple without name");
 }
 
-/// Struct expression without name.
-/// `struct` expects a name like `struct Foo{...}`.
-#[test]
-fn expr_struct_missing_name() {
-    let json = parse("@struct");
-    assert_parse_error(&json, "struct without name");
-}
-
 /// Enum expression without variant name.
 /// `enum` expects a variant name.
 #[test]
@@ -142,9 +127,9 @@ fn expr_enum_missing_variant_name() {
 }
 
 /// Struct field missing name.
-/// `struct Foo { = v }` expects a name before `=`.
+/// Struct field expects a name before `=`.
 #[test]
 fn expr_struct_field_missing_name() {
-    let json = parse("@struct Foo { = @42 }");
+    let json = parse("@{ = @42 }");
     assert_parse_error(&json, "struct field missing name");
 }

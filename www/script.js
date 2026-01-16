@@ -76,7 +76,7 @@ window.addEventListener('scroll', () => {
 document.addEventListener('DOMContentLoaded', () => {
     const codeBlocks = document.querySelectorAll('pre code');
 
-    const keywords = /\b(fun|proc|end|ret|let|if|then|else|match|struct|enum|set|ok|open)\b/;
+    const keywords = /\b(fun|proc|end|ret|let|if|then|else|match|enum|set|ok|open)\b/;
     const types = /\b(u8|u16|u32|u64|i8|i16|i32|i64|f32|f64|bool|string|Config|AddressEntry)\b/;
     const constructors = /\b(Friend|Family|Some|None|Ok|Err)\b/;
 

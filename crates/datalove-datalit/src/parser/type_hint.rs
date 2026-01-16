@@ -74,24 +74,6 @@ impl<'db> Parser<'db> {
                     )
                 }
             }
-            Some("struct") => {
-                let ts = self.peek_text_span();
-                self.eat_word("struct");
-                // Check if it's anonymous (starts with {) or named (starts with name).
-                if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
-                    // Anonymous struct with explicit keyword.
-                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
-                    sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct { fields })
-                } else {
-                    self.emit_type_hint_error(ts,
-                        "expected {} after struct keyword",
-                        "D002",
-                        "expected '{' after 'struct'"
-                    )
-                }
-            }
             Some("enum") => {
                 let ts = self.peek_text_span();
                 self.eat_word("enum");

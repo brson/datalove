@@ -79,7 +79,7 @@ impl<'db> Parser<'db> {
                                 if parser_util::is_numeric_literal(word) {
                                     // Bare number literal (decimal or hex) - use Omitted heap.
                                     ast::Heap::Omitted
-                                } else if matches!(word, "data" | "error" | "tensor" | "tuple" | "struct" | "enum" | "map" | "set" | "true" | "false" | "none" | "some" | "ok" | "er") {
+                                } else if matches!(word, "data" | "error" | "tensor" | "tuple" | "enum" | "map" | "set" | "true" | "false" | "none" | "some" | "ok" | "er") {
                                     // Keywords are allowed without heap sigils.
                                     ast::Heap::Omitted
                                 } else {
