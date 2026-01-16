@@ -170,9 +170,17 @@ nav a {
 }
 
 .nav-logo {
+    display: inline-block;
     height: 2rem;
-    width: auto;
+    width: 2rem;
     vertical-align: middle;
+    background-color: var(--accent);
+    -webkit-mask-image: url('datalove-logo.svg');
+    mask-image: url('datalove-logo.svg');
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
 }
 
 main {
