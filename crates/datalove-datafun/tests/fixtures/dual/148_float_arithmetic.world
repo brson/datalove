@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+let a: f32 = @3.0
+let b: f32 = @2.0
+let sum: f32 = a + b
+let diff: f32 = a - b
+let prod: f32 = a * b
+let quot: f32 = a / b
+let neg: f32 = -a
+debuglog sum
+debuglog diff
+debuglog prod
+debuglog quot
+debuglog neg

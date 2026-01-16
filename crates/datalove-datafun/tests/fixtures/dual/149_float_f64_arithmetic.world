@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+let a: f64 = @10.5
+let b: f64 = @3.5
+let sum: f64 = a + b
+let diff: f64 = a - b
+let prod: f64 = a * b
+let quot: f64 = a / b
+debuglog sum
+debuglog diff
+debuglog prod
+debuglog quot
