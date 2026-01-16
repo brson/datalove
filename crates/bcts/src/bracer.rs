@@ -391,6 +391,70 @@ pub fn bracer<'db>(
                             close_sigil: Sigil::AngleClose,
                         });
                         parent_brace_map.append(brace_map);
+                    } else if open_sigil == Sigil::ParenPipeOpen {
+                        brace_map.inserted_closes.push((index, Sigil::ParenPipeClose));
+                        brace_map.errors.push((
+                            open_index..index,
+                            Sigil::ParenPipeOpen,
+                        ));
+                        parent_brace_map.branches.push(Branch {
+                            real_token_range: open_index..index,
+                            branches: brace_map.branches.len(),
+                            inserted_closes: brace_map.inserted_closes.len(),
+                            removed_closes: brace_map.removed_closes.len(),
+                            errors: brace_map.errors.len(),
+                            open_sigil: Sigil::ParenPipeOpen,
+                            close_sigil: Sigil::ParenPipeClose,
+                        });
+                        parent_brace_map.append(brace_map);
+                    } else if open_sigil == Sigil::BracePipeOpen {
+                        brace_map.inserted_closes.push((index, Sigil::BracePipeClose));
+                        brace_map.errors.push((
+                            open_index..index,
+                            Sigil::BracePipeOpen,
+                        ));
+                        parent_brace_map.branches.push(Branch {
+                            real_token_range: open_index..index,
+                            branches: brace_map.branches.len(),
+                            inserted_closes: brace_map.inserted_closes.len(),
+                            removed_closes: brace_map.removed_closes.len(),
+                            errors: brace_map.errors.len(),
+                            open_sigil: Sigil::BracePipeOpen,
+                            close_sigil: Sigil::BracePipeClose,
+                        });
+                        parent_brace_map.append(brace_map);
+                    } else if open_sigil == Sigil::BracketPipeOpen {
+                        brace_map.inserted_closes.push((index, Sigil::BracketPipeClose));
+                        brace_map.errors.push((
+                            open_index..index,
+                            Sigil::BracketPipeOpen,
+                        ));
+                        parent_brace_map.branches.push(Branch {
+                            real_token_range: open_index..index,
+                            branches: brace_map.branches.len(),
+                            inserted_closes: brace_map.inserted_closes.len(),
+                            removed_closes: brace_map.removed_closes.len(),
+                            errors: brace_map.errors.len(),
+                            open_sigil: Sigil::BracketPipeOpen,
+                            close_sigil: Sigil::BracketPipeClose,
+                        });
+                        parent_brace_map.append(brace_map);
+                    } else if open_sigil == Sigil::AnglePipeOpen {
+                        brace_map.inserted_closes.push((index, Sigil::AnglePipeClose));
+                        brace_map.errors.push((
+                            open_index..index,
+                            Sigil::AnglePipeOpen,
+                        ));
+                        parent_brace_map.branches.push(Branch {
+                            real_token_range: open_index..index,
+                            branches: brace_map.branches.len(),
+                            inserted_closes: brace_map.inserted_closes.len(),
+                            removed_closes: brace_map.removed_closes.len(),
+                            errors: brace_map.errors.len(),
+                            open_sigil: Sigil::AnglePipeOpen,
+                            close_sigil: Sigil::AnglePipeClose,
+                        });
+                        parent_brace_map.append(brace_map);
                     } else {
                         bug!()
                     }
@@ -418,6 +482,18 @@ pub fn bracer<'db>(
             TokenKind::Sigil(Sigil::AngleOpen) => {
                 stack.push((index, Sigil::AngleOpen, default()));
             }
+            TokenKind::Sigil(Sigil::ParenPipeOpen) => {
+                stack.push((index, Sigil::ParenPipeOpen, default()));
+            }
+            TokenKind::Sigil(Sigil::BracePipeOpen) => {
+                stack.push((index, Sigil::BracePipeOpen, default()));
+            }
+            TokenKind::Sigil(Sigil::BracketPipeOpen) => {
+                stack.push((index, Sigil::BracketPipeOpen, default()));
+            }
+            TokenKind::Sigil(Sigil::AnglePipeOpen) => {
+                stack.push((index, Sigil::AnglePipeOpen, default()));
+            }
             TokenKind::Sigil(Sigil::ParenClose) => {
                 close_brace(&mut stack, index, Sigil::ParenOpen, Sigil::ParenClose);
             }
@@ -429,6 +505,18 @@ pub fn bracer<'db>(
             }
             TokenKind::Sigil(Sigil::AngleClose) => {
                 close_brace(&mut stack, index, Sigil::AngleOpen, Sigil::AngleClose);
+            }
+            TokenKind::Sigil(Sigil::ParenPipeClose) => {
+                close_brace(&mut stack, index, Sigil::ParenPipeOpen, Sigil::ParenPipeClose);
+            }
+            TokenKind::Sigil(Sigil::BracePipeClose) => {
+                close_brace(&mut stack, index, Sigil::BracePipeOpen, Sigil::BracePipeClose);
+            }
+            TokenKind::Sigil(Sigil::BracketPipeClose) => {
+                close_brace(&mut stack, index, Sigil::BracketPipeOpen, Sigil::BracketPipeClose);
+            }
+            TokenKind::Sigil(Sigil::AnglePipeClose) => {
+                close_brace(&mut stack, index, Sigil::AnglePipeOpen, Sigil::AnglePipeClose);
             }
             _ => {},
         }
@@ -809,4 +897,45 @@ fn test_removed_closes() {
     assert_eq!(dbglex("(a)})"), "( a )");
     // Complex nesting with stray closes.
     assert_eq!(dbglex("((a)})"), "( ( a ) )");
+}
+
+#[test]
+fn test_earmuff_braces() {
+    // Basic earmuff brace matching.
+    assert_eq!(dbglex("(|a|)"), "(| a |)");
+    assert_eq!(dbglex("{|a|}"), "{| a |}");
+    assert_eq!(dbglex("[|a|]"), "[| a |]");
+    assert_eq!(dbglex("<|a|>"), "<| a |>");
+
+    // Empty earmuff braces.
+    assert_eq!(dbglex("(||)"), "(| |)");
+    assert_eq!(dbglex("{||}"), "{| |}");
+    assert_eq!(dbglex("[||]"), "[| |]");
+    assert_eq!(dbglex("<||>"), "<| |>");
+
+    // Nesting earmuff braces.
+    assert_eq!(dbglex("(|[|a|]|)"), "(| [| a |] |)");
+    assert_eq!(dbglex("{|<|a|>|}"), "{| <| a |> |}");
+
+    // Mixing earmuff and regular braces.
+    assert_eq!(dbglex("(|(a)|)"), "(| ( a ) |)");
+    assert_eq!(dbglex("([|a|])"), "( [| a |] )");
+
+    // Unclosed earmuff braces.
+    assert_eq!(dbglex("(|a"), "(| a |)");
+    assert_eq!(dbglex("{|a"), "{| a |}");
+    assert_eq!(dbglex("[|a"), "[| a |]");
+    assert_eq!(dbglex("<|a"), "<| a |>");
+
+    // Mismatched earmuff braces.
+    assert_eq!(dbglex("(|a)"), "(| a |)");
+    assert_eq!(dbglex("{|a}"), "{| a |}");
+    assert_eq!(dbglex("[|a]"), "[| a |]");
+    assert_eq!(dbglex("<|a>"), "<| a |>");
+
+    // Stray earmuff close braces.
+    assert_eq!(dbglex("a|)b"), "a b");
+    assert_eq!(dbglex("a|}b"), "a b");
+    assert_eq!(dbglex("a|]b"), "a b");
+    assert_eq!(dbglex("a|>b"), "a b");
 }

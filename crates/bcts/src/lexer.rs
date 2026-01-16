@@ -52,6 +52,16 @@ pub enum Sigil {
     StarBarEquals,
     SlashBarEquals,
 
+    // Earmuff braces (two-character, before single-char variants).
+    ParenPipeOpen,    // "(|"
+    ParenPipeClose,   // "|)"
+    BracePipeOpen,    // "{|"
+    BracePipeClose,   // "|}"
+    BracketPipeOpen,  // "[|"
+    BracketPipeClose, // "|]"
+    AnglePipeOpen,    // "<|"
+    AnglePipeClose,   // "|>"
+
     // Two-character sigils (must come before single-character variants).
     ColonDash,
     PlusQuestion,
@@ -389,6 +399,16 @@ impl Sigil {
             Sigil::StarBarEquals => "*|=",
             Sigil::SlashBarEquals => "/|=",
 
+            // Earmuff braces.
+            Sigil::ParenPipeOpen => "(|",
+            Sigil::ParenPipeClose => "|)",
+            Sigil::BracePipeOpen => "{|",
+            Sigil::BracePipeClose => "|}",
+            Sigil::BracketPipeOpen => "[|",
+            Sigil::BracketPipeClose => "|]",
+            Sigil::AnglePipeOpen => "<|",
+            Sigil::AnglePipeClose => "|>",
+
             // Two-character sigils.
             Sigil::ColonDash => ":-",
             Sigil::PlusQuestion => "+?",
@@ -454,6 +474,10 @@ impl Sigil {
             Sigil::BraceOpen => Sigil::BraceClose,
             Sigil::BracketOpen => Sigil::BracketClose,
             Sigil::AngleOpen => Sigil::AngleClose,
+            Sigil::ParenPipeOpen => Sigil::ParenPipeClose,
+            Sigil::BracePipeOpen => Sigil::BracePipeClose,
+            Sigil::BracketPipeOpen => Sigil::BracketPipeClose,
+            Sigil::AnglePipeOpen => Sigil::AnglePipeClose,
             _ => bug!(),
         }
     }
@@ -465,12 +489,19 @@ impl Sigil {
             Sigil::BraceClose => Sigil::BraceOpen,
             Sigil::BracketClose => Sigil::BracketOpen,
             Sigil::AngleClose => Sigil::AngleOpen,
+            Sigil::ParenPipeClose => Sigil::ParenPipeOpen,
+            Sigil::BracePipeClose => Sigil::BracePipeOpen,
+            Sigil::BracketPipeClose => Sigil::BracketPipeOpen,
+            Sigil::AnglePipeClose => Sigil::AnglePipeOpen,
             _ => bug!(),
         }
     }
 
     fn is_close_sigil(&self) -> bool {
-        matches!(self, Sigil::ParenClose | Sigil::BraceClose | Sigil::BracketClose | Sigil::AngleClose)
+        matches!(self,
+            Sigil::ParenClose | Sigil::BraceClose | Sigil::BracketClose | Sigil::AngleClose |
+            Sigil::ParenPipeClose | Sigil::BracePipeClose | Sigil::BracketPipeClose | Sigil::AnglePipeClose
+        )
     }
 }
 
@@ -647,6 +678,32 @@ fn test_lex_chunk() {
     assert_eq!(
         dbglex("a+b+?c+|d+!e"),
         "a + b +? c +| d +! e",
+    );
+
+    // Earmuff braces.
+    assert_eq!(
+        dbglex("(|a|)"),
+        "(| a |)",
+    );
+    assert_eq!(
+        dbglex("{|a|}"),
+        "{| a |}",
+    );
+    assert_eq!(
+        dbglex("[|a|]"),
+        "[| a |]",
+    );
+    assert_eq!(
+        dbglex("<|a|>"),
+        "<| a |>",
+    );
+    assert_eq!(
+        dbglex("(|[|a|]|)"),
+        "(| [| a |] |)",
+    );
+    assert_eq!(
+        dbglex("(||)"),
+        "(| |)",
     );
 }
 
