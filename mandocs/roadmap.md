@@ -27,7 +27,6 @@
 
 - type syntax cleanup
 - human docs
-- parallel compilation
 
 
 
