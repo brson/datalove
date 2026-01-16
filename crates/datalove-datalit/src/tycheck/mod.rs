@@ -35,6 +35,7 @@ pub use types::{
     TypeOption,
     TypeResult,
     TypeTensor,
+    TypeTable,
     // Error type.
     TypeError,
     // Heap utilities.

@@ -17,6 +17,8 @@ pub struct IrTyDescTable {
     struct_fields: Vec<Vec<rtdt::TyInfoStructField>>,
     /// Storage for enum variant arrays.
     enum_variants: Vec<Vec<rtdt::TyInfoEnumVariant>>,
+    /// Storage for table column arrays.
+    table_columns: Vec<Vec<rtdt::TyInfoTableColumn>>,
     /// Storage for field name strings (to keep them alive).
     field_names: Vec<String>,
 }
@@ -28,6 +30,7 @@ impl IrTyDescTable {
             tuple_fields: Vec::new(),
             struct_fields: Vec::new(),
             enum_variants: Vec::new(),
+            table_columns: Vec::new(),
             field_names: Vec::new(),
         }
     }
@@ -153,6 +156,7 @@ impl IrTyDescTable {
             IrType::Result(inner) => self.create_result_tydesc(inner),
             IrType::Tensor(elem, rank) => self.create_tensor_tydesc(elem, *rank),
             IrType::Ref(inner) => self.create_ref_tydesc(inner),
+            IrType::Table(columns) => self.create_table_tydesc(columns),
         }
     }
 
@@ -450,6 +454,46 @@ impl IrTyDescTable {
             align: std::mem::align_of::<rtdt::Tensor>() as u32,
             type_info: rtdt::TyInfo {
                 tensor: rtdt::TyInfoTensor { element_tydesc, rank },
+            },
+        })
+    }
+
+    fn create_table_tydesc(&mut self, columns: &[(String, Box<IrType>)]) -> Box<TyDesc> {
+        // Create tydescs for each column type.
+        let column_tydescs: Vec<_> = columns.iter()
+            .map(|(_, ty)| self.get_or_create(ty))
+            .collect();
+
+        // Store column names.
+        let name_start = self.field_names.len();
+        for (name, _) in columns {
+            self.field_names.push(name.clone());
+        }
+
+        // Create column info.
+        let column_info: Vec<_> = columns.iter().enumerate()
+            .map(|(i, _)| {
+                let name_ref = &self.field_names[name_start + i];
+                rtdt::TyInfoTableColumn {
+                    name: name_ref.as_ptr(),
+                    name_len: name_ref.len() as u32,
+                    tydesc: column_tydescs[i],
+                }
+            })
+            .collect();
+
+        self.table_columns.push(column_info);
+        let columns_ptr = self.table_columns.last().unwrap().as_ptr();
+
+        Box::new(TyDesc {
+            type_tag: rtdt::TyTag::Table,
+            size: std::mem::size_of::<rtdt::Table>() as u32,
+            align: std::mem::align_of::<rtdt::Table>() as u32,
+            type_info: rtdt::TyInfo {
+                table: rtdt::TyInfoTable {
+                    num_columns: columns.len() as u32,
+                    columns: columns_ptr,
+                },
             },
         })
     }

@@ -14,7 +14,7 @@
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
 use crate::context::TypeContext;
-use crate::check::{check_expr, check_list_elements, check_set_elements, check_map_entries, check_tensor_shape_and_elements, check_tuple_elements, check_struct_fields, check_enum_variant};
+use crate::check::{check_expr, check_list_elements, check_set_elements, check_map_entries, check_tensor_shape_and_elements, check_tuple_elements, check_struct_fields, check_enum_variant, check_table_rows};
 use crate::types::*;
 
 pub use crate::{Type, TypeAndHeap, TypeError, is_copy_type};
@@ -431,6 +431,20 @@ pub fn synthesize_expr<'db>(
                 return Ok(result);
             }
             synthesize_inline_err(ctx, expr, err_expr)
+        }
+
+        // Table expression.
+        ExprFunKind::Table(ref table_expr) => {
+            if let Some(type_hint) = table_expr.type_hint {
+                let expected_ty = convert_type_hint(db, type_hint)?;
+                // Check rows against expected table type.
+                if let Type::Datalit(datalit::tycheck::Type::Table(table_ty)) = expected_ty.ty(db) {
+                    check_table_rows(ctx, &table_expr.header, &table_expr.rows, table_ty)?;
+                }
+                return Ok(expected_ty);
+            }
+            // Table requires type hint - cannot infer schema.
+            Err(ctx.error_cannot_synthesize(expr, "table requires type hint"))
         }
     }
 }

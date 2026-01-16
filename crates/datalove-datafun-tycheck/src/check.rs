@@ -182,6 +182,29 @@ pub fn check_expr<'db>(
             }
         }
 
+        // Handle table expressions - check rows against expected column types.
+        ExprFunKind::Table(table_expr) => {
+            match expected.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Table(table_ty)) => {
+                    // Check rows against expected column types.
+                    check_table_rows(ctx, &table_expr.header, &table_expr.rows, table_ty)?;
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                Type::Datalit(datalit::tycheck::Type::Data) => {
+                    // Any type can coerce to Data.
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
         // Handle list expressions - check elements against expected element type.
         ExprFunKind::List(list_expr) => {
             match expected.ty(db) {
@@ -594,6 +617,53 @@ pub fn check_enum_variant<'db>(
             _ => return Ok(()), // Non-datalit types handled elsewhere.
         };
         check_type_coercion(db, actual_datalit_ty, &expected_payload_ty)?;
+    }
+
+    Ok(())
+}
+
+/// Check table rows against expected table type.
+pub fn check_table_rows<'db>(
+    ctx: &mut TypeContext<'db>,
+    header: &[bct::text::InternedText<'db>],
+    rows: &[ExprTableRow<'db>],
+    table_ty: &datalit::tycheck::TypeTable<'db>,
+) -> Result<(), TypeError> {
+    let db = ctx.db;
+    let expected_columns = &table_ty.columns;
+
+    // Validate column count matches.
+    if header.len() != expected_columns.len() {
+        return Err(TypeError::ArityMismatch {
+            expected: expected_columns.len(),
+            actual: header.len(),
+        });
+    }
+
+    // Validate column names match (in order).
+    for (h, c) in header.iter().zip(expected_columns.iter()) {
+        if h.as_str(db) != c.name.as_str(db) {
+            return Err(TypeError::FieldOrderMismatch);
+        }
+    }
+
+    // Check each row's elements against column types.
+    for row in rows {
+        if row.elements.len() != expected_columns.len() {
+            return Err(TypeError::ArityMismatch {
+                expected: expected_columns.len(),
+                actual: row.elements.len(),
+            });
+        }
+
+        for (elem, col) in row.elements.iter().zip(expected_columns.iter()) {
+            let expected_col_ty = TypeAndHeap::new(
+                db,
+                col.ty.heap(db),
+                Type::Datalit(col.ty.ty(db).clone()),
+            );
+            check_expr(ctx, *elem, expected_col_ty)?;
+        }
     }
 
     Ok(())

@@ -488,4 +488,58 @@ impl IrInterpreter {
 
         Ok(())
     }
+
+    /// Execute TableNew: create a table from row tuples.
+    pub(crate) fn execute_table_new(
+        &mut self,
+        rows: &[Operand],
+        dest: Destination,
+        frame: &Frame,
+        frames: &FrameStore,
+    ) -> Result<(), InterpError> {
+        use datalove_rt::c::RtStatus;
+
+        let rt_handle = self.runtime.handle();
+        let table_ptr = dest.ptr;
+        let table_tydesc = dest.tydesc;
+
+        // Create empty table at dest.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_table_create_local(rt_handle, table_ptr, table_tydesc)
+        };
+        if status != RtStatus::Ok {
+            return Err(InterpError::RuntimeError(
+                "Failed to create table".to_string(),
+            ));
+        }
+
+        // Push each row (rows are tuples).
+        for row_op in rows {
+            let row_val = self.read_operand(row_op, frame, frames)?;
+
+            let status = unsafe {
+                datalove_rt::c::dtlv_rti_table_push_row_local(
+                    rt_handle,
+                    table_ptr,
+                    table_tydesc,
+                    row_val.ptr,
+                    row_val.tydesc,
+                )
+            };
+            if status != RtStatus::Ok {
+                unsafe {
+                    datalove_rt::c::dtlv_rti_table_destroy_local(
+                        rt_handle,
+                        table_ptr,
+                        table_tydesc,
+                    );
+                }
+                return Err(InterpError::RuntimeError(
+                    "Failed to push row to table".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
 }

@@ -106,6 +106,10 @@ pub fn ir_type_to_cranelift(ty: &IrType) -> CraneliftRepr {
             size: std::mem::size_of::<rtdt::Tensor>() as u32,
             align: std::mem::align_of::<rtdt::Tensor>() as u32,
         }),
+        IrType::Table(_) => CraneliftRepr::Aggregate(TypeLayout {
+            size: std::mem::size_of::<rtdt::Table>() as u32,
+            align: std::mem::align_of::<rtdt::Table>() as u32,
+        }),
 
         // Composite types with computed layouts.
         IrType::Tuple(fields) => {

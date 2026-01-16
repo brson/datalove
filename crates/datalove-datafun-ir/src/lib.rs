@@ -120,6 +120,8 @@ pub enum IrType {
     /// Used for field refs passed to ref/mut/out params.
     /// Layout is pointer-sized (8 bytes), stores a pointer to the inner type.
     Ref(Box<IrType>),
+    /// Table with named columns (sorted by name).
+    Table(Vec<(String, Box<IrType>)>),
 }
 
 impl std::fmt::Display for IrType {
@@ -176,6 +178,14 @@ impl std::fmt::Display for IrType {
             IrType::Result(ok) => write!(f, "result<{}>", ok),
             IrType::Tensor(elem, rank) => write!(f, "tensor<{}, {}>", elem, rank),
             IrType::Ref(inner) => write!(f, "ref<{}>", inner),
+            IrType::Table(cols) => {
+                write!(f, "{{| ")?;
+                for (i, (name, ty)) in cols.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}: {}", name, ty)?;
+                }
+                write!(f, " |}}")
+            }
         }
     }
 }
@@ -262,8 +272,18 @@ impl IrType {
                 let elem = Self::from_type_hint(db, &t.element_type);
                 IrType::Tensor(Box::new(elem), t.rank)
             }
-            TypeHint::Table(_) => {
-                todo!("table types not yet supported in datafun IR")
+            TypeHint::Table(table) => {
+                let mut columns: Vec<_> = table.columns
+                    .iter()
+                    .map(|c| {
+                        let name = c.name.text(db).to_string();
+                        let ty = Self::from_type_hint(db, &c.type_hint);
+                        (name, Box::new(ty))
+                    })
+                    .collect();
+                // Sort columns by name for consistent layout.
+                columns.sort_by(|a, b| a.0.cmp(&b.0));
+                IrType::Table(columns)
             }
             TypeHint::ParseError(_) => {
                 IrType::Error
@@ -352,8 +372,18 @@ impl IrType {
                 let elem = Self::from_datalit_tyandheap(db, &t.element_type);
                 IrType::Tensor(Box::new(elem), t.rank)
             }
-            DlType::Table(_) => {
-                todo!("table types not yet supported in datafun IR")
+            DlType::Table(table) => {
+                let mut columns: Vec<_> = table.columns
+                    .iter()
+                    .map(|c| {
+                        let name = c.name.text(db).to_string();
+                        let ty = Self::from_datalit_tyandheap(db, &c.ty);
+                        (name, Box::new(ty))
+                    })
+                    .collect();
+                // Sort columns by name for consistent layout.
+                columns.sort_by(|a, b| a.0.cmp(&b.0));
+                IrType::Table(columns)
             }
         }
     }
@@ -372,7 +402,7 @@ impl IrType {
 
             // Heap-allocated types are never copy.
             IrType::Int | IrType::String | IrType::Data | IrType::Error => false,
-            IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) | IrType::Tensor(_, _) => false,
+            IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) | IrType::Tensor(_, _) | IrType::Table(_) => false,
 
             // Composite types are copy if all fields are copy.
             IrType::Tuple(fields) => fields.iter().all(|f| f.is_copy()),
@@ -729,6 +759,12 @@ pub enum Instruction {
         dest: ValueId,
         shape: Vec<u32>,
         elements: Vec<Operand>,
+    },
+
+    /// Create a new table from row tuples.
+    TableNew {
+        dest: ValueId,
+        rows: Vec<Operand>,
     },
 
     /// Store value to mutable slot.

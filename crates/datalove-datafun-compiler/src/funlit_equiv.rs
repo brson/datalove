@@ -242,6 +242,24 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 }),
             )
         }
+        ast::ExprFunKind::Table(e) => {
+            let header = e.header.iter()
+                .map(|h| h.as_str(db).to_string())
+                .collect();
+            let rows = e.rows.iter()
+                .map(|row| {
+                    let elements = row.elements.iter()
+                        .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(datalit::ast_serde::ExprTableRow { elements })
+                })
+                .collect::<Result<Vec<_>, ConversionError>>()?;
+            (
+                e.heap,
+                e.type_hint,
+                datalit::ast_serde::Expr::Table(datalit::ast_serde::ExprTable { header, rows }),
+            )
+        }
         ast::ExprFunKind::ParseError(e) => {
             (
                 datalit::ast::Heap::Omitted,

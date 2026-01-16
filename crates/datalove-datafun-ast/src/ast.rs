@@ -294,6 +294,9 @@ pub enum ExprFunKind<'db> {
     Data(ExprData<'db>),
     Error(ExprError<'db>),
 
+    // Table expression.
+    Table(ExprTable<'db>),
+
     // Parse error
     ParseError(ExprFunParseError<'db>),
 }
@@ -558,6 +561,21 @@ pub struct ExprError<'db> {
     pub heap: datalit::ast::Heap,
     pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
     pub value: ExprFun<'db>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExprTable<'db> {
+    pub heap: datalit::ast::Heap,
+    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub header: Vec<InternedText<'db>>,
+    pub rows: Vec<ExprTableRow<'db>>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExprTableRow<'db> {
+    pub elements: Vec<ExprFun<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

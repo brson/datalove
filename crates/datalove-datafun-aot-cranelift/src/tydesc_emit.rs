@@ -13,9 +13,10 @@ use cranelift_module::{DataDescription, DataId, Linkage, Module};
 use datalove_datafun_ir::{IrFunction, IrScriptUnit, IrType};
 use datalove_rtdt::{
     Data as RtData, Error as RtError, Int as RtInt, List as RtList, Map as RtMap,
-    Set as RtSet, String as RtString, Tensor as RtTensor, TyDesc, TyInfoEnum, TyInfoEnumVariant,
-    TyInfoList, TyInfoMap, TyInfoOption, TyInfoResult, TyInfoSet, TyInfoStruct, TyInfoStructField,
-    TyInfoTensor, TyInfoTuple, TyInfoTupleField, TyTag,
+    Set as RtSet, String as RtString, Table as RtTable, Tensor as RtTensor, TyDesc,
+    TyInfoEnum, TyInfoEnumVariant, TyInfoList, TyInfoMap, TyInfoOption, TyInfoResult,
+    TyInfoSet, TyInfoStruct, TyInfoStructField, TyInfoTable, TyInfoTableColumn, TyInfoTensor,
+    TyInfoTuple, TyInfoTupleField, TyTag,
 };
 
 use crate::AotError;
@@ -67,6 +68,16 @@ const TYINFO_ENUM_VARIANT_NAME_OFFSET: usize = std::mem::offset_of!(TyInfoEnumVa
 const TYINFO_ENUM_VARIANT_NAME_LEN_OFFSET: usize = std::mem::offset_of!(TyInfoEnumVariant, name_len);
 const TYINFO_ENUM_VARIANT_OFFSET_OFFSET: usize = std::mem::offset_of!(TyInfoEnumVariant, offset);
 const TYINFO_ENUM_VARIANT_PAYLOAD_OFFSET: usize = std::mem::offset_of!(TyInfoEnumVariant, payload);
+
+// Offsets within TyInfo union for Table type.
+const TYINFO_TABLE_NUM_COLUMNS_OFFSET: usize = std::mem::offset_of!(TyInfoTable, num_columns);
+const TYINFO_TABLE_COLUMNS_OFFSET: usize = std::mem::offset_of!(TyInfoTable, columns);
+
+// TyInfoTableColumn layout.
+const TYINFO_TABLE_COLUMN_SIZE: usize = size_of::<TyInfoTableColumn>();
+const TYINFO_TABLE_COLUMN_NAME_OFFSET: usize = std::mem::offset_of!(TyInfoTableColumn, name);
+const TYINFO_TABLE_COLUMN_NAME_LEN_OFFSET: usize = std::mem::offset_of!(TyInfoTableColumn, name_len);
+const TYINFO_TABLE_COLUMN_TYDESC_OFFSET: usize = std::mem::offset_of!(TyInfoTableColumn, tydesc);
 
 // TyDesc layout computed from runtime types.
 const TYDESC_SIZE: usize = size_of::<TyDesc>();
@@ -143,6 +154,9 @@ impl TyDescEmitter {
                 // tydesc for the ref itself.
                 let _inner_id = self.emit(module, inner_ty)?;
                 return self.emit_ref_tydesc(module, ty, inner_ty);
+            }
+            IrType::Table(columns) => {
+                return self.emit_table_tydesc(module, ty, columns);
             }
             _ => {}
         }
@@ -1017,6 +1031,143 @@ impl TyDescEmitter {
         Ok(data_id)
     }
 
+    /// Emit a TyDesc for a Table type with column info.
+    fn emit_table_tydesc<M: Module>(
+        &mut self,
+        module: &mut M,
+        original_ty: &IrType,
+        columns: &[(String, Box<IrType>)],
+    ) -> Result<DataId, AotError> {
+        // Check cache using the original type.
+        if let Some(&id) = self.tydescs.get(original_ty) {
+            return Ok(id);
+        }
+
+        // First, emit all column type TyDescs.
+        let mut column_tydesc_ids = Vec::with_capacity(columns.len());
+        for (_, col_ty) in columns {
+            let tydesc_id = self.emit(module, col_ty)?;
+            column_tydesc_ids.push(tydesc_id);
+        }
+
+        // Create the columns array as a separate data object.
+        let columns_data_id = if columns.is_empty() {
+            None
+        } else {
+            // First, create static data for each column name.
+            let mut name_data_ids = Vec::with_capacity(columns.len());
+            for (name, _) in columns {
+                let name_bytes = name.as_bytes();
+                let name_name = format!("__table_column_name_{}", self.counter);
+                self.counter += 1;
+
+                let name_id = module
+                    .declare_data(&name_name, Linkage::Local, false, false)
+                    .map_err(|e| AotError::Module(format!("declare table column name: {}", e)))?;
+
+                let mut name_desc = DataDescription::new();
+                name_desc.define(name_bytes.to_vec().into_boxed_slice());
+                name_desc.set_align(1);
+
+                module
+                    .define_data(name_id, &name_desc)
+                    .map_err(|e| AotError::Module(format!("define table column name: {}", e)))?;
+
+                name_data_ids.push(name_id);
+            }
+
+            // Build the TyInfoTableColumn array.
+            let columns_size = TYINFO_TABLE_COLUMN_SIZE * columns.len();
+            let mut columns_bytes = vec![0u8; columns_size];
+
+            for (i, (name, _)) in columns.iter().enumerate() {
+                let col_base = i * TYINFO_TABLE_COLUMN_SIZE;
+
+                // Write name_len.
+                let name_len = name.len() as u32;
+                columns_bytes[col_base + TYINFO_TABLE_COLUMN_NAME_LEN_OFFSET..
+                              col_base + TYINFO_TABLE_COLUMN_NAME_LEN_OFFSET + 4]
+                    .copy_from_slice(&name_len.to_le_bytes());
+
+                // name pointer and tydesc pointer will be added as relocations.
+            }
+
+            let columns_name = format!("__tydesc_table_columns_{}", self.counter);
+            self.counter += 1;
+
+            let columns_id = module
+                .declare_data(&columns_name, Linkage::Local, false, false)
+                .map_err(|e| AotError::Module(format!("declare table columns: {}", e)))?;
+
+            let mut columns_desc = DataDescription::new();
+            columns_desc.define(columns_bytes.into_boxed_slice());
+            columns_desc.set_align(align_of::<TyInfoTableColumn>() as u64);
+
+            // Add relocations for name pointers.
+            for (i, &name_id) in name_data_ids.iter().enumerate() {
+                let name_gv = module.declare_data_in_data(name_id, &mut columns_desc);
+                let name_offset = (i * TYINFO_TABLE_COLUMN_SIZE + TYINFO_TABLE_COLUMN_NAME_OFFSET) as u32;
+                columns_desc.write_data_addr(name_offset, name_gv, 0);
+            }
+
+            // Add relocations for each column's tydesc pointer.
+            for (i, &tydesc_id) in column_tydesc_ids.iter().enumerate() {
+                let col_gv = module.declare_data_in_data(tydesc_id, &mut columns_desc);
+                let tydesc_offset = (i * TYINFO_TABLE_COLUMN_SIZE + TYINFO_TABLE_COLUMN_TYDESC_OFFSET) as u32;
+                columns_desc.write_data_addr(tydesc_offset, col_gv, 0);
+            }
+
+            module
+                .define_data(columns_id, &columns_desc)
+                .map_err(|e| AotError::Module(format!("define table columns: {}", e)))?;
+
+            Some(columns_id)
+        };
+
+        // Build base TyDesc bytes.
+        let mut bytes = vec![0u8; TYDESC_SIZE];
+        let tag = TyTag::Table as u8;
+        let num_columns = columns.len() as u32;
+        let size = size_of::<RtTable>() as u32;
+        let align = align_of::<RtTable>() as u32;
+
+        bytes[OFFSET_TYPE_TAG] = tag;
+        bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&size.to_le_bytes());
+        bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&align.to_le_bytes());
+
+        // Write num_columns in type_info.
+        let num_columns_offset = OFFSET_TYPE_INFO + TYINFO_TABLE_NUM_COLUMNS_OFFSET;
+        bytes[num_columns_offset..num_columns_offset + 4].copy_from_slice(&num_columns.to_le_bytes());
+
+        // Create unique name.
+        let name = format!("__tydesc_{}", self.counter);
+        self.counter += 1;
+
+        // Declare data.
+        let data_id = module
+            .declare_data(&name, Linkage::Local, false, false)
+            .map_err(|e| AotError::Module(format!("declare table tydesc: {}", e)))?;
+
+        // Define data with relocation to columns array.
+        let mut data_desc = DataDescription::new();
+        data_desc.define(bytes.into_boxed_slice());
+        data_desc.set_align(TYDESC_ALIGN as u64);
+
+        // Add relocation for columns pointer if we have columns.
+        if let Some(columns_id) = columns_data_id {
+            let columns_gv = module.declare_data_in_data(columns_id, &mut data_desc);
+            let columns_ptr_offset = (OFFSET_TYPE_INFO + TYINFO_TABLE_COLUMNS_OFFSET) as u32;
+            data_desc.write_data_addr(columns_ptr_offset, columns_gv, 0);
+        }
+
+        module
+            .define_data(data_id, &data_desc)
+            .map_err(|e| AotError::Module(format!("define table tydesc: {}", e)))?;
+
+        self.tydescs.insert(original_ty.clone(), data_id);
+        Ok(data_id)
+    }
+
     /// Emit TyDescs for all types upfront.
     ///
     /// Call this before codegen to populate the cache. After this,
@@ -1085,6 +1236,9 @@ impl TyDescEmitter {
 
             // Ref types - can emit if inner type can be emitted.
             IrType::Ref(inner_ty) => self.can_emit(inner_ty),
+
+            // Table types - can emit if all column types can be emitted.
+            IrType::Table(columns) => columns.iter().all(|(_, t)| self.can_emit(t)),
         }
     }
 

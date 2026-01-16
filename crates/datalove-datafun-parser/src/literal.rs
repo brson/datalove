@@ -259,6 +259,14 @@ impl<'db> Parser<'db> {
                 // List.
                 return self.parse_lit_list(heap, type_hint);
             }
+            Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
+                // Table.
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, inner, .. }) => inner,
+                    _ => unreachable!(),
+                };
+                return self.parse_lit_table(heap, type_hint, inner);
+            }
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
@@ -497,6 +505,167 @@ impl<'db> Parser<'db> {
         };
 
         ast::ExprFunKind::Tensor(ast::ExprTensor { heap, type_hint, shape, elements })
+    }
+
+    /// Parse table: {| header; row1; row2 |}
+    fn parse_lit_table(
+        &mut self,
+        heap: datalit::ast::Heap,
+        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+        iter: BracerIter<'db>,
+    ) -> ast::ExprFunKind<'db> {
+        // Collect all tokens including whitespace.
+        let all_tokens: Vec<_> = iter.collect();
+
+        // Split by row delimiters (newline in whitespace, or semicolon).
+        let rows = self.split_tokens_by_row(&all_tokens);
+
+        if rows.is_empty() {
+            // Empty table: {||}.
+            return ast::ExprFunKind::Table(ast::ExprTable {
+                heap,
+                type_hint,
+                header: vec![],
+                rows: vec![],
+            });
+        }
+
+        // First row is header (column names).
+        let header = self.parse_table_header(&rows[0]);
+        let num_columns = header.len();
+
+        // Remaining rows are data.
+        let mut data_rows = Vec::new();
+        for (row_idx, row_tokens) in rows.iter().skip(1).enumerate() {
+            let elements = self.parse_table_data_row(row_tokens);
+            if elements.len() != num_columns && !elements.is_empty() {
+                let ts = self.peek_text_span();
+                DiagnosticBuilder::error(self.db,
+                    &format!("row {} has {} columns but header has {}",
+                        row_idx + 1, elements.len(), num_columns))
+                    .code("D030")
+                    .primary_label(ts, "column count mismatch")
+                    .emit_parse();
+            }
+            data_rows.push(ast::ExprTableRow { elements });
+        }
+
+        ast::ExprFunKind::Table(ast::ExprTable { heap, type_hint, header, rows: data_rows })
+    }
+
+    /// Split tokens by row delimiters (newline or semicolon).
+    fn split_tokens_by_row(&self, tokens: &[TreeToken<'db>]) -> Vec<Vec<TreeToken<'db>>> {
+        let mut rows = Vec::new();
+        let mut current_row = Vec::new();
+
+        for token in tokens {
+            match token {
+                // Semicolon is explicit row delimiter.
+                TreeToken::Token(tok) if tok.kind(self.db) == TokenKind::Sigil(Sigil::Semicolon) => {
+                    if !current_row.is_empty() {
+                        rows.push(std::mem::take(&mut current_row));
+                    }
+                }
+                // Whitespace containing newline is implicit row delimiter.
+                TreeToken::Token(tok) if tok.kind(self.db) == TokenKind::Whitespace => {
+                    let text = tok.text(self.db).as_str(self.db);
+                    if text.contains('\n') {
+                        if !current_row.is_empty() {
+                            rows.push(std::mem::take(&mut current_row));
+                        }
+                    } else {
+                        current_row.push(token.clone());
+                    }
+                }
+                _ => {
+                    current_row.push(token.clone());
+                }
+            }
+        }
+
+        if !current_row.is_empty() {
+            rows.push(current_row);
+        }
+
+        rows
+    }
+
+    /// Parse table header row (column names).
+    fn parse_table_header(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<InternedText<'db>> {
+        // Filter out whitespace and split by comma.
+        let tokens_no_ws: Vec<_> = row_tokens.iter()
+            .filter_map(|t| t.clone().without_space(self.db))
+            .collect();
+
+        // Split by comma and extract names.
+        let parts = self.split_tokens_by_comma_for_table(&tokens_no_ws);
+        let mut names = Vec::new();
+
+        for part in parts {
+            // Each part should be a single name token.
+            if let Some(TreeToken::Token(tok)) = part.first() {
+                if let Some(name) = tok.word_str(self.db) {
+                    names.push(InternedText::new(self.db, name.S()));
+                    continue;
+                }
+            }
+            // Error: expected column name.
+            let ts = self.peek_text_span();
+            DiagnosticBuilder::error(self.db, "expected column name in table header")
+                .code("D031")
+                .primary_label(ts, "expected name")
+                .emit_parse();
+            names.push(InternedText::new(self.db, "<error>".S()));
+        }
+
+        names
+    }
+
+    /// Parse table data row (comma-separated expressions).
+    fn parse_table_data_row(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<ast::ExprFun<'db>> {
+        // Filter out whitespace.
+        let tokens_no_ws: Vec<_> = row_tokens.iter()
+            .filter_map(|t| t.clone().without_space(self.db))
+            .collect();
+
+        // Split by comma and parse each element.
+        let parts = self.split_tokens_by_comma_for_table(&tokens_no_ws);
+        let mut elements = Vec::new();
+
+        for part in parts {
+            let mut sub = Parser::new(self.db, part, self.source_text(), self.module_id());
+            let expr = sub.parse_expr_full();
+            sub.error_if_not_exhausted();
+            self.merge_from_sub(&mut sub);
+            elements.push(expr);
+        }
+
+        elements
+    }
+
+    /// Split tokens by comma (for table parsing).
+    fn split_tokens_by_comma_for_table(&self, tokens: &[TreeToken<'db>]) -> Vec<Vec<TreeToken<'db>>> {
+        let mut groups = Vec::new();
+        let mut current = Vec::new();
+
+        for token in tokens {
+            match token {
+                TreeToken::Token(tok) if tok.kind(self.db) == TokenKind::Sigil(Sigil::Comma) => {
+                    if !current.is_empty() {
+                        groups.push(std::mem::take(&mut current));
+                    }
+                }
+                _ => {
+                    current.push(token.clone());
+                }
+            }
+        }
+
+        if !current.is_empty() {
+            groups.push(current);
+        }
+
+        groups
     }
 
     /// Parse tensor data for 2D+ tensors: comma-separated rows, space-separated elements.

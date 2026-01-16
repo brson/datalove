@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// Test basic table creation.
+let t: {| a: u32, b: u32 |} = : {| a: u32, b: u32 |} / @{| a, b; 1, 2; 3, 4 |}
+debuglog @42

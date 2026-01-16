@@ -359,6 +359,16 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, "]")
             }
+            Instruction::TableNew { dest, rows } => {
+                write!(f, "{} = table [", dest)?;
+                for (i, row) in rows.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", row)?;
+                }
+                write!(f, "]")
+            }
             Instruction::SlotStore { dest, value } => {
                 write!(f, "store {}, {}", dest, value)
             }

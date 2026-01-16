@@ -1,4 +1,4 @@
-//! Collection type instruction compilation (List, Set, Map, Tensor).
+//! Collection type instruction compilation (List, Set, Map, Tensor, Table).
 
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder};
 use cranelift_frontend::FunctionBuilder;
@@ -338,6 +338,74 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Store pointer for this value.
         self.values.insert(dest, tensor_ptr);
+        Ok(())
+    }
+
+    /// Compile a TableNew instruction.
+    ///
+    /// Creates an empty table, then pushes each row (a tuple).
+    pub(super) fn compile_table_new(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        rows: &[Operand],
+    ) -> Result<(), AotError> {
+        // Get runtime imports and handle.
+        let runtime = self.runtime.ok_or_else(|| {
+            AotError::Codegen("TableNew requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            AotError::Codegen("TableNew requires runtime handle".into())
+        })?;
+
+        // Get table type from dest.
+        let table_ty = self.func.value_types[dest.0 as usize].clone();
+        let columns = match &table_ty {
+            IrType::Table(cols) => cols.clone(),
+            _ => return Err(AotError::Codegen(format!(
+                "TableNew dest has non-table type: {:?}", table_ty
+            ))),
+        };
+
+        // Build row tuple type from column types.
+        let row_ty = IrType::Tuple(columns.iter().map(|(_, t)| (**t).clone()).collect());
+
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            AotError::Codegen("no frame slot for TableNew".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let table_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Get Table TyDesc.
+        let table_tydesc_id = self.tydesc_emitter.get(&table_ty).ok_or_else(|| {
+            AotError::Codegen(format!("TyDesc not found for {:?}", table_ty))
+        })?;
+        let table_tydesc_gv = self.module.declare_data_in_func(table_tydesc_id, builder.func);
+        let table_tydesc_ptr = builder.ins().global_value(PTR_TYPE, table_tydesc_gv);
+
+        // Get row (tuple) TyDesc.
+        let row_tydesc_id = self.tydesc_emitter.get(&row_ty).ok_or_else(|| {
+            AotError::Codegen(format!("TyDesc not found for row type {:?}", row_ty))
+        })?;
+        let row_tydesc_gv = self.module.declare_data_in_func(row_tydesc_id, builder.func);
+        let row_tydesc_ptr = builder.ins().global_value(PTR_TYPE, row_tydesc_gv);
+
+        // Create empty table.
+        let create_ref = self.module.declare_func_in_func(runtime.table_create, builder.func);
+        builder.ins().call(create_ref, &[rt_handle, table_ptr, table_tydesc_ptr]);
+
+        // Push each row.
+        let push_ref = self.module.declare_func_in_func(runtime.table_push_row, builder.func);
+        for row in rows {
+            let row_ptr = self.get_operand_ptr(builder, row)?;
+            builder.ins().call(push_ref, &[
+                rt_handle, table_ptr, table_tydesc_ptr, row_ptr, row_tydesc_ptr
+            ]);
+        }
+
+        // Store pointer for this value.
+        self.values.insert(dest, table_ptr);
         Ok(())
     }
 }

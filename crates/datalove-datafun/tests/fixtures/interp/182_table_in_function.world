@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+fn make_table() -> {| a: u32, b: u32 |} {
+    : {| a: u32, b: u32 |} / @{| a, b; 10, 20 |}
+}
+
+debuglog(make_table())

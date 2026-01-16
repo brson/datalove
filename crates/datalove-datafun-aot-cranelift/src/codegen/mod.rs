@@ -554,6 +554,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::TensorNew { dest, shape, elements } => {
                 self.compile_tensor_new(builder, *dest, shape, elements)?;
             }
+            Instruction::TableNew { dest, rows } => {
+                self.compile_table_new(builder, *dest, rows)?;
+            }
 
             // Option/Result instructions.
             Instruction::WrapSome { dest, inner } => {

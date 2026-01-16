@@ -44,6 +44,10 @@ pub struct RuntimeImports {
     pub map_insert: FuncId,
     /// `dtlv_rti_tensor_init_local(rt, element_data_in, element_count, element_tydesc, shape_ptr, rank, tensor_out, tensor_tydesc) -> RtStatus`
     pub tensor_init: FuncId,
+    /// `dtlv_rti_table_create_local(rt, value_out, tydesc) -> RtStatus`
+    pub table_create: FuncId,
+    /// `dtlv_rti_table_push_row_local(rt, table_mut, table_tydesc, row_ref, row_tydesc) -> RtStatus`
+    pub table_push_row: FuncId,
 
     // Int (bigint) arithmetic functions.
     /// `dtlv_rti_int_add(rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> RtStatus`
@@ -266,6 +270,32 @@ impl RuntimeImports {
                 .map_err(|e| AotError::Module(format!("declare dtlv_rti_tensor_init_local: {}", e)))?
         };
 
+        // dtlv_rti_table_create_local(rt, value_out, tydesc) -> u8
+        let table_create = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value_out
+            sig.params.push(AbiParam::new(PTR_TYPE)); // tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_table_create_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_table_create_local: {}", e)))?
+        };
+
+        // dtlv_rti_table_push_row_local(rt, table_mut, table_tydesc, row_ref, row_tydesc) -> u8
+        let table_push_row = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // table_mut
+            sig.params.push(AbiParam::new(PTR_TYPE)); // table_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // row_ref
+            sig.params.push(AbiParam::new(PTR_TYPE)); // row_tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_table_push_row_local", Linkage::Import, &sig)
+                .map_err(|e| AotError::Module(format!("declare dtlv_rti_table_push_row_local: {}", e)))?
+        };
+
         // Int (bigint) binary operations: (rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> u8
         let int_binop_sig = || {
             let mut sig = cl_ir::Signature::new(call_conv);
@@ -379,6 +409,8 @@ impl RuntimeImports {
             map_create,
             map_insert,
             tensor_init,
+            table_create,
+            table_push_row,
             int_add,
             int_sub,
             int_mul,

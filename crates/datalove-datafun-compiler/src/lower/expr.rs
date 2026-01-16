@@ -509,6 +509,50 @@ pub fn lower_expression<'db>(
             });
             Ok(dest)
         }
+        ExprFunKind::Table(table) => {
+            // Get the table type to determine column types.
+            let result_type = ctx.expr_type(expr);
+            let column_types = match &result_type {
+                IrType::Table(cols) => cols.clone(),
+                _ => return Err(LowerError::NotImplemented("table type mismatch".to_string())),
+            };
+
+            // Each row becomes a tuple operand.
+            let rows: Result<Vec<_>, _> = table.rows.iter().map(|row| {
+                // Lower row elements.
+                let elem_values: Result<Vec<_>, _> = row.elements.iter()
+                    .map(|e| lower_expression(ctx, *e))
+                    .collect();
+                let elem_values = elem_values?;
+
+                // Convert to operands.
+                let elem_operands: Vec<_> = elem_values.iter()
+                    .map(|&v| Operand::Value(v))
+                    .collect();
+
+                // Build tuple type for row from column types.
+                let tuple_fields: Vec<_> = column_types.iter()
+                    .map(|(_, ty)| (**ty).clone())
+                    .collect();
+                let row_type = IrType::Tuple(tuple_fields);
+
+                // Create tuple from elements.
+                let tuple_dest = ctx.fresh_value(row_type);
+                ctx.emit(Instruction::Pack {
+                    dest: tuple_dest,
+                    ty: TypeRef::Tuple(elem_operands.len() as u32),
+                    fields: elem_operands,
+                });
+                Ok(Operand::Value(tuple_dest))
+            }).collect();
+
+            let dest = ctx.fresh_value(result_type);
+            ctx.emit(Instruction::TableNew {
+                dest,
+                rows: rows?,
+            });
+            Ok(dest)
+        }
         ExprFunKind::ParseError(_) => {
             Err(LowerError::NotImplemented("ParseError".to_string()))
         }

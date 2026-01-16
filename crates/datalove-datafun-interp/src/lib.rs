@@ -1065,6 +1065,20 @@ impl IrInterpreter {
                     }
                 }
             }
+            Instruction::TableNew { dest, rows } => {
+                let dest_slot = frame.value_dest(*dest)?;
+                self.execute_table_new(rows, dest_slot, frame, frames)?;
+                frame.mark_value_initialized(*dest);
+                // Mark source rows as moved (linear semantics - consumes rows).
+                for row in rows {
+                    match row {
+                        Operand::Value(id) => frame.mark_value_dropped(*id),
+                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                        Operand::Param(id) => frame.mark_param_dropped(*id),
+                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                    }
+                }
+            }
             Instruction::Drop { operand } => {
                 // Skip drop if already dropped (can happen with move semantics).
                 let val = match self.read_operand(operand, frame, frames) {

@@ -34,6 +34,7 @@ pub use datalit::tycheck::{
     TypeOption,
     TypeResult,
     TypeTensor,
+    TypeTable,
 };
 
 // ============================================================================
@@ -271,7 +272,23 @@ fn convert_type_hint_inner<'db>(
         }
 
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
-        TypeHint::Table(_) => todo!("table types not yet supported in datafun"),
+        TypeHint::Table(t) => {
+            let columns: Result<Vec<_>, TypeError> = t.columns.iter()
+                .map(|c| {
+                    let name = c.name;
+                    let c_heap = c.type_hint.heap(db);
+                    let c_hint = c.type_hint.type_hint(db);
+                    let c_ty = convert_type_hint_inner(db, c_heap, c_hint)?;
+                    Ok(datalit::tycheck::TypeNamedField {
+                        name,
+                        ty: to_datalit_type_and_heap(db, c_ty)?,
+                    })
+                })
+                .collect();
+            Type::Datalit(datalit::tycheck::Type::Table(
+                datalit::tycheck::TypeTable { columns: columns? }
+            ))
+        }
     };
 
     Ok(TypeAndHeap::new(db, heap, ty))
@@ -430,6 +447,7 @@ pub fn get_expr_heap<'db>(db: &'db dyn crate::Db, expr: ExprFun<'db>) -> datalit
         ExprFunKind::Er(er_expr) => er_expr.heap,
         ExprFunKind::Data(data_expr) => data_expr.heap,
         ExprFunKind::Error(err_expr) => err_expr.heap,
+        ExprFunKind::Table(table_expr) => table_expr.heap,
         // Non-literal expressions use Omitted heap.
         ExprFunKind::Name(_)
         | ExprFunKind::BinOp(_)

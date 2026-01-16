@@ -196,6 +196,9 @@ pub enum ExprFunKind {
     Data(ExprData),
     Error(ExprError),
 
+    // Table expression.
+    Table(ExprTable),
+
     ParseError(ExprFunParseError),
 }
 
@@ -374,6 +377,19 @@ pub struct ExprAnonEnum {
     pub type_hint: Option<datalove_datalit::ast_serde::TypeHintAndHeap>,
     pub variant_name: String,
     pub payload: Option<Box<ExprFun>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprTable {
+    pub heap: datalove_datalit::ast_serde::Heap,
+    pub type_hint: Option<datalove_datalit::ast_serde::TypeHintAndHeap>,
+    pub header: Vec<String>,
+    pub rows: Vec<ExprTableRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprTableRow {
+    pub elements: Vec<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -655,6 +671,9 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::Data(e) => ExprFunKind::Data(ExprData::from_ast(db, e)),
             crate::ast::ExprFunKind::Error(e) => ExprFunKind::Error(ExprError::from_ast(db, e)),
 
+            // Table expression.
+            crate::ast::ExprFunKind::Table(e) => ExprFunKind::Table(ExprTable::from_ast(db, e)),
+
             crate::ast::ExprFunKind::ParseError(e) => ExprFunKind::ParseError(ExprFunParseError::from_ast(db, e)),
         }
     }
@@ -916,6 +935,25 @@ impl ExprAnonEnum {
             type_hint: type_hint_from_ast(db, ast.type_hint),
             variant_name: ast.variant_name.as_str(db).to_string(),
             payload: ast.payload.map(|p| Box::new(ExprFun::from_ast(db, p))),
+        }
+    }
+}
+
+impl ExprTable {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprTable<'db>) -> Self {
+        ExprTable {
+            heap: heap_from_ast(ast.heap),
+            type_hint: type_hint_from_ast(db, ast.type_hint),
+            header: ast.header.iter().map(|h| h.as_str(db).to_string()).collect(),
+            rows: ast.rows.iter().map(|r| ExprTableRow::from_ast(db, r)).collect(),
+        }
+    }
+}
+
+impl ExprTableRow {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprTableRow<'db>) -> Self {
+        ExprTableRow {
+            elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, *e)).collect(),
         }
     }
 }
