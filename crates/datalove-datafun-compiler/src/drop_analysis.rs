@@ -71,37 +71,39 @@ impl BindingInfo {
 
 /// Error detected during drop analysis.
 ///
-/// Each variant includes an `expr_id` for span lookup during diagnostic emission.
+/// Each variant includes a `local_index` for span lookup during diagnostic emission.
+/// The local_index is the expression's sequential index within its function, which
+/// is stable regardless of parallel vs sequential compilation order.
 #[derive(Clone, Debug)]
 pub enum AnalysisError {
     /// Using a value after it was moved.
     /// D001
     UseAfterMove {
-        expr_id: u32,
+        local_index: u32,
         name: String,
     },
     /// Moving a value multiple times.
     /// D002
     DoubleMove {
-        expr_id: u32,
+        local_index: u32,
         name: String,
     },
     /// Attempting to move a borrowed value (ref/mut/out parameter).
     /// D003
     CannotMoveBorrowed {
-        expr_id: u32,
+        local_index: u32,
         name: String,
     },
     /// Attempting to pass a ref param to a mut param.
     /// D004
     CannotMutFromRef {
-        expr_id: u32,
+        local_index: u32,
         name: String,
     },
     /// Reading Out param before it was written.
     /// D005
     ReadUninitializedOutParam {
-        expr_id: u32,
+        local_index: u32,
         name: String,
     },
     /// Function returns without initializing Out param.
@@ -115,7 +117,7 @@ pub enum AnalysisError {
     /// D007
     MoveInLoop {
         /// Expression where the move occurred.
-        expr_id: u32,
+        local_index: u32,
         name: String,
     },
 }
@@ -135,25 +137,25 @@ pub fn format_analysis_errors(errors: &[AnalysisError]) -> String {
 
 fn format_single_error(error: &AnalysisError) -> String {
     match error {
-        AnalysisError::UseAfterMove { expr_id: _, name } => {
+        AnalysisError::UseAfterMove { local_index: _, name } => {
             format!("error[D001]: use of moved value: `{}`", name)
         }
-        AnalysisError::DoubleMove { expr_id: _, name } => {
+        AnalysisError::DoubleMove { local_index: _, name } => {
             format!("error[D002]: value moved twice: `{}`", name)
         }
-        AnalysisError::CannotMoveBorrowed { expr_id: _, name } => {
+        AnalysisError::CannotMoveBorrowed { local_index: _, name } => {
             format!("error[D003]: cannot move borrowed value: `{}`", name)
         }
-        AnalysisError::CannotMutFromRef { expr_id: _, name } => {
+        AnalysisError::CannotMutFromRef { local_index: _, name } => {
             format!("error[D004]: cannot get mutable reference from immutable: `{}`", name)
         }
-        AnalysisError::ReadUninitializedOutParam { expr_id: _, name } => {
+        AnalysisError::ReadUninitializedOutParam { local_index: _, name } => {
             format!("error[D005]: read of uninitialized out parameter: `{}`", name)
         }
         AnalysisError::OutParamNotInitialized { ret_stmt_idx: _, name } => {
             format!("error[D006]: out parameter not initialized: `{}`", name)
         }
-        AnalysisError::MoveInLoop { expr_id: _, name } => {
+        AnalysisError::MoveInLoop { local_index: _, name } => {
             format!("error[D007]: cannot move `{}` in loop", name)
         }
     }
@@ -237,7 +239,7 @@ struct ScopeFrame {
     current_state: HashMap<BindingId, BindingState>,
     /// Initialization state for Out params.
     out_param_init: HashMap<BindingId, OutParamInitState>,
-    /// Where each binding was moved (expr_id), for error reporting.
+    /// Where each binding was moved (local_index), for error reporting.
     moved_at: HashMap<BindingId, u32>,
 }
 
@@ -398,15 +400,15 @@ impl<'db> AnalysisCtx<'db> {
         }
     }
 
-    /// Get where a binding was moved (expr_id).
+    /// Get where a binding was moved (local_index).
     fn get_moved_at(&self, id: BindingId) -> Option<u32> {
         self.scope_stack.last()?.moved_at.get(&id).copied()
     }
 
     /// Record where a binding was moved.
-    fn set_moved_at(&mut self, id: BindingId, expr_id: u32) {
+    fn set_moved_at(&mut self, id: BindingId, local_index: u32) {
         if let Some(frame) = self.scope_stack.last_mut() {
-            frame.moved_at.insert(id, expr_id);
+            frame.moved_at.insert(id, local_index);
         }
     }
 
@@ -416,24 +418,24 @@ impl<'db> AnalysisCtx<'db> {
     }
 
     /// Mark a binding as moved at the given expression.
-    fn mark_moved(&mut self, id: BindingId, expr_id: u32) {
+    fn mark_moved(&mut self, id: BindingId, local_index: u32) {
         // Borrowed params (Ref/Mut) cannot be moved - caller retains ownership.
         if self.bindings[id.0 as usize].is_borrowed() {
             let name = self.bindings[id.0 as usize].name.clone();
-            self.errors.push(AnalysisError::CannotMoveBorrowed { expr_id, name });
+            self.errors.push(AnalysisError::CannotMoveBorrowed { local_index, name });
             return;
         }
 
         if self.get_state(id) == Some(BindingState::Moved) {
             // Double move error.
             let name = self.bindings[id.0 as usize].name.clone();
-            self.errors.push(AnalysisError::DoubleMove { expr_id, name });
+            self.errors.push(AnalysisError::DoubleMove { local_index, name });
         } else {
             // Track the move for error detection.
             // Note: ScriptUnit bindings are tracked for error detection (e.g., move in loop)
             // but are NOT scheduled for drops since they're exported.
             self.set_state(id, BindingState::Moved);
-            self.set_moved_at(id, expr_id);
+            self.set_moved_at(id, local_index);
         }
     }
 
@@ -586,7 +588,7 @@ impl<'db> AnalysisCtx<'db> {
     ///
     /// Returns the binding ID if the expression is a simple move of a binding.
     fn analyze_expr_moves(&mut self, expr: ExprFun<'db>, is_consumed: bool) -> Option<BindingId> {
-        let expr_id = expr.as_id().index();
+        let local_index = expr.local_index(self.db);
         match expr.expr(self.db) {
             ExprFunKind::Name(name) => {
                 let name_str = name.text(self.db);
@@ -595,19 +597,19 @@ impl<'db> AnalysisCtx<'db> {
                     if self.bindings[id.0 as usize].param_mode == Some(ParamMode::Out) {
                         if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
                             let name = self.bindings[id.0 as usize].name.clone();
-                            self.errors.push(AnalysisError::ReadUninitializedOutParam { expr_id, name });
+                            self.errors.push(AnalysisError::ReadUninitializedOutParam { local_index, name });
                             return None;
                         }
                     }
                     // Check for use after move.
                     if self.get_state(id) == Some(BindingState::Moved) {
                         let name = self.bindings[id.0 as usize].name.clone();
-                        self.errors.push(AnalysisError::UseAfterMove { expr_id, name });
+                        self.errors.push(AnalysisError::UseAfterMove { local_index, name });
                         return None;
                     }
                     if is_consumed && !self.bindings[id.0 as usize].ty.is_copy() {
                         // This is a move.
-                        self.mark_moved(id, expr_id);
+                        self.mark_moved(id, local_index);
                         return Some(id);
                     }
                 }
@@ -650,9 +652,9 @@ impl<'db> AnalysisCtx<'db> {
                         if let Some(binding_id) = self.expr_to_binding(*arg) {
                             if self.bindings[binding_id.0 as usize].param_mode == Some(ParamMode::Ref) {
                                 let name = self.bindings[binding_id.0 as usize].name.clone();
-                                let arg_expr_id = arg.as_id().index();
+                                let local_index = arg.local_index(self.db);
                                 self.errors.push(AnalysisError::CannotMutFromRef {
-                                    expr_id: arg_expr_id,
+                                    local_index,
                                     name,
                                 });
                             }
@@ -1233,8 +1235,8 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLoop<'db>, stmt_idx:
         if ctx.get_state(*id) == Some(BindingState::Moved) {
             let name = ctx.bindings[id.0 as usize].name.clone();
             // Use the recorded move location for the error span.
-            let expr_id = ctx.get_moved_at(*id).unwrap_or(0);
-            ctx.errors.push(AnalysisError::MoveInLoop { expr_id, name });
+            let local_index = ctx.get_moved_at(*id).unwrap_or(0);
+            ctx.errors.push(AnalysisError::MoveInLoop { local_index, name });
         }
     }
 

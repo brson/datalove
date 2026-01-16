@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "Drop analysis errors: CannotMutFromRef { expr_id: 17414, name: \"y\" }",
+                message: "Drop analysis errors: CannotMutFromRef { local_index: 0, name: \"y\" }",
             ),
             output: "",
         ),
