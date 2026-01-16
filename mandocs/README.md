@@ -20,7 +20,7 @@ Then we'll add I/O to it &mdash; carefully.
 
 <br>
 
-### 4 things to remember about Datalove
+<h2><center>4 things to remember about Datalove</center></h2>
 
 <div class="four-things-grid">
   <div class="thing-box">
@@ -61,9 +61,7 @@ declarative pure-data language for expressing typical data structures.
 
 It includes booleans, fixed integers and bigints, floats;
 anonymous tuples, structs, and enums;
-strings, lists, maps and sets, tensors;
-option and result;
-dynamically-typed data and error types.
+strings, lists, maps and sets.
 
 ```datalove
 {
@@ -81,6 +79,27 @@ dynamically-typed data and error types.
     },
   },
 }
+```
+
+It also includes _tensors_ (multi-dimensional arrays)
+and _tables_ (dataframes / structs-of-arrays).
+
+```datalove
+todo
+```
+
+It also includes optional and result types.
+
+```datalove
+todo
+```
+
+It includes two dynamic types:
+`data`, for general dynamic typing;
+and `error`, the payload for result types.
+
+```datalove
+todo
 ```
 
 
