@@ -2230,3 +2230,153 @@ proptest! {
         }
     }
 }
+
+// ============================================================================
+// Table cmp tests
+// ============================================================================
+
+#[test]
+fn test_cmp_table_empty_equal() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile_str(&db, ": {| x: u32 |} / {| x |}")?;
+    let typechecked_b = compile_str(&db, ": {| x: u32 |} / {| x |}")?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+
+    let result = unsafe {
+        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+    };
+
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Equal));
+    unsafe {
+        cleanup_value(&rt, ptr_a, tydesc_a);
+        cleanup_value(&rt, ptr_b, tydesc_b);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_cmp_table_less_by_length() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile_str(&db, ": {| x: u32 |} / {| x; @1 |}")?;
+    let typechecked_b = compile_str(&db, ": {| x: u32 |} / {| x; @1; @2 |}")?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+
+    let result = unsafe {
+        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+    };
+
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
+    unsafe {
+        cleanup_value(&rt, ptr_a, tydesc_a);
+        cleanup_value(&rt, ptr_b, tydesc_b);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_cmp_table_less_by_value() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile_str(&db, ": {| x: u32, y: u32 |} / {| x, y; @1, @2 |}")?;
+    let typechecked_b = compile_str(&db, ": {| x: u32, y: u32 |} / {| x, y; @1, @3 |}")?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+
+    let result = unsafe {
+        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+    };
+
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
+    unsafe {
+        cleanup_value(&rt, ptr_a, tydesc_a);
+        cleanup_value(&rt, ptr_b, tydesc_b);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_cmp_table_greater() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile_str(&db, ": {| x: u32 |} / {| x; @5 |}")?;
+    let typechecked_b = compile_str(&db, ": {| x: u32 |} / {| x; @3 |}")?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+
+    let result = unsafe {
+        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+    };
+
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Greater));
+    unsafe {
+        cleanup_value(&rt, ptr_a, tydesc_a);
+        cleanup_value(&rt, ptr_b, tydesc_b);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_cmp_table_with_strings() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile_str(&db, r#": {| name: string |} / {| name; @"Alice" |}"#)?;
+    let typechecked_b = compile_str(&db, r#": {| name: string |} / {| name; @"Bob" |}"#)?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+
+    let result = unsafe {
+        datalove_rt::c::dtlv_rti_cmp_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+    };
+
+    // "Alice" < "Bob" lexicographically.
+    assert!(matches!(result, datalove_rt::c::RtOrdering::Less));
+    unsafe {
+        cleanup_value(&rt, ptr_a, tydesc_a);
+        cleanup_value(&rt, ptr_b, tydesc_b);
+    }
+    Ok(())
+}

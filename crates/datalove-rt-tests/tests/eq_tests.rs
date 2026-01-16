@@ -2903,3 +2903,167 @@ proptest! {
         }
     }
 }
+
+// ============================================================================
+// Table eq tests
+// ============================================================================
+
+#[test]
+fn test_eq_table_empty_equals() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile_str(&db, ": {| x: u32 |} / {| x |}")?;
+    let typechecked_b = compile_str(&db, ": {| x: u32 |} / {| x |}")?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+
+    let result = unsafe {
+        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+    };
+
+    assert!(matches!(result, datalove_rt::c::RtEq::Equals));
+
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, tydesc_a);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_a, 1, ptr_a as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, tydesc_b);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_b, 1, ptr_b as *mut u8);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_eq_table_with_rows_equals() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile_str(&db, ": {| x: u32, y: u32 |} / {| x, y; @1, @2; @3, @4 |}")?;
+    let typechecked_b = compile_str(&db, ": {| x: u32, y: u32 |} / {| x, y; @1, @2; @3, @4 |}")?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+
+    let result = unsafe {
+        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+    };
+
+    assert!(matches!(result, datalove_rt::c::RtEq::Equals));
+
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, tydesc_a);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_a, 1, ptr_a as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, tydesc_b);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_b, 1, ptr_b as *mut u8);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_eq_table_different_values() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile_str(&db, ": {| x: u32 |} / {| x; @1 |}")?;
+    let typechecked_b = compile_str(&db, ": {| x: u32 |} / {| x; @2 |}")?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+
+    let result = unsafe {
+        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+    };
+
+    assert!(matches!(result, datalove_rt::c::RtEq::NotEquals));
+
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, tydesc_a);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_a, 1, ptr_a as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, tydesc_b);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_b, 1, ptr_b as *mut u8);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_eq_table_different_lengths() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile_str(&db, ": {| x: u32 |} / {| x; @1 |}")?;
+    let typechecked_b = compile_str(&db, ": {| x: u32 |} / {| x; @1; @2 |}")?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+
+    let result = unsafe {
+        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+    };
+
+    assert!(matches!(result, datalove_rt::c::RtEq::NotEquals));
+
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, tydesc_a);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_a, 1, ptr_a as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, tydesc_b);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_b, 1, ptr_b as *mut u8);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_eq_table_with_strings() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked_a = compile_str(&db, r#": {| name: string |} / {| name; @"Alice"; @"Bob" |}"#)?;
+    let typechecked_b = compile_str(&db, r#": {| name: string |} / {| name; @"Alice"; @"Bob" |}"#)?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let (ptr_a, tydesc_a) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_a)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+    let (ptr_b, tydesc_b) = {
+        let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked_b)?;
+        (inst.ptr, inst.tydesc.as_ptr())
+    };
+
+    let result = unsafe {
+        datalove_rt::c::dtlv_rti_eq_local(std::ptr::null_mut(), ptr_a, tydesc_a, ptr_b, tydesc_b)
+    };
+
+    assert!(matches!(result, datalove_rt::c::RtEq::Equals));
+
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_a as *mut u8, tydesc_a);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_a, 1, ptr_a as *mut u8);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), ptr_b as *mut u8, tydesc_b);
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), tydesc_b, 1, ptr_b as *mut u8);
+    }
+    Ok(())
+}

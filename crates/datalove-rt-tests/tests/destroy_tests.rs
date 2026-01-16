@@ -5,6 +5,7 @@ use rmx::prelude::*;
 use datalove_datalit::{Database, instantiate2};
 use datalove_datalit::tydesc_table::TyDescTable;
 use datalove_rt::rust::Runtime;
+use datalove_rtdt;
 
 #[salsa::tracked]
 fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {
@@ -1425,4 +1426,171 @@ proptest! {
             datalove_rt::c::dtlv_rti_shutdown(rt);
         }
     }
+}
+
+// ============================================================================
+// Table destroy tests
+// ============================================================================
+
+#[test]
+fn test_destroy_empty_table() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked = compile_str(&db, ": {| x: u32 |} / {| x |}")?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
+
+    // Clone to get a runtime-allocated copy.
+    let rt2 = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt2.is_null());
+
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rtdt::Table>());
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_clone_local(
+            rt2,
+            inst.ptr,
+            inst.tydesc.as_ptr(),
+            cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Destroy the cloned table.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            rt2,
+            cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Verify table is cleared.
+    let table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
+    assert!(table.data.is_null());
+    assert_eq!(table.len, 0);
+    assert_eq!(table.capacity, 0);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt2) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Clean up original.
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_destroy_table_with_rows() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked = compile_str(&db, ": {| x: u32, y: u32 |} / {| x, y; @1, @2; @3, @4 |}")?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
+
+    // Clone to get a runtime-allocated copy.
+    let rt2 = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt2.is_null());
+
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rtdt::Table>());
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_clone_local(
+            rt2,
+            inst.ptr,
+            inst.tydesc.as_ptr(),
+            cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Verify table has data.
+    let table_before = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
+    assert!(!table_before.data.is_null());
+    assert_eq!(table_before.len, 2);
+
+    // Destroy the cloned table.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            rt2,
+            cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Verify table is cleared.
+    let table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
+    assert!(table.data.is_null());
+    assert_eq!(table.len, 0);
+    assert_eq!(table.capacity, 0);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt2) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Clean up original.
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_destroy_table_with_strings() -> AnyResult<()> {
+    let db = Database::default();
+    let typechecked = compile_str(&db, r#": {| name: string |} / {| name; @"Alice"; @"Bob"; @"Charlie" |}"#)?;
+
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let inst = instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table, typechecked)?;
+
+    // Clone to get a runtime-allocated copy.
+    let rt2 = datalove_rt::c::dtlv_rti_init();
+    assert!(!rt2.is_null());
+
+    let mut cloned_buffer = datalove_rt::rust::AlignedBuffer::new(std::mem::size_of::<datalove_rtdt::Table>());
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_clone_local(
+            rt2,
+            inst.ptr,
+            inst.tydesc.as_ptr(),
+            cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Destroy the cloned table (should properly destroy nested strings).
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            rt2,
+            cloned_buffer.as_mut_ptr(),
+            inst.tydesc.as_ptr(),
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Verify table is cleared.
+    let table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
+    assert!(table.data.is_null());
+    assert_eq!(table.len, 0);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt2) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Clean up original.
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt.handle(), inst.ptr as *mut u8, inst.tydesc.as_ptr());
+        datalove_rt::c::dtlv_rti_mem_free_local(rt.handle(), inst.tydesc.as_ptr(), 1, inst.ptr as *mut u8);
+    }
+    Ok(())
 }

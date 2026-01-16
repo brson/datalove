@@ -484,3 +484,37 @@ fn test_pretty_tensor_f32() -> AnyResult<()> {
         "@tensor [3] [@1.5, @2.5, @3.5]",
     )
 }
+
+// Tables
+
+#[test]
+fn test_pretty_table_empty() -> AnyResult<()> {
+    test_pretty(
+        ": {| x: u32, y: u32 |} / {| x, y |}",
+        "@table {|  |}",
+    )
+}
+
+#[test]
+fn test_pretty_table_single_row() -> AnyResult<()> {
+    test_pretty(
+        ": {| x: u32, y: u32 |} / {| x, y; @1, @2 |}",
+        "@table {| @1, @2 |}",
+    )
+}
+
+#[test]
+fn test_pretty_table_multiple_rows() -> AnyResult<()> {
+    test_pretty(
+        ": {| x: u32, y: u32 |} / {| x, y; @1, @2; @3, @4 |}",
+        "@table {| @1, @2; @3, @4 |}",
+    )
+}
+
+#[test]
+fn test_pretty_table_with_strings() -> AnyResult<()> {
+    test_pretty(
+        r#": {| name: string, age: u32 |} / {| name, age; @"Alice", @30 |}"#,
+        r#"@table {| @"Alice", @30 |}"#,
+    )
+}
