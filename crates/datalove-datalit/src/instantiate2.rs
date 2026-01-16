@@ -212,6 +212,11 @@ fn instantiate_expr_into<'db>(
             instantiate_tensor(db, rt, &tensor_expr.shape, &tensor_expr.elements, tensor_ty.element_type, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
+        (Expr::Table(table_expr), Type::Table(table_ty)) => {
+            let tydesc = tydesc_table.get_or_create(ty);
+            instantiate_table(db, rt, &table_expr.rows, &table_ty.columns, tydesc_table, tydesc, dest_ptr, resolved)
+        }
+
         _ => bail!("Unsupported expression/type combination for instantiation"),
     }
 }
@@ -785,6 +790,130 @@ fn instantiate_list<'db>(
 
         Ok(dest_ptr as *const u8)
     }
+}
+
+fn instantiate_table<'db>(
+    db: &'db dyn crate::Db,
+    rt: datalove_rt::c::LocalRtHandle,
+    rows: &[ExprTableRow<'db>],
+    columns: &[TypeNamedField<'db>],
+    tydesc_table: &mut TyDescTable<'db>,
+    table_tydesc: *const rtdt::TyDesc,
+    dest_ptr: *mut u8,
+    resolved: ResolvedExpr<'db>,
+) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+
+    // Create empty table.
+    unsafe {
+        let status = datalove_rt::c::dtlv_rti_table_create_local(rt, dest_ptr, table_tydesc);
+        if status != datalove_rt::c::RtStatus::Ok {
+            return Err(anyhow!("Failed to create table"));
+        }
+    }
+
+    if rows.is_empty() {
+        return Ok(dest_ptr as *const u8);
+    }
+
+    // Build a row tuple type descriptor from column types.
+    let column_tydescs: Vec<*const rtdt::TyDesc> = columns
+        .iter()
+        .map(|col| tydesc_table.get_or_create(col.ty.ty(db)))
+        .collect();
+    let row_tuple_tydesc = tydesc_table.get_or_create_tuple(&column_tydescs);
+    let row_tuple_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(row_tuple_tydesc) };
+    let row_layout = rtdt::layout::compute_tuple_layout(row_tuple_tydesc_ref);
+
+    // Allocate temporary buffer for a single row tuple.
+    let row_buffer = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt, row_tuple_tydesc, 1)
+    };
+    if row_buffer.is_null() {
+        // Destroy the table we just created.
+        unsafe {
+            datalove_rt::c::dtlv_rti_table_destroy_local(rt, dest_ptr, table_tydesc);
+        }
+        return Err(anyhow!("Failed to allocate row buffer"));
+    }
+
+    // Push each row.
+    for (row_idx, row) in rows.iter().enumerate() {
+        if row.elements.len() != columns.len() {
+            // Cleanup and error.
+            unsafe {
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, row_tuple_tydesc, 1, row_buffer);
+                datalove_rt::c::dtlv_rti_table_destroy_local(rt, dest_ptr, table_tydesc);
+            }
+            return Err(anyhow!(
+                "Row {} has {} elements but table has {} columns",
+                row_idx,
+                row.elements.len(),
+                columns.len()
+            ));
+        }
+
+        // Instantiate each cell into the row tuple buffer.
+        for (col_idx, (elem, col)) in row.elements.iter().zip(columns.iter()).enumerate() {
+            let field_offset = row_layout.field_offsets[col_idx];
+            let cell_dest = unsafe { row_buffer.add(field_offset as usize) };
+            if let Err(e) = instantiate_expr_into(db, rt, *elem, col.ty.ty(db), tydesc_table, cell_dest, resolved) {
+                // Destroy already instantiated cells in this row.
+                for cleanup_col in 0..col_idx {
+                    let cleanup_offset = row_layout.field_offsets[cleanup_col];
+                    let cleanup_dest = unsafe { row_buffer.add(cleanup_offset as usize) };
+                    let cleanup_tydesc = column_tydescs[cleanup_col];
+                    unsafe {
+                        datalove_rt::c::dtlv_rti_any_destroy_local(rt, cleanup_dest, cleanup_tydesc);
+                    }
+                }
+                // Cleanup and return error.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_mem_free_local(rt, row_tuple_tydesc, 1, row_buffer);
+                    datalove_rt::c::dtlv_rti_table_destroy_local(rt, dest_ptr, table_tydesc);
+                }
+                return Err(e);
+            }
+        }
+
+        // Push the row to the table.
+        unsafe {
+            let status = datalove_rt::c::dtlv_rti_table_push_row_local(
+                rt,
+                dest_ptr,
+                table_tydesc,
+                row_buffer,
+                row_tuple_tydesc,
+            );
+            if status != datalove_rt::c::RtStatus::Ok {
+                // Destroy row cells.
+                for (col_idx, col_tydesc) in column_tydescs.iter().enumerate() {
+                    let cleanup_offset = row_layout.field_offsets[col_idx];
+                    let cleanup_dest = row_buffer.add(cleanup_offset as usize);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, cleanup_dest, *col_tydesc);
+                }
+                datalove_rt::c::dtlv_rti_mem_free_local(rt, row_tuple_tydesc, 1, row_buffer);
+                datalove_rt::c::dtlv_rti_table_destroy_local(rt, dest_ptr, table_tydesc);
+                return Err(anyhow!("Failed to push row {} to table", row_idx));
+            }
+        }
+
+        // Destroy the row tuple cells after push (table_push_row clones them).
+        unsafe {
+            for (col_idx, col_tydesc) in column_tydescs.iter().enumerate() {
+                let cleanup_offset = row_layout.field_offsets[col_idx];
+                let cleanup_dest = row_buffer.add(cleanup_offset as usize);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt, cleanup_dest, *col_tydesc);
+            }
+        }
+    }
+
+    // Free row buffer.
+    unsafe {
+        datalove_rt::c::dtlv_rti_mem_free_local(rt, row_tuple_tydesc, 1, row_buffer);
+    }
+
+    Ok(dest_ptr as *const u8)
 }
 
 fn instantiate_option<'db>(
@@ -2605,6 +2734,85 @@ mod tests {
             // Verify the payload is a tensor
             let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Tensor);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_table_basic() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile_str(&db, ": {| id: u32, val: u32 |} / {| id, val; @1, @10; @2, @20 |}")?;
+        let rt = datalove_rt::rust::Runtime::new();
+        let guard = RtGuard::new(rt);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
+
+        unsafe {
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Table);
+            let table = &*(inst.ptr as *const rtdt::Table);
+            assert_eq!(table.len, 2);
+            assert!(table.capacity >= 2);
+            assert!(!table.data.is_null());
+
+            // Check column tydescs.
+            let table_tydesc_ref = rtdt::TyDescRef::from_ptr(inst.tydesc.as_ptr());
+            let num_columns = table_tydesc_ref.table_num_columns();
+            assert_eq!(num_columns, 2);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_table_empty() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile_str(&db, ": {| x: u32 |} / {| x |}")?;
+        let rt = datalove_rt::rust::Runtime::new();
+        let guard = RtGuard::new(rt);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
+
+        unsafe {
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Table);
+            let table = &*(inst.ptr as *const rtdt::Table);
+            assert_eq!(table.len, 0);
+            assert_eq!(table.capacity, 0);
+            assert!(table.data.is_null());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_instantiate_table_with_string() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile_str(&db, r#": {| name: string, age: u32 |} / {| name, age; @"Alice", @30; @"Bob", @25 |}"#)?;
+        let rt = datalove_rt::rust::Runtime::new();
+        let guard = RtGuard::new(rt);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
+
+        unsafe {
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Table);
+            let table = &*(inst.ptr as *const rtdt::Table);
+            assert_eq!(table.len, 2);
+
+            // Verify table tydesc has string and u32 column types.
+            let table_tydesc_ref = rtdt::TyDescRef::from_ptr(inst.tydesc.as_ptr());
+            let col_tydescs: Vec<_> = table_tydesc_ref.table_column_tydescs().collect();
+            assert_eq!(col_tydescs.len(), 2);
+            assert_eq!(col_tydescs[0].type_tag(), rtdt::TyTag::String);
+            assert_eq!(col_tydescs[1].type_tag(), rtdt::TyTag::U32);
         }
         Ok(())
     }

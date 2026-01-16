@@ -32,6 +32,7 @@ pub struct TyDescTable<'db> {
     tuple_fields: Vec<Vec<rtdt::TyInfoTupleField>>,
     struct_fields: Vec<Vec<rtdt::TyInfoStructField>>,
     enum_variants: Vec<Vec<rtdt::TyInfoEnumVariant>>,
+    column_tydescs: Vec<Vec<*const rtdt::TyDesc>>,
 }
 
 impl<'db> TyDescTable<'db> {
@@ -48,6 +49,7 @@ impl<'db> TyDescTable<'db> {
             tuple_fields: Vec::new(),
             struct_fields: Vec::new(),
             enum_variants: Vec::new(),
+            column_tydescs: Vec::new(),
         }
     }
 
@@ -362,7 +364,7 @@ impl<'db> TyDescTable<'db> {
             Type::Option(o) => self.create_option_tydesc(o.inner_type),
             Type::Result(r) => self.create_result_tydesc(r.inner_type),
             Type::Tensor(t) => self.create_tensor_tydesc(t.element_type, t.rank),
-            Type::Table(_) => todo!("table type descriptors not yet implemented"),
+            Type::Table(t) => self.create_table_tydesc(&t.columns),
         }
     }
 
@@ -695,6 +697,32 @@ impl<'db> TyDescTable<'db> {
             type_info: rtdt::TyInfo {
                 set: rtdt::TyInfoSet {
                     element_tydesc,
+                },
+            },
+        })
+    }
+
+    /// Create TyDesc for table.
+    fn create_table_tydesc(&mut self, columns: &[TypeNamedField<'db>]) -> Box<rtdt::TyDesc> {
+        // Recursively create TyDescs for each column type.
+        let mut col_tydescs = Vec::new();
+        for column in columns {
+            let column_tydesc = self.get_or_create(column.ty.ty(self.db));
+            col_tydescs.push(column_tydesc);
+        }
+
+        // Store column tydescs array and get stable pointer.
+        self.column_tydescs.push(col_tydescs);
+        let column_tydescs_ptr = self.column_tydescs.last().unwrap().as_ptr();
+
+        Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Table,
+            size: std::mem::size_of::<rtdt::Table>() as u32,
+            align: std::mem::align_of::<rtdt::Table>() as u32,
+            type_info: rtdt::TyInfo {
+                table: rtdt::TyInfoTable {
+                    num_columns: columns.len() as u32,
+                    column_tydescs: column_tydescs_ptr,
                 },
             },
         })
