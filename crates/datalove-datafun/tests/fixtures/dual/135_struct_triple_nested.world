@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Triple nested struct.
+let deep = @{
+    a = @{
+        b = @{
+            c = @42
+        }
+    }
+}
+debuglog deep.a.b.c

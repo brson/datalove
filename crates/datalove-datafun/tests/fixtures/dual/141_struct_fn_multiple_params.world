@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Function taking multiple struct parameters - sum x values.
+fun sum_x(a: {x: @u32, y: @u32}, b: {x: @u32, y: @u32}): int
+    ret a.x + b.x
+end fun
+
+let p1 = @{x = @1, y = @2}
+let p2 = @{x = @10, y = @20}
+debuglog sum_x(p1, p2)

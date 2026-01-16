@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+// Struct with bool fields.
+let flags = @{active = @true, enabled = @false, visible = @true}
+debuglog flags.active
+debuglog flags.enabled
+debuglog flags.visible

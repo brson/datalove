@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+// Option containing struct.
+let with_some: ?@{x: @u32, y: @u32} = some @{x = @42, y = @99}
+let with_none: ?@{x: @u32, y: @u32} = none
+debuglog with_some
+debuglog with_none

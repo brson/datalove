@@ -1,0 +1,51 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "module",
+            name: Some("local/test/structops"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "fn make_point(p0, p1):\nblock0:\n    v0 = copy p0\n    v1 = copy p1\n    v2 = pack Struct0 {v0, v1}\n    return v2\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "fn make_point(p0, p1):\nblock0:\n    v0 = copy p0\n    v1 = copy p1\n    v2 = pack Struct0 {v0, v1}\n    return v2\n",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = call m0.f0(v0, v1)\n    v3 = getfieldref v2.0\n    debuglog v3\n    v4 = getfieldref v2.1\n    debuglog v4\n    unit_end\nexports:\n    p = v2\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = call m0.f0(v0, v1)\n    v3 = getfieldref v2.0\n    debuglog v3\n    v4 = getfieldref v2.1\n    debuglog v4\n    unit_end\nexports:\n    p = v2\n",
+            ),
+            ir_match: true,
+            interp_output: "@10\n@20\n",
+            aot_output: "@10\n@20\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

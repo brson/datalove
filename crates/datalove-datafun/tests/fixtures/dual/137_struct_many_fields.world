@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Struct with many fields.
+let big = @{
+    f1 = @1, f2 = @2, f3 = @3, f4 = @4, f5 = @5,
+    f6 = @6, f7 = @7, f8 = @8, f9 = @9, f10 = @10
+}
+debuglog big.f1
+debuglog big.f5
+debuglog big.f10

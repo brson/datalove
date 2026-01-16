@@ -1,0 +1,18 @@
+----------
+module local/test/structops
+----------
+
+// Module function taking list of structs.
+fun count_items(items: [@{value: @u32}]): @u32
+    ret @3
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/structops
+import structops.count_items
+
+let list = @[@{value = @1}, @{value = @2}, @{value = @3}]
+debuglog count_items(list)

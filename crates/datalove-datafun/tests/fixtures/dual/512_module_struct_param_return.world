@@ -1,0 +1,20 @@
+----------
+module local/test/structops
+----------
+
+// Module function taking and returning struct.
+fun double_coords(p: {x: @u32, y: @u32}): @{x: @u32, y: @u32}
+    ret @{x = p.x + p.x, y = p.y + p.y}
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/structops
+import structops.double_coords
+
+let original = @{x = @5, y = @10}
+let doubled = double_coords(original)
+debuglog doubled.x
+debuglog doubled.y

@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = getfield v2.0\n    v4 = const 5u32\n    v5 = gt v3, v4\n    branch v5, block1, block2\nblock1:\n    v6 = getfieldref v2.0\n    debuglog v6\n    goto block3\nblock2:\n    goto block3\nblock3:\n    v7 = getfield v2.1\n    v8 = const 100u32\n    v9 = lt v7, v8\n    branch v9, block4, block5\nblock4:\n    v10 = getfieldref v2.1\n    debuglog v10\n    goto block6\nblock5:\n    goto block6\nblock6:\n    unit_end\nexports:\n    p = v2\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = getfield v2.0\n    v4 = const 5u32\n    v5 = gt v3, v4\n    branch v5, block1, block2\nblock1:\n    v6 = getfieldref v2.0\n    debuglog v6\n    goto block3\nblock2:\n    goto block3\nblock3:\n    v7 = getfield v2.1\n    v8 = const 100u32\n    v9 = lt v7, v8\n    branch v9, block4, block5\nblock4:\n    v10 = getfieldref v2.1\n    debuglog v10\n    goto block6\nblock5:\n    goto block6\nblock6:\n    unit_end\nexports:\n    p = v2\n",
+            ),
+            ir_match: true,
+            interp_output: "@10\n@20\n",
+            aot_output: "@10\n@20\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

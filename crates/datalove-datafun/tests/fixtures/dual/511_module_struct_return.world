@@ -1,0 +1,19 @@
+----------
+module local/test/structops
+----------
+
+// Module function returning struct.
+fun make_point(x: @u32, y: @u32): @{x: @u32, y: @u32}
+    ret @{x = x, y = y}
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/structops
+import structops.make_point
+
+let p = make_point(@10, @20)
+debuglog p.x
+debuglog p.y

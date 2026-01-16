@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Struct with result field.
+let success: {value: !@u32, label: @string} = @{value = ok @42, label = @"success"}
+debuglog success.value
+debuglog success.label

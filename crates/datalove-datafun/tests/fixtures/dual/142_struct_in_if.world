@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Struct field in if condition.
+let p = @{x = @10, y = @20}
+
+if (p.x .> @5)
+    debuglog p.x
+end if
+
+if (p.y .< @100)
+    debuglog p.y
+end if

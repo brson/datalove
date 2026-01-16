@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// List of structs.
+let points = @[
+    @{x = @1, y = @2},
+    @{x = @3, y = @4},
+    @{x = @5, y = @6}
+]
+debuglog points

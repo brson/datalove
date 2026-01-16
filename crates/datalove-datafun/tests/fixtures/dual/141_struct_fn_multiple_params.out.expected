@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = const 10u32\n    v4 = const 20u32\n    v5 = pack Struct0 {v3, v4}\n    v6 = call f0(v2, v5)\n    debuglog v6\n    drop v6\n    unit_end\n\nfn sum_x(p0, p1):\nblock0:\n    v0 = copy p0\n    v1 = getfield v0.0\n    v2 = copy p1\n    v3 = getfield v2.0\n    v4 = widen v1\n    v5 = widen v3\n    v6 = add v4, v5\n    drop v4\n    drop v5\n    return v6\nexports:\n    sum_x = f0\n    p1 = v2\n    p2 = v5\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = const 10u32\n    v4 = const 20u32\n    v5 = pack Struct0 {v3, v4}\n    v6 = call f0(v2, v5)\n    debuglog v6\n    drop v6\n    unit_end\n\nfn sum_x(p0, p1):\nblock0:\n    v0 = copy p0\n    v1 = getfield v0.0\n    v2 = copy p1\n    v3 = getfield v2.0\n    v4 = widen v1\n    v5 = widen v3\n    v6 = add v4, v5\n    drop v4\n    drop v5\n    return v6\nexports:\n    sum_x = f0\n    p1 = v2\n    p2 = v5\n",
+            ),
+            ir_match: true,
+            interp_output: "@11\n",
+            aot_output: "@11\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

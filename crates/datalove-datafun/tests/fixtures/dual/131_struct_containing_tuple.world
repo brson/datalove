@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Struct containing a tuple.
+let s = @{
+    point = @(@1, @2, @3),
+    name = @"tuple holder"
+}
+debuglog s.point.0
+debuglog s.point.1
+debuglog s.point.2
+debuglog s.name

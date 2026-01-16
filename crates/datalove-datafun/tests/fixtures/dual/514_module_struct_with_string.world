@@ -1,0 +1,18 @@
+----------
+module local/test/structops
+----------
+
+// Module function taking struct with string field (move type).
+fun get_name(s: {name: @string, id: @u32}): @string
+    ret s.name
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/structops
+import structops.get_name
+
+let user = @{name = @"Alice", id = @1}
+debuglog get_name(user)

@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+// Struct with i64 fields (replacing float which isn't implemented yet).
+let point = @{x = @1000000, y = @2000000, z = @3000000}
+debuglog point.x
+debuglog point.y
+debuglog point.z

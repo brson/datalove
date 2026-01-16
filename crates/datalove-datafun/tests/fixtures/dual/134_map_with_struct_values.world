@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Map with struct values.
+let users = @map {
+    @"alice" = @{age = @30, active = @true},
+    @"bob" = @{age = @25, active = @false}
+}
+debuglog users
