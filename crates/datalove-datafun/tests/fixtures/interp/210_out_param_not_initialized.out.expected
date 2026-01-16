@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "Drop analysis errors: OutParamNotInitialized { ret_stmt_idx: Some(0), name: \"x\" }",
+                message: "Drop analysis errors: Drop analysis error in bad_function: OutParamNotInitialized { ret_stmt_idx: Some(0), name: \"x\" }",
             ),
             output: "",
         ),

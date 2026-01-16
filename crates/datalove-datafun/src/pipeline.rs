@@ -51,6 +51,7 @@ use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 use datalove_datafun_ir::{IrModuleId, FuncId, IrType, IrScriptUnit};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_compiler::drop_analysis;
+use datalove_datafun_compiler::tracked_lower::lower_module_graph_with_mode;
 use datalove_datafun_tycheck::{
     typecheck_module_graph, typecheck_module_graph_with_mode,
     type_check_script_units, create_batch_spec,
@@ -64,7 +65,6 @@ use datalove_datafun_compiler::module_graph::{
 };
 use datalove_datafun_interp::{CallDispatcher, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;
-use drop_analysis::FunctionDropAnalysis;
 
 use crate::incremental::IncrementalModuleWorld;
 
@@ -264,124 +264,69 @@ impl ModuleCompilationPipeline {
     ) -> CompiledModules<'db> {
         let parsed_graph = parse_module_graph_with_mode(db, module_graph.clone(), resolved_requires, mode);
         let graph_typecheck = typecheck_module_graph_with_mode(db, parsed_graph, mode);
-        self.compile_from_typecheck_result(db.as_salsa_db(), module_graph, parsed_graph, graph_typecheck)
+        self.compile_from_typecheck_result(db, module_graph, parsed_graph, graph_typecheck, mode)
     }
 
     /// Compile from parsed and typechecked module graph.
     fn compile_from_typecheck_result<'db>(
         &self,
-        db: &'db dyn salsa::Database,
+        db: &'db dyn DbClone,
         module_graph: ModuleGraph,
         parsed_graph: ParsedModuleGraph<'db>,
         graph_typecheck: ModuleGraphTypecheckResult<'db>,
+        mode: ParallelMode,
     ) -> CompiledModules<'db> {
-
-        let combined_expr_types = graph_typecheck.expr_types(db);
-        let combined_call_targets = graph_typecheck.call_targets(db);
-
         // Collect typecheck errors.
-        let module_errors = graph_typecheck.module_errors(db);
+        let module_errors = graph_typecheck.module_errors(db.as_salsa_db());
         let mut path_to_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for (module_id, errors) in module_errors {
-            let path = module_id.path(db).clone();
+            let path = module_id.path(db.as_salsa_db()).clone();
             let error_strings: Vec<String> = errors.iter()
                 .map(|e| format!("{}: {:?}", path, e))
                 .collect();
             path_to_errors.insert(path, error_strings);
         }
 
-        // Assign function IDs (module-local: each module starts at 0).
-        let mut func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> = HashMap::new();
-        for (ir_module_idx, (salsa_module_id, parsed)) in parsed_graph.statements_only(db).iter().enumerate() {
-            let ir_module_id = IrModuleId(ir_module_idx as u32);
-            let mut next_func_id: u32 = 0;
-            for statement in &parsed.statements {
-                if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
-                    let func_name = func.name(db).text(db).to_string();
-                    let func_id = FuncId(next_func_id);
-                    next_func_id += 1;
-                    func_id_map.insert((*salsa_module_id, func_name), (ir_module_id, func_id));
-                }
-            }
-        }
+        // Lower to IR using tracked lowering API.
+        let lowering_result = lower_module_graph_with_mode(db, parsed_graph, graph_typecheck, mode);
 
-        // Phase 2: Drop analysis.
-        let mut drop_analyses: HashMap<(String, String), FunctionDropAnalysis> = HashMap::new();
-        let mut drop_analysis_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        // Convert FuncIdMap to HashMap.
+        let func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> =
+            lowering_result.func_id_map(db.as_salsa_db()).to_hashmap(db.as_salsa_db());
 
-        for (salsa_module_id, parsed) in parsed_graph.statements_only(db) {
-            let module_path = salsa_module_id.path(db).clone();
-
-            if path_to_errors.get(&module_path).map_or(false, |e| !e.is_empty()) {
-                continue;
-            }
-
-            for statement in &parsed.statements {
-                if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
-                    let func_name = func.name(db).text(db).to_string();
-                    let analysis = drop_analysis::analyze_function(db, *func, combined_expr_types, combined_call_targets);
-
-                    if !analysis.errors.is_empty() {
-                        let error_msgs: Vec<String> = analysis.errors.iter()
-                            .map(|e| format!("{:?}", e))
-                            .collect();
-                        let key = format!("{}/{}", module_path, func_name);
-                        drop_analysis_errors.insert(key, error_msgs);
-                    } else {
-                        drop_analyses.insert((module_path.clone(), func_name), analysis);
-                    }
-                }
-            }
-        }
-
-        // Phase 3: Lower to IR.
+        // Build ScriptEnvironment and collect results.
         let mut env = ScriptEnvironment::new();
         let mut module_lowering_results: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        let mut drop_analysis_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
-        for (ir_module_idx, (salsa_module_id, parsed)) in parsed_graph.statements_only(db).iter().enumerate() {
-            let ir_module_id = IrModuleId(ir_module_idx as u32);
-            let module_path = salsa_module_id.path(db).clone();
+        for (module_id, result) in lowering_result.module_results(db.as_salsa_db()) {
+            let module_path = module_id.path(db.as_salsa_db()).clone();
+            let ir_module_id = result.ir_module_id(db.as_salsa_db());
 
-            if path_to_errors.get(&module_path).map_or(false, |e| !e.is_empty()) {
-                continue;
-            }
-
-            let mut ir_dumps = Vec::new();
-
-            for statement in &parsed.statements {
-                if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
-                    let func_name = func.name(db).text(db).to_string();
-
-                    let drop_key = format!("{}/{}", module_path, func_name);
-                    if drop_analysis_errors.contains_key(&drop_key) {
-                        ir_dumps.push(format!("Drop analysis error in {}", func_name));
-                        continue;
-                    }
-
-                    let analysis = match drop_analyses.get(&(module_path.clone(), func_name.clone())) {
-                        Some(a) => a.clone(),
-                        None => {
-                            ir_dumps.push(format!("Missing drop analysis for {}", func_name));
-                            continue;
-                        }
-                    };
-
-                    let (_, func_id) = func_id_map.get(&(*salsa_module_id, func_name.clone())).unwrap();
-                    let call_targets = graph_typecheck.call_targets(db);
-
-                    match lower::lower_function_for_module(
-                        db, combined_expr_types, call_targets, &func_id_map, *func, *func_id, analysis
-                    ) {
-                        Ok(ir_func) => {
-                            ir_dumps.push(format!("{}", ir_func));
-                            env.add_module_function(ir_module_id, ir_func.id, ir_func);
-                        }
-                        Err(e) => {
-                            ir_dumps.push(format!("Error lowering {}: {}", func_name, e));
-                        }
+            // Collect errors (includes both drop analysis and lowering errors).
+            let errors = result.errors(db.as_salsa_db());
+            if !errors.is_empty() {
+                // Separate drop analysis errors from other lowering errors.
+                for error in errors {
+                    if error.contains("Drop analysis error") {
+                        let key = format!("{}", module_path);
+                        drop_analysis_errors.entry(key).or_default().push(error.clone());
                     }
                 }
             }
+
+            // Add functions to environment and collect IR dumps.
+            let mut ir_dumps = Vec::new();
+            for ir_func in result.functions(db.as_salsa_db()) {
+                ir_dumps.push(format!("{}", ir_func));
+                env.add_module_function(ir_module_id, ir_func.id, ir_func.clone());
+            }
+
+            // Add any errors to the IR dumps for backwards compatibility.
+            for error in errors {
+                ir_dumps.push(error.clone());
+            }
+
             module_lowering_results.insert(module_path, ir_dumps);
         }
 
