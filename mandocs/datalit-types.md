@@ -6,7 +6,7 @@ completeness, numerical correctness, and predictability.
 
 Datalove Literals is a declarative
 typed language for describing pure data —
-it has first-class no pointers or object identity.
+it has no first-class pointers or object identity.
 It includes scalar values
 and a rich set of collection types:
 _lists_, _maps_, _sets_,
