@@ -489,6 +489,21 @@ pub struct ResolvedImport<'db> {
     pub source_name: InternedText<'db>,
 }
 
+/// Result of resolving imports for a single module (memoized per module).
+#[salsa::tracked]
+pub struct ModuleImportResolution<'db> {
+    /// Module this is for.
+    pub module_id: ModuleId,
+
+    /// Resolved imports: (local_name, func_type, func_ast, source_module_id).
+    #[returns(ref)]
+    pub imports: Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId)>,
+
+    /// Import resolution errors.
+    #[returns(ref)]
+    pub errors: Vec<TypeError>,
+}
+
 /// Result of typechecking a single module.
 #[salsa::tracked]
 pub struct SingleModuleTypecheckResult<'db> {
@@ -677,6 +692,7 @@ pub use api::{
     typecheck_module_graph_with_mode,
     resolve_module_exports,
     resolve_all_exports,
+    resolve_module_imports,
     AllModuleExports,
     build_all_function_ast_maps,
     AllModuleFunctionAsts,

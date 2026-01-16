@@ -1056,6 +1056,86 @@ mod tests {
     }
 
     #[test]
+    fn test_import_resolution_no_change_cached() {
+        // Verify import resolution is fully cached when nothing changes.
+        let db = Database::default();
+
+        // B exports a function, A imports it.
+        let source_b = bct::input::Source::new(&db, "fun helper(): @i32\n  ret @1\nend fun".to_string());
+        let source_a = bct::input::Source::new(&db,
+            "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret helper()\nend fun".to_string());
+
+        let mut builder = ModuleGraphBuilder::new(&db);
+        let id_b = builder.add_module("test/b".to_string(), source_b);
+        let id_a = builder.add_module("test/a".to_string(), source_a);
+        let graph = builder.build();
+
+        let mut requires = BTreeMap::new();
+        requires.insert(id_a, vec![("b".to_string(), id_b)]);
+
+        // First run: both modules should have imports resolved.
+        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
+        enable_query_logging();
+        let _result1 = typecheck_module_graph(&db, parsed1);
+        let log1 = disable_query_logging();
+
+        let first_resolved = get_executed_modules(&log1, "resolve_imports");
+        eprintln!("First run resolved imports: {:?}", first_resolved);
+        assert_eq!(first_resolved.len(), 2, "first run should resolve imports for both modules");
+
+        // Second run with same inputs: should be fully cached.
+        let parsed2 = parse_module_graph(&db, graph, requires);
+        enable_query_logging();
+        let _result2 = typecheck_module_graph(&db, parsed2);
+        let log2 = disable_query_logging();
+
+        let second_resolved = get_executed_modules(&log2, "resolve_imports");
+        eprintln!("Second run (no change) resolved imports: {:?}", second_resolved);
+        assert!(second_resolved.is_empty(), "no imports should be re-resolved when nothing changed");
+    }
+
+    #[test]
+    fn test_parallel_import_resolution_is_memoized() {
+        // Verify parallel import resolution warms the cache correctly.
+        // Note: Salsa events from worker threads aren't captured by LoggingDatabase,
+        // so we verify memoization by checking that sequential run after parallel
+        // is fully cached (proving the parallel phase warmed the cache).
+        let db = LoggingDatabase::new();
+
+        // Create modules with imports.
+        let (graph, ids) = build_graph_logging(&db, &[
+            ("b", "fun helper(): @i32\n  ret @1\nend fun"),
+            ("a", "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret helper()\nend fun"),
+        ]);
+        let mut requires = BTreeMap::new();
+        requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
+
+        // First: parallel typecheck populates cache (including import resolution).
+        let parsed = parse_module_graph(&db, graph.clone(), requires.clone());
+        let _result1 = typecheck_module_graph_parallel(&db, parsed);
+
+        // Clear events after parallel phase.
+        db.clear_events();
+
+        // Second: sequential should hit cache for everything.
+        let parsed2 = parse_module_graph(&db, graph, requires);
+        let _result2 = typecheck_module_graph(&db, parsed2);
+
+        let executed = db.executed_queries();
+        let resolve_queries: Vec<_> = executed.iter()
+            .filter(|q| q.contains("resolve_module_imports"))
+            .collect();
+
+        assert!(
+            resolve_queries.is_empty(),
+            "sequential after parallel should have cached import resolution, but executed: {:?}",
+            resolve_queries
+        );
+        eprintln!("Sequential after parallel: {} total events, {} resolve_imports queries (should be 0)",
+            executed.len(), resolve_queries.len());
+    }
+
+    #[test]
     fn test_logging_db_clone_works() {
         // Test that LoggingDatabase clone shares memoization cache.
         let db = LoggingDatabase::new();

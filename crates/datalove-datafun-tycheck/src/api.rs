@@ -493,13 +493,11 @@ pub fn typecheck_module<'db>(
 struct TypecheckPreparation<'db> {
     graph: bct::module_graph::ModuleGraph,
     module_parsed: HashMap<ModuleId, ParsedStatements<'db>>,
-    all_exports: AllModuleExports<'db>,
-    all_function_asts: AllModuleFunctionAsts<'db>,
 }
 
 /// Prepare data structures needed for typechecking.
 ///
-/// Collects exports from all modules and builds function AST maps.
+/// Builds module graph and parsed statements map.
 /// This is shared between sequential and parallel typecheck paths.
 fn prepare_typecheck<'db>(
     db: &'db dyn crate::Db,
@@ -513,17 +511,9 @@ fn prepare_typecheck<'db>(
         .map(|(id, parsed)| (*id, parsed.clone()))
         .collect();
 
-    // Collect exports from all modules (cached per-module via resolve_module_exports).
-    let all_exports = resolve_all_exports(db, parsed_graph);
-
-    // Build function AST maps for inlining.
-    let all_function_asts = build_all_function_ast_maps(db, parsed_graph);
-
     TypecheckPreparation {
         graph,
         module_parsed,
-        all_exports,
-        all_function_asts,
     }
 }
 
@@ -538,7 +528,6 @@ pub fn typecheck_module_graph<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> ModuleGraphTypecheckResult<'db> {
     let prep = prepare_typecheck(db, parsed_graph);
-    let all_exports_map = prep.all_exports.exports(db);
 
     // ========================================================================
     // TYPECHECK PASS
@@ -556,15 +545,10 @@ pub fn typecheck_module_graph<'db>(
             .cloned()
             .expect("module should have been parsed");
 
-        // Resolve imports for this module.
-        let (resolved_imports, import_errors) = resolve_module_imports_internal(
-            db,
-            module_id,
-            &parsed,
-            &parsed_graph,
-            all_exports_map,
-            prep.all_function_asts.asts(db),
-        );
+        // Resolve imports for this module (tracked, memoized per module).
+        let import_resolution = resolve_module_imports(db, module, parsed_graph);
+        let resolved_imports = import_resolution.imports(db).clone();
+        let import_errors = import_resolution.errors(db).clone();
 
         // Use empty spans inside tracked function.
         let spans = DatafunSpans::new(vec![]);
@@ -630,13 +614,12 @@ pub fn typecheck_module_graph_parallel<'db>(
 
     let db_salsa = db.as_salsa_db();
     let prep = prepare_typecheck(db_salsa, parsed_graph);
-    let all_exports_map = prep.all_exports.exports(db_salsa);
 
     // ========================================================================
     // PARALLEL TYPECHECK PASS (warms salsa cache)
     // ========================================================================
 
-    // Prepare work items with resolved imports.
+    // Clone databases upfront for parallel execution.
     let work: Vec<_> = prep.graph
         .iter_modules(db_salsa)
         .map(|module| {
@@ -645,29 +628,27 @@ pub fn typecheck_module_graph_parallel<'db>(
                 .get(&module_id)
                 .cloned()
                 .expect("module should have been parsed");
-
-            // Resolve imports for this module.
-            let (resolved_imports, import_errors) = resolve_module_imports_internal(
-                db_salsa,
-                module_id,
-                &parsed,
-                &parsed_graph,
-                all_exports_map,
-                prep.all_function_asts.asts(db_salsa),
-            );
-
-            (db.dyn_clone(), module, parsed, resolved_imports, import_errors)
+            (db.dyn_clone(), module, parsed)
         })
         .collect();
 
     // Typecheck modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, parsed, resolved_imports, import_errors)| {
+    // Both resolve_module_imports and typecheck_module are tracked and cached.
+    work.into_par_iter().for_each(|(db_clone, module, parsed)| {
+        let db_salsa = db_clone.as_salsa_db();
+
+        // Resolve imports (tracked, memoized per module).
+        let import_resolution = resolve_module_imports(db_salsa, module, parsed_graph);
+        let resolved_imports = import_resolution.imports(db_salsa).clone();
+        let import_errors = import_resolution.errors(db_salsa).clone();
+
+        // Typecheck (tracked, memoized per module).
         let spans = DatafunSpans::new(vec![]);
-        let _ = typecheck_module(db_clone.as_salsa_db(), module, parsed, spans, resolved_imports, import_errors);
+        let _ = typecheck_module(db_salsa, module, parsed, spans, resolved_imports, import_errors);
     });
 
     // Delegate to tracked function which aggregates results.
-    // All typecheck_module calls will be cache hits from the parallel phase.
+    // All resolve_module_imports and typecheck_module calls will be cache hits.
     typecheck_module_graph(db_salsa, parsed_graph)
 }
 
@@ -811,6 +792,49 @@ pub fn build_all_function_ast_maps<'db>(
     }
 
     AllModuleFunctionAsts::new(db, module_function_asts)
+}
+
+/// Resolve imports for a single module (memoized per module).
+///
+/// This is the tracked entry point for import resolution, following the same
+/// pattern as `parse_module_full` and `typecheck_module`. The parallel path
+/// calls this in parallel to warm the cache, then the sequential aggregation
+/// path hits the cache.
+#[salsa::tracked]
+pub fn resolve_module_imports<'db>(
+    db: &'db dyn crate::Db,
+    module: Module,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> crate::ModuleImportResolution<'db> {
+    let module_id = module.id(db);
+    let module_path = module_id.path(db);
+
+    log_query("resolve_imports", module_path, QueryPhase::Start);
+
+    // Get prerequisites (these are cached at the graph level).
+    let all_exports = resolve_all_exports(db, parsed_graph);
+    let all_function_asts = build_all_function_ast_maps(db, parsed_graph);
+
+    // Get parsed statements for this module.
+    let parsed = parsed_graph.statements_only(db)
+        .iter()
+        .find(|(id, _)| *id == module_id)
+        .map(|(_, p)| p.clone())
+        .expect("module should have been parsed");
+
+    // Call internal implementation.
+    let (imports, errors) = resolve_module_imports_internal(
+        db,
+        module_id,
+        &parsed,
+        &parsed_graph,
+        all_exports.exports(db),
+        all_function_asts.asts(db),
+    );
+
+    log_query("resolve_imports", module_path, QueryPhase::End);
+
+    crate::ModuleImportResolution::new(db, module_id, imports, errors)
 }
 
 /// Internal import resolution returning plain data (no tracked structs).
