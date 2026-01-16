@@ -1,13 +1,21 @@
-## The Datatypes of Datalit
+## The Datatypes of Datalove Literals
 
 Datalove's datatypes, their representation,
-and semantics are focused on correctness and completeness,
-particularly with regard to tricky corner cases related to subjects like overflow, NaNs, etc;
-and we take some difficult positions.
+and semantics are focused on readability,
+completeness, numerical correctness, and predictability.
 
-Datalit types are subtypes of Datafun types,
-and have a dedicated declarative syntax suitable
-for serialization and configuration.
+Datalove Literals is a declarative
+typed language for describing pure data —
+it has first-class no pointers or object identity.
+It includes scalar values
+and a rich set of collection types:
+_lists_, _maps_, _sets_,
+_tensors_ (multi-dimensional arrays),
+and _tables_ (dataframes / structs-of-arrays).
+
+Most types in Datalove are Datalove Literal types,
+and we call them _datalit types_.
+In some languages they might be called "plain old data".
 
 Datalit types are:
 
@@ -143,7 +151,7 @@ end fun
 ```
 
 This compromise allows for convenient but inefficient math in the repl and scripts,
-while modules are expected to be more careful with overflow.
+while modules are expected to be more careful with overflow for performance.
 
 
 
@@ -181,13 +189,14 @@ let data: [|f32, 2|] = [|1 2, 3 4|]
 ## Tables
 
 Tables, a.k.a. dataframes ala Pandas / Polars / Arrow.
-Tables provide "struct-of-array" semantics.
+Tables provide "struct-of-array" memory layout.
 
 ```datalove
 let data: {|
   x: int,
   t: int,
 |} = {|
+  x, t       // column names are required
   1, 2  
   3, 4
 |}
@@ -198,6 +207,15 @@ parsing context, one row per line.
 This allows a natural CSV-like presentation for tables,
 taking advantage of Datalove's mixed-mode brace-matched parser.
 
+One call always use manual linebreaks with `;`:
+
+```
+```datalove
+let data ={|
+  x, t; 1, 2; 3, 4
+|}
+```
+
 The type reads like a struct;
 the expression is a table each row, each an instance of that struct.
 
@@ -205,25 +223,28 @@ Table column projections,
 analogous to struct field projections;
 have type "list of field type",
 but can't be mutated or moved.
-They can be passed to reference destinations.
+They can be passed to reference destinations,
+particularly `ref`-mode function arguments.
 
 ```datalove
 let data: {|
   x: int,
   t: int,
 |} = {|
+  x, t
   1, 2  
   3, 4
 |}
 
-// Hypothetical reference binding
-let ref xs: [int] = data.x
+// Binding a column projection to a `ref` slot.
+let ref xs = data.x
 
-// Or pass to a ref param
-fun process(ref xs: [int]): int
+// This function can accept a table column projection.
+fun process(ref xs: [int]): u32
+  ret core.list.len(xs)
 end fun
 
-let p = process(data.x)
+let p = process(xs)
 ```
 
 
