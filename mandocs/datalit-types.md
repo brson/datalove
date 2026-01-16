@@ -174,7 +174,7 @@ One call always use manual linebreaks with `;`:
 
 ```
 ```datalove
-let data ={|
+let data = {|
   x, t; 1, 2; 3, 4
 |}
 ```
