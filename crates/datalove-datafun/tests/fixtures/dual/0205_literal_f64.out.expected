@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 3.141592653589793f64\n    debuglog v0\n    unit_end\nexports:\n    x = v0\n",
             ),
             ir_match: true,
-            interp_output: "<unsupported-type>\n",
-            aot_output: "<unsupported-type>\n",
+            interp_output: "@3.141592653589793\n",
+            aot_output: "@3.141592653589793\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

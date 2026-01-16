@@ -7,15 +7,15 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1f64\n    debuglog v0\n    unit_end\nexports:\n    x = v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 3.14f32\n    v1 = const 2.718f64\n    debuglog v0\n    debuglog v1\n    unit_end\nexports:\n    x = v0\n    y = v1\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1f64\n    debuglog v0\n    unit_end\nexports:\n    x = v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 3.14f32\n    v1 = const 2.718f64\n    debuglog v0\n    debuglog v1\n    unit_end\nexports:\n    x = v0\n    y = v1\n",
             ),
             ir_match: true,
-            interp_output: "@1\n",
-            aot_output: "@1\n",
+            interp_output: "@3.14\n@2.718\n",
+            aot_output: "@3.14\n@2.718\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

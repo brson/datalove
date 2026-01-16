@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+let x: f32 = @3.14
+let y: f64 = @2.718
+debuglog x
+debuglog y

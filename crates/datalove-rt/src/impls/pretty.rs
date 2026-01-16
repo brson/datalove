@@ -56,6 +56,7 @@ unsafe fn pretty_value(
             rtdt::TyTag::U64 => pretty_u64(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::I64 => pretty_i64(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::F32 => pretty_f32(rt, value_ref, string_mut, string_tydesc),
+            rtdt::TyTag::F64 => pretty_f64(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::Int => pretty_int(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::String => pretty_string(rt, value_ref, string_mut, string_tydesc),
 
@@ -219,6 +220,30 @@ unsafe fn pretty_f32(
 ) -> Result<(), ()> {
     unsafe {
         let f = &*(value_ref as *const rtdt::F32);
+        push_str(rt, string_mut, string_tydesc, b"@")?;
+        let s = if f.0.is_nan() {
+            "nan".to_string()
+        } else if f.0.is_infinite() {
+            if f.0.is_sign_positive() {
+                "inf".to_string()
+            } else {
+                "-inf".to_string()
+            }
+        } else {
+            f.0.to_string()
+        };
+        push_str(rt, string_mut, string_tydesc, s.as_bytes())
+    }
+}
+
+unsafe fn pretty_f64(
+    rt: LocalRtHandle,
+    value_ref: *const u8,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let f = &*(value_ref as *const rtdt::F64);
         push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = if f.0.is_nan() {
             "nan".to_string()

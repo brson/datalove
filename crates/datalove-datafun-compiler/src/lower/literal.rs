@@ -106,6 +106,15 @@ pub fn parse_int_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
     }
 }
 
+/// Parse a float literal into a ConstValue based on the target type.
+pub fn parse_float_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
+    match ty {
+        IrType::F32 => text.parse::<f32>().map(ConstValue::F32).map_err(|_| ()),
+        IrType::F64 => text.parse::<f64>().map(ConstValue::F64).map_err(|_| ()),
+        _ => Err(()),
+    }
+}
+
 /// Parse a hex literal into a ConstValue based on the target type.
 pub fn parse_hex_const(hex_str: &str, ty: &IrType) -> Result<ConstValue, ()> {
     match ty {

@@ -261,6 +261,39 @@ pub fn check_expr<'db>(
             }
         }
 
+        // Handle float literals specially - they can coerce to expected float types.
+        ExprFunKind::Float(_float_expr) => {
+            match expected.ty(db) {
+                Type::Datalit(expected_datalit_ty) => {
+                    // Check if expected type is a float type.
+                    if is_float_type(expected.ty(db)) {
+                        ctx.store_expr_type(expr, expected);
+                        return Ok(());
+                    }
+                    // If expected is Data, allow coercion (any type coerces to data).
+                    if let datalit::tycheck::Type::Data = expected_datalit_ty {
+                        ctx.store_expr_type(expr, expected);
+                        return Ok(());
+                    }
+                    // Otherwise, synthesize and compare.
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
+                        Ok(())
+                    } else {
+                        let expected_str = type_to_string(db, expected.ty(db));
+                        let actual_str = type_to_string(db, synthesized.ty(db));
+                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    }
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
         // For other non-datalit expressions, use synthesis + comparison with coercion support.
         _ => {
             let synthesized = ctx.synthesize_expr(expr)?;

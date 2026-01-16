@@ -8,7 +8,7 @@ use datalove_datafun_ir::{
 };
 use salsa::plumbing::AsId;
 use super::context::LowerCtx;
-use super::literal::{parse_int_const, parse_hex_const};
+use super::literal::{parse_int_const, parse_hex_const, parse_float_const};
 use super::LowerError;
 
 /// Lower an operand for borrowing contexts (binop, unaryop).
@@ -401,8 +401,14 @@ pub fn lower_expression<'db>(
             });
             Ok(dest)
         }
-        ExprFunKind::Float(_) => {
-            Err(LowerError::NotImplemented("Float".to_string()))
+        ExprFunKind::Float(lit) => {
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type.clone());
+            let text = lit.value.text(ctx.db);
+            let const_value = parse_float_const(text, &result_type)
+                .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
+            ctx.emit(Instruction::Const { dest, value: const_value });
+            Ok(dest)
         }
         ExprFunKind::String(string_expr) => {
             let raw = string_expr.value.as_str(ctx.db);
