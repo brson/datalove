@@ -148,12 +148,6 @@ Current syntax:
 let data: tensor<f32, 2> = tensor [2 2] [1 2, 3 4]
 ```
 
-New tensor syntax proposal:
-
-```datalove
-let data: [|f32, 2|] = [|1 2, 3 4|]
-```
-
 
 ## Tables
 
