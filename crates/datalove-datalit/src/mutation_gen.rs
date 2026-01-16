@@ -1074,6 +1074,20 @@ fn pretty_type_hint<'db>(
             out.push_str(e.message.as_str(db));
             out.push('>');
         }
+
+        TypeHint::Table(t) => {
+            out.push_str("{| ");
+            let columns = &t.columns;
+            for (i, col) in columns.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(col.name.as_str(db));
+                out.push_str(": ");
+                pretty_type_hint_and_heap(db, col.type_hint, out);
+            }
+            out.push_str(" |}");
+        }
     }
 }
 

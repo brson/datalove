@@ -49,6 +49,7 @@ pub enum TypeHint {
     Option(TypeHintOption),
     Result(TypeHintResult),
     Tensor(TypeHintTensor),
+    Table(TypeHintTable),
     Data,
     Error,
     ParseError(TypeHintParseError),
@@ -111,6 +112,11 @@ pub struct TypeHintResult {
 pub struct TypeHintTensor {
     pub element_type: Box<TypeHintAndHeap>,
     pub rank: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TypeHintTable {
+    pub columns: Vec<TypeHintNamedField>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -313,6 +319,7 @@ impl TypeHint {
             crate::ast::TypeHint::Option(t) => TypeHint::Option(TypeHintOption::from_ast(db, t)),
             crate::ast::TypeHint::Result(t) => TypeHint::Result(TypeHintResult::from_ast(db, t)),
             crate::ast::TypeHint::Tensor(t) => TypeHint::Tensor(TypeHintTensor::from_ast(db, t)),
+            crate::ast::TypeHint::Table(t) => TypeHint::Table(TypeHintTable::from_ast(db, t)),
             crate::ast::TypeHint::Data => TypeHint::Data,
             crate::ast::TypeHint::Error => TypeHint::Error,
             crate::ast::TypeHint::ParseError(e) => TypeHint::ParseError(TypeHintParseError::from_ast(db, e)),
@@ -412,6 +419,13 @@ impl TypeHintTensor {
     }
 }
 
+impl TypeHintTable {
+    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintTable<'db>) -> Self {
+        TypeHintTable {
+            columns: ast.columns.iter().map(|f| TypeHintNamedField::from_ast(db, f.clone())).collect(),
+        }
+    }
+}
 
 impl ExprAndHeap {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAndHeap<'db>) -> Self {

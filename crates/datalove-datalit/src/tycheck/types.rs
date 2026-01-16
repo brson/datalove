@@ -47,6 +47,7 @@ pub enum Type<'db> {
     Option(TypeOption<'db>),
     Result(TypeResult<'db>),
     Tensor(TypeTensor<'db>),
+    Table(TypeTable<'db>),
     Data,
     Error,
 }
@@ -126,6 +127,12 @@ pub struct TypeResult<'db> {
 pub struct TypeTensor<'db> {
     pub element_type: TypeAndHeap<'db>,
     pub rank: u32,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct TypeTable<'db> {
+    pub columns: Vec<TypeNamedField<'db>>,
 }
 
 // ============================================================================
@@ -304,6 +311,15 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
                 && types_and_heaps_equivalent(db, &t1.element_type, &t2.element_type)
         }
 
+        (Type::Table(t1), Type::Table(t2)) => {
+            let c1 = t1.columns.clone();
+            let c2 = t2.columns.clone();
+            c1.len() == c2.len()
+                && c1.iter().zip(c2.iter()).all(|(a, b)| {
+                    a.name == b.name && types_and_heaps_equivalent(db, &a.ty, &b.ty)
+                })
+        }
+
         _ => false,
     }
 }
@@ -434,6 +450,19 @@ pub fn convert_type_hint<'db>(
             Type::Tensor(TypeTensor { element_type, rank: t.rank })
         }
 
+        TypeHint::Table(t) => {
+            let columns: Result<Vec<_>, _> = t
+                .columns
+                .iter()
+                .map(|c| {
+                    let name = c.name;
+                    let ty = convert_type_hint(db, c.type_hint)?;
+                    Ok(TypeNamedField { name, ty })
+                })
+                .collect();
+            Type::Table(TypeTable { columns: columns? })
+        }
+
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
     };
 
@@ -524,6 +553,18 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
             let heap = heap_to_string(elem.heap(db));
             let ty_str = type_to_string(db, elem.ty(db));
             format!("@tensor<{}{}, {}>", heap, ty_str, t.rank)
+        }
+        Type::Table(t) => {
+            let cols: Vec<_> = t.columns.clone()
+                .iter()
+                .map(|c| {
+                    let name = c.name.as_str(db);
+                    let heap = heap_to_string(c.ty.heap(db));
+                    let ty_str = type_to_string(db, c.ty.ty(db));
+                    format!("{}: {}{}", name, heap, ty_str)
+                })
+                .collect();
+            format!("{{| {} |}}", cols.join(", "))
         }
     }
 }

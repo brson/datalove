@@ -362,6 +362,7 @@ impl<'db> TyDescTable<'db> {
             Type::Option(o) => self.create_option_tydesc(o.inner_type),
             Type::Result(r) => self.create_result_tydesc(r.inner_type),
             Type::Tensor(t) => self.create_tensor_tydesc(t.element_type, t.rank),
+            Type::Table(_) => todo!("table type descriptors not yet implemented"),
         }
     }
 

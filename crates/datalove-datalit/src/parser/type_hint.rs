@@ -193,6 +193,12 @@ impl<'db> Parser<'db> {
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct { fields })
+                } else if let Some(iter) = self.eat_branch(Sigil::BracePipeOpen) {
+                    // Table type hint.
+                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
+                    let columns = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
+                    sub_parser.error_if_not_exhausted_type_hint();
+                    ast::TypeHint::Table(ast::TypeHintTable { columns })
                 } else {
                     let ts = self.peek_text_span();
                     // Check if this looks like a capitalized type name.

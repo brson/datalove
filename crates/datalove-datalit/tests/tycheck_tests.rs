@@ -127,6 +127,20 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
                 "rank": t.rank
             })
         }
+
+        Type::Table(t) => {
+            let columns: Vec<_> = t.columns.iter().map(|f| {
+                json!({
+                    "name": f.name.as_str(db),
+                    "type": type_to_json(db, f.ty)
+                })
+            }).collect();
+            json!({
+                "kind": "Table",
+                "heap": heap_str,
+                "columns": columns
+            })
+        }
     }
 }
 

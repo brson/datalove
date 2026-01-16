@@ -69,6 +69,7 @@ pub enum TypeHint<'db> {
     Option(TypeHintOption<'db>),
     Result(TypeHintResult<'db>),
     Tensor(TypeHintTensor<'db>),
+    Table(TypeHintTable<'db>),
     Data,
     Error,
     ParseError(TypeHintParseError<'db>),
@@ -142,6 +143,12 @@ pub struct TypeHintResult<'db> {
 pub struct TypeHintTensor<'db> {
     pub element_type: TypeHintAndHeap<'db>,
     pub rank: u32,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct TypeHintTable<'db> {
+    pub columns: Vec<TypeHintNamedField<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

@@ -1,0 +1,67 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Table": {
+          "header": [
+            "a",
+            "b"
+          ],
+          "rows": [
+            {
+              "elements": [
+                {
+                  "expr": {
+                    "expr": {
+                      "Int": {
+                        "value": "42"
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                },
+                {
+                  "expr": {
+                    "expr": {
+                      "String": {
+                        "value": "\"hello\""
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": {
+        "Table": {
+          "columns": [
+            {
+              "name": "a",
+              "type_hint": {
+                "heap": "Omitted",
+                "type_hint": "U32"
+              }
+            },
+            {
+              "name": "b",
+              "type_hint": {
+                "heap": "Omitted",
+                "type_hint": "String"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "diagnostics": []
+}

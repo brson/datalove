@@ -779,6 +779,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             (Expr::Error(ExprError { value }), heap)
         }
         TypeHint::ParseError(_) => (Expr::None, heap),
+        TypeHint::Table(_) => todo!("table expression generation not yet implemented"),
     }
 }
 
