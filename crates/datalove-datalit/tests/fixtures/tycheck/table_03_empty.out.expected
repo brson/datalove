@@ -1,0 +1,55 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Table": {
+          "header": [
+            "x",
+            "y"
+          ],
+          "rows": []
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": {
+        "Table": {
+          "columns": [
+            {
+              "name": "x",
+              "type_hint": {
+                "heap": "Omitted",
+                "type_hint": "U32"
+              }
+            },
+            {
+              "name": "y",
+              "type_hint": {
+                "heap": "Omitted",
+                "type_hint": "U32"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "columns": [
+      {
+        "name": "x",
+        "type": "u32"
+      },
+      {
+        "name": "y",
+        "type": "u32"
+      }
+    ],
+    "heap": "",
+    "kind": "Table"
+  }
+}

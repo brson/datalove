@@ -1,0 +1,108 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Table": {
+          "header": [
+            "name",
+            "age"
+          ],
+          "rows": [
+            {
+              "elements": [
+                {
+                  "expr": {
+                    "expr": {
+                      "String": {
+                        "value": "\"Alice\""
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                },
+                {
+                  "expr": {
+                    "expr": {
+                      "Int": {
+                        "value": "25"
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "expr": {
+                    "expr": {
+                      "String": {
+                        "value": "\"Bob\""
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                },
+                {
+                  "expr": {
+                    "expr": {
+                      "Int": {
+                        "value": "30"
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": {
+        "Table": {
+          "columns": [
+            {
+              "name": "name",
+              "type_hint": {
+                "heap": "Omitted",
+                "type_hint": "String"
+              }
+            },
+            {
+              "name": "age",
+              "type_hint": {
+                "heap": "Omitted",
+                "type_hint": "U32"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "columns": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "age",
+        "type": "u32"
+      }
+    ],
+    "heap": "",
+    "kind": "Table"
+  }
+}

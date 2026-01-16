@@ -1,0 +1,88 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Table": {
+          "header": [
+            "a",
+            "b"
+          ],
+          "rows": [
+            {
+              "elements": [
+                {
+                  "expr": {
+                    "expr": {
+                      "Int": {
+                        "value": "1"
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                },
+                {
+                  "expr": {
+                    "expr": {
+                      "Int": {
+                        "value": "2"
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": {
+        "Table": {
+          "columns": [
+            {
+              "name": "x",
+              "type_hint": {
+                "heap": "Omitted",
+                "type_hint": "U32"
+              }
+            },
+            {
+              "name": "y",
+              "type_hint": {
+                "heap": "Omitted",
+                "type_hint": "U32"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T055",
+      "labels": [
+        {
+          "message": "column 1: expected `x`, found `a`",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "table column name mismatch"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "FieldOrderMismatch"
+    }
+  ],
+  "root_type": null
+}

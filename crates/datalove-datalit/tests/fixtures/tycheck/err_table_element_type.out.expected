@@ -1,0 +1,90 @@
+{
+  "ast": {
+    "expr": {
+      "expr": {
+        "Table": {
+          "header": [
+            "x",
+            "y"
+          ],
+          "rows": [
+            {
+              "elements": [
+                {
+                  "expr": {
+                    "expr": {
+                      "String": {
+                        "value": "\"hello\""
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                },
+                {
+                  "expr": {
+                    "expr": {
+                      "Int": {
+                        "value": "2"
+                      }
+                    },
+                    "heap": "Local"
+                  },
+                  "type_hint": null
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "heap": "Omitted"
+    },
+    "type_hint": {
+      "heap": "Omitted",
+      "type_hint": {
+        "Table": {
+          "columns": [
+            {
+              "name": "x",
+              "type_hint": {
+                "heap": "Omitted",
+                "type_hint": "U32"
+              }
+            },
+            {
+              "name": "y",
+              "type_hint": {
+                "heap": "Omitted",
+                "type_hint": "U32"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T022",
+      "labels": [
+        {
+          "message": "expected `u32`, found `string`",
+          "span": [
+            37,
+            38
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "string",
+      "expected": "u32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

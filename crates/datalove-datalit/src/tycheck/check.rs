@@ -433,6 +433,73 @@ pub fn check<'db>(
             Ok(())
         }
 
+        // Rule: Check-Table
+        (Expr::Table(t), Type::Table(expected_table)) => {
+            let header = t.header.clone();
+            let rows = t.rows.clone();
+            let expected_columns = expected_table.columns.clone();
+
+            // Verify column count matches.
+            if header.len() != expected_columns.len() {
+                // T054: Table column count mismatch.
+                if let Some(ts) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "table has wrong number of columns")
+                        .code("T054")
+                        .primary_label(ts.clone(), &format!("expected {} column(s), found {}",
+                            expected_columns.len(), header.len()))
+                        .emit_type();
+                }
+                return Err(TypeError::ArityMismatch {
+                    expected: expected_columns.len(),
+                    actual: header.len(),
+                });
+            }
+
+            // Verify column names match in order.
+            for (i, (header_name, expected_col)) in header.iter().zip(expected_columns.iter()).enumerate() {
+                if *header_name != expected_col.name {
+                    // T055: Table column name mismatch.
+                    if let Some(ts) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, "table column name mismatch")
+                            .code("T055")
+                            .primary_label(ts.clone(), &format!("column {}: expected `{}`, found `{}`",
+                                i + 1, expected_col.name.as_str(db), header_name.as_str(db)))
+                            .note("table column names must match the type definition in order")
+                            .emit_type();
+                    }
+                    return Err(TypeError::FieldOrderMismatch);
+                }
+            }
+
+            // Check each row against the column types.
+            for (row_idx, row) in rows.iter().enumerate() {
+                let elements = row.elements.clone();
+
+                // Verify row has correct number of elements.
+                if elements.len() != expected_columns.len() {
+                    // T056: Table row column count mismatch.
+                    if let Some(ts) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, "table row has wrong number of columns")
+                            .code("T056")
+                            .primary_label(ts.clone(), &format!("row {}: expected {} column(s), found {}",
+                                row_idx + 1, expected_columns.len(), elements.len()))
+                            .emit_type();
+                    }
+                    return Err(TypeError::ArityMismatch {
+                        expected: expected_columns.len(),
+                        actual: elements.len(),
+                    });
+                }
+
+                // Check each element against the corresponding column type.
+                for (elem, expected_col) in elements.iter().zip(expected_columns.iter()) {
+                    check(ctx, *elem, expected_col.ty)?;
+                }
+            }
+
+            Ok(())
+        }
+
         // Rule: Check-Data
         (Expr::Data(_), Type::Data) => Ok(()),
 
