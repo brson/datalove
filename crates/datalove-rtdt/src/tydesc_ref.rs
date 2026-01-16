@@ -235,15 +235,15 @@ impl<'a> TyDescRef<'a> {
         unsafe { self.inner.type_info.table.num_columns }
     }
 
-    /// Returns an iterator over column type descriptors for a Table type.
+    /// Returns an iterator over column info for a Table type.
     ///
     /// # Panics
     /// Panics if this is not a Table type.
-    pub fn table_column_tydescs(&self) -> TableColumnTyDescIter<'a> {
+    pub fn table_column_tydescs(&self) -> TableColumnIter<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Table);
         let info = unsafe { &self.inner.type_info.table };
-        TableColumnTyDescIter {
-            ptr: info.column_tydescs,
+        TableColumnIter {
+            ptr: info.columns,
             remaining: info.num_columns,
             _marker: std::marker::PhantomData,
         }
@@ -541,25 +541,49 @@ impl<'a> Iterator for EnumVariantIter<'a> {
     }
 }
 
-/// Iterator over column type descriptors in a Table.
-pub struct TableColumnTyDescIter<'a> {
-    ptr: *const *const TyDesc,
+/// Safe reference to a table column.
+#[derive(Copy, Clone)]
+pub struct TableColumnRef<'a> {
+    name: &'a str,
+    tydesc: TyDescRef<'a>,
+}
+
+impl<'a> TableColumnRef<'a> {
+    /// Returns the column name.
+    pub fn name(&self) -> &'a str {
+        self.name
+    }
+
+    /// Returns the column's type descriptor.
+    pub fn tydesc(&self) -> TyDescRef<'a> {
+        self.tydesc
+    }
+}
+
+/// Iterator over columns in a Table.
+pub struct TableColumnIter<'a> {
+    ptr: *const TyInfoTableColumn,
     remaining: u32,
     _marker: std::marker::PhantomData<&'a TyDesc>,
 }
 
-impl<'a> Iterator for TableColumnTyDescIter<'a> {
-    type Item = TyDescRef<'a>;
+impl<'a> Iterator for TableColumnIter<'a> {
+    type Item = TableColumnRef<'a>;
 
     fn next(&mut self) -> core::option::Option<Self::Item> {
         if self.remaining == 0 {
             return core::option::Option::None;
         }
         unsafe {
-            let tydesc = *self.ptr;
+            let col = &*self.ptr;
             self.ptr = self.ptr.add(1);
             self.remaining -= 1;
-            core::option::Option::Some(TyDescRef::from_ptr(tydesc))
+            let name_bytes = std::slice::from_raw_parts(col.name, col.name_len as usize);
+            let name = std::str::from_utf8_unchecked(name_bytes);
+            core::option::Option::Some(TableColumnRef {
+                name,
+                tydesc: TyDescRef::from_ptr(col.tydesc),
+            })
         }
     }
 
@@ -569,4 +593,4 @@ impl<'a> Iterator for TableColumnTyDescIter<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for TableColumnTyDescIter<'a> {}
+impl<'a> ExactSizeIterator for TableColumnIter<'a> {}

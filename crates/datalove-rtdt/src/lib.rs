@@ -9,7 +9,7 @@ pub use tydesc_ref::{
     TupleInfo, TupleFieldRef, TupleFieldIter,
     StructInfo, StructFieldRef, StructFieldIter,
     EnumInfo, EnumVariantRef, EnumVariantIter,
-    TableColumnTyDescIter,
+    TableColumnRef, TableColumnIter,
 };
 
 
@@ -515,7 +515,15 @@ pub struct TyInfoTensor {
 #[derive(Copy, Clone)]
 pub struct TyInfoTable {
     pub num_columns: u32,
-    pub column_tydescs: *const *const TyDesc,
+    pub columns: *const TyInfoTableColumn,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoTableColumn {
+    pub name: *const u8,
+    pub name_len: u32,
+    pub tydesc: *const TyDesc,
 }
 
 #[repr(C)]

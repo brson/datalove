@@ -400,7 +400,7 @@ unsafe fn clone_impl(
             }
 
             // Clone column by column, row by row.
-            for (col, col_ty) in ty.table_column_tydescs().enumerate() {
+            for (col, col_info) in ty.table_column_tydescs().enumerate() {
                 for row in 0..table_in.len {
                     let src = unsafe {
                         crate::impls::table::element_ptr(
@@ -420,7 +420,7 @@ unsafe fn clone_impl(
                             table_in.len,
                         )
                     };
-                    let status = unsafe { clone_impl(rt, src, col_ty, dst) };
+                    let status = unsafe { clone_impl(rt, src, col_info.tydesc(), dst) };
                     if status != RtStatus::Ok {
                         // Cleanup partial clone on failure.
                         for cleanup_col in 0..=col {
@@ -435,12 +435,12 @@ unsafe fn clone_impl(
                                         table_in.len,
                                     )
                                 };
-                                let cleanup_ty = ty.table_column_tydescs().nth(cleanup_col).unwrap();
+                                let cleanup_col_info = ty.table_column_tydescs().nth(cleanup_col).unwrap();
                                 unsafe {
                                     let _ = crate::impls::destroy::any_destroy_local(
                                         rt,
                                         cleanup_ptr,
-                                        cleanup_ty.as_ptr(),
+                                        cleanup_col_info.tydesc().as_ptr(),
                                     );
                                 }
                             }

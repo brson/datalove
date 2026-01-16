@@ -691,17 +691,24 @@ unsafe fn pretty_table(
         let table = &*(value_ref as *const rtdt::Table);
         let column_tydescs = crate::impls::table::collect_column_tydescs(tydesc);
 
-        // Format: {| val1, val2; val3, val4 |}
-        // Rows separated by ";", values by ",". No header (runtime has no column names).
-        push_str(rt, string_mut, string_tydesc, b"@table {| ")?;
+        // Format: @{| col1, col2; val1, val2; val3, val4 |}
+        // Header row with column names, then data rows separated by ";".
+        push_str(rt, string_mut, string_tydesc, b"@{| ")?;
 
+        // Print column names as header.
+        for (i, col) in tydesc.table_column_tydescs().enumerate() {
+            if i > 0 {
+                push_str(rt, string_mut, string_tydesc, b", ")?;
+            }
+            push_str(rt, string_mut, string_tydesc, col.name().as_bytes())?;
+        }
+
+        // Print data rows.
         if !table.data.is_null() && table.len > 0 {
             for row in 0..table.len {
-                if row > 0 {
-                    push_str(rt, string_mut, string_tydesc, b"; ")?;
-                }
+                push_str(rt, string_mut, string_tydesc, b"; ")?;
 
-                for (col, col_ty) in tydesc.table_column_tydescs().enumerate() {
+                for (col, col_info) in tydesc.table_column_tydescs().enumerate() {
                     if col > 0 {
                         push_str(rt, string_mut, string_tydesc, b", ")?;
                     }
@@ -713,7 +720,7 @@ unsafe fn pretty_table(
                         col,
                         table.capacity,
                     );
-                    pretty_value(rt, elem_ptr, col_ty, string_mut, string_tydesc)?;
+                    pretty_value(rt, elem_ptr, col_info.tydesc(), string_mut, string_tydesc)?;
                 }
             }
         }

@@ -11,8 +11,10 @@ use std::ptr;
 /// Arena for allocating type descriptors in tests.
 struct TyDescArena {
     ptrs: RefCell<Vec<*mut rtdt::TyDesc>>,
-    // Also need to keep column tydesc arrays alive.
-    col_arrays: RefCell<Vec<Vec<*const rtdt::TyDesc>>>,
+    // Keep column info arrays alive.
+    col_arrays: RefCell<Vec<Vec<rtdt::TyInfoTableColumn>>>,
+    // Keep column name strings alive.
+    col_names: RefCell<Vec<String>>,
 }
 
 impl TyDescArena {
@@ -20,6 +22,7 @@ impl TyDescArena {
         Self {
             ptrs: RefCell::new(Vec::new()),
             col_arrays: RefCell::new(Vec::new()),
+            col_names: RefCell::new(Vec::new()),
         }
     }
 
@@ -29,7 +32,15 @@ impl TyDescArena {
         ptr
     }
 
-    fn alloc_col_array(&self, cols: Vec<*const rtdt::TyDesc>) -> *const *const rtdt::TyDesc {
+    fn alloc_col_name(&self, name: &str) -> (*const u8, u32) {
+        let s = name.to_string();
+        let ptr = s.as_ptr();
+        let len = s.len() as u32;
+        self.col_names.borrow_mut().push(s);
+        (ptr, len)
+    }
+
+    fn alloc_col_array(&self, cols: Vec<rtdt::TyInfoTableColumn>) -> *const rtdt::TyInfoTableColumn {
         let ptr = cols.as_ptr();
         self.col_arrays.borrow_mut().push(cols);
         ptr
@@ -81,10 +92,17 @@ fn create_string_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     })
 }
 
-/// Create a Table<u32> type descriptor (single column).
+/// Create a Table<u32> type descriptor (single column named "x").
 fn create_table_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     let col_tydesc = create_u32_tydesc(arena);
-    let col_tydescs = arena.alloc_col_array(vec![col_tydesc]);
+    let (name_ptr, name_len) = arena.alloc_col_name("x");
+    let columns = arena.alloc_col_array(vec![
+        rtdt::TyInfoTableColumn {
+            name: name_ptr,
+            name_len,
+            tydesc: col_tydesc,
+        },
+    ]);
 
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Table,
@@ -93,17 +111,30 @@ fn create_table_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
         type_info: rtdt::TyInfo {
             table: rtdt::TyInfoTable {
                 num_columns: 1,
-                column_tydescs: col_tydescs,
+                columns,
             },
         },
     })
 }
 
-/// Create a Table<u32, u64> type descriptor (two columns).
+/// Create a Table<u32, u64> type descriptor (two columns named "a", "b").
 fn create_table_u32_u64_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     let col0_tydesc = create_u32_tydesc(arena);
     let col1_tydesc = create_u64_tydesc(arena);
-    let col_tydescs = arena.alloc_col_array(vec![col0_tydesc, col1_tydesc]);
+    let (name0_ptr, name0_len) = arena.alloc_col_name("a");
+    let (name1_ptr, name1_len) = arena.alloc_col_name("b");
+    let columns = arena.alloc_col_array(vec![
+        rtdt::TyInfoTableColumn {
+            name: name0_ptr,
+            name_len: name0_len,
+            tydesc: col0_tydesc,
+        },
+        rtdt::TyInfoTableColumn {
+            name: name1_ptr,
+            name_len: name1_len,
+            tydesc: col1_tydesc,
+        },
+    ]);
 
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Table,
@@ -112,7 +143,7 @@ fn create_table_u32_u64_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
         type_info: rtdt::TyInfo {
             table: rtdt::TyInfoTable {
                 num_columns: 2,
-                column_tydescs: col_tydescs,
+                columns,
             },
         },
     })

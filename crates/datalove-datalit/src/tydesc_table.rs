@@ -32,7 +32,7 @@ pub struct TyDescTable<'db> {
     tuple_fields: Vec<Vec<rtdt::TyInfoTupleField>>,
     struct_fields: Vec<Vec<rtdt::TyInfoStructField>>,
     enum_variants: Vec<Vec<rtdt::TyInfoEnumVariant>>,
-    column_tydescs: Vec<Vec<*const rtdt::TyDesc>>,
+    table_columns: Vec<Vec<rtdt::TyInfoTableColumn>>,
 }
 
 impl<'db> TyDescTable<'db> {
@@ -49,7 +49,7 @@ impl<'db> TyDescTable<'db> {
             tuple_fields: Vec::new(),
             struct_fields: Vec::new(),
             enum_variants: Vec::new(),
-            column_tydescs: Vec::new(),
+            table_columns: Vec::new(),
         }
     }
 
@@ -704,16 +704,21 @@ impl<'db> TyDescTable<'db> {
 
     /// Create TyDesc for table.
     fn create_table_tydesc(&mut self, columns: &[TypeNamedField<'db>]) -> Box<rtdt::TyDesc> {
-        // Recursively create TyDescs for each column type.
-        let mut col_tydescs = Vec::new();
+        // Create column info with names and tydescs.
+        let mut col_info = Vec::new();
         for column in columns {
             let column_tydesc = self.get_or_create(column.ty.ty(self.db));
-            col_tydescs.push(column_tydesc);
+            let name_str = column.name.as_str(self.db);
+            col_info.push(rtdt::TyInfoTableColumn {
+                name: name_str.as_ptr(),
+                name_len: name_str.len() as u32,
+                tydesc: column_tydesc,
+            });
         }
 
-        // Store column tydescs array and get stable pointer.
-        self.column_tydescs.push(col_tydescs);
-        let column_tydescs_ptr = self.column_tydescs.last().unwrap().as_ptr();
+        // Store column info array and get stable pointer.
+        self.table_columns.push(col_info);
+        let columns_ptr = self.table_columns.last().unwrap().as_ptr();
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Table,
@@ -722,7 +727,7 @@ impl<'db> TyDescTable<'db> {
             type_info: rtdt::TyInfo {
                 table: rtdt::TyInfoTable {
                     num_columns: columns.len() as u32,
-                    column_tydescs: column_tydescs_ptr,
+                    columns: columns_ptr,
                 },
             },
         })

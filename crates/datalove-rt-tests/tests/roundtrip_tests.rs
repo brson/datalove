@@ -87,6 +87,19 @@ fn types_equal<'db>(
             heap1 == heap2 && types_equal(db, elem1.ty(db), elem2.ty(db))
         }
 
+        (Type::Table(t1), Type::Table(t2)) => {
+            let cols1 = &t1.columns;
+            let cols2 = &t2.columns;
+            if cols1.len() != cols2.len() {
+                return false;
+            }
+            cols1.iter().zip(cols2.iter()).all(|(c1, c2)| {
+                c1.name == c2.name
+                    && std::mem::discriminant(&c1.ty.heap(db)) == std::mem::discriminant(&c2.ty.heap(db))
+                    && types_equal(db, c1.ty.ty(db), c2.ty.ty(db))
+            })
+        }
+
         _ => {
             // For other types or mismatched variants, use standard equality.
             type1 == type2

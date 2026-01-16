@@ -10,7 +10,7 @@ use datalove_rtdt as rtdt;
 
 /// Collect column type descriptors from a table tydesc into a Vec.
 pub fn collect_column_tydescs<'a>(tydesc: rtdt::TyDescRef<'a>) -> Vec<&'a rtdt::TyDesc> {
-    tydesc.table_column_tydescs().map(|t| t.as_ref()).collect()
+    tydesc.table_column_tydescs().map(|col| col.tydesc().as_ref()).collect()
 }
 
 /// Compute pointer to an element in a table's columnar data.
@@ -78,8 +78,8 @@ pub unsafe fn table_destroy_impl(
         let column_tydescs = collect_column_tydescs(tydesc);
 
         // Destroy elements column by column, row by row.
-        for (col, col_ty) in tydesc.table_column_tydescs().enumerate() {
-            let col_tydesc = col_ty.as_ptr();
+        for (col, col_info) in tydesc.table_column_tydescs().enumerate() {
+            let col_tydesc = col_info.tydesc().as_ptr();
             for row in 0..table.len {
                 let elem = element_ptr_mut(
                     table.data as *mut u8,
@@ -326,8 +326,8 @@ pub unsafe fn table_clear_impl(
         let column_tydescs = collect_column_tydescs(tydesc);
 
         // Destroy elements.
-        for (col, col_ty) in tydesc.table_column_tydescs().enumerate() {
-            let col_tydesc = col_ty.as_ptr();
+        for (col, col_info) in tydesc.table_column_tydescs().enumerate() {
+            let col_tydesc = col_info.tydesc().as_ptr();
             for row in 0..table.len {
                 let elem = element_ptr_mut(
                     table.data as *mut u8,
@@ -381,7 +381,14 @@ mod tests {
         let u32_tydesc = make_u32_tydesc();
         let u32_tydesc_ptr = &u32_tydesc as *const _;
 
-        let column_tydescs: [*const rtdt::TyDesc; 1] = [u32_tydesc_ptr];
+        let col_name = b"x";
+        let columns: [rtdt::TyInfoTableColumn; 1] = [
+            rtdt::TyInfoTableColumn {
+                name: col_name.as_ptr(),
+                name_len: col_name.len() as u32,
+                tydesc: u32_tydesc_ptr,
+            },
+        ];
         let table_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::Table,
             size: std::mem::size_of::<rtdt::Table>() as u32,
@@ -389,7 +396,7 @@ mod tests {
             type_info: rtdt::TyInfo {
                 table: rtdt::TyInfoTable {
                     num_columns: 1,
-                    column_tydescs: column_tydescs.as_ptr(),
+                    columns: columns.as_ptr(),
                 },
             },
         };

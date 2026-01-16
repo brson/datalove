@@ -2809,10 +2809,10 @@ mod tests {
 
             // Verify table tydesc has string and u32 column types.
             let table_tydesc_ref = rtdt::TyDescRef::from_ptr(inst.tydesc.as_ptr());
-            let col_tydescs: Vec<_> = table_tydesc_ref.table_column_tydescs().collect();
-            assert_eq!(col_tydescs.len(), 2);
-            assert_eq!(col_tydescs[0].type_tag(), rtdt::TyTag::String);
-            assert_eq!(col_tydescs[1].type_tag(), rtdt::TyTag::U32);
+            let col_infos: Vec<_> = table_tydesc_ref.table_column_tydescs().collect();
+            assert_eq!(col_infos.len(), 2);
+            assert_eq!(col_infos[0].tydesc().type_tag(), rtdt::TyTag::String);
+            assert_eq!(col_infos[1].tydesc().type_tag(), rtdt::TyTag::U32);
         }
         Ok(())
     }

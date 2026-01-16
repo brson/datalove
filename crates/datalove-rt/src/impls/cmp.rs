@@ -243,8 +243,8 @@ fn eq_tydesc(
                 if num_cols_a != num_cols_b {
                     return false;
                 }
-                for (col_ty_a, col_ty_b) in td_a.table_column_tydescs().zip(td_b.table_column_tydescs()) {
-                    if !eq_tydesc(col_ty_a, col_ty_b) {
+                for (col_a, col_b) in td_a.table_column_tydescs().zip(td_b.table_column_tydescs()) {
+                    if col_a.name() != col_b.name() || !eq_tydesc(col_a.tydesc(), col_b.tydesc()) {
                         return false;
                     }
                 }
@@ -649,7 +649,7 @@ unsafe fn eq_value(
 
                 // Compare element-by-element, row-major order.
                 for row in 0..table_a.len {
-                    for (col, col_ty) in td.table_column_tydescs().enumerate() {
+                    for (col, col_info) in td.table_column_tydescs().enumerate() {
                         let elem_a = crate::impls::table::element_ptr(
                             table_a.data,
                             &column_tydescs,
@@ -664,7 +664,7 @@ unsafe fn eq_value(
                             col,
                             table_b.capacity,
                         );
-                        if !eq_value(elem_a, elem_b, col_ty, float_policy) {
+                        if !eq_value(elem_a, elem_b, col_info.tydesc(), float_policy) {
                             return false;
                         }
                     }
@@ -1258,7 +1258,7 @@ unsafe fn cmp_value(
 
                 // Compare element-by-element, row-major order (lexicographic).
                 for row in 0..min_len {
-                    for (col, col_ty) in td.table_column_tydescs().enumerate() {
+                    for (col, col_info) in td.table_column_tydescs().enumerate() {
                         let elem_a = crate::impls::table::element_ptr(
                             table_a.data,
                             &column_tydescs,
@@ -1273,7 +1273,7 @@ unsafe fn cmp_value(
                             col,
                             table_b.capacity,
                         );
-                        let ord = cmp_value(elem_a, elem_b, col_ty, float_policy);
+                        let ord = cmp_value(elem_a, elem_b, col_info.tydesc(), float_policy);
                         if ord != crate::c::RtOrdering::Equal {
                             return ord;
                         }
