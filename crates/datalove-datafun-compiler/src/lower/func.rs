@@ -14,6 +14,7 @@ use super::LowerError;
 
 /// Lower a function to IR with available module functions in scope.
 ///
+/// The `func_id` parameter is the pre-assigned module-local function ID.
 /// Caller must run `drop_analysis::analyze_function` first, check for errors,
 /// and pass the result here. This function asserts that `analysis` has no errors.
 pub fn lower_function_for_module<'db>(
@@ -22,14 +23,10 @@ pub fn lower_function_for_module<'db>(
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     func: ast::StmtFun<'db>,
+    func_id: FuncId,
     analysis: FunctionDropAnalysis,
 ) -> Result<IrFunction, LowerError> {
     let mut ctx = LowerCtx::new_for_module(db, expr_types, call_targets, func_id_map);
-    let name = func.name(db).text(db).to_string();
-    let param_count = func.params(db).len();
-
-    // Define the function in the symbol table.
-    let func_id = ctx.define_func(&name, param_count);
 
     lower_function_body(&mut ctx, func_id, func, analysis)
 }

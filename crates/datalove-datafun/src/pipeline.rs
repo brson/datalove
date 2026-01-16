@@ -290,11 +290,11 @@ impl ModuleCompilationPipeline {
             path_to_errors.insert(path, error_strings);
         }
 
-        // Assign function IDs.
+        // Assign function IDs (module-local: each module starts at 0).
         let mut func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> = HashMap::new();
-        let mut next_func_id: u32 = 0;
         for (ir_module_idx, (salsa_module_id, parsed)) in parsed_graph.statements_only(db).iter().enumerate() {
             let ir_module_id = IrModuleId(ir_module_idx as u32);
+            let mut next_func_id: u32 = 0;
             for statement in &parsed.statements {
                 if let datalove_datafun_ast::ast::Statement::Fun(func) = statement {
                     let func_name = func.name(db).text(db).to_string();
@@ -370,11 +370,11 @@ impl ModuleCompilationPipeline {
                     let call_targets = graph_typecheck.call_targets(db);
 
                     match lower::lower_function_for_module(
-                        db, combined_expr_types, call_targets, &func_id_map, *func, analysis
+                        db, combined_expr_types, call_targets, &func_id_map, *func, *func_id, analysis
                     ) {
                         Ok(ir_func) => {
                             ir_dumps.push(format!("{}", ir_func));
-                            env.add_module_function(ir_module_id, *func_id, ir_func);
+                            env.add_module_function(ir_module_id, ir_func.id, ir_func);
                         }
                         Err(e) => {
                             ir_dumps.push(format!("Error lowering {}: {}", func_name, e));

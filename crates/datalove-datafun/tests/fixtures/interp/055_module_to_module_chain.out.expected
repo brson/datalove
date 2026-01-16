@@ -32,7 +32,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn add_four(p0):\nblock0:\n    v0 = call m1.f1(p0)\n    v1 = call m1.f1(v0)\n    return v1\n",
+                ir: "fn add_four(p0):\nblock0:\n    v0 = call m1.f0(p0)\n    v1 = call m1.f0(v0)\n    return v1\n",
             ),
             output: "",
         ),
@@ -56,7 +56,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = call m2.f2(v0)\n    unit_end v1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = call m2.f0(v0)\n    unit_end v1\n",
             ),
             output: "@14",
         ),
