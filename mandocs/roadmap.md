@@ -1,19 +1,24 @@
 # Datalove Roadmap
 
 
-## Next goal
+## Next checkpoint
 
 - documentation
-- diagnostics
-- full module and script compile/interpret reactivity
-- tables
+- [x] diagnostics
+- module and script compile reactivity
+- script interpreter reactivity
+- [x] tensors and tables
+- table column projections
 - closures
 - clone ops
 - type aliases
 - generic functions for built-in generic types
-- basic repl, script runner
+- basic repl,
+- [x] script runner
 - pipeline tools
-- interpreter, jit, aot
+- [x] interpreter
+- [~] jit
+- [x] aot
 - compute-only core library
 - core->runtime calls
 - heap types, examples omit
@@ -33,7 +38,6 @@
 
 # on deck
 
-- tables
 - fully reactive scripts
 - clone, working heap types, and default syntax everywhere
 - jit
