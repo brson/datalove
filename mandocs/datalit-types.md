@@ -17,39 +17,8 @@ Most types in Datalove are Datalove Literal types,
 and we call them _datalit types_.
 In some languages they might be called "plain old data".
 
-Datalit types are:
-
-- [Unit](#user-content-unit),
-  `()`, also a zero-element anonymous tuple.
-- [Booleans](#user-content-booleans),
-  `bool` - `true` and `false`
-- [Fixed integers](#user-content-fixed-integers),
-  `u8`, `u16`, `u16`, `u32`, `u64`,
-  `i8`, `i16`, `i16`, `i32`, `i64`
-- [Big integers](#user-content-big-integers),
-  `int`
-- [Floating point numbers](#user-content-floating-point-numbers),
-  `f32`, `f64`
-- [Anynomous tuples](#user-content-anynymous-tuples)
-- [Anonymous structs](#user-content-anonymous-structs)
-- [Anonymous enums (ADTs)](#user-content-anonymous-enums)
-- [Lists](#user-content-lists),
-  `list<T>` - contiguous, growable, heap-allocated arrays
-- [Maps and Sets](#user-content-maps-and-sets)
-  `map<K, V>` and `set<T>`
-- [Tensors](#user-content-tensors),
-  `tensor<T>` - multidimensional arrays
-- [Optional types](#user-content-optional-types),
-  `?T`
-- [Result types](#user-content-result-types),
-  `!T` - which may either hold `T` or `error`
-- [Existential data types](#user-content-existential-data-types),
-  `data` - dynamically-typed and pointer-packed version of any of the above
-- [Existential error types](#user-content-existential-error-types),
-  `error` - dynamically-typed and pointer-packed version of any of the above
-
 Datalit types are value types and stored inline.
-Datalit structs and enums are structurally-typed.
+Datalit structs, tuples and enums are structurally-typed.
 
 
 
