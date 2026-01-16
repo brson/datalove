@@ -726,6 +726,12 @@ impl DocsCommand {
             .with_context(|| format!("Failed to copy template.html"))?;
         println!("Copied template.html");
 
+        let logo_src = input_dir.join("datalove-logo.svg");
+        let logo_dst = output_dir.join("datalove-logo.svg");
+        fs::copy(&logo_src, &logo_dst)
+            .with_context(|| format!("Failed to copy datalove-logo.svg"))?;
+        println!("Copied datalove-logo.svg");
+
         // Process all markdown files.
         for entry in fs::read_dir(&input_dir)? {
             let entry = entry?;

@@ -159,7 +159,7 @@ body {
 }
 
 nav {
-    padding: 1rem 1rem 0 1rem;
+    padding: 2rem 2rem 0 2rem;
 }
 
 nav a {
@@ -167,6 +167,12 @@ nav a {
     text-decoration: none;
     font-weight: bold;
     font-size: 1.2rem;
+}
+
+.nav-logo {
+    height: 2rem;
+    width: auto;
+    vertical-align: middle;
 }
 
 main {
