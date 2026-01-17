@@ -43,6 +43,10 @@ pub enum IntrinsicId {
 
     // Platform queries (60-69).
     IsBigEndian = 60,
+
+    // Signed i32 operations (70-79).
+    SshrI32 = 70,
+    SremI32 = 71,
 }
 
 /// Simplified type for intrinsic parameters and return values.
@@ -196,6 +200,20 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         name: "is_big_endian",
         params: &[],
         ret: IntrinsicType::Bool,
+    },
+
+    // Signed i32 operations.
+    IntrinsicDef {
+        id: IntrinsicId::SshrI32,
+        name: "sshr_i32",
+        params: &[IntrinsicType::I32, IntrinsicType::U32],
+        ret: IntrinsicType::I32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SremI32,
+        name: "srem_i32",
+        params: &[IntrinsicType::I32, IntrinsicType::I32],
+        ret: IntrinsicType::I32,
     },
 ];
 

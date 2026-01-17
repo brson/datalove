@@ -118,6 +118,18 @@ impl IrInterpreter {
                 let is_big = false;
                 self.write_bool(is_big, dest);
             }
+
+            // Signed i32 operations.
+            SshrI32 => {
+                let a = self.read_i32(&args[0], frame, frames)?;
+                let b = self.read_u32(&args[1], frame, frames)?;
+                self.write_i32(a.wrapping_shr(b), dest);
+            }
+            SremI32 => {
+                let a = self.read_i32(&args[0], frame, frames)?;
+                let b = self.read_i32(&args[1], frame, frames)?;
+                self.write_i32(a % b, dest);
+            }
         }
         Ok(())
     }

@@ -127,6 +127,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let bool_ty = cl_ir::types::I8;
                 builder.ins().iconst(bool_ty, if is_big { 1 } else { 0 })
             }
+
+            // Signed i32 operations.
+            SshrI32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                // Signed shift right (arithmetic shift).
+                builder.ins().sshr(a, b)
+            }
+            SremI32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                // Signed remainder.
+                builder.ins().srem(a, b)
+            }
         };
 
         // Store result.
