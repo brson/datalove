@@ -57,6 +57,7 @@
 
 ## Backlog
 
+- 128-bit ints
 - remove data / error keywords - rely on ~ coercion?
 - testable docs
 - multiple scripts
