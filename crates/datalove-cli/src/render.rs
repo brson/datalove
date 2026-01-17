@@ -72,7 +72,7 @@ fn render_single_diagnostic<'db>(
 
     // Get relative path for display, stripping cwd prefix if present.
     let display_path = file_path.strip_prefix(cwd).unwrap_or(file_path);
-    let file_name = display_path.display().to_string();
+    let file_name = display_path.display().S();
 
     // Find the primary label's span for the report location.
     let offset = diag.labels.first()
@@ -98,7 +98,7 @@ fn render_single_diagnostic<'db>(
             LabelStyle::Secondary => Color::Cyan,
         };
 
-        let span = label.span.clone();
+        let span = label.span.C();
         let mut ariadne_label = Label::new((&file_name, span))
             .with_color(label_color);
 
@@ -143,7 +143,7 @@ fn render_multi_source_diagnostic<'db>(
 
     // Get relative path for display.
     let display_path = worldfile_path.strip_prefix(cwd).unwrap_or(worldfile_path);
-    let base_file_name = display_path.display().to_string();
+    let base_file_name = display_path.display().S();
 
     // Build source cache: map source text to file ID.
     // Use numbered suffixes for different sources in the same worldfile.
@@ -152,14 +152,14 @@ fn render_multi_source_diagnostic<'db>(
     let mut next_id = 0;
 
     for label in &diag.labels {
-        let source_text = label.text.as_str(db).to_string();
+        let source_text = label.text.as_str(db).S();
         if !source_to_id.contains_key(&source_text) {
             let file_id = if next_id == 0 {
-                base_file_name.clone()
+                base_file_name.C()
             } else {
                 format!("{}:{}", base_file_name, next_id)
             };
-            source_to_id.insert(source_text.clone(), file_id.clone());
+            source_to_id.insert(source_text.C(), file_id.C());
             sources.insert(file_id, Source::from(source_text));
             next_id += 1;
         }
@@ -167,20 +167,20 @@ fn render_multi_source_diagnostic<'db>(
 
     // If no labels, use the base file name.
     if diag.labels.is_empty() {
-        sources.insert(base_file_name.clone(), Source::from(String::new()));
+        sources.insert(base_file_name.C(), Source::from(String::new()));
     }
 
     // Get the primary file ID.
     let primary_file_id = diag.labels.first()
-        .map(|l| source_to_id.get(l.text.as_str(db)).unwrap().clone())
-        .unwrap_or_else(|| base_file_name.clone());
+        .map(|l| source_to_id.get(l.text.as_str(db)).unwrap().C())
+        .unwrap_or_else(|| base_file_name.C());
 
     let offset = diag.labels.first()
         .map(|l| l.span.start)
         .unwrap_or(0);
 
     // Build the report.
-    let mut builder = Report::build(kind, primary_file_id.clone(), offset);
+    let mut builder = Report::build(kind, primary_file_id.C(), offset);
 
     let message = diag.message.as_str(db);
     builder = builder.with_message(message);
@@ -192,14 +192,14 @@ fn render_multi_source_diagnostic<'db>(
     // Add labels with their respective file IDs.
     for label in &diag.labels {
         let source_text = label.text.as_str(db);
-        let file_id = source_to_id.get(source_text).unwrap().clone();
+        let file_id = source_to_id.get(source_text).unwrap().C();
 
         let label_color = match label.style {
             LabelStyle::Primary => colors.next(),
             LabelStyle::Secondary => Color::Cyan,
         };
 
-        let span = label.span.clone();
+        let span = label.span.C();
         let mut ariadne_label = Label::new((file_id, span))
             .with_color(label_color);
 
@@ -235,6 +235,6 @@ impl Cache<String> for MultiSourceCache {
     }
 
     fn display<'a>(&self, id: &'a String) -> Option<Box<dyn std::fmt::Display + 'a>> {
-        Some(Box::new(id.clone()))
+        Some(Box::new(id.C()))
     }
 }

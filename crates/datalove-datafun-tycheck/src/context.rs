@@ -3,6 +3,7 @@
 //! Provides TypeContext for tracking bindings and errors during typechecking,
 //! and ScriptTypeContext for tracking accumulated bindings across script units.
 
+use rmx::prelude::*;
 use std::collections::HashMap;
 use bct::text::{InternedText, TextSpan};
 use salsa::plumbing::AsId;
@@ -97,7 +98,7 @@ impl<'db> TypeContext<'db> {
             module_id: self.current_module_id,
             name,
         });
-        TypeError::UnresolvedName(name.as_str(self.db).to_string())
+        TypeError::UnresolvedName(name.as_str(self.db).S())
     }
 
     /// F002: Undefined function.
@@ -107,7 +108,7 @@ impl<'db> TypeContext<'db> {
             module_id: self.current_module_id,
             name,
         });
-        TypeError::UnresolvedName(name.as_str(self.db).to_string())
+        TypeError::UnresolvedName(name.as_str(self.db).S())
     }
 
     /// F011: Cannot synthesize type.
@@ -115,7 +116,7 @@ impl<'db> TypeContext<'db> {
         self.pending_diagnostics.push(PendingDiagnostic::CannotSynthesize {
             expr_id: expr.as_id().index(),
             module_id: self.current_module_id,
-            message: InternedText::new(self.db, message.to_string()),
+            message: InternedText::new(self.db, message.S()),
         });
         TypeError::CannotSynthesize
     }
@@ -125,13 +126,13 @@ impl<'db> TypeContext<'db> {
         self.pending_diagnostics.push(PendingDiagnostic::TypeMismatch {
             expr_id: expr.as_id().index(),
             module_id: self.current_module_id,
-            expected: InternedText::new(self.db, expected.to_string()),
-            actual: InternedText::new(self.db, actual.to_string()),
-            label: InternedText::new(self.db, label.to_string()),
+            expected: InternedText::new(self.db, expected.S()),
+            actual: InternedText::new(self.db, actual.S()),
+            label: InternedText::new(self.db, label.S()),
         });
         TypeError::TypeMismatch {
-            expected: expected.to_string(),
-            actual: actual.to_string(),
+            expected: expected.S(),
+            actual: actual.S(),
         }
     }
 
@@ -173,12 +174,12 @@ impl<'db> TypeContext<'db> {
         self.pending_diagnostics.push(PendingDiagnostic::InvalidOperandType {
             expr_id: expr.as_id().index(),
             module_id: self.current_module_id,
-            op: InternedText::new(self.db, op.to_string()),
-            ty: InternedText::new(self.db, ty.to_string()),
+            op: InternedText::new(self.db, op.S()),
+            ty: InternedText::new(self.db, ty.S()),
         });
         TypeError::InvalidOperandType {
-            op: op.to_string(),
-            ty: ty.to_string(),
+            op: op.S(),
+            ty: ty.S(),
         }
     }
 
@@ -187,13 +188,13 @@ impl<'db> TypeContext<'db> {
         self.pending_diagnostics.push(PendingDiagnostic::TryTypeMismatch {
             expr_id: expr.as_id().index(),
             module_id: self.current_module_id,
-            operator: InternedText::new(self.db, operator.to_string()),
-            expected: InternedText::new(self.db, expected.to_string()),
-            actual: InternedText::new(self.db, actual.to_string()),
+            operator: InternedText::new(self.db, operator.S()),
+            expected: InternedText::new(self.db, expected.S()),
+            actual: InternedText::new(self.db, actual.S()),
         });
         TypeError::TryTypeMismatch {
-            operator: operator.to_string(),
-            actual_type: actual.to_string(),
+            operator: operator.S(),
+            actual_type: actual.S(),
         }
     }
 
@@ -202,13 +203,13 @@ impl<'db> TypeContext<'db> {
         self.pending_diagnostics.push(PendingDiagnostic::TryReturnTypeMismatch {
             expr_id: expr.as_id().index(),
             module_id: self.current_module_id,
-            operator: InternedText::new(self.db, operator.to_string()),
-            expected: InternedText::new(self.db, expected.to_string()),
-            actual: InternedText::new(self.db, actual.to_string()),
+            operator: InternedText::new(self.db, operator.S()),
+            expected: InternedText::new(self.db, expected.S()),
+            actual: InternedText::new(self.db, actual.S()),
         });
         TypeError::TryReturnTypeMismatch {
-            operator: operator.to_string(),
-            return_type: actual.to_string(),
+            operator: operator.S(),
+            return_type: actual.S(),
         }
     }
 
@@ -269,7 +270,7 @@ impl<'db> TypeContext<'db> {
         self.pending_diagnostics.push(PendingDiagnostic::UndefinedVariableSet {
             local_index: stmt.local_index,
             module_id: self.current_module_id,
-            name: InternedText::new(self.db, name.to_string()),
+            name: InternedText::new(self.db, name.S()),
         });
         TypeError::UndefinedVariable
     }

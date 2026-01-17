@@ -173,9 +173,9 @@ pub fn heaps_compatible(h1: Heap, h2: Heap) -> bool {
 /// Convert a heap to a string for error messages.
 pub fn heap_to_string(heap: Heap) -> String {
     match heap {
-        Heap::Local => "@".to_string(),
-        Heap::Global => "#".to_string(),
-        Heap::Omitted => "".to_string(),
+        Heap::Local => "@".S(),
+        Heap::Global => "#".S(),
+        Heap::Omitted => "".S(),
     }
 }
 
@@ -251,8 +251,8 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
         (Type::Error, Type::Error) => true,
 
         (Type::AnonTuple(t1), Type::AnonTuple(t2)) => {
-            let f1 = t1.fields.clone();
-            let f2 = t2.fields.clone();
+            let f1 = t1.fields.C();
+            let f2 = t2.fields.C();
             f1.len() == f2.len()
                 && f1
                     .iter()
@@ -261,8 +261,8 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
         }
 
         (Type::AnonStruct(s1), Type::AnonStruct(s2)) => {
-            let f1 = s1.fields.clone();
-            let f2 = s2.fields.clone();
+            let f1 = s1.fields.C();
+            let f2 = s2.fields.C();
             f1.len() == f2.len()
                 && f1.iter().zip(f2.iter()).all(|(a, b)| {
                     a.name == b.name && types_and_heaps_equivalent(db, &a.ty, &b.ty)
@@ -270,8 +270,8 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
         }
 
         (Type::AnonEnum(e1), Type::AnonEnum(e2)) => {
-            let v1 = e1.variants.clone();
-            let v2 = e2.variants.clone();
+            let v1 = e1.variants.C();
+            let v2 = e2.variants.C();
             v1.len() == v2.len()
                 && v1.iter().all(|var1| {
                     v2.iter().any(|var2| {
@@ -312,8 +312,8 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
         }
 
         (Type::Table(t1), Type::Table(t2)) => {
-            let c1 = t1.columns.clone();
-            let c2 = t2.columns.clone();
+            let c1 = t1.columns.C();
+            let c2 = t2.columns.C();
             c1.len() == c2.len()
                 && c1.iter().zip(c2.iter()).all(|(a, b)| {
                     a.name == b.name && types_and_heaps_equivalent(db, &a.ty, &b.ty)
@@ -476,23 +476,23 @@ pub fn convert_type_hint<'db>(
 /// Convert a type to a string for error messages.
 pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
     match ty {
-        Type::Bool => "bool".to_string(),
-        Type::U8 => "u8".to_string(),
-        Type::I8 => "i8".to_string(),
-        Type::U16 => "u16".to_string(),
-        Type::I16 => "i16".to_string(),
-        Type::U32 => "u32".to_string(),
-        Type::I32 => "i32".to_string(),
-        Type::U64 => "u64".to_string(),
-        Type::I64 => "i64".to_string(),
-        Type::F32 => "f32".to_string(),
-        Type::F64 => "f64".to_string(),
-        Type::Int => "int".to_string(),
-        Type::String => "string".to_string(),
-        Type::Data => "data".to_string(),
-        Type::Error => "error".to_string(),
+        Type::Bool => "bool".S(),
+        Type::U8 => "u8".S(),
+        Type::I8 => "i8".S(),
+        Type::U16 => "u16".S(),
+        Type::I16 => "i16".S(),
+        Type::U32 => "u32".S(),
+        Type::I32 => "i32".S(),
+        Type::U64 => "u64".S(),
+        Type::I64 => "i64".S(),
+        Type::F32 => "f32".S(),
+        Type::F64 => "f64".S(),
+        Type::Int => "int".S(),
+        Type::String => "string".S(),
+        Type::Data => "data".S(),
+        Type::Error => "error".S(),
         Type::AnonTuple(t) => {
-            let fields: Vec<_> = t.fields.clone()
+            let fields: Vec<_> = t.fields.C()
                 .iter()
                 .map(|f| {
                     let heap = heap_to_string(f.heap(db));
@@ -503,7 +503,7 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
             format!("({})", fields.join(", "))
         }
         Type::AnonStruct(s) => {
-            let fields: Vec<_> = s.fields.clone()
+            let fields: Vec<_> = s.fields.C()
                 .iter()
                 .map(|f| {
                     let name = f.name.as_str(db);
@@ -555,7 +555,7 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
             format!("@tensor<{}{}, {}>", heap, ty_str, t.rank)
         }
         Type::Table(t) => {
-            let cols: Vec<_> = t.columns.clone()
+            let cols: Vec<_> = t.columns.C()
                 .iter()
                 .map(|c| {
                     let name = c.name.as_str(db);

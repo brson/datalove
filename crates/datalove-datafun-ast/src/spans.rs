@@ -63,7 +63,7 @@ impl DatafunSpans {
         let expr_id = expr.as_id();
         self.entries.iter()
             .find(|e| e.expr_id == expr_id)
-            .map(|e| e.entry.clone())
+            .map(|e| e.entry.C())
     }
 
     /// Look up span for a break statement by local_index.

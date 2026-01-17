@@ -99,7 +99,7 @@ impl<'db> Parser<'db> {
                             let ts = self.peek_text_span();
                             return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
                                 text: ts.text,
-                                span: ts.span.clone(),
+                                span: ts.span.C(),
                                 message: InternedText::new(self.db, "expected decimal digits after '.'".S()),
                             });
                         }
@@ -119,7 +119,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
                 text: ts.text,
-                span: ts.span.clone(),
+                span: ts.span.C(),
                 message: InternedText::new(self.db, "unexpected minus sign".S()),
             });
         }
@@ -209,7 +209,7 @@ impl<'db> Parser<'db> {
                                 let ts = self.peek_text_span();
                                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
                                     text: ts.text,
-                                    span: ts.span.clone(),
+                                    span: ts.span.C(),
                                     message: InternedText::new(self.db, "expected decimal digits after '.'".S()),
                                 });
                             }
@@ -225,7 +225,7 @@ impl<'db> Parser<'db> {
                             self.next();
                             return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
                                 text: ts.text,
-                                span: ts.span.clone(),
+                                span: ts.span.C(),
                                 message: InternedText::new(self.db, format!("unexpected identifier '{}'", word).S()),
                             });
                         }
@@ -241,7 +241,7 @@ impl<'db> Parser<'db> {
                         let ts = self.peek_text_span();
                         return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
                             text: ts.text,
-                            span: ts.span.clone(),
+                            span: ts.span.C(),
                             message: InternedText::new(self.db, "unexpected token".S()),
                         });
                     }
@@ -271,7 +271,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
                     text: ts.text,
-                    span: ts.span.clone(),
+                    span: ts.span.C(),
                     message: InternedText::new(self.db, "expected expression".S()),
                 });
             }
@@ -304,7 +304,7 @@ impl<'db> Parser<'db> {
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.clone(),
+                    text: ts.text, span: ts.span.C(),
                     message: InternedText::new(self.db, "expected '('".S()),
                 });
             }
@@ -325,7 +325,7 @@ impl<'db> Parser<'db> {
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.clone(),
+                    text: ts.text, span: ts.span.C(),
                     message: InternedText::new(self.db, "expected '{'".S()),
                 });
             }
@@ -346,7 +346,7 @@ impl<'db> Parser<'db> {
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.clone(),
+                    text: ts.text, span: ts.span.C(),
                     message: InternedText::new(self.db, "expected '['".S()),
                 });
             }
@@ -368,7 +368,7 @@ impl<'db> Parser<'db> {
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.clone(),
+                    text: ts.text, span: ts.span.C(),
                     message: InternedText::new(self.db, "expected '{' after 'set'".S()),
                 });
             }
@@ -390,7 +390,7 @@ impl<'db> Parser<'db> {
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.clone(),
+                    text: ts.text, span: ts.span.C(),
                     message: InternedText::new(self.db, "expected '{' after 'map'".S()),
                 });
             }
@@ -419,7 +419,7 @@ impl<'db> Parser<'db> {
                     .emit_parse();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
                     text: ts.text,
-                    span: ts.span.clone(),
+                    span: ts.span.C(),
                     message: InternedText::new(self.db, message.S()),
                 });
             }
@@ -467,7 +467,7 @@ impl<'db> Parser<'db> {
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.clone(),
+                    text: ts.text, span: ts.span.C(),
                     message: InternedText::new(self.db, "expected '[' for tensor shape".S()),
                 });
             }
@@ -488,7 +488,7 @@ impl<'db> Parser<'db> {
                     if has_error {
                         let ts = self.peek_text_span();
                         return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                            text: ts.text, span: ts.span.clone(),
+                            text: ts.text, span: ts.span.C(),
                             message: InternedText::new(self.db, format!("expected {} elements per row", row_size).S()),
                         });
                     }
@@ -498,7 +498,7 @@ impl<'db> Parser<'db> {
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.clone(),
+                    text: ts.text, span: ts.span.C(),
                     message: InternedText::new(self.db, "expected '[' for tensor data".S()),
                 });
             }
@@ -574,11 +574,11 @@ impl<'db> Parser<'db> {
                             rows.push(std::mem::take(&mut current_row));
                         }
                     } else {
-                        current_row.push(token.clone());
+                        current_row.push(token.C());
                     }
                 }
                 _ => {
-                    current_row.push(token.clone());
+                    current_row.push(token.C());
                 }
             }
         }
@@ -594,7 +594,7 @@ impl<'db> Parser<'db> {
     fn parse_table_header(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<InternedText<'db>> {
         // Filter out whitespace and split by comma.
         let tokens_no_ws: Vec<_> = row_tokens.iter()
-            .filter_map(|t| t.clone().without_space(self.db))
+            .filter_map(|t| t.C().without_space(self.db))
             .collect();
 
         // Split by comma and extract names.
@@ -625,7 +625,7 @@ impl<'db> Parser<'db> {
     fn parse_table_data_row(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<ast::ExprFun<'db>> {
         // Filter out whitespace.
         let tokens_no_ws: Vec<_> = row_tokens.iter()
-            .filter_map(|t| t.clone().without_space(self.db))
+            .filter_map(|t| t.C().without_space(self.db))
             .collect();
 
         // Split by comma and parse each element.
@@ -656,7 +656,7 @@ impl<'db> Parser<'db> {
                     }
                 }
                 _ => {
-                    current.push(token.clone());
+                    current.push(token.C());
                 }
             }
         }
@@ -720,7 +720,7 @@ impl<'db> Parser<'db> {
                     continue;
                 }
             }
-            current.push(token.clone());
+            current.push(token.C());
         }
 
         if !current.is_empty() {

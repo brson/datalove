@@ -11,6 +11,7 @@
 //! 6. Field projection synthesis
 //! 7. Inline literal synthesis - list, set, map, tensor, tuple, struct, data, error
 
+use rmx::prelude::*;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
 use crate::context::TypeContext;
@@ -159,7 +160,7 @@ pub fn synthesize_expr<'db>(
                         let datalit_elem_ty = datalit::tycheck::TypeAndHeap::new(
                             db,
                             elem_ty.heap(db),
-                            datalit_ty.clone(),
+                            datalit_ty.C(),
                         );
                         datalit_element_types.push(datalit_elem_ty);
                     }
@@ -333,7 +334,7 @@ pub fn synthesize_expr<'db>(
             if let Some(type_hint) = tensor_expr.type_hint {
                 let expected_ty = convert_type_hint(db, type_hint)?;
                 // Check rank and elements against expected type.
-                check_tensor_shape_and_elements(ctx, tensor_expr.clone(), expected_ty)?;
+                check_tensor_shape_and_elements(ctx, tensor_expr.C(), expected_ty)?;
                 return Ok(expected_ty);
             }
             synthesize_inline_tensor(ctx, expr, tensor_expr)
@@ -777,7 +778,7 @@ fn synthesize_try_option<'db>(
 
     // Return the unwrapped type T.
     let heap = inner_ty.heap(db);
-    let ty = Type::Datalit(inner_ty.ty(db).clone());
+    let ty = Type::Datalit(inner_ty.ty(db).C());
     Ok(TypeAndHeap::new(db, heap, ty))
 }
 
@@ -810,7 +811,7 @@ fn synthesize_try_result<'db>(
 
     // Return the unwrapped type T.
     let heap = inner_ty.heap(db);
-    let ty = Type::Datalit(inner_ty.ty(db).clone());
+    let ty = Type::Datalit(inner_ty.ty(db).C());
     Ok(TypeAndHeap::new(db, heap, ty))
 }
 
@@ -863,7 +864,7 @@ fn synthesize_field_proj<'db>(
                     }
 
                     let heap = field_ty.heap(db);
-                    let ty = Type::Datalit(field_ty.ty(db).clone());
+                    let ty = Type::Datalit(field_ty.ty(db).C());
                     Ok(TypeAndHeap::new(db, heap, ty))
                 }
                 _ => {
@@ -889,12 +890,12 @@ fn synthesize_field_proj<'db>(
                             }
 
                             let heap = field.ty.heap(db);
-                            let ty = Type::Datalit(field.ty.ty(db).clone());
+                            let ty = Type::Datalit(field.ty.ty(db).C());
                             return Ok(TypeAndHeap::new(db, heap, ty));
                         }
                     }
                     Err(TypeError::FieldNotFound {
-                        field_name: name_str.to_string(),
+                        field_name: name_str.S(),
                         ty: type_to_string(db, base_ty.ty(db)),
                     })
                 }
@@ -923,7 +924,7 @@ fn synthesize_inline_list<'db>(
     let elements = &list_expr.elements;
 
     if elements.is_empty() {
-        let ty = Type::Datalit(datalit::tycheck::empty_list_type(db, heap).ty(db).clone());
+        let ty = Type::Datalit(datalit::tycheck::empty_list_type(db, heap).ty(db).C());
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
 
@@ -954,7 +955,7 @@ fn synthesize_inline_set<'db>(
     let elements = &set_expr.elements;
 
     if elements.is_empty() {
-        let ty = Type::Datalit(datalit::tycheck::empty_set_type(db, heap).ty(db).clone());
+        let ty = Type::Datalit(datalit::tycheck::empty_set_type(db, heap).ty(db).C());
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
 
@@ -984,7 +985,7 @@ fn synthesize_inline_map<'db>(
     let entries = &map_expr.entries;
 
     if entries.is_empty() {
-        let ty = Type::Datalit(datalit::tycheck::empty_map_type(db, heap).ty(db).clone());
+        let ty = Type::Datalit(datalit::tycheck::empty_map_type(db, heap).ty(db).C());
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
 
@@ -1022,7 +1023,7 @@ fn synthesize_inline_tensor<'db>(
     let rank = shape.len() as u32;
 
     if elements.is_empty() {
-        let ty = Type::Datalit(datalit::tycheck::empty_tensor_type(db, heap, rank).ty(db).clone());
+        let ty = Type::Datalit(datalit::tycheck::empty_tensor_type(db, heap, rank).ty(db).C());
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
 

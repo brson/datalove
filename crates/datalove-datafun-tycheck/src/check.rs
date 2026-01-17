@@ -8,6 +8,7 @@
 //! 2. Main check_expr function - entry point for type checking
 //! 3. Collection checking helpers - list, set, map, tensor, tuple, struct, enum
 
+use rmx::prelude::*;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
 use crate::context::TypeContext;
@@ -98,7 +99,7 @@ pub fn check_expr<'db>(
                     let expected_inner = TypeAndHeap::new(
                         db,
                         inner_ty.heap(db),
-                        Type::Datalit(inner_ty.ty(db).clone())
+                        Type::Datalit(inner_ty.ty(db).C())
                     );
                     check_expr(ctx, some_expr.payload, expected_inner)?;
                     ctx.store_expr_type(expr, expected);
@@ -120,7 +121,7 @@ pub fn check_expr<'db>(
                     let expected_inner = TypeAndHeap::new(
                         db,
                         inner_ty.heap(db),
-                        Type::Datalit(inner_ty.ty(db).clone())
+                        Type::Datalit(inner_ty.ty(db).C())
                     );
                     check_expr(ctx, ok_expr.payload, expected_inner)?;
                     ctx.store_expr_type(expr, expected);
@@ -386,7 +387,7 @@ pub fn check_list_elements<'db>(
     let expected_elem_ty = TypeAndHeap::new(
         db,
         elem_type.heap(db),
-        Type::Datalit(elem_type.ty(db).clone()),
+        Type::Datalit(elem_type.ty(db).C()),
     );
     for elem in elements {
         check_expr(ctx, *elem, expected_elem_ty)?;
@@ -508,7 +509,7 @@ pub fn check_tuple_elements<'db>(
     // Extract the field types from the tuple type.
     let expected_fields = match inner_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::AnonTuple(tuple_ty)) => {
-            tuple_ty.fields.clone()
+            tuple_ty.fields.C()
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
@@ -527,7 +528,7 @@ pub fn check_tuple_elements<'db>(
         let expected_elem_ty = TypeAndHeap::new(
             db,
             expected_field.heap(db),
-            Type::Datalit(expected_field.ty(db).clone()),
+            Type::Datalit(expected_field.ty(db).C()),
         );
         check_expr(ctx, *elem, expected_elem_ty)?;
     }
@@ -549,7 +550,7 @@ pub fn check_struct_fields<'db>(
     // Extract the field types from the struct type.
     let expected_fields = match inner_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::AnonStruct(struct_ty)) => {
-            struct_ty.fields.clone()
+            struct_ty.fields.C()
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
@@ -591,7 +592,7 @@ pub fn check_enum_variant<'db>(
     // Extract the variants from the enum type.
     let expected_variants = match inner_ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::AnonEnum(enum_ty)) => {
-            enum_ty.variants.clone()
+            enum_ty.variants.C()
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
@@ -601,7 +602,7 @@ pub fn check_enum_variant<'db>(
         .iter()
         .find(|v| v.name == variant_name)
         .ok_or_else(|| {
-            TypeError::VariantNotFound(variant_name.as_str(db).to_string())
+            TypeError::VariantNotFound(variant_name.as_str(db).S())
         })?;
 
     // Check payload type if both have payloads.
@@ -609,7 +610,7 @@ pub fn check_enum_variant<'db>(
     // don't fail here - let the type comparison at a higher level catch the mismatch.
     // This matches datalit's Check-TypedAnonEnum behavior which compares enum types rather
     // than individual variant payloads.
-    if let (Some(payload_expr), Some(expected_payload_ty)) = (payload, expected_variant.payload.clone()) {
+    if let (Some(payload_expr), Some(expected_payload_ty)) = (payload, expected_variant.payload.C()) {
         // Synthesize payload type and check against expected.
         let payload_ty = ctx.synthesize_expr(payload_expr)?;
         let actual_datalit_ty = match payload_ty.ty(db) {
@@ -660,7 +661,7 @@ pub fn check_table_rows<'db>(
             let expected_col_ty = TypeAndHeap::new(
                 db,
                 col.ty.heap(db),
-                Type::Datalit(col.ty.ty(db).clone()),
+                Type::Datalit(col.ty.ty(db).C()),
             );
             check_expr(ctx, *elem, expected_col_ty)?;
         }

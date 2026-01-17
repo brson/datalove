@@ -483,7 +483,7 @@ impl AotCompileCommand {
 
         // Determine output path.
         let output_path = if let Some(ref out) = self.output {
-            out.clone()
+            out.C()
         } else {
             let stem = self.file_path.file_stem()
                 .ok_or_else(|| anyhow!("Invalid input filename"))?;
@@ -503,7 +503,7 @@ impl AotCompileCommand {
             if self.run {
                 // Run the executable. Use absolute path or prefix with ./ for relative paths.
                 let exe_path = if output_path.is_absolute() {
-                    output_path.clone()
+                    output_path.C()
                 } else {
                     std::env::current_dir()?.join(&output_path)
                 };
@@ -742,7 +742,7 @@ impl DocsCommand {
 
                 // Determine output filename.
                 let output_name = if file_name == "README.md" {
-                    "index.html".to_string()
+                    "index.html".S()
                 } else {
                     file_name.replace(".md", ".html")
                 };
@@ -758,7 +758,7 @@ impl DocsCommand {
                 options.extension.table = true;
                 options.extension.strikethrough = true;
                 options.extension.autolink = true;
-                options.extension.header_ids = Some("user-content-".to_string());
+                options.extension.header_ids = Some("user-content-".S());
                 options.render.unsafe_ = true; // Allow raw HTML in markdown.
                 let html = rmx::comrak::markdown_to_html(&markdown, &options);
 
@@ -806,10 +806,10 @@ impl DocsCommand {
         for line in markdown.lines() {
             let trimmed = line.trim();
             if trimmed.starts_with("# ") {
-                return trimmed[2..].trim().to_string();
+                return trimmed[2..].trim().S();
             }
         }
         // Fall back to filename without extension.
-        filename.trim_end_matches(".md").to_string()
+        filename.trim_end_matches(".md").S()
     }
 }

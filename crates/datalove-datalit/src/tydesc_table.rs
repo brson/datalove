@@ -62,7 +62,7 @@ impl<'db> TyDescTable<'db> {
         let tydesc = self.create_tydesc(ty);
         self.tydescs.push(tydesc);
         let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
-        self.cache.insert(ty.clone(), ptr);
+        self.cache.insert(ty.C(), ptr);
         ptr
     }
 
@@ -903,7 +903,7 @@ mod tests {
     use crate::Database;
 
     fn compile<'db>(db: &'db Database, source_text: &str) -> AnyResult<crate::tycheck::TypecheckResult<'db>> {
-        let source = bct::input::Source::new(db, source_text.to_string());
+        let source = bct::input::Source::new(db, source_text.S());
         let parsed = crate::parser::parse_for_test(db, source);
         let resolved = crate::resolve::resolve_names(db, source, parsed);
         let typechecked = crate::tycheck::type_check(db, parsed, resolved);

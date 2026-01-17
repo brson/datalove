@@ -271,9 +271,9 @@ impl<'db> Parser<'db> {
         let message_text = InternedText::new(self.db, message.S());
         let mut builder = DiagnosticBuilder::error(self.db, message)
             .code(code)
-            .primary_label(ts.clone(), label);
+            .primary_label(ts.C(), label);
         if let Some((ctx_span, ctx_msg)) = &self.branch_context {
-            builder = builder.secondary_label(ctx_span.clone(), ctx_msg);
+            builder = builder.secondary_label(ctx_span.C(), ctx_msg);
         }
         builder.emit_parse();
         ast::Statement::ParseError(ast::StmtParseError { text: ts.text, span: ts.span, message: message_text })
@@ -291,9 +291,9 @@ impl<'db> Parser<'db> {
         let message_text = InternedText::new(self.db, message.S());
         let mut builder = DiagnosticBuilder::error(self.db, message)
             .code(code)
-            .primary_label(ts.clone(), label);
+            .primary_label(ts.C(), label);
         if let Some((ctx_span, ctx_msg)) = &self.branch_context {
-            builder = builder.secondary_label(ctx_span.clone(), ctx_msg);
+            builder = builder.secondary_label(ctx_span.C(), ctx_msg);
         }
         builder.emit_parse();
         ast::ExprFun::new(
@@ -460,7 +460,7 @@ impl<'db> Parser<'db> {
                 .code("P021")
                 .primary_label(ts, "unexpected token");
             if let Some((ctx_span, ctx_msg)) = &self.branch_context {
-                builder = builder.secondary_label(ctx_span.clone(), ctx_msg);
+                builder = builder.secondary_label(ctx_span.C(), ctx_msg);
             }
             builder.emit_parse();
         }
@@ -486,7 +486,7 @@ impl<'db> TokenStream<'db> for Parser<'db> {
                 if token.is_some() {
                     *pos += 1;
                     // Remember last consumed token.
-                    *last_token = token.clone();
+                    *last_token = token.C();
                 }
                 token
             }
@@ -494,7 +494,7 @@ impl<'db> TokenStream<'db> for Parser<'db> {
                 // Take from slot 0.
                 let result = buffer[0].take();
                 // Remember last consumed token.
-                *last_token = result.clone();
+                *last_token = result.C();
                 // Shift slot 1 to slot 0.
                 buffer[0] = buffer[1].take();
                 // Fill slot 1 from iterator.

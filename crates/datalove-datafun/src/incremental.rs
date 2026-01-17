@@ -54,10 +54,10 @@ impl IncrementalModuleWorld {
 
     /// Add a module with the given path and source text.
     pub fn add_module(&mut self, db: &dyn salsa::Database, path: &str, source: &str) {
-        let new_source = Source::new(db, source.to_string());
-        let module_id = ModuleId::new(db, path.to_string());
+        let new_source = Source::new(db, source.S());
+        let module_id = ModuleId::new(db, path.S());
         let module = Module::new(db, module_id, new_source);
-        self.modules.insert(path.to_string(), module);
+        self.modules.insert(path.S(), module);
     }
 
     /// Remove a module.
@@ -69,7 +69,7 @@ impl IncrementalModuleWorld {
     pub fn update_source(&mut self, db: &mut dyn salsa::Database, path: &str, source: &str) {
         if let Some(module) = self.modules.get(path) {
             let existing_source = module.source(db);
-            existing_source.set_text(db).to(source.to_string());
+            existing_source.set_text(db).to(source.S());
         }
     }
 
@@ -212,20 +212,20 @@ impl IncrementalModuleWorld {
         for (source_path, target_paths) in &path_deps {
             for target_path in target_paths {
                 dependents_map
-                    .entry(target_path.clone())
+                    .entry(target_path.C())
                     .or_default()
-                    .insert(source_path.clone());
+                    .insert(source_path.C());
             }
         }
 
         // Transitive closure.
         let mut result = BTreeSet::new();
-        let mut queue = vec![path.to_string()];
+        let mut queue = vec![path.S()];
         while let Some(current) = queue.pop() {
             if let Some(deps) = dependents_map.get(&current) {
                 for dep in deps {
-                    if result.insert(dep.clone()) {
-                        queue.push(dep.clone());
+                    if result.insert(dep.C()) {
+                        queue.push(dep.C());
                     }
                 }
             }
@@ -288,20 +288,20 @@ impl IncrementalModuleWorld {
                 _ => continue,
             };
 
-            let source_text = module.source(db).text(db).clone();
+            let source_text = module.source(db).text(db).C();
 
-            let package = pkglib.entry(package_name.to_string())
+            let package = pkglib.entry(package_name.S())
                 .or_insert_with(|| Package {
-                    name: package_name.to_string(),
+                    name: package_name.S(),
                     modules: BTreeMap::new(),
                 });
 
             let pkg_module = PackageModule {
-                name: module_name.to_string(),
-                path: path.clone().into(),
+                name: module_name.S(),
+                path: path.C().into(),
                 text: source_text,
             };
-            package.modules.insert(module_name.to_string(), pkg_module);
+            package.modules.insert(module_name.S(), pkg_module);
         }
 
         let raw_package_world = PackageWorld {
@@ -323,9 +323,9 @@ impl IncrementalModuleWorld {
         // Convert to path-based dependencies.
         let mut deps: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for (source_id, requires) in &graph_with_requires.resolved_requires {
-            let source_path = source_id.path(db).clone();
+            let source_path = source_id.path(db).C();
             let target_paths: BTreeSet<String> = requires.iter()
-                .map(|(_, target_id)| target_id.path(db).clone())
+                .map(|(_, target_id)| target_id.path(db).C())
                 .collect();
             deps.insert(source_path, target_paths);
         }
@@ -396,7 +396,7 @@ fn topological_sort(
             // Cycle detected; skip to avoid infinite loop.
             return;
         }
-        visiting.insert(path.to_string());
+        visiting.insert(path.S());
 
         // Visit dependencies first.
         if let Some(deps) = path_deps.get(path) {
@@ -406,8 +406,8 @@ fn topological_sort(
         }
 
         visiting.remove(path);
-        visited.insert(path.to_string());
-        result.push(path.to_string());
+        visited.insert(path.S());
+        result.push(path.S());
     }
 
     for path in paths {

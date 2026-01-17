@@ -78,7 +78,7 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
             let first_line = entry.input.lines().next().unwrap_or("");
             format!("{}…", first_line)
         } else {
-            entry.input.clone()
+            entry.input.C()
         };
 
         lines.push(Line::from(vec![
@@ -227,7 +227,7 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
                 let error_msg = if let Some(repl::Eval::Error(e)) = &entry.eval_result {
                     format!("error: {}", e)
                 } else {
-                    "error".to_string()
+                    "error".S()
                 };
 
                 lines.push(Line::from(vec![
@@ -311,7 +311,7 @@ fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect)
         Style::default().fg(Color::White)
     };
 
-    let mut textarea = app.textarea().clone();
+    let mut textarea = app.textarea().C();
     textarea.set_block(
         Block::default()
             .borders(Borders::ALL)
@@ -434,7 +434,7 @@ fn render_crash_modal<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, msg: &s
         lines.push(Line::from(""));
         lines.push(Line::from(""));
         lines.push(Line::from("Full panic trace written to:"));
-        lines.push(Line::from(log_path.display().to_string()).style(Style::default().fg(Color::Cyan)));
+        lines.push(Line::from(log_path.display().S()).style(Style::default().fg(Color::Cyan)));
     }
 
     let modal = Paragraph::new(lines)

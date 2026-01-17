@@ -3,6 +3,7 @@
 //! Provides salsa-tracked entry points and public functions for typechecking
 //! scripts, expressions, and module graphs.
 
+use rmx::prelude::*;
 use std::collections::{HashMap, BTreeMap};
 use bct::text::InternedText;
 use datalove_ct::query_log::{log_query, QueryPhase};
@@ -69,7 +70,7 @@ pub fn type_check_script_units<'db>(
     let mut units = Vec::new();
     for unit_spec in spec.units(db) {
         let source = unit_spec.source;
-        let kind = unit_spec.kind.clone();
+        let kind = unit_spec.kind.C();
         units.push(ScriptUnitInput::new(db, source, kind));
     }
 
@@ -77,14 +78,14 @@ pub fn type_check_script_units<'db>(
     for module_spec in spec.modules(db) {
         modules.push(ModuleInfo::new(
             db,
-            module_spec.path.clone(),
-            module_spec.parsed.clone(),
+            module_spec.path.C(),
+            module_spec.parsed.C(),
             module_spec.source,
             module_spec.module_id,
         ));
     }
 
-    let _batch = ScriptUnitBatch::new(db, units.clone(), modules.clone());
+    let _batch = ScriptUnitBatch::new(db, units.C(), modules.C());
 
     // Build module function info for import resolution using shared helper.
     let (module_functions, path_to_module_id) = build_script_module_functions(db, spec.modules(db));
@@ -95,7 +96,7 @@ pub fn type_check_script_units<'db>(
     let mut results = Vec::new();
 
     for (unit, unit_spec) in units.iter().zip(spec.units(db).iter()) {
-        let spans = unit_spec.spans.clone();
+        let spans = unit_spec.spans.C();
         let mut ctx = TypeContext::new(db, spans);
 
         // Script units have Result<()> return type for try operators.
@@ -318,7 +319,7 @@ pub fn type_check_with_module_graph<'db>(
     let mut path_to_id: HashMap<String, ModuleId> = HashMap::new();
     for module in graph.iter_modules(db) {
         let id = module.id(db);
-        path_to_id.insert(id.path(db).clone(), id);
+        path_to_id.insert(id.path(db).C(), id);
     }
 
     // Build a map of function ASTs per module from pre-parsed statements.
@@ -480,12 +481,12 @@ pub fn typecheck_module<'db>(
     SingleModuleTypecheckResult::new(
         db,
         module_id,
-        ctx.errors.clone(),
-        ctx.pending_diagnostics.clone(),
+        ctx.errors.C(),
+        ctx.pending_diagnostics.C(),
         exports,
         imports,
-        ctx.expr_types.clone(),
-        ctx.call_targets.clone(),
+        ctx.expr_types.C(),
+        ctx.call_targets.C(),
     )
 }
 
@@ -508,7 +509,7 @@ fn prepare_typecheck<'db>(
     // Build parsed statements map.
     let module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = parsed_graph.statements_only(db)
         .iter()
-        .map(|(id, parsed)| (*id, parsed.clone()))
+        .map(|(id, parsed)| (*id, parsed.C()))
         .collect();
 
     TypecheckPreparation {
@@ -548,8 +549,8 @@ pub fn typecheck_module_graph<'db>(
 
         // Resolve imports for this module (tracked, memoized per module).
         let import_resolution = resolve_module_imports(db, module, parsed_graph);
-        let resolved_imports = import_resolution.imports(db).clone();
-        let import_errors = import_resolution.errors(db).clone();
+        let resolved_imports = import_resolution.imports(db).C();
+        let import_errors = import_resolution.errors(db).C();
 
         // Use empty spans inside tracked function.
         let spans = DatafunSpans::new(vec![]);
@@ -558,17 +559,17 @@ pub fn typecheck_module_graph<'db>(
         let result = typecheck_module(db, module, parsed, spans, resolved_imports, import_errors);
 
         // Collect errors from typecheck result.
-        let errors = result.errors(db).clone();
+        let errors = result.errors(db).C();
         if !errors.is_empty() {
             module_errors.insert(module_id, errors);
         }
 
         // Build exports.
-        let exports = ModuleExports::new(db, module_id, result.exports(db).clone());
+        let exports = ModuleExports::new(db, module_id, result.exports(db).C());
         module_exports_map.insert(module_id, exports);
 
         // Build imports.
-        let imports = ModuleImports::new(db, module_id, result.imports(db).clone());
+        let imports = ModuleImports::new(db, module_id, result.imports(db).C());
         module_imports_map.insert(module_id, imports);
 
         // Merge expr_types.
@@ -643,8 +644,8 @@ pub fn typecheck_module_graph_parallel<'db>(
 
         // Resolve imports (tracked, memoized per module).
         let import_resolution = resolve_module_imports(db_salsa, module, parsed_graph);
-        let resolved_imports = import_resolution.imports(db_salsa).clone();
-        let import_errors = import_resolution.errors(db_salsa).clone();
+        let resolved_imports = import_resolution.imports(db_salsa).C();
+        let import_errors = import_resolution.errors(db_salsa).C();
 
         // Typecheck (tracked, memoized per module).
         let spans = DatafunSpans::new(vec![]);
@@ -761,7 +762,7 @@ pub fn resolve_all_exports<'db>(
     for (module_id, parsed) in parsed_graph.statements_only(db) {
         let module = module_to_module_obj.get(module_id)
             .expect("module should exist in graph");
-        let exports = resolve_module_exports(db, *module, parsed.clone());
+        let exports = resolve_module_exports(db, *module, parsed.C());
         all_exports.insert(*module_id, exports);
     }
 
@@ -989,7 +990,7 @@ fn build_script_module_functions<'db>(
 
     for module_spec in modules {
         // Use collect_module_exports_impl to get function signatures.
-        let exports = collect_module_exports_impl(db, module_spec.parsed.clone());
+        let exports = collect_module_exports_impl(db, module_spec.parsed.C());
 
         // Build function info map with ASTs.
         let mut funcs = HashMap::new();
@@ -1005,8 +1006,8 @@ fn build_script_module_functions<'db>(
             }
         }
 
-        path_to_module_id.insert(module_spec.path.clone(), module_spec.module_id);
-        module_functions.insert(module_spec.path.clone(), funcs);
+        path_to_module_id.insert(module_spec.path.C(), module_spec.module_id);
+        module_functions.insert(module_spec.path.C(), funcs);
     }
 
     (module_functions, path_to_module_id)

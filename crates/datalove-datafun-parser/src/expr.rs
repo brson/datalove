@@ -127,25 +127,25 @@ impl<'db> Parser<'db> {
                                 Ok(idx) => ast::FieldSelector::Index(idx),
                                 Err(_) => {
                                     // Too large for u32, treat as name.
-                                    let name = InternedText::new(self.db, word.to_string());
+                                    let name = InternedText::new(self.db, word.S());
                                     ast::FieldSelector::Name(name)
                                 }
                             }
                         } else {
-                            let name = InternedText::new(self.db, word.to_string());
+                            let name = InternedText::new(self.db, word.S());
                             ast::FieldSelector::Name(name)
                         }
                     }
                     _ => {
                         // No valid field selector - create error name.
-                        let name = InternedText::new(self.db, "<error>".to_string());
+                        let name = InternedText::new(self.db, "<error>".S());
                         ast::FieldSelector::Name(name)
                     }
                 }
             }
             _ => {
                 // No token after dot - create error name.
-                let name = InternedText::new(self.db, "<error>".to_string());
+                let name = InternedText::new(self.db, "<error>".S());
                 ast::FieldSelector::Name(name)
             }
         }

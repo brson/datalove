@@ -10,6 +10,7 @@
 //! - Early returns (return statements, try operators)
 //! - Loops (values from previous iterations)
 
+use rmx::prelude::*;
 use std::collections::HashMap;
 use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{
@@ -282,7 +283,7 @@ impl<'db> AnalysisCtx<'db> {
             .map(|f| f.kind == ScopeKind::ScriptUnit)
             .unwrap_or(false);
 
-        self.bindings.push(BindingInfo { name: name.clone(), ty, is_slot, is_script_unit, param_mode });
+        self.bindings.push(BindingInfo { name: name.C(), ty, is_slot, is_script_unit, param_mode });
 
         // Record in current scope.
         if let Some(frame) = self.scope_stack.last_mut() {
@@ -305,13 +306,13 @@ impl<'db> AnalysisCtx<'db> {
     fn enter_scope(&mut self, kind: ScopeKind) {
         // Copy current state from parent scope.
         let current_state = self.scope_stack.last()
-            .map(|f| f.current_state.clone())
+            .map(|f| f.current_state.C())
             .unwrap_or_default();
         let out_param_init = self.scope_stack.last()
-            .map(|f| f.out_param_init.clone())
+            .map(|f| f.out_param_init.C())
             .unwrap_or_default();
         let moved_at = self.scope_stack.last()
-            .map(|f| f.moved_at.clone())
+            .map(|f| f.moved_at.C())
             .unwrap_or_default();
 
         self.scope_stack.push(ScopeFrame {
@@ -421,14 +422,14 @@ impl<'db> AnalysisCtx<'db> {
     fn mark_moved(&mut self, id: BindingId, local_index: u32) {
         // Borrowed params (Ref/Mut) cannot be moved - caller retains ownership.
         if self.bindings[id.0 as usize].is_borrowed() {
-            let name = self.bindings[id.0 as usize].name.clone();
+            let name = self.bindings[id.0 as usize].name.C();
             self.errors.push(AnalysisError::CannotMoveBorrowed { local_index, name });
             return;
         }
 
         if self.get_state(id) == Some(BindingState::Moved) {
             // Double move error.
-            let name = self.bindings[id.0 as usize].name.clone();
+            let name = self.bindings[id.0 as usize].name.C();
             self.errors.push(AnalysisError::DoubleMove { local_index, name });
         } else {
             // Track the move for error detection.
@@ -596,14 +597,14 @@ impl<'db> AnalysisCtx<'db> {
                     // Check for reading uninitialized Out param.
                     if self.bindings[id.0 as usize].param_mode == Some(ParamMode::Out) {
                         if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
-                            let name = self.bindings[id.0 as usize].name.clone();
+                            let name = self.bindings[id.0 as usize].name.C();
                             self.errors.push(AnalysisError::ReadUninitializedOutParam { local_index, name });
                             return None;
                         }
                     }
                     // Check for use after move.
                     if self.get_state(id) == Some(BindingState::Moved) {
-                        let name = self.bindings[id.0 as usize].name.clone();
+                        let name = self.bindings[id.0 as usize].name.C();
                         self.errors.push(AnalysisError::UseAfterMove { local_index, name });
                         return None;
                     }
@@ -651,7 +652,7 @@ impl<'db> AnalysisCtx<'db> {
                     if callee_mode == Some(ParamMode::Mut) {
                         if let Some(binding_id) = self.expr_to_binding(*arg) {
                             if self.bindings[binding_id.0 as usize].param_mode == Some(ParamMode::Ref) {
-                                let name = self.bindings[binding_id.0 as usize].name.clone();
+                                let name = self.bindings[binding_id.0 as usize].name.C();
                                 let local_index = arg.local_index(self.db);
                                 self.errors.push(AnalysisError::CannotMutFromRef {
                                     local_index,
@@ -774,7 +775,7 @@ pub fn analyze_function<'db>(
 
     // Register parameters as bindings.
     for param in func.params(db) {
-        let name = param.name.text(db).to_string();
+        let name = param.name.text(db).S();
         let ty = IrType::from_type_hint(db, &param.type_hint);
         ctx.alloc_binding(name, ty, false, Some(param.mode));
     }
@@ -810,8 +811,8 @@ pub fn analyze_script_functions<'db>(
         if let Statement::Fun(func) = stmt {
             let analysis = analyze_function(db, *func, expr_types, call_targets);
             if !analysis.errors.is_empty() {
-                let func_name = func.name(db).text(db).to_string();
-                errors.push((func_name, analysis.errors.clone()));
+                let func_name = func.name(db).text(db).S();
+                errors.push((func_name, analysis.errors.C()));
             }
             analyses.insert(*func, analysis);
         }
@@ -951,7 +952,7 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLet<'db>, stmt_idx: u
     }
 
     // Create binding for the let.
-    let name = stmt.name.text(ctx.db).to_string();
+    let name = stmt.name.text(ctx.db).S();
     let ty = ctx.expr_type(expr);
     ctx.alloc_binding(name, ty, false, None);
 }
@@ -973,7 +974,7 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtVar<'db>, stmt_idx: u
     }
 
     // Create binding for the var (as a slot).
-    let name = stmt.name.text(ctx.db).to_string();
+    let name = stmt.name.text(ctx.db).S();
     let ty = ctx.expr_type(expr);
     ctx.alloc_binding(name, ty, true, None);
 }
@@ -1018,7 +1019,7 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtRet<'db>, stmt_idx
         if info.param_mode == Some(ParamMode::Out) {
             let id = BindingId(idx as u32);
             if ctx.get_out_param_init(id) != Some(OutParamInitState::Initialized) {
-                let name = info.name.clone();
+                let name = info.name.C();
                 ctx.errors.push(AnalysisError::OutParamNotInitialized {
                     ret_stmt_idx: Some(stmt_idx),
                     name,
@@ -1048,7 +1049,7 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtRet<'db>, stmt_idx
     // All live bindings need dropping before return.
     let drops = ctx.live_bindings_for_return();
     if !drops.is_empty() {
-        ctx.schedule.before_return.insert(stmt_idx, drops.clone());
+        ctx.schedule.before_return.insert(stmt_idx, drops.C());
     }
 
     // Mark dropped bindings as Moved so they're not included in scope exit drops.
@@ -1065,10 +1066,10 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
 
     // Save state before branches.
     let state_before = ctx.scope_stack.last()
-        .map(|f| f.current_state.clone())
+        .map(|f| f.current_state.C())
         .unwrap_or_default();
     let out_param_init_before = ctx.scope_stack.last()
-        .map(|f| f.out_param_init.clone())
+        .map(|f| f.out_param_init.C())
         .unwrap_or_default();
 
     // Analyze then branch.
@@ -1076,13 +1077,13 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
 
     // If there's a then-binding (if-let), create it.
     if let Some(binding_name) = stmt.then_binding {
-        let name = binding_name.text(ctx.db).to_string();
+        let name = binding_name.text(ctx.db).S();
         let ty = ctx.expr_type(stmt.condition);
         // The binding type depends on the condition type (unwrap Option/Result).
         let inner_ty = match &ty {
-            IrType::Option(inner) => (**inner).clone(),
-            IrType::Result(inner) => (**inner).clone(),
-            other => other.clone(),
+            IrType::Option(inner) => (**inner).C(),
+            IrType::Result(inner) => (**inner).C(),
+            other => other.C(),
         };
         ctx.alloc_binding(name, inner_ty, false, None);
     }
@@ -1090,16 +1091,16 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
     analyze_statements(ctx, &stmt.then_body, &[]);
     let then_drops = ctx.exit_scope();
     let state_after_then = ctx.scope_stack.last()
-        .map(|f| f.current_state.clone())
+        .map(|f| f.current_state.C())
         .unwrap_or_default();
     let out_param_init_after_then = ctx.scope_stack.last()
-        .map(|f| f.out_param_init.clone())
+        .map(|f| f.out_param_init.C())
         .unwrap_or_default();
 
     // Reset state for else branch.
     if let Some(frame) = ctx.scope_stack.last_mut() {
-        frame.current_state = state_before.clone();
-        frame.out_param_init = out_param_init_before.clone();
+        frame.current_state = state_before.C();
+        frame.out_param_init = out_param_init_before.C();
     }
 
     // Analyze else branch.
@@ -1108,7 +1109,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
 
         // If there's an else-binding (if-let with else), create it.
         if let Some(binding_name) = stmt.else_binding {
-            let name = binding_name.text(ctx.db).to_string();
+            let name = binding_name.text(ctx.db).S();
             // Else binding gets the error for Result types.
             let ty = IrType::Error;
             ctx.alloc_binding(name, ty, false, None);
@@ -1122,15 +1123,15 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
         }
 
         let state = ctx.scope_stack.last()
-            .map(|f| f.current_state.clone())
+            .map(|f| f.current_state.C())
             .unwrap_or_default();
         let out_init = ctx.scope_stack.last()
-            .map(|f| f.out_param_init.clone())
+            .map(|f| f.out_param_init.C())
             .unwrap_or_default();
         (state, out_init)
     } else {
         // No else branch - state unchanged.
-        (state_before.clone(), out_param_init_before.clone())
+        (state_before.C(), out_param_init_before.C())
     };
 
     // Compute convergence drops.
@@ -1190,7 +1191,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
                 .unwrap_or(OutParamInitState::Uninitialized);
             if then_init != else_init {
                 // Initialized in one branch but not the other.
-                let name = ctx.bindings[id.0 as usize].name.clone();
+                let name = ctx.bindings[id.0 as usize].name.C();
                 // No specific return statement - this is a branch convergence issue.
                 ctx.errors.push(AnalysisError::OutParamNotInitialized {
                     ret_stmt_idx: None,
@@ -1233,7 +1234,7 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLoop<'db>, stmt_idx:
     // This is an error because the loop could iterate multiple times.
     for id in &outer_live_bindings {
         if ctx.get_state(*id) == Some(BindingState::Moved) {
-            let name = ctx.bindings[id.0 as usize].name.clone();
+            let name = ctx.bindings[id.0 as usize].name.C();
             // Use the recorded move location for the error span.
             let local_index = ctx.get_moved_at(*id).unwrap_or(0);
             ctx.errors.push(AnalysisError::MoveInLoop { local_index, name });

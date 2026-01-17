@@ -64,7 +64,7 @@ pub fn compute_func_id_map<'db>(
 
         for statement in &parsed.statements {
             if let Statement::Fun(func) = statement {
-                let func_name = func.name(db).text(db).to_string();
+                let func_name = func.name(db).text(db).S();
                 let func_id = FuncId(next_func_id);
                 next_func_id += 1;
                 entries.push(((*module_id, func_name), (ir_module_id, func_id)));
@@ -179,7 +179,7 @@ pub fn lower_module<'db>(
     let mut next_func_id: u32 = 0;
     for statement in &parsed.statements {
         if let Statement::Fun(func) = statement {
-            let func_name = func.name(db).text(db).to_string();
+            let func_name = func.name(db).text(db).S();
             let func_id = FuncId(next_func_id);
             next_func_id += 1;
             func_ids.push((func_name, func_id));
@@ -190,7 +190,7 @@ pub fn lower_module<'db>(
     let mut func_idx = 0;
     for statement in &parsed.statements {
         if let Statement::Fun(func) = statement {
-            let func_name = func.name(db).text(db).to_string();
+            let func_name = func.name(db).text(db).S();
             let func_id = func_ids[func_idx].1;
             func_idx += 1;
 

@@ -8,6 +8,7 @@
 //!    - Dispatches to expression-specific checking rules
 //! 2. Helper functions - diagnostic emission, type hint checks
 
+use rmx::prelude::*;
 use bct::diagnostic::DiagnosticBuilder;
 use datalove_diagnostic::DiagnosticBuilderExt;
 use crate::ast::*;

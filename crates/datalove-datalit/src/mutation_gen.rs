@@ -195,7 +195,7 @@ fn apply_delete_heap_sigil(source: &str, rng: &mut impl Rng) -> Option<MutationR
     }
 
     let pos = sigil_positions[rng.gen_range(0..sigil_positions.len())];
-    let mut result = source.to_string();
+    let mut result = source.S();
     result.remove(pos);
 
     Some(MutationResult {
@@ -217,7 +217,7 @@ fn apply_delete_opening_bracket(source: &str, rng: &mut impl Rng) -> Option<Muta
     }
 
     let (pos, bracket) = bracket_positions[rng.gen_range(0..bracket_positions.len())];
-    let mut result = source.to_string();
+    let mut result = source.S();
     result.remove(pos);
 
     Some(MutationResult {
@@ -249,7 +249,7 @@ fn apply_truncate_source(source: &str, rng: &mut impl Rng) -> Option<MutationRes
         .map(|(i, c)| i + c.len_utf8())
         .unwrap_or(pos);
 
-    let result = source[..truncate_pos].to_string();
+    let result = source[..truncate_pos].S();
 
     Some(MutationResult {
         source: result,
@@ -271,7 +271,7 @@ fn apply_delete_comma(source: &str, rng: &mut impl Rng) -> Option<MutationResult
     }
 
     let pos = comma_positions[rng.gen_range(0..comma_positions.len())];
-    let mut result = source.to_string();
+    let mut result = source.S();
     result.remove(pos);
 
     Some(MutationResult {
@@ -289,7 +289,7 @@ fn apply_extra_closing_bracket(source: &str, rng: &mut impl Rng) -> Option<Mutat
     // Insert at a random position (preferring middle of source).
     let pos = rng.gen_range(source.len() / 4..3 * source.len() / 4).min(source.len());
 
-    let mut result = source.to_string();
+    let mut result = source.S();
     result.insert(pos, bracket);
 
     Some(MutationResult {
@@ -328,7 +328,7 @@ fn apply_out_of_range_int<'db>(
 
     // Check if the expression is an integer literal.
     let expr_and_heap = expr.expr(db);
-    match expr_and_heap.expr.clone() {
+    match expr_and_heap.expr.C() {
         Expr::Int(_) | Expr::Hex(_) => {}
         _ => return None,
     }
@@ -367,8 +367,8 @@ fn apply_wrong_element_type<'db>(
     let outer_heap = expr_and_heap.heap;
 
     // Check if this is a list with at least one element.
-    if let Expr::List(list) = expr_and_heap.expr.clone() {
-        let elements = list.elements.clone();
+    if let Expr::List(list) = expr_and_heap.expr.C() {
+        let elements = list.elements.C();
         if elements.is_empty() {
             return None;
         }
@@ -377,7 +377,7 @@ fn apply_wrong_element_type<'db>(
         let first_elem = elements[0];
         let first_expr_and_heap = first_elem.expr(db);
         let first_heap = first_expr_and_heap.heap;
-        let first_expr = first_expr_and_heap.expr.clone();
+        let first_expr = first_expr_and_heap.expr.C();
 
         // Determine the wrong element to insert based on first element's type.
         let wrong_elem_str = match first_expr {
@@ -438,7 +438,7 @@ fn apply_wrong_element_type<'db>(
         Some(MutationResult {
             source,
             expected_errors: vec!["T018"], // List element type mismatch.
-            description: "Inserted wrong-typed element in list".to_string(),
+            description: "Inserted wrong-typed element in list".S(),
         })
     } else {
         None
@@ -457,8 +457,8 @@ fn apply_heap_mismatch<'db>(
     let outer_heap = expr_and_heap.heap;
 
     // Check if this is a list with at least 2 elements.
-    if let Expr::List(list) = expr_and_heap.expr.clone() {
-        let elements = list.elements.clone();
+    if let Expr::List(list) = expr_and_heap.expr.C() {
+        let elements = list.elements.C();
         if elements.len() < 2 {
             return None;
         }
@@ -528,7 +528,7 @@ fn apply_heap_mismatch<'db>(
         Some(MutationResult {
             source,
             expected_errors: vec!["T033"], // List element heap mismatch.
-            description: "Changed element heap to cause mismatch".to_string(),
+            description: "Changed element heap to cause mismatch".S(),
         })
     } else {
         None
@@ -553,9 +553,9 @@ fn apply_arity_mismatch<'db>(
         Heap::Omitted => "",
     };
 
-    match (type_hint.type_hint(db), expr_and_heap.expr.clone()) {
+    match (type_hint.type_hint(db), expr_and_heap.expr.C()) {
         (TypeHint::AnonTuple(_th), Expr::AnonTuple(t)) => {
-            let elements = t.elements.clone();
+            let elements = t.elements.C();
             if elements.len() < 2 {
                 // Need at least 2 elements to remove one and still have a tuple.
                 return None;
@@ -577,11 +577,11 @@ fn apply_arity_mismatch<'db>(
             Some(MutationResult {
                 source,
                 expected_errors: vec!["T038"], // Tuple arity mismatch.
-                description: "Removed tuple element to cause arity mismatch".to_string(),
+                description: "Removed tuple element to cause arity mismatch".S(),
             })
         }
         (TypeHint::AnonStruct(_th), Expr::AnonStruct(s)) => {
-            let fields = s.fields.clone();
+            let fields = s.fields.C();
             if fields.len() < 2 {
                 // Need at least 2 fields to remove one.
                 return None;
@@ -607,7 +607,7 @@ fn apply_arity_mismatch<'db>(
             Some(MutationResult {
                 source,
                 expected_errors: vec!["T039"], // Struct missing field.
-                description: "Removed struct field to cause arity mismatch".to_string(),
+                description: "Removed struct field to cause arity mismatch".S(),
             })
         }
         _ => None,
@@ -626,7 +626,7 @@ fn apply_remove_type_hint<'db>(
     let heap = expr_and_heap.heap;
 
     // Check if this is an expression that requires a type hint.
-    let (needs_hint, error_code) = match expr_and_heap.expr.clone() {
+    let (needs_hint, error_code) = match expr_and_heap.expr.C() {
         Expr::None => (true, "T016"), // Cannot synthesize type for None.
         Expr::AnonEnum(_) => (true, "T016"), // Cannot synthesize type for anonymous enum.
         Expr::List(l) if l.elements.is_empty() => (true, "T013"), // Cannot synthesize type for empty list.
@@ -646,7 +646,7 @@ fn apply_remove_type_hint<'db>(
         Heap::Omitted => "",
     };
 
-    let source = match expr_and_heap.expr.clone() {
+    let source = match expr_and_heap.expr.C() {
         Expr::None => format!("{}none", heap_str),
         Expr::AnonEnum(e) => {
             // Format: heap { .VariantName payload }
@@ -667,7 +667,7 @@ fn apply_remove_type_hint<'db>(
     Some(MutationResult {
         source,
         expected_errors: vec![error_code],
-        description: "Removed type hint from expression that requires one".to_string(),
+        description: "Removed type hint from expression that requires one".S(),
     })
 }
 
@@ -696,7 +696,7 @@ fn apply_wrong_variant<'db>(
     pretty_type_hint_and_heap(db, type_hint, &mut type_hint_str);
     type_hint_str.push_str(" / ");
 
-    match expr_and_heap.expr.clone() {
+    match expr_and_heap.expr.C() {
         Expr::AnonEnum(e) => {
             // Build source: `: type / heap{ .NonexistentVariant12345 payload }`
             let wrong_variant = "NonexistentVariant12345";
@@ -710,7 +710,7 @@ fn apply_wrong_variant<'db>(
             Some(MutationResult {
                 source,
                 expected_errors: vec!["T044"], // Variant not found.
-                description: "Changed enum variant to nonexistent name".to_string(),
+                description: "Changed enum variant to nonexistent name".S(),
             })
         }
         _ => None,
@@ -729,7 +729,7 @@ fn apply_delete_closing_bracket(source: &str, rng: &mut impl Rng) -> Option<Muta
     }
 
     let (pos, bracket) = bracket_positions[rng.gen_range(0..bracket_positions.len())];
-    let mut result = source.to_string();
+    let mut result = source.S();
     result.remove(pos);
 
     Some(MutationResult {
@@ -755,8 +755,8 @@ fn apply_duplicate_field<'db>(
     };
 
     // Check if this is an anon struct with at least 2 fields.
-    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr.clone()) {
-        let fields = s.fields.clone();
+    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr.C()) {
+        let fields = s.fields.C();
         if fields.len() < 2 {
             return None;
         }
@@ -782,7 +782,7 @@ fn apply_duplicate_field<'db>(
         Some(MutationResult {
             source,
             expected_errors: vec!["T040"], // Duplicate field.
-            description: "Duplicated field name in struct".to_string(),
+            description: "Duplicated field name in struct".S(),
         })
     } else {
         None
@@ -805,8 +805,8 @@ fn apply_wrong_field_name<'db>(
     };
 
     // Check if this is an anon struct.
-    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr.clone()) {
-        let fields = s.fields.clone();
+    if let (TypeHint::AnonStruct(_), Expr::AnonStruct(s)) = (type_hint.type_hint(db), expr_and_heap.expr.C()) {
+        let fields = s.fields.C();
         if fields.is_empty() {
             return None;
         }
@@ -830,7 +830,7 @@ fn apply_wrong_field_name<'db>(
         Some(MutationResult {
             source,
             expected_errors: vec!["T042"], // Unknown field.
-            description: "Changed field name to nonexistent".to_string(),
+            description: "Changed field name to nonexistent".S(),
         })
     } else {
         None
@@ -858,7 +858,7 @@ fn apply_wrong_payload_presence<'db>(
     pretty_type_hint_and_heap(db, type_hint, &mut type_hint_str);
     type_hint_str.push_str(" / ");
 
-    match (type_hint.type_hint(db), expr_and_heap.expr.clone()) {
+    match (type_hint.type_hint(db), expr_and_heap.expr.C()) {
         (TypeHint::AnonEnum(th_enum), Expr::AnonEnum(e)) => {
             let variant_name = e.variant_name.as_str(db);
 
@@ -878,7 +878,7 @@ fn apply_wrong_payload_presence<'db>(
             Some(MutationResult {
                 source,
                 expected_errors: vec!["T045"], // Wrong payload presence.
-                description: "Toggled enum variant payload presence".to_string(),
+                description: "Toggled enum variant payload presence".S(),
             })
         }
         _ => None,
@@ -895,8 +895,8 @@ fn apply_swap_map_key_value<'db>(
     let outer_heap = expr_and_heap.heap;
 
     // Check if this is a map with at least one entry where key/value types differ.
-    if let (TypeHint::Map(map_th), Expr::Map(m)) = (type_hint.type_hint(db), expr_and_heap.expr.clone()) {
-        let entries = m.entries.clone();
+    if let (TypeHint::Map(map_th), Expr::Map(m)) = (type_hint.type_hint(db), expr_and_heap.expr.C()) {
+        let entries = m.entries.C();
         if entries.is_empty() {
             return None;
         }
@@ -942,7 +942,7 @@ fn apply_swap_map_key_value<'db>(
         Some(MutationResult {
             source,
             expected_errors: vec!["T019"], // Map key type mismatch.
-            description: "Swapped map key and value".to_string(),
+            description: "Swapped map key and value".S(),
         })
     } else {
         None
@@ -1065,7 +1065,7 @@ fn pretty_type_hint<'db>(
             out.push_str("tensor<");
             pretty_type_hint_and_heap(db, t.element_type, out);
             out.push_str(", ");
-            out.push_str(&t.rank.to_string());
+            out.push_str(&t.rank.S());
             out.push('>');
         }
 

@@ -2,6 +2,7 @@
 //!
 //! Provides functions for type checking statements including function definitions.
 
+use rmx::prelude::*;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
 use crate::context::TypeContext;
@@ -186,7 +187,7 @@ pub fn check_statement<'db>(
             let ret_ty = func_type.return_type(db);
 
             // Create new context for function body with parameters in scope.
-            let saved_variables = ctx.variables.clone();
+            let saved_variables = ctx.variables.C();
             let saved_return_type = ctx.expected_return_type;
             let saved_is_void = ctx.is_void_function;
 
@@ -303,7 +304,7 @@ pub fn check_statement<'db>(
 
                 // Convert datalit TypeAndHeap to datafun TypeAndHeap.
                 let inner_heap = inner_ty.heap(db);
-                let inner_type = Type::Datalit(inner_ty.ty(db).clone());
+                let inner_type = Type::Datalit(inner_ty.ty(db).C());
                 let binding_ty = TypeAndHeap::new(db, inner_heap, inner_type);
 
                 // Add binding to context for then body (save old if shadowing).
@@ -482,7 +483,7 @@ fn typecheck_set_target_proj<'db>(
                     }
                     let field_ty = &tuple.fields[idx_usize];
                     let heap = field_ty.heap(db);
-                    let ty = Type::Datalit(field_ty.ty(db).clone());
+                    let ty = Type::Datalit(field_ty.ty(db).C());
                     Ok(TypeAndHeap::new(db, heap, ty))
                 }
                 _ => {
@@ -500,12 +501,12 @@ fn typecheck_set_target_proj<'db>(
                     for field in &struct_ty.fields {
                         if field.name.text(db) == name_str {
                             let heap = field.ty.heap(db);
-                            let ty = Type::Datalit(field.ty.ty(db).clone());
+                            let ty = Type::Datalit(field.ty.ty(db).C());
                             return Ok(TypeAndHeap::new(db, heap, ty));
                         }
                     }
                     Err(TypeError::FieldNotFound {
-                        field_name: name_str.to_string(),
+                        field_name: name_str.S(),
                         ty: type_to_string(db, base_ty.ty(db)),
                     })
                 }

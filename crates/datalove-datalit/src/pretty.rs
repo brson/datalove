@@ -29,7 +29,7 @@ pub fn pretty_print_runtime_value<'db>(
         // Initialize runtime for pretty printing.
         let rt_handle = datalove_rt::c::dtlv_rti_init();
         if rt_handle.is_null() {
-            return Err("Failed to initialize runtime".to_string());
+            return Err("Failed to initialize runtime".S());
         }
 
         // Create string tydesc.
@@ -52,7 +52,7 @@ pub fn pretty_print_runtime_value<'db>(
 
         if status != datalove_rt::c::RtStatus::Ok {
             datalove_rt::c::dtlv_rti_shutdown(rt_handle);
-            return Err("Failed to create output string".to_string());
+            return Err("Failed to create output string".S());
         }
 
         let mut output_string = output_string.assume_init();
@@ -73,7 +73,7 @@ pub fn pretty_print_runtime_value<'db>(
                 &string_tydesc,
             );
             datalove_rt::c::dtlv_rti_shutdown(rt_handle);
-            return Err("Failed to pretty-print value".to_string());
+            return Err("Failed to pretty-print value".S());
         }
 
         // Extract value string.
@@ -81,7 +81,7 @@ pub fn pretty_print_runtime_value<'db>(
             String::new()
         } else {
             let bytes = std::slice::from_raw_parts(output_string.data, output_string.size as usize);
-            String::from_utf8_lossy(bytes).to_string()
+            String::from_utf8_lossy(bytes).S()
         };
 
         // Cleanup runtime string.
@@ -217,7 +217,7 @@ fn pretty_type<'db>(
             out.push_str("tensor<");
             pretty_type_and_heap(db, &t.element_type, out);
             out.push_str(", ");
-            out.push_str(&t.rank.to_string());
+            out.push_str(&t.rank.S());
             out.push('>');
         }
 
@@ -252,7 +252,7 @@ fn pretty_expr_full<'db>(
 
     // Print expression.
     let expr_and_heap = expr.expr(db);
-    pretty_expr_and_heap(db, expr_and_heap.clone(), out, indent);
+    pretty_expr_and_heap(db, expr_and_heap.C(), out, indent);
 }
 
 fn pretty_type_hint_and_heap<'db>(
@@ -369,7 +369,7 @@ fn pretty_type_hint<'db>(
             out.push_str("tensor<");
             pretty_type_hint_and_heap(db, t.element_type, out);
             out.push_str(", ");
-            out.push_str(&t.rank.to_string());
+            out.push_str(&t.rank.S());
             out.push('>');
         }
 
@@ -531,7 +531,7 @@ fn pretty_expr<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                out.push_str(&dim.to_string());
+                out.push_str(&dim.S());
             }
             out.push_str("] [");
             let elements = &t.elements;

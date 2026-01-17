@@ -209,7 +209,7 @@ impl<'db> State<'db> {
                 }
                 assert!(range.end <= self.position);
                 vec.push(
-                    iter.next().X().clone().checked_sub(self.chunk_wip.chunk_start).expect("poo")
+                    iter.next().X().C().checked_sub(self.chunk_wip.chunk_start).expect("poo")
                 );
             }
         }

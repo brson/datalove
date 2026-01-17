@@ -27,7 +27,7 @@ impl<'db> DatalitSpans<'db> {
         let expr_id = expr.as_id();
         self.entries(db).iter()
             .find(|e| e.expr_id == expr_id)
-            .map(|e| e.entry.clone())
+            .map(|e| e.entry.C())
     }
 
     /// Get text and span for an expression.
@@ -50,7 +50,7 @@ pub fn datalit_spans<'db>(
         .iter()
         .map(|e| SpanMapEntry {
             expr_id: e.expr_id,
-            entry: SpanEntry::new(e.text_id, e.span.clone()),
+            entry: SpanEntry::new(e.text_id, e.span.C()),
         })
         .collect();
 

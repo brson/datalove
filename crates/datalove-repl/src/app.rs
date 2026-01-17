@@ -199,7 +199,7 @@ impl<E: ReplExecutor> ReplApp<E> {
 
         assert_eq!(entry.id, id);
 
-        match parse.clone() {
+        match parse.C() {
             repl::InputParse::Empty => {
                 entry.parse_result = Some(parse);
                 entry.status = EntryStatus::Empty;
@@ -217,7 +217,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             }
             repl::InputParse::Command(command) => {
                 entry.parse_result = Some(parse);
-                entry.status = EntryStatus::Evaluating { command: command.clone() };
+                entry.status = EntryStatus::Evaluating { command: command.C() };
                 self.executor.submit_eval(id, command);
                 UiAction::None
             }
@@ -242,7 +242,7 @@ impl<E: ReplExecutor> ReplApp<E> {
 
         assert_eq!(entry.id, id);
 
-        entry.eval_result = Some(eval.clone());
+        entry.eval_result = Some(eval.C());
 
         match &eval {
             repl::Eval::Error(_) => {
@@ -272,7 +272,7 @@ impl<E: ReplExecutor> ReplApp<E> {
                 // Now we can clear history and set the modal.
                 self.history.clear();
                 self.environment.clear();
-                self.crash_modal = Some(msg.clone());
+                self.crash_modal = Some(msg.C());
             }
         }
 

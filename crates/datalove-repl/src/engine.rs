@@ -71,7 +71,7 @@ impl<'db> Engine<'db> {
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.parse_input_impl(input.clone())
+            self.parse_input_impl(input.C())
         }));
 
         match result {
@@ -79,11 +79,11 @@ impl<'db> Engine<'db> {
             Err(panic_info) => {
                 self.reset();
                 let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
-                    s.to_string()
+                    s.S()
                 } else if let Some(s) = panic_info.downcast_ref::<String>() {
-                    s.clone()
+                    s.C()
                 } else {
-                    "Unknown panic".to_string()
+                    "Unknown panic".S()
                 };
                 InputParse::CrashReset(format!("Parse panic: {}", panic_msg))
             }
@@ -121,7 +121,7 @@ impl<'db> Engine<'db> {
 
     pub fn eval(&mut self, command: Command) -> Eval {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.eval_impl(command.clone())
+            self.eval_impl(command.C())
         }));
 
         match result {
@@ -129,11 +129,11 @@ impl<'db> Engine<'db> {
             Err(panic_info) => {
                 self.reset();
                 let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
-                    s.to_string()
+                    s.S()
                 } else if let Some(s) = panic_info.downcast_ref::<String>() {
-                    s.clone()
+                    s.C()
                 } else {
-                    "Unknown panic".to_string()
+                    "Unknown panic".S()
                 };
                 Eval::CrashReset(format!("Eval panic: {}", panic_msg))
             }
@@ -161,7 +161,7 @@ impl<'db> Engine<'db> {
     fn eval_repl_command(&mut self, command: ReplCommand) -> Eval {
         match command {
             ReplCommand::Unknown => {
-                Eval::Error("unknown command".to_string())
+                Eval::Error("unknown command".S())
             }
             ReplCommand::Help => {
                 Eval::CallerInterpret(command)
@@ -187,7 +187,7 @@ impl<'db> Engine<'db> {
 
         // Check for lowering errors.
         if let LoweringResult::Error { message } = &result.lowering {
-            return Eval::Error(message.clone());
+            return Eval::Error(message.C());
         }
 
         // Check for runtime errors.
@@ -203,11 +203,11 @@ impl<'db> Engine<'db> {
             let name = after_let.split(|c: char| !c.is_alphanumeric() && c != '_')
                 .next()
                 .unwrap_or("?")
-                .to_string();
+                .S();
 
             // Look up type and value from the context.
             let (ty, value) = self.ctx.get_binding(&name)
-                .unwrap_or(("?".to_string(), "?".to_string()));
+                .unwrap_or(("?".S(), "?".S()));
 
             Eval::SuccessLet(EvalLet { name, ty, value })
         } else if trimmed.starts_with("fun ") {
@@ -216,7 +216,7 @@ impl<'db> Engine<'db> {
             let name = after_fun.split(|c: char| !c.is_alphanumeric() && c != '_')
                 .next()
                 .unwrap_or("?")
-                .to_string();
+                .S();
             Eval::SuccessFun(EvalFun { name })
         } else if trimmed.starts_with("var ") {
             // Extract var binding name.
@@ -224,11 +224,11 @@ impl<'db> Engine<'db> {
             let name = after_var.split(|c: char| !c.is_alphanumeric() && c != '_')
                 .next()
                 .unwrap_or("?")
-                .to_string();
+                .S();
 
             // Look up type and value from the context.
             let (ty, value) = self.ctx.get_binding(&name)
-                .unwrap_or(("?".to_string(), "?".to_string()));
+                .unwrap_or(("?".S(), "?".S()));
 
             Eval::SuccessLet(EvalLet { name, ty, value })
         } else {
@@ -251,7 +251,7 @@ impl<'db> Engine<'db> {
 
         // Check for lowering errors.
         if let LoweringResult::Error { message } = &result.lowering {
-            return Eval::Error(message.clone());
+            return Eval::Error(message.C());
         }
 
         // Check for runtime errors.
@@ -260,8 +260,8 @@ impl<'db> Engine<'db> {
         }
 
         Eval::SuccessExpr(EvalExpr {
-            expr_kind: "expr".to_string(),
-            ty: result.ty.unwrap_or_else(|| "?".to_string()),
+            expr_kind: "expr".S(),
+            ty: result.ty.unwrap_or_else(|| "?".S()),
             value: result.output,
         })
     }
@@ -284,9 +284,9 @@ impl<'db> Engine<'db> {
             .context("failed to read script file")?;
 
         for line in contents.lines() {
-            let parse_result = engine.parse_input(Input::Input(line.to_string()));
+            let parse_result = engine.parse_input(Input::Input(line.S()));
             let eval_result = match &parse_result {
-                InputParse::Command(cmd) => Some(engine.eval(cmd.clone())),
+                InputParse::Command(cmd) => Some(engine.eval(cmd.C())),
                 _ => None,
             };
 

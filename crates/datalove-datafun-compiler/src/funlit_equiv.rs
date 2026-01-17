@@ -42,7 +42,7 @@ pub fn extract_expr_from_parsed<'db>(
     match &statements[0] {
         ast::Statement::Ret(ret) => {
             ret.value.ok_or_else(|| ConversionError::InvalidScriptStructure(
-                "bare ret statement has no value".to_string()
+                "bare ret statement has no value".S()
             ))
         }
         other => Err(ConversionError::InvalidScriptStructure(
@@ -81,28 +81,28 @@ pub fn datafun_expr_to_datalit_serde<'db>(
             e.heap,
             e.type_hint,
             datalit::ast_serde::Expr::Int(datalit::ast_serde::ExprInt {
-                value: e.value.as_str(db).to_string(),
+                value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::Float(e) => (
             e.heap,
             e.type_hint,
             datalit::ast_serde::Expr::Float(datalit::ast_serde::ExprFloat {
-                value: e.value.as_str(db).to_string(),
+                value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::Hex(e) => (
             e.heap,
             e.type_hint,
             datalit::ast_serde::Expr::Hex(datalit::ast_serde::ExprHex {
-                value: e.value.as_str(db).to_string(),
+                value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::String(e) => (
             e.heap,
             e.type_hint,
             datalit::ast_serde::Expr::String(datalit::ast_serde::ExprString {
-                value: e.value.as_str(db).to_string(),
+                value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::List(e) => {
@@ -147,7 +147,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 e.heap,
                 e.type_hint,
                 datalit::ast_serde::Expr::Tensor(datalit::ast_serde::ExprTensor {
-                    shape: e.shape.clone(),
+                    shape: e.shape.C(),
                     elements,
                 }),
             )
@@ -167,7 +167,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 .map(|field| {
                     let value = datafun_expr_to_datalit_serde(db, field.value)?;
                     Ok(datalit::ast_serde::ExprStructField {
-                        name: field.name.as_str(db).to_string(),
+                        name: field.name.as_str(db).S(),
                         value,
                     })
                 })
@@ -187,7 +187,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 e.heap,
                 e.type_hint,
                 datalit::ast_serde::Expr::AnonEnum(datalit::ast_serde::ExprAnonEnum {
-                    variant_name: e.variant_name.as_str(db).to_string(),
+                    variant_name: e.variant_name.as_str(db).S(),
                     payload,
                 }),
             )

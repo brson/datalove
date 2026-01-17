@@ -47,7 +47,7 @@ impl ReplExecutor for WebWorkerExecutor {
         let response_queue = Rc::new(RefCell::new(VecDeque::new()));
 
         // Set up message handler.
-        let queue_clone = response_queue.clone();
+        let queue_clone = response_queue.C();
         let onmessage = Closure::wrap(Box::new(move |event: MessageEvent| {
             let data = event.data();
             let json_str = match data.as_string() {

@@ -506,7 +506,7 @@ pub struct ScriptCompilationContext<'db> {
 impl<'db> ScriptCompilationContext<'db> {
     /// Compile and execute a script fragment (statements like `let x = 1`).
     pub fn eval_fragment(&mut self, source: &str) -> ScriptUnitResult {
-        let src = bct::input::Source::new(self.db, source.to_string());
+        let src = bct::input::Source::new(self.db, source.S());
         self.last_source = Some(src);
         let parse_result = datalove_datafun_parser::parse(self.db, src);
         let parsed = parse_result.parsed;
@@ -516,7 +516,7 @@ impl<'db> ScriptCompilationContext<'db> {
             let parse_errors: Vec<String> = parse_diags.iter()
                 .map(|d| {
                     let diag = d.to_diagnostic(self.db);
-                    diag.message.as_str(self.db).to_string()
+                    diag.message.as_str(self.db).S()
                 })
                 .collect();
             return ScriptUnitResult {
@@ -546,7 +546,7 @@ impl<'db> ScriptCompilationContext<'db> {
 
     /// Compile and execute an expression, returning its value.
     pub fn eval_expr(&mut self, source: &str) -> ScriptUnitResult {
-        let src = bct::input::Source::new(self.db, source.to_string());
+        let src = bct::input::Source::new(self.db, source.S());
         self.last_source = Some(src);
         let expr = datalove_datafun_parser::parse_expr(self.db, src);
 
@@ -555,7 +555,7 @@ impl<'db> ScriptCompilationContext<'db> {
             let parse_errors: Vec<String> = parse_diags.iter()
                 .map(|d| {
                     let diag = d.to_diagnostic(self.db);
-                    diag.message.as_str(self.db).to_string()
+                    diag.message.as_str(self.db).S()
                 })
                 .collect();
             return ScriptUnitResult {
@@ -604,7 +604,7 @@ impl<'db> ScriptCompilationContext<'db> {
     }
 
     fn lower_fragment_impl(&mut self, source: &str, for_aot: bool) -> ScriptLowerResult {
-        let src = bct::input::Source::new(self.db, source.to_string());
+        let src = bct::input::Source::new(self.db, source.S());
         self.last_source = Some(src);
         let parse_result = datalove_datafun_parser::parse(self.db, src);
         let parsed = parse_result.parsed;
@@ -614,7 +614,7 @@ impl<'db> ScriptCompilationContext<'db> {
             let parse_errors: Vec<String> = parse_diags.iter()
                 .map(|d| {
                     let diag = d.to_diagnostic(self.db);
-                    diag.message.as_str(self.db).to_string()
+                    diag.message.as_str(self.db).S()
                 })
                 .collect();
             return ScriptLowerResult {
@@ -642,7 +642,7 @@ impl<'db> ScriptCompilationContext<'db> {
     }
 
     fn lower_expr_impl(&mut self, source: &str, for_aot: bool) -> ScriptLowerResult {
-        let src = bct::input::Source::new(self.db, source.to_string());
+        let src = bct::input::Source::new(self.db, source.S());
         self.last_source = Some(src);
         let expr = datalove_datafun_parser::parse_expr(self.db, src);
 
@@ -651,7 +651,7 @@ impl<'db> ScriptCompilationContext<'db> {
             let parse_errors: Vec<String> = parse_diags.iter()
                 .map(|d| {
                     let diag = d.to_diagnostic(self.db);
-                    diag.message.as_str(self.db).to_string()
+                    diag.message.as_str(self.db).S()
                 })
                 .collect();
             return ScriptLowerResult {
@@ -875,7 +875,7 @@ impl<'db> ScriptCompilationContext<'db> {
         };
 
         let output = match self.interp.execute_script_unit_in_env(&ir_unit, &mut self.env, ret_dest, None) {
-            Ok(UnitCompletion::Normal) => "(fragment executed)".to_string(),
+            Ok(UnitCompletion::Normal) => "(fragment executed)".S(),
             Ok(UnitCompletion::EarlyReturn) => {
                 let value = datalove_datafun_interp::Value {
                     ptr: ret_buffer.as_mut_ptr(),
@@ -986,7 +986,7 @@ impl<'db> ScriptCompilationContext<'db> {
                 Err(e) => format!("Error: {:?}", e),
             }
         } else {
-            "(fragment executed)".to_string()
+            "(fragment executed)".S()
         };
 
         let unit_index = self.script_ctx.current_unit;
@@ -1008,11 +1008,11 @@ impl<'db> ScriptCompilationContext<'db> {
         if let Some((unit, value_id)) = self.script_ctx.values.get(name) {
             let ty = self.script_ctx.value_types.get(name)
                 .map(|t| format!("{}", t))
-                .unwrap_or_else(|| "?".to_string());
+                .unwrap_or_else(|| "?".S());
             let val = match self.env.frames.external_value(*unit, *value_id) {
                 Ok(v) => self.interp.pretty_print_value(&v)
                     .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
-                Err(InterpError::UninitializedValue(_)) => "<moved>".to_string(),
+                Err(InterpError::UninitializedValue(_)) => "<moved>".S(),
                 Err(e) => format!("<error: {:?}>", e),
             };
             return Some((ty, val));
@@ -1021,11 +1021,11 @@ impl<'db> ScriptCompilationContext<'db> {
         if let Some((unit, slot_id)) = self.script_ctx.slots.get(name) {
             let ty = self.script_ctx.slot_types.get(name)
                 .map(|t| format!("{}", t))
-                .unwrap_or_else(|| "?".to_string());
+                .unwrap_or_else(|| "?".S());
             let val = match self.env.frames.external_slot(*unit, *slot_id) {
                 Ok(v) => self.interp.pretty_print_value(&v)
                     .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
-                Err(InterpError::UninitializedSlot(_)) => "<moved>".to_string(),
+                Err(InterpError::UninitializedSlot(_)) => "<moved>".S(),
                 Err(e) => format!("<error: {:?}>", e),
             };
             return Some((ty, val));
@@ -1042,31 +1042,31 @@ impl<'db> ScriptCompilationContext<'db> {
         for (name, (unit, value_id)) in &self.script_ctx.values {
             let ty = self.script_ctx.value_types.get(name)
                 .map(|t| format!("{}", t))
-                .unwrap_or_else(|| "?".to_string());
+                .unwrap_or_else(|| "?".S());
             let val = match self.env.frames.external_value(*unit, *value_id) {
                 Ok(v) => self.interp.pretty_print_value(&v)
                     .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
-                Err(InterpError::UninitializedValue(_)) => "<moved>".to_string(),
+                Err(InterpError::UninitializedValue(_)) => "<moved>".S(),
                 Err(e) => format!("<error: {:?}>", e),
             };
-            result.push((name.clone(), "let".to_string(), ty, val));
+            result.push((name.C(), "let".S(), ty, val));
         }
 
         for (name, (unit, slot_id)) in &self.script_ctx.slots {
             let ty = self.script_ctx.slot_types.get(name)
                 .map(|t| format!("{}", t))
-                .unwrap_or_else(|| "?".to_string());
+                .unwrap_or_else(|| "?".S());
             let val = match self.env.frames.external_slot(*unit, *slot_id) {
                 Ok(v) => self.interp.pretty_print_value(&v)
                     .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
-                Err(InterpError::UninitializedSlot(_)) => "<moved>".to_string(),
+                Err(InterpError::UninitializedSlot(_)) => "<moved>".S(),
                 Err(e) => format!("<error: {:?}>", e),
             };
-            result.push((name.clone(), "var".to_string(), ty, val));
+            result.push((name.C(), "var".S(), ty, val));
         }
 
         for (name, _) in &self.script_ctx.functions {
-            result.push((name.clone(), "fun".to_string(), "function".to_string(), "-".to_string()));
+            result.push((name.C(), "fun".S(), "function".S(), "-".S()));
         }
 
         result.sort_by(|a, b| a.0.cmp(&b.0));

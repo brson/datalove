@@ -126,7 +126,7 @@ pub fn analyze_modules_worldfile(
 
     // Look up the main function using (ModuleId, "main") key.
     let (main_ir_module_id, main_func_id) = compiled.func_id_map
-        .get(&(main_salsa_module_id, "main".to_string()))
+        .get(&(main_salsa_module_id, "main".S()))
         .ok_or_else(|| anyhow!("main function not found"))?;
 
     let main_func = compiled.env.registry.get_module_function(*main_ir_module_id, *main_func_id)

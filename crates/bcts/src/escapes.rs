@@ -67,7 +67,7 @@ pub fn process_escape_sequences(s: &str) -> Result<String, EscapeError> {
                         _ => {
                             return Err(EscapeError::InvalidUnicodeEscape {
                                 position: pos,
-                                reason: "expected '{' after \\u".to_string(),
+                                reason: "expected '{' after \\u".S(),
                             });
                         }
                     }

@@ -302,16 +302,16 @@ pub fn datafun_spans<'db>(
         .iter()
         .map(|e| SpanMapEntry {
             expr_id: e.expr_id,
-            entry: SpanEntry::new(e.text_id, e.span.clone()),
+            entry: SpanEntry::new(e.text_id, e.span.C()),
         })
         .collect();
 
     DatafunSpans::with_stmt_spans(
         entries,
-        parse_result.break_spans.clone(),
-        parse_result.continue_spans.clone(),
-        parse_result.ret_spans.clone(),
-        parse_result.set_spans.clone(),
-        parse_result.fun_spans.clone(),
+        parse_result.break_spans.C(),
+        parse_result.continue_spans.C(),
+        parse_result.ret_spans.C(),
+        parse_result.set_spans.C(),
+        parse_result.fun_spans.C(),
     )
 }

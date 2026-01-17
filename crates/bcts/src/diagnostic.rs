@@ -6,6 +6,7 @@
 //! - Labels, notes, and suggestions
 //! - Salsa-compatible storage for accumulator round-tripping
 
+use rmx::prelude::*;
 use crate::text::{Text, InternedText, TextSpan, ByteSpan};
 use salsa::plumbing::AsId;
 
@@ -25,7 +26,7 @@ impl SpanEntry {
 
     pub fn to_text_and_span<'db>(&self, _db: &'db dyn salsa::Database) -> (Text<'db>, ByteSpan) {
         use salsa::plumbing::FromId;
-        (Text::from_id(self.text_id), self.span.clone())
+        (Text::from_id(self.text_id), self.span.C())
     }
 }
 
@@ -163,7 +164,7 @@ impl<'db> Diagnostic<'db> {
             message: self.message.as_id(),
             labels: self.labels.iter().map(|l| StoredLabel {
                 text: l.text.as_id(),
-                span: l.span.clone(),
+                span: l.span.C(),
                 message: l.message.map(|m| m.as_id()),
                 style: l.style,
             }).collect(),
@@ -183,7 +184,7 @@ impl StoredDiagnostic {
             message: InternedText::from_id(self.message),
             labels: self.labels.iter().map(|l| DiagnosticLabel {
                 text: Text::from_id(l.text),
-                span: l.span.clone(),
+                span: l.span.C(),
                 message: l.message.map(|id| InternedText::from_id(id)),
                 style: l.style,
             }).collect(),
@@ -214,7 +215,7 @@ impl<'db> DiagnosticBuilder<'db> {
             diagnostic: Diagnostic {
                 severity: Severity::Error,
                 code: None,
-                message: InternedText::new(db, message.to_string()),
+                message: InternedText::new(db, message.S()),
                 labels: vec![],
                 notes: vec![],
                 suggestions: vec![],
@@ -229,7 +230,7 @@ impl<'db> DiagnosticBuilder<'db> {
             diagnostic: Diagnostic {
                 severity: Severity::Warning,
                 code: None,
-                message: InternedText::new(db, message.to_string()),
+                message: InternedText::new(db, message.S()),
                 labels: vec![],
                 notes: vec![],
                 suggestions: vec![],
@@ -239,7 +240,7 @@ impl<'db> DiagnosticBuilder<'db> {
 
     /// Set the error code.
     pub fn code(mut self, code: &str) -> Self {
-        self.diagnostic.code = Some(InternedText::new(self.db, code.to_string()));
+        self.diagnostic.code = Some(InternedText::new(self.db, code.S()));
         self
     }
 
@@ -248,7 +249,7 @@ impl<'db> DiagnosticBuilder<'db> {
         self.diagnostic.labels.push(DiagnosticLabel {
             text: ts.text,
             span: ts.span,
-            message: Some(InternedText::new(self.db, msg.to_string())),
+            message: Some(InternedText::new(self.db, msg.S())),
             style: LabelStyle::Primary,
         });
         self
@@ -259,7 +260,7 @@ impl<'db> DiagnosticBuilder<'db> {
         self.diagnostic.labels.push(DiagnosticLabel {
             text: ts.text,
             span: ts.span,
-            message: Some(InternedText::new(self.db, msg.to_string())),
+            message: Some(InternedText::new(self.db, msg.S())),
             style: LabelStyle::Secondary,
         });
         self
@@ -289,7 +290,7 @@ impl<'db> DiagnosticBuilder<'db> {
 
     /// Add a note.
     pub fn note(mut self, note: &str) -> Self {
-        self.diagnostic.notes.push(InternedText::new(self.db, note.to_string()));
+        self.diagnostic.notes.push(InternedText::new(self.db, note.S()));
         self
     }
 
@@ -303,8 +304,8 @@ impl<'db> DiagnosticBuilder<'db> {
         self.diagnostic.suggestions.push(Suggestion {
             text: ts.text,
             span: ts.span,
-            message: InternedText::new(self.db, msg.to_string()),
-            replacement: replacement.map(|r| InternedText::new(self.db, r.to_string())),
+            message: InternedText::new(self.db, msg.S()),
+            replacement: replacement.map(|r| InternedText::new(self.db, r.S())),
         });
         self
     }

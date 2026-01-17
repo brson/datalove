@@ -801,8 +801,8 @@ fn test_text_span() {
         for token in bracer.iter(db) {
             if let TreeToken::Branch { .. } = &token {
                 let ts = token.text_span(db, source_text)?;
-                let spanned = &ts.text.as_str(db)[ts.span.clone()];
-                return Some((ts.start(), ts.end(), spanned.to_string()));
+                let spanned = &ts.text.as_str(db)[ts.span.C()];
+                return Some((ts.start(), ts.end(), spanned.S()));
             }
         }
         None
@@ -868,15 +868,15 @@ fn test_without_space() {
     assert_eq!(tokens.len(), 5);
 
     // Token "a" - not whitespace, returns Some.
-    let t0 = tokens[0].clone().without_space(db);
+    let t0 = tokens[0].C().without_space(db);
     assert!(t0.is_some());
 
     // Whitespace token - returns None.
-    let t1 = tokens[1].clone().without_space(db);
+    let t1 = tokens[1].C().without_space(db);
     assert!(t1.is_none());
 
     // Branch - always returns Some.
-    let t4 = tokens[4].clone().without_space(db);
+    let t4 = tokens[4].C().without_space(db);
     assert!(t4.is_some());
 }
 

@@ -65,7 +65,7 @@ pub fn analyze_worldfile(
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {
         results.push(SectionResult {
-            section_type: "resolution".to_string(),
+            section_type: "resolution".S(),
             name: None,
             typecheck: TypecheckResult::Error { errors: vec![err.clone()] },
             lowering: LoweringResult::Skipped,
@@ -109,7 +109,7 @@ pub fn analyze_worldfile(
             };
 
             results.push(SectionResult {
-                section_type: "module".to_string(),
+                section_type: "module".S(),
                 name: Some(module_path),
                 typecheck,
                 lowering,
@@ -142,7 +142,7 @@ pub fn analyze_worldfile(
                 // Capture debug output.
                 let debug_output = ctx.get_debug_buffer();
                 results.push(SectionResult {
-                    section_type: "scriptunit-fragment".to_string(),
+                    section_type: "scriptunit-fragment".S(),
                     name: None,
                     typecheck: unit_result.typecheck,
                     lowering: unit_result.lowering,
@@ -157,7 +157,7 @@ pub fn analyze_worldfile(
                 // Capture debug output.
                 let debug_output = ctx.get_debug_buffer();
                 results.push(SectionResult {
-                    section_type: "scriptunit-expr".to_string(),
+                    section_type: "scriptunit-expr".S(),
                     name: None,
                     typecheck: unit_result.typecheck,
                     lowering: unit_result.lowering,
