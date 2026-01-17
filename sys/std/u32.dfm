@@ -10,8 +10,9 @@ fun bits(): u32
   ret 32
 end fun
 
+// Intrinsic needed: intrinsic_popcount(u32): u32
 fun count_ones(self: u32): u32
-  // todo
+  // todo: ret intrinsic_popcount(self)
   ret 0
 end fun
 
@@ -19,13 +20,15 @@ fun count_zeros(self: u32): u32
   ret sub_saturating(bits(), count_ones(self))
 end fun
 
+// Intrinsic needed: intrinsic_clz(u32): u32
 fun leading_zeros(self: u32): u32
-  // todo
+  // todo: ret intrinsic_clz(self)
   ret 0
 end fun
 
+// Intrinsic needed: intrinsic_ctz(u32): u32
 fun trailing_zeros(self: u32): u32
-  // todo
+  // todo: ret intrinsic_ctz(self)
   ret 0
 end fun
 
@@ -37,38 +40,45 @@ fun trailing_ones(self: u32): u32
   ret trailing_zeros(bitnot(self))
 end fun
 
+// Intrinsic needed: intrinsic_u32_to_i32(u32): i32
 fun cast_signed(self: u32): i32
-  // todo
+  // todo: ret intrinsic_u32_to_i32(self)
   ret 0
 end fun
 
+// Intrinsic needed: intrinsic_swap_bytes_u32(u32): u32
 fun swap_bytes(self: u32): u32
-  // todo
+  // todo: ret intrinsic_swap_bytes_u32(self)
   ret 0
 end fun
 
+// Intrinsic needed: intrinsic_reverse_bits_u32(u32): u32
 fun reverse_bits(self: u32): u32
-  // todo
+  // todo: ret intrinsic_reverse_bits_u32(self)
   ret 0
 end fun
 
+// Intrinsics needed: intrinsic_swap_bytes_u32(u32): u32, intrinsic_is_big_endian(): bool
 fun from_be(other: u32): u32
-  // todo
+  // todo: if intrinsic_is_big_endian() then other else swap_bytes(other)
   ret 0
 end fun
 
+// Intrinsics needed: intrinsic_swap_bytes_u32(u32): u32, intrinsic_is_big_endian(): bool
 fun from_le(other: u32): u32
-  // todo
+  // todo: if intrinsic_is_big_endian() then swap_bytes(other) else other
   ret 0
 end fun
 
+// Intrinsics needed: intrinsic_swap_bytes_u32(u32): u32, intrinsic_is_big_endian(): bool
 fun to_be(self: u32): u32
-  // todo
+  // todo: if intrinsic_is_big_endian() then self else swap_bytes(self)
   ret 0
 end fun
 
+// Intrinsics needed: intrinsic_swap_bytes_u32(u32): u32, intrinsic_is_big_endian(): bool
 fun to_le(self: u32): u32
-  // todo
+  // todo: if intrinsic_is_big_endian() then swap_bytes(self) else self
   ret 0
 end fun
 
@@ -77,8 +87,10 @@ fun add_checked(self: u32, other: u32): ?u32
   ret some (self +? other)
 end fun
 
+// Intrinsic needed: intrinsic_i32_to_u32(i32): u32
 fun add_checked_signed(self: u32, other: i32): ?u32
-  // todo
+  // todo: if other >= 0 then add_checked(self, intrinsic_i32_to_u32(other))
+  //       else sub_checked(self, intrinsic_i32_to_u32(-other))
   ret @none // fixme @-required
 end fun
 
@@ -87,8 +99,10 @@ fun sub_checked(self: u32, other: u32): ?u32
   ret some (self -? other)
 end fun
 
+// Intrinsic needed: intrinsic_i32_to_u32(i32): u32
 fun sub_checked_signed(self: u32, other: i32): ?u32
-  // todo
+  // todo: if other >= 0 then sub_checked(self, intrinsic_i32_to_u32(other))
+  //       else add_checked(self, intrinsic_i32_to_u32(-other))
   ret @none // fixme @-required
 end fun
 
@@ -135,24 +149,27 @@ fun div_saturating(self: u32, other: u32): ?u32
   ret div_checked(self, other)
 end fun
 
+// Intrinsic needed: intrinsic_add_wrapping_u32(u32, u32): u32
 fun add_wrapping(self: u32, other: u32): u32
-  // todo
+  // todo: ret intrinsic_add_wrapping_u32(self, other)
   ret 0
 end fun
 
+// Intrinsic needed: intrinsic_sub_wrapping_u32(u32, u32): u32
 fun sub_wrapping(self: u32, other: u32): u32
-  // todo
+  // todo: ret intrinsic_sub_wrapping_u32(self, other)
   ret 0
 end fun
 
+// Intrinsic needed: intrinsic_mul_wrapping_u32(u32, u32): u32
 fun mul_wrapping(self: u32, other: u32): u32
-  // todo
+  // todo: ret intrinsic_mul_wrapping_u32(self, other)
   ret 0
 end fun
 
+// No intrinsic needed: u32 division cannot overflow.
 fun div_wrapping(self: u32, other: u32): ?u32
-  // todo
-  ret @none // fixme @-required
+  ret div_checked(self, other)
 end fun
 
 fun neg_checked(self: u32): ?u32
@@ -163,11 +180,19 @@ fun neg_checked(self: u32): ?u32
   end if
 end fun
 
+// Intrinsic needed: intrinsic_shl_u32(u32, u32): u32
+// Returns none if shift >= 32 or if bits would be lost.
 fun shift_left(self: u32, other: u32): ?u32
+  // todo: if other >= 32 then @none
+  //       else let result = intrinsic_shl_u32(self, other)
+  //            if intrinsic_shr_u32(result, other) == self then some result else @none
   ret @none // fixme @
 end fun
 
+// Intrinsic needed: intrinsic_shr_u32(u32, u32): u32
+// Returns none if shift >= 32.
 fun shift_right(self: u32, other: u32): ?u32
+  // todo: if other >= 32 then @none else some intrinsic_shr_u32(self, other)
   ret @none // fixme @
 end fun
 
@@ -229,23 +254,27 @@ fun rotate_right(self: u32, n: u32): u32
   ret bitor(left_part, right_part)
 end fun
 
+// Intrinsic needed: intrinsic_bitnot_u32(u32): u32
 fun bitnot(self: u32): u32
-  // todo
+  // todo: ret intrinsic_bitnot_u32(self)
   ret 0
 end fun
 
+// Intrinsic needed: intrinsic_bitand_u32(u32, u32): u32
 fun bitand(self: u32, n: u32): u32
-  // todo
+  // todo: ret intrinsic_bitand_u32(self, n)
   ret 0
 end fun
 
+// Intrinsic needed: intrinsic_bitor_u32(u32, u32): u32
 fun bitor(self: u32, n: u32): u32
-  // todo
+  // todo: ret intrinsic_bitor_u32(self, n)
   ret 0
 end fun
 
+// Intrinsic needed: intrinsic_bitxor_u32(u32, u32): u32
 fun bitxor(self: u32, n: u32): u32
-  // todo
+  // todo: ret intrinsic_bitxor_u32(self, n)
   ret 0
 end fun
 
@@ -286,11 +315,11 @@ fun clamp(self: u32, min_val: u32, max_val: u32): u32
 end fun
 
 // Absolute difference between two values.
-// Since we check the condition first, subtraction cannot overflow.
+// Since we check the condition first, subtraction cannot underflow.
 fun abs_diff(self: u32, other: u32): u32
   if self >= other
-    ret sub_wrapping(self, other)
+    ret sub_saturating(self, other)
   else
-    ret sub_wrapping(other, self)
+    ret sub_saturating(other, self)
   end if
 end fun
