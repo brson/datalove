@@ -1,3 +1,5 @@
+// Constants.
+
 fun min_value(): u32
   ret 0
 end fun
@@ -9,6 +11,26 @@ end fun
 fun bits(): u32
   ret 32
 end fun
+
+// Bitwise primitives.
+
+fun bitnot(self: u32): u32
+  ret icall bitnot_u32(self)
+end fun
+
+fun bitand(self: u32, n: u32): u32
+  ret icall bitand_u32(self, n)
+end fun
+
+fun bitor(self: u32, n: u32): u32
+  ret icall bitor_u32(self, n)
+end fun
+
+fun bitxor(self: u32, n: u32): u32
+  ret icall bitxor_u32(self, n)
+end fun
+
+// Bit counting.
 
 fun count_ones(self: u32): u32
   ret icall popcount_u32(self)
@@ -34,9 +56,24 @@ fun trailing_ones(self: u32): u32
   ret trailing_zeros(bitnot(self))
 end fun
 
-fun cast_signed(self: u32): i32
-  ret icall u32_to_i32(self)
+fun is_power_of_two(self: u32): bool
+  if self == 0
+    ret @false
+  else
+    ret count_ones(self) == 1
+  end if
 end fun
+
+// Integer log base 2. Returns none if self is zero.
+fun ilog2(self: u32): ?u32
+  if self == 0
+    ret @none
+  else
+    ret some sub_saturating(31, leading_zeros(self))
+  end if
+end fun
+
+// Byte manipulation.
 
 fun swap_bytes(self: u32): u32
   ret icall swap_bytes_u32(self)
@@ -45,6 +82,8 @@ end fun
 fun reverse_bits(self: u32): u32
   ret icall reverse_bits_u32(self)
 end fun
+
+// Endianness conversion.
 
 fun from_be(other: u32): u32
   let is_big = icall is_big_endian()
@@ -82,9 +121,44 @@ fun to_le(self: u32): u32
   end if
 end fun
 
-// Checked addition. Returns none on overflow.
+// Type conversion.
+
+fun cast_signed(self: u32): i32
+  ret icall u32_to_i32(self)
+end fun
+
+// Checked arithmetic.
+
+fun neg_checked(self: u32): ?u32
+  if self == 0
+    ret some 0
+  else
+    ret @none
+  end if
+end fun
+
 fun add_checked(self: u32, other: u32): ?u32
   ret some (self +? other)
+end fun
+
+fun sub_checked(self: u32, other: u32): ?u32
+  ret some (self -? other)
+end fun
+
+fun mul_checked(self: u32, other: u32): ?u32
+  ret some (self *? other)
+end fun
+
+fun div_checked(self: u32, other: u32): ?u32
+  ret some (self /? other)
+end fun
+
+fun rem_checked(self: u32, other: u32): ?u32
+  if other == 0
+    ret @none
+  else
+    ret some icall rem_u32(self, other)
+  end if
 end fun
 
 // Checked signed addition. Adds a signed i32 to u32.
@@ -100,11 +174,6 @@ fun add_checked_signed(self: u32, other: i32): ?u32
   end if
 end fun
 
-// Checked subtraction. Returns none on underflow.
-fun sub_checked(self: u32, other: u32): ?u32
-  ret some (self -? other)
-end fun
-
 // Checked signed subtraction. Subtracts a signed i32 from u32.
 // Returns none on underflow (positive other) or overflow (negative other).
 fun sub_checked_signed(self: u32, other: i32): ?u32
@@ -118,26 +187,8 @@ fun sub_checked_signed(self: u32, other: i32): ?u32
   end if
 end fun
 
-// Checked multiplication. Returns none on overflow.
-fun mul_checked(self: u32, other: u32): ?u32
-  ret some (self *? other)
-end fun
+// Saturating arithmetic.
 
-// Checked division. Returns none on division by zero.
-fun div_checked(self: u32, other: u32): ?u32
-  ret some (self /? other)
-end fun
-
-// Checked remainder. Returns none on division by zero.
-fun rem_checked(self: u32, other: u32): ?u32
-  if other == 0
-    ret @none
-  else
-    ret some icall rem_u32(self, other)
-  end if
-end fun
-
-// Saturating addition. Returns max_value on overflow.
 fun add_saturating(self: u32, other: u32): u32
   if add_checked(self, other) |value|
     ret value
@@ -146,7 +197,6 @@ fun add_saturating(self: u32, other: u32): u32
   end if
 end fun
 
-// Saturating subtraction. Returns 0 on underflow.
 fun sub_saturating(self: u32, other: u32): u32
   if sub_checked(self, other) |value|
     ret value
@@ -155,7 +205,6 @@ fun sub_saturating(self: u32, other: u32): u32
   end if
 end fun
 
-// Saturating multiplication. Returns max_value on overflow.
 fun mul_saturating(self: u32, other: u32): u32
   if mul_checked(self, other) |value|
     ret value
@@ -164,11 +213,34 @@ fun mul_saturating(self: u32, other: u32): u32
   end if
 end fun
 
-// Saturating division. Returns none on division by zero.
 // For u32, division cannot overflow (result <= dividend), so this is same as div_checked.
 fun div_saturating(self: u32, other: u32): ?u32
   ret div_checked(self, other)
 end fun
+
+fun add_saturating_signed(self: u32, other: i32): u32
+  if other >= (: i32 / 0)
+    let other_u32 = icall i32_to_u32(other)
+    ret add_saturating(self, other_u32)
+  else
+    let neg_other = icall neg_wrapping_i32(other)
+    let abs_other = icall i32_to_u32(neg_other)
+    ret sub_saturating(self, abs_other)
+  end if
+end fun
+
+fun sub_saturating_signed(self: u32, other: i32): u32
+  if other >= (: i32 / 0)
+    let other_u32 = icall i32_to_u32(other)
+    ret sub_saturating(self, other_u32)
+  else
+    let neg_other = icall neg_wrapping_i32(other)
+    let abs_other = icall i32_to_u32(neg_other)
+    ret add_saturating(self, abs_other)
+  end if
+end fun
+
+// Wrapping arithmetic.
 
 fun add_wrapping(self: u32, other: u32): u32
   ret icall add_wrapping_u32(self, other)
@@ -182,12 +254,11 @@ fun mul_wrapping(self: u32, other: u32): u32
   ret icall mul_wrapping_u32(self, other)
 end fun
 
-// No intrinsic needed: u32 division cannot overflow.
+// u32 division cannot overflow.
 fun div_wrapping(self: u32, other: u32): ?u32
   ret div_checked(self, other)
 end fun
 
-// Wrapping signed addition. Adds a signed i32 to u32, wrapping on overflow/underflow.
 fun add_wrapping_signed(self: u32, other: i32): u32
   if other >= (: i32 / 0)
     let other_u32 = icall i32_to_u32(other)
@@ -199,7 +270,6 @@ fun add_wrapping_signed(self: u32, other: i32): u32
   end if
 end fun
 
-// Wrapping signed subtraction. Subtracts a signed i32 from u32, wrapping on overflow/underflow.
 fun sub_wrapping_signed(self: u32, other: i32): u32
   if other >= (: i32 / 0)
     let other_u32 = icall i32_to_u32(other)
@@ -211,61 +281,31 @@ fun sub_wrapping_signed(self: u32, other: i32): u32
   end if
 end fun
 
-// Saturating signed addition. Adds a signed i32 to u32, saturating at bounds.
-fun add_saturating_signed(self: u32, other: i32): u32
-  if other >= (: i32 / 0)
-    let other_u32 = icall i32_to_u32(other)
-    ret add_saturating(self, other_u32)
-  else
-    let neg_other = icall neg_wrapping_i32(other)
-    let abs_other = icall i32_to_u32(neg_other)
-    ret sub_saturating(self, abs_other)
-  end if
-end fun
+// Shifts.
 
-// Saturating signed subtraction. Subtracts a signed i32 from u32, saturating at bounds.
-fun sub_saturating_signed(self: u32, other: i32): u32
-  if other >= (: i32 / 0)
-    let other_u32 = icall i32_to_u32(other)
-    ret sub_saturating(self, other_u32)
-  else
-    let neg_other = icall neg_wrapping_i32(other)
-    let abs_other = icall i32_to_u32(neg_other)
-    ret add_saturating(self, abs_other)
-  end if
-end fun
-
-fun neg_checked(self: u32): ?u32
-  if self == 0
-    ret some 0
-  else
+// Returns none if shift >= 32.
+fun shift_left(self: u32, n: u32): ?u32
+  if n >= 32
     ret @none
+  else
+    ret some icall shl_u32(self, n)
   end if
 end fun
 
 // Returns none if shift >= 32.
-fun shift_left(self: u32, other: u32): ?u32
-  if other >= 32
+fun shift_right(self: u32, n: u32): ?u32
+  if n >= 32
     ret @none
   else
-    ret some icall shl_u32(self, other)
+    ret some icall shr_u32(self, n)
   end if
 end fun
 
-// Returns none if shift >= 32.
-fun shift_right(self: u32, other: u32): ?u32
-  if other >= 32
-    ret @none
-  else
-    ret some icall shr_u32(self, other)
-  end if
-end fun
-
-fun shift_left_saturating(self: u32, other: u32): u32
-  if other >= 32
+fun shift_left_saturating(self: u32, n: u32): u32
+  if n >= 32
     ret max_value()
   else
-    if shift_left(self, other) |value|
+    if shift_left(self, n) |value|
       ret value
     else
       ret max_value()
@@ -273,11 +313,11 @@ fun shift_left_saturating(self: u32, other: u32): u32
   end if
 end fun
 
-fun shift_right_saturating(self: u32, other: u32): u32
-  if other >= 32
+fun shift_right_saturating(self: u32, n: u32): u32
+  if n >= 32
     ret 0
   else
-    if shift_right(self, other) |value|
+    if shift_right(self, n) |value|
       ret value
     else
       ret 0
@@ -285,8 +325,8 @@ fun shift_right_saturating(self: u32, other: u32): u32
   end if
 end fun
 
-fun shift_left_wrapping(self: u32, other: u32): u32
-  let n_mod = bitand(other, 31)
+fun shift_left_wrapping(self: u32, n: u32): u32
+  let n_mod = bitand(n, 31)
   if shift_left(self, n_mod) |value|
     ret value
   else
@@ -294,14 +334,16 @@ fun shift_left_wrapping(self: u32, other: u32): u32
   end if
 end fun
 
-fun shift_right_wrapping(self: u32, other: u32): u32
-  let n_mod = bitand(other, 31)
+fun shift_right_wrapping(self: u32, n: u32): u32
+  let n_mod = bitand(n, 31)
   if shift_right(self, n_mod) |value|
     ret value
   else
     ret 0
   end if
 end fun
+
+// Rotates.
 
 fun rotate_left(self: u32, n: u32): u32
   let n_mod = bitand(n, 31)
@@ -319,37 +361,12 @@ fun rotate_right(self: u32, n: u32): u32
   ret bitor(left_part, right_part)
 end fun
 
-fun bitnot(self: u32): u32
-  ret icall bitnot_u32(self)
-end fun
+// Comparisons and utilities.
 
-fun bitand(self: u32, n: u32): u32
-  ret icall bitand_u32(self, n)
-end fun
-
-fun bitor(self: u32, n: u32): u32
-  ret icall bitor_u32(self, n)
-end fun
-
-fun bitxor(self: u32, n: u32): u32
-  ret icall bitxor_u32(self, n)
-end fun
-
-// True if zero.
 fun is_zero(self: u32): bool
   ret self == 0
 end fun
 
-// Maximum of two values.
-fun max(self: u32, other: u32): u32
-  if self >= other
-    ret self
-  else
-    ret other
-  end if
-end fun
-
-// Minimum of two values.
 fun min(self: u32, other: u32): u32
   if self <= other
     ret self
@@ -358,7 +375,14 @@ fun min(self: u32, other: u32): u32
   end if
 end fun
 
-// Clamp value to range [min_val, max_val].
+fun max(self: u32, other: u32): u32
+  if self >= other
+    ret self
+  else
+    ret other
+  end if
+end fun
+
 fun clamp(self: u32, min_val: u32, max_val: u32): u32
   if self .< min_val
     ret min_val
@@ -371,30 +395,10 @@ fun clamp(self: u32, min_val: u32, max_val: u32): u32
   end if
 end fun
 
-// Absolute difference between two values.
-// Since we check the condition first, subtraction cannot underflow.
 fun abs_diff(self: u32, other: u32): u32
   if self >= other
     ret sub_saturating(self, other)
   else
     ret sub_saturating(other, self)
-  end if
-end fun
-
-// True if value is a power of two.
-fun is_power_of_two(self: u32): bool
-  if self == 0
-    ret @false
-  else
-    ret count_ones(self) == 1
-  end if
-end fun
-
-// Integer log base 2. Returns none if self is zero.
-fun ilog2(self: u32): ?u32
-  if self == 0
-    ret @none
-  else
-    ret some sub_saturating(31, leading_zeros(self))
   end if
 end fun
