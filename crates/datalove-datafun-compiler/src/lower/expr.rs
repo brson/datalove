@@ -556,6 +556,33 @@ pub fn lower_expression<'db>(
         ExprFunKind::ParseError(_) => {
             Err(LowerError::NotImplemented("ParseError".to_string()))
         }
+        ExprFunKind::IntrinsicCall(icall) => {
+            // Look up the intrinsic by name.
+            let name_str = icall.name.as_str(ctx.db);
+            let (intrinsic_id, _def) = datalove_datafun_intrinsics::lookup_intrinsic(name_str)
+                .ok_or_else(|| LowerError::NotImplemented(format!("unknown intrinsic: {}", name_str)))?;
+
+            // Lower arguments.
+            let args: Result<Vec<_>, _> = icall.args
+                .iter()
+                .map(|arg| lower_operand(ctx, *arg))
+                .collect();
+            let args = args?;
+
+            let result_type = ctx.expr_type(expr);
+            let dest = ctx.fresh_value(result_type);
+
+            ctx.emit(Instruction::Intrinsic {
+                dest,
+                intrinsic: intrinsic_id,
+                args,
+            });
+
+            // Drop expression temporaries after the intrinsic completes.
+            ctx.emit_expr_temp_drops();
+
+            Ok(dest)
+        }
     }
 }
 

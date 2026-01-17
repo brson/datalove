@@ -47,6 +47,7 @@ mod ops;
 mod types;
 mod collections;
 mod dispatch;
+mod intrinsics;
 
 #[cfg(test)]
 mod tests;
@@ -1255,6 +1256,11 @@ impl IrInterpreter {
                         size,
                     );
                 }
+            }
+            Instruction::Intrinsic { dest, intrinsic, args } => {
+                let dest_slot = frame.value_dest(*dest)?;
+                self.execute_intrinsic(*intrinsic, args, dest_slot, frame, frames)?;
+                frame.mark_value_initialized(*dest);
             }
         }
         Ok(())

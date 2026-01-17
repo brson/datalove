@@ -7,6 +7,7 @@ edition.workspace = true
 
 [dependencies]
 rmx.workspace = true
+datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
 datalove-datafun-ir.path = "../datalove-datafun-ir"
 datalove-rtdt.path = "../datalove-rtdt"
 datalove-rt.path = "../datalove-rt"

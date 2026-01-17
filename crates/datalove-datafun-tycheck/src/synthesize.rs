@@ -447,6 +447,11 @@ pub fn synthesize_expr<'db>(
             // Table requires type hint - cannot infer schema.
             Err(ctx.error_cannot_synthesize(expr, "table requires type hint"))
         }
+
+        // Intrinsic call expression.
+        ExprFunKind::IntrinsicCall(ref icall) => {
+            synthesize_intrinsic_call(ctx, expr, icall)
+        }
     }
 }
 
@@ -743,6 +748,71 @@ fn synthesize_function_call<'db>(
 
     // Return the function's return type.
     Ok(return_type)
+}
+
+// ============================================================================
+// Intrinsic Call Synthesis
+// ============================================================================
+
+/// Synthesize type for intrinsic call.
+fn synthesize_intrinsic_call<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
+    icall: &ExprIntrinsicCall<'db>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    use datalove_datafun_intrinsics::lookup_intrinsic;
+
+    let db = ctx.db;
+    let name_str = icall.name.as_str(db);
+    let args = &icall.args;
+
+    // Look up intrinsic by name.
+    let (intrinsic_id, intrinsic_def) = lookup_intrinsic(name_str)
+        .ok_or_else(|| ctx.error_cannot_synthesize(expr, &format!("unknown intrinsic: {}", name_str)))?;
+
+    // Check arity.
+    if args.len() != intrinsic_def.params.len() {
+        return Err(ctx.error_cannot_synthesize(
+            expr,
+            &format!("intrinsic {} expects {} arguments, got {}", name_str, intrinsic_def.params.len(), args.len())
+        ));
+    }
+
+    // Check argument types.
+    for (arg, expected_intrinsic_ty) in args.iter().zip(intrinsic_def.params.iter()) {
+        let arg_ty = ctx.synthesize_expr(*arg)?;
+        let expected_datafun_ty = intrinsic_type_to_datafun(db, *expected_intrinsic_ty);
+
+        if !types_equivalent(db, arg_ty.ty(db), expected_datafun_ty.ty(db)) {
+            return Err(ctx.error_type_mismatch(
+                expr,
+                &type_to_string(db, expected_datafun_ty.ty(db)),
+                &type_to_string(db, arg_ty.ty(db)),
+                &format!("argument to intrinsic {}", name_str)
+            ));
+        }
+    }
+
+    // Store the resolved intrinsic ID for lowering.
+    ctx.store_intrinsic_target(expr, intrinsic_id);
+
+    // Return the intrinsic's return type.
+    Ok(intrinsic_type_to_datafun(db, intrinsic_def.ret))
+}
+
+/// Convert intrinsic type to datafun type.
+fn intrinsic_type_to_datafun<'db>(db: &'db dyn crate::Db, ty: datalove_datafun_intrinsics::IntrinsicType) -> TypeAndHeap<'db> {
+    use datalove_datafun_intrinsics::IntrinsicType;
+
+    let datalit_ty = match ty {
+        IntrinsicType::U32 => datalit::tycheck::Type::U32,
+        IntrinsicType::I32 => datalit::tycheck::Type::I32,
+        IntrinsicType::U64 => datalit::tycheck::Type::U64,
+        IntrinsicType::I64 => datalit::tycheck::Type::I64,
+        IntrinsicType::Bool => datalit::tycheck::Type::Bool,
+    };
+
+    TypeAndHeap::new(db, datalit::ast::Heap::Omitted, Type::Datalit(datalit_ty))
 }
 
 // ============================================================================

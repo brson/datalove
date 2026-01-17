@@ -453,6 +453,7 @@ pub fn get_expr_heap<'db>(db: &'db dyn crate::Db, expr: ExprFun<'db>) -> datalit
         | ExprFunKind::BinOp(_)
         | ExprFunKind::UnaryOp(_)
         | ExprFunKind::FunctionCall(_)
+        | ExprFunKind::IntrinsicCall(_)
         | ExprFunKind::Tuple(_)
         | ExprFunKind::TryOption(_)
         | ExprFunKind::TryResult(_)

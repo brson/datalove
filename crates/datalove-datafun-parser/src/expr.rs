@@ -306,6 +306,56 @@ impl<'db> Parser<'db> {
                                     };
                                     self.create_expr(expr_kind, ts)
                                 }
+                                // Intrinsic call: icall name(args)
+                                "icall" => {
+                                    let ts = self.peek_text_span();
+                                    self.next(); // consume "icall"
+
+                                    // Parse intrinsic name.
+                                    let intrinsic_name = match self.peek() {
+                                        Some(TreeToken::Token(tok)) if tok.kind(self.db) == TokenKind::Word => {
+                                            let name = tok.word_str(self.db).unwrap_or("");
+                                            self.next(); // consume the name
+                                            InternedText::new(self.db, name.to_string())
+                                        }
+                                        _ => {
+                                            return self.emit_expr_error(ts,
+                                                "expected intrinsic name after 'icall'",
+                                                "P040",
+                                                "expected intrinsic name"
+                                            );
+                                        }
+                                    };
+
+                                    // Parse arguments in parentheses.
+                                    let args = match self.peek() {
+                                        Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
+                                            let (args_iter, open_span) = match self.next() {
+                                                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
+                                                    let open_span = TextSpan::new(self.source_text(), open.span(self.db));
+                                                    (inner, open_span)
+                                                }
+                                                _ => unreachable!(),
+                                            };
+                                            self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")))
+                                        }
+                                        _ => {
+                                            return self.emit_expr_error(ts,
+                                                "expected '(' after intrinsic name",
+                                                "P041",
+                                                "expected '('"
+                                            );
+                                        }
+                                    };
+
+                                    self.create_expr(
+                                        ast::ExprFunKind::IntrinsicCall(ast::ExprIntrinsicCall {
+                                            name: intrinsic_name,
+                                            args,
+                                        }),
+                                        ts
+                                    )
+                                }
                                 num if num.chars().all(|c| char::is_ascii_digit(&c)) => {
                                     // Capture span before parsing for diagnostic reporting.
                                     let ts = self.peek_text_span();

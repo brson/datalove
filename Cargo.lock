@@ -1106,6 +1106,7 @@ dependencies = [
  "cranelift-module",
  "cranelift-object",
  "datalove-datafun",
+ "datalove-datafun-intrinsics",
  "datalove-datafun-ir",
  "datalove-rt",
  "datalove-rtdt",
@@ -1134,6 +1135,7 @@ dependencies = [
  "datalove-datafun-aot-cranelift",
  "datalove-datafun-ast",
  "datalove-datafun-interp",
+ "datalove-datafun-intrinsics",
  "datalove-datafun-ir",
  "datalove-datafun-parser",
  "datalove-datafun-tycheck",
@@ -1154,6 +1156,7 @@ dependencies = [
 name = "datalove-datafun-interp"
 version = "0.1.0"
 dependencies = [
+ "datalove-datafun-intrinsics",
  "datalove-datafun-ir",
  "datalove-rt",
  "datalove-rtdt",
@@ -1161,9 +1164,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-datafun-intrinsics"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "datalove-datafun-ir"
 version = "0.1.0"
 dependencies = [
+ "datalove-datafun-intrinsics",
  "datalove-datalit",
  "ron",
  "salsa",
@@ -1217,6 +1228,7 @@ dependencies = [
  "bcts",
  "datalove-ct",
  "datalove-datafun-ast",
+ "datalove-datafun-intrinsics",
  "datalove-datalit",
  "datalove-diagnostic",
  "rayon",

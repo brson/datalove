@@ -792,6 +792,15 @@ pub enum Instruction {
     /// Debug log a value (borrows, does not consume).
     DebugLog { operand: Operand },
 
+    /// Execute an intrinsic function.
+    ///
+    /// Intrinsics compile directly to machine instructions without function call overhead.
+    Intrinsic {
+        dest: ValueId,
+        intrinsic: datalove_datafun_intrinsics::IntrinsicId,
+        args: Vec<Operand>,
+    },
+
     /// No operation.
     Nop,
 }

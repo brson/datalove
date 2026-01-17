@@ -200,6 +200,9 @@ pub enum ExprFunKind {
     Table(ExprTable),
 
     ParseError(ExprFunParseError),
+
+    // Intrinsic call expression.
+    IntrinsicCall(ExprIntrinsicCall),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -211,6 +214,12 @@ pub struct ExprBinOp {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprFunctionCall {
+    pub name: String,
+    pub args: Vec<ExprFun>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprIntrinsicCall {
     pub name: String,
     pub args: Vec<ExprFun>,
 }
@@ -675,6 +684,16 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::Table(e) => ExprFunKind::Table(ExprTable::from_ast(db, e)),
 
             crate::ast::ExprFunKind::ParseError(e) => ExprFunKind::ParseError(ExprFunParseError::from_ast(db, e)),
+            crate::ast::ExprFunKind::IntrinsicCall(e) => ExprFunKind::IntrinsicCall(ExprIntrinsicCall::from_ast(db, e)),
+        }
+    }
+}
+
+impl ExprIntrinsicCall {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprIntrinsicCall<'db>) -> Self {
+        ExprIntrinsicCall {
+            name: ast.name.as_str(db).to_string(),
+            args: ast.args.iter().map(|a| ExprFun::from_ast(db, *a)).collect(),
         }
     }
 }

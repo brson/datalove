@@ -45,6 +45,8 @@ mod calls;
 mod collections;
 /// Constant value materialization.
 mod constants;
+/// Intrinsic function codegen.
+mod intrinsics;
 /// Binary and unary operations.
 mod ops;
 /// Option and Result operations.
@@ -585,6 +587,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             Instruction::DataFrom { dest, inner } => {
                 self.compile_data_from(builder, *dest, inner)?;
+            }
+            Instruction::Intrinsic { dest, intrinsic, args } => {
+                self.compile_intrinsic(builder, *dest, *intrinsic, args)?;
             }
         }
         Ok(())

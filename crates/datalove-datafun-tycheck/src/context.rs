@@ -9,6 +9,7 @@ use bct::text::{InternedText, TextSpan};
 use salsa::plumbing::AsId;
 
 use datalove_datafun_ast::ast::*;
+use datalove_datafun_intrinsics::IntrinsicId;
 
 pub use datalove_datafun_ast::spans::DatafunSpans;
 pub use bct::module_graph::ModuleId;
@@ -50,6 +51,8 @@ pub struct TypeContext<'db> {
     /// Whether we're in a reference context (ref/mut/out param or binop operand).
     /// Move-type field projections are allowed in ref context.
     pub(crate) ref_context: bool,
+    /// Resolved intrinsic targets, indexed by ExprFun ID.
+    pub(crate) intrinsic_targets: Vec<Option<IntrinsicId>>,
 }
 
 impl<'db> TypeContext<'db> {
@@ -81,6 +84,7 @@ impl<'db> TypeContext<'db> {
             call_targets: Vec::new(),
             loop_depth: 0,
             ref_context: false,
+            intrinsic_targets: Vec::new(),
         }
     }
 
@@ -352,6 +356,26 @@ impl<'db> TypeContext<'db> {
         let ty = crate::synthesize::synthesize_expr(self, expr)?;
         self.store_expr_type(expr, ty);
         Ok(ty)
+    }
+
+    /// Store resolved intrinsic target for an intrinsic call expression.
+    pub fn store_intrinsic_target(&mut self, expr: ExprFun<'db>, intrinsic: IntrinsicId) {
+        let id = expr.as_id();
+        let index = id.index() as usize;
+
+        // Ensure the vector is large enough.
+        if index >= self.intrinsic_targets.len() {
+            self.intrinsic_targets.resize(index + 1, None);
+        }
+
+        self.intrinsic_targets[index] = Some(intrinsic);
+    }
+
+    /// Get resolved intrinsic target for an expression.
+    pub fn get_intrinsic_target(&self, expr: ExprFun<'db>) -> Option<IntrinsicId> {
+        let id = expr.as_id();
+        let index = id.index() as usize;
+        self.intrinsic_targets.get(index).and_then(|t| *t)
     }
 }
 

@@ -1,0 +1,24 @@
+require module sys/std/u32
+
+import u32.bitnot
+import u32.bitand
+import u32.bitor
+import u32.bitxor
+
+let a: u32 = 65535
+let b: u32 = 16711935
+
+// Test bitnot.
+let not_a = bitnot(a)
+
+// Test bitand.
+let and_ab = bitand(a, b)
+
+// Test bitor.
+let or_ab = bitor(a, b)
+
+// Test bitxor.
+let xor_ab = bitxor(a, b)
+
+// Verify results.
+let output = (not_a, and_ab, or_ab, xor_ab)

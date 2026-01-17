@@ -299,6 +299,9 @@ pub enum ExprFunKind<'db> {
 
     // Parse error
     ParseError(ExprFunParseError<'db>),
+
+    // Intrinsic call (icall name(args)).
+    IntrinsicCall(ExprIntrinsicCall<'db>),
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -584,4 +587,14 @@ pub struct ExprFunParseError<'db> {
     pub text: Text<'db>,
     pub span: ByteSpan,
     pub message: InternedText<'db>,
+}
+
+/// Intrinsic call expression (icall name(args)).
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExprIntrinsicCall<'db> {
+    /// The intrinsic name (e.g., "bitnot_u32").
+    pub name: InternedText<'db>,
+    /// Arguments to the intrinsic.
+    pub args: Vec<ExprFun<'db>>,
 }

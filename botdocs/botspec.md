@@ -162,6 +162,7 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 | Logical and/or/xor | `a and b` | Implemented (bool only) |
 | Try option | `expr?` | Implemented (early-return on none) |
 | Try result | `expr!` | Implemented (early-return on error) |
+| Intrinsic call | `icall name(args)` | Implemented |
 
 ### 2.3 Operators
 
@@ -369,6 +370,50 @@ fun early_exit(n: u32)       // void - bare ret OK
   end if
 end fun
 ```
+
+### 2.10 Intrinsic Calls
+
+Low-level operations that compile directly to machine instructions without function call overhead.
+
+**Syntax:** `icall intrinsic_name(args)`
+
+**Available Intrinsics:**
+
+| Name | Params | Return | Description |
+|------|--------|--------|-------------|
+| `bitnot_u32` | `u32` | `u32` | Bitwise NOT |
+| `bitand_u32` | `u32, u32` | `u32` | Bitwise AND |
+| `bitor_u32` | `u32, u32` | `u32` | Bitwise OR |
+| `bitxor_u32` | `u32, u32` | `u32` | Bitwise XOR |
+| `shl_u32` | `u32, u32` | `u32` | Shift left |
+| `shr_u32` | `u32, u32` | `u32` | Shift right (unsigned) |
+| `popcount_u32` | `u32` | `u32` | Count set bits |
+| `clz_u32` | `u32` | `u32` | Count leading zeros |
+| `ctz_u32` | `u32` | `u32` | Count trailing zeros |
+| `swap_bytes_u32` | `u32` | `u32` | Byte-swap (endian convert) |
+| `reverse_bits_u32` | `u32` | `u32` | Reverse bit order |
+| `add_wrapping_u32` | `u32, u32` | `u32` | Add with wrapping |
+| `sub_wrapping_u32` | `u32, u32` | `u32` | Subtract with wrapping |
+| `mul_wrapping_u32` | `u32, u32` | `u32` | Multiply with wrapping |
+| `u32_to_i32` | `u32` | `i32` | Reinterpret as signed |
+| `i32_to_u32` | `i32` | `u32` | Reinterpret as unsigned |
+| `is_big_endian` | (none) | `bool` | Query platform endianness |
+
+**Example:**
+```
+require module sys/std/u32
+import u32.bitnot
+
+fun bitnot(self: u32): u32
+  ret icall bitnot_u32(self)
+end fun
+```
+
+**Implementation:**
+- Intrinsics are defined in `datalove-datafun-intrinsics` crate
+- Typechecked against a central definition table
+- Interpreter executes via Rust operations
+- AOT compiles to inline Cranelift IR instructions (no call overhead)
 
 ---
 

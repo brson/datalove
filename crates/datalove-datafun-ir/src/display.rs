@@ -391,6 +391,14 @@ impl fmt::Display for Instruction {
             Instruction::DebugLog { operand } => {
                 write!(f, "debuglog {}", operand)
             }
+            Instruction::Intrinsic { dest, intrinsic, args } => {
+                write!(f, "{} = intrinsic {:?}(", dest, intrinsic)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ")")
+            }
             Instruction::Nop => {
                 write!(f, "nop")
             }

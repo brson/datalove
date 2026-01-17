@@ -12,6 +12,7 @@ salsa.workspace = true
 rayon.workspace = true
 datalove-ct.path = "../datalove-ct"
 datalove-datafun-ast.path = "../datalove-datafun-ast"
+datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
 datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"
 
