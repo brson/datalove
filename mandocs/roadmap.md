@@ -32,8 +32,8 @@
 
 ## In progress
 
+- usize/isize
 - numeric intrinsics and core functions
-- type syntax cleanup
 - human docs
 
 
@@ -41,6 +41,7 @@
 
 ## On deck
 
+- std.string - waiting for usize/isize
 - assert statements - needed for std_tests
 - fully reactive scripts
 - clone and coerce
