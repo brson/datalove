@@ -6,8 +6,8 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "local/test/mutual: TryReturnTypeMismatch { operator: \"-!\", return_type: \"bool\" }",
-                    "local/test/mutual: TryReturnTypeMismatch { operator: \"-!\", return_type: \"bool\" }",
+                    "line 6, col 16: error[F049]: try operator `-!` return type mismatch: expected `Result`, found `bool`",
+                    "line 13, col 17: error[F049]: try operator `-!` return type mismatch: expected `Result`, found `bool`",
                 ],
             ),
             interp_lowering: LoweringResult(

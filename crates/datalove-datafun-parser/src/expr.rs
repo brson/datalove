@@ -283,9 +283,15 @@ impl<'db> Parser<'db> {
                         if let Some(word) = token.word_str(self.db) {
                             // Check against datalit keywords - use new inline variants.
                             match word {
-                                "true" | "false" | "tuple" | "enum" |
-                                "option" | "result" | "error" | "map" | "set" | "none" | "data" |
-                                "tensor" => {
+                                // Standalone literals - always keywords.
+                                "true" | "false" | "none" => {
+                                    // Capture span before parsing for diagnostic reporting.
+                                    let ts = self.peek_text_span();
+                                    let expr_kind = self.parse_lit_expr(datalit::ast::Heap::Omitted, None);
+                                    self.create_expr(expr_kind, ts)
+                                }
+                                // Collection keywords - only treat as keywords if followed by `{`.
+                                "map" | "set" if self.peek_second_sigil(Sigil::BraceOpen) => {
                                     // Capture span before parsing for diagnostic reporting.
                                     let ts = self.peek_text_span();
                                     let expr_kind = self.parse_lit_expr(datalit::ast::Heap::Omitted, None);

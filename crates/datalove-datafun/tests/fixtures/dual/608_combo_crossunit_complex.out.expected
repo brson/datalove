@@ -6,9 +6,9 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "local/test/utils: TryReturnTypeMismatch { operator: \"+!\", return_type: \"u32\" }",
-                    "local/test/utils: TryReturnTypeMismatch { operator: \"/!\", return_type: \"bool\" }",
-                    "local/test/utils: UnresolvedName(\"half\")",
+                    "line 3, col 9: error[F049]: try operator `+!` return type mismatch: expected `Result`, found `u32`",
+                    "line 7, col 16: error[F049]: try operator `/!` return type mismatch: expected `Result`, found `bool`",
+                    "line 8, col 10: error[F001]: cannot find value `half` in this scope",
                 ],
             ),
             interp_lowering: LoweringResult(

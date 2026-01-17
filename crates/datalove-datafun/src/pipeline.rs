@@ -276,14 +276,29 @@ impl ModuleCompilationPipeline {
         graph_typecheck: ModuleGraphTypecheckResult<'db>,
         mode: ParallelMode,
     ) -> CompiledModules<'db> {
-        // Collect typecheck errors.
-        let module_errors = graph_typecheck.module_errors(db.as_salsa_db());
+        // Collect typecheck errors with location info from pending diagnostics.
+        let module_results = graph_typecheck.module_results(db.as_salsa_db());
         let mut path_to_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for (module_id, errors) in module_errors {
+        for (module_id, result) in module_results {
+            let errors = result.errors(db.as_salsa_db());
+            if errors.is_empty() {
+                continue;
+            }
             let path = module_id.path(db.as_salsa_db()).clone();
-            let error_strings: Vec<String> = errors.iter()
-                .map(|e| format!("{}: {:?}", path, e))
-                .collect();
+
+            // Format pending diagnostics with location info.
+            let pending = result.pending_diagnostics(db.as_salsa_db());
+            let span_lookup = datalove_datafun_tycheck::ModuleGraphSpanLookup::new(&parsed_graph, *module_id);
+            let formatted = datalove_datafun_tycheck::format_pending_diagnostics(db.as_salsa_db(), pending, &span_lookup);
+
+            // Use formatted diagnostics if available, otherwise fall back to raw error format.
+            let error_strings = if !formatted.is_empty() {
+                formatted
+            } else {
+                errors.iter()
+                    .map(|e| format!("{}: {:?}", path, e))
+                    .collect()
+            };
             path_to_errors.insert(path, error_strings);
         }
 

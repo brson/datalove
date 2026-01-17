@@ -423,3 +423,119 @@ fn emit_arity_mismatch<'db>(
 
     builder.emit_type();
 }
+
+/// Format pending diagnostics as human-readable strings with location info.
+///
+/// Unlike `emit_pending_diagnostics`, this returns strings instead of emitting
+/// to the diagnostic system, useful for test harnesses and error collection.
+pub fn format_pending_diagnostics<'db>(
+    db: &'db dyn crate::Db,
+    pending: &[PendingDiagnostic<'db>],
+    spans: &dyn SpanLookup<'db>,
+) -> Vec<String> {
+    pending.iter().filter_map(|diag| format_single_diagnostic(db, diag, spans)).collect()
+}
+
+/// Format a single pending diagnostic as a string.
+fn format_single_diagnostic<'db>(
+    db: &'db dyn crate::Db,
+    diag: &PendingDiagnostic<'db>,
+    spans: &dyn SpanLookup<'db>,
+) -> Option<String> {
+    match diag {
+        PendingDiagnostic::UndefinedVariable { expr_id, module_id: _, name } => {
+            let ts = spans.lookup_expr(db, *expr_id)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F001]: cannot find value `{}` in this scope", loc, name.as_str(db)))
+        }
+        PendingDiagnostic::UndefinedFunction { expr_id, module_id: _, name } => {
+            let ts = spans.lookup_expr(db, *expr_id)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F002]: cannot find function `{}` in this scope", loc, name.as_str(db)))
+        }
+        PendingDiagnostic::CannotSynthesize { expr_id, module_id: _, message } => {
+            let ts = spans.lookup_expr(db, *expr_id)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F011]: {}", loc, message.as_str(db)))
+        }
+        PendingDiagnostic::TypeMismatch { expr_id, module_id: _, expected, actual, label: _ } => {
+            let ts = spans.lookup_expr(db, *expr_id)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F016]: mismatched types: expected `{}`, found `{}`", loc, expected.as_str(db), actual.as_str(db)))
+        }
+        PendingDiagnostic::InvalidOperandType { expr_id, module_id: _, op, ty } => {
+            let ts = spans.lookup_expr(db, *expr_id)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F026]: invalid operand type `{}` for operator `{}`", loc, ty.as_str(db), op.as_str(db)))
+        }
+        PendingDiagnostic::ArityMismatch { call_expr_id, call_module_id: _, func_name, func_local_index: _, func_module_id: _, expected, actual } => {
+            let ts = spans.lookup_expr(db, *call_expr_id)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F045]: function `{}` takes {} argument(s) but {} were supplied", loc, func_name.as_str(db), expected, actual))
+        }
+        PendingDiagnostic::ResultRequiresBinding { expr_id, module_id: _ } => {
+            let ts = spans.lookup_expr(db, *expr_id)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F046]: Result destructuring requires an else binding", loc))
+        }
+        PendingDiagnostic::TryTypeMismatch { expr_id, module_id: _, operator, expected, actual } => {
+            let ts = spans.lookup_expr(db, *expr_id)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F048]: try operator `{}` requires {} type, found `{}`", loc, operator.as_str(db), expected.as_str(db), actual.as_str(db)))
+        }
+        PendingDiagnostic::BreakOutsideLoop { local_index, module_id: _ } => {
+            let ts = spans.lookup_break(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F041]: `break` outside of a loop", loc))
+        }
+        PendingDiagnostic::ContinueOutsideLoop { local_index, module_id: _ } => {
+            let ts = spans.lookup_continue(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F042]: `continue` outside of a loop", loc))
+        }
+        PendingDiagnostic::FunctionRequiresReturnValue { local_index, module_id: _ } => {
+            let ts = spans.lookup_ret(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F043]: non-void function requires a return value", loc))
+        }
+        PendingDiagnostic::UndefinedVariableSet { local_index, module_id: _, name } => {
+            let ts = spans.lookup_set(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F054]: cannot find variable `{}` in this scope", loc, name.as_str(db)))
+        }
+        PendingDiagnostic::VoidFunctionReturnsValue { local_index, module_id: _ } => {
+            let ts = spans.lookup_ret(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F044]: void function cannot return a value", loc))
+        }
+        PendingDiagnostic::TryReturnTypeMismatch { expr_id, module_id: _, operator, expected, actual } => {
+            let ts = spans.lookup_expr(db, *expr_id)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F049]: try operator `{}` return type mismatch: expected `{}`, found `{}`", loc, operator.as_str(db), expected.as_str(db), actual.as_str(db)))
+        }
+    }
+}
+
+/// Format a TextSpan as a location string (e.g., "line 10, col 5").
+fn format_location<'db>(db: &'db dyn crate::Db, ts: &bct::text::TextSpan<'db>) -> String {
+    let span = &ts.span;
+    let text = ts.text.text(db);
+
+    // Calculate line and column from byte offset.
+    let start = span.start as usize;
+    let mut line = 1;
+    let mut col = 1;
+    for (i, ch) in text.char_indices() {
+        if i >= start {
+            break;
+        }
+        if ch == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+
+    format!("line {}, col {}", line, col)
+}

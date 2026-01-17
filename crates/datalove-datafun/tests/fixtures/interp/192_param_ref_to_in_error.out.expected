@@ -16,29 +16,25 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "CannotSynthesize",
-                ],
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100int\n    v1 = call m0.f1(v0)\n    unit_end\nexports:\n    val = v0\n    result = v1\n    output = v1\n",
             ),
-            output: "",
+            output: "Error: ModuleFunctionNotFound { module: IrModuleId(0), func: FuncId(1) }",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"output\")",
-                ],
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = copy unit0.v1\n    unit_end v0\n",
             ),
-            output: "",
+            output: "Error: ExternalUnitNotFound(0)",
         ),
     ],
 )

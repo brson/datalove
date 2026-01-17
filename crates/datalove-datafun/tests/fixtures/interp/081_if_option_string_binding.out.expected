@@ -16,15 +16,13 @@ Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "CannotSynthesize",
-                ],
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = move unit0.s0\n    unit_end v0\n",
             ),
-            output: "",
+            output: "@\"hello world\"",
         ),
     ],
 )

@@ -2,8 +2,7 @@ ModulesAnalysis(
     typecheck: TypecheckResult(
         status: "Error",
         errors: [
-            "local/test/main: CannotSynthesize",
-            "local/test/main: UnresolvedName(\"x\")",
+            "line 16, col 16: error[F011]: type inference blocked by syntax error",
         ],
     ),
     lowering: LoweringResult(

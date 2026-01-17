@@ -6,7 +6,7 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "local/test/recur: TryReturnTypeMismatch { operator: \"-!\", return_type: \"u32\" }",
+                    "line 6, col 24: error[F049]: try operator `-!` return type mismatch: expected `Result`, found `u32`",
                 ],
             ),
             interp_lowering: LoweringResult(

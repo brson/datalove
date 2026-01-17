@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "local/test/bad_module: TypeMismatch { expected: \"u32\", actual: \"int\" }",
+                    "line 4, col 9: error[F016]: mismatched types: expected `u32`, found `int`",
                 ],
             ),
             lowering: LoweringResult(

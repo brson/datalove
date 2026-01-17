@@ -66,7 +66,7 @@ pub mod synthesize;
 pub mod types;
 
 // Re-export emit infrastructure.
-pub use emit::{SpanLookup, LocalSpanLookup, ModuleGraphSpanLookup, emit_pending_diagnostics};
+pub use emit::{SpanLookup, LocalSpanLookup, ModuleGraphSpanLookup, emit_pending_diagnostics, format_pending_diagnostics};
 
 /// Type representation for datafun (extends datalit types with function types).
 #[derive(Clone, Hash, PartialEq, Eq)]

@@ -6,9 +6,9 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "local/test/fib: TryReturnTypeMismatch { operator: \"-!\", return_type: \"@?u32\" }",
-                    "local/test/fib: TryReturnTypeMismatch { operator: \"-!\", return_type: \"@?u32\" }",
-                    "local/test/fib: UnresolvedName(\"a\")",
+                    "line 7, col 17: error[F049]: try operator `-!` return type mismatch: expected `Result`, found `@?u32`",
+                    "line 8, col 17: error[F049]: try operator `-!` return type mismatch: expected `Result`, found `@?u32`",
+                    "line 9, col 15: error[F001]: cannot find value `a` in this scope",
                 ],
             ),
             interp_lowering: LoweringResult(

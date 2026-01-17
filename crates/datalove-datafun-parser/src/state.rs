@@ -310,6 +310,25 @@ impl<'db> Parser<'db> {
         self.peek_sigil(Sigil::Colon)
     }
 
+    /// Peek at the second token (one ahead of current).
+    pub(super) fn peek_second(&self) -> Option<&TreeToken<'db>> {
+        match &self.source {
+            TokenSource::Vec { tokens, pos, .. } => tokens.get(*pos + 1),
+            TokenSource::Iter { buffer, .. } => buffer[1].as_ref(),
+        }
+    }
+
+    /// Check if the second token is a specific sigil.
+    pub(super) fn peek_second_sigil(&self, sigil: Sigil) -> bool {
+        match self.peek_second() {
+            Some(TreeToken::Token(token)) => {
+                matches!(token.kind(self.db), TokenKind::Sigil(s) if s == sigil)
+            }
+            Some(TreeToken::Branch { sigil: s, .. }) => *s == sigil,
+            None => false,
+        }
+    }
+
     /// Get the byte position at start of current token (or end of last token).
     pub(super) fn current_byte_pos(&self) -> usize {
         if let Some(token) = self.peek() {

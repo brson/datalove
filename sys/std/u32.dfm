@@ -73,6 +73,104 @@ fun ilog2(self: u32): ?u32
   end if
 end fun
 
+// Power functions.
+
+// Returns the smallest power of two >= self. Returns none on overflow.
+fun next_power_of_two(self: u32): ?u32
+  if self <= 1
+    ret some 1
+  else
+    if is_power_of_two(self)
+      ret some self
+    else
+      // self > 1 and not a power of two, so we need 2^(ilog2(self) + 1).
+      if ilog2(self) |log|
+        let next_exp = add_saturating(log, 1)
+        if next_exp >= 32
+          ret @none
+        else
+          ret shift_left(1, next_exp)
+        end if
+      else
+        // Unreachable: ilog2 only returns none for 0.
+        ret some 1
+      end if
+    end if
+  end if
+end fun
+
+// Binary exponentiation with overflow detection.
+fun pow_checked(self: u32, exp: u32): ?u32
+  var result: u32 = 1
+  var base: u32 = self
+  var e: u32 = exp
+  loop while e .> 0
+    if bitand(e, 1) == 1
+      if mul_checked(result, base) |next_result|
+        set result = next_result
+      else
+        ret @none
+      end if
+    end if
+    set e = shift_right_wrapping(e, 1)
+    if e .> 0
+      if mul_checked(base, base) |next_base|
+        set base = next_base
+      else
+        ret @none
+      end if
+    end if
+  end loop
+  ret some result
+end fun
+
+// Binary exponentiation saturating at max_value on overflow.
+fun pow_saturating(self: u32, exp: u32): u32
+  var result: u32 = 1
+  var base: u32 = self
+  var e: u32 = exp
+  var overflow: bool = @false
+  loop while e .> 0
+    if bitand(e, 1) == 1
+      if mul_checked(result, base) |next_result|
+        set result = next_result
+      else
+        set overflow = @true
+      end if
+    end if
+    set e = shift_right_wrapping(e, 1)
+    if e .> 0
+      if mul_checked(base, base) |next_base|
+        set base = next_base
+      else
+        set overflow = @true
+      end if
+    end if
+  end loop
+  if overflow
+    ret max_value()
+  else
+    ret result
+  end if
+end fun
+
+// Binary exponentiation with wrapping on overflow.
+fun pow_wrapping(self: u32, exp: u32): u32
+  var result: u32 = 1
+  var base: u32 = self
+  var e: u32 = exp
+  loop while e .> 0
+    if bitand(e, 1) == 1
+      set result = mul_wrapping(result, base)
+    end if
+    set e = shift_right_wrapping(e, 1)
+    if e .> 0
+      set base = mul_wrapping(base, base)
+    end if
+  end loop
+  ret result
+end fun
+
 // Byte manipulation.
 
 fun swap_bytes(self: u32): u32

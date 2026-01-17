@@ -6,7 +6,7 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "local/test/structops: TypeMismatch { expected: \"{x: @u32, y: @u32}\", actual: \"{x: int, y: int}\" }",
+                    "line 4, col 9: error[F016]: mismatched types: expected `{x: @u32, y: @u32}`, found `{x: int, y: int}`",
                 ],
             ),
             interp_lowering: LoweringResult(

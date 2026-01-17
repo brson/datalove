@@ -18,8 +18,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "local/test/derived: UnresolvedName(\"module base (not required)\")",
-                    "local/test/derived: UnresolvedName(\"double\")",
+                    "line 6, col 9: error[F002]: cannot find function `double` in this scope",
                 ],
             ),
             lowering: LoweringResult(

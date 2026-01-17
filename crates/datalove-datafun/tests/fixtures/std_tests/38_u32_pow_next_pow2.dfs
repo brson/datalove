@@ -1,0 +1,52 @@
+require module sys/std/u32
+
+import u32.next_power_of_two
+import u32.pow_checked
+import u32.pow_saturating
+import u32.pow_wrapping
+
+// next_power_of_two tests
+let np1 = next_power_of_two(0)    // some 1
+let np2 = next_power_of_two(1)    // some 1
+let np3 = next_power_of_two(2)    // some 2
+let np4 = next_power_of_two(3)    // some 4
+let np5 = next_power_of_two(4)    // some 4
+let np6 = next_power_of_two(5)    // some 8
+let np7 = next_power_of_two(7)    // some 8
+let np8 = next_power_of_two(8)    // some 8
+let np9 = next_power_of_two(9)    // some 16
+let np10 = next_power_of_two(2147483648)  // some 2147483648 (2^31, already power of 2)
+let np11 = next_power_of_two(2147483649)  // none (would need 2^32, overflow)
+let np12 = next_power_of_two(4294967295)  // none (max_value, would overflow)
+
+// pow_checked tests - basic cases
+let pc1 = pow_checked(2, 0)     // some 1
+let pc2 = pow_checked(2, 1)     // some 2
+let pc3 = pow_checked(2, 2)     // some 4
+let pc4 = pow_checked(2, 10)    // some 1024
+let pc5 = pow_checked(2, 31)    // some 2147483648
+let pc6 = pow_checked(2, 32)    // none (overflow)
+let pc7 = pow_checked(3, 20)    // some 3486784401
+let pc8 = pow_checked(3, 21)    // none (overflow)
+let pc9 = pow_checked(0, 0)     // some 1 (0^0 = 1 by convention)
+let pc10 = pow_checked(0, 1)    // some 0
+let pc11 = pow_checked(1, 100)  // some 1
+
+// pow_saturating tests
+let ps1 = pow_saturating(2, 0)    // 1
+let ps2 = pow_saturating(2, 10)   // 1024
+let ps3 = pow_saturating(2, 31)   // 2147483648
+let ps4 = pow_saturating(2, 32)   // 4294967295 (saturated)
+let ps5 = pow_saturating(3, 21)   // 4294967295 (saturated)
+let ps6 = pow_saturating(100, 10) // 4294967295 (saturated)
+
+// pow_wrapping tests
+let pw1 = pow_wrapping(2, 0)     // 1
+let pw2 = pow_wrapping(2, 10)    // 1024
+let pw3 = pow_wrapping(2, 31)    // 2147483648
+let pw4 = pow_wrapping(2, 32)    // 0 (wrapped: 2^32 mod 2^32 = 0)
+let pw5 = pow_wrapping(2, 33)    // 0 (wrapped: 2^33 mod 2^32 = 0)
+let pw6 = pow_wrapping(3, 20)    // 3486784401
+let pw7 = pow_wrapping(3, 21)    // wraps: 3^21 = 10460353203 mod 2^32
+
+let output = (np1, np2, np3, np4, np5, np6, np7, np8, np9, np10, np11, np12, pc1, pc2, pc3, pc4, pc5, pc6, pc7, pc8, pc9, pc10, pc11, ps1, ps2, ps3, ps4, ps5, ps6, pw1, pw2, pw3, pw4, pw5, pw6, pw7)
