@@ -1,0 +1,35 @@
+require module sys/std/u32
+
+import u32.rem_checked
+import u32.is_power_of_two
+import u32.ilog2
+
+// rem_checked tests
+let rem1 = rem_checked(10, 3)    // 10 % 3 = 1
+let rem2 = rem_checked(15, 5)    // 15 % 5 = 0
+let rem3 = rem_checked(7, 10)    // 7 % 10 = 7
+let rem4 = rem_checked(10, 0)    // div by zero = none
+
+// is_power_of_two tests
+let pow1 = is_power_of_two(0)    // false
+let pow2 = is_power_of_two(1)    // true (2^0)
+let pow3 = is_power_of_two(2)    // true (2^1)
+let pow4 = is_power_of_two(3)    // false
+let pow5 = is_power_of_two(4)    // true (2^2)
+let pow6 = is_power_of_two(16)   // true (2^4)
+let pow7 = is_power_of_two(17)   // false
+let pow8 = is_power_of_two(2147483648)  // true (2^31)
+
+// ilog2 tests
+let log1 = ilog2(0)      // none
+let log2 = ilog2(1)      // some 0
+let log3 = ilog2(2)      // some 1
+let log4 = ilog2(3)      // some 1
+let log5 = ilog2(4)      // some 2
+let log6 = ilog2(7)      // some 2
+let log7 = ilog2(8)      // some 3
+let log8 = ilog2(255)    // some 7
+let log9 = ilog2(256)    // some 8
+let log10 = ilog2(4294967295)  // some 31
+
+let output = (rem1, rem2, rem3, rem4, pow1, pow2, pow3, pow4, pow5, pow6, pow7, pow8, log1, log2, log3, log4, log5, log6, log7, log8, log9, log10)

@@ -34,6 +34,7 @@ pub enum IntrinsicId {
     AddWrappingU32 = 40,
     SubWrappingU32 = 41,
     MulWrappingU32 = 42,
+    RemU32 = 43,
 
     // Type conversion (50-59).
     U32ToI32 = 50,
@@ -159,6 +160,12 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
     IntrinsicDef {
         id: IntrinsicId::MulWrappingU32,
         name: "mul_wrapping_u32",
+        params: &[IntrinsicType::U32, IntrinsicType::U32],
+        ret: IntrinsicType::U32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::RemU32,
+        name: "rem_u32",
         params: &[IntrinsicType::U32, IntrinsicType::U32],
         ret: IntrinsicType::U32,
     },

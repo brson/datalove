@@ -128,6 +128,15 @@ fun div_checked(self: u32, other: u32): ?u32
   ret some (self /? other)
 end fun
 
+// Checked remainder. Returns none on division by zero.
+fun rem_checked(self: u32, other: u32): ?u32
+  if other == 0
+    ret @none
+  else
+    ret some icall rem_u32(self, other)
+  end if
+end fun
+
 // Saturating addition. Returns max_value on overflow.
 fun add_saturating(self: u32, other: u32): u32
   if add_checked(self, other) |value|
@@ -369,5 +378,23 @@ fun abs_diff(self: u32, other: u32): u32
     ret sub_saturating(self, other)
   else
     ret sub_saturating(other, self)
+  end if
+end fun
+
+// True if value is a power of two.
+fun is_power_of_two(self: u32): bool
+  if self == 0
+    ret @false
+  else
+    ret count_ones(self) == 1
+  end if
+end fun
+
+// Integer log base 2. Returns none if self is zero.
+fun ilog2(self: u32): ?u32
+  if self == 0
+    ret @none
+  else
+    ret some sub_saturating(31, leading_zeros(self))
   end if
 end fun

@@ -90,6 +90,11 @@ impl IrInterpreter {
                 let b = self.read_u32(&args[1], frame, frames)?;
                 self.write_u32(a.wrapping_mul(b), dest);
             }
+            RemU32 => {
+                let a = self.read_u32(&args[0], frame, frames)?;
+                let b = self.read_u32(&args[1], frame, frames)?;
+                self.write_u32(a % b, dest);
+            }
 
             // Type conversions.
             U32ToI32 => {

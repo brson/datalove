@@ -101,6 +101,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let b = self.get_operand_value(builder, &args[1])?;
                 builder.ins().imul(a, b)
             }
+            RemU32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().urem(a, b)
+            }
 
             // Type conversions.
             // For u32 <-> i32, these are no-ops at the IR level (same bit representation).
