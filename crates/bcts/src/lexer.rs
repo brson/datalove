@@ -114,6 +114,8 @@ pub enum Sigil {
     BraceClose,
     BracketOpen,
     BracketClose,
+    Dollar,
+    Tilde,
 }
 
 #[salsa::tracked]
@@ -461,6 +463,8 @@ impl Sigil {
             Sigil::BraceClose => "}",
             Sigil::BracketOpen => "[",
             Sigil::BracketClose => "]",
+            Sigil::Dollar => "$",
+            Sigil::Tilde => "~",
         }
     }
 
@@ -678,6 +682,16 @@ fn test_lex_chunk() {
     assert_eq!(
         dbglex("a+b+?c+|d+!e"),
         "a + b +? c +| d +! e",
+    );
+
+    // Clone and widen postfix operators.
+    assert_eq!(
+        dbglex("a$b~c"),
+        "a $ b ~ c",
+    );
+    assert_eq!(
+        dbglex("x$~"),
+        "x $ ~",
     );
 
     // Earmuff braces.
