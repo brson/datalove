@@ -691,7 +691,7 @@ impl TypecheckStdCommand {
 impl DocsCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use rmx::std::fs;
-        use tera::{Tera, Context};
+        use rmx::tera::{Tera, Context};
 
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let manifest_path = PathBuf::from(manifest_dir);
@@ -754,13 +754,13 @@ impl DocsCommand {
                 let markdown = Self::rewrite_links(&markdown);
 
                 // Convert to HTML with GFM extensions.
-                let mut options = comrak::Options::default();
+                let mut options = rmx::comrak::Options::default();
                 options.extension.table = true;
                 options.extension.strikethrough = true;
                 options.extension.autolink = true;
                 options.extension.header_ids = Some("user-content-".to_string());
                 options.render.unsafe_ = true; // Allow raw HTML in markdown.
-                let html = comrak::markdown_to_html(&markdown, &options);
+                let html = rmx::comrak::markdown_to_html(&markdown, &options);
 
                 // Extract title from first heading or filename.
                 let title = Self::extract_title(&markdown, &file_name);

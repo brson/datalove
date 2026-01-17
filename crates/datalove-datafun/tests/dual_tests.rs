@@ -468,7 +468,7 @@ fn aot_compile_link_run(
     };
 
     // Write object to temp file.
-    let dir = match tempfile::tempdir() {
+    let dir = match rmx::tempfile::tempdir() {
         Ok(d) => d,
         Err(e) => {
             return (

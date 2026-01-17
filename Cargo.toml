@@ -25,9 +25,11 @@ default-members = [
 
 [workspace.dependencies]
 rmx.package = "rustmax"
-rmx.version = "0.0.6"
+rmx.version = "0.0.7"
 rmx.features = [
   "rmx-profile-wasm",
+  "comrak",
+  "tera",
 ]
 bct.package = "bcts"
 bct.path = "crates/bcts"

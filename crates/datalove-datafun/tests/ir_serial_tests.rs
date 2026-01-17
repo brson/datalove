@@ -228,7 +228,7 @@ fn execute_ir_aot(
     };
 
     // Write object to temp file.
-    let dir = match tempfile::tempdir() {
+    let dir = match rmx::tempfile::tempdir() {
         Ok(d) => d,
         Err(e) => {
             return (

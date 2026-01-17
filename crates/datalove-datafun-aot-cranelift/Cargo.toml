@@ -18,5 +18,4 @@ cranelift-object = "0.116"
 target-lexicon = "0.13"
 
 [dev-dependencies]
-tempfile = "3"
 datalove-datafun.path = "../datalove-datafun"

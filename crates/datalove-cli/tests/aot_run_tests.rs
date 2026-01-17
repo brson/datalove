@@ -28,7 +28,7 @@ fn run_aot(path: &Path) -> Result<String, String> {
     }
 
     // Create a temp directory for the output executable.
-    let temp_dir = tempfile::tempdir()
+    let temp_dir = rmx::tempfile::tempdir()
         .map_err(|e| format!("Failed to create temp dir: {}", e))?;
     let exe_path = temp_dir.path().join("test_exe");
 

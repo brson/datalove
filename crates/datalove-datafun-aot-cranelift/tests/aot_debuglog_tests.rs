@@ -63,7 +63,7 @@ fn test_compile_debuglog_i32() {
     );
 
     // Write to temp file to verify it's a valid object.
-    let dir = tempfile::tempdir().expect("failed to create temp dir");
+    let dir = rmx::tempfile::tempdir().expect("failed to create temp dir");
     let obj_path = dir.path().join("test.o");
     std::fs::write(&obj_path, &obj_bytes).expect("failed to write object file");
 

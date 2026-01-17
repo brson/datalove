@@ -1294,8 +1294,8 @@ pub mod aot {
     /// Link object bytes to an executable in a temp directory.
     pub fn link_object_to_temp_executable(
         obj_bytes: &[u8],
-    ) -> Result<(PathBuf, tempfile::TempDir), LinkError> {
-        let dir = tempfile::tempdir().map_err(LinkError::TempDir)?;
+    ) -> Result<(PathBuf, rmx::tempfile::TempDir), LinkError> {
+        let dir = rmx::tempfile::tempdir().map_err(LinkError::TempDir)?;
         let exe_path = dir.path().join("script");
         link_object_to_path(obj_bytes, &exe_path)?;
         Ok((exe_path, dir))
@@ -1303,7 +1303,7 @@ pub mod aot {
 
     /// Link object bytes to an executable at the specified path.
     pub fn link_object_to_path(obj_bytes: &[u8], output_path: &Path) -> Result<(), LinkError> {
-        let dir = tempfile::tempdir().map_err(LinkError::TempDir)?;
+        let dir = rmx::tempfile::tempdir().map_err(LinkError::TempDir)?;
         let obj_path = dir.path().join("script.o");
         std::fs::write(&obj_path, obj_bytes).map_err(LinkError::WriteObject)?;
 
