@@ -72,9 +72,9 @@ fun to_le(self: u32): u32
   ret 0
 end fun
 
+// Checked addition. Returns none on overflow.
 fun add_checked(self: u32, other: u32): ?u32
-  // todo
-  ret @none // fixme @-required
+  ret some (self +? other)
 end fun
 
 fun add_checked_signed(self: u32, other: i32): ?u32
@@ -82,9 +82,9 @@ fun add_checked_signed(self: u32, other: i32): ?u32
   ret @none // fixme @-required
 end fun
 
+// Checked subtraction. Returns none on underflow.
 fun sub_checked(self: u32, other: u32): ?u32
-  // todo
-  ret @none // fixme @-required
+  ret some (self -? other)
 end fun
 
 fun sub_checked_signed(self: u32, other: i32): ?u32
@@ -92,34 +92,47 @@ fun sub_checked_signed(self: u32, other: i32): ?u32
   ret @none // fixme @-required
 end fun
 
+// Checked multiplication. Returns none on overflow.
 fun mul_checked(self: u32, other: u32): ?u32
-  // todo
-  ret @none // fixme @-required
+  ret some (self *? other)
 end fun
 
+// Checked division. Returns none on division by zero.
 fun div_checked(self: u32, other: u32): ?u32
-  // todo
-  ret @none // fixme @-required
+  ret some (self /? other)
 end fun
 
+// Saturating addition. Returns max_value on overflow.
 fun add_saturating(self: u32, other: u32): u32
-  // todo
-  ret 0
+  if add_checked(self, other) |value|
+    ret value
+  else
+    ret max_value()
+  end if
 end fun
 
+// Saturating subtraction. Returns 0 on underflow.
 fun sub_saturating(self: u32, other: u32): u32
-  // todo
-  ret 0
+  if sub_checked(self, other) |value|
+    ret value
+  else
+    ret 0
+  end if
 end fun
 
+// Saturating multiplication. Returns max_value on overflow.
 fun mul_saturating(self: u32, other: u32): u32
-  // todo
-  ret 0
+  if mul_checked(self, other) |value|
+    ret value
+  else
+    ret max_value()
+  end if
 end fun
 
+// Saturating division. Returns none on division by zero.
+// For u32, division cannot overflow (result <= dividend), so this is same as div_checked.
 fun div_saturating(self: u32, other: u32): ?u32
-  // todo
-  ret @none // fixme @-required
+  ret div_checked(self, other)
 end fun
 
 fun add_wrapping(self: u32, other: u32): u32

@@ -1,0 +1,24 @@
+require module sys/std/u32
+require module sys/std/option
+
+import u32.add_checked
+import u32.sub_checked
+import option.unwrap_or_zero
+import option.is_some
+
+// add_checked: normal cases
+let add_ok1 = unwrap_or_zero(add_checked(10, 20))
+let add_ok2 = unwrap_or_zero(add_checked(0, 0))
+let add_ok3 = unwrap_or_zero(add_checked(4294967290, 5))
+
+// add_checked: overflow case (max + 1)
+let add_overflow = is_some(add_checked(4294967295, 1))
+
+// sub_checked: normal cases
+let sub_ok1 = unwrap_or_zero(sub_checked(20, 10))
+let sub_ok2 = unwrap_or_zero(sub_checked(5, 5))
+
+// sub_checked: underflow case (0 - 1)
+let sub_underflow = is_some(sub_checked(0, 1))
+
+let output = (add_ok1, add_ok2, add_ok3, add_overflow, sub_ok1, sub_ok2, sub_underflow)

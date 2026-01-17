@@ -1,0 +1,25 @@
+require module sys/std/u32
+require module sys/std/option
+
+import u32.mul_checked
+import u32.div_checked
+import option.unwrap_or_zero
+import option.is_some
+
+// mul_checked: normal cases
+let mul_ok1 = unwrap_or_zero(mul_checked(10, 20))
+let mul_ok2 = unwrap_or_zero(mul_checked(0, 100))
+let mul_ok3 = unwrap_or_zero(mul_checked(65536, 65535))
+
+// mul_checked: overflow case
+let mul_overflow = is_some(mul_checked(65536, 65536))
+
+// div_checked: normal cases
+let div_ok1 = unwrap_or_zero(div_checked(100, 10))
+let div_ok2 = unwrap_or_zero(div_checked(7, 3))
+let div_ok3 = unwrap_or_zero(div_checked(0, 5))
+
+// div_checked: divide by zero
+let div_zero = is_some(div_checked(10, 0))
+
+let output = (mul_ok1, mul_ok2, mul_ok3, mul_overflow, div_ok1, div_ok2, div_ok3, div_zero)

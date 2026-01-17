@@ -1,0 +1,22 @@
+require module sys/std/u32
+
+import u32.add_saturating
+import u32.sub_saturating
+
+// add_saturating: normal cases
+let add_ok1 = add_saturating(10, 20)
+let add_ok2 = add_saturating(0, 0)
+
+// add_saturating: overflow saturates to max
+let add_sat1 = add_saturating(4294967295, 1)
+let add_sat2 = add_saturating(4294967290, 100)
+
+// sub_saturating: normal cases
+let sub_ok1 = sub_saturating(20, 10)
+let sub_ok2 = sub_saturating(5, 5)
+
+// sub_saturating: underflow saturates to 0
+let sub_sat1 = sub_saturating(0, 1)
+let sub_sat2 = sub_saturating(10, 100)
+
+let output = (add_ok1, add_ok2, add_sat1, add_sat2, sub_ok1, sub_ok2, sub_sat1, sub_sat2)

@@ -1,0 +1,14 @@
+require module sys/std/u32
+
+import u32.mul_saturating
+
+// mul_saturating: normal cases
+let mul_ok1 = mul_saturating(10, 20)
+let mul_ok2 = mul_saturating(0, 100)
+let mul_ok3 = mul_saturating(1, 4294967295)
+
+// mul_saturating: overflow saturates to max
+let mul_sat1 = mul_saturating(65536, 65536)
+let mul_sat2 = mul_saturating(4294967295, 2)
+
+let output = (mul_ok1, mul_ok2, mul_ok3, mul_sat1, mul_sat2)
