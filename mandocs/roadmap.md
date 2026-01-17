@@ -22,6 +22,7 @@
 - [x] aot
 - compute-only core library
 - core->runtime calls
+- intrinsics and core functions
 - heap types, examples omit
 - [x] field projections
 - match for enums
