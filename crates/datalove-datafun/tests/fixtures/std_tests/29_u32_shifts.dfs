@@ -1,0 +1,32 @@
+require module sys/std/u32
+
+import u32.shift_left
+import u32.shift_right
+import u32.shift_left_wrapping
+import u32.shift_right_wrapping
+import u32.rotate_left
+import u32.rotate_right
+
+let a: u32 = 1
+
+// Basic shifts.
+let shl_1 = shift_left(a, 4)
+let shr_16 = shift_right(16, 2)
+
+// Shift by 0.
+let shl_0 = shift_left(a, 0)
+let shr_0 = shift_right(a, 0)
+
+// Shift >= 32 returns none.
+let shl_32 = shift_left(a, 32)
+let shr_32 = shift_right(a, 32)
+
+// Wrapping shifts.
+let shl_wrap = shift_left_wrapping(1, 4)
+let shr_wrap = shift_right_wrapping(16, 2)
+
+// Rotate.
+let rot_l = rotate_left(1, 1)
+let rot_r = rotate_right(2, 1)
+
+let output = (shl_1, shr_16, shl_0, shr_0, shl_32, shr_32, shl_wrap, shr_wrap, rot_l, rot_r)

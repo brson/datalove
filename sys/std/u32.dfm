@@ -170,23 +170,21 @@ fun neg_checked(self: u32): ?u32
   end if
 end fun
 
-// Returns none if shift >= 32 or if bits would be lost.
-// Stubbed - needs proper implementation with shift intrinsics.
+// Returns none if shift >= 32.
 fun shift_left(self: u32, other: u32): ?u32
   if other >= 32
     ret @none
   else
-    ret some self
+    ret some icall shl_u32(self, other)
   end if
 end fun
 
 // Returns none if shift >= 32.
-// Stubbed - needs proper implementation with shift intrinsics.
 fun shift_right(self: u32, other: u32): ?u32
   if other >= 32
     ret @none
   else
-    ret some self
+    ret some icall shr_u32(self, other)
   end if
 end fun
 
