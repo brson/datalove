@@ -30,7 +30,7 @@
 
 
 
-# in progress
+## In progress
 
 - type syntax cleanup
 - human docs
@@ -38,7 +38,7 @@
 
 
 
-# on deck
+## On deck
 
 - fully reactive scripts
 - clone, working heap types, and default syntax everywhere
@@ -49,31 +49,33 @@
 - runtime calls
 
 
-----------
 
 
+## Backlog
 
-# backlog
-
-- testable
+- testable docs
 - multiple scripts
 - analysis caching
-- sourceless parsing
-- clean up demo files in style of learn x in y minutes
-- datafun ast roundtrip
 - updates feed
-- cleanup and specify bidirectional typechecking
-- comptime/const execution
-- named types
-- improve runtime implementation unsafety
 - type declarations
 - simple multithreading
+
+
+
+
+## Backburner
+
+- cleanup and specify bidirectional typechecking
+- comptime/const execution
+- sourceless parsing
+- lsp - needs a project/workspace concept
 - deterministic builds - compiler pipeline is already deterministic
 - wasm-component backend
+- improve runtime implementation unsafety
 
 
 
 
-## backburner
+## Far future
 
-- lsp - needs a project/workspace concept
+- named types
