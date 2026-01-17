@@ -41,9 +41,10 @@
 
 ## On deck
 
-- assert statements
+- assert statements - needed for std_tests
 - fully reactive scripts
 - clone, working heap types, and default syntax everywhere
+- widening coercions
 - jit
 - match
 - generics

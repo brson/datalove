@@ -5,6 +5,17 @@ Datalove on various language design topics.
 
 
 
+### 2026-01-17 - `assert` statements
+
+todo
+
+```datalove
+fun test_thing()
+
+end fun
+```
+
+
 ### 2026-01-08 - Field projections
 
 Datalove structs and tuples support
