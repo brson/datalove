@@ -153,17 +153,21 @@ but I do have a [vision](vision.md) about what it will be.
 - [Datalove Literals](datalit-types.md)
 - [Modules, Functions and Scripts](modules-functions-scripts.md)
 - [Control Flow](control-flow.md)
-- [Optional and Result Types and Operations](checked-types.md)
 - [Operators](operators.md)
+- [Optional and Result Types and Operations](checked-types.md)
 - [Heaps and Multithreading](heaps.md)
+- [Roadmap](roadmap.md)
+- [Vision](vision.md)
+
+---
+
+- [Datalove Literals Runtime Types](datalit-runtime-types.md)
+- [Compiler Guide](compiler-guide.md)
+- [Testing](testing-tower.md)
+- [Influences](influences.md)
 
 ---
 
 - [Features](features.md)
 - [Design Notes](design-notes.md)
 - [Novelties](novelties.md)
-- [Datalit Runtime Types](datalit-runtime-types.md)
-- [Compiler Guide](compiler-guide.md)
-- [Testing](testing-tower.md)
-- [Influences](influences.md)
-- [Vision](vision.md)
