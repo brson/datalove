@@ -151,6 +151,11 @@ let foo = "test"
 let foo_length: usize = len(foo)
 ```
 
+Arithmetic operators widen `usize` and `isize`
+to `int` like other fixed int types.
+They otherwise do not automatically coerce
+to any other types.
+
 
 
 
