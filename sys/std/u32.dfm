@@ -500,3 +500,12 @@ fun abs_diff(self: u32, other: u32): u32
     ret sub_saturating(other, self)
   end if
 end fun
+
+// Average of two values, rounded down, without overflow.
+// Uses the identity: (a + b) / 2 = (a & b) + ((a ^ b) >> 1)
+fun midpoint(self: u32, other: u32): u32
+  let common = bitand(self, other)
+  let diff = bitxor(self, other)
+  let half_diff = shift_right_wrapping(diff, 1)
+  ret add_wrapping(common, half_diff)
+end fun

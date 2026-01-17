@@ -1,0 +1,27 @@
+require module sys/std/u32
+
+import u32.midpoint
+import u32.max_value
+
+// Basic cases
+let m1 = midpoint(0, 0)       // 0
+let m2 = midpoint(0, 1)       // 0 (rounds down)
+let m3 = midpoint(1, 1)       // 1
+let m4 = midpoint(0, 2)       // 1
+let m5 = midpoint(1, 3)       // 2
+let m6 = midpoint(0, 10)      // 5
+let m7 = midpoint(10, 0)      // 5 (order doesn't matter)
+
+// Cases that would overflow with naive (a + b) / 2
+let m8 = midpoint(max_value(), max_value())   // 4294967295
+let m9 = midpoint(max_value(), 0)             // 2147483647
+let m10 = midpoint(0, max_value())            // 2147483647
+let m11 = midpoint(max_value(), 1)            // 2147483648
+let m12 = midpoint(4000000000, 4000000000)    // 4000000000
+
+// Odd sums (rounds down)
+let m13 = midpoint(1, 2)      // 1 (not 1.5)
+let m14 = midpoint(0, 3)      // 1 (not 1.5)
+let m15 = midpoint(100, 201)  // 150 (not 150.5)
+
+let output = (m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12, m13, m14, m15)
