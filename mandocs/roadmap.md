@@ -41,6 +41,7 @@
 
 ## On deck
 
+- assert statements
 - fully reactive scripts
 - clone, working heap types, and default syntax everywhere
 - jit
