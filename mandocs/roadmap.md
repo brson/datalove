@@ -32,6 +32,7 @@
 
 ## In progress
 
+- numeric intrinsics and core functions
 - type syntax cleanup
 - human docs
 
