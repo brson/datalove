@@ -43,6 +43,7 @@
 
 - assert statements - needed for std_tests
 - fully reactive scripts
+- clone and coerce
 - clone, working heap types, and default syntax everywhere
 - widening coercions
 - jit
