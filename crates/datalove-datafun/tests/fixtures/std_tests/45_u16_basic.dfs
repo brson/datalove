@@ -1,0 +1,136 @@
+require module sys/std/u16
+
+import u16.min_value
+import u16.max_value
+import u16.bits
+import u16.bitnot
+import u16.bitand
+import u16.bitor
+import u16.bitxor
+import u16.count_ones
+import u16.count_zeros
+import u16.leading_zeros
+import u16.trailing_zeros
+import u16.leading_ones
+import u16.trailing_ones
+import u16.is_power_of_two
+import u16.ilog2
+import u16.swap_bytes
+import u16.reverse_bits
+import u16.cast_signed
+import u16.add_checked
+import u16.sub_checked
+import u16.mul_checked
+import u16.div_checked
+import u16.rem_checked
+import u16.add_saturating
+import u16.sub_saturating
+import u16.mul_saturating
+import u16.add_wrapping
+import u16.sub_wrapping
+import u16.mul_wrapping
+import u16.shift_left
+import u16.shift_right
+import u16.shift_left_wrapping
+import u16.shift_right_wrapping
+import u16.rotate_left
+import u16.rotate_right
+import u16.is_zero
+import u16.min
+import u16.max
+import u16.clamp
+import u16.abs_diff
+import u16.midpoint
+
+// Constants.
+let min_v = min_value()
+let max_v = max_value()
+let bits_v = bits()
+
+// Bitwise.
+let not_val = bitnot(0)
+let and_val = bitand(65535, 255)
+let or_val = bitor(65280, 255)
+let xor_val = bitxor(65535, 255)
+
+// Bit counting.
+let ones = count_ones(65535)
+let zeros = count_zeros(65535)
+let lz = leading_zeros(1)
+let tz = trailing_zeros(32768)
+let lo = leading_ones(65535)
+let to = trailing_ones(65534)
+
+// Power of two.
+let is_pow2 = is_power_of_two(256)
+let not_pow2 = is_power_of_two(255)
+let log2_256 = ilog2(256)
+let log2_0 = ilog2(0)
+
+// Byte manipulation.
+let swapped = swap_bytes(256)
+let reversed = reverse_bits(1)
+
+// Type conversion.
+let cast_v = cast_signed(32768)
+
+// Checked arithmetic.
+let add_chk = add_checked(30000, 30000)
+let add_chk_ovf = add_checked(60000, 10000)
+let sub_chk = sub_checked(30000, 10000)
+let sub_chk_unf = sub_checked(10000, 30000)
+let mul_chk = mul_checked(100, 200)
+let mul_chk_ovf = mul_checked(1000, 100)
+let div_chk = div_checked(1000, 10)
+let div_chk_zero = div_checked(1000, 0)
+let rem_chk = rem_checked(17, 5)
+let rem_chk_zero = rem_checked(17, 0)
+
+// Saturating arithmetic.
+let add_sat = add_saturating(60000, 10000)
+let sub_sat = sub_saturating(10000, 30000)
+let mul_sat = mul_saturating(1000, 100)
+
+// Wrapping arithmetic.
+let add_wrap = add_wrapping(60000, 10000)
+let sub_wrap = sub_wrapping(10000, 30000)
+let mul_wrap = mul_wrapping(1000, 100)
+
+// Shifts.
+let shl = shift_left(1, 8)
+let shr = shift_right(256, 4)
+let shl_ovf = shift_left(1, 16)
+let shr_ovf = shift_right(1, 16)
+let shl_wrap = shift_left_wrapping(1, 20)
+let shr_wrap = shift_right_wrapping(256, 20)
+
+// Rotations.
+let rotl = rotate_left(1, 8)
+let rotr = rotate_right(256, 8)
+
+// Comparisons.
+let is_z = is_zero(0)
+let min_v2 = min(100, 200)
+let max_v2 = max(100, 200)
+let clamped = clamp(500, 100, 300)
+let adiff = abs_diff(100, 300)
+let mid = midpoint(100, 200)
+
+let output = (
+  min_v, max_v, bits_v,
+  not_val, and_val, or_val, xor_val,
+  ones, zeros, lz, tz, lo, to,
+  is_pow2, not_pow2, log2_256, log2_0,
+  swapped, reversed,
+  cast_v,
+  add_chk, add_chk_ovf,
+  sub_chk, sub_chk_unf,
+  mul_chk, mul_chk_ovf,
+  div_chk, div_chk_zero,
+  rem_chk, rem_chk_zero,
+  add_sat, sub_sat, mul_sat,
+  add_wrap, sub_wrap, mul_wrap,
+  shl, shr, shl_ovf, shr_ovf, shl_wrap, shr_wrap,
+  rotl, rotr,
+  is_z, min_v2, max_v2, clamped, adiff, mid
+)

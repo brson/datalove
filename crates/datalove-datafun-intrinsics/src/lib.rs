@@ -93,11 +93,82 @@ pub enum IntrinsicId {
     // U64/I64 type conversion (150-159).
     U64ToI64 = 150,
     I64ToU64 = 151,
+
+    // U8 operations (160-179).
+    BitnotU8 = 160,
+    BitandU8 = 161,
+    BitorU8 = 162,
+    BitxorU8 = 163,
+    ShlU8 = 164,
+    ShrU8 = 165,
+    PopcountU8 = 166,
+    ClzU8 = 167,
+    CtzU8 = 168,
+    ReverseBitsU8 = 169,
+    AddWrappingU8 = 170,
+    SubWrappingU8 = 171,
+    MulWrappingU8 = 172,
+    RemU8 = 173,
+    U8ToI8 = 174,
+    I8ToU8 = 175,
+
+    // I8 operations (176-179).
+    NegWrappingI8 = 176,
+    SshrI8 = 177,
+    SremI8 = 178,
+
+    // U16 operations (180-199).
+    BitnotU16 = 180,
+    BitandU16 = 181,
+    BitorU16 = 182,
+    BitxorU16 = 183,
+    ShlU16 = 184,
+    ShrU16 = 185,
+    PopcountU16 = 186,
+    ClzU16 = 187,
+    CtzU16 = 188,
+    SwapBytesU16 = 189,
+    ReverseBitsU16 = 190,
+    AddWrappingU16 = 191,
+    SubWrappingU16 = 192,
+    MulWrappingU16 = 193,
+    RemU16 = 194,
+    U16ToI16 = 195,
+    I16ToU16 = 196,
+
+    // I16 operations (197-199).
+    NegWrappingI16 = 197,
+    SshrI16 = 198,
+    SremI16 = 199,
+
+    // U64 additional operations (200-219).
+    BitnotU64 = 200,
+    BitorU64 = 201,
+    ShlU64 = 202,
+    ShrU64 = 203,
+    PopcountU64 = 204,
+    ClzU64 = 205,
+    CtzU64 = 206,
+    SwapBytesU64 = 207,
+    ReverseBitsU64 = 208,
+    AddWrappingU64 = 209,
+    SubWrappingU64 = 210,
+    MulWrappingU64 = 211,
+    RemU64 = 212,
+
+    // I64 operations (213-219).
+    NegWrappingI64 = 213,
+    SshrI64 = 214,
+    SremI64 = 215,
 }
 
 /// Simplified type for intrinsic parameters and return values.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum IntrinsicType {
+    U8,
+    I8,
+    U16,
+    I16,
     U32,
     I32,
     U64,
@@ -458,6 +529,376 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         name: "i64_to_u64",
         params: &[IntrinsicType::I64],
         ret: IntrinsicType::U64,
+    },
+
+    // U8 bitwise operations.
+    IntrinsicDef {
+        id: IntrinsicId::BitnotU8,
+        name: "bitnot_u8",
+        params: &[IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitandU8,
+        name: "bitand_u8",
+        params: &[IntrinsicType::U8, IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitorU8,
+        name: "bitor_u8",
+        params: &[IntrinsicType::U8, IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitxorU8,
+        name: "bitxor_u8",
+        params: &[IntrinsicType::U8, IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+
+    // U8 shift operations.
+    IntrinsicDef {
+        id: IntrinsicId::ShlU8,
+        name: "shl_u8",
+        params: &[IntrinsicType::U8, IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::ShrU8,
+        name: "shr_u8",
+        params: &[IntrinsicType::U8, IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+
+    // U8 bit counting operations.
+    IntrinsicDef {
+        id: IntrinsicId::PopcountU8,
+        name: "popcount_u8",
+        params: &[IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::ClzU8,
+        name: "clz_u8",
+        params: &[IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::CtzU8,
+        name: "ctz_u8",
+        params: &[IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+
+    // U8 bit manipulation.
+    IntrinsicDef {
+        id: IntrinsicId::ReverseBitsU8,
+        name: "reverse_bits_u8",
+        params: &[IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+
+    // U8 wrapping arithmetic.
+    IntrinsicDef {
+        id: IntrinsicId::AddWrappingU8,
+        name: "add_wrapping_u8",
+        params: &[IntrinsicType::U8, IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SubWrappingU8,
+        name: "sub_wrapping_u8",
+        params: &[IntrinsicType::U8, IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::MulWrappingU8,
+        name: "mul_wrapping_u8",
+        params: &[IntrinsicType::U8, IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::RemU8,
+        name: "rem_u8",
+        params: &[IntrinsicType::U8, IntrinsicType::U8],
+        ret: IntrinsicType::U8,
+    },
+
+    // U8/I8 type conversion.
+    IntrinsicDef {
+        id: IntrinsicId::U8ToI8,
+        name: "u8_to_i8",
+        params: &[IntrinsicType::U8],
+        ret: IntrinsicType::I8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::I8ToU8,
+        name: "i8_to_u8",
+        params: &[IntrinsicType::I8],
+        ret: IntrinsicType::U8,
+    },
+
+    // I8 operations.
+    IntrinsicDef {
+        id: IntrinsicId::NegWrappingI8,
+        name: "neg_wrapping_i8",
+        params: &[IntrinsicType::I8],
+        ret: IntrinsicType::I8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SshrI8,
+        name: "sshr_i8",
+        params: &[IntrinsicType::I8, IntrinsicType::U8],
+        ret: IntrinsicType::I8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SremI8,
+        name: "srem_i8",
+        params: &[IntrinsicType::I8, IntrinsicType::I8],
+        ret: IntrinsicType::I8,
+    },
+
+    // U16 bitwise operations.
+    IntrinsicDef {
+        id: IntrinsicId::BitnotU16,
+        name: "bitnot_u16",
+        params: &[IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitandU16,
+        name: "bitand_u16",
+        params: &[IntrinsicType::U16, IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitorU16,
+        name: "bitor_u16",
+        params: &[IntrinsicType::U16, IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitxorU16,
+        name: "bitxor_u16",
+        params: &[IntrinsicType::U16, IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+
+    // U16 shift operations.
+    IntrinsicDef {
+        id: IntrinsicId::ShlU16,
+        name: "shl_u16",
+        params: &[IntrinsicType::U16, IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::ShrU16,
+        name: "shr_u16",
+        params: &[IntrinsicType::U16, IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+
+    // U16 bit counting operations.
+    IntrinsicDef {
+        id: IntrinsicId::PopcountU16,
+        name: "popcount_u16",
+        params: &[IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::ClzU16,
+        name: "clz_u16",
+        params: &[IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::CtzU16,
+        name: "ctz_u16",
+        params: &[IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+
+    // U16 byte/bit manipulation.
+    IntrinsicDef {
+        id: IntrinsicId::SwapBytesU16,
+        name: "swap_bytes_u16",
+        params: &[IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::ReverseBitsU16,
+        name: "reverse_bits_u16",
+        params: &[IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+
+    // U16 wrapping arithmetic.
+    IntrinsicDef {
+        id: IntrinsicId::AddWrappingU16,
+        name: "add_wrapping_u16",
+        params: &[IntrinsicType::U16, IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SubWrappingU16,
+        name: "sub_wrapping_u16",
+        params: &[IntrinsicType::U16, IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::MulWrappingU16,
+        name: "mul_wrapping_u16",
+        params: &[IntrinsicType::U16, IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::RemU16,
+        name: "rem_u16",
+        params: &[IntrinsicType::U16, IntrinsicType::U16],
+        ret: IntrinsicType::U16,
+    },
+
+    // U16/I16 type conversion.
+    IntrinsicDef {
+        id: IntrinsicId::U16ToI16,
+        name: "u16_to_i16",
+        params: &[IntrinsicType::U16],
+        ret: IntrinsicType::I16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::I16ToU16,
+        name: "i16_to_u16",
+        params: &[IntrinsicType::I16],
+        ret: IntrinsicType::U16,
+    },
+
+    // I16 operations.
+    IntrinsicDef {
+        id: IntrinsicId::NegWrappingI16,
+        name: "neg_wrapping_i16",
+        params: &[IntrinsicType::I16],
+        ret: IntrinsicType::I16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SshrI16,
+        name: "sshr_i16",
+        params: &[IntrinsicType::I16, IntrinsicType::U16],
+        ret: IntrinsicType::I16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SremI16,
+        name: "srem_i16",
+        params: &[IntrinsicType::I16, IntrinsicType::I16],
+        ret: IntrinsicType::I16,
+    },
+
+    // U64 additional bitwise operations.
+    IntrinsicDef {
+        id: IntrinsicId::BitnotU64,
+        name: "bitnot_u64",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitorU64,
+        name: "bitor_u64",
+        params: &[IntrinsicType::U64, IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+
+    // U64 shift operations.
+    IntrinsicDef {
+        id: IntrinsicId::ShlU64,
+        name: "shl_u64",
+        params: &[IntrinsicType::U64, IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::ShrU64,
+        name: "shr_u64",
+        params: &[IntrinsicType::U64, IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+
+    // U64 bit counting operations.
+    IntrinsicDef {
+        id: IntrinsicId::PopcountU64,
+        name: "popcount_u64",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::ClzU64,
+        name: "clz_u64",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::CtzU64,
+        name: "ctz_u64",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+
+    // U64 byte/bit manipulation.
+    IntrinsicDef {
+        id: IntrinsicId::SwapBytesU64,
+        name: "swap_bytes_u64",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::ReverseBitsU64,
+        name: "reverse_bits_u64",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+
+    // U64 wrapping arithmetic.
+    IntrinsicDef {
+        id: IntrinsicId::AddWrappingU64,
+        name: "add_wrapping_u64",
+        params: &[IntrinsicType::U64, IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SubWrappingU64,
+        name: "sub_wrapping_u64",
+        params: &[IntrinsicType::U64, IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::MulWrappingU64,
+        name: "mul_wrapping_u64",
+        params: &[IntrinsicType::U64, IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::RemU64,
+        name: "rem_u64",
+        params: &[IntrinsicType::U64, IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+
+    // I64 operations.
+    IntrinsicDef {
+        id: IntrinsicId::NegWrappingI64,
+        name: "neg_wrapping_i64",
+        params: &[IntrinsicType::I64],
+        ret: IntrinsicType::I64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SshrI64,
+        name: "sshr_i64",
+        params: &[IntrinsicType::I64, IntrinsicType::U64],
+        ret: IntrinsicType::I64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SremI64,
+        name: "srem_i64",
+        params: &[IntrinsicType::I64, IntrinsicType::I64],
+        ret: IntrinsicType::I64,
     },
 ];
 

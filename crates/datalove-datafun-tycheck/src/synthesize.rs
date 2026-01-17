@@ -805,6 +805,10 @@ fn intrinsic_type_to_datafun<'db>(db: &'db dyn crate::Db, ty: datalove_datafun_i
     use datalove_datafun_intrinsics::IntrinsicType;
 
     let datalit_ty = match ty {
+        IntrinsicType::U8 => datalit::tycheck::Type::U8,
+        IntrinsicType::I8 => datalit::tycheck::Type::I8,
+        IntrinsicType::U16 => datalit::tycheck::Type::U16,
+        IntrinsicType::I16 => datalit::tycheck::Type::I16,
         IntrinsicType::U32 => datalit::tycheck::Type::U32,
         IntrinsicType::I32 => datalit::tycheck::Type::I32,
         IntrinsicType::U64 => datalit::tycheck::Type::U64,

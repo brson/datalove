@@ -291,6 +291,293 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             I64ToU64 => {
                 self.get_operand_value(builder, &args[0])?
             }
+
+            // U8 bitwise operations.
+            BitnotU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bnot(a)
+            }
+            BitandU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().band(a, b)
+            }
+            BitorU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().bor(a, b)
+            }
+            BitxorU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().bxor(a, b)
+            }
+
+            // U8 shift operations.
+            ShlU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().ishl(a, b)
+            }
+            ShrU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().ushr(a, b)
+            }
+
+            // U8 bit counting operations.
+            PopcountU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().popcnt(a)
+            }
+            ClzU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().clz(a)
+            }
+            CtzU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ctz(a)
+            }
+
+            // U8 bit manipulation.
+            ReverseBitsU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bitrev(a)
+            }
+
+            // U8 wrapping arithmetic.
+            AddWrappingU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().iadd(a, b)
+            }
+            SubWrappingU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().isub(a, b)
+            }
+            MulWrappingU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().imul(a, b)
+            }
+            RemU8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().urem(a, b)
+            }
+
+            // U8/I8 type conversion (no-op at IR level).
+            U8ToI8 => {
+                self.get_operand_value(builder, &args[0])?
+            }
+            I8ToU8 => {
+                self.get_operand_value(builder, &args[0])?
+            }
+
+            // I8 operations.
+            NegWrappingI8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ineg(a)
+            }
+            SshrI8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().sshr(a, b)
+            }
+            SremI8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().srem(a, b)
+            }
+
+            // U16 bitwise operations.
+            BitnotU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bnot(a)
+            }
+            BitandU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().band(a, b)
+            }
+            BitorU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().bor(a, b)
+            }
+            BitxorU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().bxor(a, b)
+            }
+
+            // U16 shift operations.
+            ShlU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().ishl(a, b)
+            }
+            ShrU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().ushr(a, b)
+            }
+
+            // U16 bit counting operations.
+            PopcountU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().popcnt(a)
+            }
+            ClzU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().clz(a)
+            }
+            CtzU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ctz(a)
+            }
+
+            // U16 byte/bit manipulation.
+            SwapBytesU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bswap(a)
+            }
+            ReverseBitsU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bitrev(a)
+            }
+
+            // U16 wrapping arithmetic.
+            AddWrappingU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().iadd(a, b)
+            }
+            SubWrappingU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().isub(a, b)
+            }
+            MulWrappingU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().imul(a, b)
+            }
+            RemU16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().urem(a, b)
+            }
+
+            // U16/I16 type conversion (no-op at IR level).
+            U16ToI16 => {
+                self.get_operand_value(builder, &args[0])?
+            }
+            I16ToU16 => {
+                self.get_operand_value(builder, &args[0])?
+            }
+
+            // I16 operations.
+            NegWrappingI16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ineg(a)
+            }
+            SshrI16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().sshr(a, b)
+            }
+            SremI16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().srem(a, b)
+            }
+
+            // U64 additional bitwise operations.
+            BitnotU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bnot(a)
+            }
+            BitorU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().bor(a, b)
+            }
+
+            // U64 shift operations.
+            ShlU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().ishl(a, b)
+            }
+            ShrU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().ushr(a, b)
+            }
+
+            // U64 bit counting operations.
+            PopcountU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().popcnt(a)
+            }
+            ClzU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().clz(a)
+            }
+            CtzU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ctz(a)
+            }
+
+            // U64 byte/bit manipulation.
+            SwapBytesU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bswap(a)
+            }
+            ReverseBitsU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bitrev(a)
+            }
+
+            // U64 wrapping arithmetic.
+            AddWrappingU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().iadd(a, b)
+            }
+            SubWrappingU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().isub(a, b)
+            }
+            MulWrappingU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().imul(a, b)
+            }
+            RemU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().urem(a, b)
+            }
+
+            // I64 operations.
+            NegWrappingI64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ineg(a)
+            }
+            SshrI64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().sshr(a, b)
+            }
+            SremI64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().srem(a, b)
+            }
         };
 
         // Store result.
