@@ -141,6 +141,71 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Signed remainder.
                 builder.ins().srem(a, b)
             }
+
+            // F32 classification intrinsics.
+            IsNanF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                // NaN is the only value where x != x.
+                builder.ins().fcmp(cl_ir::condcodes::FloatCC::Unordered, a, a)
+            }
+            IsInfiniteF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let abs_val = builder.ins().fabs(a);
+                let inf = builder.ins().f32const(f32::INFINITY);
+                builder.ins().fcmp(cl_ir::condcodes::FloatCC::Equal, abs_val, inf)
+            }
+
+            // F32 bit conversion.
+            F32ToBits => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bitcast(cl_ir::types::I32, cl_ir::MemFlags::new(), a)
+            }
+            BitsToF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bitcast(cl_ir::types::F32, cl_ir::MemFlags::new(), a)
+            }
+
+            // F32 math intrinsics.
+            AbsF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().fabs(a)
+            }
+            SqrtF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().sqrt(a)
+            }
+            FloorF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().floor(a)
+            }
+            CeilF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ceil(a)
+            }
+            RoundF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                // Cranelift nearest rounds to nearest even.
+                builder.ins().nearest(a)
+            }
+            TruncF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().trunc(a)
+            }
+            CopysignF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().fcopysign(a, b)
+            }
+            MinF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().fmin(a, b)
+            }
+            MaxF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().fmax(a, b)
+            }
         };
 
         // Store result.

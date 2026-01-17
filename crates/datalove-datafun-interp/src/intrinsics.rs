@@ -130,6 +130,68 @@ impl IrInterpreter {
                 let b = self.read_i32(&args[1], frame, frames)?;
                 self.write_i32(a % b, dest);
             }
+
+            // F32 classification intrinsics.
+            IsNanF32 => {
+                let a = self.read_f32(&args[0], frame, frames)?;
+                self.write_bool(a.is_nan(), dest);
+            }
+            IsInfiniteF32 => {
+                let a = self.read_f32(&args[0], frame, frames)?;
+                self.write_bool(a.is_infinite(), dest);
+            }
+
+            // F32 bit conversion.
+            F32ToBits => {
+                let a = self.read_f32(&args[0], frame, frames)?;
+                self.write_u32(a.to_bits(), dest);
+            }
+            BitsToF32 => {
+                let a = self.read_u32(&args[0], frame, frames)?;
+                self.write_f32(f32::from_bits(a), dest);
+            }
+
+            // F32 math intrinsics.
+            AbsF32 => {
+                let a = self.read_f32(&args[0], frame, frames)?;
+                self.write_f32(a.abs(), dest);
+            }
+            SqrtF32 => {
+                let a = self.read_f32(&args[0], frame, frames)?;
+                self.write_f32(a.sqrt(), dest);
+            }
+            FloorF32 => {
+                let a = self.read_f32(&args[0], frame, frames)?;
+                self.write_f32(a.floor(), dest);
+            }
+            CeilF32 => {
+                let a = self.read_f32(&args[0], frame, frames)?;
+                self.write_f32(a.ceil(), dest);
+            }
+            RoundF32 => {
+                let a = self.read_f32(&args[0], frame, frames)?;
+                // Round to nearest even to match Cranelift's `nearest`.
+                self.write_f32(round_ties_even(a), dest);
+            }
+            TruncF32 => {
+                let a = self.read_f32(&args[0], frame, frames)?;
+                self.write_f32(a.trunc(), dest);
+            }
+            CopysignF32 => {
+                let a = self.read_f32(&args[0], frame, frames)?;
+                let b = self.read_f32(&args[1], frame, frames)?;
+                self.write_f32(a.copysign(b), dest);
+            }
+            MinF32 => {
+                let a = self.read_f32(&args[0], frame, frames)?;
+                let b = self.read_f32(&args[1], frame, frames)?;
+                self.write_f32(a.min(b), dest);
+            }
+            MaxF32 => {
+                let a = self.read_f32(&args[0], frame, frames)?;
+                let b = self.read_f32(&args[1], frame, frames)?;
+                self.write_f32(a.max(b), dest);
+            }
         }
         Ok(())
     }
@@ -159,5 +221,43 @@ impl IrInterpreter {
     /// Write a bool value to destination.
     fn write_bool(&self, value: bool, dest: Destination) {
         unsafe { *(dest.ptr as *mut u8) = value as u8; }
+    }
+
+    /// Read an f32 value from an operand.
+    fn read_f32(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<f32, InterpError> {
+        let val = self.read_operand(op, frame, frames)?;
+        Ok(unsafe { *(val.ptr as *const f32) })
+    }
+
+    /// Write an f32 value to destination.
+    fn write_f32(&self, value: f32, dest: Destination) {
+        unsafe { *(dest.ptr as *mut f32) = value; }
+    }
+}
+
+/// Round f32 to nearest integer, with ties going to nearest even.
+fn round_ties_even(x: f32) -> f32 {
+    // Handle special cases.
+    if x.is_nan() || x.is_infinite() {
+        return x;
+    }
+
+    let rounded = x.round();
+    let diff = x - rounded;
+
+    // Check if exactly halfway.
+    if diff.abs() == 0.5 {
+        // Round to nearest even.
+        if rounded as i32 % 2 != 0 {
+            if x > 0.0 {
+                rounded - 1.0
+            } else {
+                rounded + 1.0
+            }
+        } else {
+            rounded
+        }
+    } else {
+        rounded
     }
 }

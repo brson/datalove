@@ -47,6 +47,25 @@ pub enum IntrinsicId {
     // Signed i32 operations (70-79).
     SshrI32 = 70,
     SremI32 = 71,
+
+    // F32 classification intrinsics (80-89).
+    IsNanF32 = 80,
+    IsInfiniteF32 = 81,
+
+    // F32 bit conversion (90-99).
+    F32ToBits = 90,
+    BitsToF32 = 91,
+
+    // F32 math intrinsics (100-109).
+    AbsF32 = 100,
+    SqrtF32 = 101,
+    FloorF32 = 102,
+    CeilF32 = 103,
+    RoundF32 = 104,
+    TruncF32 = 105,
+    CopysignF32 = 106,
+    MinF32 = 107,
+    MaxF32 = 108,
 }
 
 /// Simplified type for intrinsic parameters and return values.
@@ -56,6 +75,7 @@ pub enum IntrinsicType {
     I32,
     U64,
     I64,
+    F32,
     Bool,
 }
 
@@ -214,6 +234,90 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         name: "srem_i32",
         params: &[IntrinsicType::I32, IntrinsicType::I32],
         ret: IntrinsicType::I32,
+    },
+
+    // F32 classification intrinsics.
+    IntrinsicDef {
+        id: IntrinsicId::IsNanF32,
+        name: "is_nan_f32",
+        params: &[IntrinsicType::F32],
+        ret: IntrinsicType::Bool,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::IsInfiniteF32,
+        name: "is_infinite_f32",
+        params: &[IntrinsicType::F32],
+        ret: IntrinsicType::Bool,
+    },
+
+    // F32 bit conversion.
+    IntrinsicDef {
+        id: IntrinsicId::F32ToBits,
+        name: "f32_to_bits",
+        params: &[IntrinsicType::F32],
+        ret: IntrinsicType::U32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitsToF32,
+        name: "bits_to_f32",
+        params: &[IntrinsicType::U32],
+        ret: IntrinsicType::F32,
+    },
+
+    // F32 math intrinsics.
+    IntrinsicDef {
+        id: IntrinsicId::AbsF32,
+        name: "abs_f32",
+        params: &[IntrinsicType::F32],
+        ret: IntrinsicType::F32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SqrtF32,
+        name: "sqrt_f32",
+        params: &[IntrinsicType::F32],
+        ret: IntrinsicType::F32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::FloorF32,
+        name: "floor_f32",
+        params: &[IntrinsicType::F32],
+        ret: IntrinsicType::F32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::CeilF32,
+        name: "ceil_f32",
+        params: &[IntrinsicType::F32],
+        ret: IntrinsicType::F32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::RoundF32,
+        name: "round_f32",
+        params: &[IntrinsicType::F32],
+        ret: IntrinsicType::F32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::TruncF32,
+        name: "trunc_f32",
+        params: &[IntrinsicType::F32],
+        ret: IntrinsicType::F32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::CopysignF32,
+        name: "copysign_f32",
+        params: &[IntrinsicType::F32, IntrinsicType::F32],
+        ret: IntrinsicType::F32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::MinF32,
+        name: "min_f32",
+        params: &[IntrinsicType::F32, IntrinsicType::F32],
+        ret: IntrinsicType::F32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::MaxF32,
+        name: "max_f32",
+        params: &[IntrinsicType::F32, IntrinsicType::F32],
+        ret: IntrinsicType::F32,
     },
 ];
 
