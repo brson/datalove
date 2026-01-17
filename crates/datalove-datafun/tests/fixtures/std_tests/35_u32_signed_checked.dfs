@@ -1,0 +1,23 @@
+require module sys/std/u32
+
+import u32.add_checked_signed
+import u32.sub_checked_signed
+
+// add_checked_signed tests
+let add1 = add_checked_signed(10, 5)          // 10 + 5 = 15
+let add2 = add_checked_signed(10, : i32 / -3) // 10 - 3 = 7
+let add3 = add_checked_signed(2, : i32 / -5)  // 2 - 5 = underflow
+let add4 = add_checked_signed(4294967295, 1)  // max + 1 = overflow
+
+// sub_checked_signed tests
+let sub1 = sub_checked_signed(10, 5)          // 10 - 5 = 5
+let sub2 = sub_checked_signed(10, : i32 / -3) // 10 + 3 = 13
+let sub3 = sub_checked_signed(2, 5)           // 2 - 5 = underflow
+let sub4 = sub_checked_signed(4294967290, : i32 / -10)  // near max + 10 = overflow
+
+// i32::MIN edge case
+let i32_min = : i32 / -2147483648
+let add_min = add_checked_signed(3000000000, i32_min)  // 3B - 2147483648 = 852516352
+let sub_min = sub_checked_signed(1000000000, i32_min)  // 1B + 2147483648 = 3147483648
+
+let output = (add1, add2, add3, add4, sub1, sub2, sub3, sub4, add_min, sub_min)

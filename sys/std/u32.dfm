@@ -87,9 +87,25 @@ fun add_checked(self: u32, other: u32): ?u32
   ret some (self +? other)
 end fun
 
-// Requires i32 negation intrinsic - stubbed for now.
+// Checked signed addition. Adds a signed i32 to u32.
+// Returns none on overflow (positive other) or underflow (negative other).
 fun add_checked_signed(self: u32, other: i32): ?u32
-  ret @none
+  let zero: i32 = 0
+  if other >= zero
+    let other_u32 = icall i32_to_u32(other)
+    ret some (self +? other_u32)
+  else
+    // Check for i32::MIN by comparing bit patterns.
+    let other_bits = icall i32_to_u32(other)
+    let i32_min_bits: u32 = 2147483648
+    if other_bits == i32_min_bits
+      ret some (self -? i32_min_bits)
+    else
+      let neg_other = -?other
+      let abs_other = icall i32_to_u32(neg_other)
+      ret some (self -? abs_other)
+    end if
+  end if
 end fun
 
 // Checked subtraction. Returns none on underflow.
@@ -97,9 +113,25 @@ fun sub_checked(self: u32, other: u32): ?u32
   ret some (self -? other)
 end fun
 
-// Requires i32 negation intrinsic - stubbed for now.
+// Checked signed subtraction. Subtracts a signed i32 from u32.
+// Returns none on underflow (positive other) or overflow (negative other).
 fun sub_checked_signed(self: u32, other: i32): ?u32
-  ret @none
+  let zero: i32 = 0
+  if other >= zero
+    let other_u32 = icall i32_to_u32(other)
+    ret some (self -? other_u32)
+  else
+    // Check for i32::MIN by comparing bit patterns.
+    let other_bits = icall i32_to_u32(other)
+    let i32_min_bits: u32 = 2147483648
+    if other_bits == i32_min_bits
+      ret some (self +? i32_min_bits)
+    else
+      let neg_other = -?other
+      let abs_other = icall i32_to_u32(neg_other)
+      ret some (self +? abs_other)
+    end if
+  end if
 end fun
 
 // Checked multiplication. Returns none on overflow.
