@@ -56,6 +56,7 @@
 
 ## Backlog
 
+- remove data / error keywords - rely on ~ coercion?
 - testable docs
 - multiple scripts
 - analysis caching
