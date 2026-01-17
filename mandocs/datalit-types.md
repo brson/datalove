@@ -135,6 +135,8 @@ while modules are expected to be more careful with overflow for performance.
 
 ## Anonymous enums
 
+## Strings
+
 ## Lists
 
 ## Maps and sets
