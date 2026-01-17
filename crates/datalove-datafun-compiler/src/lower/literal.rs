@@ -115,6 +115,28 @@ pub fn parse_float_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
     }
 }
 
+/// Try to parse a negated integer literal.
+///
+/// This handles the special case where `-N` fits in the target type but `N` doesn't.
+/// For example, `-2147483648` fits in i32 but `2147483648` doesn't.
+/// Returns Some(ConstValue) if successful, None if the negated value doesn't fit.
+pub fn try_parse_negated_int_const(text: &str, ty: &IrType) -> Option<ConstValue> {
+    let negated = format!("-{}", text);
+    match ty {
+        IrType::I8 => negated.parse::<i8>().map(ConstValue::I8).ok(),
+        IrType::I16 => negated.parse::<i16>().map(ConstValue::I16).ok(),
+        IrType::I32 => negated.parse::<i32>().map(ConstValue::I32).ok(),
+        IrType::I64 => negated.parse::<i64>().map(ConstValue::I64).ok(),
+        IrType::Int => {
+            let (limbs, _) = parse_decimal_to_limbs(text).ok()?;
+            // For bigint, negation is just flipping the sign.
+            let negative = !limbs.is_empty(); // negative unless zero
+            Some(ConstValue::Int { limbs, negative })
+        }
+        _ => None,
+    }
+}
+
 /// Parse a hex literal into a ConstValue based on the target type.
 pub fn parse_hex_const(hex_str: &str, ty: &IrType) -> Result<ConstValue, ()> {
     match ty {

@@ -318,6 +318,25 @@ pub fn check_expr<'db>(
             }
         }
 
+        // Handle unary negation on signed fixed integers.
+        // When expected type is a signed fixed int (i8, i16, i32, i64), check operand against it.
+        ExprFunKind::UnaryOp(unary) if unary.op == UnaryOp::Neg => {
+            if is_signed_fixed_int_type(expected.ty(db)) {
+                // Check operand against expected type.
+                check_expr(ctx, unary.operand, expected)?;
+                ctx.store_expr_type(expr, expected);
+                return Ok(());
+            }
+            // Otherwise fall through to default synthesis behavior.
+            let synthesized = ctx.synthesize_expr(expr)?;
+            if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
+                return Ok(());
+            }
+            let expected_str = type_to_string(db, expected.ty(db));
+            let actual_str = type_to_string(db, synthesized.ty(db));
+            Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+        }
+
         // For other non-datalit expressions, use synthesis + comparison with coercion support.
         _ => {
             let synthesized = ctx.synthesize_expr(expr)?;

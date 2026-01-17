@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+// Test that negative literals work for signed integers.
+let a: i32 = -1
+let b: i32 = -2147483648
+let c: i64 = -9223372036854775808
+let output = (a, b, c)

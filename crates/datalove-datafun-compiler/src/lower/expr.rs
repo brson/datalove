@@ -8,7 +8,7 @@ use datalove_datafun_ir::{
 };
 use salsa::plumbing::AsId;
 use super::context::LowerCtx;
-use super::literal::{parse_int_const, parse_hex_const, parse_float_const};
+use super::literal::{parse_int_const, parse_hex_const, parse_float_const, try_parse_negated_int_const};
 use super::LowerError;
 
 /// Lower an operand for borrowing contexts (binop, unaryop).
@@ -683,9 +683,24 @@ fn lower_unaryop<'db>(
     expr: ExprFun<'db>,
     unary: ast::ExprUnaryOp<'db>,
 ) -> Result<ValueId, LowerError> {
+    let result_type = ctx.expr_type(expr);
+
+    // Special case: negation of integer literal for signed fixed int types.
+    // This handles cases like `let x: i32 = -2147483648` where the literal
+    // value (2147483648) doesn't fit in the target type but the negated value does.
+    if unary.op == ast::UnaryOp::Neg {
+        if let ExprFunKind::Int(lit) = unary.operand.expr(ctx.db) {
+            let text = lit.value.text(ctx.db);
+            if let Some(const_value) = try_parse_negated_int_const(text, &result_type) {
+                let dest = ctx.fresh_value(result_type);
+                ctx.emit(Instruction::Const { dest, value: const_value });
+                return Ok(dest);
+            }
+        }
+    }
+
     // Use lower_operand for borrowing semantics.
     let operand = lower_operand(ctx, unary.operand)?;
-    let result_type = ctx.expr_type(expr);
     let dest = ctx.fresh_value(result_type);
 
     match unary.op {

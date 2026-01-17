@@ -88,6 +88,11 @@ pub fn is_unsigned_int_type(ty: &Type<'_>) -> bool {
     }
 }
 
+/// Check if a type is a signed fixed-size integer type (i8, i16, i32, i64).
+pub fn is_signed_fixed_int_type(ty: &Type<'_>) -> bool {
+    is_fixed_int_type(ty) && !is_unsigned_int_type(ty)
+}
+
 /// Check if a type is boolean.
 pub fn is_bool_type(ty: &Type<'_>) -> bool {
     match ty {

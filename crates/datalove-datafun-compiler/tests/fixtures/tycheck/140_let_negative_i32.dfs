@@ -1,0 +1,4 @@
+// Test that negative literals typecheck correctly for signed integers.
+let a: i32 = -1
+let b: i32 = -2147483648
+let c: i64 = -9223372036854775808

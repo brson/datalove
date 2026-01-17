@@ -1,0 +1,21 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "i32"
+    },
+    {
+      "kind": "variable",
+      "name": "b",
+      "type": "i32"
+    },
+    {
+      "kind": "variable",
+      "name": "c",
+      "type": "i64"
+    }
+  ]
+}
