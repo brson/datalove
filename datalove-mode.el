@@ -18,29 +18,32 @@
     ;; Punctuation and operators.
     (modify-syntax-entry ?@ "'" table)
     (modify-syntax-entry ?# "'" table)
-    (modify-syntax-entry ?$ "'" table)
-    (modify-syntax-entry ?? "'" table)
+    (modify-syntax-entry ?? "." table)
+    (modify-syntax-entry ?! "." table)
     (modify-syntax-entry ?: "." table)
     (modify-syntax-entry ?, "." table)
     (modify-syntax-entry ?. "." table)
+    (modify-syntax-entry ?| "." table)
 
     table)
   "Syntax table for `datalove-mode'.")
 
 (defvar datalove-font-lock-keywords
   (let* ((keywords
-          '("let" "var" "nil" "bool" "true" "false"
-            "u8" "u16" "u32" "u64" "i8" "i16" "i32" "i64"
-            "f32" "f64" "int" "float"
-            "string" "opt" "error" "tuple" "enum"
-            "token" "map" "set" "list"
-            "fun" "proc" "arena" "block"
-            "require" "module" "data"
-            "ret" "loop" "break" "continue"
+          '("let" "var" "set"
+            "fun" "ret"
+            "require" "module" "data" "import"
             "if" "else" "end"
-            "call" "memoize"
-            "not" "and" "or" "xor" "implies"
-            "move" "copy" "ref" "out"))
+            "loop" "while" "break" "continue"
+            "not" "and" "or" "xor"
+            "some" "ok" "er"
+            "ref" "mut" "out"
+            ;; Types.
+            "bool" "true" "false"
+            "u8" "u16" "u32" "u64" "i8" "i16" "i32" "i64"
+            "f32" "int"
+            "string" "opt" "error" "tuple" "enum"
+            "map" "list" "tensor" "table"))
          (keyword-regexp (regexp-opt keywords 'words)))
 
     `(
@@ -48,34 +51,43 @@
       (,keyword-regexp . font-lock-keyword-face)
 
       ;; Multi-word keywords.
-      ("\\<end\s+\\(fun\\|proc\\|arena\\|if\\)\\>" . font-lock-keyword-face)
+      ("\\<end\s+\\(fun\\|if\\|loop\\)\\>" . font-lock-keyword-face)
       ("\\<require\s+\\(module\\|data\\)\\>" . font-lock-keyword-face)
+      ("\\<loop\s+while\\>" . font-lock-keyword-face)
 
       ;; Function definitions.
       ("\\<fun\s+\\([a-zA-Z_][a-zA-Z0-9_]*\\)" 1 font-lock-function-name-face)
-      ("\\<proc\s+\\([a-zA-Z_][a-zA-Z0-9_]*\\)" 1 font-lock-function-name-face)
 
       ;; Type annotations and enum names.
       ("\\<enum\s+\\([A-Z][a-zA-Z0-9_]*\\)" 1 font-lock-type-face)
       ("@\\(enum\\)\s+\\([A-Z][a-zA-Z0-9_]*\\)" 2 font-lock-type-face)
 
       ;; Type names in type positions.
-      ("@\\(u8\\|u16\\|u32\\|u64\\|i8\\|i16\\|i32\\|i64\\|f32\\|f64\\|int\\|float\\|bool\\|string\\)\\>" 1 font-lock-type-face)
+      ("@\\(u8\\|u16\\|u32\\|u64\\|i8\\|i16\\|i32\\|i64\\|f32\\|int\\|bool\\|string\\)\\>" 1 font-lock-type-face)
 
-      ;; Boolean literals.
-      ("@\\(true\\|false\\|nil\\)\\>" . font-lock-constant-face)
+      ;; Boolean and special literals.
+      ("@\\(true\\|false\\|none\\)\\>" . font-lock-constant-face)
 
-      ;; Numeric literals.
-      ("@\\([0-9]+\\(?:\\.[0-9]+\\)?\\)" . font-lock-constant-face)
+      ;; Numeric literals (decimal and hex).
+      ("@\\(0x[0-9a-fA-F]+\\|[0-9]+\\(?:\\.[0-9]+\\)?\\)" . font-lock-constant-face)
+
+      ;; @data, @error, @set, @map, @tensor constructors.
+      ("@\\(data\\|error\\|set\\|map\\|tensor\\)\\>" . font-lock-builtin-face)
+
+      ;; Table delimiters.
+      ("{|\\||}" . font-lock-builtin-face)
 
       ;; String literals.
       ("@\"\\(?:[^\"\\]\\|\\\\.\\)*\"" . font-lock-string-face)
 
-      ;; Operators.
-      ("\\(\\.\\+\\|\\.\\-\\|\\.\\*\\|\\./\\|\\.<\\|\\.>\\|\\.<=\\|\\.>=\\|\\.==\\|\\.!=\\)" . font-lock-builtin-face)
+      ;; Comparison operators.
+      ("\\(\\.<\\|\\.>\\|<=\\|>=\\|==\\|!=\\)" . font-lock-builtin-face)
 
-      ;; Sigils.
-      ("\\(@\\|#\\|\\$\\|?\\)" . font-lock-variable-name-face)
+      ;; Checked/optional arithmetic operators.
+      ("\\([+\\-*/][!?]\\)" . font-lock-builtin-face)
+
+      ;; Heap sigils.
+      ("\\(@\\|#\\)" . font-lock-variable-name-face)
 
       ;; Type annotation colon.
       (":" . font-lock-keyword-face)
