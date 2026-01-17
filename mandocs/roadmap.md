@@ -11,6 +11,7 @@
 - table column projections
 - closures
 - clone ops
+- [x] logic ops
 - type aliases
 - generic functions for built-in generic types
 - basic repl,
@@ -51,8 +52,9 @@
 
 
 
-# future
+# backlog
 
+- testable
 - multiple scripts
 - analysis caching
 - sourceless parsing
@@ -73,4 +75,4 @@
 
 ## backburner
 
-- lsp
+- lsp - needs a project/workspace concept
