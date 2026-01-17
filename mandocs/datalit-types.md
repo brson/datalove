@@ -125,6 +125,35 @@ while modules are expected to be more careful with overflow for performance.
 
 
 
+## `usize` and `isize`
+
+These are fixed integers with the
+width used to represent collection indexes.
+
+There are no pointers in datafun,
+but the size of collections is constrained by the pointer size.
+
+These have the same representation as `u32` and `i32` by default,
+but their representation is compile-time configurable,
+mostly to ensure the compiler is well-factored to support
+reconfiguration.
+
+Their size must be smaller than the pointer size
+of the interpreter, and of any AOT target;
+and in practice probably the compiler as well
+since it needs to do compile-time evaluation.
+
+Operations that deal in collection indexes,
+length, and capacity use these types.
+
+```datalove
+let foo = "test"
+let foo_length: usize = len(foo)
+```
+
+
+
+
 ## Big integers
 
 ## Floating point numbers
