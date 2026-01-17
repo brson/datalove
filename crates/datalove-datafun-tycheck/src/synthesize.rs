@@ -810,6 +810,7 @@ fn intrinsic_type_to_datafun<'db>(db: &'db dyn crate::Db, ty: datalove_datafun_i
         IntrinsicType::U64 => datalit::tycheck::Type::U64,
         IntrinsicType::I64 => datalit::tycheck::Type::I64,
         IntrinsicType::F32 => datalit::tycheck::Type::F32,
+        IntrinsicType::F64 => datalit::tycheck::Type::F64,
         IntrinsicType::Bool => datalit::tycheck::Type::Bool,
     };
 

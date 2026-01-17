@@ -66,6 +66,33 @@ pub enum IntrinsicId {
     CopysignF32 = 106,
     MinF32 = 107,
     MaxF32 = 108,
+
+    // F64 classification intrinsics (110-119).
+    IsNanF64 = 110,
+    IsInfiniteF64 = 111,
+
+    // F64 bit conversion (120-129).
+    F64ToBits = 120,
+    BitsToF64 = 121,
+
+    // F64 math intrinsics (130-139).
+    AbsF64 = 130,
+    SqrtF64 = 131,
+    FloorF64 = 132,
+    CeilF64 = 133,
+    RoundF64 = 134,
+    TruncF64 = 135,
+    CopysignF64 = 136,
+    MinF64 = 137,
+    MaxF64 = 138,
+
+    // U64 bitwise operations (140-149).
+    BitandU64 = 140,
+    BitxorU64 = 141,
+
+    // U64/I64 type conversion (150-159).
+    U64ToI64 = 150,
+    I64ToU64 = 151,
 }
 
 /// Simplified type for intrinsic parameters and return values.
@@ -76,6 +103,7 @@ pub enum IntrinsicType {
     U64,
     I64,
     F32,
+    F64,
     Bool,
 }
 
@@ -318,6 +346,118 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         name: "max_f32",
         params: &[IntrinsicType::F32, IntrinsicType::F32],
         ret: IntrinsicType::F32,
+    },
+
+    // F64 classification intrinsics.
+    IntrinsicDef {
+        id: IntrinsicId::IsNanF64,
+        name: "is_nan_f64",
+        params: &[IntrinsicType::F64],
+        ret: IntrinsicType::Bool,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::IsInfiniteF64,
+        name: "is_infinite_f64",
+        params: &[IntrinsicType::F64],
+        ret: IntrinsicType::Bool,
+    },
+
+    // F64 bit conversion.
+    IntrinsicDef {
+        id: IntrinsicId::F64ToBits,
+        name: "f64_to_bits",
+        params: &[IntrinsicType::F64],
+        ret: IntrinsicType::U64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitsToF64,
+        name: "bits_to_f64",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::F64,
+    },
+
+    // F64 math intrinsics.
+    IntrinsicDef {
+        id: IntrinsicId::AbsF64,
+        name: "abs_f64",
+        params: &[IntrinsicType::F64],
+        ret: IntrinsicType::F64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SqrtF64,
+        name: "sqrt_f64",
+        params: &[IntrinsicType::F64],
+        ret: IntrinsicType::F64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::FloorF64,
+        name: "floor_f64",
+        params: &[IntrinsicType::F64],
+        ret: IntrinsicType::F64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::CeilF64,
+        name: "ceil_f64",
+        params: &[IntrinsicType::F64],
+        ret: IntrinsicType::F64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::RoundF64,
+        name: "round_f64",
+        params: &[IntrinsicType::F64],
+        ret: IntrinsicType::F64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::TruncF64,
+        name: "trunc_f64",
+        params: &[IntrinsicType::F64],
+        ret: IntrinsicType::F64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::CopysignF64,
+        name: "copysign_f64",
+        params: &[IntrinsicType::F64, IntrinsicType::F64],
+        ret: IntrinsicType::F64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::MinF64,
+        name: "min_f64",
+        params: &[IntrinsicType::F64, IntrinsicType::F64],
+        ret: IntrinsicType::F64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::MaxF64,
+        name: "max_f64",
+        params: &[IntrinsicType::F64, IntrinsicType::F64],
+        ret: IntrinsicType::F64,
+    },
+
+    // U64 bitwise operations.
+    IntrinsicDef {
+        id: IntrinsicId::BitandU64,
+        name: "bitand_u64",
+        params: &[IntrinsicType::U64, IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitxorU64,
+        name: "bitxor_u64",
+        params: &[IntrinsicType::U64, IntrinsicType::U64],
+        ret: IntrinsicType::U64,
+    },
+
+    // U64/I64 type conversion.
+    IntrinsicDef {
+        id: IntrinsicId::U64ToI64,
+        name: "u64_to_i64",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::I64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::I64ToU64,
+        name: "i64_to_u64",
+        params: &[IntrinsicType::I64],
+        ret: IntrinsicType::U64,
     },
 ];
 

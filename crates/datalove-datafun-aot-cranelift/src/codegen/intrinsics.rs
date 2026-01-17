@@ -206,6 +206,91 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let b = self.get_operand_value(builder, &args[1])?;
                 builder.ins().fmax(a, b)
             }
+
+            // F64 classification intrinsics.
+            IsNanF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                // NaN is the only value where x != x.
+                builder.ins().fcmp(cl_ir::condcodes::FloatCC::Unordered, a, a)
+            }
+            IsInfiniteF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let abs_val = builder.ins().fabs(a);
+                let inf = builder.ins().f64const(f64::INFINITY);
+                builder.ins().fcmp(cl_ir::condcodes::FloatCC::Equal, abs_val, inf)
+            }
+
+            // F64 bit conversion.
+            F64ToBits => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bitcast(cl_ir::types::I64, cl_ir::MemFlags::new(), a)
+            }
+            BitsToF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bitcast(cl_ir::types::F64, cl_ir::MemFlags::new(), a)
+            }
+
+            // F64 math intrinsics.
+            AbsF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().fabs(a)
+            }
+            SqrtF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().sqrt(a)
+            }
+            FloorF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().floor(a)
+            }
+            CeilF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ceil(a)
+            }
+            RoundF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                // Cranelift nearest rounds to nearest even.
+                builder.ins().nearest(a)
+            }
+            TruncF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().trunc(a)
+            }
+            CopysignF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().fcopysign(a, b)
+            }
+            MinF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().fmin(a, b)
+            }
+            MaxF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().fmax(a, b)
+            }
+
+            // U64 bitwise operations.
+            BitandU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().band(a, b)
+            }
+            BitxorU64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().bxor(a, b)
+            }
+
+            // U64/I64 type conversion (no-op at IR level).
+            U64ToI64 => {
+                self.get_operand_value(builder, &args[0])?
+            }
+            I64ToU64 => {
+                self.get_operand_value(builder, &args[0])?
+            }
         };
 
         // Store result.

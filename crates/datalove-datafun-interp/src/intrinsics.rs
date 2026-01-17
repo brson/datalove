@@ -192,6 +192,90 @@ impl IrInterpreter {
                 let b = self.read_f32(&args[1], frame, frames)?;
                 self.write_f32(a.max(b), dest);
             }
+
+            // F64 classification intrinsics.
+            IsNanF64 => {
+                let a = self.read_f64(&args[0], frame, frames)?;
+                self.write_bool(a.is_nan(), dest);
+            }
+            IsInfiniteF64 => {
+                let a = self.read_f64(&args[0], frame, frames)?;
+                self.write_bool(a.is_infinite(), dest);
+            }
+
+            // F64 bit conversion.
+            F64ToBits => {
+                let a = self.read_f64(&args[0], frame, frames)?;
+                self.write_u64(a.to_bits(), dest);
+            }
+            BitsToF64 => {
+                let a = self.read_u64(&args[0], frame, frames)?;
+                self.write_f64(f64::from_bits(a), dest);
+            }
+
+            // F64 math intrinsics.
+            AbsF64 => {
+                let a = self.read_f64(&args[0], frame, frames)?;
+                self.write_f64(a.abs(), dest);
+            }
+            SqrtF64 => {
+                let a = self.read_f64(&args[0], frame, frames)?;
+                self.write_f64(a.sqrt(), dest);
+            }
+            FloorF64 => {
+                let a = self.read_f64(&args[0], frame, frames)?;
+                self.write_f64(a.floor(), dest);
+            }
+            CeilF64 => {
+                let a = self.read_f64(&args[0], frame, frames)?;
+                self.write_f64(a.ceil(), dest);
+            }
+            RoundF64 => {
+                let a = self.read_f64(&args[0], frame, frames)?;
+                // Round to nearest even to match Cranelift's `nearest`.
+                self.write_f64(round_ties_even_f64(a), dest);
+            }
+            TruncF64 => {
+                let a = self.read_f64(&args[0], frame, frames)?;
+                self.write_f64(a.trunc(), dest);
+            }
+            CopysignF64 => {
+                let a = self.read_f64(&args[0], frame, frames)?;
+                let b = self.read_f64(&args[1], frame, frames)?;
+                self.write_f64(a.copysign(b), dest);
+            }
+            MinF64 => {
+                let a = self.read_f64(&args[0], frame, frames)?;
+                let b = self.read_f64(&args[1], frame, frames)?;
+                self.write_f64(a.min(b), dest);
+            }
+            MaxF64 => {
+                let a = self.read_f64(&args[0], frame, frames)?;
+                let b = self.read_f64(&args[1], frame, frames)?;
+                self.write_f64(a.max(b), dest);
+            }
+
+            // U64 bitwise operations.
+            BitandU64 => {
+                let a = self.read_u64(&args[0], frame, frames)?;
+                let b = self.read_u64(&args[1], frame, frames)?;
+                self.write_u64(a & b, dest);
+            }
+            BitxorU64 => {
+                let a = self.read_u64(&args[0], frame, frames)?;
+                let b = self.read_u64(&args[1], frame, frames)?;
+                self.write_u64(a ^ b, dest);
+            }
+
+            // U64/I64 type conversion.
+            U64ToI64 => {
+                let a = self.read_u64(&args[0], frame, frames)?;
+                self.write_i64(a as i64, dest);
+            }
+            I64ToU64 => {
+                let a = self.read_i64(&args[0], frame, frames)?;
+                self.write_u64(a as u64, dest);
+            }
         }
         Ok(())
     }
@@ -233,6 +317,39 @@ impl IrInterpreter {
     fn write_f32(&self, value: f32, dest: Destination) {
         unsafe { *(dest.ptr as *mut f32) = value; }
     }
+
+    /// Read an f64 value from an operand.
+    fn read_f64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<f64, InterpError> {
+        let val = self.read_operand(op, frame, frames)?;
+        Ok(unsafe { *(val.ptr as *const f64) })
+    }
+
+    /// Write an f64 value to destination.
+    fn write_f64(&self, value: f64, dest: Destination) {
+        unsafe { *(dest.ptr as *mut f64) = value; }
+    }
+
+    /// Read a u64 value from an operand.
+    fn read_u64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<u64, InterpError> {
+        let val = self.read_operand(op, frame, frames)?;
+        Ok(unsafe { *(val.ptr as *const u64) })
+    }
+
+    /// Write a u64 value to destination.
+    fn write_u64(&self, value: u64, dest: Destination) {
+        unsafe { *(dest.ptr as *mut u64) = value; }
+    }
+
+    /// Read an i64 value from an operand.
+    fn read_i64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<i64, InterpError> {
+        let val = self.read_operand(op, frame, frames)?;
+        Ok(unsafe { *(val.ptr as *const i64) })
+    }
+
+    /// Write an i64 value to destination.
+    fn write_i64(&self, value: i64, dest: Destination) {
+        unsafe { *(dest.ptr as *mut i64) = value; }
+    }
 }
 
 /// Round f32 to nearest integer, with ties going to nearest even.
@@ -249,6 +366,33 @@ fn round_ties_even(x: f32) -> f32 {
     if diff.abs() == 0.5 {
         // Round to nearest even.
         if rounded as i32 % 2 != 0 {
+            if x > 0.0 {
+                rounded - 1.0
+            } else {
+                rounded + 1.0
+            }
+        } else {
+            rounded
+        }
+    } else {
+        rounded
+    }
+}
+
+/// Round f64 to nearest integer, with ties going to nearest even.
+fn round_ties_even_f64(x: f64) -> f64 {
+    // Handle special cases.
+    if x.is_nan() || x.is_infinite() {
+        return x;
+    }
+
+    let rounded = x.round();
+    let diff = x - rounded;
+
+    // Check if exactly halfway.
+    if diff.abs() == 0.5 {
+        // Round to nearest even.
+        if rounded as i64 % 2 != 0 {
             if x > 0.0 {
                 rounded - 1.0
             } else {

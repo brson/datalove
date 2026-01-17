@@ -1,0 +1,159 @@
+require module sys/std/f64
+
+import f64.nan
+import f64.infinity
+import f64.neg_infinity
+import f64.max_value
+import f64.min_value
+import f64.min_positive
+import f64.epsilon
+import f64.is_nan
+import f64.is_infinite
+import f64.is_finite
+import f64.is_normal
+import f64.is_subnormal
+import f64.is_sign_positive
+import f64.is_sign_negative
+import f64.abs
+import f64.signum
+import f64.copysign
+import f64.floor
+import f64.ceil
+import f64.round
+import f64.trunc
+import f64.fract
+import f64.recip
+import f64.sqrt
+import f64.min
+import f64.max
+import f64.clamp
+import f64.to_bits
+import f64.from_bits
+import f64.is_zero
+import f64.total_cmp
+
+// Constants.
+let nan_v = nan()
+let inf_v = infinity()
+let neg_inf_v = neg_infinity()
+let max_v = max_value()
+let min_v = min_value()
+let min_pos_v = min_positive()
+let eps_v = epsilon()
+
+// Classification - NaN.
+let nan_is_nan = is_nan(nan_v)
+let nan_is_inf = is_infinite(nan_v)
+let nan_is_finite = is_finite(nan_v)
+let nan_is_normal = is_normal(nan_v)
+
+// Classification - Infinity.
+let inf_is_nan = is_nan(inf_v)
+let inf_is_inf = is_infinite(inf_v)
+let inf_is_finite = is_finite(inf_v)
+let neg_inf_is_inf = is_infinite(neg_inf_v)
+
+// Classification - Regular numbers.
+let one_is_nan = is_nan(@1.0)
+let one_is_inf = is_infinite(@1.0)
+let one_is_finite = is_finite(@1.0)
+let one_is_normal = is_normal(@1.0)
+let zero_is_normal = is_normal(@0.0)
+
+// Classification - Subnormal.
+let min_pos_is_subnormal = is_subnormal(min_pos_v)
+let one_is_subnormal = is_subnormal(@1.0)
+
+// Sign checks.
+let pos_sign = is_sign_positive(@1.0)
+let neg_sign = is_sign_negative(@-1.0)
+let zero_pos_sign = is_sign_positive(@0.0)
+let neg_zero_sign = is_sign_negative(@-0.0)
+let inf_pos_sign = is_sign_positive(inf_v)
+let neg_inf_neg_sign = is_sign_negative(neg_inf_v)
+
+// Abs.
+let abs_pos = abs(@3.5)
+let abs_neg = abs(@-3.5)
+let abs_zero = abs(@0.0)
+
+// Signum.
+let signum_pos = signum(@42.0)
+let signum_neg = signum(@-42.0)
+let signum_zero = signum(@0.0)
+
+// Copysign.
+let copy_pos_pos = copysign(@3.0, @1.0)
+let copy_pos_neg = copysign(@3.0, @-1.0)
+let copy_neg_pos = copysign(@-3.0, @1.0)
+let copy_neg_neg = copysign(@-3.0, @-1.0)
+
+// Rounding.
+let floor_pos = floor(@3.7)
+let floor_neg = floor(@-3.7)
+let ceil_pos = ceil(@3.2)
+let ceil_neg = ceil(@-3.2)
+let round_up = round(@3.6)
+let round_down = round(@3.4)
+let trunc_pos = trunc(@3.9)
+let trunc_neg = trunc(@-3.9)
+let fract_pos = fract(@3.75)
+
+// Arithmetic.
+let recip_two = recip(@2.0)
+let sqrt_four = sqrt(@4.0)
+let sqrt_two = sqrt(@2.0)
+
+// Min/max/clamp.
+let min_v2 = min(@3.0, @5.0)
+let max_v2 = max(@3.0, @5.0)
+let clamped_low = clamp(@1.0, @2.0, @4.0)
+let clamped_mid = clamp(@3.0, @2.0, @4.0)
+let clamped_high = clamp(@5.0, @2.0, @4.0)
+
+// Bit manipulation.
+let bits_one = to_bits(@1.0)
+let from_one = from_bits(4607182418800017408)
+
+// Zero check.
+let is_z = is_zero(@0.0)
+let is_nz = is_zero(@1.0)
+
+// Total comparison.
+let cmp_lt = total_cmp(@1.0, @2.0)
+let cmp_eq = total_cmp(@3.0, @3.0)
+let cmp_gt = total_cmp(@5.0, @4.0)
+let cmp_neg = total_cmp(@-2.0, @-1.0)
+
+let output = (
+  // Constants exist (check bits).
+  to_bits(nan_v), to_bits(inf_v), to_bits(neg_inf_v),
+  // Classification - NaN.
+  nan_is_nan, nan_is_inf, nan_is_finite, nan_is_normal,
+  // Classification - Infinity.
+  inf_is_nan, inf_is_inf, inf_is_finite, neg_inf_is_inf,
+  // Classification - Regular numbers.
+  one_is_nan, one_is_inf, one_is_finite, one_is_normal, zero_is_normal,
+  // Subnormal.
+  min_pos_is_subnormal, one_is_subnormal,
+  // Sign checks.
+  pos_sign, neg_sign, zero_pos_sign, neg_zero_sign, inf_pos_sign, neg_inf_neg_sign,
+  // Abs.
+  abs_pos, abs_neg, abs_zero,
+  // Signum.
+  signum_pos, signum_neg, signum_zero,
+  // Copysign.
+  copy_pos_pos, copy_pos_neg, copy_neg_pos, copy_neg_neg,
+  // Rounding.
+  floor_pos, floor_neg, ceil_pos, ceil_neg, round_up, round_down, trunc_pos, trunc_neg, fract_pos,
+  // Arithmetic.
+  recip_two, sqrt_four, sqrt_two,
+  // Min/max/clamp.
+  min_v2, max_v2, clamped_low, clamped_mid, clamped_high,
+  // Bit manipulation.
+  bits_one, from_one,
+  // Zero check.
+  is_z, is_nz,
+  // Total comparison.
+  cmp_lt, cmp_eq, cmp_gt, cmp_neg
+)
