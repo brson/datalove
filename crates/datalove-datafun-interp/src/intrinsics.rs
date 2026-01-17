@@ -100,6 +100,10 @@ impl IrInterpreter {
                 let a = self.read_i32(&args[0], frame, frames)?;
                 self.write_u32(a as u32, dest);
             }
+            NegWrappingI32 => {
+                let a = self.read_i32(&args[0], frame, frames)?;
+                self.write_i32(a.wrapping_neg(), dest);
+            }
 
             // Platform queries.
             IsBigEndian => {

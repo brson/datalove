@@ -90,19 +90,13 @@ end fun
 // Checked signed addition. Adds a signed i32 to u32.
 // Returns none on overflow (positive other) or underflow (negative other).
 fun add_checked_signed(self: u32, other: i32): ?u32
-  let i32_min: i32 = -2147483648
   if other >= (: i32 / 0)
     let other_u32 = icall i32_to_u32(other)
     ret some (self +? other_u32)
   else
-    if other == i32_min
-      // i32::MIN can't be negated, handle specially.
-      ret some (self -? 2147483648)
-    else
-      let neg_other = -?other
-      let abs_other = icall i32_to_u32(neg_other)
-      ret some (self -? abs_other)
-    end if
+    let neg_other = icall neg_wrapping_i32(other)
+    let abs_other = icall i32_to_u32(neg_other)
+    ret some (self -? abs_other)
   end if
 end fun
 
@@ -114,19 +108,13 @@ end fun
 // Checked signed subtraction. Subtracts a signed i32 from u32.
 // Returns none on underflow (positive other) or overflow (negative other).
 fun sub_checked_signed(self: u32, other: i32): ?u32
-  let i32_min: i32 = -2147483648
   if other >= (: i32 / 0)
     let other_u32 = icall i32_to_u32(other)
     ret some (self -? other_u32)
   else
-    if other == i32_min
-      // i32::MIN can't be negated, handle specially.
-      ret some (self +? 2147483648)
-    else
-      let neg_other = -?other
-      let abs_other = icall i32_to_u32(neg_other)
-      ret some (self +? abs_other)
-    end if
+    let neg_other = icall neg_wrapping_i32(other)
+    let abs_other = icall i32_to_u32(neg_other)
+    ret some (self +? abs_other)
   end if
 end fun
 
@@ -188,6 +176,54 @@ end fun
 // No intrinsic needed: u32 division cannot overflow.
 fun div_wrapping(self: u32, other: u32): ?u32
   ret div_checked(self, other)
+end fun
+
+// Wrapping signed addition. Adds a signed i32 to u32, wrapping on overflow/underflow.
+fun add_wrapping_signed(self: u32, other: i32): u32
+  if other >= (: i32 / 0)
+    let other_u32 = icall i32_to_u32(other)
+    ret add_wrapping(self, other_u32)
+  else
+    let neg_other = icall neg_wrapping_i32(other)
+    let abs_other = icall i32_to_u32(neg_other)
+    ret sub_wrapping(self, abs_other)
+  end if
+end fun
+
+// Wrapping signed subtraction. Subtracts a signed i32 from u32, wrapping on overflow/underflow.
+fun sub_wrapping_signed(self: u32, other: i32): u32
+  if other >= (: i32 / 0)
+    let other_u32 = icall i32_to_u32(other)
+    ret sub_wrapping(self, other_u32)
+  else
+    let neg_other = icall neg_wrapping_i32(other)
+    let abs_other = icall i32_to_u32(neg_other)
+    ret add_wrapping(self, abs_other)
+  end if
+end fun
+
+// Saturating signed addition. Adds a signed i32 to u32, saturating at bounds.
+fun add_saturating_signed(self: u32, other: i32): u32
+  if other >= (: i32 / 0)
+    let other_u32 = icall i32_to_u32(other)
+    ret add_saturating(self, other_u32)
+  else
+    let neg_other = icall neg_wrapping_i32(other)
+    let abs_other = icall i32_to_u32(neg_other)
+    ret sub_saturating(self, abs_other)
+  end if
+end fun
+
+// Saturating signed subtraction. Subtracts a signed i32 from u32, saturating at bounds.
+fun sub_saturating_signed(self: u32, other: i32): u32
+  if other >= (: i32 / 0)
+    let other_u32 = icall i32_to_u32(other)
+    ret sub_saturating(self, other_u32)
+  else
+    let neg_other = icall neg_wrapping_i32(other)
+    let abs_other = icall i32_to_u32(neg_other)
+    ret add_saturating(self, abs_other)
+  end if
 end fun
 
 fun neg_checked(self: u32): ?u32

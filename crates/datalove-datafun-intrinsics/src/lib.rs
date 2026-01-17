@@ -38,6 +38,7 @@ pub enum IntrinsicId {
     // Type conversion (50-59).
     U32ToI32 = 50,
     I32ToU32 = 51,
+    NegWrappingI32 = 52,
 
     // Platform queries (60-69).
     IsBigEndian = 60,
@@ -174,6 +175,12 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         name: "i32_to_u32",
         params: &[IntrinsicType::I32],
         ret: IntrinsicType::U32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::NegWrappingI32,
+        name: "neg_wrapping_i32",
+        params: &[IntrinsicType::I32],
+        ret: IntrinsicType::I32,
     },
 
     // Platform queries.

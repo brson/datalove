@@ -1,0 +1,39 @@
+require module sys/std/u32
+
+import u32.add_wrapping_signed
+import u32.sub_wrapping_signed
+import u32.add_saturating_signed
+import u32.sub_saturating_signed
+
+// add_wrapping_signed tests
+let aw1 = add_wrapping_signed(10, 5)            // 10 + 5 = 15
+let aw2 = add_wrapping_signed(10, : i32 / -3)   // 10 - 3 = 7
+let aw3 = add_wrapping_signed(2, : i32 / -5)    // 2 - 5 = wraps to max-2
+let aw4 = add_wrapping_signed(4294967295, 1)    // max + 1 = wraps to 0
+
+// sub_wrapping_signed tests
+let sw1 = sub_wrapping_signed(10, 5)            // 10 - 5 = 5
+let sw2 = sub_wrapping_signed(10, : i32 / -3)   // 10 + 3 = 13
+let sw3 = sub_wrapping_signed(2, 5)             // 2 - 5 = wraps to max-2
+let sw4 = sub_wrapping_signed(4294967290, : i32 / -10)  // near max + 10 = wraps to 4
+
+// add_saturating_signed tests
+let as1 = add_saturating_signed(10, 5)            // 10 + 5 = 15
+let as2 = add_saturating_signed(10, : i32 / -3)   // 10 - 3 = 7
+let as3 = add_saturating_signed(2, : i32 / -5)    // 2 - 5 = saturates to 0
+let as4 = add_saturating_signed(4294967295, 1)    // max + 1 = saturates to max
+
+// sub_saturating_signed tests
+let ss1 = sub_saturating_signed(10, 5)            // 10 - 5 = 5
+let ss2 = sub_saturating_signed(10, : i32 / -3)   // 10 + 3 = 13
+let ss3 = sub_saturating_signed(2, 5)             // 2 - 5 = saturates to 0
+let ss4 = sub_saturating_signed(4294967290, : i32 / -10)  // near max + 10 = saturates to max
+
+// i32::MIN edge cases
+let i32_min = : i32 / -2147483648
+let aw_min = add_wrapping_signed(1000000000, i32_min)  // 1B - 2147483648 = wraps
+let sw_min = sub_wrapping_signed(1000000000, i32_min)  // 1B + 2147483648 = 3147483648
+let as_min = add_saturating_signed(1000000000, i32_min)  // 1B - 2147483648 = saturates to 0
+let ss_min = sub_saturating_signed(1000000000, i32_min)  // 1B + 2147483648 = 3147483648
+
+let output = (aw1, aw2, aw3, aw4, sw1, sw2, sw3, sw4, as1, as2, as3, as4, ss1, ss2, ss3, ss4, aw_min, sw_min, as_min, ss_min)

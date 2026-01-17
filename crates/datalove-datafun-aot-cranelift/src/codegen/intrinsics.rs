@@ -110,6 +110,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             I32ToU32 => {
                 self.get_operand_value(builder, &args[0])?
             }
+            NegWrappingI32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ineg(a)
+            }
 
             // Platform queries.
             IsBigEndian => {
