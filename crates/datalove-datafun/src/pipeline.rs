@@ -46,6 +46,7 @@
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 use rmx::std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 use datalove_datafun_ir::{IrModuleId, FuncId, IrType, IrScriptUnit};
@@ -63,7 +64,7 @@ use datalove_datafun_compiler::module_graph::{
     ModuleGraph, ModuleGraphTypecheckResult, ModuleId,
     ParsedModuleGraph, parse_module_graph_with_mode,
 };
-use datalove_datafun_interp::{CallDispatcher, ScriptEnvironment, UnitCompletion};
+use datalove_datafun_interp::{CallDispatcher, ModuleFunctionRegistry, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;
 
 use crate::incremental::IncrementalModuleWorld;
@@ -309,8 +310,8 @@ impl ModuleCompilationPipeline {
         let func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> =
             lowering_result.func_id_map(db.as_salsa_db()).to_hashmap(db.as_salsa_db());
 
-        // Build ScriptEnvironment and collect results.
-        let mut env = ScriptEnvironment::new();
+        // Build module registry and collect results.
+        let mut module_registry = ModuleFunctionRegistry::new();
         let mut module_lowering_results: BTreeMap<String, Vec<String>> = BTreeMap::new();
         let mut drop_analysis_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
@@ -330,11 +331,11 @@ impl ModuleCompilationPipeline {
                 }
             }
 
-            // Add functions to environment and collect IR dumps.
+            // Add functions to module registry and collect IR dumps.
             let mut ir_dumps = Vec::new();
             for ir_func in result.functions(db.as_salsa_db()) {
                 ir_dumps.push(format!("{}", ir_func));
-                env.add_module_function(ir_module_id, ir_func.id, ir_func.clone());
+                module_registry.add_module_function(ir_module_id, ir_func.id, ir_func.clone());
             }
 
             // Add any errors to the IR dumps for backwards compatibility.
@@ -345,15 +346,19 @@ impl ModuleCompilationPipeline {
             module_lowering_results.insert(module_path, ir_dumps);
         }
 
-        CompiledModules {
-            resolution_error: None,
+        let shared = Arc::new(SharedModuleContext {
             module_graph,
             parsed_graph,
             graph_typecheck,
+            func_id_map,
+            module_registry: Arc::new(module_registry),
+        });
+
+        CompiledModules {
+            shared,
+            resolution_error: None,
             path_to_errors,
             drop_analysis_errors,
-            func_id_map,
-            env,
             module_lowering_results,
         }
     }
@@ -366,19 +371,31 @@ impl Default for ModuleCompilationPipeline {
 }
 
 // ============================================================================
+// Shared module context
+// ============================================================================
+
+/// Shared context for module functions, shareable across multiple script contexts.
+///
+/// This contains all the compiled module data that can be shared across multiple
+/// concurrent script execution contexts.
+pub struct SharedModuleContext<'db> {
+    pub module_graph: ModuleGraph,
+    pub parsed_graph: ParsedModuleGraph<'db>,
+    pub graph_typecheck: ModuleGraphTypecheckResult<'db>,
+    pub func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+    pub module_registry: Arc<ModuleFunctionRegistry>,
+}
+
+// ============================================================================
 // Compiled modules
 // ============================================================================
 
 /// Result of compiling modules, ready for script execution.
 pub struct CompiledModules<'db> {
+    pub shared: Arc<SharedModuleContext<'db>>,
     pub resolution_error: Option<String>,
-    pub module_graph: ModuleGraph,
-    pub parsed_graph: ParsedModuleGraph<'db>,
-    pub graph_typecheck: ModuleGraphTypecheckResult<'db>,
     pub path_to_errors: BTreeMap<String, Vec<String>>,
     pub drop_analysis_errors: BTreeMap<String, Vec<String>>,
-    pub func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
-    pub env: ScriptEnvironment,
     pub module_lowering_results: BTreeMap<String, Vec<String>>,
 }
 
@@ -449,12 +466,15 @@ impl<'db> CompiledModules<'db> {
 
     /// Get module type diagnostics with spans for rendering.
     pub fn get_module_type_diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<&'db datalove_diagnostic::TypeDiagnostic> {
-        typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(db, self.parsed_graph)
+        typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(db, self.shared.parsed_graph)
     }
 
     /// Create a context for compiling and executing scripts against these modules.
+    ///
+    /// Can be called multiple times to create independent script contexts that
+    /// share the same module compilation.
     pub fn script_context(
-        self,
+        &self,
         db: &'db dyn salsa::Database,
         debug_mode: datalove_rt::c::DebugOutputMode,
     ) -> ScriptCompilationContext<'db> {
@@ -462,13 +482,13 @@ impl<'db> CompiledModules<'db> {
         let mut module_specs = Vec::new();
 
         // Build a map of spans for quick lookup.
-        let spans_map: std::collections::HashMap<_, _> = self.parsed_graph.spans(db).iter()
+        let spans_map: std::collections::HashMap<_, _> = self.shared.parsed_graph.spans(db).iter()
             .map(|(id, spans)| (*id, spans.clone()))
             .collect();
 
-        for (salsa_module_id, parsed) in self.parsed_graph.statements_only(db) {
+        for (salsa_module_id, parsed) in self.shared.parsed_graph.statements_only(db) {
             let module_path = salsa_module_id.path(db).clone();
-            let module_source = self.module_graph.iter_modules(db)
+            let module_source = self.shared.module_graph.iter_modules(db)
                 .find(|m| m.id(db) == *salsa_module_id)
                 .map(|m| m.source(db))
                 .expect("module should exist in graph");
@@ -484,14 +504,17 @@ impl<'db> CompiledModules<'db> {
             ));
         }
 
+        // Create a new ScriptEnvironment that shares the module registry.
+        let env = ScriptEnvironment::with_module_registry(Arc::clone(&self.shared.module_registry));
+
         ScriptCompilationContext {
             db,
             script_ctx,
-            env: self.env,
+            env,
             accumulated_unit_specs: Vec::new(),
             module_specs,
             interp: datalove_datafun_interp::IrInterpreter::new_with_debug_mode(debug_mode),
-            func_id_map: self.func_id_map,
+            func_id_map: self.shared.func_id_map.clone(),
             last_source: None,
             last_batch_spec: None,
         }
@@ -1384,5 +1407,300 @@ pub mod aot {
         let (exe_path, _dir) = link_object_to_temp_executable(&obj_bytes)
             .map_err(|e| anyhow!("{}", e))?;
         run_executable(&exe_path).map_err(|e| anyhow!("{}", e))
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use datalove_rt::c::DebugOutputMode;
+
+    fn make_db() -> crate::Database {
+        crate::Database::default()
+    }
+
+    /// Test creating multiple script contexts from the same compiled modules.
+    #[test]
+    fn test_multiple_script_contexts() {
+        let db = make_db();
+        let mut pipeline = ModuleCompilationPipeline::new();
+
+        // Compile with no modules - just testing script context isolation.
+        let compiled = pipeline.compile_fresh(&db);
+        assert!(compiled.is_successful(), "compilation should succeed");
+
+        // Create first script context.
+        let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled);
+        let result1 = ctx1.eval_fragment("let x = @10");
+        assert!(matches!(result1.typecheck, TypecheckResult::Success), "ctx1 fragment should typecheck");
+
+        // Create second script context from the same compiled modules.
+        let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled);
+        let result2 = ctx2.eval_fragment("let y = @20");
+        assert!(matches!(result2.typecheck, TypecheckResult::Success), "ctx2 fragment should typecheck");
+
+        // Each context should have independent state.
+        let expr1 = ctx1.eval_expr("x");
+        assert_eq!(expr1.output, "@10");
+
+        let expr2 = ctx2.eval_expr("y");
+        assert_eq!(expr2.output, "@20");
+
+        // ctx1 should not see y, ctx2 should not see x.
+        let bad1 = ctx1.eval_expr("y");
+        assert!(matches!(bad1.typecheck, TypecheckResult::Error { .. }), "ctx1 should not see y");
+
+        let bad2 = ctx2.eval_expr("x");
+        assert!(matches!(bad2.typecheck, TypecheckResult::Error { .. }), "ctx2 should not see x");
+
+        ctx1.destroy_all();
+        ctx2.destroy_all();
+    }
+
+    /// Test interleaved execution of script units from multiple contexts.
+    #[test]
+    fn test_interleaved_execution() {
+        let db = make_db();
+        let mut pipeline = ModuleCompilationPipeline::new();
+
+        let compiled = pipeline.compile_fresh(&db);
+        assert!(compiled.is_successful());
+
+        let mut ctx_a = compiled.script_context(&db, DebugOutputMode::Disabled);
+        let mut ctx_b = compiled.script_context(&db, DebugOutputMode::Disabled);
+
+        // Define simple identity functions in each context.
+        let r1 = ctx_a.eval_fragment("fun id_a(n: @u32): @u32\n  ret n\nend fun");
+        assert!(matches!(r1.typecheck, TypecheckResult::Success), "ctx_a fn def failed: {:?}", r1.typecheck);
+
+        let r2 = ctx_b.eval_fragment("fun id_b(n: @u32): @u32\n  ret n\nend fun");
+        assert!(matches!(r2.typecheck, TypecheckResult::Success), "ctx_b fn def failed: {:?}", r2.typecheck);
+
+        // Interleave: A defines values, B defines values.
+        let _ = ctx_a.eval_fragment("let a1: @u32 = @5");
+        let _ = ctx_b.eval_fragment("let b1: @u32 = @10");
+
+        // A uses its function, B uses its function.
+        let _ = ctx_a.eval_fragment("let a2 = id_a(a1)");
+        let _ = ctx_b.eval_fragment("let b2 = id_b(b1)");
+
+        // Verify values.
+        let result_a = ctx_a.eval_expr("a2");
+        assert_eq!(result_a.output, "@5");
+
+        let result_b = ctx_b.eval_expr("b2");
+        assert_eq!(result_b.output, "@10");
+
+        // Each context's function is isolated.
+        let bad_a = ctx_a.eval_expr("id_b(@1)");
+        assert!(matches!(bad_a.typecheck, TypecheckResult::Error { .. }), "ctx_a should not see id_b");
+
+        let bad_b = ctx_b.eval_expr("id_a(@1)");
+        assert!(matches!(bad_b.typecheck, TypecheckResult::Error { .. }), "ctx_b should not see id_a");
+
+        ctx_a.destroy_all();
+        ctx_b.destroy_all();
+    }
+
+    /// Test running scripts in parallel using threads with shared compiled modules.
+    ///
+    /// Compiles modules once, then shares the compilation across threads.
+    /// Each thread gets a cloned database via `DbClone::dyn_clone()` and creates
+    /// its own script context from the shared compiled modules.
+    #[test]
+    fn test_parallel_script_execution() {
+        use std::sync::Arc;
+        use std::thread;
+
+        // Compile once on the main thread.
+        let db = make_db();
+        let mut pipeline = ModuleCompilationPipeline::new();
+
+        // Add a module with a function all threads will use.
+        pipeline.add_module(&db, "local", "pkg", "math", r#"
+fun square(n: int): int
+  ret n * n
+end fun
+"#);
+
+        let compiled = pipeline.compile_fresh(&db);
+        assert!(compiled.is_successful(), "compilation failed: {:?}", compiled.all_errors());
+
+        // Clone the compiled modules into an Arc for sharing.
+        // (CompiledModules already has Arc<SharedModuleContext> internally.)
+        let compiled = Arc::new(compiled);
+
+        // Clone databases upfront - one per thread for parallel execution.
+        // Can't clone inside parallel section since &dyn DbClone isn't Sync.
+        let work: Vec<_> = (0..4)
+            .map(|i| (db.dyn_clone(), Arc::clone(&compiled), i))
+            .collect();
+
+        let results = std::sync::Mutex::new(Vec::new());
+
+        thread::scope(|s| {
+            for (db_clone, compiled, i) in work {
+                let results = &results;
+                s.spawn(move || {
+                    // Use the cloned database for this thread.
+                    let db_ref = db_clone.as_salsa_db();
+
+                    // Create a script context from the shared compiled modules.
+                    let mut ctx = compiled.script_context(db_ref, DebugOutputMode::Disabled);
+
+                    // Import and use the shared module function.
+                    let r = ctx.eval_fragment("require module local/pkg/math\nimport math.square");
+                    assert!(matches!(r.typecheck, TypecheckResult::Success),
+                        "import failed: {:?}", r.typecheck);
+
+                    // Define local variable and compute.
+                    let val = (i + 1) * 10;
+                    let _ = ctx.eval_fragment(&format!("let n: int = @{}", val));
+                    let _ = ctx.eval_fragment("let result = square(n)");
+
+                    let result = ctx.eval_expr("result");
+                    ctx.destroy_all();
+
+                    let expected = val * val;
+                    assert_eq!(result.output, format!("@{}", expected),
+                        "thread {} expected {} but got {}", i, expected, result.output);
+                    results.lock().unwrap().push((i, expected));
+                });
+            }
+        });
+
+        // Verify all threads completed.
+        let mut results = results.into_inner().unwrap();
+        results.sort_by_key(|(i, _)| *i);
+        let values: Vec<_> = results.into_iter().map(|(_, v)| v).collect();
+        assert_eq!(values, vec![100, 400, 900, 1600]);
+    }
+
+    /// Test compile-run-compile-run pattern with incremental compilation.
+    #[test]
+    fn test_compile_run_compile_run() {
+        let db = make_db();
+        let mut pipeline = ModuleCompilationPipeline::new();
+
+        // First compilation: add a module with a simple identity function.
+        pipeline.add_module(&db, "local", "pkg", "v1", r#"
+fun value(x: @u32): @u32
+  ret x
+end fun
+"#);
+
+        let compiled1 = pipeline.compile_fresh(&db);
+        assert!(compiled1.is_successful(), "first compilation failed: {:?}", compiled1.all_errors());
+
+        // First run: import and call module function.
+        {
+            let mut ctx = compiled1.script_context(&db, DebugOutputMode::Disabled);
+            let r = ctx.eval_fragment("require module local/pkg/v1\nimport v1.value");
+            assert!(matches!(r.typecheck, TypecheckResult::Success), "import failed: {:?}", r.typecheck);
+            let result = ctx.eval_expr("value(@100)");
+            assert_eq!(result.output, "@100");
+            ctx.destroy_all();
+        }
+
+        // Create a second context from the same compilation.
+        {
+            let mut ctx2 = compiled1.script_context(&db, DebugOutputMode::Disabled);
+            let r = ctx2.eval_fragment("require module local/pkg/v1\nimport v1.value");
+            assert!(matches!(r.typecheck, TypecheckResult::Success), "second import failed: {:?}", r.typecheck);
+            let result = ctx2.eval_expr("value(@200)");
+            assert_eq!(result.output, "@200");
+            ctx2.destroy_all();
+        }
+    }
+
+    /// Test that unit functions are isolated between contexts.
+    #[test]
+    fn test_isolated_unit_functions() {
+        let db = make_db();
+        let mut pipeline = ModuleCompilationPipeline::new();
+
+        let compiled = pipeline.compile_fresh(&db);
+        assert!(compiled.is_successful());
+
+        let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled);
+        let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled);
+
+        // Define functions with the same name returning different values.
+        let r1_def = ctx1.eval_fragment("fun local_fn(x: @u32): @u32\n  ret @10\nend fun");
+        assert!(matches!(r1_def.typecheck, TypecheckResult::Success), "ctx1 fn def failed: {:?}", r1_def.typecheck);
+
+        let r2_def = ctx2.eval_fragment("fun local_fn(x: @u32): @u32\n  ret @20\nend fun");
+        assert!(matches!(r2_def.typecheck, TypecheckResult::Success), "ctx2 fn def failed: {:?}", r2_def.typecheck);
+
+        // Local functions are isolated to their context.
+        let r1_local = ctx1.eval_expr("local_fn(@5)");
+        assert!(matches!(r1_local.typecheck, TypecheckResult::Success), "ctx1 fn call failed: {:?}", r1_local.typecheck);
+        assert_eq!(r1_local.output, "@10");
+
+        let r2_local = ctx2.eval_expr("local_fn(@5)");
+        assert!(matches!(r2_local.typecheck, TypecheckResult::Success), "ctx2 fn call failed: {:?}", r2_local.typecheck);
+        assert_eq!(r2_local.output, "@20");
+
+        ctx1.destroy_all();
+        ctx2.destroy_all();
+    }
+
+    /// Test creating many script contexts doesn't cause issues.
+    #[test]
+    fn test_many_script_contexts() {
+        let db = make_db();
+        let mut pipeline = ModuleCompilationPipeline::new();
+
+        let compiled = pipeline.compile_fresh(&db);
+        assert!(compiled.is_successful());
+
+        // Create many contexts.
+        for i in 0..20u32 {
+            let mut ctx = compiled.script_context(&db, DebugOutputMode::Disabled);
+            let r = ctx.eval_fragment("fun id(x: @u32): @u32\n  ret x\nend fun");
+            assert!(matches!(r.typecheck, TypecheckResult::Success), "fn def failed: {:?}", r.typecheck);
+            let result = ctx.eval_expr(&format!("id(@{})", i));
+            assert_eq!(result.output, format!("@{}", i));
+            ctx.destroy_all();
+        }
+    }
+
+    /// Test that module functions are shared across contexts.
+    #[test]
+    fn test_shared_module_functions() {
+        let db = make_db();
+        let mut pipeline = ModuleCompilationPipeline::new();
+
+        pipeline.add_module(&db, "local", "pkg", "math", r#"
+fun id(x: @u32): @u32
+  ret x
+end fun
+"#);
+
+        let compiled = pipeline.compile_fresh(&db);
+        assert!(compiled.is_successful(), "compilation failed: {:?}", compiled.all_errors());
+
+        // Create two contexts that both use the module function.
+        let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled);
+        let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled);
+
+        // Both contexts import and use the module function.
+        let r1 = ctx1.eval_fragment("require module local/pkg/math\nimport math.id");
+        assert!(matches!(r1.typecheck, TypecheckResult::Success), "ctx1 import failed: {:?}", r1.typecheck);
+        let r2 = ctx2.eval_fragment("require module local/pkg/math\nimport math.id");
+        assert!(matches!(r2.typecheck, TypecheckResult::Success), "ctx2 import failed: {:?}", r2.typecheck);
+
+        let r1 = ctx1.eval_expr("id(@10)");
+        assert_eq!(r1.output, "@10");
+
+        let r2 = ctx2.eval_expr("id(@20)");
+        assert_eq!(r2.output, "@20");
+
+        ctx1.destroy_all();
+        ctx2.destroy_all();
     }
 }

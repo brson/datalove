@@ -57,7 +57,7 @@ pub use value::{Value, Destination};
 pub use layout::IrLayout;
 pub use tydesc::IrTyDescTable;
 pub use frame::{Frame, FrameStore};
-pub use env::{FunctionRegistry, ScriptEnvironment, ExecutionContext};
+pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ScriptEnvironment, ExecutionContext};
 pub use dispatch::{CallDispatcher, DispatchCallContext, DispatchResult};
 pub use datalove_rt::c::DebugOutputMode;
 

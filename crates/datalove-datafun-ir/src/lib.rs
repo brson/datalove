@@ -11,7 +11,7 @@ use std::collections::HashMap;
 pub mod display;
 pub mod registry;
 
-pub use registry::FunctionRegistry;
+pub use registry::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry};
 
 /// SSA value - defined exactly once, immutable.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]

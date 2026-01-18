@@ -1,15 +1,18 @@
 //! Execution environment for function resolution.
 //!
 //! - `FunctionRegistry`: (re-exported from IR crate) Module functions and functions from previous script units.
+//! - `ModuleFunctionRegistry`: Shared, immutable after module compilation.
+//! - `UnitFunctionRegistry`: Per-script, grows as units execute.
 //! - `ExecutionContext`: Local functions in the current unit.
 //! - `ScriptEnvironment`: Combines registry with `FrameStore` for script execution.
 
+use std::sync::Arc;
 use datalove_datafun_ir::{IrFunction, FuncId, FuncRef, IrModuleId};
 use crate::error::InterpError;
 use crate::frame::{Frame, FrameStore};
 
-// Re-export FunctionRegistry from the IR crate.
-pub use datalove_datafun_ir::FunctionRegistry;
+// Re-export registry types from the IR crate.
+pub use datalove_datafun_ir::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry};
 
 /// Combined environment for script execution (convenience wrapper).
 pub struct ScriptEnvironment {
@@ -21,6 +24,16 @@ impl ScriptEnvironment {
     pub fn new() -> Self {
         Self {
             registry: FunctionRegistry::new(),
+            frames: FrameStore::new(),
+        }
+    }
+
+    /// Create with an existing module registry.
+    ///
+    /// Used when creating multiple script contexts that share module functions.
+    pub fn with_module_registry(module_registry: Arc<ModuleFunctionRegistry>) -> Self {
+        Self {
+            registry: FunctionRegistry::with_module_registry(module_registry),
             frames: FrameStore::new(),
         }
     }

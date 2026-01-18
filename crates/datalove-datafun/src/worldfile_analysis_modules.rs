@@ -70,7 +70,7 @@ pub fn analyze_modules_worldfile(
     }
 
     // Compile modules (typecheck, drop analysis, lower).
-    let (mut compiled, db) = pipeline.compile(db);
+    let (compiled, db) = pipeline.compile(db);
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {
@@ -119,17 +119,17 @@ pub fn analyze_modules_worldfile(
 
     // Find main function.
     // First, find the ModuleId for "local/test/main" from the module graph.
-    let main_salsa_module_id = compiled.module_graph.iter_modules(db)
+    let main_salsa_module_id = compiled.shared.module_graph.iter_modules(db)
         .find(|m| m.id(db).path(db) == "local/test/main")
         .map(|m| m.id(db))
         .ok_or_else(|| anyhow!("main module not found"))?;
 
     // Look up the main function using (ModuleId, "main") key.
-    let (main_ir_module_id, main_func_id) = compiled.func_id_map
+    let (main_ir_module_id, main_func_id) = compiled.shared.func_id_map
         .get(&(main_salsa_module_id, "main".S()))
         .ok_or_else(|| anyhow!("main function not found"))?;
 
-    let main_func = compiled.env.registry.get_module_function(*main_ir_module_id, *main_func_id)
+    let main_func = compiled.shared.module_registry.get_module_function(*main_ir_module_id, *main_func_id)
         .ok_or_else(|| anyhow!("main function not in registry"))?;
 
     // Verify main is nullary.
@@ -160,8 +160,13 @@ pub fn analyze_modules_worldfile(
         tydesc: ret_tydesc,
     };
 
+    // Create a temporary ScriptEnvironment from the shared module registry.
+    let mut env = datalove_datafun_interp::ScriptEnvironment::with_module_registry(
+        std::sync::Arc::clone(&compiled.shared.module_registry)
+    );
+
     // Execute main with the environment (so it can call other functions).
-    let output = match interp.call_with_env(main_func, Vec::new(), ret_dest, &compiled.env) {
+    let output = match interp.call_with_env(main_func, Vec::new(), ret_dest, &env) {
         Ok(()) => {
             // Pretty-print the return value.
             let value = datalove_datafun_interp::Value {
@@ -178,7 +183,7 @@ pub fn analyze_modules_worldfile(
     };
 
     // Cleanup: destroy all values in frames to prevent memory leaks.
-    compiled.env.destroy_all(interp.runtime_handle());
+    env.destroy_all(interp.runtime_handle());
 
     Ok(ModulesAnalysis {
         typecheck: TypecheckResult::Success,
