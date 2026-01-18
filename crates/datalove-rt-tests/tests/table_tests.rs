@@ -295,7 +295,7 @@ fn test_table_push_and_len() {
                 rt,
                 table_ptr as *const u8,
                 table_tydesc,
-                i,
+                i.into(),
                 0,
             )
         };
@@ -359,10 +359,10 @@ fn test_table_two_columns() {
     // Verify elements.
     for i in 0u32..5 {
         let col0_ptr = unsafe {
-            datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, table_tydesc, i, 0)
+            datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, table_tydesc, i.into(), 0)
         };
         let col1_ptr = unsafe {
-            datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, table_tydesc, i, 1)
+            datalove_rt::c::dtlv_rti_table_get_local(rt, table_ptr as *const u8, table_tydesc, i.into(), 1)
         };
         assert!(!col0_ptr.is_null());
         assert!(!col1_ptr.is_null());
@@ -537,9 +537,9 @@ fn test_table_clone() {
     assert_eq!(cloned.len, table.len);
     assert_ne!(cloned.data, table.data); // Different allocation.
 
-    for i in 0..3 {
+    for i in 0u32..3 {
         let elem_ptr = unsafe {
-            datalove_rt::c::dtlv_rti_table_get_local(rt, cloned_ptr as *const u8, table_tydesc, i, 0)
+            datalove_rt::c::dtlv_rti_table_get_local(rt, cloned_ptr as *const u8, table_tydesc, i.into(), 0)
         };
         let val = unsafe { *(elem_ptr as *const u32) };
         assert_eq!(val, i * 10);

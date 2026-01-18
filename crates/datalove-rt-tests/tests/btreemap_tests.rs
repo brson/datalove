@@ -768,7 +768,7 @@ unsafe fn create_runtime_string(
                 &mut string as *mut rtdt::String as *mut u8,
                 string_tydesc,
                 s.as_ptr(),
-                s.len() as u32,
+                (s.len() as u32).into(),
             );
         }
 
@@ -2471,7 +2471,7 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
     }
 
     // Now only keys where i % 3 == 2 should remain.
-    let final_remaining = (0u32..100).filter(|i| i % 3 == 2).count() as u32;
+    let final_remaining = (0u32..100).filter(|i| i % 3 == 2).count() as rtdt::UsizeRepr;
     assert_eq!(map.len, final_remaining);
 
     // Clean up.
@@ -2917,7 +2917,7 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_clone_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             tuple_tydesc,
             map_ptr,
             map_tydesc,
@@ -3002,7 +3002,7 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_clone_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             tuple_tydesc,
             map_ptr,
             map_tydesc,
@@ -3089,7 +3089,7 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreemap_clone_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             tuple_tydesc,
             map_ptr,
             map_tydesc,

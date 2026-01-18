@@ -428,7 +428,7 @@ unsafe fn pretty_list(
                     push_str(rt, string_mut, string_tydesc, b", ")?;
                 }
 
-                let elem_value = list.data.add((i * elem_ty.size()) as usize);
+                let elem_value = list.data.add((i as usize) * (elem_ty.size() as usize));
                 pretty_value(rt, elem_value, elem_ty, string_mut, string_tydesc)?;
             }
         }
@@ -775,7 +775,7 @@ unsafe fn push_str(
             string_mut,
             string_tydesc,
             bytes.as_ptr(),
-            bytes.len() as u32,
+            bytes.len() as rtdt::UsizeRepr,
         );
 
         if status == RtStatus::Ok {

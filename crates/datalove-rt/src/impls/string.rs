@@ -64,7 +64,7 @@ pub unsafe fn string_push_bytes_local(
     string_value_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
     bytes_ref: *const u8,
-    bytes_len: u32,
+    bytes_len: rtdt::UsizeRepr,
 ) -> RtStatus {
     if bytes_len == 0 {
         return RtStatus::Ok;
@@ -212,7 +212,7 @@ mod tests {
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
                 data.as_ptr(),
-                data.len() as u32,
+                (data.len() as u32).into(),
             );
 
             assert_eq!(status, RtStatus::Ok);

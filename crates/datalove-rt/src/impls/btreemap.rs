@@ -1973,7 +1973,7 @@ pub unsafe fn btreemap_build_from_sorted_slices(
     value_tydesc: rtdt::TyDescRef,
     keys_ptr: *mut u8,
     values_ptr: *mut u8,
-    num_entries: u32,
+    num_entries: rtdt::UsizeRepr,
 ) -> RtStatus {
     unsafe {
         if map_out.is_null() {
@@ -2164,7 +2164,7 @@ unsafe fn cleanup_map_leaves_internal(
 pub unsafe fn btreemap_clone_from_slice_impl(
     rt: &mut RtLocal,
     slice_ptr_ref: *const u8,
-    slice_ptr_len: u32,
+    slice_ptr_len: rtdt::UsizeRepr,
     slice_element_tydesc: *const TyDesc,
     btreemap_value_out: *mut u8,
     btreemap_tydesc: rtdt::TyDescRef,

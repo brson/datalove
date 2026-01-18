@@ -581,7 +581,7 @@ unsafe fn eq_value(
                     }
 
                     // Compute total number of elements.
-                    let total_elems = shape_a.iter().product::<u32>();
+                    let total_elems: rtdt::UsizeRepr = shape_a.iter().copied().product();
 
                     if total_elems == 0 {
                         return true;  // Empty tensors with matching shapes are equal.
@@ -593,7 +593,7 @@ unsafe fn eq_value(
                     let strides_b = std::slice::from_raw_parts(tensor_b.strides, rank as usize);
 
                     // Iterate through all multi-dimensional indices.
-                    let mut indices = vec![0u32; rank as usize];
+                    let mut indices: Vec<rtdt::UsizeRepr> = vec![0; rank as usize];
                     for _ in 0..total_elems {
                         // Compute linear offset for tensor_a.
                         let mut offset_a = tensor_a.offset_elems;
@@ -615,7 +615,7 @@ unsafe fn eq_value(
                         }
 
                         // Increment indices (like odometer).
-                        let mut carry = 1;
+                        let mut carry: rtdt::UsizeRepr = 1;
                         for i in (0..rank as usize).rev() {
                             if carry == 0 {
                                 break;
@@ -1215,7 +1215,7 @@ unsafe fn cmp_value(
                     }
 
                     // Shapes are equal, compare elements.
-                    let total_elems = shape_a.iter().product::<u32>();
+                    let total_elems: rtdt::UsizeRepr = shape_a.iter().copied().product();
 
                     if total_elems == 0 {
                         return crate::c::RtOrdering::Equal;  // Empty tensors with matching shapes are equal.
@@ -1227,7 +1227,7 @@ unsafe fn cmp_value(
                     let strides_b = std::slice::from_raw_parts(tensor_b.strides, rank as usize);
 
                     // Iterate through all multi-dimensional indices lexicographically.
-                    let mut indices = vec![0u32; rank as usize];
+                    let mut indices: Vec<rtdt::UsizeRepr> = vec![0; rank as usize];
                     for _ in 0..total_elems {
                         // Compute linear offset for tensor_a.
                         let mut offset_a = tensor_a.offset_elems;
@@ -1255,7 +1255,7 @@ unsafe fn cmp_value(
                         }
 
                         // Increment indices (like odometer).
-                        let mut carry = 1;
+                        let mut carry: rtdt::UsizeRepr = 1;
                         for i in (0..rank as usize).rev() {
                             if carry == 0 {
                                 break;

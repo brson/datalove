@@ -127,8 +127,8 @@ pub struct EnumLayout {
 #[repr(C)]
 pub struct List {
     pub data: *const u8, // type-aligned
-    pub size: u32, // in elements,
-    pub capacity: u32, // in elements,
+    pub size: UsizeRepr, // in elements,
+    pub capacity: UsizeRepr, // in elements,
 }
 
 /// Columnar table storage.
@@ -137,22 +137,22 @@ pub struct List {
 /// are computed dynamically from the type descriptors in TyInfoTable.
 #[repr(C)]
 pub struct Table {
-    pub len: u32,
-    pub capacity: u32,
+    pub len: UsizeRepr,
+    pub capacity: UsizeRepr,
     pub data: *const u8,
 }
 
 #[repr(C)]
 pub struct String {
     pub data: *const u8,
-    pub size: u32,
-    pub capacity: u32,
+    pub size: UsizeRepr,
+    pub capacity: UsizeRepr,
 }
 
 #[repr(C)]
 pub struct Map {
     pub root: *const MapNode,
-    pub len: u32,
+    pub len: UsizeRepr,
 }
 
 /// B-tree order parameter for Map nodes.
@@ -192,7 +192,7 @@ pub enum MapNodeTag {
 #[repr(C)]
 pub struct Set {
     pub root: *const SetNode,
-    pub len: u32,
+    pub len: UsizeRepr,
 }
 
 /// B-tree order parameter for Set nodes.
@@ -273,12 +273,12 @@ pub struct SetNodeLeafLayout {
 #[repr(C)]
 pub struct Tensor {
     pub ptr_base: *mut u8,
-    pub capacity_elems: u32,
-    pub offset_elems: u32,
-    // u32 x rank
-    pub shape: *const u32,
-    // u32 x rank
-    pub strides: *const u32,
+    pub capacity_elems: UsizeRepr,
+    pub offset_elems: UsizeRepr,
+    // UsizeRepr x rank
+    pub shape: *const UsizeRepr,
+    // UsizeRepr x rank (can be negative for reversed dimensions, but stored unsigned)
+    pub strides: *const UsizeRepr,
     pub layout: TensorLayout,
 }
 
@@ -304,8 +304,8 @@ pub struct TensorLayoutInfo {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SliceRange {
-    pub start: u32,
-    pub end: u32,
+    pub start: UsizeRepr,
+    pub end: UsizeRepr,
 }
 
 

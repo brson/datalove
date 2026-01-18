@@ -148,7 +148,7 @@ fn test_string_destroy_with_data() -> AnyResult<()> {
             &mut string as *mut rtdt::String as *mut u8,
             &*tydesc,
             data.as_ptr(),
-            data.len() as u32,
+            (data.len() as u32).into(),
         );
     }
     assert!(!string.data.is_null());
@@ -222,7 +222,7 @@ fn test_string_push_bytes_to_empty() -> AnyResult<()> {
             &mut string as *mut rtdt::String as *mut u8,
             &*tydesc,
             data.as_ptr(),
-            data.len() as u32,
+            (data.len() as u32).into(),
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -365,7 +365,7 @@ fn test_string_push_bytes_large() -> AnyResult<()> {
             &mut string as *mut rtdt::String as *mut u8,
             &*tydesc,
             large_data.as_ptr(),
-            large_data.len() as u32,
+            (large_data.len() as u32).into(),
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -619,7 +619,7 @@ fn test_string_utf8_data() -> AnyResult<()> {
             &mut string as *mut rtdt::String as *mut u8,
             &*tydesc,
             bytes.as_ptr(),
-            bytes.len() as u32,
+            (bytes.len() as u32).into(),
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -666,7 +666,7 @@ fn test_string_binary_data() -> AnyResult<()> {
             &mut string as *mut rtdt::String as *mut u8,
             &*tydesc,
             binary_data.as_ptr(),
-            binary_data.len() as u32,
+            (binary_data.len() as u32).into(),
         )
     };
     assert_eq!(status, RtStatus::Ok);
@@ -723,7 +723,7 @@ fn test_string_capacity_growth() -> AnyResult<()> {
                 &mut string as *mut rtdt::String as *mut u8,
                 &*tydesc,
                 chunk.as_ptr(),
-                chunk.len() as u32,
+                (chunk.len() as u32).into(),
             );
         }
     }

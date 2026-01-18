@@ -340,7 +340,7 @@ pub unsafe fn btreeset_build_from_sorted_slice(
     set_out: *mut Set,
     element_tydesc: *const TyDesc,
     elements_ptr: *mut u8,
-    num_elements: u32,
+    num_elements: rtdt::UsizeRepr,
 ) -> RtStatus {
     unsafe {
         if set_out.is_null() || element_tydesc.is_null() {
@@ -1236,7 +1236,7 @@ pub unsafe fn btreeset_insert_impl(
 pub unsafe fn btreeset_clone_from_slice_impl(
     rt: &mut RtLocal,
     slice_ptr_ref: *const u8,
-    slice_ptr_len: u32,
+    slice_ptr_len: rtdt::UsizeRepr,
     slice_element_tydesc: *const TyDesc,
     btreeset_value_out: *mut u8,
     btreeset_tydesc: *const TyDesc,

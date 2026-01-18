@@ -477,6 +477,13 @@ pub fn compute_set_leaf_node_layout(
     }
 }
 
+/// Align a usize value up to the given alignment.
+#[inline]
+fn align_up_usize(value: usize, align: u32) -> usize {
+    let a = align as usize;
+    (value + a - 1) & !(a - 1)
+}
+
 /// Compute byte offset of a column within a table's data allocation.
 ///
 /// Iterates through prior columns, accumulating their aligned sizes.
@@ -484,33 +491,33 @@ pub fn compute_set_leaf_node_layout(
 pub fn table_column_offset(
     column_tydescs: &[&TyDesc],
     column_index: usize,
-    capacity: u32,
-) -> u32 {
-    let mut offset = 0u32;
+    capacity: UsizeRepr,
+) -> usize {
+    let mut offset = 0usize;
     for i in 0..column_index {
-        offset = align_up(offset, column_tydescs[i].align);
-        offset += column_tydescs[i].size * capacity;
+        offset = align_up_usize(offset, column_tydescs[i].align);
+        offset += (column_tydescs[i].size as usize) * (capacity as usize);
     }
-    align_up(offset, column_tydescs[column_index].align)
+    align_up_usize(offset, column_tydescs[column_index].align)
 }
 
 /// Compute total allocation size for a table's data.
 #[inline]
 pub fn table_data_allocation_size(
     column_tydescs: &[&TyDesc],
-    capacity: u32,
+    capacity: UsizeRepr,
 ) -> u32 {
     if column_tydescs.is_empty() || capacity == 0 {
         return 0;
     }
-    let mut offset = 0u32;
+    let mut offset = 0usize;
     let mut max_align = 1u32;
     for tydesc in column_tydescs {
-        offset = align_up(offset, tydesc.align);
-        offset += tydesc.size * capacity;
+        offset = align_up_usize(offset, tydesc.align);
+        offset += (tydesc.size as usize) * (capacity as usize);
         max_align = max_align.max(tydesc.align);
     }
-    align_up(offset, max_align)
+    align_up_usize(offset, max_align) as u32
 }
 
 /// Compute required alignment for a table's data allocation.

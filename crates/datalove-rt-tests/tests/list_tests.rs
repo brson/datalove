@@ -1230,7 +1230,7 @@ unsafe fn create_runtime_string(
                 &mut string as *mut rtdt::String as *mut u8,
                 string_tydesc,
                 s.as_ptr(),
-                s.len() as u32,
+                (s.len() as u32).into(),
             );
         }
 
@@ -2484,7 +2484,7 @@ fn test_list_create_from_slice_multiple() -> AnyResult<()> {
                 rt,
                 list_ptr,
                 list_tydesc,
-                idx as u32,
+                (idx as u32).into(),
                 option_buffer.as_mut_ptr(),
                 option_tydesc,
             )
@@ -2572,7 +2572,7 @@ fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
                 rt,
                 list_ptr,
                 list_tydesc,
-                idx as u32,
+                (idx as u32).into(),
                 option_buffer.as_mut_ptr(),
                 option_tydesc,
             )
@@ -2671,7 +2671,7 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
                 rt,
                 list_ptr,
                 list_tydesc,
-                idx as u32,
+                (idx as u32).into(),
                 option_buffer.as_mut_ptr(),
                 option_tydesc,
             )

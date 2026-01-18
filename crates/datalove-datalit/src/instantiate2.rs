@@ -467,7 +467,7 @@ fn instantiate_hex_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db,
     unsafe {
         // Allocate limbs array via runtime.
         let limbs_ptr = if !limbs.is_empty() {
-            let ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, 4, 4, limbs.len() as u32) as *mut u32;
+            let ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, 4, 4, (limbs.len() as u32).into()) as *mut u32;
             for (i, &limb) in limbs.iter().enumerate() {
                 *ptr.add(i) = limb;
             }
@@ -509,7 +509,7 @@ fn instantiate_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int
     unsafe {
         // Allocate limbs array via runtime using size=4, align=4, count=len.
         let limbs_ptr = if !limbs.is_empty() {
-            let ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, 4, 4, limbs.len() as u32) as *mut u32;
+            let ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, 4, 4, (limbs.len() as u32).into()) as *mut u32;
             for (i, &limb) in limbs.iter().enumerate() {
                 *ptr.add(i) = limb;
             }
@@ -579,7 +579,7 @@ fn instantiate_string(
                 string_ptr as *mut u8,
                 string_tydesc,
                 value_str.as_ptr(),
-                value_str.len() as u32,
+                (value_str.len() as u32).into(),
             );
 
             if status != datalove_rt::c::RtStatus::Ok {
@@ -762,7 +762,7 @@ fn instantiate_list<'db>(
     unsafe {
         // Allocate list data array.
         let data_ptr = if !elements.is_empty() {
-            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(rt, element_tydesc, elements.len() as u32);
+            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(rt, element_tydesc, (elements.len() as u32).into());
 
             // Try to instantiate all elements. If any fail, clean up and return error.
             for (i, elem) in elements.iter().enumerate() {
@@ -774,7 +774,7 @@ fn instantiate_list<'db>(
                         datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
                     }
                     // Free the array.
-                    datalove_rt::c::dtlv_rti_mem_free_local(rt, element_tydesc, elements.len() as u32, array_ptr);
+                    datalove_rt::c::dtlv_rti_mem_free_local(rt, element_tydesc, (elements.len() as u32).into(), array_ptr);
                     return Err(e);
                 }
             }
@@ -785,8 +785,8 @@ fn instantiate_list<'db>(
 
         let list_ptr = dest_ptr as *mut rtdt::List;
         (*list_ptr).data = data_ptr;
-        (*list_ptr).size = elements.len() as u32;
-        (*list_ptr).capacity = elements.len() as u32;
+        (*list_ptr).size = (elements.len() as u32).into();
+        (*list_ptr).capacity = (elements.len() as u32).into();
 
         Ok(dest_ptr as *const u8)
     }
@@ -1178,7 +1178,7 @@ fn instantiate_map<'db>(
             value_tydesc,
             keys_buffer,
             values_buffer,
-            entries.len() as u32,
+            (entries.len() as u32).into(),
         );
 
         // Free the buffer memory (data has been moved to the tree).
@@ -1261,7 +1261,7 @@ fn instantiate_set<'db>(
             set_ptr as *mut u8,
             element_tydesc,
             buffer,
-            elements.len() as u32,
+            (elements.len() as u32).into(),
         );
 
         // Free the buffer memory (elements have been moved to the tree).
@@ -1298,7 +1298,7 @@ fn instantiate_tensor<'db>(
     unsafe {
         // Allocate tensor data array.
         let data_ptr = if total_elems > 0 {
-            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(rt, element_tydesc, total_elems as u32);
+            let array_ptr = datalove_rt::c::dtlv_rti_mem_alloc_local(rt, element_tydesc, (total_elems as u32).into());
 
             // Try to instantiate all elements. If any fail, clean up and return error.
             for (i, elem) in elements.iter().enumerate() {
@@ -1310,7 +1310,7 @@ fn instantiate_tensor<'db>(
                         datalove_rt::c::dtlv_rti_any_destroy_local(rt, elem_to_destroy, element_tydesc);
                     }
                     // Free the array.
-                    datalove_rt::c::dtlv_rti_mem_free_local(rt, element_tydesc, total_elems as u32, array_ptr);
+                    datalove_rt::c::dtlv_rti_mem_free_local(rt, element_tydesc, (total_elems as u32).into(), array_ptr);
                     return Err(e);
                 }
             }
@@ -1319,29 +1319,29 @@ fn instantiate_tensor<'db>(
             std::ptr::null_mut()
         };
 
-        // Allocate shape array.
+        // Allocate shape array (UsizeRepr per dimension).
         let shape_ptr = if rank > 0 {
-            let shape_array = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, std::mem::size_of::<u32>() as u32, std::mem::align_of::<u32>() as u32, rank as u32) as *mut u32;
+            let shape_array = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, (rank as u32).into()) as *mut rtdt::UsizeRepr;
             for (i, &dim) in shape.iter().enumerate() {
-                *shape_array.add(i) = dim;
+                *shape_array.add(i) = dim as rtdt::UsizeRepr;
             }
-            shape_array as *const u32
+            shape_array as *const rtdt::UsizeRepr
         } else {
             std::ptr::null()
         };
 
-        // Allocate and compute strides array.
+        // Allocate and compute strides array (UsizeRepr per dimension).
         let strides_ptr = if rank > 0 {
-            let strides_array = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, std::mem::size_of::<u32>() as u32, std::mem::align_of::<u32>() as u32, rank as u32) as *mut u32;
+            let strides_array = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, (rank as u32).into()) as *mut rtdt::UsizeRepr;
 
             // Compute strides for row-major layout.
             // RowMajor: strides[i] = product of dims[i+1..rank].
             for i in 0..rank {
-                let stride = shape[i+1..rank].iter().map(|&d| d as u32).product::<u32>();
+                let stride: rtdt::UsizeRepr = shape[i+1..rank].iter().map(|&d| d as rtdt::UsizeRepr).product();
                 *strides_array.add(i) = if stride == 0 { 1 } else { stride };
             }
 
-            strides_array as *const u32
+            strides_array as *const rtdt::UsizeRepr
         } else {
             std::ptr::null()
         };
@@ -1352,7 +1352,7 @@ fn instantiate_tensor<'db>(
         // Fill in the Tensor struct.
         let tensor_ptr = dest_ptr as *mut rtdt::Tensor;
         (*tensor_ptr).ptr_base = data_ptr;
-        (*tensor_ptr).capacity_elems = total_elems as u32;
+        (*tensor_ptr).capacity_elems = total_elems as rtdt::UsizeRepr;
         (*tensor_ptr).offset_elems = 0;
         (*tensor_ptr).shape = shape_ptr;
         (*tensor_ptr).strides = strides_ptr;

@@ -99,7 +99,7 @@ unsafe fn create_runtime_string(
                 &mut string as *mut rtdt::String as *mut u8,
                 string_tydesc,
                 s.as_ptr(),
-                s.len() as u32,
+                (s.len() as u32).into(),
             );
         }
 

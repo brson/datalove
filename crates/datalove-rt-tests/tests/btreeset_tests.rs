@@ -127,7 +127,7 @@ unsafe fn create_runtime_string(
                 &mut string as *mut rtdt::String as *mut u8,
                 string_tydesc,
                 s.as_ptr(),
-                s.len() as u32,
+                (s.len() as u32).into(),
             );
         }
 
@@ -836,7 +836,7 @@ fn test_btreeset_clone_from_slice_single() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
             slice.as_ptr() as *const u8,
-            slice.len() as u32,
+            (slice.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             set_ptr,
             set_tydesc as *const rtdt::TyDesc,
@@ -1004,7 +1004,7 @@ fn test_btreeset_insert_1000_random() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let mut unique_count = 0u32;
+    let mut unique_count: rtdt::UsizeRepr = 0;
     for i in 0u32..1000 {
         let mut element = (i.wrapping_mul(2654435761)) % 1000;
         let mut was_inserted = 0u8;
@@ -1230,7 +1230,7 @@ fn test_btreeset_clone_from_slice_1000() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
             slice.as_ptr() as *const u8,
-            slice.len() as u32,
+            (slice.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             set_ptr,
             set_tydesc as *const rtdt::TyDesc,
@@ -1461,7 +1461,7 @@ fn test_btreeset_clone_from_slice_empty() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
             slice.as_ptr() as *const u8,
-            slice.len() as u32,
+            (slice.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             set_ptr,
             set_tydesc as *const rtdt::TyDesc,
@@ -1507,7 +1507,7 @@ fn test_btreeset_clone_from_slice_multiple() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
             slice.as_ptr() as *const u8,
-            slice.len() as u32,
+            (slice.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             set_ptr,
             set_tydesc as *const rtdt::TyDesc,
@@ -1570,7 +1570,7 @@ fn test_btreeset_clone_from_slice_with_duplicates() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
             slice.as_ptr() as *const u8,
-            slice.len() as u32,
+            (slice.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             set_ptr,
             set_tydesc as *const rtdt::TyDesc,
@@ -1638,7 +1638,7 @@ fn test_btreeset_clone_from_slice_strings() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
             runtime_strings.as_ptr() as *const u8,
-            runtime_strings.len() as u32,
+            (runtime_strings.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             set_ptr,
             set_tydesc as *const rtdt::TyDesc,
@@ -1694,7 +1694,7 @@ fn test_btreeset_clone_from_slice_reverse_order() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_btreeset_clone_from_slice_local(
             rt,
             slice.as_ptr() as *const u8,
-            slice.len() as u32,
+            (slice.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             set_ptr,
             set_tydesc as *const rtdt::TyDesc,

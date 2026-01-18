@@ -22,13 +22,13 @@ pub fn collect_column_tydescs<'a>(tydesc: rtdt::TyDescRef<'a>) -> Vec<&'a rtdt::
 pub unsafe fn element_ptr(
     data: *const u8,
     column_tydescs: &[&rtdt::TyDesc],
-    row: u32,
+    row: rtdt::UsizeRepr,
     col: usize,
-    capacity: u32,
+    capacity: rtdt::UsizeRepr,
 ) -> *const u8 {
     let col_offset = rtdt::layout::table_column_offset(column_tydescs, col, capacity);
     let elem_size = column_tydescs[col].size;
-    unsafe { data.add(col_offset as usize + (row as usize * elem_size as usize)) }
+    unsafe { data.add(col_offset + (row as usize * elem_size as usize)) }
 }
 
 /// Compute mutable pointer to an element in a table's columnar data.
@@ -36,9 +36,9 @@ pub unsafe fn element_ptr(
 pub unsafe fn element_ptr_mut(
     data: *mut u8,
     column_tydescs: &[&rtdt::TyDesc],
-    row: u32,
+    row: rtdt::UsizeRepr,
     col: usize,
-    capacity: u32,
+    capacity: rtdt::UsizeRepr,
 ) -> *mut u8 {
     unsafe { element_ptr(data, column_tydescs, row, col, capacity) as *mut u8 }
 }
@@ -189,7 +189,7 @@ unsafe fn table_grow(
     rt: LocalRtHandle,
     table: &mut rtdt::Table,
     column_tydescs: &[&rtdt::TyDesc],
-    new_capacity: u32,
+    new_capacity: rtdt::UsizeRepr,
 ) -> RtStatus {
     unsafe {
         if column_tydescs.is_empty() {
@@ -245,7 +245,7 @@ unsafe fn table_grow(
 pub unsafe fn table_get_element_ptr(
     table_ref: *const u8,
     tydesc: rtdt::TyDescRef,
-    row: u32,
+    row: rtdt::UsizeRepr,
     col: u32,
 ) -> *const u8 {
     unsafe {
@@ -271,7 +271,7 @@ pub unsafe fn table_set_element(
     rt: LocalRtHandle,
     table_mut: *mut u8,
     tydesc: rtdt::TyDescRef,
-    row: u32,
+    row: rtdt::UsizeRepr,
     col: u32,
     value_ref: *const u8,
     value_tydesc: *const rtdt::TyDesc,
@@ -349,7 +349,7 @@ pub unsafe fn table_clear_impl(
 }
 
 /// Get the length (number of rows) of a table.
-pub unsafe fn table_len(table_ref: *const u8) -> u32 {
+pub unsafe fn table_len(table_ref: *const u8) -> rtdt::UsizeRepr {
     unsafe {
         let table = &*(table_ref as *const rtdt::Table);
         table.len
@@ -440,7 +440,7 @@ mod tests {
         // Column 0: u32 at offset 0, 4 elements = 16 bytes.
         // Column 1: u64 needs 8-byte alignment, aligns 16 -> 16, starts at 16.
         let base = 0x1000 as *const u8;
-        let capacity = 4u32;
+        let capacity: rtdt::UsizeRepr = 4;
 
         unsafe {
             // First row, first column.

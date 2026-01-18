@@ -10,9 +10,10 @@ crate-type = ["lib", "staticlib"]
 
 [features]
 slow_tests = []
+index-64 = ["datalove-rtdt/index-64"]
 
 [dependencies]
-datalove-rtdt.path = "../datalove-rtdt"
+datalove-rtdt = { path = "../datalove-rtdt" }
 libc = "0.2"
 
 [dev-dependencies]

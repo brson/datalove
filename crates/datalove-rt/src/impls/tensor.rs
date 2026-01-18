@@ -11,14 +11,14 @@ use datalove_rtdt::TyDescRef;
 /// Compute row-major strides from shape.
 ///
 /// Row-major: strides[i] = product(shape[i+1..])
-fn compute_row_major_strides(shape: &[u32]) -> Vec<u32> {
+fn compute_row_major_strides(shape: &[u32]) -> Vec<rtdt::UsizeRepr> {
     let rank = shape.len();
-    let mut strides = vec![0u32; rank];
+    let mut strides: Vec<rtdt::UsizeRepr> = vec![0; rank];
 
     for i in 0..rank {
-        let mut stride = 1u32;
+        let mut stride: rtdt::UsizeRepr = 1;
         for j in (i + 1)..rank {
-            stride = stride.saturating_mul(shape[j]);
+            stride = stride.saturating_mul(shape[j] as rtdt::UsizeRepr);
         }
         strides[i] = stride;
     }
@@ -29,14 +29,14 @@ fn compute_row_major_strides(shape: &[u32]) -> Vec<u32> {
 /// Compute column-major strides from shape.
 ///
 /// Column-major: strides[i] = product(shape[..i])
-fn compute_col_major_strides(shape: &[u32]) -> Vec<u32> {
+fn compute_col_major_strides(shape: &[u32]) -> Vec<rtdt::UsizeRepr> {
     let rank = shape.len();
-    let mut strides = vec![0u32; rank];
+    let mut strides: Vec<rtdt::UsizeRepr> = vec![0; rank];
 
     for i in 0..rank {
-        let mut stride = 1u32;
+        let mut stride: rtdt::UsizeRepr = 1;
         for j in 0..i {
-            stride = stride.saturating_mul(shape[j]);
+            stride = stride.saturating_mul(shape[j] as rtdt::UsizeRepr);
         }
         strides[i] = stride;
     }
@@ -51,13 +51,13 @@ fn compute_col_major_strides(shape: &[u32]) -> Vec<u32> {
 /// Check if strides match row-major contiguous pattern.
 ///
 /// Row-major: strides[i] == product(shape[i+1..])
-fn is_row_major_contiguous(shape: &[u32], strides: &[u32]) -> bool {
+fn is_row_major_contiguous(shape: &[rtdt::UsizeRepr], strides: &[rtdt::UsizeRepr]) -> bool {
     if shape.len() != strides.len() {
         return false;
     }
 
     for i in 0..shape.len() {
-        let mut expected = 1u32;
+        let mut expected: rtdt::UsizeRepr = 1;
         for j in (i + 1)..shape.len() {
             expected = expected.saturating_mul(shape[j]);
         }
@@ -72,13 +72,13 @@ fn is_row_major_contiguous(shape: &[u32], strides: &[u32]) -> bool {
 /// Check if strides match column-major contiguous pattern.
 ///
 /// Column-major: strides[i] == product(shape[..i])
-fn is_col_major_contiguous(shape: &[u32], strides: &[u32]) -> bool {
+fn is_col_major_contiguous(shape: &[rtdt::UsizeRepr], strides: &[rtdt::UsizeRepr]) -> bool {
     if shape.len() != strides.len() {
         return false;
     }
 
     for i in 0..shape.len() {
-        let mut expected = 1u32;
+        let mut expected: rtdt::UsizeRepr = 1;
         for j in 0..i {
             expected = expected.saturating_mul(shape[j]);
         }
@@ -91,7 +91,7 @@ fn is_col_major_contiguous(shape: &[u32], strides: &[u32]) -> bool {
 }
 
 /// Check if tensor is contiguous (either row-major or column-major).
-fn is_contiguous(shape: &[u32], strides: &[u32]) -> bool {
+fn is_contiguous(shape: &[rtdt::UsizeRepr], strides: &[rtdt::UsizeRepr]) -> bool {
     is_row_major_contiguous(shape, strides) || is_col_major_contiguous(shape, strides)
 }
 
@@ -106,7 +106,7 @@ fn is_contiguous(shape: &[u32], strides: &[u32]) -> bool {
 pub unsafe fn tensor_create_from_slice_impl(
     rt_ref: &mut RtLocal,
     slice_ptr_ref: *const u8,
-    slice_len: u32,
+    slice_len: rtdt::UsizeRepr,
     element_tydesc_ref: TyDescRef,
     // u32 x rank
     shape_in: *mut u8,
@@ -135,9 +135,9 @@ pub unsafe fn tensor_create_from_slice_impl(
         let shape_slice = std::slice::from_raw_parts(shape_data, rank as usize);
 
         // Compute total elements from shape.
-        let mut total_elems = 1u32;
+        let mut total_elems: rtdt::UsizeRepr = 1;
         for &dim in shape_slice {
-            total_elems = total_elems.saturating_mul(dim);
+            total_elems = total_elems.saturating_mul(dim as rtdt::UsizeRepr);
         }
 
         // Validate slice length matches total elements.
@@ -156,29 +156,29 @@ pub unsafe fn tensor_create_from_slice_impl(
             return RtStatus::Error;
         }
 
-        // Allocate shape array.
+        // Allocate shape array (UsizeRepr per dimension).
         let shape_array_ptr = rt_ref.alloc.alloc(
-            std::mem::size_of::<u32>() as u32,
-            std::mem::align_of::<u32>() as u32,
+            rtdt::INDEX_SIZE,
+            rtdt::INDEX_ALIGN,
             rank,
-        ) as *mut u32;
+        ) as *mut rtdt::UsizeRepr;
         if shape_array_ptr.is_null() {
             rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
             let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
             return RtStatus::Error;
         }
 
-        // Allocate strides array.
+        // Allocate strides array (UsizeRepr per dimension).
         let strides_array_ptr = rt_ref.alloc.alloc(
-            std::mem::size_of::<u32>() as u32,
-            std::mem::align_of::<u32>() as u32,
+            rtdt::INDEX_SIZE,
+            rtdt::INDEX_ALIGN,
             rank,
-        ) as *mut u32;
+        ) as *mut rtdt::UsizeRepr;
         if strides_array_ptr.is_null() {
             rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
             rt_ref.alloc.free(
-                std::mem::size_of::<u32>() as u32,
-                std::mem::align_of::<u32>() as u32,
+                rtdt::INDEX_SIZE,
+                rtdt::INDEX_ALIGN,
                 rank,
                 shape_array_ptr as *mut u8,
             );
@@ -189,8 +189,8 @@ pub unsafe fn tensor_create_from_slice_impl(
         // Clone elements from slice to data buffer.
         let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
         for i in 0..total_elems {
-            let src_ptr = slice_ptr_ref.add((i * element_size) as usize);
-            let dest_ptr = data_ptr.add((i * element_size) as usize);
+            let src_ptr = slice_ptr_ref.add((i as usize) * (element_size as usize));
+            let dest_ptr = data_ptr.add((i as usize) * (element_size as usize));
 
             let status = crate::impls::clone::clone_value(
                 rt_handle,
@@ -202,7 +202,7 @@ pub unsafe fn tensor_create_from_slice_impl(
                 // Clean up partially created tensor.
                 // Destroy elements that were successfully cloned.
                 for j in 0..i {
-                    let elem_ptr = data_ptr.add((j * element_size) as usize);
+                    let elem_ptr = data_ptr.add((j as usize) * (element_size as usize));
                     let _ = crate::impls::destroy::any_destroy_local(
                         rt_handle,
                         elem_ptr,
@@ -211,14 +211,14 @@ pub unsafe fn tensor_create_from_slice_impl(
                 }
                 rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
                 rt_ref.alloc.free(
-                    std::mem::size_of::<u32>() as u32,
-                    std::mem::align_of::<u32>() as u32,
+                    rtdt::INDEX_SIZE,
+                    rtdt::INDEX_ALIGN,
                     rank,
                     shape_array_ptr as *mut u8,
                 );
                 rt_ref.alloc.free(
-                    std::mem::size_of::<u32>() as u32,
-                    std::mem::align_of::<u32>() as u32,
+                    rtdt::INDEX_SIZE,
+                    rtdt::INDEX_ALIGN,
                     rank,
                     strides_array_ptr as *mut u8,
                 );
@@ -227,8 +227,10 @@ pub unsafe fn tensor_create_from_slice_impl(
             }
         }
 
-        // Copy shape values.
-        std::ptr::copy_nonoverlapping(shape_data, shape_array_ptr, rank as usize);
+        // Copy shape values (convert u32 to UsizeRepr).
+        for i in 0..rank as usize {
+            *shape_array_ptr.add(i) = *shape_data.add(i) as rtdt::UsizeRepr;
+        }
 
         // Compute and write strides based on layout.
         let layout_enum = std::mem::transmute::<u8, rtdt::TensorLayout>(layout);
@@ -265,7 +267,7 @@ pub unsafe fn tensor_create_from_slice_impl(
 pub unsafe fn tensor_init_impl(
     rt_ref: &mut RtLocal,
     element_data_in: *mut u8,
-    element_count: u32,
+    element_count: rtdt::UsizeRepr,
     element_tydesc_ref: TyDescRef,
     shape_ptr: *const u32,
     rank: u32,
@@ -301,9 +303,9 @@ pub unsafe fn tensor_init_impl(
 
         // Compute total elements from shape.
         let shape_slice = std::slice::from_raw_parts(shape_ptr, rank as usize);
-        let mut total_elems = 1u32;
+        let mut total_elems: rtdt::UsizeRepr = 1;
         for &dim in shape_slice {
-            total_elems = total_elems.saturating_mul(dim);
+            total_elems = total_elems.saturating_mul(dim as rtdt::UsizeRepr);
         }
 
         // Validate element count matches shape.
@@ -322,33 +324,36 @@ pub unsafe fn tensor_init_impl(
         std::ptr::copy_nonoverlapping(
             element_data_in,
             data_ptr,
-            (total_elems * element_size) as usize,
+            (total_elems as usize) * (element_size as usize),
         );
 
-        // Allocate shape array.
+        // Allocate shape array (UsizeRepr per dimension).
         let shape_array_ptr = rt_ref.alloc.alloc(
-            std::mem::size_of::<u32>() as u32,
-            std::mem::align_of::<u32>() as u32,
-            rank,
-        ) as *mut u32;
+            rtdt::INDEX_SIZE,
+            rtdt::INDEX_ALIGN,
+            rank.into(),
+        ) as *mut rtdt::UsizeRepr;
         if shape_array_ptr.is_null() {
             rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
             return RtStatus::Error;
         }
-        std::ptr::copy_nonoverlapping(shape_ptr, shape_array_ptr, rank as usize);
+        // Convert u32 shape values to UsizeRepr.
+        for i in 0..rank as usize {
+            *shape_array_ptr.add(i) = *shape_ptr.add(i) as rtdt::UsizeRepr;
+        }
 
-        // Allocate strides array.
+        // Allocate strides array (UsizeRepr per dimension).
         let strides_array_ptr = rt_ref.alloc.alloc(
-            std::mem::size_of::<u32>() as u32,
-            std::mem::align_of::<u32>() as u32,
-            rank,
-        ) as *mut u32;
+            rtdt::INDEX_SIZE,
+            rtdt::INDEX_ALIGN,
+            rank.into(),
+        ) as *mut rtdt::UsizeRepr;
         if strides_array_ptr.is_null() {
             rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
             rt_ref.alloc.free(
-                std::mem::size_of::<u32>() as u32,
-                std::mem::align_of::<u32>() as u32,
-                rank,
+                rtdt::INDEX_SIZE,
+                rtdt::INDEX_ALIGN,
+                rank.into(),
                 shape_array_ptr as *mut u8,
             );
             return RtStatus::Error;
@@ -393,8 +398,8 @@ pub unsafe fn tensor_get_impl(
         let tensor_ptr = tensor_value_ref as *const rtdt::Tensor;
         let ptr_base = (*tensor_ptr).ptr_base;
         let offset_elems = (*tensor_ptr).offset_elems;
-        let shape_ptr = (*tensor_ptr).shape as *const u32;
-        let strides_ptr = (*tensor_ptr).strides as *const u32;
+        let shape_ptr = (*tensor_ptr).shape;
+        let strides_ptr = (*tensor_ptr).strides;
 
         // These are programming errors (use-after-destroy, use-after-move).
         assert!(!ptr_base.is_null(), "tensor_get: ptr_base is null");
@@ -409,7 +414,7 @@ pub unsafe fn tensor_get_impl(
 
         let mut linear_offset = offset_elems;
         for i in 0..rank as usize {
-            let index = indices_slice[i];
+            let index = indices_slice[i] as rtdt::UsizeRepr;
             let dim = shape_slice[i];
 
             if index >= dim {
@@ -459,8 +464,8 @@ pub unsafe fn tensor_set_impl(
         let tensor_ptr = tensor_value_ref as *mut rtdt::Tensor;
         let ptr_base = (*tensor_ptr).ptr_base;
         let offset_elems = (*tensor_ptr).offset_elems;
-        let shape_ptr = (*tensor_ptr).shape as *const u32;
-        let strides_ptr = (*tensor_ptr).strides as *const u32;
+        let shape_ptr = (*tensor_ptr).shape;
+        let strides_ptr = (*tensor_ptr).strides;
 
         // These are programming errors (use-after-destroy, use-after-move).
         assert!(!ptr_base.is_null(), "tensor_set: ptr_base is null");
@@ -475,7 +480,7 @@ pub unsafe fn tensor_set_impl(
 
         let mut linear_offset = offset_elems;
         for i in 0..rank as usize {
-            let index = indices_slice[i];
+            let index = indices_slice[i] as rtdt::UsizeRepr;
             let dim = shape_slice[i];
 
             if index >= dim {
@@ -565,27 +570,27 @@ pub unsafe fn tensor_transpose_impl(
             seen[p as usize] = true;
         }
 
-        // Allocate new shape array.
+        // Allocate new shape array (UsizeRepr per dimension).
         let shape_out_ptr = rt_ref.alloc.alloc(
-            std::mem::size_of::<u32>() as u32,
-            std::mem::align_of::<u32>() as u32,
-            rank,
-        ) as *mut u32;
+            rtdt::INDEX_SIZE,
+            rtdt::INDEX_ALIGN,
+            rank.into(),
+        ) as *mut rtdt::UsizeRepr;
         if shape_out_ptr.is_null() {
             return RtStatus::Error;
         }
 
-        // Allocate new strides array.
+        // Allocate new strides array (UsizeRepr per dimension).
         let strides_out_ptr = rt_ref.alloc.alloc(
-            std::mem::size_of::<u32>() as u32,
-            std::mem::align_of::<u32>() as u32,
-            rank,
-        ) as *mut u32;
+            rtdt::INDEX_SIZE,
+            rtdt::INDEX_ALIGN,
+            rank.into(),
+        ) as *mut rtdt::UsizeRepr;
         if strides_out_ptr.is_null() {
             rt_ref.alloc.free(
-                std::mem::size_of::<u32>() as u32,
-                std::mem::align_of::<u32>() as u32,
-                rank,
+                rtdt::INDEX_SIZE,
+                rtdt::INDEX_ALIGN,
+                rank.into(),
                 shape_out_ptr as *mut u8,
             );
             return RtStatus::Error;
@@ -622,15 +627,15 @@ pub unsafe fn tensor_transpose_impl(
 
         // Free old shape and strides arrays from input tensor.
         rt_ref.alloc.free(
-            std::mem::size_of::<u32>() as u32,
-            std::mem::align_of::<u32>() as u32,
-            rank,
+            rtdt::INDEX_SIZE,
+            rtdt::INDEX_ALIGN,
+            rank.into(),
             shape_in_ptr as *mut u8,
         );
         rt_ref.alloc.free(
-            std::mem::size_of::<u32>() as u32,
-            std::mem::align_of::<u32>() as u32,
-            rank,
+            rtdt::INDEX_SIZE,
+            rtdt::INDEX_ALIGN,
+            rank.into(),
             strides_in_ptr as *mut u8,
         );
 
@@ -707,9 +712,9 @@ pub unsafe fn tensor_destroy_impl(
         // Free the shape array.
         if !shape_ptr.is_null() && rank > 0 {
             rt_ref.alloc.free(
-                std::mem::size_of::<u32>() as u32,
-                std::mem::align_of::<u32>() as u32,
-                rank,
+                rtdt::INDEX_SIZE,
+                rtdt::INDEX_ALIGN,
+                rank.into(),
                 shape_ptr as *mut u8,
             );
         }
@@ -717,9 +722,9 @@ pub unsafe fn tensor_destroy_impl(
         // Free the strides array.
         if !strides_ptr.is_null() && rank > 0 {
             rt_ref.alloc.free(
-                std::mem::size_of::<u32>() as u32,
-                std::mem::align_of::<u32>() as u32,
-                rank,
+                rtdt::INDEX_SIZE,
+                rtdt::INDEX_ALIGN,
+                rank.into(),
                 strides_ptr as *mut u8,
             );
         }
@@ -800,12 +805,12 @@ pub unsafe fn tensor_slice_impl(
             }
         }
 
-        // Allocate new shape array.
+        // Allocate new shape array (UsizeRepr per dimension).
         let new_shape_ptr = rt_ref.alloc.alloc(
-            std::mem::size_of::<u32>() as u32,
-            std::mem::align_of::<u32>() as u32,
-            rank,
-        ) as *mut u32;
+            rtdt::INDEX_SIZE,
+            rtdt::INDEX_ALIGN,
+            rank.into(),
+        ) as *mut rtdt::UsizeRepr;
 
         if new_shape_ptr.is_null() {
             return error_path(
@@ -817,19 +822,19 @@ pub unsafe fn tensor_slice_impl(
             );
         }
 
-        // Allocate new strides array.
+        // Allocate new strides array (UsizeRepr per dimension).
         let new_strides_ptr = rt_ref.alloc.alloc(
-            std::mem::size_of::<u32>() as u32,
-            std::mem::align_of::<u32>() as u32,
-            rank,
-        ) as *mut u32;
+            rtdt::INDEX_SIZE,
+            rtdt::INDEX_ALIGN,
+            rank.into(),
+        ) as *mut rtdt::UsizeRepr;
 
         if new_strides_ptr.is_null() {
             // Clean up shape allocation.
             rt_ref.alloc.free(
-                std::mem::size_of::<u32>() as u32,
-                std::mem::align_of::<u32>() as u32,
-                rank,
+                rtdt::INDEX_SIZE,
+                rtdt::INDEX_ALIGN,
+                rank.into(),
                 new_shape_ptr as *mut u8,
             );
             return error_path(
@@ -858,15 +863,15 @@ pub unsafe fn tensor_slice_impl(
 
         // Free old shape and strides arrays.
         rt_ref.alloc.free(
-            std::mem::size_of::<u32>() as u32,
-            std::mem::align_of::<u32>() as u32,
-            rank,
+            rtdt::INDEX_SIZE,
+            rtdt::INDEX_ALIGN,
+            rank.into(),
             shape_ptr as *mut u8,
         );
         rt_ref.alloc.free(
-            std::mem::size_of::<u32>() as u32,
-            std::mem::align_of::<u32>() as u32,
-            rank,
+            rtdt::INDEX_SIZE,
+            rtdt::INDEX_ALIGN,
+            rank.into(),
             strides_ptr as *mut u8,
         );
 
@@ -1001,15 +1006,15 @@ pub unsafe fn tensor_reshape_impl(
         }
 
         // Compute current total elements.
-        let mut current_total = 1u32;
+        let mut current_total: rtdt::UsizeRepr = 1;
         for &dim in shape {
             current_total = current_total.saturating_mul(dim);
         }
 
-        // Compute new total elements.
-        let mut new_total = 1u32;
+        // Compute new total elements (from u32 new_shape).
+        let mut new_total: rtdt::UsizeRepr = 1;
         for &dim in new_shape {
-            new_total = new_total.saturating_mul(dim);
+            new_total = new_total.saturating_mul(dim as rtdt::UsizeRepr);
         }
 
         // Validate total elements match.
@@ -1028,43 +1033,39 @@ pub unsafe fn tensor_reshape_impl(
             compute_col_major_strides(new_shape)
         };
 
-        // Allocate new strides array.
-        let strides_size = std::mem::size_of::<u32>() as u32;
-        let strides_align = std::mem::align_of::<u32>() as u32;
-        let new_strides_ptr = rt_ref.alloc.alloc(strides_size, strides_align, new_rank);
+        // Allocate new strides array (UsizeRepr per dimension).
+        let new_strides_ptr = rt_ref.alloc.alloc(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, new_rank);
         if new_strides_ptr.is_null() {
             let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
 
         // Copy new strides into allocated array.
-        let new_strides_ptr_typed = new_strides_ptr as *mut u32;
+        let new_strides_ptr_typed = new_strides_ptr as *mut rtdt::UsizeRepr;
         for (i, &stride) in new_strides_vec.iter().enumerate() {
             std::ptr::write(new_strides_ptr_typed.add(i), stride);
         }
 
-        // Allocate new shape array and copy from new_shape List.
-        let shape_size = std::mem::size_of::<u32>() as u32;
-        let shape_align = std::mem::align_of::<u32>() as u32;
-        let new_shape_ptr = rt_ref.alloc.alloc(shape_size, shape_align, new_rank);
+        // Allocate new shape array (UsizeRepr per dimension).
+        let new_shape_ptr = rt_ref.alloc.alloc(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, new_rank);
         if new_shape_ptr.is_null() {
             // Free new_strides before returning.
-            rt_ref.alloc.free(strides_size, strides_align, new_rank, new_strides_ptr);
+            rt_ref.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, new_rank, new_strides_ptr);
             let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
 
-        // Copy shape data from List to new array.
-        let new_shape_ptr_typed = new_shape_ptr as *mut u32;
+        // Copy shape data from List (u32) to new array (UsizeRepr).
+        let new_shape_ptr_typed = new_shape_ptr as *mut rtdt::UsizeRepr;
         for i in 0..new_rank as usize {
-            std::ptr::write(new_shape_ptr_typed.add(i), new_shape[i]);
+            std::ptr::write(new_shape_ptr_typed.add(i), new_shape[i] as rtdt::UsizeRepr);
         }
 
         // Free old strides array.
-        rt_ref.alloc.free(strides_size, strides_align, rank, strides_ptr as *mut u8);
+        rt_ref.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), strides_ptr as *mut u8);
 
         // Free old shape array.
-        rt_ref.alloc.free(shape_size, shape_align, rank, shape_ptr as *mut u8);
+        rt_ref.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), shape_ptr as *mut u8);
 
         // Destroy the new_shape List (including its data).
         let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);

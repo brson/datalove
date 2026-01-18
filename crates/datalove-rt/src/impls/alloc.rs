@@ -3,6 +3,8 @@
 //! On Unix platforms: Single-threaded allocator using mmap for page allocation.
 //! On wasm32: Uses Rust's global allocator.
 
+use datalove_rtdt::UsizeRepr;
+
 // Unix-only imports and constants (used by unix_impl and tests).
 #[cfg(not(target_arch = "wasm32"))]
 use std::ptr;
@@ -110,7 +112,7 @@ mod unix_impl {
             }
         }
 
-        pub unsafe fn alloc(&mut self, size: u32, align: u32, count: u32) -> *mut u8 {
+        pub unsafe fn alloc(&mut self, size: u32, align: u32, count: UsizeRepr) -> *mut u8 {
             let total_size = (size as usize)
                 .checked_mul(count as usize)
                 .expect("allocation size overflow");
@@ -135,7 +137,7 @@ mod unix_impl {
                     self.active_allocations.insert(ptr, AllocationInfo {
                         size,
                         align: align as u32,
-                        count,
+                        count: count as u32, // Truncate for tracking (leak detection only)
                         backtrace,
                     });
                 }
@@ -144,7 +146,7 @@ mod unix_impl {
             }
         }
 
-        pub unsafe fn free(&mut self, size: u32, align: u32, count: u32, ptr: *mut u8) {
+        pub unsafe fn free(&mut self, size: u32, align: u32, count: UsizeRepr, ptr: *mut u8) {
             if ptr.is_null() {
                 return;
             }
@@ -159,7 +161,7 @@ mod unix_impl {
             if let Some(info) = self.active_allocations.remove(&ptr) {
                 // Validate parameters match (in warn/panic modes).
                 if self.leak_check_mode != LeakCheckMode::Ignore {
-                    if info.size != size || info.align != align as u32 || info.count != count {
+                    if info.size != size || info.align != align as u32 || info.count != count as u32 {
                         let msg = format!(
                             "free() parameter mismatch: ptr={:p}, expected (size={}, align={}, count={}), got (size={}, align={}, count={})",
                             ptr, info.size, info.align, info.count, size, align, count
@@ -440,7 +442,7 @@ mod wasm_impl {
             }
         }
 
-        pub unsafe fn alloc(&mut self, size: u32, align: u32, count: u32) -> *mut u8 {
+        pub unsafe fn alloc(&mut self, size: u32, align: u32, count: UsizeRepr) -> *mut u8 {
             let total_size = (size as usize)
                 .checked_mul(count as usize)
                 .expect("allocation size overflow");
@@ -459,7 +461,7 @@ mod wasm_impl {
             }
         }
 
-        pub unsafe fn free(&mut self, size: u32, align: u32, count: u32, ptr: *mut u8) {
+        pub unsafe fn free(&mut self, size: u32, align: u32, count: UsizeRepr, ptr: *mut u8) {
             if ptr.is_null() {
                 return;
             }
@@ -851,11 +853,11 @@ mod tests {
         fn proptest_random_alloc_free(size in 1u32..10000, align in prop::sample::select(vec![1u32, 2, 4, 8, 16, 32, 64]), count in 1u32..10) {
             let mut rt = AllocLocal::new_raw();
             unsafe {
-                let ptr = rt.alloc(size, align, count);
+                let ptr = rt.alloc(size, align, count.into());
                 prop_assert!(!ptr.is_null());
                 prop_assert!(is_aligned(ptr, align as usize));
 
-                rt.free(size, align, count, ptr);
+                rt.free(size, align, count.into(), ptr);
                 rt.shutdown();
             }
         }
@@ -868,7 +870,7 @@ mod tests {
             let size = size.min(data.len());
             let mut rt = AllocLocal::new_raw();
             unsafe {
-                let ptr = rt.alloc(size as u32, 8, 1);
+                let ptr = rt.alloc(size as u32, 8, 1u32.into());
                 prop_assert!(!ptr.is_null());
 
                 for i in 0..size {
@@ -879,7 +881,7 @@ mod tests {
                     prop_assert_eq!(*ptr.add(i), data[i]);
                 }
 
-                rt.free(size as u32, 8, 1, ptr);
+                rt.free(size as u32, 8, 1u32.into(), ptr);
                 rt.shutdown();
             }
         }
@@ -894,11 +896,11 @@ mod tests {
             let align = 1u32 << align_pow;
             let mut rt = AllocLocal::new_raw();
             unsafe {
-                let ptr = rt.alloc(size, align, 1);
+                let ptr = rt.alloc(size, align, 1u32.into());
                 prop_assert!(!ptr.is_null());
                 prop_assert!(is_aligned(ptr, align as usize));
 
-                rt.free(size, align, 1, ptr);
+                rt.free(size, align, 1u32.into(), ptr);
                 rt.shutdown();
             }
         }
@@ -912,13 +914,13 @@ mod tests {
 
             unsafe {
                 for (size, count) in &ops {
-                    let ptr = rt.alloc(*size, 8, *count);
+                    let ptr = rt.alloc(*size, 8, (*count).into());
                     prop_assert!(!ptr.is_null());
                     allocations.push((*size, *count, ptr));
                 }
 
                 for (size, count, ptr) in allocations.iter().rev() {
-                    rt.free(*size, 8, *count, *ptr);
+                    rt.free(*size, 8, (*count).into(), *ptr);
                 }
 
                 rt.shutdown();
@@ -935,10 +937,10 @@ mod tests {
 
             unsafe {
                 for (size, align) in ops {
-                    let ptr = rt.alloc(size, align, 1);
+                    let ptr = rt.alloc(size, align, 1u32.into());
                     prop_assert!(!ptr.is_null());
                     prop_assert!(is_aligned(ptr, align as usize));
-                    rt.free(size, align, 1, ptr);
+                    rt.free(size, align, 1u32.into(), ptr);
                 }
 
                 rt.shutdown();
@@ -955,9 +957,9 @@ mod tests {
             unsafe {
                 for base in boundaries {
                     let size = (base as i32 + offset).max(1) as u32;
-                    let ptr = rt.alloc(size, 8, 1);
+                    let ptr = rt.alloc(size, 8, 1u32.into());
                     prop_assert!(!ptr.is_null());
-                    rt.free(size, 8, 1, ptr);
+                    rt.free(size, 8, 1u32.into(), ptr);
                 }
 
                 rt.shutdown();
@@ -970,7 +972,7 @@ mod tests {
         fn proptest_count_variations(size in 1u32..256, count in 1u32..100) {
             let mut rt = AllocLocal::new_raw();
             unsafe {
-                let ptr = rt.alloc(size, 8, count);
+                let ptr = rt.alloc(size, 8, count.into());
                 prop_assert!(!ptr.is_null());
 
                 let total_size = (size as usize) * (count as usize);
@@ -978,7 +980,7 @@ mod tests {
                     test_write_read(ptr, total_size);
                 }
 
-                rt.free(size, 8, count, ptr);
+                rt.free(size, 8, count.into(), ptr);
                 rt.shutdown();
             }
         }

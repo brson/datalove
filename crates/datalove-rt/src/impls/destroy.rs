@@ -38,7 +38,7 @@ pub unsafe fn any_destroy_local(
                 // Free the limb buffer if it exists.
                 if !int.data.is_null() && int.capacity > 0 {
                     // Each limb is a u32.
-                    rt_ref.alloc.free(4, 4, int.capacity, int.data as *mut u8);
+                    rt_ref.alloc.free(4, 4, int.capacity.into(), int.data as *mut u8);
                 }
 
                 // Clear the int fields.
@@ -133,12 +133,12 @@ pub unsafe fn any_destroy_local(
 
                 // Free the shape array if it exists.
                 if !tensor.shape.is_null() && rank > 0 {
-                    rt_ref.alloc.free(4, 4, rank, tensor.shape as *mut u8);
+                    rt_ref.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), tensor.shape as *mut u8);
                 }
 
                 // Free the stride array if it exists.
                 if !tensor.strides.is_null() && rank > 0 {
-                    rt_ref.alloc.free(4, 4, rank, tensor.strides as *mut u8);
+                    rt_ref.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), tensor.strides as *mut u8);
                 }
 
                 // Clear the tensor fields.

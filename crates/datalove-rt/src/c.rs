@@ -99,7 +99,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_mem_alloc_local(
     rt: LocalRtHandle,
     // The type of the element being allocated (not the container).
     tydesc: *const rtdt::TyDesc,
-    count: u32,
+    count: rtdt::UsizeRepr,
 ) -> *mut u8 {
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!tydesc.is_null(), "tydesc is null");
@@ -117,7 +117,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_mem_alloc_raw_local(
     rt: LocalRtHandle,
     size: u32,
     align: u32,
-    count: u32,
+    count: rtdt::UsizeRepr,
 ) -> *mut u8 {
     debug_assert!(!rt.is_null(), "rt is null");
 
@@ -133,7 +133,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_mem_free_raw_local(
     rt: LocalRtHandle,
     size: u32,
     align: u32,
-    count: u32,
+    count: rtdt::UsizeRepr,
     ptr: *mut u8,
 ) -> RtStatus {
     debug_assert!(!rt.is_null(), "rt is null");
@@ -152,7 +152,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_mem_free_raw_local(
 pub unsafe extern "C-unwind" fn dtlv_rti_mem_free_local(
     rt: LocalRtHandle,
     tydesc: *const rtdt::TyDesc,
-    count: u32,
+    count: rtdt::UsizeRepr,
     ptr: *mut u8
 ) -> RtStatus {
     debug_assert!(!rt.is_null(), "rt is null");
@@ -552,7 +552,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_string_push_bytes_local(
     string_value_mut: *mut u8,
     string_tydesc: *const rtdt::TyDesc,
     bytes_ref: *const u8,
-    bytes_len: u32,
+    bytes_len: rtdt::UsizeRepr,
 ) -> RtStatus {
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!string_value_mut.is_null(), "string_value_mut is null");
@@ -624,7 +624,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_clone_from_slice_local(
     rt: LocalRtHandle,
     // Values will be cloned.
     slice_ref: *const u8,
-    slice_len: u32,
+    slice_len: rtdt::UsizeRepr,
     // Should be a tuple of key/value I guess.
     slice_element_tydesc: *const rtdt::TyDesc,
     // Destination will be overwritten.
@@ -666,7 +666,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_build_from_sorted_slices_local
     value_tydesc: *const rtdt::TyDesc,
     keys_ptr: *mut u8,
     values_ptr: *mut u8,
-    num_entries: u32,
+    num_entries: rtdt::UsizeRepr,
 ) -> RtStatus {
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!map_out.is_null(), "map_out is null");
@@ -1016,7 +1016,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clear_local(
 pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_clone_from_slice_local(
     rt: LocalRtHandle,
     slice_ref: *const u8,
-    slice_len: u32,
+    slice_len: rtdt::UsizeRepr,
     slice_element_tydesc: *const rtdt::TyDesc,
     btreeset_value_out: *mut u8,
     btreeset_tydesc: *const rtdt::TyDesc,
@@ -1058,7 +1058,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_build_from_sorted_slice_local(
     set_out: *mut u8,
     element_tydesc: *const rtdt::TyDesc,
     elements_ptr: *mut u8,
-    num_elements: u32,
+    num_elements: rtdt::UsizeRepr,
 ) -> RtStatus {
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!set_out.is_null(), "set_out is null");
@@ -1107,7 +1107,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_create_local(
 pub unsafe extern "C-unwind" fn dtlv_rti_list_create_from_slice_local(
     rt: LocalRtHandle,
     slice_ref: *const u8,
-    slice_len: u32,
+    slice_len: rtdt::UsizeRepr,
     element_tydesc: *const rtdt::TyDesc,
     list_value_out: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
@@ -1177,7 +1177,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_get_local(
     rt: LocalRtHandle,
     list_value_ref: *const u8,
     list_tydesc: *const rtdt::TyDesc,
-    index: u32,
+    index: rtdt::UsizeRepr,
     option_value_out: *mut u8,
     option_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
@@ -1208,7 +1208,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_set_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
-    index: u32,
+    index: rtdt::UsizeRepr,
     element_in: *mut u8,
     element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
@@ -1305,7 +1305,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_insert_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
-    index: u32,
+    index: rtdt::UsizeRepr,
     element_in: *mut u8,
     element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
@@ -1340,7 +1340,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_remove_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
-    index: u32,
+    index: rtdt::UsizeRepr,
     option_value_out: *mut u8,
     option_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
@@ -1371,7 +1371,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_reserve_local(
     rt: LocalRtHandle,
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
-    additional: u32,
+    additional: rtdt::UsizeRepr,
 ) -> RtStatus {
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
@@ -1416,7 +1416,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_extend_from_slice_local(
     list_value_mut: *mut u8,
     list_tydesc: *const rtdt::TyDesc,
     slice_ref: *const u8,
-    slice_len: u32,
+    slice_len: rtdt::UsizeRepr,
     element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     debug_assert!(!rt.is_null(), "rt is null");
@@ -1453,7 +1453,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_extend_from_slice_local(
 pub unsafe extern "C-unwind" fn dtlv_rti_tensor_create_from_slice_local(
     rt: LocalRtHandle,
     slice_ref: *const u8,
-    slice_len: u32,
+    slice_len: rtdt::UsizeRepr,
     element_tydesc: *const rtdt::TyDesc,
     shape_in: *mut u8,
     shape_tydesc: *const rtdt::TyDesc,
@@ -1699,7 +1699,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_reshape_local(
 pub unsafe extern "C-unwind" fn dtlv_rti_tensor_init_local(
     rt: LocalRtHandle,
     element_data_in: *mut u8,
-    element_count: u32,
+    element_count: rtdt::UsizeRepr,
     element_tydesc: *const rtdt::TyDesc,
     shape_ptr: *const u32,
     rank: u32,
@@ -1806,7 +1806,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_get_local(
     _rt: LocalRtHandle,
     table_ref: *const u8,
     table_tydesc: *const rtdt::TyDesc,
-    row: u32,
+    row: rtdt::UsizeRepr,
     col: u32,
 ) -> *const u8 {
     debug_assert!(!table_ref.is_null(), "table_ref is null");
@@ -1824,7 +1824,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_set_local(
     rt: LocalRtHandle,
     table_mut: *mut u8,
     table_tydesc: *const rtdt::TyDesc,
-    row: u32,
+    row: rtdt::UsizeRepr,
     col: u32,
     value_ref: *const u8,
     value_tydesc: *const rtdt::TyDesc,
@@ -1873,7 +1873,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_len(
     _rt: LocalRtHandle,
     table_ref: *const u8,
     _table_tydesc: *const rtdt::TyDesc,
-) -> u32 {
+) -> rtdt::UsizeRepr {
     debug_assert!(!table_ref.is_null(), "table_ref is null");
     unsafe {
         crate::impls::table::table_len(table_ref)

@@ -156,7 +156,7 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -243,7 +243,7 @@ fn test_tensor_create_from_slice_2d_row_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -321,7 +321,7 @@ fn test_tensor_create_from_slice_2d_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -393,7 +393,7 @@ fn test_tensor_create_from_slice_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -476,7 +476,7 @@ fn test_tensor_create_mismatched_length() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -534,7 +534,7 @@ fn test_multiple_tensors() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
                 rt,
                 slice_data.as_ptr() as *const u8,
-                slice_data.len() as u32,
+                (slice_data.len() as u32).into(),
                 element_tydesc as *const rtdt::TyDesc,
                 &mut shape_list as *mut rtdt::List as *mut u8,
                 list_tydesc as *const rtdt::TyDesc,
@@ -610,7 +610,7 @@ fn test_tensor_get_1d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -699,7 +699,7 @@ fn test_tensor_get_2d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -794,7 +794,7 @@ fn test_tensor_get_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -890,7 +890,7 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -972,7 +972,7 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -1077,7 +1077,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -1184,7 +1184,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -1300,7 +1300,7 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -1399,7 +1399,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -1506,7 +1506,7 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -1590,7 +1590,7 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -1727,7 +1727,7 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -1817,7 +1817,7 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -1904,7 +1904,7 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -1994,7 +1994,7 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -2076,7 +2076,7 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -2155,7 +2155,7 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -2313,7 +2313,7 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -2423,7 +2423,7 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -2519,7 +2519,7 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -2613,7 +2613,7 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -2709,7 +2709,7 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -2798,7 +2798,7 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -2902,7 +2902,7 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -3008,7 +3008,7 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -3103,7 +3103,7 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -3235,7 +3235,7 @@ fn test_tensor_create_empty_shape() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -3284,7 +3284,7 @@ fn test_tensor_reshape_empty_new_shape() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -3375,7 +3375,7 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -3539,7 +3539,7 @@ fn test_tensor_slice_rank_zero_tydesc() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             &*element_tydesc_2 as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -3630,7 +3630,7 @@ fn test_tensor_reshape_rank_zero_tensor_tydesc() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             &*element_tydesc_2 as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -3721,7 +3721,7 @@ fn test_tensor_transpose_rank_zero_tydesc() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             &*element_tydesc_2 as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -3800,7 +3800,7 @@ fn test_tensor_reshape_col_major() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -3909,7 +3909,7 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -4048,7 +4048,7 @@ fn test_tensor_create_row_major_transposed() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -4118,7 +4118,7 @@ fn test_tensor_create_col_major_transposed() -> AnyResult<()> {
         datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
             rt,
             slice_data.as_ptr() as *const u8,
-            slice_data.len() as u32,
+            (slice_data.len() as u32).into(),
             element_tydesc as *const rtdt::TyDesc,
             &mut shape_list as *mut rtdt::List as *mut u8,
             list_tydesc as *const rtdt::TyDesc,
@@ -4194,7 +4194,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
                 rt,
                 slice_data.as_ptr() as *const u8,
-                slice_data.len() as u32,
+                (slice_data.len() as u32).into(),
                 element_tydesc as *const rtdt::TyDesc,
                 &mut shape_list as *mut rtdt::List as *mut u8,
                 list_tydesc as *const rtdt::TyDesc,
@@ -4264,7 +4264,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
                 rt,
                 slice_data.as_ptr() as *const u8,
-                slice_data.len() as u32,
+                (slice_data.len() as u32).into(),
                 element_tydesc as *const rtdt::TyDesc,
                 &mut shape_list as *mut rtdt::List as *mut u8,
                 list_tydesc as *const rtdt::TyDesc,
@@ -4330,7 +4330,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
                 rt,
                 slice_data.as_ptr() as *const u8,
-                slice_data.len() as u32,
+                (slice_data.len() as u32).into(),
                 element_tydesc as *const rtdt::TyDesc,
                 &mut shape_list as *mut rtdt::List as *mut u8,
                 list_tydesc as *const rtdt::TyDesc,
@@ -4396,7 +4396,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
             datalove_rt::c::dtlv_rti_tensor_create_from_slice_local(
                 rt,
                 slice_data.as_ptr() as *const u8,
-                slice_data.len() as u32,
+                (slice_data.len() as u32).into(),
                 element_tydesc as *const rtdt::TyDesc,
                 &mut shape_list as *mut rtdt::List as *mut u8,
                 list_tydesc as *const rtdt::TyDesc,

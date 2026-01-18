@@ -110,7 +110,7 @@ unsafe fn add_magnitude(
     // Allocate and copy to runtime memory.
     let result_len = result_limbs.len();
     unsafe {
-        let result_ptr = rt.alloc.alloc(4, 4, result_len as u32) as *mut u32;
+        let result_ptr = rt.alloc.alloc(4, 4, (result_len as u32).into()) as *mut u32;
         for (i, &limb) in result_limbs.iter().enumerate() {
             *result_ptr.add(i) = limb;
         }
@@ -153,7 +153,7 @@ unsafe fn sub_magnitude(
     assert!(!(result_len == 1 && result_limbs[0] == 0), "sub_magnitude produced zero result");
 
     unsafe {
-        let result_ptr = rt.alloc.alloc(4, 4, result_len as u32) as *mut u32;
+        let result_ptr = rt.alloc.alloc(4, 4, (result_len as u32).into()) as *mut u32;
         for (i, &limb) in result_limbs.iter().enumerate() {
             *result_ptr.add(i) = limb;
         }
@@ -260,7 +260,7 @@ pub(crate) unsafe fn int_sub_impl(
         }
 
         // Create negated b: allocate temporary Int for -b.
-        let neg_b_limbs_ptr = rt.alloc.alloc(4, 4, b_abs_size as u32) as *mut u32;
+        let neg_b_limbs_ptr = rt.alloc.alloc(4, 4, (b_abs_size as u32).into()) as *mut u32;
         let b_limbs = std::slice::from_raw_parts(b.data, b_abs_size);
         let neg_b_limbs = std::slice::from_raw_parts_mut(neg_b_limbs_ptr, b_abs_size);
         neg_b_limbs.copy_from_slice(b_limbs);
@@ -276,7 +276,7 @@ pub(crate) unsafe fn int_sub_impl(
         let result = int_add_impl(rt, a_in, &neg_b as *const rtdt::Int as *const u8, result_out);
 
         // Free temporary allocation.
-        rt.alloc.free(4, 4, b_abs_size as u32, neg_b_limbs_ptr as *mut u8);
+        rt.alloc.free(4, 4, (b_abs_size as u32).into(), neg_b_limbs_ptr as *mut u8);
 
         result
     }
@@ -336,7 +336,7 @@ pub(crate) unsafe fn int_mul_impl(
         let result_len = result_limbs.len();
 
         // Allocate and copy to runtime memory.
-        let result_ptr = rt.alloc.alloc(4, 4, result_len as u32) as *mut u32;
+        let result_ptr = rt.alloc.alloc(4, 4, (result_len as u32).into()) as *mut u32;
         for (i, &limb) in result_limbs.iter().enumerate() {
             *result_ptr.add(i) = limb;
         }
@@ -378,7 +378,7 @@ pub(crate) unsafe fn int_neg_impl(
         }
 
         // Allocate limbs for result.
-        let limbs_ptr = rt.alloc.alloc(4, 4, abs_size as u32) as *mut u32;
+        let limbs_ptr = rt.alloc.alloc(4, 4, (abs_size as u32).into()) as *mut u32;
 
         // Copy limbs.
         let src_limbs = std::slice::from_raw_parts(a.data, abs_size);
@@ -439,7 +439,7 @@ unsafe fn div_magnitude(
         assert!(!(q_len == 1 && quotient[0] == 0), "single-limb division produced zero quotient");
 
         unsafe {
-            let q_ptr = rt.alloc.alloc(4, 4, q_len as u32) as *mut u32;
+            let q_ptr = rt.alloc.alloc(4, 4, (q_len as u32).into()) as *mut u32;
             for (i, &limb) in quotient.iter().enumerate() {
                 *q_ptr.add(i) = limb;
             }
@@ -541,7 +541,7 @@ unsafe fn div_magnitude(
         assert!(!(q_len == 1 && quotient[0] == 0), "multi-limb division produced zero quotient");
 
         unsafe {
-            let q_ptr = rt.alloc.alloc(4, 4, q_len as u32) as *mut u32;
+            let q_ptr = rt.alloc.alloc(4, 4, (q_len as u32).into()) as *mut u32;
             for (i, &limb) in quotient.iter().enumerate() {
                 *q_ptr.add(i) = limb;
             }

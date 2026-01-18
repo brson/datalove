@@ -64,7 +64,7 @@ unsafe fn clone_impl(
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
                 let limb_size = std::mem::size_of::<u32>() as u32;
                 let limb_align = std::mem::align_of::<u32>() as u32;
-                let new_data = unsafe { rt_ref.alloc.alloc(limb_size, limb_align, num_limbs) as *mut u32 };
+                let new_data = unsafe { rt_ref.alloc.alloc(limb_size, limb_align, num_limbs.into()) as *mut u32 };
 
                 // Copy limbs.
                 unsafe {
@@ -199,8 +199,9 @@ unsafe fn clone_impl(
 
                 // Clone each element.
                 for i in 0..list_in.size {
-                    let elem_in = unsafe { list_in.data.add((i * elem_size) as usize) };
-                    let elem_out = unsafe { new_data.add((i * elem_size) as usize) };
+                    let offset = (i as usize) * (elem_size as usize);
+                    let elem_in = unsafe { list_in.data.add(offset) };
+                    let elem_out = unsafe { new_data.add(offset) };
 
                     let status = unsafe {
                         clone_impl(rt, elem_in, elem_ty, elem_out)
@@ -210,7 +211,8 @@ unsafe fn clone_impl(
                         // Clone failed. Destroy successfully cloned elements and free buffer.
                         unsafe {
                             for j in 0..i {
-                                let elem_to_destroy = new_data.add((j * elem_size) as usize);
+                                let cleanup_offset = (j as usize) * (elem_size as usize);
+                                let elem_to_destroy = new_data.add(cleanup_offset);
                                 let _ = crate::impls::destroy::any_destroy_local(rt, elem_to_destroy, elem_ty.as_ptr());
                             }
                             rt_ref.alloc.free(elem_size, elem_align, list_in.size, new_data);
@@ -319,8 +321,9 @@ unsafe fn clone_impl(
 
                 // Clone each element in the capacity buffer.
                 for i in 0..tensor_in.capacity_elems {
-                    let elem_in = unsafe { tensor_in.ptr_base.add((i * elem_size) as usize) };
-                    let elem_out = unsafe { new_data.add((i * elem_size) as usize) };
+                    let offset = (i as usize) * (elem_size as usize);
+                    let elem_in = unsafe { tensor_in.ptr_base.add(offset) };
+                    let elem_out = unsafe { new_data.add(offset) };
 
                     let status = unsafe {
                         clone_impl(rt, elem_in, element_ty, elem_out)
@@ -334,13 +337,17 @@ unsafe fn clone_impl(
                 // Allocate and copy shape array.
                 let new_shape = if rank > 0 && !tensor_in.shape.is_null() {
                     unsafe {
-                        let shape_ptr = rt_ref.alloc.alloc(4, 4, rank) as *mut u32;
+                        let shape_ptr = rt_ref.alloc.alloc(
+                            rtdt::INDEX_SIZE,
+                            rtdt::INDEX_ALIGN,
+                            rank.into()
+                        ) as *mut rtdt::UsizeRepr;
                         std::ptr::copy_nonoverlapping(
                             tensor_in.shape,
                             shape_ptr,
                             rank as usize
                         );
-                        shape_ptr as *const u32
+                        shape_ptr as *const rtdt::UsizeRepr
                     }
                 } else {
                     std::ptr::null()
@@ -349,13 +356,17 @@ unsafe fn clone_impl(
                 // Allocate and copy strides array.
                 let new_strides = if rank > 0 && !tensor_in.strides.is_null() {
                     unsafe {
-                        let strides_ptr = rt_ref.alloc.alloc(4, 4, rank) as *mut u32;
+                        let strides_ptr = rt_ref.alloc.alloc(
+                            rtdt::INDEX_SIZE,
+                            rtdt::INDEX_ALIGN,
+                            rank.into()
+                        ) as *mut rtdt::UsizeRepr;
                         std::ptr::copy_nonoverlapping(
                             tensor_in.strides,
                             strides_ptr,
                             rank as usize
                         );
-                        strides_ptr as *const u32
+                        strides_ptr as *const rtdt::UsizeRepr
                     }
                 } else {
                     std::ptr::null()
@@ -877,7 +888,7 @@ mod tests {
                 std::ptr::null()
             } else {
                 unsafe {
-                    let ptr = rt.alloc.alloc(4, 4, limbs.len() as u32) as *mut u32;
+                    let ptr = rt.alloc.alloc(4, 4, (limbs.len() as u32).into()) as *mut u32;
                     for (i, &limb) in limbs.iter().enumerate() {
                         *ptr.add(i) = limb;
                     }
@@ -923,14 +934,14 @@ mod tests {
 
                 // Cleanup.
                 unsafe {
-                    rt.alloc.free(4, 4, limbs.len() as u32, value_out.data as *mut u8);
+                    rt.alloc.free(4, 4, (limbs.len() as u32).into(), value_out.data as *mut u8);
                 }
             }
 
             // Cleanup input.
             if !limbs.is_empty() {
                 unsafe {
-                    rt.alloc.free(4, 4, limbs.len() as u32, limb_data as *mut u8);
+                    rt.alloc.free(4, 4, (limbs.len() as u32).into(), limb_data as *mut u8);
                 }
             }
         }
@@ -979,7 +990,7 @@ mod tests {
                 std::ptr::null()
             } else {
                 unsafe {
-                    let ptr = rt.alloc.alloc(1, 1, bytes.len() as u32);
+                    let ptr = rt.alloc.alloc(1, 1, (bytes.len() as u32).into());
                     for (i, &byte) in bytes.iter().enumerate() {
                         *ptr.add(i) = byte;
                     }
@@ -989,8 +1000,8 @@ mod tests {
 
             let value_in = rtdt::String {
                 data: str_data,
-                size: bytes.len() as u32,
-                capacity: bytes.len() as u32,
+                size: bytes.len() as rtdt::UsizeRepr,
+                capacity: bytes.len() as rtdt::UsizeRepr,
             };
 
             let mut value_out = rtdt::String {
@@ -1024,14 +1035,14 @@ mod tests {
 
                 // Cleanup.
                 unsafe {
-                    rt.alloc.free(1, 1, bytes.len() as u32, value_out.data as *mut u8);
+                    rt.alloc.free(1, 1, (bytes.len() as u32).into(), value_out.data as *mut u8);
                 }
             }
 
             // Cleanup input.
             if !bytes.is_empty() {
                 unsafe {
-                    rt.alloc.free(1, 1, bytes.len() as u32, str_data as *mut u8);
+                    rt.alloc.free(1, 1, (bytes.len() as u32).into(), str_data as *mut u8);
                 }
             }
         }
@@ -1164,7 +1175,7 @@ mod tests {
                 std::ptr::null()
             } else {
                 unsafe {
-                    let ptr = rt.alloc.alloc(4, 4, elements.len() as u32) as *mut u32;
+                    let ptr = rt.alloc.alloc(4, 4, (elements.len() as u32).into()) as *mut u32;
                     for (i, &elem) in elements.iter().enumerate() {
                         *ptr.add(i) = elem;
                     }
@@ -1174,8 +1185,8 @@ mod tests {
 
             let value_in = rtdt::List {
                 data: list_data,
-                size: elements.len() as u32,
-                capacity: elements.len() as u32,
+                size: elements.len() as rtdt::UsizeRepr,
+                capacity: elements.len() as rtdt::UsizeRepr,
             };
 
             let mut value_out = rtdt::List {
@@ -1209,14 +1220,14 @@ mod tests {
 
                 // Cleanup.
                 unsafe {
-                    rt.alloc.free(4, 4, elements.len() as u32, value_out.data as *mut u8);
+                    rt.alloc.free(4, 4, (elements.len() as u32).into(), value_out.data as *mut u8);
                 }
             }
 
             // Cleanup input.
             if !elements.is_empty() {
                 unsafe {
-                    rt.alloc.free(4, 4, elements.len() as u32, list_data as *mut u8);
+                    rt.alloc.free(4, 4, (elements.len() as u32).into(), list_data as *mut u8);
                 }
             }
         }
