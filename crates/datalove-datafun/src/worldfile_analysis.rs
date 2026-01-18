@@ -120,7 +120,7 @@ pub fn analyze_worldfile(
     }
 
     // Create script compilation context with Buffer mode for capturing debuglog output.
-    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer);
+    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, None);
 
     // Process script units using the context.
     for section in &parsed.sections {

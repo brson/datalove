@@ -17,7 +17,7 @@
 //! let compiled = pipeline.compile_fresh(&db);
 //!
 //! // Stage 2: run scripts.
-//! let mut ctx = compiled.script_context(&db, DebugOutputMode::Stderr);
+//! let mut ctx = compiled.script_context(&db, DebugOutputMode::Stderr, None);
 //! ctx.eval_fragment("let x = 42");
 //! ctx.eval_expr("x + 1");
 //! ```
@@ -473,10 +473,14 @@ impl<'db> CompiledModules<'db> {
     ///
     /// Can be called multiple times to create independent script contexts that
     /// share the same module compilation.
+    ///
+    /// The optional `call_dispatcher` enables JIT compilation or other call
+    /// dispatch mechanisms.
     pub fn script_context(
         &self,
         db: &'db dyn salsa::Database,
         debug_mode: datalove_rt::c::DebugOutputMode,
+        call_dispatcher: Option<Box<dyn CallDispatcher>>,
     ) -> ScriptCompilationContext<'db> {
         let script_ctx = lower::ScriptLowerContext::new();
         let mut module_specs = Vec::new();
@@ -513,7 +517,7 @@ impl<'db> CompiledModules<'db> {
             env,
             accumulated_unit_specs: Vec::new(),
             module_specs,
-            interp: datalove_datafun_interp::IrInterpreter::new_with_debug_mode(debug_mode),
+            interp: datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher),
             func_id_map: self.shared.func_id_map.clone(),
             last_source: None,
             last_batch_spec: None,
@@ -1144,11 +1148,6 @@ impl<'db> ScriptCompilationContext<'db> {
         self.interp.clear_debug_buffer();
     }
 
-    /// Set a call dispatcher for JIT compilation.
-    pub fn set_call_dispatcher(&mut self, dispatcher: Box<dyn CallDispatcher>) {
-        self.interp.set_call_dispatcher(dispatcher);
-    }
-
     /// Destroy all allocated runtime values.
     pub fn destroy_all(&mut self) {
         self.env.destroy_all(self.interp.runtime_handle());
@@ -1434,12 +1433,12 @@ mod tests {
         assert!(compiled.is_successful(), "compilation should succeed");
 
         // Create first script context.
-        let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled);
+        let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled, None);
         let result1 = ctx1.eval_fragment("let x = @10");
         assert!(matches!(result1.typecheck, TypecheckResult::Success), "ctx1 fragment should typecheck");
 
         // Create second script context from the same compiled modules.
-        let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled);
+        let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled, None);
         let result2 = ctx2.eval_fragment("let y = @20");
         assert!(matches!(result2.typecheck, TypecheckResult::Success), "ctx2 fragment should typecheck");
 
@@ -1470,8 +1469,8 @@ mod tests {
         let compiled = pipeline.compile_fresh(&db);
         assert!(compiled.is_successful());
 
-        let mut ctx_a = compiled.script_context(&db, DebugOutputMode::Disabled);
-        let mut ctx_b = compiled.script_context(&db, DebugOutputMode::Disabled);
+        let mut ctx_a = compiled.script_context(&db, DebugOutputMode::Disabled, None);
+        let mut ctx_b = compiled.script_context(&db, DebugOutputMode::Disabled, None);
 
         // Define simple identity functions in each context.
         let r1 = ctx_a.eval_fragment("fun id_a(n: @u32): @u32\n  ret n\nend fun");
@@ -1550,7 +1549,7 @@ end fun
                     let db_ref = db_clone.as_salsa_db();
 
                     // Create a script context from the shared compiled modules.
-                    let mut ctx = compiled.script_context(db_ref, DebugOutputMode::Disabled);
+                    let mut ctx = compiled.script_context(db_ref, DebugOutputMode::Disabled, None);
 
                     // Import and use the shared module function.
                     let r = ctx.eval_fragment("require module local/pkg/math\nimport math.square");
@@ -1598,7 +1597,7 @@ end fun
 
         // First run: import and call module function.
         {
-            let mut ctx = compiled1.script_context(&db, DebugOutputMode::Disabled);
+            let mut ctx = compiled1.script_context(&db, DebugOutputMode::Disabled, None);
             let r = ctx.eval_fragment("require module local/pkg/v1\nimport v1.value");
             assert!(matches!(r.typecheck, TypecheckResult::Success), "import failed: {:?}", r.typecheck);
             let result = ctx.eval_expr("value(@100)");
@@ -1608,7 +1607,7 @@ end fun
 
         // Create a second context from the same compilation.
         {
-            let mut ctx2 = compiled1.script_context(&db, DebugOutputMode::Disabled);
+            let mut ctx2 = compiled1.script_context(&db, DebugOutputMode::Disabled, None);
             let r = ctx2.eval_fragment("require module local/pkg/v1\nimport v1.value");
             assert!(matches!(r.typecheck, TypecheckResult::Success), "second import failed: {:?}", r.typecheck);
             let result = ctx2.eval_expr("value(@200)");
@@ -1626,8 +1625,8 @@ end fun
         let compiled = pipeline.compile_fresh(&db);
         assert!(compiled.is_successful());
 
-        let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled);
-        let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled);
+        let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled, None);
+        let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled, None);
 
         // Define functions with the same name returning different values.
         let r1_def = ctx1.eval_fragment("fun local_fn(x: @u32): @u32\n  ret @10\nend fun");
@@ -1660,7 +1659,7 @@ end fun
 
         // Create many contexts.
         for i in 0..20u32 {
-            let mut ctx = compiled.script_context(&db, DebugOutputMode::Disabled);
+            let mut ctx = compiled.script_context(&db, DebugOutputMode::Disabled, None);
             let r = ctx.eval_fragment("fun id(x: @u32): @u32\n  ret x\nend fun");
             assert!(matches!(r.typecheck, TypecheckResult::Success), "fn def failed: {:?}", r.typecheck);
             let result = ctx.eval_expr(&format!("id(@{})", i));
@@ -1685,8 +1684,8 @@ end fun
         assert!(compiled.is_successful(), "compilation failed: {:?}", compiled.all_errors());
 
         // Create two contexts that both use the module function.
-        let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled);
-        let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled);
+        let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled, None);
+        let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled, None);
 
         // Both contexts import and use the module function.
         let r1 = ctx1.eval_fragment("require module local/pkg/math\nimport math.id");

@@ -90,28 +90,24 @@ pub struct IrInterpreter {
 impl IrInterpreter {
     /// Create a new interpreter with default settings (debug output disabled).
     pub fn new() -> Self {
-        Self::new_with_debug_mode(datalove_rt::c::DebugOutputMode::Disabled)
+        Self::new_with_options(datalove_rt::c::DebugOutputMode::Disabled, None)
     }
 
     /// Create a new interpreter with the specified debug output mode.
     pub fn new_with_debug_mode(debug_mode: datalove_rt::c::DebugOutputMode) -> Self {
+        Self::new_with_options(debug_mode, None)
+    }
+
+    /// Create a new interpreter with all configuration options.
+    pub fn new_with_options(
+        debug_mode: datalove_rt::c::DebugOutputMode,
+        call_dispatcher: Option<Box<dyn CallDispatcher>>,
+    ) -> Self {
         Self {
             runtime: datalove_rt::rust::Runtime::new_with_debug_mode(debug_mode),
             tydesc_table: IrTyDescTable::new(),
-            call_dispatcher: RefCell::new(None),
+            call_dispatcher: RefCell::new(call_dispatcher),
         }
-    }
-
-    /// Set a call dispatcher for intercepting function calls.
-    ///
-    /// Use this to integrate JIT compilation or other call dispatch mechanisms.
-    pub fn set_call_dispatcher(&mut self, dispatcher: Box<dyn CallDispatcher>) {
-        *self.call_dispatcher.borrow_mut() = Some(dispatcher);
-    }
-
-    /// Remove the call dispatcher.
-    pub fn clear_call_dispatcher(&mut self) {
-        *self.call_dispatcher.borrow_mut() = None;
     }
 
     /// Get the runtime handle for memory management.

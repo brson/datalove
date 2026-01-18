@@ -108,12 +108,11 @@ pub fn analyze_worldfile_with_jit(
         }
     }
 
-    // Create script compilation context with Buffer mode and JIT enabled.
-    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer);
-
-    // Enable JIT with threshold=1 (compile on first call).
+    // Create JIT engine with threshold=1 (compile on first call).
     let jit = JitEngine::new(1).expect("JitEngine creation failed");
-    ctx.set_call_dispatcher(Box::new(jit));
+
+    // Create script compilation context with Buffer mode and JIT enabled.
+    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, Some(Box::new(jit)));
 
     // Process script units.
     for section in &parsed.sections {

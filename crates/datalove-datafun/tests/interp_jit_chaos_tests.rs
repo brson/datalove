@@ -42,8 +42,8 @@ fn run_with_interpreter(
         return results;
     }
 
-    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer);
     // No call dispatcher - pure interpreter.
+    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, None);
 
     for section in &parsed.sections {
         match section {
@@ -99,9 +99,8 @@ fn run_with_jit(
         return results;
     }
 
-    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer);
     let jit = JitEngine::new(1).expect("JitEngine creation failed");
-    ctx.set_call_dispatcher(Box::new(jit));
+    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, Some(Box::new(jit)));
 
     for section in &parsed.sections {
         match section {
@@ -158,11 +157,10 @@ fn run_with_chaos(
         return results;
     }
 
-    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer);
     let mut chaos = ChaosDispatcher::new(seed).expect("ChaosDispatcher creation failed");
     chaos.set_compile_probability(75);
     chaos.set_use_jit_probability(50);
-    ctx.set_call_dispatcher(Box::new(chaos));
+    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, Some(Box::new(chaos)));
 
     for section in &parsed.sections {
         match section {

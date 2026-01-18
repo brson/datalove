@@ -151,7 +151,7 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
     }
 
     // Create script compilation context with Disabled mode (we don't use interpreter).
-    let mut ctx = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled);
+    let mut ctx = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled, None);
 
     // Process script units via AOT.
     for section in &parsed.sections {

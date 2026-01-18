@@ -455,7 +455,7 @@ fn analyze_worldfile_ir_serial(
     }
 
     // Lower for AOT (includes drops).
-    let mut ctx = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled);
+    let mut ctx = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled, None);
     let lower_result = ctx.lower_fragment_for_aot(fragment_source);
 
     // Get registry before destroying ctx.

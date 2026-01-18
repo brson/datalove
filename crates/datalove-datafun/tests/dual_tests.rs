@@ -270,7 +270,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     }
 
     // Run interpreter pipeline.
-    let mut interp_ctx = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Buffer);
+    let mut interp_ctx = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Buffer, None);
     interp_ctx.clear_debug_buffer();
     let interp_result = interp_ctx.eval_fragment(fragment_source);
     let interp_output = interp_ctx.get_debug_buffer();
@@ -281,7 +281,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     let compiled2 = pipeline2.compile_fresh(&db);
 
     // Run AOT pipeline.
-    let mut aot_ctx = compiled2.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled);
+    let mut aot_ctx = compiled2.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled, None);
     let aot_lower_result = aot_ctx.lower_fragment_for_aot(fragment_source);
 
     // If typecheck failed, return early.

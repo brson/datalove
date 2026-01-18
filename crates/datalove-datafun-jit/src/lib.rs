@@ -8,10 +8,10 @@
 //! ```ignore
 //! use datalove_datafun_jit::JitEngine;
 //! use datalove_datafun_interp::IrInterpreter;
+//! use datalove_rt::c::DebugOutputMode;
 //!
-//! let mut interp = IrInterpreter::new();
 //! let jit = JitEngine::new(100)?; // Compile after 100 calls
-//! interp.set_call_dispatcher(Box::new(jit));
+//! let mut interp = IrInterpreter::new_with_options(DebugOutputMode::Disabled, Some(Box::new(jit)));
 //! ```
 
 mod compiler;
@@ -433,9 +433,11 @@ mod tests {
         };
 
         // Set up interpreter with JIT dispatcher (threshold=1: compile on first call).
-        let mut interp = IrInterpreter::new();
         let jit = JitEngine::new(1).expect("JitEngine creation failed");
-        interp.set_call_dispatcher(Box::new(jit));
+        let mut interp = IrInterpreter::new_with_options(
+            datalove_rt::c::DebugOutputMode::Disabled,
+            Some(Box::new(jit)),
+        );
 
         // Set up execution context with both functions.
         let functions = vec![add_fn, main_fn.clone()];
