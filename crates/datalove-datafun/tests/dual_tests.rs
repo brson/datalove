@@ -19,7 +19,6 @@ use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 use std::path::Path;
 use std::process::Command;
-use std::sync::OnceLock;
 
 use datalove_datafun as datafun;
 use datalove_datafun_aot_cranelift::AotCompiler;
@@ -95,35 +94,9 @@ pub enum ExecutionResult {
     Error { message: String, exit_code: Option<i32> },
 }
 
-static RUNTIME_LIB_DIR: OnceLock<std::path::PathBuf> = OnceLock::new();
-
 /// Build the runtime library once and return the path to the lib directory.
 fn ensure_runtime_lib() -> &'static Path {
-    RUNTIME_LIB_DIR.get_or_init(|| {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-            .unwrap_or_else(|_| ".".to_string());
-        let manifest_path = std::path::PathBuf::from(manifest_dir);
-        let workspace_root = manifest_path.join("../..").canonicalize()
-            .expect("failed to find workspace root");
-        let lib_dir = workspace_root.join("target/debug");
-
-        // Build with index-64 feature if this test was compiled with it.
-        #[cfg(feature = "index-64")]
-        let args = ["build", "-p", "datalove-rt", "--features", "index-64"];
-        #[cfg(not(feature = "index-64"))]
-        let args = ["build", "-p", "datalove-rt"];
-
-        let status = Command::new("cargo")
-            .args(args)
-            .current_dir(&workspace_root)
-            .status()
-            .expect("failed to run cargo build");
-        if !status.success() {
-            panic!("Failed to build datalove-rt");
-        }
-
-        lib_dir
-    })
+    datafun::pipeline::aot::ensure_runtime_lib()
 }
 
 /// Normalize IR dump by removing trailing Drop instructions before unit_end.

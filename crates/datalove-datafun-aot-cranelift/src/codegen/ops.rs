@@ -448,14 +448,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             IrType::U16 => (false, 16, cl_types::I16),
             IrType::U32 => (false, 32, cl_types::I32),
             IrType::U64 => (false, 64, cl_types::I64),
-            #[cfg(not(feature = "index-64"))]
-            IrType::Usize => (false, 32, cl_types::I32),
-            #[cfg(feature = "index-64")]
-            IrType::Usize => (false, 64, cl_types::I64),
-            #[cfg(not(feature = "index-64"))]
-            IrType::Isize => (true, 32, cl_types::I32),
-            #[cfg(feature = "index-64")]
-            IrType::Isize => (true, 64, cl_types::I64),
+            IrType::Usize => (false, crate::index_types::INDEX_BITS, crate::index_types::INDEX_TYPE),
+            IrType::Isize => (true, crate::index_types::INDEX_BITS, crate::index_types::INDEX_TYPE),
             _ => {
                 return Err(AotError::Unsupported(format!(
                     "checked binop not supported for type: {:?}",
@@ -610,10 +604,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             IrType::I16 => (i16::MIN as i64, cl_types::I16),
             IrType::I32 => (i32::MIN as i64, cl_types::I32),
             IrType::I64 => (i64::MIN, cl_types::I64),
-            #[cfg(not(feature = "index-64"))]
-            IrType::Isize => (i32::MIN as i64, cl_types::I32),
-            #[cfg(feature = "index-64")]
-            IrType::Isize => (i64::MIN, cl_types::I64),
+            IrType::Isize => (datalove_rtdt::IsizeRepr::MIN as i64, crate::index_types::INDEX_TYPE),
             _ => {
                 return Err(AotError::Unsupported(format!(
                     "checked negation only supported for signed integers, got {:?}",

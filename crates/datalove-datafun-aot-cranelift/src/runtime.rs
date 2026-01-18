@@ -135,17 +135,14 @@ impl RuntimeImports {
 
         // dtlv_rti_mem_alloc_raw_local(ptr, u32, u32, UsizeRepr) -> ptr
         // Count type is UsizeRepr which depends on index-64 feature.
-        #[cfg(not(feature = "index-64"))]
-        const COUNT_TYPE: cranelift_codegen::ir::Type = cl_types::I32;
-        #[cfg(feature = "index-64")]
-        const COUNT_TYPE: cranelift_codegen::ir::Type = cl_types::I64;
+        use crate::index_types::INDEX_TYPE;
 
         let mem_alloc_raw = {
             let mut sig = cl_ir::Signature::new(call_conv);
             sig.params.push(AbiParam::new(PTR_TYPE));      // rt handle
             sig.params.push(AbiParam::new(cl_types::I32)); // size
             sig.params.push(AbiParam::new(cl_types::I32)); // align
-            sig.params.push(AbiParam::new(COUNT_TYPE));    // count (UsizeRepr)
+            sig.params.push(AbiParam::new(INDEX_TYPE));    // count (UsizeRepr)
             sig.returns.push(AbiParam::new(PTR_TYPE));     // allocated ptr
             module
                 .declare_function("dtlv_rti_mem_alloc_raw_local", Linkage::Import, &sig)
@@ -264,7 +261,7 @@ impl RuntimeImports {
             let mut sig = cl_ir::Signature::new(call_conv);
             sig.params.push(AbiParam::new(PTR_TYPE));      // rt handle
             sig.params.push(AbiParam::new(PTR_TYPE));      // element_data_in
-            sig.params.push(AbiParam::new(COUNT_TYPE));    // element_count (UsizeRepr)
+            sig.params.push(AbiParam::new(INDEX_TYPE));    // element_count (UsizeRepr)
             sig.params.push(AbiParam::new(PTR_TYPE));      // element_tydesc
             sig.params.push(AbiParam::new(PTR_TYPE));      // shape_ptr
             sig.params.push(AbiParam::new(cl_types::I32)); // rank

@@ -108,11 +108,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), AotError> {
         use datalove_rtdt as rtdt;
 
-        // Capacity type and offset depend on index-64 feature.
-        #[cfg(not(feature = "index-64"))]
-        const CAPACITY_TYPE: cranelift_codegen::ir::Type = cl_types::I32;
-        #[cfg(feature = "index-64")]
-        const CAPACITY_TYPE: cranelift_codegen::ir::Type = cl_types::I64;
+        // Capacity type depends on index-64 feature.
+        use crate::index_types::INDEX_TYPE;
 
         // Offset of capacity field in Int struct.
         let capacity_offset = std::mem::offset_of!(rtdt::Int, capacity) as i32;
@@ -128,7 +125,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // Zero: null data, size=0, capacity=0.
             let null = builder.ins().iconst(cl_types::I64, 0);
             let zero32 = builder.ins().iconst(cl_types::I32, 0);
-            let zero_cap = builder.ins().iconst(CAPACITY_TYPE, 0);
+            let zero_cap = builder.ins().iconst(INDEX_TYPE, 0);
             builder.ins().store(MemFlags::new(), null, base, 0);     // data
             builder.ins().store(MemFlags::new(), zero32, base, 8);   // size_and_sign
             builder.ins().store(MemFlags::new(), zero_cap, base, capacity_offset);  // capacity
@@ -146,7 +143,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let alloc_ref = self.module.declare_func_in_func(runtime.mem_alloc_raw, builder.func);
             let size = builder.ins().iconst(cl_types::I32, 4);   // size of u32
             let align = builder.ins().iconst(cl_types::I32, 4);  // align of u32
-            let count = builder.ins().iconst(CAPACITY_TYPE, limbs.len() as i64);
+            let count = builder.ins().iconst(INDEX_TYPE, limbs.len() as i64);
             let call = builder.ins().call(alloc_ref, &[rt_handle, size, align, count]);
             let limbs_ptr = builder.inst_results(call)[0];
 
@@ -168,7 +165,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let size_val = builder.ins().iconst(cl_types::I32, size_and_sign as i64);
             builder.ins().store(MemFlags::new(), size_val, base, 8);   // size_and_sign
 
-            let cap_val = builder.ins().iconst(CAPACITY_TYPE, limbs.len() as i64);
+            let cap_val = builder.ins().iconst(INDEX_TYPE, limbs.len() as i64);
             builder.ins().store(MemFlags::new(), cap_val, base, capacity_offset);   // capacity
         }
 

@@ -21,3 +21,12 @@ target-lexicon = "0.13"
 
 [dev-dependencies]
 datalove-datafun.path = "../datalove-datafun"
+
+[features]
+index-64 = [
+    "datalove-datafun-ir/index-64",
+    "datalove-datafun-interp/index-64",
+    "datalove-datafun-aot-cranelift/index-64",
+    "datalove-rtdt/index-64",
+    "datalove-rt/index-64",
+]

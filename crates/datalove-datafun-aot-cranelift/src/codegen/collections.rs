@@ -323,13 +323,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Call tensor_init runtime function.
         // element_count is UsizeRepr type (I32 or I64 depending on index-64 feature).
-        #[cfg(not(feature = "index-64"))]
-        const COUNT_TYPE: cranelift_codegen::ir::Type = cl_types::I32;
-        #[cfg(feature = "index-64")]
-        const COUNT_TYPE: cranelift_codegen::ir::Type = cl_types::I64;
+        use crate::index_types::INDEX_TYPE;
 
         let init_ref = self.module.declare_func_in_func(runtime.tensor_init, builder.func);
-        let element_count_val = builder.ins().iconst(COUNT_TYPE, element_count as i64);
+        let element_count_val = builder.ins().iconst(INDEX_TYPE, element_count as i64);
         let rank_val = builder.ins().iconst(cl_types::I32, rank as i64);
         builder.ins().call(init_ref, &[
             rt_handle,

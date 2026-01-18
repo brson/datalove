@@ -25,6 +25,8 @@
 
 /// IR to Cranelift translation.
 pub mod codegen;
+/// Cranelift types for index-sized values.
+pub mod index_types;
 /// Stack frame layout computation.
 pub mod layout;
 /// Runtime function imports.

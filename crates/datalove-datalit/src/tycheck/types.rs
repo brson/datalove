@@ -873,6 +873,30 @@ pub fn check_hex_fits_wrapped_type<'db>(
 // Diagnostic Helpers
 // ============================================================================
 
+/// Description of usize range based on index-64 feature.
+#[cfg(not(feature = "index-64"))]
+const USIZE_RANGE: &str = "usize can represent values from 0 to 4,294,967,295";
+#[cfg(feature = "index-64")]
+const USIZE_RANGE: &str = "usize can represent values from 0 to 18,446,744,073,709,551,615";
+
+/// Description of isize range based on index-64 feature.
+#[cfg(not(feature = "index-64"))]
+const ISIZE_RANGE: &str = "isize can represent values from -2,147,483,648 to 2,147,483,647";
+#[cfg(feature = "index-64")]
+const ISIZE_RANGE: &str = "isize can represent values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807";
+
+/// Hex range description for usize based on index-64 feature.
+#[cfg(not(feature = "index-64"))]
+const USIZE_HEX_RANGE: &str = "usize can represent hex values from 0x00000000 to 0xFFFFFFFF";
+#[cfg(feature = "index-64")]
+const USIZE_HEX_RANGE: &str = "usize can represent hex values from 0x0000000000000000 to 0xFFFFFFFFFFFFFFFF";
+
+/// Hex range description for isize based on index-64 feature.
+#[cfg(not(feature = "index-64"))]
+const ISIZE_HEX_RANGE: &str = "isize can represent hex values from -0x80000000 to 0x7FFFFFFF";
+#[cfg(feature = "index-64")]
+const ISIZE_HEX_RANGE: &str = "isize can represent hex values from -0x8000000000000000 to 0x7FFFFFFFFFFFFFFF";
+
 /// Get the diagnostic code and range note for an integer type.
 pub fn int_type_range_info(ty: &Type<'_>) -> (&'static str, &'static str) {
     match ty {
@@ -884,14 +908,8 @@ pub fn int_type_range_info(ty: &Type<'_>) -> (&'static str, &'static str) {
         Type::I32 => ("T010", "i32 can represent values from -2,147,483,648 to 2,147,483,647"),
         Type::U64 => ("T011", "u64 can represent values from 0 to 18,446,744,073,709,551,615"),
         Type::I64 => ("T012", "i64 can represent values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807"),
-        #[cfg(not(feature = "index-64"))]
-        Type::Usize => ("T015", "usize can represent values from 0 to 4,294,967,295"),
-        #[cfg(feature = "index-64")]
-        Type::Usize => ("T015", "usize can represent values from 0 to 18,446,744,073,709,551,615"),
-        #[cfg(not(feature = "index-64"))]
-        Type::Isize => ("T016", "isize can represent values from -2,147,483,648 to 2,147,483,647"),
-        #[cfg(feature = "index-64")]
-        Type::Isize => ("T016", "isize can represent values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807"),
+        Type::Usize => ("T015", USIZE_RANGE),
+        Type::Isize => ("T016", ISIZE_RANGE),
         Type::Int => ("T000", "int is arbitrary precision"),
         _ => ("T000", ""),
     }
@@ -908,14 +926,8 @@ pub fn hex_type_range_info(ty: &Type<'_>) -> (&'static str, &'static str) {
         Type::I16 => ("T008", "i16 can represent hex values from -0x8000 to 0x7FFF"),
         Type::I32 => ("T010", "i32 can represent hex values from -0x80000000 to 0x7FFFFFFF"),
         Type::I64 => ("T012", "i64 can represent hex values from -0x8000000000000000 to 0x7FFFFFFFFFFFFFFF"),
-        #[cfg(not(feature = "index-64"))]
-        Type::Usize => ("T015", "usize can represent hex values from 0x00000000 to 0xFFFFFFFF"),
-        #[cfg(feature = "index-64")]
-        Type::Usize => ("T015", "usize can represent hex values from 0x0000000000000000 to 0xFFFFFFFFFFFFFFFF"),
-        #[cfg(not(feature = "index-64"))]
-        Type::Isize => ("T016", "isize can represent hex values from -0x80000000 to 0x7FFFFFFF"),
-        #[cfg(feature = "index-64")]
-        Type::Isize => ("T016", "isize can represent hex values from -0x8000000000000000 to 0x7FFFFFFFFFFFFFFF"),
+        Type::Usize => ("T015", USIZE_HEX_RANGE),
+        Type::Isize => ("T016", ISIZE_HEX_RANGE),
         Type::Int => ("T000", "int is arbitrary precision"),
         Type::F32 => ("T013", "f32 bit patterns must be 32-bit hex values (0x00000000 to 0xFFFFFFFF)"),
         Type::F64 => ("T014", "f64 bit patterns must be 64-bit hex values (0x0000000000000000 to 0xFFFFFFFFFFFFFFFF)"),
