@@ -1,7 +1,6 @@
 # The Datalove Guide
 
-Datalove is
-a simple and expressive interactive scripting language &mdash;
+Datalove is an interactive scripting language &mdash;
 strongly and statically typed, but with ergonomic coercions &mdash;
 for efficient data modeling and transformation.
 
@@ -20,12 +19,12 @@ Then we'll add I/O to it &mdash; carefully.
 
 <br>
 
-<h2><center>4 things to remember about Datalove</center></h2>
+<h2><center>4 Things to Remember <br> … about Datalove</center></h2>
 
 <div class="four-things-grid">
   <div class="thing-box">
     <p>Part <em>data serialization, configuration and interchange format</em>
-       for common data types,
+       for common <em>modern</em> data types,
        with a focus on <em>numerical correctness.</em></p>
   </div>
   <div class="thing-box">
@@ -39,8 +38,8 @@ Then we'll add I/O to it &mdash; carefully.
   <div class="thing-box">
     <p>Modern compilation and execution architecture with
        <em>fully-memoized recompilation</em> and <em>rapid script iteration</em>,
-       interactive / <em>REPL</em> interpreter with <em>JIT</em>,
-       <em>compile</em> to <em>staticly-linked</em> binaries.</p>
+       interactive (<em>REPL</em>) interpreter with <em>JIT</em>,
+       <em>compiles</em> to <em>staticly-linked</em> binaries.</p>
   </div>
 </div>
 
