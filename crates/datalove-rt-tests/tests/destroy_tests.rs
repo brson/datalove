@@ -164,8 +164,8 @@ fn test_destroy_list_empty() -> AnyResult<()> {
     // Verify list is cleared.
     let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::List) };
     assert!(list_val.data.is_null());
-    assert_eq!(list_val.size, 0);
-    assert_eq!(list_val.capacity, 0);
+    assert_eq!(list_val.size, datalove_rtdt::Usize::ZERO);
+    assert_eq!(list_val.capacity, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -217,8 +217,8 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
     // Verify list is cleared.
     let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::List) };
     assert!(list_val.data.is_null());
-    assert_eq!(list_val.size, 0);
-    assert_eq!(list_val.capacity, 0);
+    assert_eq!(list_val.size, datalove_rtdt::Usize::ZERO);
+    assert_eq!(list_val.capacity, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -270,8 +270,8 @@ fn test_destroy_list_strings() -> AnyResult<()> {
     // Verify list is cleared.
     let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::List) };
     assert!(list_val.data.is_null());
-    assert_eq!(list_val.size, 0);
-    assert_eq!(list_val.capacity, 0);
+    assert_eq!(list_val.size, datalove_rtdt::Usize::ZERO);
+    assert_eq!(list_val.capacity, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -323,8 +323,8 @@ fn test_destroy_list_nested() -> AnyResult<()> {
     // Verify list is cleared.
     let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::List) };
     assert!(list_val.data.is_null());
-    assert_eq!(list_val.size, 0);
-    assert_eq!(list_val.capacity, 0);
+    assert_eq!(list_val.size, datalove_rtdt::Usize::ZERO);
+    assert_eq!(list_val.capacity, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -573,7 +573,7 @@ fn test_destroy_set_empty() -> AnyResult<()> {
     // Verify set is cleared.
     let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
     assert!(set_val.root.is_null());
-    assert_eq!(set_val.len, 0);
+    assert_eq!(set_val.len, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -628,7 +628,7 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
     // Verify set is cleared.
     let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
     assert!(set_val.root.is_null());
-    assert_eq!(set_val.len, 0);
+    assert_eq!(set_val.len, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -683,7 +683,7 @@ fn test_destroy_set_strings() -> AnyResult<()> {
     // Verify set is cleared.
     let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
     assert!(set_val.root.is_null());
-    assert_eq!(set_val.len, 0);
+    assert_eq!(set_val.len, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -738,7 +738,7 @@ fn test_destroy_set_tuples() -> AnyResult<()> {
     // Verify set is cleared.
     let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
     assert!(set_val.root.is_null());
-    assert_eq!(set_val.len, 0);
+    assert_eq!(set_val.len, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -794,7 +794,7 @@ fn test_destroy_set_large() -> AnyResult<()> {
     // Verify set is cleared.
     let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
     assert!(set_val.root.is_null());
-    assert_eq!(set_val.len, 0);
+    assert_eq!(set_val.len, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -992,7 +992,7 @@ fn test_destroy_map_empty() -> AnyResult<()> {
 
     let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
     assert!(map_val.root.is_null());
-    assert_eq!(map_val.len, 0);
+    assert_eq!(map_val.len, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1041,7 +1041,7 @@ fn test_destroy_map_primitives() -> AnyResult<()> {
 
     let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
     assert!(map_val.root.is_null());
-    assert_eq!(map_val.len, 0);
+    assert_eq!(map_val.len, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1090,7 +1090,7 @@ fn test_destroy_map_strings() -> AnyResult<()> {
 
     let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
     assert!(map_val.root.is_null());
-    assert_eq!(map_val.len, 0);
+    assert_eq!(map_val.len, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1139,7 +1139,7 @@ fn test_destroy_map_tuples() -> AnyResult<()> {
 
     let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
     assert!(map_val.root.is_null());
-    assert_eq!(map_val.len, 0);
+    assert_eq!(map_val.len, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1188,7 +1188,7 @@ fn test_destroy_map_nested() -> AnyResult<()> {
 
     let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
     assert!(map_val.root.is_null());
-    assert_eq!(map_val.len, 0);
+    assert_eq!(map_val.len, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1246,7 +1246,7 @@ fn test_destroy_map_large() -> AnyResult<()> {
 
     let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
     assert!(map_val.root.is_null());
-    assert_eq!(map_val.len, 0);
+    assert_eq!(map_val.len, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1471,8 +1471,8 @@ fn test_destroy_empty_table() -> AnyResult<()> {
     // Verify table is cleared.
     let table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
     assert!(table.data.is_null());
-    assert_eq!(table.len, 0);
-    assert_eq!(table.capacity, 0);
+    assert_eq!(table.len, datalove_rtdt::Usize::ZERO);
+    assert_eq!(table.capacity, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt2) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1514,7 +1514,7 @@ fn test_destroy_table_with_rows() -> AnyResult<()> {
     // Verify table has data.
     let table_before = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
     assert!(!table_before.data.is_null());
-    assert_eq!(table_before.len, 2);
+    assert_eq!(table_before.len, datalove_rtdt::Usize(2));
 
     // Destroy the cloned table.
     let status = unsafe {
@@ -1529,8 +1529,8 @@ fn test_destroy_table_with_rows() -> AnyResult<()> {
     // Verify table is cleared.
     let table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
     assert!(table.data.is_null());
-    assert_eq!(table.len, 0);
-    assert_eq!(table.capacity, 0);
+    assert_eq!(table.len, datalove_rtdt::Usize::ZERO);
+    assert_eq!(table.capacity, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt2) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1582,7 +1582,7 @@ fn test_destroy_table_with_strings() -> AnyResult<()> {
     // Verify table is cleared.
     let table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
     assert!(table.data.is_null());
-    assert_eq!(table.len, 0);
+    assert_eq!(table.len, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt2) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);

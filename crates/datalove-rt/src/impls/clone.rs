@@ -88,22 +88,22 @@ unsafe fn clone_impl(
             let str_in = unsafe { &*(value_in as *const rtdt::String) };
             let str_out = unsafe { &mut *(value_out as *mut rtdt::String) };
 
-            if str_in.size == 0 || str_in.data.is_null() {
+            if str_in.size == rtdt::Usize::ZERO || str_in.data.is_null() {
                 // Empty string.
                 str_out.data = std::ptr::null();
-                str_out.size = 0;
-                str_out.capacity = 0;
+                str_out.size = rtdt::Usize::ZERO;
+                str_out.capacity = rtdt::Usize::ZERO;
             } else {
                 // Allocate new string buffer.
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-                let new_data = unsafe { rt_ref.alloc.alloc(1, 1, str_in.size) };
+                let new_data = unsafe { rt_ref.alloc.alloc(1, 1, str_in.size.0) };
 
                 // Copy bytes.
                 unsafe {
                     std::ptr::copy_nonoverlapping(
                         str_in.data,
                         new_data,
-                        str_in.size as usize
+                        str_in.size.as_usize()
                     );
                 }
 
@@ -186,19 +186,19 @@ unsafe fn clone_impl(
             let elem_ty = ty.list_element_ty();
             let elem_size = elem_ty.size();
 
-            if list_in.size == 0 || list_in.data.is_null() {
+            if list_in.size == rtdt::Usize::ZERO || list_in.data.is_null() {
                 // Empty list.
                 list_out.data = std::ptr::null();
-                list_out.size = 0;
-                list_out.capacity = 0;
+                list_out.size = rtdt::Usize::ZERO;
+                list_out.capacity = rtdt::Usize::ZERO;
             } else {
                 // Allocate new list buffer.
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
                 let elem_align = elem_ty.align();
-                let new_data = unsafe { rt_ref.alloc.alloc(elem_size, elem_align, list_in.size) };
+                let new_data = unsafe { rt_ref.alloc.alloc(elem_size, elem_align, list_in.size.0) };
 
                 // Clone each element.
-                for i in 0..list_in.size {
+                for i in 0..list_in.size.0 {
                     let offset = (i as usize) * (elem_size as usize);
                     let elem_in = unsafe { list_in.data.add(offset) };
                     let elem_out = unsafe { new_data.add(offset) };
@@ -215,7 +215,7 @@ unsafe fn clone_impl(
                                 let elem_to_destroy = new_data.add(cleanup_offset);
                                 let _ = crate::impls::destroy::any_destroy_local(rt, elem_to_destroy, elem_ty.as_ptr());
                             }
-                            rt_ref.alloc.free(elem_size, elem_align, list_in.size, new_data);
+                            rt_ref.alloc.free(elem_size, elem_align, list_in.size.0, new_data);
                         }
                         return status;
                     }
@@ -236,7 +236,7 @@ unsafe fn clone_impl(
 
             if map_in.root.is_null() {
                 map_out.root = std::ptr::null();
-                map_out.len = 0;
+                map_out.len = rtdt::Usize::ZERO;
             } else {
                 let key_ty = ty.map_key_ty();
                 let value_ty = ty.map_value_ty();
@@ -269,7 +269,7 @@ unsafe fn clone_impl(
 
             if set_in.root.is_null() {
                 set_out.root = std::ptr::null();
-                set_out.len = 0;
+                set_out.len = rtdt::Usize::ZERO;
             } else {
                 let element_ty = ty.set_element_ty();
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
@@ -304,10 +304,10 @@ unsafe fn clone_impl(
             let elem_align = element_ty.align();
 
             // Empty tensor or null pointer.
-            if tensor_in.capacity_elems == 0 || tensor_in.ptr_base.is_null() {
+            if tensor_in.capacity_elems == rtdt::Usize::ZERO || tensor_in.ptr_base.is_null() {
                 tensor_out.ptr_base = std::ptr::null_mut();
-                tensor_out.offset_elems = 0;
-                tensor_out.capacity_elems = 0;
+                tensor_out.offset_elems = rtdt::Usize::ZERO;
+                tensor_out.capacity_elems = rtdt::Usize::ZERO;
                 tensor_out.shape = std::ptr::null();
                 tensor_out.strides = std::ptr::null();
                 tensor_out.layout = tensor_in.layout;
@@ -316,11 +316,11 @@ unsafe fn clone_impl(
 
                 // Allocate new data buffer.
                 let new_data = unsafe {
-                    rt_ref.alloc.alloc(elem_size, elem_align, tensor_in.capacity_elems)
+                    rt_ref.alloc.alloc(elem_size, elem_align, tensor_in.capacity_elems.0)
                 };
 
                 // Clone each element in the capacity buffer.
-                for i in 0..tensor_in.capacity_elems {
+                for i in 0..tensor_in.capacity_elems.0 {
                     let offset = (i as usize) * (elem_size as usize);
                     let elem_in = unsafe { tensor_in.ptr_base.add(offset) };
                     let elem_out = unsafe { new_data.add(offset) };
@@ -341,13 +341,13 @@ unsafe fn clone_impl(
                             rtdt::INDEX_SIZE,
                             rtdt::INDEX_ALIGN,
                             rank.into()
-                        ) as *mut rtdt::UsizeRepr;
+                        ) as *mut rtdt::Usize;
                         std::ptr::copy_nonoverlapping(
                             tensor_in.shape,
                             shape_ptr,
                             rank as usize
                         );
-                        shape_ptr as *const rtdt::UsizeRepr
+                        shape_ptr as *const rtdt::Usize
                     }
                 } else {
                     std::ptr::null()
@@ -360,13 +360,13 @@ unsafe fn clone_impl(
                             rtdt::INDEX_SIZE,
                             rtdt::INDEX_ALIGN,
                             rank.into()
-                        ) as *mut rtdt::UsizeRepr;
+                        ) as *mut rtdt::Usize;
                         std::ptr::copy_nonoverlapping(
                             tensor_in.strides,
                             strides_ptr,
                             rank as usize
                         );
-                        strides_ptr as *const rtdt::UsizeRepr
+                        strides_ptr as *const rtdt::Usize
                     }
                 } else {
                     std::ptr::null()
@@ -389,15 +389,15 @@ unsafe fn clone_impl(
             let table_in = unsafe { &*(value_in as *const rtdt::Table) };
             let table_out = unsafe { &mut *(value_out as *mut rtdt::Table) };
 
-            if table_in.len == 0 || table_in.data.is_null() {
-                table_out.len = 0;
-                table_out.capacity = 0;
+            if table_in.len == rtdt::Usize::ZERO || table_in.data.is_null() {
+                table_out.len = rtdt::Usize::ZERO;
+                table_out.capacity = rtdt::Usize::ZERO;
                 table_out.data = std::ptr::null();
                 return RtStatus::Ok;
             }
 
             let column_tydescs = crate::impls::table::collect_column_tydescs(ty);
-            let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, table_in.len);
+            let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, table_in.len.0);
             let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
 
             let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
@@ -413,14 +413,14 @@ unsafe fn clone_impl(
 
             // Clone column by column, row by row.
             for (col, col_info) in ty.table_column_tydescs().enumerate() {
-                for row in 0..table_in.len {
+                for row in 0..table_in.len.0 {
                     let src = unsafe {
                         crate::impls::table::element_ptr(
                             table_in.data,
                             &column_tydescs,
                             row,
                             col,
-                            table_in.capacity,
+                            table_in.capacity.0,
                         )
                     };
                     let dst = unsafe {
@@ -429,14 +429,14 @@ unsafe fn clone_impl(
                             &column_tydescs,
                             row,
                             col,
-                            table_in.len,
+                            table_in.len.0,
                         )
                     };
                     let status = unsafe { clone_impl(rt, src, col_info.tydesc(), dst) };
                     if status != RtStatus::Ok {
                         // Cleanup partial clone on failure.
                         for cleanup_col in 0..=col {
-                            let cleanup_end_row = if cleanup_col == col { row } else { table_in.len };
+                            let cleanup_end_row = if cleanup_col == col { row } else { table_in.len.0 };
                             for cleanup_row in 0..cleanup_end_row {
                                 let cleanup_ptr = unsafe {
                                     crate::impls::table::element_ptr_mut(
@@ -444,7 +444,7 @@ unsafe fn clone_impl(
                                         &column_tydescs,
                                         cleanup_row,
                                         cleanup_col,
-                                        table_in.len,
+                                        table_in.len.0,
                                     )
                                 };
                                 let cleanup_col_info = ty.table_column_tydescs().nth(cleanup_col).unwrap();
@@ -954,14 +954,14 @@ mod tests {
 
         let value_in = rtdt::String {
             data: std::ptr::null(),
-            size: 0,
-            capacity: 0,
+            size: rtdt::Usize::ZERO,
+            capacity: rtdt::Usize::ZERO,
         };
 
         let mut value_out = rtdt::String {
             data: std::ptr::null(),
-            size: 999,
-            capacity: 999,
+            size: rtdt::Usize(999),
+            capacity: rtdt::Usize(999),
         };
 
         let status = unsafe {
@@ -975,8 +975,8 @@ mod tests {
 
         assert_eq!(status, RtStatus::Ok);
         assert!(value_out.data.is_null());
-        assert_eq!(value_out.size, 0);
-        assert_eq!(value_out.capacity, 0);
+        assert_eq!(value_out.size, rtdt::Usize::ZERO);
+        assert_eq!(value_out.capacity, rtdt::Usize::ZERO);
     }
 
     proptest! {
@@ -1000,14 +1000,14 @@ mod tests {
 
             let value_in = rtdt::String {
                 data: str_data,
-                size: bytes.len() as rtdt::UsizeRepr,
-                capacity: bytes.len() as rtdt::UsizeRepr,
+                size: rtdt::Usize(bytes.len() as rtdt::UsizeRepr),
+                capacity: rtdt::Usize(bytes.len() as rtdt::UsizeRepr),
             };
 
             let mut value_out = rtdt::String {
                 data: std::ptr::null(),
-                size: 0,
-                capacity: 0,
+                size: rtdt::Usize::ZERO,
+                capacity: rtdt::Usize::ZERO,
             };
 
             let status = unsafe {
@@ -1125,14 +1125,14 @@ mod tests {
 
         let value_in = rtdt::List {
             data: std::ptr::null(),
-            size: 0,
-            capacity: 0,
+            size: rtdt::Usize::ZERO,
+            capacity: rtdt::Usize::ZERO,
         };
 
         let mut value_out = rtdt::List {
             data: std::ptr::null(),
-            size: 999,
-            capacity: 999,
+            size: rtdt::Usize(999),
+            capacity: rtdt::Usize(999),
         };
 
         let status = unsafe {
@@ -1146,8 +1146,8 @@ mod tests {
 
         assert_eq!(status, RtStatus::Ok);
         assert!(value_out.data.is_null());
-        assert_eq!(value_out.size, 0);
-        assert_eq!(value_out.capacity, 0);
+        assert_eq!(value_out.size, rtdt::Usize::ZERO);
+        assert_eq!(value_out.capacity, rtdt::Usize::ZERO);
     }
 
     proptest! {
@@ -1185,14 +1185,14 @@ mod tests {
 
             let value_in = rtdt::List {
                 data: list_data,
-                size: elements.len() as rtdt::UsizeRepr,
-                capacity: elements.len() as rtdt::UsizeRepr,
+                size: rtdt::Usize(elements.len() as rtdt::UsizeRepr),
+                capacity: rtdt::Usize(elements.len() as rtdt::UsizeRepr),
             };
 
             let mut value_out = rtdt::List {
                 data: std::ptr::null(),
-                size: 0,
-                capacity: 0,
+                size: rtdt::Usize::ZERO,
+                capacity: rtdt::Usize::ZERO,
             };
 
             let status = unsafe {
@@ -1360,12 +1360,12 @@ mod tests {
 
         let value_in = rtdt::Map {
             root: std::ptr::null(),
-            len: 0,
+            len: rtdt::Usize::ZERO,
         };
 
         let mut value_out = rtdt::Map {
             root: std::ptr::null(),
-            len: 999,
+            len: rtdt::Usize(999),
         };
 
         let status = unsafe {
@@ -1379,7 +1379,7 @@ mod tests {
 
         assert_eq!(status, RtStatus::Ok);
         assert!(value_out.root.is_null());
-        assert_eq!(value_out.len, 0);
+        assert_eq!(value_out.len, rtdt::Usize::ZERO);
     }
 
     #[test]
@@ -1403,12 +1403,12 @@ mod tests {
 
         let value_in = rtdt::Set {
             root: std::ptr::null(),
-            len: 0,
+            len: rtdt::Usize::ZERO,
         };
 
         let mut value_out = rtdt::Set {
             root: std::ptr::null(),
-            len: 999,
+            len: rtdt::Usize(999),
         };
 
         let status = unsafe {
@@ -1422,6 +1422,6 @@ mod tests {
 
         assert_eq!(status, RtStatus::Ok);
         assert!(value_out.root.is_null());
-        assert_eq!(value_out.len, 0);
+        assert_eq!(value_out.len, rtdt::Usize::ZERO);
     }
 }

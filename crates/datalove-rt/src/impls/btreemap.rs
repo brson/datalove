@@ -215,7 +215,7 @@ pub unsafe fn btreemap_create_impl(
         // Create an empty map (null root, zero length).
         let map_ptr = value_out as *mut Map;
         (*map_ptr).root = std::ptr::null_mut();
-        (*map_ptr).len = 0;
+        (*map_ptr).len = rtdt::Usize::ZERO;
 
         RtStatus::Ok
     }
@@ -244,7 +244,7 @@ pub unsafe fn btreemap_destroy_impl(
 
         // Clear the map struct.
         (*map_ptr).root = std::ptr::null_mut();
-        (*map_ptr).len = 0;
+        (*map_ptr).len = rtdt::Usize::ZERO;
 
         RtStatus::Ok
     }
@@ -815,7 +815,7 @@ pub unsafe fn btreemap_insert_impl(
 
             write_node_len(leaf, 1);
             (*map_ptr).root = leaf as *const MapNode;
-            (*map_ptr).len = 1;
+            (*map_ptr).len = rtdt::Usize::ONE;
 
             return RtStatus::Ok;
         }
@@ -841,7 +841,7 @@ pub unsafe fn btreemap_insert_impl(
             }
             LeafInsertResult::Inserted => {
                 // Key was inserted, increment len.
-                (*map_ptr).len += 1;
+                (*map_ptr).len += rtdt::Usize::ONE;
                 RtStatus::Ok
             }
             LeafInsertResult::NeedsSplit => {
@@ -864,7 +864,7 @@ pub unsafe fn btreemap_insert_impl(
                 );
 
                 if status == RtStatus::Ok && was_inserted {
-                    (*map_ptr).len += 1;
+                    (*map_ptr).len += rtdt::Usize::ONE;
                 }
                 status
             }
@@ -1759,12 +1759,12 @@ pub unsafe fn btreemap_remove_impl(
                 RtStatus::Ok
             }
             RemoveResult::Removed => {
-                (*map_ptr).len -= 1;
+                (*map_ptr).len -= rtdt::Usize::ONE;
                 RtStatus::Ok
             }
             RemoveResult::Underflow => {
                 // Root underflowed.
-                (*map_ptr).len -= 1;
+                (*map_ptr).len -= rtdt::Usize::ONE;
 
                 let root_len = read_node_len(root);
                 if root_len == 0 {
@@ -1983,7 +1983,7 @@ pub unsafe fn btreemap_build_from_sorted_slices(
         // Handle empty case.
         if num_entries == 0 || keys_ptr.is_null() || values_ptr.is_null() {
             (*map_out).root = std::ptr::null();
-            (*map_out).len = 0;
+            (*map_out).len = rtdt::Usize::ZERO;
             return RtStatus::Ok;
         }
 
@@ -2044,7 +2044,7 @@ pub unsafe fn btreemap_build_from_sorted_slices(
         // If only one leaf, it's the root.
         if leaves.len() == 1 {
             (*map_out).root = leaves[0] as *const MapNode;
-            (*map_out).len = num_entries;
+            (*map_out).len = rtdt::Usize(num_entries);
             return RtStatus::Ok;
         }
 
@@ -2056,7 +2056,7 @@ pub unsafe fn btreemap_build_from_sorted_slices(
             let num_nodes = current_level.len();
             if num_nodes == 1 {
                 (*map_out).root = current_level[0] as *const MapNode;
-                (*map_out).len = num_entries;
+                (*map_out).len = rtdt::Usize(num_entries);
                 return RtStatus::Ok;
             }
 

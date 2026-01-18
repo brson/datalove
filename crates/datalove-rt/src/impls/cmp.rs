@@ -386,15 +386,15 @@ unsafe fn eq_value(
                 let str_b = &*(value_b as *const rtdt::String);
 
                 // Handle empty strings (size 0, data can be null).
-                if str_a.size == 0 && str_b.size == 0 {
+                if str_a.size == rtdt::Usize::ZERO && str_b.size == rtdt::Usize::ZERO {
                     return true;
                 }
                 if str_a.size != str_b.size {
                     return false;
                 }
 
-                let bytes_a = std::slice::from_raw_parts(str_a.data, str_a.size as usize);
-                let bytes_b = std::slice::from_raw_parts(str_b.data, str_b.size as usize);
+                let bytes_a = std::slice::from_raw_parts(str_a.data, str_a.size.as_usize());
+                let bytes_b = std::slice::from_raw_parts(str_b.data, str_b.size.as_usize());
                 bytes_a == bytes_b
             }
             rtdt::TyTag::Tuple => {
@@ -452,7 +452,7 @@ unsafe fn eq_value(
                 let element_ty = td.list_element_ty();
                 let element_size = element_ty.size() as usize;
 
-                for i in 0..list_a.size as usize {
+                for i in 0..list_a.size.as_usize() {
                     let elem_a = list_a.data.add(i * element_size);
                     let elem_b = list_b.data.add(i * element_size);
                     if !eq_value(elem_a, elem_b, element_ty, float_policy) {
@@ -525,7 +525,7 @@ unsafe fn eq_value(
                 }
 
                 // Both empty.
-                if map_a.len == 0 {
+                if map_a.len == rtdt::Usize::ZERO {
                     return true;
                 }
 
@@ -551,7 +551,7 @@ unsafe fn eq_value(
                 }
 
                 // Both empty.
-                if set_a.len == 0 {
+                if set_a.len == rtdt::Usize::ZERO {
                     return true;
                 }
 
@@ -581,7 +581,7 @@ unsafe fn eq_value(
                     }
 
                     // Compute total number of elements.
-                    let total_elems: rtdt::UsizeRepr = shape_a.iter().copied().product();
+                    let total_elems: rtdt::UsizeRepr = shape_a.iter().map(|u| u.0).product();
 
                     if total_elems == 0 {
                         return true;  // Empty tensors with matching shapes are equal.
@@ -596,16 +596,16 @@ unsafe fn eq_value(
                     let mut indices: Vec<rtdt::UsizeRepr> = vec![0; rank as usize];
                     for _ in 0..total_elems {
                         // Compute linear offset for tensor_a.
-                        let mut offset_a = tensor_a.offset_elems;
+                        let mut offset_a = tensor_a.offset_elems.0;
                         for (i, &idx) in indices.iter().enumerate() {
-                            offset_a += idx * strides_a[i];
+                            offset_a += idx * strides_a[i].0;
                         }
                         let elem_a = tensor_a.ptr_base.add((offset_a as usize) * element_size);
 
                         // Compute linear offset for tensor_b.
-                        let mut offset_b = tensor_b.offset_elems;
+                        let mut offset_b = tensor_b.offset_elems.0;
                         for (i, &idx) in indices.iter().enumerate() {
-                            offset_b += idx * strides_b[i];
+                            offset_b += idx * strides_b[i].0;
                         }
                         let elem_b = tensor_b.ptr_base.add((offset_b as usize) * element_size);
 
@@ -621,7 +621,7 @@ unsafe fn eq_value(
                                 break;
                             }
                             indices[i] += carry;
-                            if indices[i] >= shape_a[i] {
+                            if indices[i] >= shape_a[i].0 {
                                 indices[i] = 0;
                                 carry = 1;
                             } else {
@@ -636,8 +636,8 @@ unsafe fn eq_value(
                     let element_ty = td.tensor_element_ty();
                     let element_size = element_ty.size() as usize;
 
-                    let elem_a = tensor_a.ptr_base.add((tensor_a.offset_elems as usize) * element_size);
-                    let elem_b = tensor_b.ptr_base.add((tensor_b.offset_elems as usize) * element_size);
+                    let elem_a = tensor_a.ptr_base.add(tensor_a.offset_elems.as_usize() * element_size);
+                    let elem_b = tensor_b.ptr_base.add(tensor_b.offset_elems.as_usize() * element_size);
 
                     eq_value(elem_a, elem_b, element_ty, float_policy)
                 }
@@ -652,28 +652,28 @@ unsafe fn eq_value(
                 }
 
                 // Empty tables are equal.
-                if table_a.len == 0 {
+                if table_a.len == rtdt::Usize::ZERO {
                     return true;
                 }
 
                 let column_tydescs = crate::impls::table::collect_column_tydescs(td);
 
                 // Compare element-by-element, row-major order.
-                for row in 0..table_a.len {
+                for row in 0..table_a.len.0 {
                     for (col, col_info) in td.table_column_tydescs().enumerate() {
                         let elem_a = crate::impls::table::element_ptr(
                             table_a.data,
                             &column_tydescs,
                             row,
                             col,
-                            table_a.capacity,
+                            table_a.capacity.0,
                         );
                         let elem_b = crate::impls::table::element_ptr(
                             table_b.data,
                             &column_tydescs,
                             row,
                             col,
-                            table_b.capacity,
+                            table_b.capacity.0,
                         );
                         if !eq_value(elem_a, elem_b, col_info.tydesc(), float_policy) {
                             return false;
@@ -998,18 +998,18 @@ unsafe fn cmp_value(
                 let str_b = &*(value_b as *const rtdt::String);
 
                 // Handle empty strings (size 0, data can be null).
-                if str_a.size == 0 && str_b.size == 0 {
+                if str_a.size == rtdt::Usize::ZERO && str_b.size == rtdt::Usize::ZERO {
                     return crate::c::RtOrdering::Equal;
                 }
-                if str_a.size == 0 {
+                if str_a.size == rtdt::Usize::ZERO {
                     return crate::c::RtOrdering::Less;
                 }
-                if str_b.size == 0 {
+                if str_b.size == rtdt::Usize::ZERO {
                     return crate::c::RtOrdering::Greater;
                 }
 
-                let bytes_a = std::slice::from_raw_parts(str_a.data, str_a.size as usize);
-                let bytes_b = std::slice::from_raw_parts(str_b.data, str_b.size as usize);
+                let bytes_a = std::slice::from_raw_parts(str_a.data, str_a.size.as_usize());
+                let bytes_b = std::slice::from_raw_parts(str_b.data, str_b.size.as_usize());
 
                 // Lexicographic comparison.
                 match bytes_a.cmp(bytes_b) {
@@ -1083,7 +1083,7 @@ unsafe fn cmp_value(
                 let element_size = element_ty.size() as usize;
 
                 // Lexicographic comparison.
-                let min_size = list_a.size.min(list_b.size) as usize;
+                let min_size = list_a.size.min(list_b.size).as_usize();
                 for i in 0..min_size {
                     let elem_a = list_a.data.add(i * element_size);
                     let elem_b = list_b.data.add(i * element_size);
@@ -1215,7 +1215,7 @@ unsafe fn cmp_value(
                     }
 
                     // Shapes are equal, compare elements.
-                    let total_elems: rtdt::UsizeRepr = shape_a.iter().copied().product();
+                    let total_elems: rtdt::UsizeRepr = shape_a.iter().map(|u| u.0).product();
 
                     if total_elems == 0 {
                         return crate::c::RtOrdering::Equal;  // Empty tensors with matching shapes are equal.
@@ -1230,16 +1230,16 @@ unsafe fn cmp_value(
                     let mut indices: Vec<rtdt::UsizeRepr> = vec![0; rank as usize];
                     for _ in 0..total_elems {
                         // Compute linear offset for tensor_a.
-                        let mut offset_a = tensor_a.offset_elems;
+                        let mut offset_a = tensor_a.offset_elems.0;
                         for (i, &idx) in indices.iter().enumerate() {
-                            offset_a += idx * strides_a[i];
+                            offset_a += idx * strides_a[i].0;
                         }
                         let elem_a = tensor_a.ptr_base.add((offset_a as usize) * element_size);
 
                         // Compute linear offset for tensor_b.
-                        let mut offset_b = tensor_b.offset_elems;
+                        let mut offset_b = tensor_b.offset_elems.0;
                         for (i, &idx) in indices.iter().enumerate() {
-                            offset_b += idx * strides_b[i];
+                            offset_b += idx * strides_b[i].0;
                         }
                         let elem_b = tensor_b.ptr_base.add((offset_b as usize) * element_size);
 
@@ -1261,7 +1261,7 @@ unsafe fn cmp_value(
                                 break;
                             }
                             indices[i] += carry;
-                            if indices[i] >= shape_a[i] {
+                            if indices[i] >= shape_a[i].0 {
                                 indices[i] = 0;
                                 carry = 1;
                             } else {
@@ -1276,8 +1276,8 @@ unsafe fn cmp_value(
                     let element_ty = td.tensor_element_ty();
                     let element_size = element_ty.size() as usize;
 
-                    let elem_a = tensor_a.ptr_base.add((tensor_a.offset_elems as usize) * element_size);
-                    let elem_b = tensor_b.ptr_base.add((tensor_b.offset_elems as usize) * element_size);
+                    let elem_a = tensor_a.ptr_base.add(tensor_a.offset_elems.as_usize() * element_size);
+                    let elem_b = tensor_b.ptr_base.add(tensor_b.offset_elems.as_usize() * element_size);
 
                     cmp_value(elem_a, elem_b, element_ty, float_policy)
                 }
@@ -1287,7 +1287,7 @@ unsafe fn cmp_value(
                 let table_b = &*(value_b as *const rtdt::Table);
 
                 let column_tydescs = crate::impls::table::collect_column_tydescs(td);
-                let min_len = table_a.len.min(table_b.len);
+                let min_len = table_a.len.min(table_b.len).0;
 
                 // Compare element-by-element, row-major order (lexicographic).
                 for row in 0..min_len {
@@ -1297,14 +1297,14 @@ unsafe fn cmp_value(
                             &column_tydescs,
                             row,
                             col,
-                            table_a.capacity,
+                            table_a.capacity.0,
                         );
                         let elem_b = crate::impls::table::element_ptr(
                             table_b.data,
                             &column_tydescs,
                             row,
                             col,
-                            table_b.capacity,
+                            table_b.capacity.0,
                         );
                         let ord = cmp_value(elem_a, elem_b, col_info.tydesc(), float_policy);
                         if ord != crate::c::RtOrdering::Equal {
@@ -1314,7 +1314,7 @@ unsafe fn cmp_value(
                 }
 
                 // All compared elements equal - shorter table is less.
-                match table_a.len.cmp(&table_b.len) {
+                match table_a.len.0.cmp(&table_b.len.0) {
                     std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
                     std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
                     std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,

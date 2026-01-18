@@ -145,8 +145,8 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
     // Create tensor.
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -169,19 +169,19 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
 
     // Verify tensor fields.
     assert!(!tensor.ptr_base.is_null());
-    assert_eq!(tensor.offset_elems, 0);
-    assert_eq!(tensor.capacity_elems, 5);
+    assert_eq!(tensor.offset_elems, rtdt::Usize::ZERO);
+    assert_eq!(tensor.capacity_elems, rtdt::Usize(5));
     assert!(!tensor.shape.is_null());
     assert!(!tensor.strides.is_null());
     assert_eq!(tensor.layout, rtdt::TensorLayout::RowMajor);
 
     // Verify shape.
     let shape = unsafe { std::slice::from_raw_parts(tensor.shape, 1) };
-    assert_eq!(shape[0], 5);
+    assert_eq!(shape[0], rtdt::Usize(5));
 
     // Verify strides (1D row-major: [1]).
     let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 1) };
-    assert_eq!(strides[0], 1);
+    assert_eq!(strides[0], rtdt::Usize(1));
 
     // Verify data.
     let data = unsafe {
@@ -201,8 +201,8 @@ fn test_tensor_create_from_slice_1d() -> AnyResult<()> {
 
     // Verify tensor is cleared.
     assert!(tensor.ptr_base.is_null());
-    assert_eq!(tensor.offset_elems, 0);
-    assert_eq!(tensor.capacity_elems, 0);
+    assert_eq!(tensor.offset_elems, rtdt::Usize::ZERO);
+    assert_eq!(tensor.capacity_elems, rtdt::Usize::ZERO);
     assert!(tensor.shape.is_null());
     assert!(tensor.strides.is_null());
 
@@ -232,8 +232,8 @@ fn test_tensor_create_from_slice_2d_row_major() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -256,17 +256,17 @@ fn test_tensor_create_from_slice_2d_row_major() -> AnyResult<()> {
 
     // Verify tensor fields.
     assert!(!tensor.ptr_base.is_null());
-    assert_eq!(tensor.offset_elems, 0);
-    assert_eq!(tensor.capacity_elems, 6);
+    assert_eq!(tensor.offset_elems, rtdt::Usize::ZERO);
+    assert_eq!(tensor.capacity_elems, rtdt::Usize(6));
     assert_eq!(tensor.layout, rtdt::TensorLayout::RowMajor);
 
     // Verify shape: [2, 3]
     let shape = unsafe { std::slice::from_raw_parts(tensor.shape, 2) };
-    assert_eq!(shape, &[2, 3]);
+    assert_eq!(shape, &[rtdt::Usize(2), rtdt::Usize(3)]);
 
     // Verify strides (row-major [2, 3]: [3, 1]).
     let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 2) };
-    assert_eq!(strides, &[3, 1]);
+    assert_eq!(strides, &[rtdt::Usize(3), rtdt::Usize(1)]);
 
     // Verify data.
     let data = unsafe {
@@ -310,8 +310,8 @@ fn test_tensor_create_from_slice_2d_col_major() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::ColMajor,
@@ -334,17 +334,17 @@ fn test_tensor_create_from_slice_2d_col_major() -> AnyResult<()> {
 
     // Verify tensor fields.
     assert!(!tensor.ptr_base.is_null());
-    assert_eq!(tensor.offset_elems, 0);
-    assert_eq!(tensor.capacity_elems, 6);
+    assert_eq!(tensor.offset_elems, rtdt::Usize::ZERO);
+    assert_eq!(tensor.capacity_elems, rtdt::Usize(6));
     assert_eq!(tensor.layout, rtdt::TensorLayout::ColMajor);
 
     // Verify shape: [2, 3]
     let shape = unsafe { std::slice::from_raw_parts(tensor.shape, 2) };
-    assert_eq!(shape, &[2, 3]);
+    assert_eq!(shape, &[rtdt::Usize(2), rtdt::Usize(3)]);
 
     // Verify strides (col-major [2, 3]: [1, 2]).
     let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 2) };
-    assert_eq!(strides, &[1, 2]);
+    assert_eq!(strides, &[rtdt::Usize(1), rtdt::Usize(2)]);
 
     // Clean up.
     let status = unsafe {
@@ -382,8 +382,8 @@ fn test_tensor_create_from_slice_3d() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -406,17 +406,17 @@ fn test_tensor_create_from_slice_3d() -> AnyResult<()> {
 
     // Verify tensor fields.
     assert!(!tensor.ptr_base.is_null());
-    assert_eq!(tensor.offset_elems, 0);
-    assert_eq!(tensor.capacity_elems, 24);
+    assert_eq!(tensor.offset_elems, rtdt::Usize::ZERO);
+    assert_eq!(tensor.capacity_elems, rtdt::Usize(24));
     assert_eq!(tensor.layout, rtdt::TensorLayout::RowMajor);
 
     // Verify shape: [2, 3, 4]
     let shape = unsafe { std::slice::from_raw_parts(tensor.shape, 3) };
-    assert_eq!(shape, &[2, 3, 4]);
+    assert_eq!(shape, &[rtdt::Usize(2), rtdt::Usize(3), rtdt::Usize(4)]);
 
     // Verify strides (row-major [2, 3, 4]: [12, 4, 1]).
     let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 3) };
-    assert_eq!(strides, &[12, 4, 1]);
+    assert_eq!(strides, &[rtdt::Usize(12), rtdt::Usize(4), rtdt::Usize(1)]);
 
     // Verify data.
     let data = unsafe {
@@ -464,8 +464,8 @@ fn test_tensor_create_mismatched_length() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -523,8 +523,8 @@ fn test_multiple_tensors() -> AnyResult<()> {
 
         let mut tensor = rtdt::Tensor {
             ptr_base: ptr::null_mut(),
-            offset_elems: 0,
-            capacity_elems: 0,
+            offset_elems: rtdt::Usize::ZERO,
+            capacity_elems: rtdt::Usize::ZERO,
             shape: ptr::null(),
             strides: ptr::null(),
             layout: rtdt::TensorLayout::RowMajor,
@@ -599,8 +599,8 @@ fn test_tensor_get_1d() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: std::ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: std::ptr::null(),
         strides: std::ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -688,8 +688,8 @@ fn test_tensor_get_2d() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: std::ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: std::ptr::null(),
         strides: std::ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -783,8 +783,8 @@ fn test_tensor_get_3d() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: std::ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: std::ptr::null(),
         strides: std::ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -879,8 +879,8 @@ fn test_tensor_get_out_of_bounds() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: std::ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: std::ptr::null(),
         strides: std::ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -961,8 +961,8 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: std::ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: std::ptr::null(),
         strides: std::ptr::null(),
         layout: rtdt::TensorLayout::ColMajor,
@@ -985,7 +985,7 @@ fn test_tensor_get_col_major() -> AnyResult<()> {
 
     // Verify strides are [1, 2] for column-major.
     let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 2) };
-    assert_eq!(strides, &[1, 2]);
+    assert_eq!(strides, &[rtdt::Usize(1), rtdt::Usize(2)]);
 
     // Test specific elements.
     // For col-major with shape [2, 3] and strides [1, 2]:
@@ -1066,8 +1066,8 @@ fn test_tensor_set_1d() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: std::ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: std::ptr::null(),
         strides: std::ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -1173,8 +1173,8 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: std::ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: std::ptr::null(),
         strides: std::ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -1289,8 +1289,8 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: std::ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: std::ptr::null(),
         strides: std::ptr::null(),
         layout: rtdt::TensorLayout::ColMajor,
@@ -1388,8 +1388,8 @@ fn test_tensor_set_3d() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: std::ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: std::ptr::null(),
         strides: std::ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -1495,8 +1495,8 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: std::ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: std::ptr::null(),
         strides: std::ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -1579,8 +1579,8 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -1608,8 +1608,8 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
     let perm = [1u32, 0];
     let mut transposed = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -1634,11 +1634,11 @@ fn test_tensor_transpose_2d_row_major() -> AnyResult<()> {
 
     // Verify transposed shape is [3, 2].
     let shape = unsafe { std::slice::from_raw_parts(transposed.shape, 2) };
-    assert_eq!(shape, &[3, 2]);
+    assert_eq!(shape, &[rtdt::Usize(3), rtdt::Usize(2)]);
 
     // Verify transposed strides are [1, 3] (swapped from [3, 1]).
     let strides = unsafe { std::slice::from_raw_parts(transposed.strides, 2) };
-    assert_eq!(strides, &[1, 3]);
+    assert_eq!(strides, &[rtdt::Usize(1), rtdt::Usize(3)]);
 
     // Verify layout changed to ColMajorTransposed.
     assert_eq!(transposed.layout, rtdt::TensorLayout::ColMajorTransposed);
@@ -1716,8 +1716,8 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::ColMajor,
@@ -1742,8 +1742,8 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
     let perm = [1u32, 0];
     let mut transposed = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::ColMajor,
@@ -1763,11 +1763,11 @@ fn test_tensor_transpose_2d_col_major() -> AnyResult<()> {
 
     // Verify transposed shape is [3, 2].
     let shape = unsafe { std::slice::from_raw_parts(transposed.shape, 2) };
-    assert_eq!(shape, &[3, 2]);
+    assert_eq!(shape, &[rtdt::Usize(3), rtdt::Usize(2)]);
 
     // Verify transposed strides are [2, 1] (swapped from [1, 2]).
     let strides = unsafe { std::slice::from_raw_parts(transposed.strides, 2) };
-    assert_eq!(strides, &[2, 1]);
+    assert_eq!(strides, &[rtdt::Usize(2), rtdt::Usize(1)]);
 
     // Verify layout changed to RowMajorTransposed.
     assert_eq!(transposed.layout, rtdt::TensorLayout::RowMajorTransposed);
@@ -1806,8 +1806,8 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -1832,8 +1832,8 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
     let perm = [2u32, 0, 1];
     let mut transposed = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -1853,11 +1853,11 @@ fn test_tensor_transpose_3d() -> AnyResult<()> {
 
     // Verify transposed shape is [4, 2, 3].
     let shape = unsafe { std::slice::from_raw_parts(transposed.shape, 3) };
-    assert_eq!(shape, &[4, 2, 3]);
+    assert_eq!(shape, &[rtdt::Usize(4), rtdt::Usize(2), rtdt::Usize(3)]);
 
     // Verify transposed strides are [1, 12, 4] (permutation of [12, 4, 1]).
     let strides = unsafe { std::slice::from_raw_parts(transposed.strides, 3) };
-    assert_eq!(strides, &[1, 12, 4]);
+    assert_eq!(strides, &[rtdt::Usize(1), rtdt::Usize(12), rtdt::Usize(4)]);
 
     // Clean up.
     let status = unsafe {
@@ -1893,8 +1893,8 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -1919,8 +1919,8 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
     let perm = [0u32, 1];
     let mut transposed = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -1940,11 +1940,11 @@ fn test_tensor_transpose_identity() -> AnyResult<()> {
 
     // Verify shape is unchanged [2, 3].
     let shape = unsafe { std::slice::from_raw_parts(transposed.shape, 2) };
-    assert_eq!(shape, &[2, 3]);
+    assert_eq!(shape, &[rtdt::Usize(2), rtdt::Usize(3)]);
 
     // Verify strides are unchanged [3, 1].
     let strides = unsafe { std::slice::from_raw_parts(transposed.strides, 2) };
-    assert_eq!(strides, &[3, 1]);
+    assert_eq!(strides, &[rtdt::Usize(3), rtdt::Usize(1)]);
 
     // Layout should be unchanged (not a standard transpose).
     assert_eq!(transposed.layout, rtdt::TensorLayout::RowMajor);
@@ -1983,8 +1983,8 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -2009,8 +2009,8 @@ fn test_tensor_transpose_invalid_permutation_out_of_bounds() -> AnyResult<()> {
     let perm = [0u32, 2];  // 2 is out of bounds for rank 2.
     let mut transposed = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -2065,8 +2065,8 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -2091,8 +2091,8 @@ fn test_tensor_transpose_invalid_permutation_duplicates() -> AnyResult<()> {
     let perm = [0u32, 0];
     let mut transposed = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -2144,8 +2144,8 @@ fn test_tensor_get_clones_and_caller_destroys() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: std::ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: std::ptr::null(),
         strides: std::ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -2302,8 +2302,8 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -2363,20 +2363,20 @@ fn test_tensor_slice_2d_valid() -> AnyResult<()> {
 
     // Verify sliced tensor properties.
     assert!(!sliced_tensor.ptr_base.is_null());
-    assert_eq!(sliced_tensor.offset_elems, 1 * 5 + 2); // offset = 7
-    assert_eq!(sliced_tensor.capacity_elems, 20);
+    assert_eq!(sliced_tensor.offset_elems, rtdt::Usize(1 * 5 + 2)); // offset = 7
+    assert_eq!(sliced_tensor.capacity_elems, rtdt::Usize(20));
     assert!(!sliced_tensor.shape.is_null());
     assert!(!sliced_tensor.strides.is_null());
 
     // Verify new shape: [2, 3]
     let shape = unsafe { std::slice::from_raw_parts(sliced_tensor.shape, 2) };
-    assert_eq!(shape[0], 2);
-    assert_eq!(shape[1], 3);
+    assert_eq!(shape[0], rtdt::Usize(2));
+    assert_eq!(shape[1], rtdt::Usize(3));
 
     // Verify strides unchanged: [5, 1]
     let strides = unsafe { std::slice::from_raw_parts(sliced_tensor.strides, 2) };
-    assert_eq!(strides[0], 5);
-    assert_eq!(strides[1], 1);
+    assert_eq!(strides[0], rtdt::Usize(5));
+    assert_eq!(strides[1], rtdt::Usize(1));
 
     // Destroy sliced tensor.
     let mut sliced_tensor_copy = unsafe { ptr::read(sliced_tensor) };
@@ -2412,8 +2412,8 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -2469,10 +2469,10 @@ fn test_tensor_slice_2d_full_range() -> AnyResult<()> {
 
     // Verify shape unchanged: [2, 3]
     let shape = unsafe { std::slice::from_raw_parts(sliced_tensor.shape, 2) };
-    assert_eq!(shape, &[2, 3]);
+    assert_eq!(shape, &[rtdt::Usize(2), rtdt::Usize(3)]);
 
     // Verify offset is still 0.
-    assert_eq!(sliced_tensor.offset_elems, 0);
+    assert_eq!(sliced_tensor.offset_elems, rtdt::Usize::ZERO);
 
     // Cleanup.
     let mut sliced_tensor_copy = unsafe { ptr::read(sliced_tensor) };
@@ -2508,8 +2508,8 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -2563,10 +2563,10 @@ fn test_tensor_slice_2d_single_element() -> AnyResult<()> {
 
     // Verify shape: [1, 1]
     let shape = unsafe { std::slice::from_raw_parts(sliced_tensor.shape, 2) };
-    assert_eq!(shape, &[1, 1]);
+    assert_eq!(shape, &[rtdt::Usize(1), rtdt::Usize(1)]);
 
     // Verify offset: 1*4 + 2 = 6
-    assert_eq!(sliced_tensor.offset_elems, 6);
+    assert_eq!(sliced_tensor.offset_elems, rtdt::Usize(6));
 
     // Cleanup.
     let mut sliced_tensor_copy = unsafe { ptr::read(sliced_tensor) };
@@ -2602,8 +2602,8 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -2662,7 +2662,7 @@ fn test_tensor_slice_2d_invalid_range_start_ge_end() -> AnyResult<()> {
 
     // Verify it's the original tensor.
     assert!(!error_tensor.ptr_base.is_null());
-    assert_eq!(error_tensor.offset_elems, 0);
+    assert_eq!(error_tensor.offset_elems, rtdt::Usize::ZERO);
 
     // Destroy the tensor from the error.
     let mut error_tensor_copy = unsafe { ptr::read(error_tensor) };
@@ -2698,8 +2698,8 @@ fn test_tensor_slice_2d_out_of_bounds() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -2787,8 +2787,8 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -2843,14 +2843,14 @@ fn test_tensor_slice_3d() -> AnyResult<()> {
 
     // Verify shape: [2, 2, 2]
     let shape = unsafe { std::slice::from_raw_parts(sliced_tensor.shape, 3) };
-    assert_eq!(shape, &[2, 2, 2]);
+    assert_eq!(shape, &[rtdt::Usize(2), rtdt::Usize(2), rtdt::Usize(2)]);
 
     // Verify offset: 0*12 + 1*4 + 1 = 5
-    assert_eq!(sliced_tensor.offset_elems, 5);
+    assert_eq!(sliced_tensor.offset_elems, rtdt::Usize(5));
 
     // Verify strides unchanged: [12, 4, 1]
     let strides = unsafe { std::slice::from_raw_parts(sliced_tensor.strides, 3) };
-    assert_eq!(strides, &[12, 4, 1]);
+    assert_eq!(strides, &[rtdt::Usize(12), rtdt::Usize(4), rtdt::Usize(1)]);
 
     // Cleanup.
     let mut sliced_tensor_copy = unsafe { ptr::read(sliced_tensor) };
@@ -2891,8 +2891,8 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -2951,14 +2951,14 @@ fn test_tensor_reshape_2d_to_3d() -> AnyResult<()> {
 
     // Verify new shape: [3, 4, 5]
     let shape = unsafe { std::slice::from_raw_parts(reshaped_tensor.shape, 3) };
-    assert_eq!(shape, &[3, 4, 5]);
+    assert_eq!(shape, &[rtdt::Usize(3), rtdt::Usize(4), rtdt::Usize(5)]);
 
     // Verify strides (row-major: [20, 5, 1]).
     let strides = unsafe { std::slice::from_raw_parts(reshaped_tensor.strides, 3) };
-    assert_eq!(strides, &[20, 5, 1]);
+    assert_eq!(strides, &[rtdt::Usize(20), rtdt::Usize(5), rtdt::Usize(1)]);
 
     // Verify offset is 0.
-    assert_eq!(reshaped_tensor.offset_elems, 0);
+    assert_eq!(reshaped_tensor.offset_elems, rtdt::Usize::ZERO);
 
     // Verify layout preserved.
     assert_eq!(reshaped_tensor.layout, rtdt::TensorLayout::RowMajor);
@@ -2997,8 +2997,8 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -3056,7 +3056,7 @@ fn test_tensor_reshape_error_size_mismatch() -> AnyResult<()> {
 
     // Verify it's the original tensor with shape [6, 10].
     let shape = unsafe { std::slice::from_raw_parts(error_tensor.shape, 2) };
-    assert_eq!(shape, &[6, 10]);
+    assert_eq!(shape, &[rtdt::Usize(6), rtdt::Usize(10)]);
 
     // Clean up.
     let mut error_tensor_copy = unsafe { ptr::read(error_tensor) };
@@ -3092,8 +3092,8 @@ fn test_tensor_reshape_error_non_contiguous() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -3223,8 +3223,8 @@ fn test_tensor_create_empty_shape() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -3273,8 +3273,8 @@ fn test_tensor_reshape_empty_new_shape() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -3364,8 +3364,8 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -3422,7 +3422,7 @@ fn test_tensor_reshape_sliced_tensor() -> AnyResult<()> {
     let mut sliced_tensor = unsafe { ptr::read(sliced_tensor_ptr) };
 
     // Verify offset is non-zero.
-    assert!(sliced_tensor.offset_elems > 0);
+    assert!(sliced_tensor.offset_elems > rtdt::Usize::ZERO);
 
     // Try to reshape the sliced tensor (should fail because offset != 0).
     let mut new_shape_list = unsafe {
@@ -3485,8 +3485,8 @@ fn test_tensor_destroy_already_cleared() -> AnyResult<()> {
     // Create a tensor with all null fields.
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -3528,8 +3528,8 @@ fn test_tensor_slice_rank_zero_tydesc() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -3619,8 +3619,8 @@ fn test_tensor_reshape_rank_zero_tensor_tydesc() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -3710,8 +3710,8 @@ fn test_tensor_transpose_rank_zero_tydesc() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -3736,8 +3736,8 @@ fn test_tensor_transpose_rank_zero_tydesc() -> AnyResult<()> {
     let perm: [u32; 0] = [];
     let mut tensor_out = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -3789,8 +3789,8 @@ fn test_tensor_reshape_col_major() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::ColMajor,
@@ -3813,8 +3813,8 @@ fn test_tensor_reshape_col_major() -> AnyResult<()> {
 
     // Verify col-major strides.
     let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 2) };
-    assert_eq!(strides[0], 1);  // Col-major: first dim stride = 1.
-    assert_eq!(strides[1], 2);  // Col-major: second dim stride = product of prior dims.
+    assert_eq!(strides[0], rtdt::Usize(1));  // Col-major: first dim stride = 1.
+    assert_eq!(strides[1], rtdt::Usize(2));  // Col-major: second dim stride = product of prior dims.
 
     // Reshape to 3x2 (same total elements).
     let mut new_shape_list = unsafe {
@@ -3853,13 +3853,13 @@ fn test_tensor_reshape_col_major() -> AnyResult<()> {
 
     // Verify new shape is [3, 2].
     let new_shape = unsafe { std::slice::from_raw_parts(reshaped_tensor.shape, 2) };
-    assert_eq!(new_shape[0], 3);
-    assert_eq!(new_shape[1], 2);
+    assert_eq!(new_shape[0], rtdt::Usize(3));
+    assert_eq!(new_shape[1], rtdt::Usize(2));
 
     // Verify col-major strides for new shape [3, 2]: [1, 3].
     let new_strides = unsafe { std::slice::from_raw_parts(reshaped_tensor.strides, 2) };
-    assert_eq!(new_strides[0], 1);
-    assert_eq!(new_strides[1], 3);
+    assert_eq!(new_strides[0], rtdt::Usize(1));
+    assert_eq!(new_strides[1], rtdt::Usize(3));
 
     // Clean up.
     let status = unsafe {
@@ -3898,8 +3898,8 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -3922,15 +3922,15 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
 
     // Verify original strides: [12, 4, 1] (row-major for [2, 3, 4]).
     let strides_before = unsafe { std::slice::from_raw_parts(tensor.strides, 3) };
-    assert_eq!(strides_before, &[12, 4, 1]);
+    assert_eq!(strides_before, &[rtdt::Usize(12), rtdt::Usize(4), rtdt::Usize(1)]);
 
     // Transpose with perm [1, 2, 0] -> shape becomes [3, 4, 2].
     // Strides become [4, 1, 12] (permuted from [12, 4, 1]).
     let perm = [1u32, 2, 0];
     let mut transposed = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajor,
@@ -3950,17 +3950,17 @@ fn test_tensor_reshape_3d_transposed_non_contiguous() -> AnyResult<()> {
 
     // Verify transposed shape is [3, 4, 2].
     let shape = unsafe { std::slice::from_raw_parts(transposed.shape, 3) };
-    assert_eq!(shape, &[3, 4, 2]);
+    assert_eq!(shape, &[rtdt::Usize(3), rtdt::Usize(4), rtdt::Usize(2)]);
 
     // Verify transposed strides: [4, 1, 12].
     // Row-major for [3, 4, 2] would be [8, 2, 1].
     // Col-major for [3, 4, 2] would be [1, 3, 12].
     // [4, 1, 12] is neither!
     let strides_after = unsafe { std::slice::from_raw_parts(transposed.strides, 3) };
-    assert_eq!(strides_after, &[4, 1, 12]);
+    assert_eq!(strides_after, &[rtdt::Usize(4), rtdt::Usize(1), rtdt::Usize(12)]);
 
     // Verify offset_elems is still 0.
-    assert_eq!(transposed.offset_elems, 0);
+    assert_eq!(transposed.offset_elems, rtdt::Usize::ZERO);
 
     // Now try to reshape to [24] - this should fail the contiguity check.
     let mut new_shape_list = unsafe {
@@ -4037,8 +4037,8 @@ fn test_tensor_create_row_major_transposed() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::RowMajorTransposed,
@@ -4065,12 +4065,12 @@ fn test_tensor_create_row_major_transposed() -> AnyResult<()> {
 
     // Verify shape.
     let shape = unsafe { std::slice::from_raw_parts(tensor.shape, 2) };
-    assert_eq!(shape, &[2, 3]);
+    assert_eq!(shape, &[rtdt::Usize(2), rtdt::Usize(3)]);
 
     // RowMajorTransposed uses col-major strides: [1, 2].
     let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 2) };
-    assert_eq!(strides[0], 1);
-    assert_eq!(strides[1], 2);
+    assert_eq!(strides[0], rtdt::Usize(1));
+    assert_eq!(strides[1], rtdt::Usize(2));
 
     // Clean up.
     let status = unsafe {
@@ -4107,8 +4107,8 @@ fn test_tensor_create_col_major_transposed() -> AnyResult<()> {
 
     let mut tensor = rtdt::Tensor {
         ptr_base: ptr::null_mut(),
-        offset_elems: 0,
-        capacity_elems: 0,
+        offset_elems: rtdt::Usize::ZERO,
+        capacity_elems: rtdt::Usize::ZERO,
         shape: ptr::null(),
         strides: ptr::null(),
         layout: rtdt::TensorLayout::ColMajorTransposed,
@@ -4135,12 +4135,12 @@ fn test_tensor_create_col_major_transposed() -> AnyResult<()> {
 
     // Verify shape.
     let shape = unsafe { std::slice::from_raw_parts(tensor.shape, 2) };
-    assert_eq!(shape, &[2, 3]);
+    assert_eq!(shape, &[rtdt::Usize(2), rtdt::Usize(3)]);
 
     // ColMajorTransposed uses row-major strides: [3, 1].
     let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 2) };
-    assert_eq!(strides[0], 3);
-    assert_eq!(strides[1], 1);
+    assert_eq!(strides[0], rtdt::Usize(3));
+    assert_eq!(strides[1], rtdt::Usize(1));
 
     // Clean up.
     let status = unsafe {
@@ -4183,8 +4183,8 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
 
         let mut tensor = rtdt::Tensor {
             ptr_base: ptr::null_mut(),
-            offset_elems: 0,
-            capacity_elems: 0,
+            offset_elems: rtdt::Usize::ZERO,
+            capacity_elems: rtdt::Usize::ZERO,
             shape: ptr::null(),
             strides: ptr::null(),
             layout: rtdt::TensorLayout::RowMajor,
@@ -4209,8 +4209,8 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
         let perm = [1u32, 0];
         let mut transposed = rtdt::Tensor {
             ptr_base: ptr::null_mut(),
-            offset_elems: 0,
-            capacity_elems: 0,
+            offset_elems: rtdt::Usize::ZERO,
+            capacity_elems: rtdt::Usize::ZERO,
             shape: ptr::null(),
             strides: ptr::null(),
             layout: rtdt::TensorLayout::RowMajor,
@@ -4231,7 +4231,7 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
 
         // Verify shape is swapped.
         let shape = unsafe { std::slice::from_raw_parts(transposed.shape, 2) };
-        assert_eq!(shape, &[3, 2]);
+        assert_eq!(shape, &[rtdt::Usize(3), rtdt::Usize(2)]);
 
         // Clean up.
         let status = unsafe {
@@ -4253,8 +4253,8 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
 
         let mut tensor = rtdt::Tensor {
             ptr_base: ptr::null_mut(),
-            offset_elems: 0,
-            capacity_elems: 0,
+            offset_elems: rtdt::Usize::ZERO,
+            capacity_elems: rtdt::Usize::ZERO,
             shape: ptr::null(),
             strides: ptr::null(),
             layout: rtdt::TensorLayout::ColMajorTransposed,
@@ -4279,8 +4279,8 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
         let perm = [1u32, 0];
         let mut transposed = rtdt::Tensor {
             ptr_base: ptr::null_mut(),
-            offset_elems: 0,
-            capacity_elems: 0,
+            offset_elems: rtdt::Usize::ZERO,
+            capacity_elems: rtdt::Usize::ZERO,
             shape: ptr::null(),
             strides: ptr::null(),
             layout: rtdt::TensorLayout::RowMajor,
@@ -4319,8 +4319,8 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
 
         let mut tensor = rtdt::Tensor {
             ptr_base: ptr::null_mut(),
-            offset_elems: 0,
-            capacity_elems: 0,
+            offset_elems: rtdt::Usize::ZERO,
+            capacity_elems: rtdt::Usize::ZERO,
             shape: ptr::null(),
             strides: ptr::null(),
             layout: rtdt::TensorLayout::ColMajor,
@@ -4345,8 +4345,8 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
         let perm = [1u32, 0];
         let mut transposed = rtdt::Tensor {
             ptr_base: ptr::null_mut(),
-            offset_elems: 0,
-            capacity_elems: 0,
+            offset_elems: rtdt::Usize::ZERO,
+            capacity_elems: rtdt::Usize::ZERO,
             shape: ptr::null(),
             strides: ptr::null(),
             layout: rtdt::TensorLayout::RowMajor,
@@ -4385,8 +4385,8 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
 
         let mut tensor = rtdt::Tensor {
             ptr_base: ptr::null_mut(),
-            offset_elems: 0,
-            capacity_elems: 0,
+            offset_elems: rtdt::Usize::ZERO,
+            capacity_elems: rtdt::Usize::ZERO,
             shape: ptr::null(),
             strides: ptr::null(),
             layout: rtdt::TensorLayout::RowMajorTransposed,
@@ -4411,8 +4411,8 @@ fn test_tensor_transpose_layout_cycle() -> AnyResult<()> {
         let perm = [1u32, 0];
         let mut transposed = rtdt::Tensor {
             ptr_base: ptr::null_mut(),
-            offset_elems: 0,
-            capacity_elems: 0,
+            offset_elems: rtdt::Usize::ZERO,
+            capacity_elems: rtdt::Usize::ZERO,
             shape: ptr::null(),
             strides: ptr::null(),
             layout: rtdt::TensorLayout::RowMajor,

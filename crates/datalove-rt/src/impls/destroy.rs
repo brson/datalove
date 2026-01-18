@@ -67,9 +67,9 @@ pub unsafe fn any_destroy_local(
                 let element_tydesc = element_ty.as_ptr();
 
                 // Recursively destroy each element.
-                if !list.data.is_null() && list.size > 0 {
+                if !list.data.is_null() && list.size > rtdt::Usize::ZERO {
                     let element_size = element_ty.size() as usize;
-                    for i in 0..list.size {
+                    for i in 0..list.size.0 {
                         let element_ptr = (list.data as *mut u8).add((i as usize) * element_size);
                         let status = any_destroy_local(rt, element_ptr, element_tydesc);
                         if status != RtStatus::Ok {
@@ -81,14 +81,14 @@ pub unsafe fn any_destroy_local(
                 // Free the list buffer if it exists.
                 // Re-obtain rt_ref after recursive calls to satisfy Stacked Borrows.
                 let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-                if !list.data.is_null() && list.capacity > 0 {
-                    rt_ref.alloc.free(element_ty.size(), element_ty.align(), list.capacity, list.data as *mut u8);
+                if !list.data.is_null() && list.capacity > rtdt::Usize::ZERO {
+                    rt_ref.alloc.free(element_ty.size(), element_ty.align(), list.capacity.0, list.data as *mut u8);
                 }
 
                 // Clear the list fields.
                 (*list_ptr).data = std::ptr::null();
-                (*list_ptr).size = 0;
-                (*list_ptr).capacity = 0;
+                (*list_ptr).size = rtdt::Usize::ZERO;
+                (*list_ptr).capacity = rtdt::Usize::ZERO;
 
                 RtStatus::Ok
             }
@@ -108,9 +108,9 @@ pub unsafe fn any_destroy_local(
                 let rank = ty.tensor_rank();
 
                 // Recursively destroy each element in the base buffer.
-                if !tensor.ptr_base.is_null() && tensor.capacity_elems > 0 {
+                if !tensor.ptr_base.is_null() && tensor.capacity_elems > rtdt::Usize::ZERO {
                     let element_size = element_ty.size() as usize;
-                    for i in 0..tensor.capacity_elems {
+                    for i in 0..tensor.capacity_elems.0 {
                         let element_ptr = tensor.ptr_base.add((i as usize) * element_size);
                         let status = any_destroy_local(rt, element_ptr, element_tydesc);
                         if status != RtStatus::Ok {
@@ -122,11 +122,11 @@ pub unsafe fn any_destroy_local(
                 // Free the data buffer if it exists.
                 // Re-obtain rt_ref after recursive calls to satisfy Stacked Borrows.
                 let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-                if !tensor.ptr_base.is_null() && tensor.capacity_elems > 0 {
+                if !tensor.ptr_base.is_null() && tensor.capacity_elems > rtdt::Usize::ZERO {
                     rt_ref.alloc.free(
                         element_ty.size(),
                         element_ty.align(),
-                        tensor.capacity_elems,
+                        tensor.capacity_elems.0,
                         tensor.ptr_base,
                     );
                 }
@@ -143,8 +143,8 @@ pub unsafe fn any_destroy_local(
 
                 // Clear the tensor fields.
                 (*tensor_ptr).ptr_base = std::ptr::null_mut();
-                (*tensor_ptr).offset_elems = 0;
-                (*tensor_ptr).capacity_elems = 0;
+                (*tensor_ptr).offset_elems = rtdt::Usize::ZERO;
+                (*tensor_ptr).capacity_elems = rtdt::Usize::ZERO;
                 (*tensor_ptr).shape = std::ptr::null();
                 (*tensor_ptr).strides = std::ptr::null();
 
@@ -414,8 +414,8 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
             assert!(string.data.is_null());
-            assert_eq!(string.size, 0);
-            assert_eq!(string.capacity, 0);
+            assert_eq!(string.size, rtdt::Usize::ZERO);
+            assert_eq!(string.capacity, rtdt::Usize::ZERO);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
@@ -489,7 +489,7 @@ mod tests {
 
             // Verify string was created.
             assert!(!tuple.field1.data.is_null());
-            assert_eq!(tuple.field1.size, 4);
+            assert_eq!(tuple.field1.size, rtdt::Usize(4));
 
             // Destroy the tuple using any_destroy.
             let status = any_destroy_local(
@@ -500,8 +500,8 @@ mod tests {
 
             assert_eq!(status, RtStatus::Ok);
             assert!(tuple.field1.data.is_null());
-            assert_eq!(tuple.field1.size, 0);
-            assert_eq!(tuple.field1.capacity, 0);
+            assert_eq!(tuple.field1.size, rtdt::Usize::ZERO);
+            assert_eq!(tuple.field1.capacity, rtdt::Usize::ZERO);
 
             // Reconstruct and drop the fields Vec to avoid leaking.
             drop(Vec::from_raw_parts(fields_ptr as *mut rtdt::TyInfoTupleField, 2, 2));

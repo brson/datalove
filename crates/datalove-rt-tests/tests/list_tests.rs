@@ -122,8 +122,8 @@ fn test_list_create_empty() -> AnyResult<()> {
     // Allocate space for the list.
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -139,8 +139,8 @@ fn test_list_create_empty() -> AnyResult<()> {
 
     // Verify the list is empty.
     assert!(list.data.is_null());
-    assert_eq!(list.size, 0);
-    assert_eq!(list.capacity, 0);
+    assert_eq!(list.size, rtdt::Usize::ZERO);
+    assert_eq!(list.capacity, rtdt::Usize::ZERO);
 
     // Clean up.
     let status = unsafe {
@@ -169,8 +169,8 @@ fn test_list_destroy_empty() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -195,8 +195,8 @@ fn test_list_destroy_empty() -> AnyResult<()> {
 
     // Verify list is cleared.
     assert!(list.data.is_null());
-    assert_eq!(list.size, 0);
-    assert_eq!(list.capacity, 0);
+    assert_eq!(list.size, rtdt::Usize::ZERO);
+    assert_eq!(list.capacity, rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -215,8 +215,8 @@ fn test_list_clear_empty() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -241,7 +241,7 @@ fn test_list_clear_empty() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify list is still empty.
-    assert_eq!(list.size, 0);
+    assert_eq!(list.size, rtdt::Usize::ZERO);
 
     // Clean up.
     let status = unsafe {
@@ -274,8 +274,8 @@ fn test_list_push_single() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -303,7 +303,7 @@ fn test_list_push_single() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify list size.
-    assert_eq!(list.size, 1);
+    assert_eq!(list.size, rtdt::Usize(1));
     assert!(!list.data.is_null());
 
     // Clean up.
@@ -333,8 +333,8 @@ fn test_list_push_multiple() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -363,7 +363,7 @@ fn test_list_push_multiple() -> AnyResult<()> {
     }
 
     // Verify list size.
-    assert_eq!(list.size, 5);
+    assert_eq!(list.size, rtdt::Usize(5));
 
     // Clean up.
     let status = unsafe {
@@ -393,8 +393,8 @@ fn test_list_pop_empty() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -454,8 +454,8 @@ fn test_list_push_pop() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -480,7 +480,7 @@ fn test_list_push_pop() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(list.size, 1);
+    assert_eq!(list.size, rtdt::Usize(1));
 
     // Pop.
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
@@ -508,7 +508,7 @@ fn test_list_push_pop() -> AnyResult<()> {
     assert_eq!(retrieved_value, 42);
 
     // List should be empty now.
-    assert_eq!(list.size, 0);
+    assert_eq!(list.size, rtdt::Usize::ZERO);
 
     // Clean up.
     let status = unsafe {
@@ -542,8 +542,8 @@ fn test_list_get_empty() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -604,8 +604,8 @@ fn test_list_get_valid() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -687,8 +687,8 @@ fn test_list_get_out_of_bounds() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -767,8 +767,8 @@ fn test_list_capacity_growth() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -801,8 +801,8 @@ fn test_list_capacity_growth() -> AnyResult<()> {
         }
     }
 
-    assert_eq!(list.size, 10);
-    assert!(list.capacity >= 10);
+    assert_eq!(list.size, rtdt::Usize(10));
+    assert!(list.capacity >= rtdt::Usize(10));
 
     // Clean up.
     let status = unsafe {
@@ -831,8 +831,8 @@ fn test_list_reserve() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -857,8 +857,8 @@ fn test_list_reserve() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Check that capacity is at least 20.
-    assert!(list.capacity >= 20);
-    assert_eq!(list.size, 0);
+    assert!(list.capacity >= rtdt::Usize(20));
+    assert_eq!(list.size, rtdt::Usize::ZERO);
 
     // Clean up.
     let status = unsafe {
@@ -887,8 +887,8 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -911,7 +911,7 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert!(list.capacity >= 100);
+    assert!(list.capacity >= rtdt::Usize(100));
 
     // Push only 3 elements.
     for i in 0u32..3 {
@@ -939,8 +939,8 @@ fn test_list_shrink_to_fit() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Capacity should now be 3.
-    assert_eq!(list.capacity, 3);
-    assert_eq!(list.size, 3);
+    assert_eq!(list.capacity, rtdt::Usize(3));
+    assert_eq!(list.size, rtdt::Usize(3));
 
     // Clean up.
     let status = unsafe {
@@ -974,8 +974,8 @@ fn test_list_insert_at_start() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1016,7 +1016,7 @@ fn test_list_insert_at_start() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(list.size, 4);
+    assert_eq!(list.size, rtdt::Usize(4));
 
     // Verify list is now [5, 10, 20, 30].
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
@@ -1073,8 +1073,8 @@ fn test_list_remove_middle() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1129,7 +1129,7 @@ fn test_list_remove_middle() -> AnyResult<()> {
     assert_eq!(removed_value, 20);
 
     // List should now be [0, 10, 30, 40].
-    assert_eq!(list.size, 4);
+    assert_eq!(list.size, rtdt::Usize(4));
 
     // Clean up.
     let status = unsafe {
@@ -1253,8 +1253,8 @@ fn test_list_create_empty_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1268,8 +1268,8 @@ fn test_list_create_empty_string() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     assert!(list.data.is_null());
-    assert_eq!(list.size, 0);
-    assert_eq!(list.capacity, 0);
+    assert_eq!(list.size, rtdt::Usize::ZERO);
+    assert_eq!(list.capacity, rtdt::Usize::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
@@ -1297,8 +1297,8 @@ fn test_list_destroy_empty_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1321,8 +1321,8 @@ fn test_list_destroy_empty_string() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     assert!(list.data.is_null());
-    assert_eq!(list.size, 0);
-    assert_eq!(list.capacity, 0);
+    assert_eq!(list.size, rtdt::Usize::ZERO);
+    assert_eq!(list.capacity, rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1341,8 +1341,8 @@ fn test_list_clear_empty_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1364,7 +1364,7 @@ fn test_list_clear_empty_string() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    assert_eq!(list.size, 0);
+    assert_eq!(list.size, rtdt::Usize::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
@@ -1392,8 +1392,8 @@ fn test_list_push_single_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1418,7 +1418,7 @@ fn test_list_push_single_string() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(list.size, 1);
+    assert_eq!(list.size, rtdt::Usize(1));
     assert!(!list.data.is_null());
 
     let status = unsafe {
@@ -1447,8 +1447,8 @@ fn test_list_push_multiple_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1477,7 +1477,7 @@ fn test_list_push_multiple_string() -> AnyResult<()> {
         }
     }
 
-    assert_eq!(list.size, 5);
+    assert_eq!(list.size, rtdt::Usize(5));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
@@ -1506,8 +1506,8 @@ fn test_list_pop_empty_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1564,8 +1564,8 @@ fn test_list_push_pop_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1590,7 +1590,7 @@ fn test_list_push_pop_string() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(list.size, 1);
+    assert_eq!(list.size, rtdt::Usize(1));
 
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
     let mut option_buffer = datalove_rt::rust::AlignedBuffer::new(option_layout.size as usize);
@@ -1609,7 +1609,7 @@ fn test_list_push_pop_string() -> AnyResult<()> {
     let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-    assert_eq!(list.size, 0);
+    assert_eq!(list.size, rtdt::Usize::ZERO);
 
     // Clean up the cloned option value.
     let status = unsafe {
@@ -1648,8 +1648,8 @@ fn test_list_get_empty_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1707,8 +1707,8 @@ fn test_list_get_valid_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1792,8 +1792,8 @@ fn test_list_get_out_of_bounds_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1865,8 +1865,8 @@ fn test_list_capacity_growth_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1898,8 +1898,8 @@ fn test_list_capacity_growth_string() -> AnyResult<()> {
         }
     }
 
-    assert_eq!(list.size, 10);
-    assert!(list.capacity >= 10);
+    assert_eq!(list.size, rtdt::Usize(10));
+    assert!(list.capacity >= rtdt::Usize(10));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
@@ -1927,8 +1927,8 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -1950,7 +1950,7 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert!(list.capacity >= 100);
+    assert!(list.capacity >= rtdt::Usize(100));
 
     for i in 0..3 {
         unsafe {
@@ -1976,8 +1976,8 @@ fn test_list_shrink_to_fit_string() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    assert_eq!(list.capacity, 3);
-    assert_eq!(list.size, 3);
+    assert_eq!(list.capacity, rtdt::Usize(3));
+    assert_eq!(list.size, rtdt::Usize(3));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
@@ -2005,8 +2005,8 @@ fn test_list_insert_at_start_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2046,7 +2046,7 @@ fn test_list_insert_at_start_string() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(list.size, 4);
+    assert_eq!(list.size, rtdt::Usize(4));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
@@ -2075,8 +2075,8 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2122,7 +2122,7 @@ fn test_list_remove_middle_string() -> AnyResult<()> {
     let tag = unsafe { *option_buffer.as_ptr() };
     assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
-    assert_eq!(list.size, 4);
+    assert_eq!(list.size, rtdt::Usize(4));
 
     // Clean up the cloned option value.
     let status = unsafe {
@@ -2165,8 +2165,8 @@ fn test_list_set_valid() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2261,8 +2261,8 @@ fn test_list_set_out_of_bounds() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2330,8 +2330,8 @@ fn test_list_set_string() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2373,7 +2373,7 @@ fn test_list_set_string() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(list.size, 3);
+    assert_eq!(list.size, rtdt::Usize(3));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
@@ -2405,8 +2405,8 @@ fn test_list_create_from_slice_empty() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2424,7 +2424,7 @@ fn test_list_create_from_slice_empty() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    assert_eq!(list.size, 0);
+    assert_eq!(list.size, rtdt::Usize::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
@@ -2453,8 +2453,8 @@ fn test_list_create_from_slice_multiple() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2471,8 +2471,8 @@ fn test_list_create_from_slice_multiple() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    assert_eq!(list.size, 5);
-    assert!(list.capacity >= 5);
+    assert_eq!(list.size, rtdt::Usize(5));
+    assert!(list.capacity >= rtdt::Usize(5));
 
     // Verify all elements.
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
@@ -2532,8 +2532,8 @@ fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2560,7 +2560,7 @@ fn test_list_extend_from_slice_empty_list() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    assert_eq!(list.size, 3);
+    assert_eq!(list.size, rtdt::Usize(3));
 
     // Verify all elements.
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
@@ -2613,8 +2613,8 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2642,7 +2642,7 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(list.size, 2);
+    assert_eq!(list.size, rtdt::Usize(2));
 
     // Extend with [3, 4, 5].
     let slice: [u32; 3] = [3, 4, 5];
@@ -2658,7 +2658,7 @@ fn test_list_extend_from_slice_nonempty_list() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    assert_eq!(list.size, 5);
+    assert_eq!(list.size, rtdt::Usize(5));
 
     // Verify all elements [1, 2, 3, 4, 5].
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
@@ -2711,8 +2711,8 @@ fn test_list_extend_from_slice_empty_slice() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2789,8 +2789,8 @@ fn test_list_shrink_to_fit_empty_with_capacity() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2814,9 +2814,9 @@ fn test_list_shrink_to_fit_empty_with_capacity() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    assert!(list.capacity >= 50);
+    assert!(list.capacity >= rtdt::Usize(50));
     assert!(!list.data.is_null());
-    assert_eq!(list.size, 0);
+    assert_eq!(list.size, rtdt::Usize::ZERO);
 
     // Shrink to fit on empty list should free the buffer.
     let status = unsafe {
@@ -2828,9 +2828,9 @@ fn test_list_shrink_to_fit_empty_with_capacity() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    assert_eq!(list.capacity, 0);
+    assert_eq!(list.capacity, rtdt::Usize::ZERO);
     assert!(list.data.is_null());
-    assert_eq!(list.size, 0);
+    assert_eq!(list.size, rtdt::Usize::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
@@ -2859,8 +2859,8 @@ fn test_list_insert_at_end() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2902,7 +2902,7 @@ fn test_list_insert_at_end() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    assert_eq!(list.size, 3);
+    assert_eq!(list.size, rtdt::Usize(3));
 
     // Verify [10, 20, 30].
     let option_layout = rtdt::layout::compute_option_layout(unsafe { rtdt::TyDescRef::from_ptr(option_tydesc) });
@@ -2954,8 +2954,8 @@ fn test_list_insert_beyond_end() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -2998,7 +2998,7 @@ fn test_list_insert_beyond_end() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Error);
 
     // Size should be unchanged.
-    assert_eq!(list.size, 2);
+    assert_eq!(list.size, rtdt::Usize(2));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_list_destroy_local(
@@ -3027,8 +3027,8 @@ fn test_list_remove_last() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -3081,7 +3081,7 @@ fn test_list_remove_last() -> AnyResult<()> {
     let removed_value = unsafe { *value_ptr };
     assert_eq!(removed_value, 30);
 
-    assert_eq!(list.size, 2);
+    assert_eq!(list.size, rtdt::Usize(2));
 
     // Verify remaining elements [10, 20].
     for (idx, expected) in [(0, 10), (1, 20)] {
@@ -3131,8 +3131,8 @@ fn test_list_clear_nonempty() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -3160,7 +3160,7 @@ fn test_list_clear_nonempty() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(list.size, 5);
+    assert_eq!(list.size, rtdt::Usize(5));
     let capacity_before = list.capacity;
 
     // Clear the list.
@@ -3174,7 +3174,7 @@ fn test_list_clear_nonempty() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Size should be 0, capacity should be preserved.
-    assert_eq!(list.size, 0);
+    assert_eq!(list.size, rtdt::Usize::ZERO);
     assert_eq!(list.capacity, capacity_before);
 
     let status = unsafe {
@@ -3203,8 +3203,8 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
 
     let mut list = rtdt::List {
         data: ptr::null(),
-        size: 0,
-        capacity: 0,
+        size: rtdt::Usize::ZERO,
+        capacity: rtdt::Usize::ZERO,
     };
     let list_ptr = &mut list as *mut rtdt::List as *mut u8;
 
@@ -3229,7 +3229,7 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     let capacity_after_first = list.capacity;
-    assert!(capacity_after_first >= 20);
+    assert!(capacity_after_first >= rtdt::Usize(20));
 
     // Push some elements.
     for i in 0u32..5 {

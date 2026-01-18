@@ -309,8 +309,8 @@ unsafe fn pretty_string(
     unsafe {
         let s = &*(value_ref as *const rtdt::String);
         push_str(rt, string_mut, string_tydesc, b"@\"")?;
-        if !s.data.is_null() && s.size > 0 {
-            let bytes = std::slice::from_raw_parts(s.data, s.size as usize);
+        if !s.data.is_null() && s.size > rtdt::Usize::ZERO {
+            let bytes = std::slice::from_raw_parts(s.data, s.size.as_usize());
             for &byte in bytes {
                 match byte {
                     b'"' => push_str(rt, string_mut, string_tydesc, b"\\\"")?,
@@ -422,8 +422,8 @@ unsafe fn pretty_list(
 
         push_str(rt, string_mut, string_tydesc, b"@[")?;
 
-        if !list.data.is_null() && list.size > 0 {
-            for i in 0..list.size {
+        if !list.data.is_null() && list.size > rtdt::Usize::ZERO {
+            for i in 0..list.size.0 {
                 if i > 0 {
                     push_str(rt, string_mut, string_tydesc, b", ")?;
                 }
@@ -451,7 +451,7 @@ unsafe fn pretty_map(
 
         push_str(rt, string_mut, string_tydesc, b"@map {")?;
 
-        if !map.root.is_null() && map.len > 0 {
+        if !map.root.is_null() && map.len > rtdt::Usize::ZERO {
             let key_size = key_ty.size() as usize;
             let value_size = value_ty.size() as usize;
 
@@ -503,7 +503,7 @@ unsafe fn pretty_set(
 
         push_str(rt, string_mut, string_tydesc, b"@set {")?;
 
-        if !set.root.is_null() && set.len > 0 {
+        if !set.root.is_null() && set.len > rtdt::Usize::ZERO {
             let elem_size = elem_ty.size() as usize;
 
             let mut current_leaf = set.root as *mut rtdt::SetNode;
@@ -654,7 +654,7 @@ unsafe fn pretty_tensor(
                 if i > 0 {
                     push_str(rt, string_mut, string_tydesc, b", ")?;
                 }
-                let dim = *tensor.shape.add(i);
+                let dim = (*tensor.shape.add(i)).0;
                 let s = dim.to_string();
                 push_str(rt, string_mut, string_tydesc, s.as_bytes())?;
             }
@@ -664,7 +664,7 @@ unsafe fn pretty_tensor(
 
         // Calculate total elements.
         let total_elems: usize = if rank > 0 && !tensor.shape.is_null() {
-            (0..rank).map(|i| *tensor.shape.add(i) as usize).product()
+            (0..rank).map(|i| (*tensor.shape.add(i)).as_usize()).product()
         } else {
             0
         };
@@ -684,7 +684,7 @@ unsafe fn pretty_tensor(
                 // 2D+: comma-separated rows, space-separated elements within rows.
                 // For row-major layout, the last dimension is contiguous.
                 let row_size = if rank > 0 && !tensor.shape.is_null() {
-                    *tensor.shape.add(rank - 1) as usize
+                    (*tensor.shape.add(rank - 1)).as_usize()
                 } else {
                     1
                 };
@@ -734,8 +734,8 @@ unsafe fn pretty_table(
         }
 
         // Print data rows.
-        if !table.data.is_null() && table.len > 0 {
-            for row in 0..table.len {
+        if !table.data.is_null() && table.len > rtdt::Usize::ZERO {
+            for row in 0..table.len.0 {
                 push_str(rt, string_mut, string_tydesc, b"; ")?;
 
                 for (col, col_info) in tydesc.table_column_tydescs().enumerate() {
@@ -748,7 +748,7 @@ unsafe fn pretty_table(
                         &column_tydescs,
                         row,
                         col,
-                        table.capacity,
+                        table.capacity.0,
                     );
                     pretty_value(rt, elem_ptr, col_info.tydesc(), string_mut, string_tydesc)?;
                 }
@@ -817,10 +817,10 @@ mod tests {
 
     unsafe fn get_string_contents(string: &rtdt::String) -> String {
         unsafe {
-            if string.data.is_null() || string.size == 0 {
+            if string.data.is_null() || string.size == rtdt::Usize::ZERO {
                 return String::new();
             }
-            let bytes = std::slice::from_raw_parts(string.data, string.size as usize);
+            let bytes = std::slice::from_raw_parts(string.data, string.size.as_usize());
             String::from_utf8_lossy(bytes).to_string()
         }
     }

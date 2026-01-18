@@ -1483,7 +1483,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_create_from_slice_local(
         crate::impls::tensor::tensor_create_from_slice_impl(
             rt_ref,
             slice_ref,
-            slice_len,
+            rtdt::Usize(slice_len),
             element_tydesc_ref,
             shape_in,
             shape_tydesc_ref,
@@ -1719,7 +1719,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_init_local(
         crate::impls::tensor::tensor_init_impl(
             rt_ref,
             element_data_in,
-            element_count,
+            rtdt::Usize(element_count),
             element_tydesc_ref,
             shape_ptr,
             rank,
@@ -1876,7 +1876,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_len(
 ) -> rtdt::UsizeRepr {
     debug_assert!(!table_ref.is_null(), "table_ref is null");
     unsafe {
-        crate::impls::table::table_len(table_ref)
+        crate::impls::table::table_len(table_ref).0
     }
 }
 

@@ -196,10 +196,10 @@ impl IrInterpreter {
             }
 
             // Extract string contents.
-            let result = if output_string.data.is_null() || output_string.size == 0 {
+            let result = if output_string.data.is_null() || output_string.size == rtdt::Usize::ZERO {
                 String::new()
             } else {
-                let bytes = std::slice::from_raw_parts(output_string.data, output_string.size as usize);
+                let bytes = std::slice::from_raw_parts(output_string.data, output_string.size.as_usize());
                 String::from_utf8_lossy(bytes).to_string()
             };
 

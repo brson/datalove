@@ -131,7 +131,7 @@ fn test_btreemap_create_empty() -> AnyResult<()> {
     // Allocate space for the map
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -147,7 +147,7 @@ fn test_btreemap_create_empty() -> AnyResult<()> {
 
     // Verify the map is empty
     assert!(map.root.is_null());
-    assert_eq!(map.len, 0);
+    assert_eq!(map.len, rtdt::Usize::ZERO);
 
     // Clean up
     let status = unsafe {
@@ -176,7 +176,7 @@ fn test_btreemap_destroy_empty() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -201,7 +201,7 @@ fn test_btreemap_destroy_empty() -> AnyResult<()> {
 
     // Verify map is cleared
     assert!(map.root.is_null());
-    assert_eq!(map.len, 0);
+    assert_eq!(map.len, rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -220,7 +220,7 @@ fn test_btreemap_clear_empty() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -246,7 +246,7 @@ fn test_btreemap_clear_empty() -> AnyResult<()> {
 
     // Verify map is still empty
     assert!(map.root.is_null());
-    assert_eq!(map.len, 0);
+    assert_eq!(map.len, rtdt::Usize::ZERO);
 
     // Clean up
     let status = unsafe {
@@ -275,7 +275,7 @@ fn test_btreemap_insert_single() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -307,7 +307,7 @@ fn test_btreemap_insert_single() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Verify map len
-    assert_eq!(map.len, 1);
+    assert_eq!(map.len, rtdt::Usize(1));
     assert!(!map.root.is_null());
 
     // Clean up
@@ -337,7 +337,7 @@ fn test_btreemap_insert_multiple() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -370,7 +370,7 @@ fn test_btreemap_insert_multiple() -> AnyResult<()> {
     }
 
     // Verify map len
-    assert_eq!(map.len, 5);
+    assert_eq!(map.len, rtdt::Usize(5));
 
     // Clean up
     let status = unsafe {
@@ -399,7 +399,7 @@ fn test_btreemap_insert_update() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -428,7 +428,7 @@ fn test_btreemap_insert_update() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(map.len, 1);
+    assert_eq!(map.len, rtdt::Usize(1));
 
     // Update (42, 200)
     let mut key2 = 42u32;
@@ -447,7 +447,7 @@ fn test_btreemap_insert_update() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     // Len should still be 1 (update, not insert)
-    assert_eq!(map.len, 1);
+    assert_eq!(map.len, rtdt::Usize(1));
 
     // Clean up
     let status = unsafe {
@@ -476,7 +476,7 @@ fn test_btreemap_insert_with_split() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -509,7 +509,7 @@ fn test_btreemap_insert_with_split() -> AnyResult<()> {
     }
 
     // Verify map len
-    assert_eq!(map.len, 15);
+    assert_eq!(map.len, rtdt::Usize(15));
 
     // Clean up
     let status = unsafe {
@@ -538,7 +538,7 @@ fn test_btreemap_insert_multi_level_splits() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -571,7 +571,7 @@ fn test_btreemap_insert_multi_level_splits() -> AnyResult<()> {
     }
 
     // Verify map len
-    assert_eq!(map.len, 30);
+    assert_eq!(map.len, rtdt::Usize(30));
 
     // Clean up
     let status = unsafe {
@@ -600,7 +600,7 @@ fn test_btreemap_insert_deep_tree() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -633,7 +633,7 @@ fn test_btreemap_insert_deep_tree() -> AnyResult<()> {
     }
 
     // Verify map len
-    assert_eq!(map.len, 100);
+    assert_eq!(map.len, rtdt::Usize(100));
 
     // Clean up
     let status = unsafe {
@@ -662,7 +662,7 @@ fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -695,7 +695,7 @@ fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
     }
 
     // Verify map len
-    assert_eq!(map.len, 50);
+    assert_eq!(map.len, rtdt::Usize(50));
 
     // Clean up
     let status = unsafe {
@@ -789,7 +789,7 @@ fn test_btreemap_create_empty_string() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -803,7 +803,7 @@ fn test_btreemap_create_empty_string() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     assert!(map.root.is_null());
-    assert_eq!(map.len, 0);
+    assert_eq!(map.len, rtdt::Usize::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
@@ -831,7 +831,7 @@ fn test_btreemap_destroy_empty_string() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -854,7 +854,7 @@ fn test_btreemap_destroy_empty_string() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     assert!(map.root.is_null());
-    assert_eq!(map.len, 0);
+    assert_eq!(map.len, rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -873,7 +873,7 @@ fn test_btreemap_clear_empty_string() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -896,7 +896,7 @@ fn test_btreemap_clear_empty_string() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     assert!(map.root.is_null());
-    assert_eq!(map.len, 0);
+    assert_eq!(map.len, rtdt::Usize::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
@@ -924,7 +924,7 @@ fn test_btreemap_insert_single_string() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -952,7 +952,7 @@ fn test_btreemap_insert_single_string() -> AnyResult<()> {
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-        assert_eq!(map.len, 1);
+        assert_eq!(map.len, rtdt::Usize(1));
         assert!(!map.root.is_null());
 
         // Note: key_str and value_str have been moved into the btreemap.
@@ -985,7 +985,7 @@ fn test_btreemap_insert_multiple_string() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1022,7 +1022,7 @@ fn test_btreemap_insert_multiple_string() -> AnyResult<()> {
         }
     }
 
-    assert_eq!(map.len, 5);
+    assert_eq!(map.len, rtdt::Usize(5));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
@@ -1050,7 +1050,7 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1077,7 +1077,7 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
             value_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-        assert_eq!(map.len, 1);
+        assert_eq!(map.len, rtdt::Usize(1));
 
         // Note: key_str and value_str have been moved into the btreemap.
         // We must NOT destroy them here.
@@ -1095,7 +1095,7 @@ fn test_btreemap_insert_update_string() -> AnyResult<()> {
             value_tydesc,
         );
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-        assert_eq!(map.len, 1);
+        assert_eq!(map.len, rtdt::Usize(1));
 
         // Note: key_str2 was destroyed by the update operation (since the key already existed).
         // value_str2 was moved into the btreemap, replacing the old value.
@@ -1128,7 +1128,7 @@ fn test_btreemap_insert_with_split_string() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1165,7 +1165,7 @@ fn test_btreemap_insert_with_split_string() -> AnyResult<()> {
         }
     }
 
-    assert_eq!(map.len, 15);
+    assert_eq!(map.len, rtdt::Usize(15));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
@@ -1193,7 +1193,7 @@ fn test_btreemap_insert_multi_level_splits_string() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1230,7 +1230,7 @@ fn test_btreemap_insert_multi_level_splits_string() -> AnyResult<()> {
         }
     }
 
-    assert_eq!(map.len, 30);
+    assert_eq!(map.len, rtdt::Usize(30));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
@@ -1258,7 +1258,7 @@ fn test_btreemap_insert_deep_tree_string() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1295,7 +1295,7 @@ fn test_btreemap_insert_deep_tree_string() -> AnyResult<()> {
         }
     }
 
-    assert_eq!(map.len, 100);
+    assert_eq!(map.len, rtdt::Usize(100));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
@@ -1323,7 +1323,7 @@ fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1360,7 +1360,7 @@ fn test_btreemap_insert_reverse_order_string() -> AnyResult<()> {
         }
     }
 
-    assert_eq!(map.len, 50);
+    assert_eq!(map.len, rtdt::Usize(50));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
@@ -1391,7 +1391,7 @@ fn test_btreemap_get_empty() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1453,7 +1453,7 @@ fn test_btreemap_get_existing_key() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1538,7 +1538,7 @@ fn test_btreemap_get_nonexistent_key() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1619,7 +1619,7 @@ fn test_btreemap_get_multiple() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1708,7 +1708,7 @@ fn test_btreemap_get_after_update() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1830,7 +1830,7 @@ fn test_btreemap_get_with_splits() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1942,7 +1942,7 @@ fn test_btreemap_remove_empty() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1967,7 +1967,7 @@ fn test_btreemap_remove_empty() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(map.len, 0);
+    assert_eq!(map.len, rtdt::Usize::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
@@ -1995,7 +1995,7 @@ fn test_btreemap_remove_single() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -2024,7 +2024,7 @@ fn test_btreemap_remove_single() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(map.len, 1);
+    assert_eq!(map.len, rtdt::Usize(1));
 
     // Remove the key.
     let status = unsafe {
@@ -2037,7 +2037,7 @@ fn test_btreemap_remove_single() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(map.len, 0);
+    assert_eq!(map.len, rtdt::Usize::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
@@ -2065,7 +2065,7 @@ fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -2096,7 +2096,7 @@ fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 5);
+    assert_eq!(map.len, rtdt::Usize(5));
 
     // Try to remove a key that doesn't exist.
     let key = 99u32;
@@ -2110,7 +2110,7 @@ fn test_btreemap_remove_nonexistent() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(map.len, 5); // Len should not change.
+    assert_eq!(map.len, rtdt::Usize(5)); // Len should not change.
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
@@ -2138,7 +2138,7 @@ fn test_btreemap_remove_multiple() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -2169,7 +2169,7 @@ fn test_btreemap_remove_multiple() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 10);
+    assert_eq!(map.len, rtdt::Usize(10));
 
     // Remove every other key.
     for i in (0u32..10).step_by(2) {
@@ -2185,7 +2185,7 @@ fn test_btreemap_remove_multiple() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 5);
+    assert_eq!(map.len, rtdt::Usize(5));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
@@ -2213,7 +2213,7 @@ fn test_btreemap_remove_all() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -2244,7 +2244,7 @@ fn test_btreemap_remove_all() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 10);
+    assert_eq!(map.len, rtdt::Usize(10));
 
     // Remove all keys.
     for i in 0u32..10 {
@@ -2260,7 +2260,7 @@ fn test_btreemap_remove_all() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 0);
+    assert_eq!(map.len, rtdt::Usize::ZERO);
     assert!(map.root.is_null());
 
     let status = unsafe {
@@ -2289,7 +2289,7 @@ fn test_btreemap_remove_with_splits() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -2320,7 +2320,7 @@ fn test_btreemap_remove_with_splits() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 50);
+    assert_eq!(map.len, rtdt::Usize(50));
 
     // Remove half of them.
     for i in (0u32..50).step_by(2) {
@@ -2336,7 +2336,7 @@ fn test_btreemap_remove_with_splits() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 25);
+    assert_eq!(map.len, rtdt::Usize(25));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreemap_destroy_local(
@@ -2366,7 +2366,7 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -2398,7 +2398,7 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 100);
+    assert_eq!(map.len, rtdt::Usize(100));
 
     // Remove keys in a pattern that forces rebalancing.
     // Remove every 3rd key to create underflows.
@@ -2418,7 +2418,7 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
 
     // Verify that the remaining keys are still accessible.
     let expected_remaining = 100 - (100 / 3 + 1);
-    assert_eq!(map.len, expected_remaining);
+    assert_eq!(map.len, rtdt::Usize(expected_remaining));
 
     // Verify we can still get values for non-removed keys.
     let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc(&arena);
@@ -2472,7 +2472,7 @@ fn test_btreemap_remove_with_rebalancing() -> AnyResult<()> {
 
     // Now only keys where i % 3 == 2 should remain.
     let final_remaining = (0u32..100).filter(|i| i % 3 == 2).count() as rtdt::UsizeRepr;
-    assert_eq!(map.len, final_remaining);
+    assert_eq!(map.len, rtdt::Usize(final_remaining));
 
     // Clean up.
     let status = unsafe {
@@ -2502,7 +2502,7 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -2533,7 +2533,7 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 500);
+    assert_eq!(map.len, rtdt::Usize(500));
 
     // Remove keys from the middle to force internal node rebalancing.
     for i in 200u32..300 {
@@ -2549,7 +2549,7 @@ fn test_btreemap_remove_internal_rebalancing() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 400);
+    assert_eq!(map.len, rtdt::Usize(400));
 
     // Verify remaining keys are still accessible.
     let (option_tydesc, _inner_tydesc) = create_option_u32_tydesc(&arena);
@@ -2621,7 +2621,7 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -2659,7 +2659,7 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 20);
+    assert_eq!(map.len, rtdt::Usize(20));
 
     // Remove every other key.
     for i in (0..20).step_by(2) {
@@ -2689,7 +2689,7 @@ fn test_btreemap_remove_string() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 10);
+    assert_eq!(map.len, rtdt::Usize(10));
 
     // Clean up.
     let status = unsafe {
@@ -2719,7 +2719,7 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -2757,7 +2757,7 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
-    assert_eq!(map.len, 50);
+    assert_eq!(map.len, rtdt::Usize(50));
 
     // Remove keys in a pattern that forces rebalancing.
     for i in (0..50).step_by(3) {
@@ -2789,7 +2789,7 @@ fn test_btreemap_remove_string_with_rebalancing() -> AnyResult<()> {
     }
 
     let expected_remaining = 50 - (50 / 3 + 1);
-    assert_eq!(map.len, expected_remaining);
+    assert_eq!(map.len, rtdt::Usize(expected_remaining));
 
     // Clean up.
     let status = unsafe {
@@ -2853,7 +2853,7 @@ fn test_btreemap_clone_from_slice_empty() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -2869,7 +2869,7 @@ fn test_btreemap_clone_from_slice_empty() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(map.len, 0);
+    assert_eq!(map.len, rtdt::Usize::ZERO);
     assert!(map.root.is_null());
 
     let status = unsafe {
@@ -2898,7 +2898,7 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -2924,7 +2924,7 @@ fn test_btreemap_clone_from_slice_single() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(map.len, 1);
+    assert_eq!(map.len, rtdt::Usize(1));
 
     // Verify we can retrieve the value.
     let (option_tydesc, _inner) = create_option_u32_tydesc(&arena);
@@ -2980,7 +2980,7 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -3009,7 +3009,7 @@ fn test_btreemap_clone_from_slice_multiple() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(map.len, 5);
+    assert_eq!(map.len, rtdt::Usize(5));
 
     // Verify all values are retrievable.
     let (option_tydesc, _inner) = create_option_u32_tydesc(&arena);
@@ -3068,7 +3068,7 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
 
     let mut map = rtdt::Map {
         root: ptr::null(),
-        len: 0,
+        len: rtdt::Usize::ZERO,
     };
     let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -3096,7 +3096,7 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(map.len, 2, "Map should have 2 unique keys");
+    assert_eq!(map.len, rtdt::Usize(2), "Map should have 2 unique keys");
 
     // Verify key 10 has the updated value.
     let (option_tydesc, _inner) = create_option_u32_tydesc(&arena);

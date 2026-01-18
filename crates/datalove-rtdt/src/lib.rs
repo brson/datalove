@@ -60,11 +60,291 @@ mod index_types {
 }
 pub use index_types::*;
 
+#[derive(Copy, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct Usize(pub UsizeRepr);
 
+#[derive(Copy, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct Isize(pub IsizeRepr);
+
+impl Usize {
+    pub const ZERO: Self = Self(0);
+    pub const ONE: Self = Self(1);
+
+    #[inline]
+    pub const fn new(val: UsizeRepr) -> Self {
+        Self(val)
+    }
+
+    #[inline]
+    pub const fn get(self) -> UsizeRepr {
+        self.0
+    }
+
+    #[inline]
+    pub const fn as_usize(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl Isize {
+    pub const ZERO: Self = Self(0);
+    pub const ONE: Self = Self(1);
+
+    #[inline]
+    pub const fn new(val: IsizeRepr) -> Self {
+        Self(val)
+    }
+
+    #[inline]
+    pub const fn get(self) -> IsizeRepr {
+        self.0
+    }
+
+    #[inline]
+    pub const fn as_isize(self) -> isize {
+        self.0 as isize
+    }
+}
+
+impl From<UsizeRepr> for Usize {
+    #[inline]
+    fn from(val: UsizeRepr) -> Self {
+        Self(val)
+    }
+}
+
+impl From<Usize> for UsizeRepr {
+    #[inline]
+    fn from(val: Usize) -> Self {
+        val.0
+    }
+}
+
+// Only implement From<u32> when UsizeRepr != u32 (i.e., when index-64 is enabled).
+#[cfg(feature = "index-64")]
+impl From<u32> for Usize {
+    #[inline]
+    fn from(val: u32) -> Self {
+        Self(val as UsizeRepr)
+    }
+}
+
+impl From<usize> for Usize {
+    #[inline]
+    fn from(val: usize) -> Self {
+        Self(val as UsizeRepr)
+    }
+}
+
+impl From<IsizeRepr> for Isize {
+    #[inline]
+    fn from(val: IsizeRepr) -> Self {
+        Self(val)
+    }
+}
+
+impl From<Isize> for IsizeRepr {
+    #[inline]
+    fn from(val: Isize) -> Self {
+        val.0
+    }
+}
+
+// Only implement From<i32> when IsizeRepr != i32 (i.e., when index-64 is enabled).
+#[cfg(feature = "index-64")]
+impl From<i32> for Isize {
+    #[inline]
+    fn from(val: i32) -> Self {
+        Self(val as IsizeRepr)
+    }
+}
+
+impl From<isize> for Isize {
+    #[inline]
+    fn from(val: isize) -> Self {
+        Self(val as IsizeRepr)
+    }
+}
+
+impl core::fmt::Debug for Usize {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Usize({})", self.0)
+    }
+}
+
+impl core::fmt::Display for Usize {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl core::fmt::Debug for Isize {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Isize({})", self.0)
+    }
+}
+
+impl core::fmt::Display for Isize {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl core::ops::Add for Usize {
+    type Output = Self;
+    #[inline]
+    fn add(self, rhs: Self) -> Self {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl core::ops::Sub for Usize {
+    type Output = Self;
+    #[inline]
+    fn sub(self, rhs: Self) -> Self {
+        Self(self.0 - rhs.0)
+    }
+}
+
+impl core::ops::Mul for Usize {
+    type Output = Self;
+    #[inline]
+    fn mul(self, rhs: Self) -> Self {
+        Self(self.0 * rhs.0)
+    }
+}
+
+impl core::ops::Div for Usize {
+    type Output = Self;
+    #[inline]
+    fn div(self, rhs: Self) -> Self {
+        Self(self.0 / rhs.0)
+    }
+}
+
+impl core::ops::Rem for Usize {
+    type Output = Self;
+    #[inline]
+    fn rem(self, rhs: Self) -> Self {
+        Self(self.0 % rhs.0)
+    }
+}
+
+impl core::ops::AddAssign for Usize {
+    #[inline]
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0;
+    }
+}
+
+impl core::ops::SubAssign for Usize {
+    #[inline]
+    fn sub_assign(&mut self, rhs: Self) {
+        self.0 -= rhs.0;
+    }
+}
+
+impl core::ops::MulAssign for Usize {
+    #[inline]
+    fn mul_assign(&mut self, rhs: Self) {
+        self.0 *= rhs.0;
+    }
+}
+
+impl core::iter::Sum for Usize {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::ZERO, |a, b| a + b)
+    }
+}
+
+impl core::iter::Product for Usize {
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::ONE, |a, b| a * b)
+    }
+}
+
+impl core::ops::Add for Isize {
+    type Output = Self;
+    #[inline]
+    fn add(self, rhs: Self) -> Self {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl core::ops::Sub for Isize {
+    type Output = Self;
+    #[inline]
+    fn sub(self, rhs: Self) -> Self {
+        Self(self.0 - rhs.0)
+    }
+}
+
+impl core::ops::Mul for Isize {
+    type Output = Self;
+    #[inline]
+    fn mul(self, rhs: Self) -> Self {
+        Self(self.0 * rhs.0)
+    }
+}
+
+impl core::ops::Div for Isize {
+    type Output = Self;
+    #[inline]
+    fn div(self, rhs: Self) -> Self {
+        Self(self.0 / rhs.0)
+    }
+}
+
+impl core::ops::Rem for Isize {
+    type Output = Self;
+    #[inline]
+    fn rem(self, rhs: Self) -> Self {
+        Self(self.0 % rhs.0)
+    }
+}
+
+impl core::ops::Neg for Isize {
+    type Output = Self;
+    #[inline]
+    fn neg(self) -> Self {
+        Self(-self.0)
+    }
+}
+
+impl core::ops::AddAssign for Isize {
+    #[inline]
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0;
+    }
+}
+
+impl core::ops::SubAssign for Isize {
+    #[inline]
+    fn sub_assign(&mut self, rhs: Self) {
+        self.0 -= rhs.0;
+    }
+}
+
+impl core::ops::MulAssign for Isize {
+    #[inline]
+    fn mul_assign(&mut self, rhs: Self) {
+        self.0 *= rhs.0;
+    }
+}
+
+impl core::iter::Sum for Isize {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::ZERO, |a, b| a + b)
+    }
+}
+
+impl core::iter::Product for Isize {
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::ONE, |a, b| a * b)
+    }
+}
 
 #[repr(transparent)]
 pub struct F32(pub f32);
@@ -127,8 +407,8 @@ pub struct EnumLayout {
 #[repr(C)]
 pub struct List {
     pub data: *const u8, // type-aligned
-    pub size: UsizeRepr, // in elements,
-    pub capacity: UsizeRepr, // in elements,
+    pub size: Usize, // in elements,
+    pub capacity: Usize, // in elements,
 }
 
 /// Columnar table storage.
@@ -137,22 +417,22 @@ pub struct List {
 /// are computed dynamically from the type descriptors in TyInfoTable.
 #[repr(C)]
 pub struct Table {
-    pub len: UsizeRepr,
-    pub capacity: UsizeRepr,
+    pub len: Usize,
+    pub capacity: Usize,
     pub data: *const u8,
 }
 
 #[repr(C)]
 pub struct String {
     pub data: *const u8,
-    pub size: UsizeRepr,
-    pub capacity: UsizeRepr,
+    pub size: Usize,
+    pub capacity: Usize,
 }
 
 #[repr(C)]
 pub struct Map {
     pub root: *const MapNode,
-    pub len: UsizeRepr,
+    pub len: Usize,
 }
 
 /// B-tree order parameter for Map nodes.
@@ -192,7 +472,7 @@ pub enum MapNodeTag {
 #[repr(C)]
 pub struct Set {
     pub root: *const SetNode,
-    pub len: UsizeRepr,
+    pub len: Usize,
 }
 
 /// B-tree order parameter for Set nodes.
@@ -273,12 +553,12 @@ pub struct SetNodeLeafLayout {
 #[repr(C)]
 pub struct Tensor {
     pub ptr_base: *mut u8,
-    pub capacity_elems: UsizeRepr,
-    pub offset_elems: UsizeRepr,
-    // UsizeRepr x rank
-    pub shape: *const UsizeRepr,
-    // UsizeRepr x rank (can be negative for reversed dimensions, but stored unsigned)
-    pub strides: *const UsizeRepr,
+    pub capacity_elems: Usize,
+    pub offset_elems: Usize,
+    // Usize x rank
+    pub shape: *const Usize,
+    // Usize x rank (can be negative for reversed dimensions, but stored unsigned)
+    pub strides: *const Usize,
     pub layout: TensorLayout,
 }
 

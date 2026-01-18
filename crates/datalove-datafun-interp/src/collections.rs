@@ -79,7 +79,7 @@ impl IrInterpreter {
             // Update list size.
             unsafe {
                 let list = list_ptr as *mut rtdt::List;
-                (*list).size = (i + 1) as u32;
+                (*list).size = rtdt::Usize((i + 1) as rtdt::UsizeRepr);
             }
         }
 
@@ -419,7 +419,7 @@ impl IrInterpreter {
                     *shape_array.add(i) = dim;
                 }
             }
-            shape_array as *const u32
+            shape_array as *const rtdt::Usize
         } else {
             std::ptr::null()
         };
@@ -470,7 +470,7 @@ impl IrInterpreter {
                 }
             }
 
-            strides_array as *const u32
+            strides_array as *const rtdt::Usize
         } else {
             std::ptr::null()
         };
@@ -479,8 +479,8 @@ impl IrInterpreter {
         unsafe {
             let tensor = tensor_ptr as *mut rtdt::Tensor;
             (*tensor).ptr_base = data_ptr;
-            (*tensor).capacity_elems = total_elems as u32;
-            (*tensor).offset_elems = 0;
+            (*tensor).capacity_elems = rtdt::Usize(total_elems as rtdt::UsizeRepr);
+            (*tensor).offset_elems = rtdt::Usize::ZERO;
             (*tensor).shape = shape_ptr;
             (*tensor).strides = strides_ptr;
             (*tensor).layout = rtdt::TensorLayout::RowMajor;

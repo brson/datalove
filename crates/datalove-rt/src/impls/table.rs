@@ -51,8 +51,8 @@ pub unsafe fn table_create_impl(
 ) -> RtStatus {
     unsafe {
         let table = &mut *(value_out as *mut rtdt::Table);
-        table.len = 0;
-        table.capacity = 0;
+        table.len = rtdt::Usize::ZERO;
+        table.capacity = rtdt::Usize::ZERO;
         table.data = std::ptr::null();
     }
     RtStatus::Ok
@@ -70,8 +70,8 @@ pub unsafe fn table_destroy_impl(
 
         // Early return only if no buffer allocated.
         if table.data.is_null() {
-            (*table_ptr).len = 0;
-            (*table_ptr).capacity = 0;
+            (*table_ptr).len = rtdt::Usize::ZERO;
+            (*table_ptr).capacity = rtdt::Usize::ZERO;
             return RtStatus::Ok;
         }
 
@@ -80,13 +80,13 @@ pub unsafe fn table_destroy_impl(
         // Destroy elements column by column, row by row.
         for (col, col_info) in tydesc.table_column_tydescs().enumerate() {
             let col_tydesc = col_info.tydesc().as_ptr();
-            for row in 0..table.len {
+            for row in 0..table.len.0 {
                 let elem = element_ptr_mut(
                     table.data as *mut u8,
                     &column_tydescs,
                     row,
                     col,
-                    table.capacity,
+                    table.capacity.0,
                 );
                 let status = crate::impls::destroy::any_destroy_local(rt, elem, col_tydesc);
                 if status != RtStatus::Ok {
@@ -98,8 +98,8 @@ pub unsafe fn table_destroy_impl(
         // Free the data buffer.
         // Re-obtain rt_ref after recursive calls to satisfy Stacked Borrows.
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        if table.capacity > 0 {
-            let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, table.capacity);
+        if table.capacity > rtdt::Usize::ZERO {
+            let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, table.capacity.0);
             let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
             if alloc_size > 0 {
                 rt_ref.alloc.free(alloc_size, alloc_align, 1, table.data as *mut u8);
@@ -108,8 +108,8 @@ pub unsafe fn table_destroy_impl(
 
         // Clear the table fields.
         (*table_ptr).data = std::ptr::null();
-        (*table_ptr).len = 0;
-        (*table_ptr).capacity = 0;
+        (*table_ptr).len = rtdt::Usize::ZERO;
+        (*table_ptr).capacity = rtdt::Usize::ZERO;
 
         RtStatus::Ok
     }
@@ -137,7 +137,7 @@ pub unsafe fn table_push_row_impl(
 
         // Check if we need to grow.
         if table.len >= table.capacity {
-            let new_capacity = if table.capacity == 0 { 4 } else { table.capacity * 2 };
+            let new_capacity = if table.capacity == rtdt::Usize::ZERO { 4 } else { table.capacity.0 * 2 };
             let status = table_grow(rt, table, &column_tydescs, new_capacity);
             if status != RtStatus::Ok {
                 return status;
@@ -150,9 +150,9 @@ pub unsafe fn table_push_row_impl(
             let dst = element_ptr_mut(
                 table.data as *mut u8,
                 &column_tydescs,
-                table.len,
+                table.len.0,
                 col,
-                table.capacity,
+                table.capacity.0,
             );
 
             // Clone the field value into the table.
@@ -168,9 +168,9 @@ pub unsafe fn table_push_row_impl(
                     let cleanup_dst = element_ptr_mut(
                         table.data as *mut u8,
                         &column_tydescs,
-                        table.len,
+                        table.len.0,
                         cleanup_col,
-                        table.capacity,
+                        table.capacity.0,
                     );
                     let cleanup_tydesc = column_tydescs[cleanup_col];
                     let _ = crate::impls::destroy::any_destroy_local(rt, cleanup_dst, cleanup_tydesc);
@@ -179,7 +179,7 @@ pub unsafe fn table_push_row_impl(
             }
         }
 
-        table.len += 1;
+        table.len += rtdt::Usize::ONE;
         RtStatus::Ok
     }
 }
@@ -194,7 +194,7 @@ unsafe fn table_grow(
     unsafe {
         if column_tydescs.is_empty() {
             // Zero-column table needs no allocation.
-            table.capacity = new_capacity;
+            table.capacity = rtdt::Usize(new_capacity);
             return RtStatus::Ok;
         }
 
@@ -204,7 +204,7 @@ unsafe fn table_grow(
         let alloc_align = rtdt::layout::table_data_alignment(column_tydescs);
 
         if new_alloc_size == 0 {
-            table.capacity = new_capacity;
+            table.capacity = rtdt::Usize(new_capacity);
             return RtStatus::Ok;
         }
 
@@ -214,27 +214,27 @@ unsafe fn table_grow(
         }
 
         // Copy existing data column by column if there was old data.
-        if !table.data.is_null() && table.len > 0 {
+        if !table.data.is_null() && table.len > rtdt::Usize::ZERO {
             for col in 0..column_tydescs.len() {
                 let col_tydesc = column_tydescs[col];
                 let elem_size = col_tydesc.size as usize;
 
-                for row in 0..table.len {
-                    let src = element_ptr(table.data, column_tydescs, row, col, table.capacity);
+                for row in 0..table.len.0 {
+                    let src = element_ptr(table.data, column_tydescs, row, col, table.capacity.0);
                     let dst = element_ptr_mut(new_data, column_tydescs, row, col, new_capacity);
                     std::ptr::copy_nonoverlapping(src, dst, elem_size);
                 }
             }
 
             // Free old buffer.
-            let old_alloc_size = rtdt::layout::table_data_allocation_size(column_tydescs, table.capacity);
+            let old_alloc_size = rtdt::layout::table_data_allocation_size(column_tydescs, table.capacity.0);
             if old_alloc_size > 0 {
                 rt_ref.alloc.free(old_alloc_size, alloc_align, 1, table.data as *mut u8);
             }
         }
 
         table.data = new_data;
-        table.capacity = new_capacity;
+        table.capacity = rtdt::Usize(new_capacity);
         RtStatus::Ok
     }
 }
@@ -252,7 +252,7 @@ pub unsafe fn table_get_element_ptr(
         let table = &*(table_ref as *const rtdt::Table);
         let column_tydescs = collect_column_tydescs(tydesc);
 
-        if row >= table.len || col as usize >= column_tydescs.len() {
+        if row >= table.len.0 || col as usize >= column_tydescs.len() {
             return std::ptr::null();
         }
 
@@ -260,7 +260,7 @@ pub unsafe fn table_get_element_ptr(
             return std::ptr::null();
         }
 
-        element_ptr(table.data, &column_tydescs, row, col as usize, table.capacity)
+        element_ptr(table.data, &column_tydescs, row, col as usize, table.capacity.0)
     }
 }
 
@@ -280,7 +280,7 @@ pub unsafe fn table_set_element(
         let table = &*(table_mut as *const rtdt::Table);
         let column_tydescs = collect_column_tydescs(tydesc);
 
-        if row >= table.len || col as usize >= column_tydescs.len() {
+        if row >= table.len.0 || col as usize >= column_tydescs.len() {
             return RtStatus::Error;
         }
 
@@ -293,7 +293,7 @@ pub unsafe fn table_set_element(
             &column_tydescs,
             row,
             col as usize,
-            table.capacity,
+            table.capacity.0,
         );
 
         // Destroy old value.
@@ -318,8 +318,8 @@ pub unsafe fn table_clear_impl(
         let table = &*(table_mut as *const rtdt::Table);
         let table_ptr = table_mut as *mut rtdt::Table;
 
-        if table.data.is_null() || table.len == 0 {
-            (*table_ptr).len = 0;
+        if table.data.is_null() || table.len == rtdt::Usize::ZERO {
+            (*table_ptr).len = rtdt::Usize::ZERO;
             return RtStatus::Ok;
         }
 
@@ -328,13 +328,13 @@ pub unsafe fn table_clear_impl(
         // Destroy elements.
         for (col, col_info) in tydesc.table_column_tydescs().enumerate() {
             let col_tydesc = col_info.tydesc().as_ptr();
-            for row in 0..table.len {
+            for row in 0..table.len.0 {
                 let elem = element_ptr_mut(
                     table.data as *mut u8,
                     &column_tydescs,
                     row,
                     col,
-                    table.capacity,
+                    table.capacity.0,
                 );
                 let status = crate::impls::destroy::any_destroy_local(rt, elem, col_tydesc);
                 if status != RtStatus::Ok {
@@ -343,13 +343,13 @@ pub unsafe fn table_clear_impl(
             }
         }
 
-        (*table_ptr).len = 0;
+        (*table_ptr).len = rtdt::Usize::ZERO;
         RtStatus::Ok
     }
 }
 
 /// Get the length (number of rows) of a table.
-pub unsafe fn table_len(table_ref: *const u8) -> rtdt::UsizeRepr {
+pub unsafe fn table_len(table_ref: *const u8) -> rtdt::Usize {
     unsafe {
         let table = &*(table_ref as *const rtdt::Table);
         table.len
@@ -413,8 +413,8 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let table = table.assume_init();
-            assert_eq!(table.len, 0);
-            assert_eq!(table.capacity, 0);
+            assert_eq!(table.len, rtdt::Usize::ZERO);
+            assert_eq!(table.capacity, rtdt::Usize::ZERO);
             assert!(table.data.is_null());
         }
     }

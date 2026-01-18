@@ -21,8 +21,8 @@ pub unsafe fn list_create_impl(
     let list_ptr = value_out as *mut List;
     unsafe {
         (*list_ptr).data = std::ptr::null();
-        (*list_ptr).size = 0;
-        (*list_ptr).capacity = 0;
+        (*list_ptr).size = rtdt::Usize::ZERO;
+        (*list_ptr).capacity = rtdt::Usize::ZERO;
     }
 
     RtStatus::Ok
@@ -635,7 +635,7 @@ impl ListRef {
     /// Get the current size (element count).
     #[inline]
     fn size(&self) -> rtdt::UsizeRepr {
-        unsafe { (*self.ptr).size }
+        unsafe { (*self.ptr).size.0 }
     }
 
     /// Get a pointer to the element at `index`.
@@ -689,13 +689,13 @@ impl ListMut {
     /// Get the current size (element count).
     #[inline]
     fn size(&self) -> rtdt::UsizeRepr {
-        unsafe { (*self.ptr).size }
+        unsafe { (*self.ptr).size.0 }
     }
 
     /// Get the current capacity (element count).
     #[inline]
     fn capacity(&self) -> rtdt::UsizeRepr {
-        unsafe { (*self.ptr).capacity }
+        unsafe { (*self.ptr).capacity.0 }
     }
 
     /// Set the data pointer.
@@ -707,13 +707,13 @@ impl ListMut {
     /// Set the size.
     #[inline]
     fn set_size(&mut self, size: rtdt::UsizeRepr) {
-        unsafe { (*self.ptr).size = size; }
+        unsafe { (*self.ptr).size = rtdt::Usize(size); }
     }
 
     /// Set the capacity.
     #[inline]
     fn set_capacity(&mut self, capacity: rtdt::UsizeRepr) {
-        unsafe { (*self.ptr).capacity = capacity; }
+        unsafe { (*self.ptr).capacity = rtdt::Usize(capacity); }
     }
 
     /// Get a pointer to the element at `index`.
