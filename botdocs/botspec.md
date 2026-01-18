@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2026-01-16
+Last verified: 2026-01-17
 
 ## Overview
 
@@ -23,9 +23,22 @@ Uses Salsa for incremental compilation. REPL-first design.
 | `bool` | Boolean | Implemented |
 | `u8`, `u16`, `u32`, `u64` | Unsigned integers | Implemented |
 | `i8`, `i16`, `i32`, `i64` | Signed integers | Implemented |
+| `usize` | Unsigned index type (32 or 64-bit) | Implemented |
+| `isize` | Signed index type (32 or 64-bit) | Implemented |
 | `f32` | 32-bit float | Implemented |
 | `int` | Arbitrary precision signed integer (bigint) | Implemented |
 | `string` | UTF-8 string | Implemented |
+
+**Index Types (usize/isize):**
+
+`usize` and `isize` are platform-configurable index types used for collection sizes, capacities, and array indices. Their bit width is controlled by the `index-64` compile-time feature:
+
+| Feature | `usize` | `isize` |
+|---------|---------|---------|
+| Default | u32 | i32 |
+| `index-64` | u64 | i64 |
+
+These types widen to `int` like other fixed integers. See `botdocs/index-64.md` for details on the feature.
 
 ### 1.2 Collection Types
 
@@ -431,6 +444,8 @@ Fixed integers widen along chains:
 ```
 u8 -> u16 -> u32 -> u64 -> int
 i8 -> i16 -> i32 -> i64 -> int
+usize -> int
+isize -> int
 ```
 
 ### 3.3 Coercions
@@ -449,7 +464,7 @@ i8 -> i16 -> i32 -> i64 -> int
 
 | Copy Types | Linear Types |
 |------------|--------------|
-| bool, u8-u64, i8-i64, f32 | int, string, list, map, set, tensor, table, data, error |
+| bool, u8-u64, i8-i64, usize, isize, f32 | int, string, list, map, set, tensor, table, data, error |
 
 Linear types have move semantics; copy types can be freely duplicated.
 
