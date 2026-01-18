@@ -40,6 +40,10 @@ let inferred: u32 = 42        // heap inferred
 // Type hints use `: type / expr` syntax.
 let hinted = : u32 / 99
 
+// Hex literals work for integers and f32 (bit pattern).
+let hex_int: u32 = 0xFF             // 255
+let hex_float = : f32 / 0x40490FDB  // pi as bit pattern (needs type hint)
+
 
 // =========================================================================
 // 2. VARIABLES: LET, VAR, SET
@@ -65,9 +69,11 @@ let empty_list: [u32] = []
 
 // Maps use @map<K, V> type and @map { k1 = v1, k2 = v2 } syntax.
 let scores: @map<string, u32> = @map { "alice" = 100, "bob" = 85 }
+let empty_map: @map<u32, u32> = @map {}
 
 // Sets use @set<T> type and @set { v1, v2, v3 } syntax.
 let unique: @set<u32> = @set { 1, 2, 3 }
+let empty_set: @set<u32> = @set {}
 
 
 // =========================================================================
@@ -96,9 +102,9 @@ let found: ?u32 = some 42
 let missing: ?u32 = @none
 
 // Result type: !T holds a value or @error.
-// Create with ok/er or via checked operators that early-return.
+// ok wraps value, er wraps error. @error constructs the error value.
 let success: !u32 = ok 42
-// Note: error literals at script level have limited support.
+let failure: !u32 = er @error "something went wrong"
 
 
 // =========================================================================

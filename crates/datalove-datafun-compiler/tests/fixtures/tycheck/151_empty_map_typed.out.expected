@@ -1,0 +1,11 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "x",
+      "type": "@map<u32, string>"
+    }
+  ]
+}

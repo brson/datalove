@@ -1,0 +1,30 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": {
+          "heap": "Local",
+          "type_hint": {
+            "Set": {
+              "element_type": {
+                "heap": "Omitted",
+                "type_hint": "U32"
+              }
+            }
+          }
+        },
+        "value": {
+          "expr": {
+            "elements": [],
+            "heap": "Local",
+            "kind": "Set",
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

@@ -229,6 +229,88 @@ pub fn check_expr<'db>(
             }
         }
 
+        // Handle set expressions - check elements against expected element type.
+        ExprFunKind::Set(set_expr) => {
+            match expected.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Set(expected_set)) => {
+                    // For empty sets, we can accept any expected set type.
+                    // For non-empty sets, synthesize and compare as usual.
+                    if set_expr.elements.is_empty() {
+                        // Empty set: accept the expected type directly.
+                        ctx.store_expr_type(expr, expected);
+                        Ok(())
+                    } else {
+                        // Non-empty set: synthesize and compare (original behavior).
+                        let synthesized = ctx.synthesize_expr(expr)?;
+                        if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
+                            return Ok(());
+                        }
+                        // Check if types are compatible with coercion.
+                        if let Type::Datalit(synth_ty) = synthesized.ty(db) {
+                            if datalit::tycheck::can_widen_to(synth_ty, &datalit::tycheck::Type::Set(expected_set.C())) {
+                                return Ok(());
+                            }
+                        }
+                        let expected_str = type_to_string(db, expected.ty(db));
+                        let actual_str = type_to_string(db, synthesized.ty(db));
+                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    }
+                }
+                Type::Datalit(datalit::tycheck::Type::Data) => {
+                    // Any type can coerce to Data.
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
+        // Handle map expressions - check entries against expected key/value types.
+        ExprFunKind::Map(map_expr) => {
+            match expected.ty(db) {
+                Type::Datalit(datalit::tycheck::Type::Map(expected_map)) => {
+                    // For empty maps, we can accept any expected map type.
+                    // For non-empty maps, synthesize and compare as usual.
+                    if map_expr.entries.is_empty() {
+                        // Empty map: accept the expected type directly.
+                        ctx.store_expr_type(expr, expected);
+                        Ok(())
+                    } else {
+                        // Non-empty map: synthesize and compare (original behavior).
+                        let synthesized = ctx.synthesize_expr(expr)?;
+                        if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
+                            return Ok(());
+                        }
+                        // Check if types are compatible with coercion.
+                        if let Type::Datalit(synth_ty) = synthesized.ty(db) {
+                            if datalit::tycheck::can_widen_to(synth_ty, &datalit::tycheck::Type::Map(expected_map.C())) {
+                                return Ok(());
+                            }
+                        }
+                        let expected_str = type_to_string(db, expected.ty(db));
+                        let actual_str = type_to_string(db, synthesized.ty(db));
+                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    }
+                }
+                Type::Datalit(datalit::tycheck::Type::Data) => {
+                    // Any type can coerce to Data.
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected.ty(db));
+                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
         // Handle tuple expressions - check elements against expected field types.
         ExprFunKind::AnonTuple(tuple_expr) => {
             match expected.ty(db) {

@@ -362,7 +362,7 @@ impl<'db> Parser<'db> {
                                         ts
                                     )
                                 }
-                                num if num.chars().all(|c| char::is_ascii_digit(&c)) => {
+                                num if Self::is_numeric_literal(num) => {
                                     // Capture span before parsing for diagnostic reporting.
                                     let ts = self.peek_text_span();
                                     let expr_kind = self.parse_lit_expr(datalit::ast::Heap::Omitted, None);

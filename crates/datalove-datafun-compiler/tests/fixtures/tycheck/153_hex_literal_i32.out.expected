@@ -1,0 +1,26 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            14,
+            18
+          ],
+          "text": "0x10"
+        }
+      ],
+      "message": "mismatched types: expected `i32`, found `u32`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "u32",
+      "expected": "i32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": []
+}

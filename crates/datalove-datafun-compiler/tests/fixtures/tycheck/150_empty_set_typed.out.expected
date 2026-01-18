@@ -1,0 +1,11 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "x",
+      "type": "@set<u32>"
+    }
+  ]
+}
