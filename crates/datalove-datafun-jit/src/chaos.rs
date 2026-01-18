@@ -33,34 +33,25 @@ pub struct ChaosDispatcher {
 }
 
 impl ChaosDispatcher {
-    /// Create a new chaos dispatcher with the given seed.
+    /// Create a new chaos dispatcher with the given seed and probabilities.
     ///
     /// The seed should be derived from test input for reproducibility.
-    pub fn new(seed: u64) -> Result<Self, crate::JitError> {
+    /// Probabilities are clamped to 0-100.
+    pub fn new(seed: u64, compile_probability: u32, use_jit_probability: u32) -> Result<Self, crate::JitError> {
         Ok(Self {
             jit: JitEngine::new(1)?, // Threshold 1: compile on first attempt
             rng_state: seed,
             call_counter: 0,
-            compile_probability: 50,
-            use_jit_probability: 50,
+            compile_probability: compile_probability.min(100),
+            use_jit_probability: use_jit_probability.min(100),
         })
     }
 
     /// Create from a hashable value (e.g., file path or contents).
-    pub fn from_hashable<H: Hash>(value: &H) -> Result<Self, crate::JitError> {
+    pub fn from_hashable<H: Hash>(value: &H, compile_probability: u32, use_jit_probability: u32) -> Result<Self, crate::JitError> {
         let mut hasher = DefaultHasher::new();
         value.hash(&mut hasher);
-        Self::new(hasher.finish())
-    }
-
-    /// Set the probability of forcing compilation (0-100).
-    pub fn set_compile_probability(&mut self, prob: u32) {
-        self.compile_probability = prob.min(100);
-    }
-
-    /// Set the probability of using JIT when available (0-100).
-    pub fn set_use_jit_probability(&mut self, prob: u32) {
-        self.use_jit_probability = prob.min(100);
+        Self::new(hasher.finish(), compile_probability, use_jit_probability)
     }
 
     /// Generate a pseudo-random number in [0, 100).
@@ -244,15 +235,15 @@ mod tests {
 
     #[test]
     fn test_chaos_dispatcher_creation() {
-        let chaos = ChaosDispatcher::new(12345);
+        let chaos = ChaosDispatcher::new(12345, 50, 50);
         assert!(chaos.is_ok());
     }
 
     #[test]
     fn test_chaos_from_hashable() {
-        let chaos1 = ChaosDispatcher::from_hashable(&"test_input_1").unwrap();
-        let chaos2 = ChaosDispatcher::from_hashable(&"test_input_1").unwrap();
-        let chaos3 = ChaosDispatcher::from_hashable(&"test_input_2").unwrap();
+        let chaos1 = ChaosDispatcher::from_hashable(&"test_input_1", 50, 50).unwrap();
+        let chaos2 = ChaosDispatcher::from_hashable(&"test_input_1", 50, 50).unwrap();
+        let chaos3 = ChaosDispatcher::from_hashable(&"test_input_2", 50, 50).unwrap();
 
         // Same input should produce same initial state.
         assert_eq!(chaos1.rng_state, chaos2.rng_state);
@@ -262,8 +253,7 @@ mod tests {
 
     #[test]
     fn test_random_distribution() {
-        let mut chaos = ChaosDispatcher::new(42).unwrap();
-        chaos.set_compile_probability(50);
+        let mut chaos = ChaosDispatcher::new(42, 50, 50).unwrap();
 
         let mut compile_count = 0;
         for _ in 0..1000 {

@@ -157,9 +157,7 @@ fn run_with_chaos(
         return results;
     }
 
-    let mut chaos = ChaosDispatcher::new(seed).expect("ChaosDispatcher creation failed");
-    chaos.set_compile_probability(75);
-    chaos.set_use_jit_probability(50);
+    let chaos = ChaosDispatcher::new(seed, 75, 50).expect("ChaosDispatcher creation failed");
     let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, Some(Box::new(chaos)));
 
     for section in &parsed.sections {
