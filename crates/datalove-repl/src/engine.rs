@@ -50,7 +50,7 @@ impl<'db> Engine<'db> {
         }
 
         // Create script compilation context.
-        let ctx = compiled.script_context(db, datalove_datafun::DebugOutputMode::Disabled);
+        let ctx = compiled.script_context(db, datalove_datafun::DebugOutputMode::Disabled, None);
 
         Ok(Engine {
             db,
@@ -66,7 +66,7 @@ impl<'db> Engine<'db> {
         // Create a new context.
         let mut pipeline = ModuleCompilationPipeline::new();
         let compiled = pipeline.compile_fresh(self.db);
-        self.ctx = compiled.script_context(self.db, datalove_datafun::DebugOutputMode::Disabled);
+        self.ctx = compiled.script_context(self.db, datalove_datafun::DebugOutputMode::Disabled, None);
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {

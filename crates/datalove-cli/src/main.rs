@@ -363,7 +363,7 @@ impl ScriptCommand {
         }
 
         // Create script compilation context with Stderr mode for debuglog output.
-        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr);
+        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None);
 
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(&self.file_path)
@@ -442,7 +442,7 @@ impl AotCompileCommand {
         }
 
         // Create script compilation context.
-        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr);
+        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None);
 
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(&self.file_path)
@@ -581,7 +581,7 @@ impl ScriptWorldCommand {
         }
 
         // Create script compilation context.
-        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr);
+        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None);
 
         // Execute the script section.
         let script_section = script_sections[0];
