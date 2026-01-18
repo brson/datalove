@@ -33,7 +33,6 @@
 ## In progress
 
 - usize/isize
-- numeric intrinsics and core functions
 - human docs
 
 
