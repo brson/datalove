@@ -291,23 +291,26 @@ mod tests {
 
     #[test]
     fn test_int_layout() {
+        use datalove_rtdt::Int;
         let layout = ir_type_to_cranelift(&IrType::Int).layout();
-        assert_eq!(layout.size, 16);
-        assert_eq!(layout.align, 8);
+        assert_eq!(layout.size, std::mem::size_of::<Int>() as u32);
+        assert_eq!(layout.align, std::mem::align_of::<Int>() as u32);
     }
 
     #[test]
     fn test_string_layout() {
+        use datalove_rtdt::String;
         let layout = ir_type_to_cranelift(&IrType::String).layout();
-        assert_eq!(layout.size, 16);
-        assert_eq!(layout.align, 8);
+        assert_eq!(layout.size, std::mem::size_of::<String>() as u32);
+        assert_eq!(layout.align, std::mem::align_of::<String>() as u32);
     }
 
     #[test]
     fn test_list_layout() {
+        use datalove_rtdt::List;
         let layout = ir_type_to_cranelift(&IrType::List(Box::new(IrType::U32))).layout();
-        assert_eq!(layout.size, 16);
-        assert_eq!(layout.align, 8);
+        assert_eq!(layout.size, std::mem::size_of::<List>() as u32);
+        assert_eq!(layout.align, std::mem::align_of::<List>() as u32);
     }
 
     #[test]

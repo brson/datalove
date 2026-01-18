@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 42isize\n    v1 = const -42isize\n    v2 = const 0isize\n    v3 = const 2147483647isize\n    v4 = const -2147483648isize\n    v5 = intrinsic NegWrappingIsize(v0)\n    debuglog v5\n    v6 = intrinsic NegWrappingIsize(v1)\n    debuglog v6\n    v7 = intrinsic NegWrappingIsize(v2)\n    debuglog v7\n    v8 = intrinsic NegWrappingIsize(v3)\n    debuglog v8\n    v9 = intrinsic NegWrappingIsize(v4)\n    debuglog v9\n    unit_end\nexports:\n    pos = v0\n    neg = v1\n    zero = v2\n    max = v3\n    min = v4\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 42isize\n    v1 = const -42isize\n    v2 = const 0isize\n    v3 = const 2147483647isize\n    v4 = const -2147483648isize\n    v5 = intrinsic NegWrappingIsize(v0)\n    debuglog v5\n    v6 = intrinsic NegWrappingIsize(v1)\n    debuglog v6\n    v7 = intrinsic NegWrappingIsize(v2)\n    debuglog v7\n    v8 = intrinsic NegWrappingIsize(v3)\n    debuglog v8\n    v9 = intrinsic NegWrappingIsize(v4)\n    debuglog v9\n    unit_end\nexports:\n    pos = v0\n    neg = v1\n    zero = v2\n    max = v3\n    min = v4\n",
+            ),
+            ir_match: true,
+            interp_output: "@-42\n@42\n@0\n@-2147483647\n@2147483648\n",
+            aot_output: "@-42\n@42\n@0\n@-2147483647\n@2147483648\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

@@ -136,6 +136,18 @@ where
     fn run_test_case(&self, input_path: &Path) -> TestResult {
         let base_path = input_path.with_extension("");
         let actual_path = PathBuf::from(format!("{}.out.actual", base_path.display()));
+
+        // Feature-specific expected file takes precedence over default.
+        #[cfg(feature = "index-64")]
+        let expected_path = {
+            let feature_path = PathBuf::from(format!("{}.out.expected.64", base_path.display()));
+            if feature_path.exists() {
+                feature_path
+            } else {
+                PathBuf::from(format!("{}.out.expected", base_path.display()))
+            }
+        };
+        #[cfg(not(feature = "index-64"))]
         let expected_path = PathBuf::from(format!("{}.out.expected", base_path.display()));
 
         let analysis = match (self.analyzer)(input_path) {

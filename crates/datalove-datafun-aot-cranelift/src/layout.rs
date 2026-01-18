@@ -187,17 +187,21 @@ mod tests {
 
     #[test]
     fn test_frame_with_aggregate_types() {
+        use datalove_rtdt::String as RtString;
+        let string_size = std::mem::size_of::<RtString>() as u32;
+
         let layout = FrameLayout::compute(
             &[],
             &[IrType::String, IrType::U32],
             &[],
         );
-        // String is 16 bytes, u32 is 4 bytes
+        // String size depends on index-64 feature, u32 is 4 bytes
         assert_eq!(layout.values[0].offset, 0);
-        assert_eq!(layout.values[0].size, 16);
-        assert_eq!(layout.values[1].offset, 16);
+        assert_eq!(layout.values[0].size, string_size);
+        assert_eq!(layout.values[1].offset, string_size);
         assert_eq!(layout.values[1].size, 4);
         // Frame size aligned to 8
-        assert_eq!(layout.frame_size, 24);
+        let expected_frame_size = ((string_size + 4 + 7) / 8) * 8;
+        assert_eq!(layout.frame_size, expected_frame_size);
     }
 }

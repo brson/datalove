@@ -31,6 +31,7 @@ index-64 = [
     "datalove-datafun-ir/index-64",
     "datalove-datafun-compiler/index-64",
     "datalove-datafun-aot-cranelift/index-64",
+    "datalove-exampletest/index-64",
 ]
 
 [dev-dependencies]

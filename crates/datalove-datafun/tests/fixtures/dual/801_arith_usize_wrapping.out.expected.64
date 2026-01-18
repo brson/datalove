@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10usize\n    v1 = const 5usize\n    v2 = const 3usize\n    v3, v4 = add.checked v0, v1\n    branch v4, block1, block2\nblock1:\n    v5 = const \"arithmetic overflow\"\n    v6 = error_from v5\n    v7 = err v6\n    unit_early_return v7\nblock2:\n    debuglog v3\n    v8, v9 = sub.checked v0, v1\n    branch v9, block3, block4\nblock3:\n    v10 = const \"arithmetic overflow\"\n    v11 = error_from v10\n    v12 = err v11\n    unit_early_return v12\nblock4:\n    debuglog v8\n    v13, v14 = mul.checked v0, v2\n    branch v14, block5, block6\nblock5:\n    v15 = const \"arithmetic overflow\"\n    v16 = error_from v15\n    v17 = err v16\n    unit_early_return v17\nblock6:\n    debuglog v13\n    v18 = const 4294967295usize\n    v19 = const 1usize\n    v20, v21 = add.checked v18, v19\n    branch v21, block7, block8\nblock7:\n    v22 = const \"arithmetic overflow\"\n    v23 = error_from v22\n    v24 = err v23\n    unit_early_return v24\nblock8:\n    debuglog v20\n    v25 = const 0usize\n    v26, v27 = sub.checked v25, v19\n    branch v27, block9, block10\nblock9:\n    v28 = const \"arithmetic overflow\"\n    v29 = error_from v28\n    v30 = err v29\n    unit_early_return v30\nblock10:\n    debuglog v26\n    unit_end\nexports:\n    a = v0\n    b = v1\n    c = v2\n    max = v18\n    one = v19\n    zero = v25\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10usize\n    v1 = const 5usize\n    v2 = const 3usize\n    v3, v4 = add.checked v0, v1\n    branch v4, block1, block2\nblock1:\n    v5 = const \"arithmetic overflow\"\n    v6 = error_from v5\n    v7 = err v6\n    unit_early_return v7\nblock2:\n    debuglog v3\n    v8, v9 = sub.checked v0, v1\n    branch v9, block3, block4\nblock3:\n    v10 = const \"arithmetic overflow\"\n    v11 = error_from v10\n    v12 = err v11\n    unit_early_return v12\nblock4:\n    debuglog v8\n    v13, v14 = mul.checked v0, v2\n    branch v14, block5, block6\nblock5:\n    v15 = const \"arithmetic overflow\"\n    v16 = error_from v15\n    v17 = err v16\n    unit_early_return v17\nblock6:\n    debuglog v13\n    v18 = const 4294967295usize\n    v19 = const 1usize\n    v20, v21 = add.checked v18, v19\n    branch v21, block7, block8\nblock7:\n    v22 = const \"arithmetic overflow\"\n    v23 = error_from v22\n    v24 = err v23\n    unit_early_return v24\nblock8:\n    debuglog v20\n    v25 = const 0usize\n    v26, v27 = sub.checked v25, v19\n    branch v27, block9, block10\nblock9:\n    v28 = const \"arithmetic overflow\"\n    v29 = error_from v28\n    v30 = err v29\n    unit_early_return v30\nblock10:\n    debuglog v26\n    unit_end\nexports:\n    a = v0\n    b = v1\n    c = v2\n    max = v18\n    one = v19\n    zero = v25\n",
+            ),
+            ir_match: true,
+            interp_output: "@15\n@5\n@30\n@4294967296\n@error @\"arithmetic overflow\"\n",
+            aot_output: "@15\n@5\n@30\n@4294967296\n@error @\"arithmetic overflow\"\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)
