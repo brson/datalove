@@ -50,7 +50,8 @@ pub fn lower_function_body<'db>(
     let name = func.name(ctx.db).text(ctx.db).to_string();
 
     // Set drop schedule for this function.
-    ctx.set_drop_schedule(analysis.schedule, analysis.bindings);
+    ctx.drop_schedule = analysis.schedule;
+    ctx.binding_info = analysis.bindings;
 
     // Save and set function context for try operators.
     let saved_return_type = ctx.return_type.take();

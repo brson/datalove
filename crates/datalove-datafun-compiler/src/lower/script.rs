@@ -51,8 +51,9 @@ pub fn lower_script_unit<'db>(
                 ));
             }
 
-            ctx.set_drop_schedule(script_analysis.schedule, script_analysis.bindings);
-            ctx.set_unit_end_drops(script_analysis.unit_end);
+            ctx.drop_schedule = script_analysis.schedule;
+            ctx.binding_info = script_analysis.bindings;
+            ctx.unit_end_drops = script_analysis.unit_end;
 
             // Lower all statements with index tracking.
             for (idx, stmt) in stmts.iter().enumerate() {
@@ -123,8 +124,9 @@ pub fn lower_script_fragment_raw<'db>(
         ));
     }
 
-    ctx.set_drop_schedule(script_analysis.schedule, script_analysis.bindings);
-    ctx.set_unit_end_drops(script_analysis.unit_end);
+    ctx.drop_schedule = script_analysis.schedule;
+    ctx.binding_info = script_analysis.bindings;
+    ctx.unit_end_drops = script_analysis.unit_end;
 
     // Lower all statements with index tracking.
     for (idx, stmt) in stmts.iter().enumerate() {

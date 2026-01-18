@@ -537,12 +537,6 @@ impl<'db> LowerCtx<'db> {
         self.external_slot_types.get(name)
     }
 
-    /// Set the drop schedule for this context.
-    pub fn set_drop_schedule(&mut self, schedule: DropSchedule, bindings: Vec<BindingInfo>) {
-        self.drop_schedule = schedule;
-        self.binding_info = bindings;
-    }
-
     /// Record a binding to operand mapping.
     ///
     /// Called when creating bindings during lowering.
@@ -703,11 +697,6 @@ impl<'db> LowerCtx<'db> {
             }
         }
         result
-    }
-
-    /// Set bindings to drop at unit end (for AOT compilation).
-    pub fn set_unit_end_drops(&mut self, drops: Vec<BindingId>) {
-        self.unit_end_drops = drops;
     }
 
     /// Emit drops for unit end (for AOT compilation).
