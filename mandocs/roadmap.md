@@ -40,7 +40,7 @@
 
 ## On deck
 
-- std.string - waiting for usize/isize
+- std.string - waiting for rtcalls
 - assert statements - needed for std_tests
 - fully reactive scripts
 - clone and coerce
