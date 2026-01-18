@@ -126,7 +126,8 @@ fn eq_tydesc(
     match td_a.type_tag() {
             rtdt::TyTag::Bool | rtdt::TyTag::U8 | rtdt::TyTag::I8 |
             rtdt::TyTag::U16 | rtdt::TyTag::I16 | rtdt::TyTag::U32 | rtdt::TyTag::I32 |
-            rtdt::TyTag::F32 | rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::F64 |
+            rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::Usize | rtdt::TyTag::Isize |
+            rtdt::TyTag::F32 | rtdt::TyTag::F64 |
             rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 true
             }
@@ -319,6 +320,16 @@ unsafe fn eq_value(
             rtdt::TyTag::I64 => {
                 let a = *(value_a as *const i64);
                 let b = *(value_b as *const i64);
+                a == b
+            }
+            rtdt::TyTag::Usize => {
+                let a = *(value_a as *const rtdt::UsizeRepr);
+                let b = *(value_b as *const rtdt::UsizeRepr);
+                a == b
+            }
+            rtdt::TyTag::Isize => {
+                let a = *(value_a as *const rtdt::IsizeRepr);
+                let b = *(value_b as *const rtdt::IsizeRepr);
                 a == b
             }
             rtdt::TyTag::F32 => {
@@ -880,6 +891,28 @@ unsafe fn cmp_value(
             rtdt::TyTag::I64 => {
                 let a = *(value_a as *const i64);
                 let b = *(value_b as *const i64);
+                if a < b {
+                    crate::c::RtOrdering::Less
+                } else if a > b {
+                    crate::c::RtOrdering::Greater
+                } else {
+                    crate::c::RtOrdering::Equal
+                }
+            }
+            rtdt::TyTag::Usize => {
+                let a = *(value_a as *const rtdt::UsizeRepr);
+                let b = *(value_b as *const rtdt::UsizeRepr);
+                if a < b {
+                    crate::c::RtOrdering::Less
+                } else if a > b {
+                    crate::c::RtOrdering::Greater
+                } else {
+                    crate::c::RtOrdering::Equal
+                }
+            }
+            rtdt::TyTag::Isize => {
+                let a = *(value_a as *const rtdt::IsizeRepr);
+                let b = *(value_b as *const rtdt::IsizeRepr);
                 if a < b {
                     crate::c::RtOrdering::Less
                 } else if a > b {

@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0usize\n    v1 = const 1usize\n    v2 = const 4294967295usize\n    v3 = const 2147483647usize\n    v4 = intrinsic UsizeToIsize(v0)\n    debuglog v4\n    v5 = intrinsic UsizeToIsize(v1)\n    debuglog v5\n    v6 = intrinsic UsizeToIsize(v3)\n    debuglog v6\n    v7 = intrinsic UsizeToIsize(v2)\n    debuglog v7\n    v8 = const 0isize\n    v9 = const 1isize\n    v10 = const -1isize\n    v11 = const 2147483647isize\n    v12 = const -2147483648isize\n    v13 = intrinsic IsizeToUsize(v8)\n    debuglog v13\n    v14 = intrinsic IsizeToUsize(v9)\n    debuglog v14\n    v15 = intrinsic IsizeToUsize(v10)\n    debuglog v15\n    v16 = intrinsic IsizeToUsize(v11)\n    debuglog v16\n    v17 = intrinsic IsizeToUsize(v12)\n    debuglog v17\n    unit_end\nexports:\n    u_zero = v0\n    u_one = v1\n    u_max = v2\n    u_half = v3\n    i_zero = v8\n    i_one = v9\n    i_neg = v10\n    i_max = v11\n    i_min = v12\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0usize\n    v1 = const 1usize\n    v2 = const 4294967295usize\n    v3 = const 2147483647usize\n    v4 = intrinsic UsizeToIsize(v0)\n    debuglog v4\n    v5 = intrinsic UsizeToIsize(v1)\n    debuglog v5\n    v6 = intrinsic UsizeToIsize(v3)\n    debuglog v6\n    v7 = intrinsic UsizeToIsize(v2)\n    debuglog v7\n    v8 = const 0isize\n    v9 = const 1isize\n    v10 = const -1isize\n    v11 = const 2147483647isize\n    v12 = const -2147483648isize\n    v13 = intrinsic IsizeToUsize(v8)\n    debuglog v13\n    v14 = intrinsic IsizeToUsize(v9)\n    debuglog v14\n    v15 = intrinsic IsizeToUsize(v10)\n    debuglog v15\n    v16 = intrinsic IsizeToUsize(v11)\n    debuglog v16\n    v17 = intrinsic IsizeToUsize(v12)\n    debuglog v17\n    unit_end\nexports:\n    u_zero = v0\n    u_one = v1\n    u_max = v2\n    u_half = v3\n    i_zero = v8\n    i_one = v9\n    i_neg = v10\n    i_max = v11\n    i_min = v12\n",
+            ),
+            ir_match: true,
+            interp_output: "@0\n@1\n@2147483647\n@-1\n@0\n@1\n@4294967295\n@2147483647\n@2147483648\n",
+            aot_output: "@0\n@1\n@2147483647\n@-1\n@0\n@1\n@4294967295\n@2147483647\n@2147483648\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

@@ -1,0 +1,58 @@
+----------
+module local/test/isize_math
+----------
+
+fun add(a: isize, b: isize): isize
+    ret a +! b
+end fun
+
+fun sub(a: isize, b: isize): isize
+    ret a -! b
+end fun
+
+fun mul(a: isize, b: isize): isize
+    ret a *! b
+end fun
+
+fun negate(n: isize): isize
+    ret icall neg_wrapping_isize(n)
+end fun
+
+fun max_of(a: isize, b: isize): isize
+    if a .>= b
+        ret a
+    else
+        ret b
+    end if
+end fun
+
+fun min_of(a: isize, b: isize): isize
+    if a .<= b
+        ret a
+    else
+        ret b
+    end if
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/isize_math
+import isize_math.add
+import isize_math.sub
+import isize_math.mul
+import isize_math.negate
+import isize_math.max_of
+import isize_math.min_of
+
+let a: isize = (: isize / 100)
+let b: isize = (: isize / -50)
+
+debuglog add(a, b)
+debuglog sub(a, b)
+debuglog mul(a, b)
+debuglog negate(a)
+debuglog negate(b)
+debuglog max_of(a, b)
+debuglog min_of(a, b)

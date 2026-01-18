@@ -295,6 +295,26 @@ impl<'db> TyDescTable<'db> {
                     },
                 })
             }
+            Type::Usize => {
+                Box::new(rtdt::TyDesc {
+                    type_tag: rtdt::TyTag::Usize,
+                    size: rtdt::INDEX_SIZE,
+                    align: rtdt::INDEX_ALIGN,
+                    type_info: rtdt::TyInfo {
+                        nothing: rtdt::TyInfoNothing,
+                    },
+                })
+            }
+            Type::Isize => {
+                Box::new(rtdt::TyDesc {
+                    type_tag: rtdt::TyTag::Isize,
+                    size: rtdt::INDEX_SIZE,
+                    align: rtdt::INDEX_ALIGN,
+                    type_info: rtdt::TyInfo {
+                        nothing: rtdt::TyInfoNothing,
+                    },
+                })
+            }
             Type::F32 => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::F32,

@@ -1208,6 +1208,8 @@ impl TyDescEmitter {
             | IrType::I32
             | IrType::U64
             | IrType::I64
+            | IrType::Usize
+            | IrType::Isize
             | IrType::F32
             | IrType::F64
             | IrType::Int
@@ -1257,6 +1259,8 @@ impl TyDescEmitter {
             IrType::I32 => (TyTag::I32 as u8, size_of::<i32>() as u32, align_of::<i32>() as u32),
             IrType::U64 => (TyTag::U64 as u8, size_of::<u64>() as u32, align_of::<u64>() as u32),
             IrType::I64 => (TyTag::I64 as u8, size_of::<i64>() as u32, align_of::<i64>() as u32),
+            IrType::Usize => (TyTag::Usize as u8, datalove_rtdt::INDEX_SIZE, datalove_rtdt::INDEX_ALIGN),
+            IrType::Isize => (TyTag::Isize as u8, datalove_rtdt::INDEX_SIZE, datalove_rtdt::INDEX_ALIGN),
             IrType::F32 => (TyTag::F32 as u8, size_of::<f32>() as u32, align_of::<f32>() as u32),
             IrType::F64 => (TyTag::F64 as u8, size_of::<f64>() as u32, align_of::<f64>() as u32),
             IrType::Int => (TyTag::Int as u8, size_of::<RtInt>() as u32, align_of::<RtInt>() as u32),

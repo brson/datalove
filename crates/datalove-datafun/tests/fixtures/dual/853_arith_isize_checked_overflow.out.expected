@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 2147483647isize\n    v1 = const -2147483648isize\n    v2 = const 1isize\n    v3 = const 0isize\n    v4 = call f1(v0, v2)\n    v5 = const 999isize\n    v6 = call f0(v4, v5)\n    debuglog v6\n    v7 = call f2(v1, v2)\n    v8 = const 999isize\n    v9 = call f0(v7, v8)\n    debuglog v9\n    v10 = call f3(v2, v3)\n    v11 = const 999isize\n    v12 = call f0(v10, v11)\n    debuglog v12\n    unit_end\n\nfn unwrap_isize(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nfn checked_add(p0, p1):\nblock0:\n    v0, v1 = add.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\nfn checked_sub(p0, p1):\nblock0:\n    v0, v1 = sub.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\nfn checked_div(p0, p1):\nblock0:\n    v0, v1 = div.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\nexports:\n    unwrap_isize = f0\n    checked_add = f1\n    checked_sub = f2\n    checked_div = f3\n    max = v0\n    min = v1\n    one = v2\n    zero = v3\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 2147483647isize\n    v1 = const -2147483648isize\n    v2 = const 1isize\n    v3 = const 0isize\n    v4 = call f1(v0, v2)\n    v5 = const 999isize\n    v6 = call f0(v4, v5)\n    debuglog v6\n    v7 = call f2(v1, v2)\n    v8 = const 999isize\n    v9 = call f0(v7, v8)\n    debuglog v9\n    v10 = call f3(v2, v3)\n    v11 = const 999isize\n    v12 = call f0(v10, v11)\n    debuglog v12\n    unit_end\n\nfn unwrap_isize(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nfn checked_add(p0, p1):\nblock0:\n    v0, v1 = add.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\nfn checked_sub(p0, p1):\nblock0:\n    v0, v1 = sub.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\nfn checked_div(p0, p1):\nblock0:\n    v0, v1 = div.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\nexports:\n    unwrap_isize = f0\n    checked_add = f1\n    checked_sub = f2\n    checked_div = f3\n    max = v0\n    min = v1\n    one = v2\n    zero = v3\n",
+            ),
+            ir_match: true,
+            interp_output: "@999\n@999\n@999\n",
+            aot_output: "@999\n@999\n@999\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

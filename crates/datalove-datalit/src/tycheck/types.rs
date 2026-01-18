@@ -34,6 +34,8 @@ pub enum Type<'db> {
     I32,
     U64,
     I64,
+    Usize,
+    Isize,
     F32,
     F64,
     Int,
@@ -191,6 +193,7 @@ pub fn is_numeric_type(ty: &Type<'_>) -> bool {
         Type::U16 | Type::I16 |
         Type::U32 | Type::I32 |
         Type::U64 | Type::I64 |
+        Type::Usize | Type::Isize |
         Type::F32 | Type::F64 |
         Type::Int
     )
@@ -213,13 +216,14 @@ pub fn is_fixed_int_type(ty: &Type<'_>) -> bool {
         Type::U8 | Type::I8 |
         Type::U16 | Type::I16 |
         Type::U32 | Type::I32 |
-        Type::U64 | Type::I64
+        Type::U64 | Type::I64 |
+        Type::Usize | Type::Isize
     )
 }
 
 /// Check if a type is an unsigned integer type.
 pub fn is_unsigned_int_type(ty: &Type<'_>) -> bool {
-    matches!(ty, Type::U8 | Type::U16 | Type::U32 | Type::U64)
+    matches!(ty, Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::Usize)
 }
 
 /// Check if a type is boolean.
@@ -243,6 +247,8 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
         (Type::I32, Type::I32) => true,
         (Type::U64, Type::U64) => true,
         (Type::I64, Type::I64) => true,
+        (Type::Usize, Type::Usize) => true,
+        (Type::Isize, Type::Isize) => true,
         (Type::F32, Type::F32) => true,
         (Type::F64, Type::F64) => true,
         (Type::Int, Type::Int) => true,
@@ -348,6 +354,8 @@ pub fn can_widen_to<'db>(from: &Type<'db>, to: &Type<'db>) -> bool {
         (Type::I16, Type::I32 | Type::I64 | Type::Int) => true,
         (Type::I32, Type::I64 | Type::Int) => true,
         (Type::I64, Type::Int) => true,
+        (Type::Usize, Type::Int) => true,
+        (Type::Isize, Type::Int) => true,
         _ => false,
     }
 }
@@ -374,6 +382,8 @@ pub fn convert_type_hint<'db>(
         TypeHint::I32 => Type::I32,
         TypeHint::U64 => Type::U64,
         TypeHint::I64 => Type::I64,
+        TypeHint::Usize => Type::Usize,
+        TypeHint::Isize => Type::Isize,
         TypeHint::F32 => Type::F32,
         TypeHint::F64 => Type::F64,
         TypeHint::Int => Type::Int,
@@ -485,6 +495,8 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
         Type::I32 => "i32".S(),
         Type::U64 => "u64".S(),
         Type::I64 => "i64".S(),
+        Type::Usize => "usize".S(),
+        Type::Isize => "isize".S(),
         Type::F32 => "f32".S(),
         Type::F64 => "f64".S(),
         Type::Int => "int".S(),
@@ -735,6 +747,8 @@ pub fn check_int_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeErr
         Type::I32 => value_str.parse::<i32>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
         Type::U64 => value_str.parse::<u64>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
         Type::I64 => value_str.parse::<i64>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
+        Type::Usize => value_str.parse::<datalove_rtdt::UsizeRepr>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
+        Type::Isize => value_str.parse::<datalove_rtdt::IsizeRepr>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
         Type::Int => Ok(()),
         _ => Ok(()),
     }
@@ -806,6 +820,30 @@ pub fn check_hex_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeErr
                 if value <= 9223372036854775807 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
             }
         }
+        Type::Usize if !is_negative => {
+            datalove_rtdt::UsizeRepr::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
+        }
+        Type::Isize => {
+            // Handle signed isize similar to other signed types.
+            #[cfg(not(feature = "index-64"))]
+            {
+                let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
+                if is_negative {
+                    if value <= 2147483648 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+                } else {
+                    if value <= 2147483647 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+                }
+            }
+            #[cfg(feature = "index-64")]
+            {
+                let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
+                if is_negative {
+                    if value <= 9223372036854775808 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+                } else {
+                    if value <= 9223372036854775807 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
+                }
+            }
+        }
         Type::Int => Ok(()),
         Type::F32 if !is_negative => {
             u32::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
@@ -846,6 +884,14 @@ pub fn int_type_range_info(ty: &Type<'_>) -> (&'static str, &'static str) {
         Type::I32 => ("T010", "i32 can represent values from -2,147,483,648 to 2,147,483,647"),
         Type::U64 => ("T011", "u64 can represent values from 0 to 18,446,744,073,709,551,615"),
         Type::I64 => ("T012", "i64 can represent values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807"),
+        #[cfg(not(feature = "index-64"))]
+        Type::Usize => ("T015", "usize can represent values from 0 to 4,294,967,295"),
+        #[cfg(feature = "index-64")]
+        Type::Usize => ("T015", "usize can represent values from 0 to 18,446,744,073,709,551,615"),
+        #[cfg(not(feature = "index-64"))]
+        Type::Isize => ("T016", "isize can represent values from -2,147,483,648 to 2,147,483,647"),
+        #[cfg(feature = "index-64")]
+        Type::Isize => ("T016", "isize can represent values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807"),
         Type::Int => ("T000", "int is arbitrary precision"),
         _ => ("T000", ""),
     }
@@ -862,6 +908,14 @@ pub fn hex_type_range_info(ty: &Type<'_>) -> (&'static str, &'static str) {
         Type::I16 => ("T008", "i16 can represent hex values from -0x8000 to 0x7FFF"),
         Type::I32 => ("T010", "i32 can represent hex values from -0x80000000 to 0x7FFFFFFF"),
         Type::I64 => ("T012", "i64 can represent hex values from -0x8000000000000000 to 0x7FFFFFFFFFFFFFFF"),
+        #[cfg(not(feature = "index-64"))]
+        Type::Usize => ("T015", "usize can represent hex values from 0x00000000 to 0xFFFFFFFF"),
+        #[cfg(feature = "index-64")]
+        Type::Usize => ("T015", "usize can represent hex values from 0x0000000000000000 to 0xFFFFFFFFFFFFFFFF"),
+        #[cfg(not(feature = "index-64"))]
+        Type::Isize => ("T016", "isize can represent hex values from -0x80000000 to 0x7FFFFFFF"),
+        #[cfg(feature = "index-64")]
+        Type::Isize => ("T016", "isize can represent hex values from -0x8000000000000000 to 0x7FFFFFFFFFFFFFFF"),
         Type::Int => ("T000", "int is arbitrary precision"),
         Type::F32 => ("T013", "f32 bit patterns must be 32-bit hex values (0x00000000 to 0xFFFFFFFF)"),
         Type::F64 => ("T014", "f64 bit patterns must be 64-bit hex values (0x0000000000000000 to 0xFFFFFFFFFFFFFFFF)"),

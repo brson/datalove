@@ -258,6 +258,7 @@ pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ty
         | DatalitType::U16 | DatalitType::I16
         | DatalitType::U32 | DatalitType::I32
         | DatalitType::U64 | DatalitType::I64
+        | DatalitType::Usize | DatalitType::Isize
         | DatalitType::F32 | DatalitType::F64 => true,
 
         // Bigint is move (heap-allocated).

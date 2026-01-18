@@ -22,6 +22,8 @@ fn type_hint_to_string(db: &dyn salsa::Database, type_hint: datalove_datalit::as
         TypeHint::I32 => "i32",
         TypeHint::U64 => "u64",
         TypeHint::I64 => "i64",
+        TypeHint::Usize => "usize",
+        TypeHint::Isize => "isize",
         TypeHint::F32 => "f32",
         TypeHint::F64 => "f64",
         TypeHint::String => "string",

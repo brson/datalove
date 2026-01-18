@@ -615,6 +615,9 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         TypeHint::I32 => (gen_int_expr(db, rng, config, i32::MIN, i32::MAX), heap),
         TypeHint::U64 => (gen_uint_expr(db, rng, config, 0u64, u64::MAX), heap),
         TypeHint::I64 => (gen_int_expr(db, rng, config, i64::MIN, i64::MAX), heap),
+        // For usize/isize, generate 32-bit values (default configuration).
+        TypeHint::Usize => (gen_uint_expr(db, rng, config, 0u32, u32::MAX), heap),
+        TypeHint::Isize => (gen_int_expr(db, rng, config, i32::MIN, i32::MAX), heap),
         TypeHint::F32 => (gen_f32_expr(db, rng, config), heap),
         TypeHint::F64 => (gen_f64_expr(db, rng, config), heap),
         TypeHint::Int => (gen_int_expr(db, rng, config, i64::MIN, i64::MAX), heap),

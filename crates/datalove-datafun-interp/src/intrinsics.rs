@@ -567,6 +567,111 @@ impl IrInterpreter {
                 let b = self.read_i64(&args[1], frame, frames)?;
                 self.write_i64(a % b, dest);
             }
+
+            // Usize bitwise operations.
+            BitnotUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                self.write_usize(!a, dest);
+            }
+            BitandUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                let b = self.read_usize(&args[1], frame, frames)?;
+                self.write_usize(a & b, dest);
+            }
+            BitorUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                let b = self.read_usize(&args[1], frame, frames)?;
+                self.write_usize(a | b, dest);
+            }
+            BitxorUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                let b = self.read_usize(&args[1], frame, frames)?;
+                self.write_usize(a ^ b, dest);
+            }
+
+            // Usize shift operations.
+            ShlUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                let b = self.read_u32(&args[1], frame, frames)?;
+                self.write_usize(a.wrapping_shl(b), dest);
+            }
+            ShrUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                let b = self.read_u32(&args[1], frame, frames)?;
+                self.write_usize(a.wrapping_shr(b), dest);
+            }
+
+            // Usize bit counting operations.
+            PopcountUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                self.write_u32(a.count_ones(), dest);
+            }
+            ClzUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                self.write_u32(a.leading_zeros(), dest);
+            }
+            CtzUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                self.write_u32(a.trailing_zeros(), dest);
+            }
+
+            // Usize byte/bit manipulation.
+            SwapBytesUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                self.write_usize(a.swap_bytes(), dest);
+            }
+            ReverseBitsUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                self.write_usize(a.reverse_bits(), dest);
+            }
+
+            // Usize wrapping arithmetic.
+            AddWrappingUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                let b = self.read_usize(&args[1], frame, frames)?;
+                self.write_usize(a.wrapping_add(b), dest);
+            }
+            SubWrappingUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                let b = self.read_usize(&args[1], frame, frames)?;
+                self.write_usize(a.wrapping_sub(b), dest);
+            }
+            MulWrappingUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                let b = self.read_usize(&args[1], frame, frames)?;
+                self.write_usize(a.wrapping_mul(b), dest);
+            }
+            RemUsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                let b = self.read_usize(&args[1], frame, frames)?;
+                self.write_usize(a % b, dest);
+            }
+
+            // Usize/Isize type conversion.
+            UsizeToIsize => {
+                let a = self.read_usize(&args[0], frame, frames)?;
+                self.write_isize(a as datalove_rtdt::IsizeRepr, dest);
+            }
+            IsizeToUsize => {
+                let a = self.read_isize(&args[0], frame, frames)?;
+                self.write_usize(a as datalove_rtdt::UsizeRepr, dest);
+            }
+
+            // Isize operations.
+            NegWrappingIsize => {
+                let a = self.read_isize(&args[0], frame, frames)?;
+                self.write_isize(a.wrapping_neg(), dest);
+            }
+            SshrIsize => {
+                let a = self.read_isize(&args[0], frame, frames)?;
+                let b = self.read_u32(&args[1], frame, frames)?;
+                self.write_isize(a.wrapping_shr(b), dest);
+            }
+            SremIsize => {
+                let a = self.read_isize(&args[0], frame, frames)?;
+                let b = self.read_isize(&args[1], frame, frames)?;
+                self.write_isize(a % b, dest);
+            }
         }
         Ok(())
     }
@@ -684,6 +789,28 @@ impl IrInterpreter {
     /// Write an i16 value to destination.
     fn write_i16(&self, value: i16, dest: Destination) {
         unsafe { *(dest.ptr as *mut i16) = value; }
+    }
+
+    /// Read a usize value from an operand.
+    fn read_usize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<datalove_rtdt::UsizeRepr, InterpError> {
+        let val = self.read_operand(op, frame, frames)?;
+        Ok(unsafe { *(val.ptr as *const datalove_rtdt::UsizeRepr) })
+    }
+
+    /// Write a usize value to destination.
+    fn write_usize(&self, value: datalove_rtdt::UsizeRepr, dest: Destination) {
+        unsafe { *(dest.ptr as *mut datalove_rtdt::UsizeRepr) = value; }
+    }
+
+    /// Read an isize value from an operand.
+    fn read_isize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<datalove_rtdt::IsizeRepr, InterpError> {
+        let val = self.read_operand(op, frame, frames)?;
+        Ok(unsafe { *(val.ptr as *const datalove_rtdt::IsizeRepr) })
+    }
+
+    /// Write an isize value to destination.
+    fn write_isize(&self, value: datalove_rtdt::IsizeRepr, dest: Destination) {
+        unsafe { *(dest.ptr as *mut datalove_rtdt::IsizeRepr) = value; }
     }
 }
 

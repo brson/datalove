@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+let zero: isize = (: isize / 0)
+let one: isize = (: isize / 1)
+let neg_one: isize = (: isize / -1)
+let min: isize = (: isize / -2147483648)
+let max: isize = (: isize / 2147483647)
+
+debuglog zero
+debuglog one
+debuglog neg_one
+debuglog min
+debuglog max

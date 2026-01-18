@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0isize\n    v1 = const 1isize\n    v2 = const -1isize\n    v3 = const -2147483648isize\n    v4 = const 2147483647isize\n    debuglog v0\n    debuglog v1\n    debuglog v2\n    debuglog v3\n    debuglog v4\n    unit_end\nexports:\n    zero = v0\n    one = v1\n    neg_one = v2\n    min = v3\n    max = v4\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0isize\n    v1 = const 1isize\n    v2 = const -1isize\n    v3 = const -2147483648isize\n    v4 = const 2147483647isize\n    debuglog v0\n    debuglog v1\n    debuglog v2\n    debuglog v3\n    debuglog v4\n    unit_end\nexports:\n    zero = v0\n    one = v1\n    neg_one = v2\n    min = v3\n    max = v4\n",
+            ),
+            ir_match: true,
+            interp_output: "@0\n@1\n@-1\n@-2147483648\n@2147483647\n",
+            aot_output: "@0\n@1\n@-1\n@-2147483648\n@2147483647\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

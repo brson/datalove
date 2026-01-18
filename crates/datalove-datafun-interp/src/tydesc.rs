@@ -110,6 +110,18 @@ impl IrTyDescTable {
                 align: 8,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
             }),
+            IrType::Usize => Box::new(TyDesc {
+                type_tag: rtdt::TyTag::Usize,
+                size: rtdt::INDEX_SIZE,
+                align: rtdt::INDEX_ALIGN,
+                type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
+            }),
+            IrType::Isize => Box::new(TyDesc {
+                type_tag: rtdt::TyTag::Isize,
+                size: rtdt::INDEX_SIZE,
+                align: rtdt::INDEX_ALIGN,
+                type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
+            }),
             IrType::Int => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::Int,
                 size: std::mem::size_of::<rtdt::Int>() as u32,

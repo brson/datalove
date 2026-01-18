@@ -43,6 +43,29 @@ pub struct U64(pub u64);
 #[repr(transparent)]
 pub struct I64(pub i64);
 
+// Collection index types - configurable size.
+#[cfg(not(feature = "index-64"))]
+mod index_types {
+    pub type UsizeRepr = u32;
+    pub type IsizeRepr = i32;
+    pub const INDEX_SIZE: u32 = 4;
+    pub const INDEX_ALIGN: u32 = 4;
+}
+#[cfg(feature = "index-64")]
+mod index_types {
+    pub type UsizeRepr = u64;
+    pub type IsizeRepr = i64;
+    pub const INDEX_SIZE: u32 = 8;
+    pub const INDEX_ALIGN: u32 = 8;
+}
+pub use index_types::*;
+
+#[repr(transparent)]
+pub struct Usize(pub UsizeRepr);
+
+#[repr(transparent)]
+pub struct Isize(pub IsizeRepr);
+
 #[repr(transparent)]
 pub struct F32(pub f32);
 
@@ -391,6 +414,8 @@ pub enum TyTag {
     I32 = 0x15,
     U64 = 0x16,
     I64 = 0x17,
+    Usize = 0x18,
+    Isize = 0x19,
 
     F32 = 0x20,
     F64 = 0x21,

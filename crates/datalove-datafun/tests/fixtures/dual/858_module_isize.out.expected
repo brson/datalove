@@ -1,0 +1,56 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "module",
+            name: Some("local/test/isize_math"),
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "line 3, col 9: error[F049]: try operator `+!` return type mismatch: expected `Result`, found `isize`",
+                    "line 7, col 9: error[F049]: try operator `-!` return type mismatch: expected `Result`, found `isize`",
+                    "line 11, col 9: error[F049]: try operator `*!` return type mismatch: expected `Result`, found `isize`",
+                ],
+            ),
+            interp_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100isize\n    v1 = const -50isize\n    v2 = call m0.f0(v0, v1)\n    debuglog v2\n    v3 = call m0.f1(v0, v1)\n    debuglog v3\n    v4 = call m0.f2(v0, v1)\n    debuglog v4\n    v5 = call m0.f3(v0)\n    debuglog v5\n    v6 = call m0.f3(v1)\n    debuglog v6\n    v7 = call m0.f4(v0, v1)\n    debuglog v7\n    v8 = call m0.f5(v0, v1)\n    debuglog v8\n    unit_end\nexports:\n    a = v0\n    b = v1\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100isize\n    v1 = const -50isize\n    v2 = call m0.f0(v0, v1)\n    debuglog v2\n    v3 = call m0.f1(v0, v1)\n    debuglog v3\n    v4 = call m0.f2(v0, v1)\n    debuglog v4\n    v5 = call m0.f3(v0)\n    debuglog v5\n    v6 = call m0.f3(v1)\n    debuglog v6\n    v7 = call m0.f4(v0, v1)\n    debuglog v7\n    v8 = call m0.f5(v0, v1)\n    debuglog v8\n    unit_end\nexports:\n    a = v0\n    b = v1\n",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Error",
+                message: "unsupported: module function (IrModuleId(0), FuncId(0)) not pre-compiled",
+            )),
+            link: Some(LinkResult(
+                status: "Skipped",
+                reason: "AOT compile failed",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Skipped",
+                reason: "AOT compile failed",
+            )),
+        ),
+    ],
+)

@@ -58,6 +58,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ConstValue::I64(v) => {
                 builder.ins().iconst(cl_types::I64, *v)
             }
+            #[cfg(not(feature = "index-64"))]
+            ConstValue::Usize(v) => {
+                builder.ins().iconst(cl_types::I32, *v as i64)
+            }
+            #[cfg(feature = "index-64")]
+            ConstValue::Usize(v) => {
+                builder.ins().iconst(cl_types::I64, *v as i64)
+            }
+            #[cfg(not(feature = "index-64"))]
+            ConstValue::Isize(v) => {
+                builder.ins().iconst(cl_types::I32, *v as i64)
+            }
+            #[cfg(feature = "index-64")]
+            ConstValue::Isize(v) => {
+                builder.ins().iconst(cl_types::I64, *v)
+            }
             ConstValue::F32(v) => {
                 builder.ins().f32const(*v)
             }

@@ -12,7 +12,7 @@ use crate::value::{Destination, Value};
 use crate::IrInterpreter;
 
 impl IrInterpreter {
-    /// Check if a type tag is a fixed-width integer (u8-u64, i8-i64).
+    /// Check if a type tag is a fixed-width integer (u8-u64, i8-i64, usize, isize).
     pub(crate) fn is_fixed_width_int(tag: rtdt::TyTag) -> bool {
         matches!(
             tag,
@@ -24,6 +24,8 @@ impl IrInterpreter {
                 | rtdt::TyTag::I16
                 | rtdt::TyTag::I32
                 | rtdt::TyTag::I64
+                | rtdt::TyTag::Usize
+                | rtdt::TyTag::Isize
         )
     }
 
@@ -40,6 +42,8 @@ impl IrInterpreter {
                 | rtdt::TyTag::I16
                 | rtdt::TyTag::I32
                 | rtdt::TyTag::I64
+                | rtdt::TyTag::Usize
+                | rtdt::TyTag::Isize
                 | rtdt::TyTag::F32
                 | rtdt::TyTag::F64
         )
@@ -57,6 +61,7 @@ impl IrInterpreter {
                 rtdt::TyTag::Bool
                 | rtdt::TyTag::U8 | rtdt::TyTag::U16 | rtdt::TyTag::U32 | rtdt::TyTag::U64
                 | rtdt::TyTag::I8 | rtdt::TyTag::I16 | rtdt::TyTag::I32 | rtdt::TyTag::I64
+                | rtdt::TyTag::Usize | rtdt::TyTag::Isize
                 | rtdt::TyTag::F32 | rtdt::TyTag::F64 => true,
 
                 // Heap-allocated types are never copy.
@@ -163,6 +168,30 @@ impl IrInterpreter {
                         ((-v) as u64, true)
                     } else {
                         (v as u64, false)
+                    }
+                }
+                rtdt::TyTag::Usize => {
+                    (*(src.ptr as *const rtdt::UsizeRepr) as u64, false)
+                }
+                rtdt::TyTag::Isize => {
+                    let v = *(src.ptr as *const rtdt::IsizeRepr);
+                    #[cfg(not(feature = "index-64"))]
+                    {
+                        if v < 0 {
+                            ((-(v as i64)) as u64, true)
+                        } else {
+                            (v as u64, false)
+                        }
+                    }
+                    #[cfg(feature = "index-64")]
+                    {
+                        if v == i64::MIN {
+                            (0x8000_0000_0000_0000u64, true)
+                        } else if v < 0 {
+                            ((-v) as u64, true)
+                        } else {
+                            (v as u64, false)
+                        }
                     }
                 }
                 _ => {
@@ -397,6 +426,8 @@ impl IrInterpreter {
             int_binop!(U16, u16, lhs, rhs, dest, op);
             int_binop!(U32, u32, lhs, rhs, dest, op);
             int_binop!(U64, u64, lhs, rhs, dest, op);
+            int_binop!(Usize, rtdt::UsizeRepr, lhs, rhs, dest, op);
+            int_binop!(Isize, rtdt::IsizeRepr, lhs, rhs, dest, op);
 
             // Bigint operations via runtime (when operands are already Int).
             if tag == rtdt::TyTag::Int {
@@ -671,12 +702,14 @@ impl IrInterpreter {
             signed_int_unaryop!(I16, i16, src, dest, op);
             signed_int_unaryop!(I32, i32, src, dest, op);
             signed_int_unaryop!(I64, i64, src, dest, op);
+            signed_int_unaryop!(Isize, rtdt::IsizeRepr, src, dest, op);
 
             // Unsigned integer bitnot.
             unsigned_int_unaryop!(U8, u8, src, dest, op);
             unsigned_int_unaryop!(U16, u16, src, dest, op);
             unsigned_int_unaryop!(U32, u32, src, dest, op);
             unsigned_int_unaryop!(U64, u64, src, dest, op);
+            unsigned_int_unaryop!(Usize, rtdt::UsizeRepr, src, dest, op);
 
             // F32 negation.
             if tag == rtdt::TyTag::F32 && op == UnaryOp::Neg {
@@ -775,6 +808,8 @@ impl IrInterpreter {
             checked_int_binop!(U16, u16, lhs, rhs, dest, overflow_dest, op);
             checked_int_binop!(U32, u32, lhs, rhs, dest, overflow_dest, op);
             checked_int_binop!(U64, u64, lhs, rhs, dest, overflow_dest, op);
+            checked_int_binop!(Usize, rtdt::UsizeRepr, lhs, rhs, dest, overflow_dest, op);
+            checked_int_binop!(Isize, rtdt::IsizeRepr, lhs, rhs, dest, overflow_dest, op);
 
             let tag = (*lhs.tydesc).type_tag;
             Err(InterpError::TypeMismatch(format!(
@@ -818,6 +853,7 @@ impl IrInterpreter {
             checked_signed_neg!(I16, i16, src, dest, overflow_dest);
             checked_signed_neg!(I32, i32, src, dest, overflow_dest);
             checked_signed_neg!(I64, i64, src, dest, overflow_dest);
+            checked_signed_neg!(Isize, rtdt::IsizeRepr, src, dest, overflow_dest);
 
             let tag = (*src.tydesc).type_tag;
             Err(InterpError::TypeMismatch(format!(

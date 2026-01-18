@@ -1,0 +1,21 @@
+----------
+scriptunit-fragment
+----------
+
+let a: usize = (: usize / 10)
+let b: usize = (: usize / 5)
+let c: usize = (: usize / 3)
+
+// Basic wrapping arithmetic.
+debuglog (a +! b)
+debuglog (a -! b)
+debuglog (a *! c)
+
+// Wrapping overflow.
+let max: usize = (: usize / 4294967295)
+let one: usize = (: usize / 1)
+debuglog (max +! one)
+
+// Wrapping underflow.
+let zero: usize = (: usize / 0)
+debuglog (zero -! one)

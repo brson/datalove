@@ -578,6 +578,131 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let b = self.get_operand_value(builder, &args[1])?;
                 builder.ins().srem(a, b)
             }
+
+            // Usize bitwise operations.
+            BitnotUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bnot(a)
+            }
+            BitandUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().band(a, b)
+            }
+            BitorUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().bor(a, b)
+            }
+            BitxorUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().bxor(a, b)
+            }
+
+            // Usize shift operations.
+            ShlUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().ishl(a, b)
+            }
+            ShrUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().ushr(a, b)
+            }
+
+            // Usize bit counting operations.
+            // These return u32 (I32) regardless of usize width.
+            #[cfg(not(feature = "index-64"))]
+            PopcountUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().popcnt(a)
+            }
+            #[cfg(feature = "index-64")]
+            PopcountUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let result = builder.ins().popcnt(a);
+                builder.ins().ireduce(cl_types::I32, result)
+            }
+            #[cfg(not(feature = "index-64"))]
+            ClzUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().clz(a)
+            }
+            #[cfg(feature = "index-64")]
+            ClzUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let result = builder.ins().clz(a);
+                builder.ins().ireduce(cl_types::I32, result)
+            }
+            #[cfg(not(feature = "index-64"))]
+            CtzUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ctz(a)
+            }
+            #[cfg(feature = "index-64")]
+            CtzUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let result = builder.ins().ctz(a);
+                builder.ins().ireduce(cl_types::I32, result)
+            }
+
+            // Usize byte/bit manipulation.
+            SwapBytesUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bswap(a)
+            }
+            ReverseBitsUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().bitrev(a)
+            }
+
+            // Usize wrapping arithmetic.
+            AddWrappingUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().iadd(a, b)
+            }
+            SubWrappingUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().isub(a, b)
+            }
+            MulWrappingUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().imul(a, b)
+            }
+            RemUsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().urem(a, b)
+            }
+
+            // Usize/Isize type conversion (no-op at IR level).
+            UsizeToIsize => {
+                self.get_operand_value(builder, &args[0])?
+            }
+            IsizeToUsize => {
+                self.get_operand_value(builder, &args[0])?
+            }
+
+            // Isize operations.
+            NegWrappingIsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ineg(a)
+            }
+            SshrIsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().sshr(a, b)
+            }
+            SremIsize => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                let b = self.get_operand_value(builder, &args[1])?;
+                builder.ins().srem(a, b)
+            }
         };
 
         // Store result.

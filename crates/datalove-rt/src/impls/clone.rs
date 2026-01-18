@@ -39,6 +39,7 @@ unsafe fn clone_impl(
         // Scalars - just copy bytes.
         TyTag::Bool | TyTag::U8 | TyTag::I8 | TyTag::U16 | TyTag::I16 |
         TyTag::U32 | TyTag::I32 | TyTag::U64 | TyTag::I64 |
+        TyTag::Usize | TyTag::Isize |
         TyTag::F32 | TyTag::F64 => {
             unsafe {
                 std::ptr::copy_nonoverlapping(value_in, value_out, ty.size() as usize);

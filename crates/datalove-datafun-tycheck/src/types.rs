@@ -148,6 +148,8 @@ fn convert_type_hint_inner<'db>(
         TypeHint::I32 => Type::Datalit(datalit::tycheck::Type::I32),
         TypeHint::U64 => Type::Datalit(datalit::tycheck::Type::U64),
         TypeHint::I64 => Type::Datalit(datalit::tycheck::Type::I64),
+        TypeHint::Usize => Type::Datalit(datalit::tycheck::Type::Usize),
+        TypeHint::Isize => Type::Datalit(datalit::tycheck::Type::Isize),
         TypeHint::F32 => Type::Datalit(datalit::tycheck::Type::F32),
         TypeHint::F64 => Type::Datalit(datalit::tycheck::Type::F64),
         TypeHint::Int => Type::Datalit(datalit::tycheck::Type::Int),

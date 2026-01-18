@@ -160,6 +160,30 @@ pub enum IntrinsicId {
     NegWrappingI64 = 213,
     SshrI64 = 214,
     SremI64 = 215,
+
+    // Usize operations (220-239).
+    BitnotUsize = 220,
+    BitandUsize = 221,
+    BitorUsize = 222,
+    BitxorUsize = 223,
+    ShlUsize = 224,
+    ShrUsize = 225,
+    PopcountUsize = 226,
+    ClzUsize = 227,
+    CtzUsize = 228,
+    SwapBytesUsize = 229,
+    ReverseBitsUsize = 230,
+    AddWrappingUsize = 231,
+    SubWrappingUsize = 232,
+    MulWrappingUsize = 233,
+    RemUsize = 234,
+    UsizeToIsize = 235,
+
+    // Isize operations (250-269).
+    IsizeToUsize = 250,
+    NegWrappingIsize = 251,
+    SshrIsize = 252,
+    SremIsize = 253,
 }
 
 /// Simplified type for intrinsic parameters and return values.
@@ -173,6 +197,8 @@ pub enum IntrinsicType {
     I32,
     U64,
     I64,
+    Usize,
+    Isize,
     F32,
     F64,
     Bool,
@@ -899,6 +925,140 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         name: "srem_i64",
         params: &[IntrinsicType::I64, IntrinsicType::I64],
         ret: IntrinsicType::I64,
+    },
+
+    // Usize bitwise operations.
+    IntrinsicDef {
+        id: IntrinsicId::BitnotUsize,
+        name: "bitnot_usize",
+        params: &[IntrinsicType::Usize],
+        ret: IntrinsicType::Usize,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitandUsize,
+        name: "bitand_usize",
+        params: &[IntrinsicType::Usize, IntrinsicType::Usize],
+        ret: IntrinsicType::Usize,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitorUsize,
+        name: "bitor_usize",
+        params: &[IntrinsicType::Usize, IntrinsicType::Usize],
+        ret: IntrinsicType::Usize,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::BitxorUsize,
+        name: "bitxor_usize",
+        params: &[IntrinsicType::Usize, IntrinsicType::Usize],
+        ret: IntrinsicType::Usize,
+    },
+
+    // Usize shift operations.
+    IntrinsicDef {
+        id: IntrinsicId::ShlUsize,
+        name: "shl_usize",
+        params: &[IntrinsicType::Usize, IntrinsicType::U32],
+        ret: IntrinsicType::Usize,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::ShrUsize,
+        name: "shr_usize",
+        params: &[IntrinsicType::Usize, IntrinsicType::U32],
+        ret: IntrinsicType::Usize,
+    },
+
+    // Usize bit counting operations.
+    IntrinsicDef {
+        id: IntrinsicId::PopcountUsize,
+        name: "popcount_usize",
+        params: &[IntrinsicType::Usize],
+        ret: IntrinsicType::U32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::ClzUsize,
+        name: "clz_usize",
+        params: &[IntrinsicType::Usize],
+        ret: IntrinsicType::U32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::CtzUsize,
+        name: "ctz_usize",
+        params: &[IntrinsicType::Usize],
+        ret: IntrinsicType::U32,
+    },
+
+    // Usize byte/bit manipulation.
+    IntrinsicDef {
+        id: IntrinsicId::SwapBytesUsize,
+        name: "swap_bytes_usize",
+        params: &[IntrinsicType::Usize],
+        ret: IntrinsicType::Usize,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::ReverseBitsUsize,
+        name: "reverse_bits_usize",
+        params: &[IntrinsicType::Usize],
+        ret: IntrinsicType::Usize,
+    },
+
+    // Usize wrapping arithmetic.
+    IntrinsicDef {
+        id: IntrinsicId::AddWrappingUsize,
+        name: "add_wrapping_usize",
+        params: &[IntrinsicType::Usize, IntrinsicType::Usize],
+        ret: IntrinsicType::Usize,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SubWrappingUsize,
+        name: "sub_wrapping_usize",
+        params: &[IntrinsicType::Usize, IntrinsicType::Usize],
+        ret: IntrinsicType::Usize,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::MulWrappingUsize,
+        name: "mul_wrapping_usize",
+        params: &[IntrinsicType::Usize, IntrinsicType::Usize],
+        ret: IntrinsicType::Usize,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::RemUsize,
+        name: "rem_usize",
+        params: &[IntrinsicType::Usize, IntrinsicType::Usize],
+        ret: IntrinsicType::Usize,
+    },
+
+    // Usize/Isize type conversion.
+    IntrinsicDef {
+        id: IntrinsicId::UsizeToIsize,
+        name: "usize_to_isize",
+        params: &[IntrinsicType::Usize],
+        ret: IntrinsicType::Isize,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::IsizeToUsize,
+        name: "isize_to_usize",
+        params: &[IntrinsicType::Isize],
+        ret: IntrinsicType::Usize,
+    },
+
+    // Isize operations.
+    IntrinsicDef {
+        id: IntrinsicId::NegWrappingIsize,
+        name: "neg_wrapping_isize",
+        params: &[IntrinsicType::Isize],
+        ret: IntrinsicType::Isize,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SshrIsize,
+        name: "sshr_isize",
+        params: &[IntrinsicType::Isize, IntrinsicType::U32],
+        ret: IntrinsicType::Isize,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::SremIsize,
+        name: "srem_isize",
+        params: &[IntrinsicType::Isize, IntrinsicType::Isize],
+        ret: IntrinsicType::Isize,
     },
 ];
 

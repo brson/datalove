@@ -984,6 +984,8 @@ fn pretty_type_hint<'db>(
         TypeHint::I32 => out.push_str("i32"),
         TypeHint::U64 => out.push_str("u64"),
         TypeHint::I64 => out.push_str("i64"),
+        TypeHint::Usize => out.push_str("usize"),
+        TypeHint::Isize => out.push_str("isize"),
         TypeHint::F32 => out.push_str("f32"),
         TypeHint::F64 => out.push_str("f64"),
         TypeHint::Int => out.push_str("int"),

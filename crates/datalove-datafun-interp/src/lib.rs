@@ -1342,6 +1342,12 @@ impl IrInterpreter {
                 ConstValue::I64(n) => {
                     *(dest.ptr as *mut i64) = *n;
                 }
+                ConstValue::Usize(n) => {
+                    *(dest.ptr as *mut rtdt::UsizeRepr) = *n;
+                }
+                ConstValue::Isize(n) => {
+                    *(dest.ptr as *mut rtdt::IsizeRepr) = *n;
+                }
                 ConstValue::Int { limbs, negative } => {
                     let int_ptr = dest.ptr as *mut rtdt::Int;
                     if limbs.is_empty() {

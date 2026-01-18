@@ -56,6 +56,8 @@ pub enum TypeHint<'db> {
     I32,
     U64,
     I64,
+    Usize,
+    Isize,
     F32,
     F64,
     Int,

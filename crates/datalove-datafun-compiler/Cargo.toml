@@ -7,6 +7,15 @@ edition.workspace = true
 
 [features]
 slow_tests = []
+index-64 = [
+    "datalove-rtdt/index-64",
+    "datalove-datafun-ir/index-64",
+    "datalove-datafun-interp/index-64",
+    "datalove-datafun-tycheck/index-64",
+    "datalove-datafun-parser/index-64",
+    "datalove-datafun-intrinsics/index-64",
+    "datalove-datalit/index-64",
+]
 
 [dependencies]
 rmx.workspace = true

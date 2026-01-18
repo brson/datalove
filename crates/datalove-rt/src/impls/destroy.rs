@@ -25,6 +25,8 @@ pub unsafe fn any_destroy_local(
             | rtdt::TyTag::I32
             | rtdt::TyTag::U64
             | rtdt::TyTag::I64
+            | rtdt::TyTag::Usize
+            | rtdt::TyTag::Isize
             | rtdt::TyTag::F32
             | rtdt::TyTag::F64 => RtStatus::Ok,
 

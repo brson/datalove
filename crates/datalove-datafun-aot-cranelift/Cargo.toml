@@ -5,6 +5,13 @@ license.workspace = true
 authors.workspace = true
 edition.workspace = true
 
+[features]
+index-64 = [
+    "datalove-rtdt/index-64",
+    "datalove-datafun-ir/index-64",
+    "datalove-datafun-intrinsics/index-64",
+]
+
 [dependencies]
 rmx.workspace = true
 datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"

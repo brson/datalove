@@ -1,0 +1,35 @@
+----------
+scriptunit-fragment
+----------
+
+fun unwrap_usize(opt: ?usize, default: usize): usize
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+fun checked_add(a: usize, b: usize): ?usize
+    ret some (a +? b)
+end fun
+
+fun checked_sub(a: usize, b: usize): ?usize
+    ret some (a -? b)
+end fun
+
+fun checked_div(a: usize, b: usize): ?usize
+    ret some (a /? b)
+end fun
+
+let max: usize = (: usize / 4294967295)
+let one: usize = (: usize / 1)
+let zero: usize = (: usize / 0)
+
+// Add overflow returns none.
+debuglog unwrap_usize(checked_add(max, one), (: usize / 999))
+
+// Sub underflow returns none.
+debuglog unwrap_usize(checked_sub(zero, one), (: usize / 999))
+
+// Div by zero returns none.
+debuglog unwrap_usize(checked_div(one, zero), (: usize / 999))

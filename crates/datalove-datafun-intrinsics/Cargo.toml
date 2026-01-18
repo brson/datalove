@@ -5,5 +5,8 @@ license.workspace = true
 authors.workspace = true
 edition.workspace = true
 
+[features]
+index-64 = []
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }

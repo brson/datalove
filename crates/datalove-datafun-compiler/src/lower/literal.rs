@@ -98,6 +98,8 @@ pub fn parse_int_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
         IrType::I16 => text.parse::<i16>().map(ConstValue::I16).map_err(|_| ()),
         IrType::I32 => text.parse::<i32>().map(ConstValue::I32).map_err(|_| ()),
         IrType::I64 => text.parse::<i64>().map(ConstValue::I64).map_err(|_| ()),
+        IrType::Usize => text.parse::<datalove_rtdt::UsizeRepr>().map(ConstValue::Usize).map_err(|_| ()),
+        IrType::Isize => text.parse::<datalove_rtdt::IsizeRepr>().map(ConstValue::Isize).map_err(|_| ()),
         IrType::Int => {
             let (limbs, negative) = parse_decimal_to_limbs(text)?;
             Ok(ConstValue::Int { limbs, negative })
@@ -127,6 +129,7 @@ pub fn try_parse_negated_int_const(text: &str, ty: &IrType) -> Option<ConstValue
         IrType::I16 => negated.parse::<i16>().map(ConstValue::I16).ok(),
         IrType::I32 => negated.parse::<i32>().map(ConstValue::I32).ok(),
         IrType::I64 => negated.parse::<i64>().map(ConstValue::I64).ok(),
+        IrType::Isize => negated.parse::<datalove_rtdt::IsizeRepr>().map(ConstValue::Isize).ok(),
         IrType::Int => {
             let (limbs, _) = parse_decimal_to_limbs(text).ok()?;
             // For bigint, negation is just flipping the sign.
@@ -148,6 +151,8 @@ pub fn parse_hex_const(hex_str: &str, ty: &IrType) -> Result<ConstValue, ()> {
         IrType::I16 => i16::from_str_radix(hex_str, 16).map(ConstValue::I16).map_err(|_| ()),
         IrType::I32 => i32::from_str_radix(hex_str, 16).map(ConstValue::I32).map_err(|_| ()),
         IrType::I64 => i64::from_str_radix(hex_str, 16).map(ConstValue::I64).map_err(|_| ()),
+        IrType::Usize => datalove_rtdt::UsizeRepr::from_str_radix(hex_str, 16).map(ConstValue::Usize).map_err(|_| ()),
+        IrType::Isize => datalove_rtdt::IsizeRepr::from_str_radix(hex_str, 16).map(ConstValue::Isize).map_err(|_| ()),
         IrType::Int => {
             let (limbs, negative) = parse_hex_to_limbs(hex_str)?;
             Ok(ConstValue::Int { limbs, negative })
