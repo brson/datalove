@@ -55,13 +55,13 @@
 - match
 - generics
 - type aliases
-- runtime calls
 
 
 
 
 ## Backlog
 
+- inlining
 - 128-bit ints
 - remove data / error keywords - rely on ~ coercion?
 - testable docs

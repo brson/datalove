@@ -24,24 +24,23 @@ Then we'll add I/O to it &mdash; carefully.
 
 <div class="four-things-grid">
   <div class="thing-box">
-    <p>A <em>data serialization, configuration and interchange format</em>
+    <p>Part <em>data serialization, configuration and interchange format</em>
        for common data types,
        with a focus on <em>numerical correctness.</em></p>
   </div>
   <div class="thing-box">
-    <p>A <em>pure-functional language</em>
+    <p>Part <em>pure-functional language</em>
        that reads like an imperative language,
        with a simple but sophisticated <em>linear type system.</em></p>
   </div>
   <div class="thing-box">
-    <p>Simple and complete <em>syntax and machine representation</em>
-       of common data types for <em>interchange and transformation.</em></p>
+    <p></p>
   </div>
   <div class="thing-box">
     <p>Modern compilation and execution architecture with
-       <em>rapid recompilation</em> and <em>script</em> iteration,
-       interactive / <em>REPL</em>,
-       <em>AOT</em>-render to <em>staticly-linked</em> binaries.</p>
+       <em>fully-memoized recompilation</em> and <em>rapid script iteration</em>,
+       interactive / <em>REPL</em> interpreter with JIT,
+       <em>compile</em> to <em>staticly-linked</em> binaries.</p>
   </div>
 </div>
 
