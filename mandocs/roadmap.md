@@ -32,7 +32,6 @@
 
 ## In progress
 
-- usize/isize
 - human docs
 
 
@@ -40,6 +39,12 @@
 
 ## On deck
 
+- datalit syntax cleanup
+  - map set type syntax
+  - usize/isize -> index/offset
+- workspaces - waiting for design
+- riders - waiting for workspaces
+- rtcalls - waiting for native riders
 - std.string - waiting for rtcalls
 - assert statements - needed for std_tests
 - fully reactive scripts
@@ -78,7 +83,6 @@
 - deterministic builds - compiler pipeline is already deterministic
 - wasm-component backend
 - improve runtime implementation unsafety
-- usize/isize -> index/offset
 
 
 

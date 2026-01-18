@@ -156,6 +156,7 @@ but I do have a [vision](vision.md) about what it will be.
 - [Operators](operators.md)
 - [Optional and Result Types and Operations](checked-types.md)
 - [Heaps and Multithreading](heaps.md)
+- [Datalove Worlds](worlds.md)
 - [Roadmap](roadmap.md)
 - [Vision](vision.md)
 
