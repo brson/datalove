@@ -4,6 +4,10 @@ default:
 test:
     cargo test --all --all-targets
 
+# Run tests with 64-bit collection indexes.
+test-64:
+    cargo test --all --all-targets --features index-64
+
 test-slow:
     cargo test -p datalove-rt --features slow_tests
     cargo test -p datalove-rt-tests --features slow_tests
