@@ -4,15 +4,13 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "TypeMismatch { expected: \"@map<@int, @string>\", actual: \"@map<@u32, @string>\" }",
-                ],
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn make_map():\nblock0:\n    v0 = const 1int\n    v1 = const \"one\"\n    v2 = const 2int\n    v3 = const \"two\"\n    v4 = const 3int\n    v5 = const \"three\"\n    v6 = map {v0: v1, v2: v3, v4: v5}\n    return v6\nexports:\n    make_map = f0\n",
             ),
-            output: "",
+            output: "(fragment executed)",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
@@ -21,10 +19,10 @@ Analysis(
                 status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Error",
-                message: "function not found: make_map",
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call unit0.f0()\n    unit_end v0\n",
             ),
-            output: "",
+            output: "@map {@1 = @\"one\", @2 = @\"two\", @3 = @\"three\"}",
         ),
     ],
 )

@@ -232,29 +232,11 @@ pub fn check_expr<'db>(
         // Handle set expressions - check elements against expected element type.
         ExprFunKind::Set(set_expr) => {
             match expected.ty(db) {
-                Type::Datalit(datalit::tycheck::Type::Set(expected_set)) => {
-                    // For empty sets, we can accept any expected set type.
-                    // For non-empty sets, synthesize and compare as usual.
-                    if set_expr.elements.is_empty() {
-                        // Empty set: accept the expected type directly.
-                        ctx.store_expr_type(expr, expected);
-                        Ok(())
-                    } else {
-                        // Non-empty set: synthesize and compare (original behavior).
-                        let synthesized = ctx.synthesize_expr(expr)?;
-                        if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
-                            return Ok(());
-                        }
-                        // Check if types are compatible with coercion.
-                        if let Type::Datalit(synth_ty) = synthesized.ty(db) {
-                            if datalit::tycheck::can_widen_to(synth_ty, &datalit::tycheck::Type::Set(expected_set.C())) {
-                                return Ok(());
-                            }
-                        }
-                        let expected_str = type_to_string(db, expected.ty(db));
-                        let actual_str = type_to_string(db, synthesized.ty(db));
-                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
-                    }
+                Type::Datalit(datalit::tycheck::Type::Set(_)) => {
+                    // Check elements against expected element type (with coercion).
+                    check_set_elements(ctx, &set_expr.elements, expected)?;
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
                 }
                 Type::Datalit(datalit::tycheck::Type::Data) => {
                     // Any type can coerce to Data.
@@ -273,29 +255,11 @@ pub fn check_expr<'db>(
         // Handle map expressions - check entries against expected key/value types.
         ExprFunKind::Map(map_expr) => {
             match expected.ty(db) {
-                Type::Datalit(datalit::tycheck::Type::Map(expected_map)) => {
-                    // For empty maps, we can accept any expected map type.
-                    // For non-empty maps, synthesize and compare as usual.
-                    if map_expr.entries.is_empty() {
-                        // Empty map: accept the expected type directly.
-                        ctx.store_expr_type(expr, expected);
-                        Ok(())
-                    } else {
-                        // Non-empty map: synthesize and compare (original behavior).
-                        let synthesized = ctx.synthesize_expr(expr)?;
-                        if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
-                            return Ok(());
-                        }
-                        // Check if types are compatible with coercion.
-                        if let Type::Datalit(synth_ty) = synthesized.ty(db) {
-                            if datalit::tycheck::can_widen_to(synth_ty, &datalit::tycheck::Type::Map(expected_map.C())) {
-                                return Ok(());
-                            }
-                        }
-                        let expected_str = type_to_string(db, expected.ty(db));
-                        let actual_str = type_to_string(db, synthesized.ty(db));
-                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
-                    }
+                Type::Datalit(datalit::tycheck::Type::Map(_)) => {
+                    // Check entries against expected key/value types (with coercion).
+                    check_map_entries(ctx, &map_expr.entries, expected)?;
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
                 }
                 Type::Datalit(datalit::tycheck::Type::Data) => {
                     // Any type can coerce to Data.
@@ -514,10 +478,14 @@ pub fn check_set_elements<'db>(
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
 
-    // Check each element against expected element type.
+    // Check each element against expected element type using bidirectional checking.
+    let expected_elem_ty = TypeAndHeap::new(
+        db,
+        elem_type.heap(db),
+        Type::Datalit(elem_type.ty(db).C()),
+    );
     for elem in elements {
-        let elem_ty = ctx.synthesize_expr(*elem)?;
-        check_element_type_and_heap(db, *elem, elem_ty, &elem_type)?;
+        check_expr(ctx, *elem, expected_elem_ty)?;
     }
 
     Ok(())
@@ -542,13 +510,20 @@ pub fn check_map_entries<'db>(
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
 
-    // Check each entry against expected types.
+    // Check each entry against expected types using bidirectional checking.
+    let expected_key_ty = TypeAndHeap::new(
+        db,
+        key_type.heap(db),
+        Type::Datalit(key_type.ty(db).C()),
+    );
+    let expected_value_ty = TypeAndHeap::new(
+        db,
+        value_type.heap(db),
+        Type::Datalit(value_type.ty(db).C()),
+    );
     for entry in entries {
-        let key_ty = ctx.synthesize_expr(entry.key)?;
-        let value_ty = ctx.synthesize_expr(entry.value)?;
-
-        check_element_type_and_heap(db, entry.key, key_ty, &key_type)?;
-        check_element_type_and_heap(db, entry.value, value_ty, &value_type)?;
+        check_expr(ctx, entry.key, expected_key_ty)?;
+        check_expr(ctx, entry.value, expected_value_ty)?;
     }
 
     Ok(())
