@@ -78,7 +78,7 @@
 - deterministic builds - compiler pipeline is already deterministic
 - wasm-component backend
 - improve runtime implementation unsafety
-
+- usize/isize -> index/offset
 
 
 
