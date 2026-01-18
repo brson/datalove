@@ -483,7 +483,7 @@ fn instantiate_hex_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db,
         } else {
             limbs.len() as i32
         };
-        (*int_ptr).capacity = limbs.len() as u32;
+        (*int_ptr).capacity = rtdt::Usize(limbs.len() as rtdt::UsizeRepr);
 
         Ok(dest_ptr as *const u8)
     }
@@ -525,7 +525,7 @@ fn instantiate_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int
         } else {
             limbs.len() as i32
         };
-        (*int_ptr).capacity = limbs.len() as u32;
+        (*int_ptr).capacity = rtdt::Usize(limbs.len() as rtdt::UsizeRepr);
 
         Ok(dest_ptr as *const u8)
     }
@@ -1600,7 +1600,7 @@ mod tests {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Int);
             let int = &*(inst.ptr as *const rtdt::Int);
             assert_eq!(int.size_and_sign, 1);
-            assert_eq!(int.capacity, 1);
+            assert_eq!(int.capacity, rtdt::Usize(1));
             let limbs = std::slice::from_raw_parts(int.data, 1);
             assert_eq!(limbs[0], 42);
         }
@@ -1625,7 +1625,7 @@ mod tests {
             let int = &*(inst.ptr as *const rtdt::Int);
             // Canonical zero: no limbs, size_and_sign=0, data=null.
             assert_eq!(int.size_and_sign, 0);
-            assert_eq!(int.capacity, 0);
+            assert_eq!(int.capacity, rtdt::Usize::ZERO);
             assert!(int.data.is_null());
         }
         Ok(())

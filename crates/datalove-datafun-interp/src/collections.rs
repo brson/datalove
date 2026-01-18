@@ -51,7 +51,7 @@ impl IrInterpreter {
                 rt_handle,
                 list_ptr,
                 list_tydesc,
-                elements.len() as u32,
+                elements.len() as rtdt::UsizeRepr,
             )
         };
         if status != RtStatus::Ok {
@@ -167,7 +167,7 @@ impl IrInterpreter {
                 set_ptr,
                 element_tydesc,
                 buffer,
-                elem_values.len() as u32,
+                elem_values.len() as rtdt::UsizeRepr,
             )
         };
 
@@ -308,7 +308,7 @@ impl IrInterpreter {
                 value_tydesc,
                 keys_buffer,
                 values_buffer,
-                kv_pairs.len() as u32,
+                kv_pairs.len() as rtdt::UsizeRepr,
             )
         };
 
@@ -366,7 +366,7 @@ impl IrInterpreter {
                 datalove_rt::c::dtlv_rti_mem_alloc_local(
                     rt_handle,
                     element_tydesc,
-                    total_elems as u32,
+                    total_elems as rtdt::UsizeRepr,
                 )
             };
             if array_ptr.is_null() {
@@ -393,10 +393,10 @@ impl IrInterpreter {
             let shape_array = unsafe {
                 datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
                     rt_handle,
-                    std::mem::size_of::<u32>() as u32,
-                    std::mem::align_of::<u32>() as u32,
-                    rank as u32,
-                ) as *mut u32
+                    rtdt::INDEX_SIZE,
+                    rtdt::INDEX_ALIGN,
+                    rank as rtdt::UsizeRepr,
+                ) as *mut rtdt::UsizeRepr
             };
             if shape_array.is_null() {
                 // Cleanup data if allocated.
@@ -405,7 +405,7 @@ impl IrInterpreter {
                         datalove_rt::c::dtlv_rti_mem_free_local(
                             rt_handle,
                             element_tydesc,
-                            total_elems as u32,
+                            total_elems as rtdt::UsizeRepr,
                             data_ptr,
                         );
                     }
@@ -416,7 +416,7 @@ impl IrInterpreter {
             }
             for (i, &dim) in shape.iter().enumerate() {
                 unsafe {
-                    *shape_array.add(i) = dim;
+                    *shape_array.add(i) = dim as rtdt::UsizeRepr;
                 }
             }
             shape_array as *const rtdt::Usize
@@ -429,10 +429,10 @@ impl IrInterpreter {
             let strides_array = unsafe {
                 datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
                     rt_handle,
-                    std::mem::size_of::<u32>() as u32,
-                    std::mem::align_of::<u32>() as u32,
-                    rank as u32,
-                ) as *mut u32
+                    rtdt::INDEX_SIZE,
+                    rtdt::INDEX_ALIGN,
+                    rank as rtdt::UsizeRepr,
+                ) as *mut rtdt::UsizeRepr
             };
             if strides_array.is_null() {
                 // Cleanup.
@@ -441,7 +441,7 @@ impl IrInterpreter {
                         datalove_rt::c::dtlv_rti_mem_free_local(
                             rt_handle,
                             element_tydesc,
-                            total_elems as u32,
+                            total_elems as rtdt::UsizeRepr,
                             data_ptr,
                         );
                     }
@@ -450,8 +450,8 @@ impl IrInterpreter {
                     unsafe {
                         datalove_rt::c::dtlv_rti_mem_free_raw_local(
                             rt_handle,
-                            (rank * std::mem::size_of::<u32>()) as u32,
-                            std::mem::align_of::<u32>() as u32,
+                            (rank as u32) * rtdt::INDEX_SIZE,
+                            rtdt::INDEX_ALIGN,
                             1,
                             shape_ptr as *mut u8,
                         );
@@ -464,7 +464,7 @@ impl IrInterpreter {
 
             // Compute strides for row-major layout.
             for i in 0..rank {
-                let stride = shape[i + 1..rank].iter().map(|&d| d).product::<u32>();
+                let stride = shape[i + 1..rank].iter().map(|&d| d as rtdt::UsizeRepr).product::<rtdt::UsizeRepr>();
                 unsafe {
                     *strides_array.add(i) = if stride == 0 { 1 } else { stride };
                 }

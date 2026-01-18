@@ -207,7 +207,7 @@ impl IrInterpreter {
             if magnitude == 0 {
                 int_buf.data = std::ptr::null();
                 int_buf.size_and_sign = 0;
-                int_buf.capacity = 0;
+                int_buf.capacity = rtdt::Usize::ZERO;
             } else if magnitude <= u32::MAX as u64 {
                 // Fits in one limb.
                 let limb_ptr =
@@ -215,7 +215,7 @@ impl IrInterpreter {
                 *limb_ptr = magnitude as u32;
                 int_buf.data = limb_ptr;
                 int_buf.size_and_sign = if is_negative { -1 } else { 1 };
-                int_buf.capacity = 1;
+                int_buf.capacity = rtdt::Usize(1);
             } else {
                 // Needs two limbs (for u64/i64 values > u32::MAX).
                 let limb_ptr =
@@ -225,7 +225,7 @@ impl IrInterpreter {
                 *limb_ptr.add(1) = (magnitude >> 32) as u32;
                 int_buf.data = limb_ptr;
                 int_buf.size_and_sign = if is_negative { -2 } else { 2 };
-                int_buf.capacity = 2;
+                int_buf.capacity = rtdt::Usize(2);
             }
         }
 
@@ -235,12 +235,12 @@ impl IrInterpreter {
     /// Destroy a temporary Int's limb allocation.
     pub(crate) unsafe fn destroy_temp_int(&self, int_buf: &rtdt::Int) {
         unsafe {
-            if !int_buf.data.is_null() && int_buf.capacity > 0 {
+            if !int_buf.data.is_null() && int_buf.capacity > rtdt::Usize::ZERO {
                 datalove_rt::c::dtlv_rti_mem_free_raw_local(
                     self.runtime.handle(),
                     4, // align
                     4, // elem_size
-                    int_buf.capacity,
+                    int_buf.capacity.0,
                     int_buf.data as *mut u8,
                 );
             }

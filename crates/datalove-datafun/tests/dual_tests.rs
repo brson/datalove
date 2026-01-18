@@ -107,8 +107,14 @@ fn ensure_runtime_lib() -> &'static Path {
             .expect("failed to find workspace root");
         let lib_dir = workspace_root.join("target/debug");
 
+        // Build with index-64 feature if this test was compiled with it.
+        #[cfg(feature = "index-64")]
+        let args = ["build", "-p", "datalove-rt", "--features", "index-64"];
+        #[cfg(not(feature = "index-64"))]
+        let args = ["build", "-p", "datalove-rt"];
+
         let status = Command::new("cargo")
-            .args(["build", "-p", "datalove-rt"])
+            .args(args)
             .current_dir(&workspace_root)
             .status()
             .expect("failed to run cargo build");

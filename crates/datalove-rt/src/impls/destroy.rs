@@ -36,15 +36,15 @@ pub unsafe fn any_destroy_local(
                 let int = &*int_ptr;
 
                 // Free the limb buffer if it exists.
-                if !int.data.is_null() && int.capacity > 0 {
+                if !int.data.is_null() && int.capacity > rtdt::Usize::ZERO {
                     // Each limb is a u32.
-                    rt_ref.alloc.free(4, 4, int.capacity.into(), int.data as *mut u8);
+                    rt_ref.alloc.free(4, 4, int.capacity.0, int.data as *mut u8);
                 }
 
                 // Clear the int fields.
                 (*int_ptr).data = std::ptr::null();
                 (*int_ptr).size_and_sign = 0;
-                (*int_ptr).capacity = 0;
+                (*int_ptr).capacity = rtdt::Usize::ZERO;
 
                 RtStatus::Ok
             }

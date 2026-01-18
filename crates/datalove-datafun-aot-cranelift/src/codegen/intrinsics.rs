@@ -4,6 +4,7 @@
 
 use cranelift_frontend::FunctionBuilder;
 use cranelift_codegen::ir as cl_ir;
+use cranelift_codegen::ir::types as cl_types;
 use cranelift_codegen::ir::InstBuilder;
 use cranelift_module::Module;
 

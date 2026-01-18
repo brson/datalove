@@ -59,7 +59,7 @@ fn test_destroy_int_small() -> AnyResult<()> {
     // Verify int is cleared.
     let int_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Int) };
     assert!(int_val.data.is_null());
-    assert_eq!(int_val.capacity, 0);
+    assert_eq!(int_val.capacity, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -112,7 +112,7 @@ fn test_destroy_int_large() -> AnyResult<()> {
     // Verify int is cleared.
     let int_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Int) };
     assert!(int_val.data.is_null());
-    assert_eq!(int_val.capacity, 0);
+    assert_eq!(int_val.capacity, datalove_rtdt::Usize::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);

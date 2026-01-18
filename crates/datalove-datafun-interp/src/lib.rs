@@ -1353,12 +1353,12 @@ impl IrInterpreter {
                     if limbs.is_empty() {
                         (*int_ptr).data = std::ptr::null();
                         (*int_ptr).size_and_sign = 0;
-                        (*int_ptr).capacity = 0;
+                        (*int_ptr).capacity = rtdt::Usize::ZERO;
                     } else {
                         // Allocate limbs in runtime memory.
                         // Must use size=4, count=num_limbs to match the destroy code.
                         let rt_handle = self.runtime.handle();
-                        let num_limbs = limbs.len() as u32;
+                        let num_limbs = limbs.len() as rtdt::UsizeRepr;
                         let limbs_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
                             rt_handle,
                             4,          // size of one limb
@@ -1379,7 +1379,7 @@ impl IrInterpreter {
                         } else {
                             limbs.len() as i32
                         };
-                        (*int_ptr).capacity = num_limbs;
+                        (*int_ptr).capacity = rtdt::Usize(num_limbs);
                     }
                 }
                 ConstValue::F32(n) => {
@@ -1406,7 +1406,7 @@ impl IrInterpreter {
                             dest.ptr,
                             dest.tydesc,
                             s.as_ptr(),
-                            s.len() as u32,
+                            s.len() as rtdt::UsizeRepr,
                         );
                         if status != datalove_rt::c::RtStatus::Ok {
                             return Err(InterpError::RuntimeError(

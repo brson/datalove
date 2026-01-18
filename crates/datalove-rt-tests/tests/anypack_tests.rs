@@ -19,7 +19,7 @@ fn make_tydesc(type_tag: TyTag) -> TyDesc {
 #[test]
 fn test_tag_two_pointers_via_from_pointers() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: 0 };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
     let data = Data::from_pointers(&tydesc, &int_val as *const Int as *const u8);
     assert_eq!(data.tag(), anypack::Tag::TwoPointers);
 }
@@ -288,7 +288,7 @@ fn test_from_pointers() {
 #[test]
 fn test_from_int() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: 0 };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
     let data = Data::from_int(&int_val, &tydesc);
     assert_eq!(data.tag(), anypack::Tag::TwoPointers);
     assert_eq!(data.tytag(), TyTag::Int);
@@ -388,7 +388,7 @@ fn test_from_error() {
 #[test]
 fn test_tydesc_two_pointers() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: 0 };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
     let data = Data::from_int(&int_val, &tydesc);
     assert_eq!(data.tydesc(), &tydesc as *const TyDesc);
 }
@@ -412,7 +412,7 @@ fn test_tydesc_small_immediate() {
 #[test]
 fn test_value_ptr() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: 0 };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
     let data = Data::from_int(&int_val, &tydesc);
     assert_eq!(data.value_ptr(), &int_val as *const Int as *const u8);
 }
@@ -420,7 +420,7 @@ fn test_value_ptr() {
 #[test]
 fn test_value_ptr_as() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: 0 };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
     let data = Data::from_int(&int_val, &tydesc);
     assert_eq!(data.value_ptr_as::<Int>(), &int_val as *const Int);
 }
@@ -509,7 +509,7 @@ fn test_as_int_wrong_type() {
 #[test]
 fn test_as_string_wrong_type() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: 0 };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
     let data = Data::from_int(&int_val, &tydesc);
     assert_eq!(data.as_string(), None);
 }
@@ -675,7 +675,7 @@ fn test_debug_inline_with_tydesc() {
 #[test]
 fn test_debug_two_pointers() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: 0 };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
     let data = Data::from_int(&int_val, &tydesc);
     let debug_str = format!("{:?}", data);
     assert!(debug_str.contains("Data"));

@@ -58,7 +58,7 @@ unsafe fn clone_impl(
                 // Zero or empty.
                 int_out.data = std::ptr::null();
                 int_out.size_and_sign = 0;
-                int_out.capacity = 0;
+                int_out.capacity = rtdt::Usize::ZERO;
             } else {
                 // Allocate new limb buffer.
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
@@ -77,7 +77,7 @@ unsafe fn clone_impl(
 
                 int_out.data = new_data;
                 int_out.size_and_sign = int_in.size_and_sign;
-                int_out.capacity = num_limbs;
+                int_out.capacity = rtdt::Usize(num_limbs as rtdt::UsizeRepr);
             }
 
             RtStatus::Ok
@@ -850,13 +850,13 @@ mod tests {
         let value_in = rtdt::Int {
             data: std::ptr::null(),
             size_and_sign: 0,
-            capacity: 0,
+            capacity: rtdt::Usize::ZERO,
         };
 
         let mut value_out = rtdt::Int {
             data: std::ptr::null_mut(),
             size_and_sign: 999,
-            capacity: 999,
+            capacity: rtdt::Usize(999),
         };
 
         let status = unsafe {
@@ -871,7 +871,7 @@ mod tests {
         assert_eq!(status, RtStatus::Ok);
         assert!(value_out.data.is_null());
         assert_eq!(value_out.size_and_sign, 0);
-        assert_eq!(value_out.capacity, 0);
+        assert_eq!(value_out.capacity, rtdt::Usize::ZERO);
     }
 
     proptest! {
@@ -900,13 +900,13 @@ mod tests {
             let value_in = rtdt::Int {
                 data: limb_data,
                 size_and_sign: if is_negative { -size } else { size },
-                capacity: limbs.len() as u32,
+                capacity: rtdt::Usize(limbs.len() as rtdt::UsizeRepr),
             };
 
             let mut value_out = rtdt::Int {
                 data: std::ptr::null(),
                 size_and_sign: 0,
-                capacity: 0,
+                capacity: rtdt::Usize::ZERO,
             };
 
             let status = unsafe {

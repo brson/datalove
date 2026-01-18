@@ -364,7 +364,7 @@ pub struct Int {
     // sign(size_and_sign) == sign of self
     pub size_and_sign: i32,
     // Limbs allocated.
-    pub capacity: u32,
+    pub capacity: Usize,
 }
 
 

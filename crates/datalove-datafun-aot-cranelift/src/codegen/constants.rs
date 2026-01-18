@@ -96,7 +96,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile an Int (bigint) constant.
     ///
-    /// Int layout: `{ data: *const u32, size_and_sign: i32, capacity: u32 }` = 16 bytes.
+    /// Int layout varies based on index-64 feature:
+    /// - Default: `{ data: *const u32, size_and_sign: i32, capacity: Usize(u32) }` = 16 bytes
+    /// - index-64: `{ data: *const u32, size_and_sign: i32, [pad], capacity: Usize(u64) }` = 24 bytes
     pub(super) fn compile_int_const(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -104,6 +106,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         limbs: &[u32],
         negative: bool,
     ) -> Result<(), AotError> {
+        use datalove_rtdt as rtdt;
+
+        // Capacity type and offset depend on index-64 feature.
+        #[cfg(not(feature = "index-64"))]
+        const CAPACITY_TYPE: cranelift_codegen::ir::Type = cl_types::I32;
+        #[cfg(feature = "index-64")]
+        const CAPACITY_TYPE: cranelift_codegen::ir::Type = cl_types::I64;
+
+        // Offset of capacity field in Int struct.
+        let capacity_offset = std::mem::offset_of!(rtdt::Int, capacity) as i32;
+
         // Get frame slot and destination address.
         let frame_slot = self.frame_slot.ok_or_else(|| {
             AotError::Codegen("no frame slot for Int constant".into())
@@ -115,9 +128,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // Zero: null data, size=0, capacity=0.
             let null = builder.ins().iconst(cl_types::I64, 0);
             let zero32 = builder.ins().iconst(cl_types::I32, 0);
+            let zero_cap = builder.ins().iconst(CAPACITY_TYPE, 0);
             builder.ins().store(MemFlags::new(), null, base, 0);     // data
             builder.ins().store(MemFlags::new(), zero32, base, 8);   // size_and_sign
-            builder.ins().store(MemFlags::new(), zero32, base, 12);  // capacity
+            builder.ins().store(MemFlags::new(), zero_cap, base, capacity_offset);  // capacity
         } else {
             // Need runtime handle for memory allocation.
             let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -128,10 +142,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             })?;
 
             // Allocate limbs: 4 bytes each, 4-byte aligned.
+            // Count parameter type must match UsizeRepr.
             let alloc_ref = self.module.declare_func_in_func(runtime.mem_alloc_raw, builder.func);
             let size = builder.ins().iconst(cl_types::I32, 4);   // size of u32
             let align = builder.ins().iconst(cl_types::I32, 4);  // align of u32
-            let count = builder.ins().iconst(cl_types::I32, limbs.len() as i64);
+            let count = builder.ins().iconst(CAPACITY_TYPE, limbs.len() as i64);
             let call = builder.ins().call(alloc_ref, &[rt_handle, size, align, count]);
             let limbs_ptr = builder.inst_results(call)[0];
 
@@ -153,8 +168,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let size_val = builder.ins().iconst(cl_types::I32, size_and_sign as i64);
             builder.ins().store(MemFlags::new(), size_val, base, 8);   // size_and_sign
 
-            let cap_val = builder.ins().iconst(cl_types::I32, limbs.len() as i64);
-            builder.ins().store(MemFlags::new(), cap_val, base, 12);   // capacity
+            let cap_val = builder.ins().iconst(CAPACITY_TYPE, limbs.len() as i64);
+            builder.ins().store(MemFlags::new(), cap_val, base, capacity_offset);   // capacity
         }
 
         // Store base pointer for this value.
