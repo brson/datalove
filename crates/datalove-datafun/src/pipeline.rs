@@ -1266,8 +1266,14 @@ pub mod aot {
             let lib_dir = workspace_root.join("target/debug");
 
             // Build quietly to avoid polluting test output.
+            // Use index-64 feature if this crate was compiled with it.
+            #[cfg(feature = "index-64")]
+            let args = ["build", "-p", "datalove-rt", "--features", "index-64", "--quiet"];
+            #[cfg(not(feature = "index-64"))]
+            let args = ["build", "-p", "datalove-rt", "--quiet"];
+
             let output = Command::new("cargo")
-                .args(["build", "-p", "datalove-rt", "--quiet"])
+                .args(args)
                 .current_dir(&workspace_root)
                 .output()
                 .expect("failed to run cargo build");
