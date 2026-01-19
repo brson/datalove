@@ -5,58 +5,64 @@ use crate::config::WorldGenConfig;
 use crate::context::{GenContext, Variable};
 use crate::gen_type::gen_type_hint_with_heap;
 use crate::gen_expr::{gen_expr, gen_bool_expr};
+use crate::pretty::pretty_type_hint_and_heap;
 
 /// Generate a let statement.
-pub fn gen_let<R: Rng>(
+pub fn gen_let<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &mut GenContext,
+    ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
     let name = format!("v{}", *var_counter);
     *var_counter += 1;
 
-    let type_hint = gen_type_hint_with_heap(rng, config, ctx, 0);
-    let value = gen_expr(rng, &type_hint, config, ctx);
+    let type_hint = gen_type_hint_with_heap(db, rng, config);
+    let value = gen_expr(db, rng, type_hint, config, ctx);
+    let type_str = pretty_type_hint_and_heap(db, type_hint);
 
     ctx.variables.push(Variable {
         name: name.clone(),
-        type_hint: type_hint.clone(),
+        type_hint,
         is_mutable: false,
     });
 
-    format!("{}let {}: {} = {}", indent, name, type_hint, value)
+    format!("{}let {}: {} = {}", indent, name, type_str, value)
 }
 
 /// Generate a var statement.
-pub fn gen_var<R: Rng>(
+pub fn gen_var<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &mut GenContext,
+    ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
     let name = format!("v{}", *var_counter);
     *var_counter += 1;
 
-    let type_hint = gen_type_hint_with_heap(rng, config, ctx, 0);
-    let value = gen_expr(rng, &type_hint, config, ctx);
+    let type_hint = gen_type_hint_with_heap(db, rng, config);
+    let value = gen_expr(db, rng, type_hint, config, ctx);
+    let type_str = pretty_type_hint_and_heap(db, type_hint);
 
     ctx.variables.push(Variable {
         name: name.clone(),
-        type_hint: type_hint.clone(),
+        type_hint,
         is_mutable: true,
     });
 
-    format!("{}var {}: {} = {}", indent, name, type_hint, value)
+    format!("{}var {}: {} = {}", indent, name, type_str, value)
 }
 
 /// Generate a set statement.
-pub fn gen_set<R: Rng>(
+pub fn gen_set<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &GenContext,
+    ctx: &GenContext<'db>,
     indent: &str,
 ) -> Option<String> {
     let mutable_vars = ctx.mutable_variables();
@@ -65,21 +71,22 @@ pub fn gen_set<R: Rng>(
     }
 
     let var = mutable_vars[rng.gen_range(0..mutable_vars.len())];
-    let value = gen_expr(rng, &var.type_hint, config, ctx);
+    let value = gen_expr(db, rng, var.type_hint, config, ctx);
 
     Some(format!("{}set {} = {}", indent, var.name, value))
 }
 
 /// Generate a return statement.
-pub fn gen_ret<R: Rng>(
+pub fn gen_ret<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &GenContext,
+    ctx: &GenContext<'db>,
     indent: &str,
 ) -> String {
-    match &ctx.return_type {
+    match ctx.return_type {
         Some(return_type) => {
-            let value = gen_expr(rng, return_type, config, ctx);
+            let value = gen_expr(db, rng, return_type, config, ctx);
             format!("{}ret {}", indent, value)
         }
         None => format!("{}ret", indent),
@@ -87,14 +94,15 @@ pub fn gen_ret<R: Rng>(
 }
 
 /// Generate an if statement.
-pub fn gen_if<R: Rng>(
+pub fn gen_if<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &mut GenContext,
+    ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
-    let condition = gen_bool_expr(rng, config, ctx);
+    let condition = gen_bool_expr(db, rng, config, ctx);
     let mut result = format!("{}if {}\n", indent, condition);
 
     // Generate then-body.
@@ -103,7 +111,7 @@ pub fn gen_if<R: Rng>(
 
     let then_stmt_count = rng.gen_range(1..=2);
     for _ in 0..then_stmt_count {
-        let stmt = gen_simple_statement(rng, config, ctx, var_counter, &inner_indent);
+        let stmt = gen_simple_statement(db, rng, config, ctx, var_counter, &inner_indent);
         result.push_str(&stmt);
         result.push('\n');
     }
@@ -113,7 +121,7 @@ pub fn gen_if<R: Rng>(
         result.push_str(&format!("{}else\n", indent));
         let else_stmt_count = rng.gen_range(1..=2);
         for _ in 0..else_stmt_count {
-            let stmt = gen_simple_statement(rng, config, ctx, var_counter, &inner_indent);
+            let stmt = gen_simple_statement(db, rng, config, ctx, var_counter, &inner_indent);
             result.push_str(&stmt);
             result.push('\n');
         }
@@ -125,15 +133,16 @@ pub fn gen_if<R: Rng>(
 }
 
 /// Generate a loop statement.
-pub fn gen_loop<R: Rng>(
+pub fn gen_loop<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &mut GenContext,
+    ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
     // Use while-condition loops to ensure termination.
-    let condition = gen_bool_expr(rng, config, ctx);
+    let condition = gen_bool_expr(db, rng, config, ctx);
     let mut result = format!("{}loop while {}\n", indent, condition);
 
     let inner_indent = format!("{}  ", indent);
@@ -146,7 +155,7 @@ pub fn gen_loop<R: Rng>(
         if i == body_stmt_count - 1 && rng.gen_bool(0.5) {
             result.push_str(&format!("{}break\n", inner_indent));
         } else {
-            let stmt = gen_loop_body_statement(rng, config, ctx, var_counter, &inner_indent);
+            let stmt = gen_loop_body_statement(db, rng, config, ctx, var_counter, &inner_indent);
             result.push_str(&stmt);
             result.push('\n');
         }
@@ -159,64 +168,67 @@ pub fn gen_loop<R: Rng>(
 }
 
 /// Generate a simple statement (let, var, set).
-fn gen_simple_statement<R: Rng>(
+fn gen_simple_statement<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &mut GenContext,
+    ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
     let choice = rng.gen_range(0..10);
     match choice {
-        0..=3 => gen_let(rng, config, ctx, var_counter, indent),
-        4..=6 => gen_var(rng, config, ctx, var_counter, indent),
-        7..=9 => gen_set(rng, config, ctx, indent)
-            .unwrap_or_else(|| gen_let(rng, config, ctx, var_counter, indent)),
-        _ => gen_let(rng, config, ctx, var_counter, indent),
+        0..=3 => gen_let(db, rng, config, ctx, var_counter, indent),
+        4..=6 => gen_var(db, rng, config, ctx, var_counter, indent),
+        7..=9 => gen_set(db, rng, config, ctx, indent)
+            .unwrap_or_else(|| gen_let(db, rng, config, ctx, var_counter, indent)),
+        _ => gen_let(db, rng, config, ctx, var_counter, indent),
     }
 }
 
 /// Generate a statement suitable for loop body (may include break/continue).
-fn gen_loop_body_statement<R: Rng>(
+fn gen_loop_body_statement<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &mut GenContext,
+    ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
     let choice = rng.gen_range(0..15);
     match choice {
-        0..=4 => gen_let(rng, config, ctx, var_counter, indent),
-        5..=8 => gen_var(rng, config, ctx, var_counter, indent),
-        9..=11 => gen_set(rng, config, ctx, indent)
-            .unwrap_or_else(|| gen_let(rng, config, ctx, var_counter, indent)),
+        0..=4 => gen_let(db, rng, config, ctx, var_counter, indent),
+        5..=8 => gen_var(db, rng, config, ctx, var_counter, indent),
+        9..=11 => gen_set(db, rng, config, ctx, indent)
+            .unwrap_or_else(|| gen_let(db, rng, config, ctx, var_counter, indent)),
         12 => format!("{}break", indent),
         13 => format!("{}continue", indent),
-        14 if !ctx.at_max_depth(config) => gen_if(rng, config, ctx, var_counter, indent),
-        _ => gen_let(rng, config, ctx, var_counter, indent),
+        14 if !ctx.at_max_depth(config) => gen_if(db, rng, config, ctx, var_counter, indent),
+        _ => gen_let(db, rng, config, ctx, var_counter, indent),
     }
 }
 
 /// Generate a function body statement.
-pub fn gen_body_statement<R: Rng>(
+pub fn gen_body_statement<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &mut GenContext,
+    ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
     // Check probabilities for control flow.
-    let can_if = !ctx.at_max_depth(config) && rng.gen_bool(config.if_probability);
-    let can_loop = !ctx.at_max_depth(config) && rng.gen_bool(config.loop_probability);
+    let can_if = !ctx.at_max_depth(config) && config.check_probability(rng, config.if_probability);
+    let can_loop = !ctx.at_max_depth(config) && config.check_probability(rng, config.loop_probability);
 
     let choice = rng.gen_range(0..10);
     match choice {
-        0..=3 => gen_let(rng, config, ctx, var_counter, indent),
-        4..=5 => gen_var(rng, config, ctx, var_counter, indent),
-        6..=7 => gen_set(rng, config, ctx, indent)
-            .unwrap_or_else(|| gen_let(rng, config, ctx, var_counter, indent)),
-        8 if can_if => gen_if(rng, config, ctx, var_counter, indent),
-        9 if can_loop => gen_loop(rng, config, ctx, var_counter, indent),
-        _ => gen_let(rng, config, ctx, var_counter, indent),
+        0..=3 => gen_let(db, rng, config, ctx, var_counter, indent),
+        4..=5 => gen_var(db, rng, config, ctx, var_counter, indent),
+        6..=7 => gen_set(db, rng, config, ctx, indent)
+            .unwrap_or_else(|| gen_let(db, rng, config, ctx, var_counter, indent)),
+        8 if can_if => gen_if(db, rng, config, ctx, var_counter, indent),
+        9 if can_loop => gen_loop(db, rng, config, ctx, var_counter, indent),
+        _ => gen_let(db, rng, config, ctx, var_counter, indent),
     }
 }

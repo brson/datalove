@@ -3,7 +3,7 @@
 use rand::Rng;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, ModuleInfo, TypeAlias, FunctionSig};
-use crate::gen_type::gen_type_alias;
+use crate::gen_type::{gen_type_alias, format_type_alias};
 use crate::gen_function::{gen_function_signature, gen_function};
 
 /// Generate a module name.
@@ -14,10 +14,10 @@ fn gen_module_name<R: Rng>(rng: &mut R, index: usize) -> String {
 }
 
 /// Plan the module graph (DAG of dependencies).
-pub fn plan_module_graph<R: Rng>(
+pub fn plan_module_graph<'db, R: Rng>(
     rng: &mut R,
     config: &WorldGenConfig,
-) -> Vec<ModuleInfo> {
+) -> Vec<ModuleInfo<'db>> {
     let module_count = rng.gen_range(config.module_count.0..=config.module_count.1);
     let mut modules = Vec::new();
 
@@ -36,26 +36,20 @@ pub fn plan_module_graph<R: Rng>(
 }
 
 /// Generate type alias definitions for a module.
-pub fn gen_module_type_aliases<R: Rng>(
+pub fn gen_module_type_aliases<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-) -> Vec<TypeAlias> {
+) -> Vec<TypeAlias<'db>> {
     let count = rng.gen_range(config.type_aliases_per_module.0..=config.type_aliases_per_module.1);
     let mut aliases = Vec::new();
 
     for i in 0..count {
         let name = format!("Type{}", i);
-        let type_hint = gen_type_alias(rng, &name, config);
-        // Extract the type from "type Name: type" format.
-        let parts: Vec<&str> = type_hint.splitn(2, ": ").collect();
-        let actual_type = if parts.len() == 2 {
-            parts[1].to_string()
-        } else {
-            "@u32".to_string()
-        };
+        let (_, type_hint) = gen_type_alias(db, rng, &name, config);
         aliases.push(TypeAlias {
             name,
-            type_hint: actual_type,
+            type_hint,
         });
     }
 
@@ -63,17 +57,17 @@ pub fn gen_module_type_aliases<R: Rng>(
 }
 
 /// Generate function signatures for a module (first pass).
-pub fn gen_module_function_sigs<R: Rng>(
+pub fn gen_module_function_sigs<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &GenContext,
-) -> Vec<FunctionSig> {
+) -> Vec<FunctionSig<'db>> {
     let count = rng.gen_range(config.functions_per_module.0..=config.functions_per_module.1);
     let mut sigs = Vec::new();
 
     for i in 0..count {
         let name = format!("fn{}", i);
-        let sig = gen_function_signature(rng, &name, config, ctx);
+        let sig = gen_function_signature(db, rng, &name, config);
         sigs.push(sig);
     }
 
@@ -81,11 +75,12 @@ pub fn gen_module_function_sigs<R: Rng>(
 }
 
 /// Generate a complete module.
-pub fn gen_module<R: Rng>(
+pub fn gen_module<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
-    info: &ModuleInfo,
+    info: &ModuleInfo<'db>,
     config: &WorldGenConfig,
-    prior_modules: &[ModuleInfo],
+    prior_modules: &[ModuleInfo<'db>],
 ) -> String {
     let mut lines = Vec::new();
 
@@ -122,7 +117,7 @@ pub fn gen_module<R: Rng>(
 
     // Generate type alias statements.
     for alias in &info.type_aliases {
-        lines.push(format!("type {}: {}", alias.name, alias.type_hint));
+        lines.push(format_type_alias(db, &alias.name, alias.type_hint));
     }
     if !info.type_aliases.is_empty() {
         lines.push(String::new());
@@ -130,7 +125,7 @@ pub fn gen_module<R: Rng>(
 
     // Generate function definitions.
     for sig in &info.functions {
-        let func_def = gen_function(rng, sig, config, &ctx);
+        let func_def = gen_function(db, rng, sig, config, &ctx);
         lines.push(func_def);
         lines.push(String::new());
     }

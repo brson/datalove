@@ -1,183 +1,39 @@
-//! Expression generation.
+//! Expression generation using datalit's type-directed generation.
 
 use rand::Rng;
+use datalove_datalit::ast::TypeHintAndHeap;
+use datalove_datalit::ast_gen;
 use crate::config::WorldGenConfig;
-use crate::context::GenContext;
-use crate::gen_type::gen_heap;
-
-/// Generate a literal expression matching the given type.
-pub fn gen_literal<R: Rng>(rng: &mut R, type_hint: &str, ctx: &GenContext) -> String {
-    // Strip heap annotation if present.
-    let ty = type_hint
-        .trim_start_matches('@')
-        .trim_start_matches('#');
-
-    // Check if this is a type alias.
-    if let Some(alias) = ctx.type_aliases.iter().find(|a| a.name == ty) {
-        // Generate a value matching the underlying type.
-        return gen_literal(rng, &alias.type_hint, ctx);
-    }
-
-    match ty {
-        "bool" => if rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() },
-        "u8" => format!("{}", rng.gen_range(0u8..=255)),
-        "i8" => format!("{}", rng.gen_range(-128i8..=127)),
-        "u16" => format!("{}", rng.gen_range(0u16..=1000)),
-        "i16" => format!("{}", rng.gen_range(-1000i16..=1000)),
-        "u32" => format!("{}", rng.gen_range(0u32..=10000)),
-        "i32" => format!("{}", rng.gen_range(-10000i32..=10000)),
-        "u64" => format!("{}", rng.gen_range(0u64..=100000)),
-        "i64" => format!("{}", rng.gen_range(-100000i64..=100000)),
-        "f32" => {
-            // Must have exactly one decimal place and suffix to ensure f32.
-            let val: f32 = rng.gen_range(-100.0f32..=100.0);
-            format!("{:.2}", val)
-        }
-        "f64" => {
-            // Must have decimal places for f64.
-            let val: f64 = rng.gen_range(-100.0f64..=100.0);
-            format!("{:.2}", val)
-        }
-        "string" => {
-            let strings = ["\"hello\"", "\"world\"", "\"test\"", "\"data\"", "\"\""];
-            strings[rng.gen_range(0..strings.len())].to_string()
-        }
-        "int" => format!("{}", rng.gen_range(-10000i64..=10000)),
-        _ => {
-            // Handle composite types.
-            if ty.starts_with('[') && ty.ends_with(']') {
-                // List type.
-                let elem_ty = &ty[1..ty.len()-1];
-                let count = rng.gen_range(0..=3);
-                let elems: Vec<String> = (0..count)
-                    .map(|_| gen_literal(rng, elem_ty, ctx))
-                    .collect();
-                format!("[{}]", elems.join(", "))
-            } else if ty.starts_with('?') {
-                // Option type.
-                let inner_ty = &ty[1..];
-                if rng.gen_bool(0.5) {
-                    format!(": ?{} / none", inner_ty)
-                } else {
-                    format!("some {}", gen_literal(rng, inner_ty, ctx))
-                }
-            } else if ty.starts_with('!') {
-                // Result type.
-                let inner_ty = &ty[1..];
-                format!("ok {}", gen_literal(rng, inner_ty, ctx))
-            } else if ty.starts_with('(') && ty.ends_with(')') {
-                // Tuple type.
-                let inner = &ty[1..ty.len()-1];
-                let fields = parse_type_list(inner);
-                let elems: Vec<String> = fields
-                    .iter()
-                    .map(|f| gen_literal(rng, f, ctx))
-                    .collect();
-                format!("({})", elems.join(", "))
-            } else if ty.starts_with('{') && ty.ends_with('}') {
-                // Struct type.
-                let inner = &ty[1..ty.len()-1];
-                if inner.is_empty() {
-                    "{}".to_string()
-                } else {
-                    let fields = parse_struct_fields(inner);
-                    let elems: Vec<String> = fields
-                        .iter()
-                        .map(|(name, field_ty)| {
-                            format!("{} = {}", name, gen_literal(rng, field_ty, ctx))
-                        })
-                        .collect();
-                    format!("{{{}}}", elems.join(", "))
-                }
-            } else {
-                // Unknown type (likely a type alias we can't resolve), return simple value.
-                "0".to_string()
-            }
-        }
-    }
-}
-
-/// Parse a comma-separated list of types, respecting nested brackets.
-fn parse_type_list(s: &str) -> Vec<String> {
-    let mut result = Vec::new();
-    let mut current = String::new();
-    let mut depth = 0;
-
-    for ch in s.chars() {
-        match ch {
-            '(' | '[' | '{' | '<' => {
-                depth += 1;
-                current.push(ch);
-            }
-            ')' | ']' | '}' | '>' => {
-                depth -= 1;
-                current.push(ch);
-            }
-            ',' if depth == 0 => {
-                let trimmed = current.trim().to_string();
-                if !trimmed.is_empty() {
-                    result.push(trimmed);
-                }
-                current.clear();
-            }
-            _ => {
-                current.push(ch);
-            }
-        }
-    }
-
-    let trimmed = current.trim().to_string();
-    if !trimmed.is_empty() {
-        result.push(trimmed);
-    }
-
-    result
-}
-
-/// Parse struct fields like "f0: u32, f1: string".
-fn parse_struct_fields(s: &str) -> Vec<(String, String)> {
-    let fields_list = parse_type_list(s);
-    let mut result = Vec::new();
-
-    for field in fields_list {
-        if let Some((name, ty)) = field.split_once(": ") {
-            result.push((name.trim().to_string(), ty.trim().to_string()));
-        }
-    }
-
-    result
-}
+use crate::context::{GenContext, FunctionSig, types_match};
+use crate::gen_type::{gen_bool_type, gen_u32_type};
+use crate::pretty::pretty_expr_with_heap;
 
 /// Generate an expression matching the given type.
 ///
 /// May be a literal, variable reference, or function call.
-pub fn gen_expr<R: Rng>(
+pub fn gen_expr<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
-    type_hint: &str,
+    type_hint: TypeHintAndHeap<'db>,
     config: &WorldGenConfig,
-    ctx: &GenContext,
+    ctx: &GenContext<'db>,
 ) -> String {
     // Check if we can use a variable.
-    let matching_vars = ctx.variables_of_type(type_hint);
+    let matching_vars = ctx.variables_of_type(db, type_hint);
     let can_use_var = !matching_vars.is_empty() && rng.gen_bool(0.4);
 
-    // Check if the expected type is a type alias (module-local).
-    let is_type_alias = ctx.type_aliases.iter().any(|a| a.name == type_hint.trim_start_matches('@').trim_start_matches('#'));
-
     // Check if we can call a function.
-    // If expected type is a type alias, only call local functions to avoid cross-module alias conflicts.
-    let matching_fns: Vec<_> = if is_type_alias {
-        ctx.functions
-            .iter()
-            .filter(|f| f.return_type.as_deref() == Some(type_hint))
-            .collect()
-    } else {
-        ctx.callable_functions()
-            .filter(|f| f.return_type.as_deref() == Some(type_hint))
-            .collect()
-    };
+    let matching_fns: Vec<_> = ctx.callable_functions()
+        .filter(|f| {
+            if let Some(ret_type) = f.return_type {
+                types_match(db, ret_type, type_hint)
+            } else {
+                false
+            }
+        })
+        .collect();
     let can_call_fn = !matching_fns.is_empty()
-        && rng.gen_bool(config.function_call_probability);
+        && config.check_probability(rng, config.function_call_probability);
 
     if can_use_var && !can_call_fn {
         // Use a variable.
@@ -186,7 +42,7 @@ pub fn gen_expr<R: Rng>(
     } else if can_call_fn && !can_use_var {
         // Call a function.
         let func = matching_fns[rng.gen_range(0..matching_fns.len())];
-        gen_function_call(rng, func, config, ctx)
+        gen_function_call(db, rng, func, config, ctx)
     } else if can_use_var && can_call_fn {
         // Choose randomly.
         if rng.gen_bool(0.5) {
@@ -194,39 +50,64 @@ pub fn gen_expr<R: Rng>(
             var.name.clone()
         } else {
             let func = matching_fns[rng.gen_range(0..matching_fns.len())];
-            gen_function_call(rng, func, config, ctx)
+            gen_function_call(db, rng, func, config, ctx)
         }
     } else {
-        // Generate a literal with heap annotation.
-        let heap = gen_heap(rng);
-        format!("{}{}", heap, gen_literal(rng, type_hint, ctx))
+        // Generate a literal using datalit.
+        gen_literal(db, rng, type_hint, config)
     }
 }
 
-/// Generate a function call expression.
-fn gen_function_call<R: Rng>(
+/// Generate a literal expression matching the given type using datalit.
+fn gen_literal<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
-    func: &crate::context::FunctionSig,
+    type_hint: TypeHintAndHeap<'db>,
     config: &WorldGenConfig,
-    ctx: &GenContext,
+) -> String {
+    let type_hint_inner = type_hint.type_hint(db);
+    let heap = type_hint.heap(db);
+
+    let (expr, expr_heap) = ast_gen::gen_expr_matching_type(
+        db,
+        rng,
+        type_hint_inner,
+        heap,
+        &config.type_config,
+        0,
+    );
+
+    pretty_expr_with_heap(db, expr, expr_heap)
+}
+
+/// Generate a function call expression.
+fn gen_function_call<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    func: &FunctionSig<'db>,
+    config: &WorldGenConfig,
+    ctx: &GenContext<'db>,
 ) -> String {
     let args: Vec<String> = func
         .params
         .iter()
-        .map(|(_, param_type)| gen_expr(rng, param_type, config, ctx))
+        .map(|(_, param_type)| gen_expr(db, rng, *param_type, config, ctx))
         .collect();
 
     format!("{}({})", func.name, args.join(", "))
 }
 
 /// Generate a boolean expression.
-pub fn gen_bool_expr<R: Rng>(
+pub fn gen_bool_expr<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &GenContext,
+    ctx: &GenContext<'db>,
 ) -> String {
+    let bool_type = gen_bool_type(db);
+
     // Check for bool variables.
-    let bool_vars = ctx.variables_of_type("@bool");
+    let bool_vars = ctx.variables_of_type(db, bool_type);
     let has_bool_var = !bool_vars.is_empty();
 
     let choice = rng.gen_range(0..10);
@@ -242,9 +123,9 @@ pub fn gen_bool_expr<R: Rng>(
         }
         6..=8 => {
             // Comparison expression.
-            let ty = "@u32";
-            let lhs = gen_expr(rng, ty, config, ctx);
-            let rhs = gen_expr(rng, ty, config, ctx);
+            let ty = gen_u32_type(db);
+            let lhs = gen_expr(db, rng, ty, config, ctx);
+            let rhs = gen_expr(db, rng, ty, config, ctx);
             let ops = [".<", ".>", "<=", ">=", "==", "!="];
             let op = ops[rng.gen_range(0..ops.len())];
             format!("{} {} {}", lhs, op, rhs)
@@ -253,5 +134,282 @@ pub fn gen_bool_expr<R: Rng>(
             // Simple literal fallback.
             if rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use datalove_datalit::ast::{Heap, TypeHint, TypeHintAndHeap};
+    use datalove_datalit::Database;
+    use crate::context::Variable;
+    use rand::SeedableRng;
+
+    #[test]
+    fn test_gen_expr_literal_u32() {
+        let db = Database::default();
+        test_gen_expr_literal_u32_inner(&db);
+    }
+
+    #[salsa::tracked]
+    fn test_gen_expr_literal_u32_inner<'db>(db: &'db dyn salsa::Database) {
+        let config = WorldGenConfig::default();
+        let ctx = GenContext::new();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+
+        let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
+        let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
+
+        // Should produce a u32 literal with @ prefix.
+        assert!(expr.starts_with("@"), "u32 expression should start with @: {}", expr);
+        // Should be parseable as a number (after stripping @).
+        let num_str = &expr[1..];
+        assert!(num_str.parse::<u32>().is_ok(), "Should be valid u32: {}", expr);
+    }
+
+    #[test]
+    fn test_gen_expr_literal_bool() {
+        let db = Database::default();
+        test_gen_expr_literal_bool_inner(&db);
+    }
+
+    #[salsa::tracked]
+    fn test_gen_expr_literal_bool_inner<'db>(db: &'db dyn salsa::Database) {
+        let config = WorldGenConfig::default();
+        let ctx = GenContext::new();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+
+        let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::Bool);
+        let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
+
+        // Should produce @true or @false.
+        assert!(
+            expr == "@true" || expr == "@false",
+            "bool expression should be @true or @false: {}",
+            expr
+        );
+    }
+
+    #[test]
+    fn test_gen_expr_literal_string() {
+        let db = Database::default();
+        test_gen_expr_literal_string_inner(&db);
+    }
+
+    #[salsa::tracked]
+    fn test_gen_expr_literal_string_inner<'db>(db: &'db dyn salsa::Database) {
+        let config = WorldGenConfig::default();
+        let ctx = GenContext::new();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+
+        let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::String);
+        let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
+
+        // Should produce @"..." string.
+        assert!(expr.starts_with("@\""), "string should start with @\": {}", expr);
+        assert!(expr.ends_with("\""), "string should end with \": {}", expr);
+    }
+
+    #[test]
+    fn test_gen_expr_uses_variable() {
+        let db = Database::default();
+        test_gen_expr_uses_variable_inner(&db);
+    }
+
+    #[salsa::tracked]
+    fn test_gen_expr_uses_variable_inner<'db>(db: &'db dyn salsa::Database) {
+        let config = WorldGenConfig::default();
+        let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
+
+        let mut ctx = GenContext::new();
+        ctx.variables.push(Variable {
+            name: "my_var".to_string(),
+            type_hint: ty,
+            is_mutable: false,
+        });
+
+        // Generate many expressions - some should use the variable.
+        let mut used_var = false;
+        for seed in 0..100 {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
+            if expr == "my_var" {
+                used_var = true;
+                break;
+            }
+        }
+
+        assert!(used_var, "Should use variable at least once in 100 attempts");
+    }
+
+    #[test]
+    fn test_gen_expr_function_call() {
+        let db = Database::default();
+        test_gen_expr_function_call_inner(&db);
+    }
+
+    #[salsa::tracked]
+    fn test_gen_expr_function_call_inner<'db>(db: &'db dyn salsa::Database) {
+        let mut config = WorldGenConfig::default();
+        config.function_call_probability = 100; // Always call if available.
+
+        let ret_ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
+        let param_ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::Bool);
+
+        let mut ctx = GenContext::new();
+        ctx.functions.push(FunctionSig {
+            name: "get_value".to_string(),
+            params: vec![("flag".to_string(), param_ty)],
+            return_type: Some(ret_ty),
+        });
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let expr = gen_expr(db, &mut rng, ret_ty, &config, &ctx);
+
+        // Should generate function call.
+        assert!(
+            expr.contains("get_value("),
+            "Should generate function call: {}",
+            expr
+        );
+    }
+
+    #[test]
+    fn test_gen_bool_expr_literals() {
+        let db = Database::default();
+        test_gen_bool_expr_literals_inner(&db);
+    }
+
+    #[salsa::tracked]
+    fn test_gen_bool_expr_literals_inner<'db>(db: &'db dyn salsa::Database) {
+        let config = WorldGenConfig::default();
+        let ctx = GenContext::new();
+
+        let mut found_true = false;
+        let mut found_false = false;
+
+        for seed in 0..100 {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let expr = gen_bool_expr(db, &mut rng, &config, &ctx);
+            if expr == "true" {
+                found_true = true;
+            }
+            if expr == "false" {
+                found_false = true;
+            }
+        }
+
+        assert!(found_true, "Should generate 'true' literal");
+        assert!(found_false, "Should generate 'false' literal");
+    }
+
+    #[test]
+    fn test_gen_bool_expr_comparison() {
+        let db = Database::default();
+        test_gen_bool_expr_comparison_inner(&db);
+    }
+
+    #[salsa::tracked]
+    fn test_gen_bool_expr_comparison_inner<'db>(db: &'db dyn salsa::Database) {
+        let config = WorldGenConfig::default();
+        let ctx = GenContext::new();
+
+        let mut found_comparison = false;
+
+        for seed in 0..100 {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let expr = gen_bool_expr(db, &mut rng, &config, &ctx);
+            if expr.contains(".<") || expr.contains(".>")
+                || expr.contains("<=") || expr.contains(">=")
+                || expr.contains("==") || expr.contains("!=")
+            {
+                found_comparison = true;
+                break;
+            }
+        }
+
+        assert!(found_comparison, "Should generate comparison expressions");
+    }
+
+    #[test]
+    fn test_gen_expr_type_variety() {
+        let db = Database::default();
+        test_gen_expr_type_variety_inner(&db);
+    }
+
+    #[salsa::tracked]
+    fn test_gen_expr_type_variety_inner<'db>(db: &'db dyn salsa::Database) {
+        let config = WorldGenConfig::default();
+        let ctx = GenContext::new();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+
+        // Test various primitive types.
+        let types = [
+            TypeHint::Bool,
+            TypeHint::U8,
+            TypeHint::I8,
+            TypeHint::U16,
+            TypeHint::I16,
+            TypeHint::U32,
+            TypeHint::I32,
+            TypeHint::U64,
+            TypeHint::I64,
+            TypeHint::F32,
+            TypeHint::F64,
+            TypeHint::String,
+        ];
+
+        for ty_hint in types {
+            let ty = TypeHintAndHeap::new(db, Heap::Local, ty_hint);
+            let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
+            // All expressions should start with @ for local heap.
+            assert!(
+                expr.starts_with("@"),
+                "Expression should start with @: {}",
+                expr
+            );
+        }
+    }
+
+    #[test]
+    fn test_gen_expr_global_heap() {
+        let db = Database::default();
+        test_gen_expr_global_heap_inner(&db);
+    }
+
+    #[salsa::tracked]
+    fn test_gen_expr_global_heap_inner<'db>(db: &'db dyn salsa::Database) {
+        let config = WorldGenConfig::default();
+        let ctx = GenContext::new();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+
+        let ty = TypeHintAndHeap::new(db, Heap::Global, TypeHint::U32);
+        let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
+
+        // Should produce #... for global heap.
+        assert!(expr.starts_with("#"), "Global heap should use #: {}", expr);
+    }
+
+    #[test]
+    fn test_gen_expr_deterministic() {
+        let db = Database::default();
+        test_gen_expr_deterministic_inner(&db);
+    }
+
+    #[salsa::tracked]
+    fn test_gen_expr_deterministic_inner<'db>(db: &'db dyn salsa::Database) {
+        let config = WorldGenConfig::default();
+        let ctx = GenContext::new();
+
+        let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
+
+        // Same seed should produce same expression.
+        let mut rng1 = rand::rngs::StdRng::seed_from_u64(42);
+        let mut rng2 = rand::rngs::StdRng::seed_from_u64(42);
+
+        let expr1 = gen_expr(db, &mut rng1, ty, &config, &ctx);
+        let expr2 = gen_expr(db, &mut rng2, ty, &config, &ctx);
+
+        assert_eq!(expr1, expr2, "Same seed should produce same expression");
     }
 }

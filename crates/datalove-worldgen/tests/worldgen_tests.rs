@@ -103,9 +103,9 @@ fn test_minimal_config_typechecks() {
     config.statements_per_function = (1, 1);
     config.type_aliases_per_module = (0, 0);
     config.script_statements = (1, 1);
-    config.if_probability = 0.0;
-    config.loop_probability = 0.0;
-    config.function_call_probability = 0.0;
+    config.if_probability = 0;
+    config.loop_probability = 0;
+    config.function_call_probability = 0;
 
     for seed in 0..20 {
         let wf = gen_worldfile_seeded(seed, config.clone());
@@ -265,5 +265,224 @@ impl ConstructCoverage {
                 self.function_calls += 1;
             }
         }
+    }
+}
+
+// ============================================================================
+// Tests for TypeHintAndHeap-based type tracking (new features)
+// ============================================================================
+
+/// Verify that type hints use the @ and # sigils correctly.
+#[test]
+fn test_heap_sigils_in_output() {
+    let config = WorldGenConfig::default();
+
+    // Test multiple seeds to find both local and global heap usage.
+    let mut found_local = false;
+    let mut found_global = false;
+
+    for seed in 0..100 {
+        let wf = gen_worldfile_seeded(seed, config.clone());
+
+        // Look for @type patterns (local heap).
+        if wf.contains("@u32") || wf.contains("@i32") || wf.contains("@bool")
+            || wf.contains("@u64") || wf.contains("@string")
+        {
+            found_local = true;
+        }
+
+        // Look for #type patterns (global heap).
+        if wf.contains("#u32") || wf.contains("#i32") || wf.contains("#bool")
+            || wf.contains("#u64") || wf.contains("#string")
+        {
+            found_global = true;
+        }
+
+        if found_local && found_global {
+            break;
+        }
+    }
+
+    assert!(found_local, "Should generate types with local heap (@)");
+    assert!(found_global, "Should generate types with global heap (#)");
+}
+
+/// Verify that generated expressions match their declared types.
+#[test]
+fn test_type_consistency() {
+    let config = WorldGenConfig::default();
+
+    for seed in 0..20 {
+        let wf = gen_worldfile_seeded(seed, config.clone());
+        let errors = typecheck_worldfile(&wf);
+
+        if !errors.is_empty() {
+            eprintln!("Seed {}: Type consistency errors:", seed);
+            for err in &errors {
+                eprintln!("  {}", err);
+            }
+            panic!("Type consistency check failed for seed {}", seed);
+        }
+    }
+}
+
+/// Verify that type alias definitions are formatted correctly.
+#[test]
+fn test_type_alias_format() {
+    let mut config = WorldGenConfig::default();
+    config.type_aliases_per_module = (2, 3);
+
+    let wf = gen_worldfile_seeded(42, config);
+
+    // Type aliases should be in format "type Name: @type".
+    for line in wf.lines() {
+        if line.starts_with("type Type") {
+            assert!(
+                line.contains(": @") || line.contains(": #"),
+                "Type alias should have heap sigil: {}",
+                line
+            );
+        }
+    }
+}
+
+/// Verify that function signatures have proper type annotations.
+#[test]
+fn test_function_signature_types() {
+    let config = WorldGenConfig::default();
+    let wf = gen_worldfile_seeded(42, config);
+
+    // Find function definitions.
+    for line in wf.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("fun ") {
+            // Parameters should have type annotations.
+            if trimmed.contains("(") && trimmed.contains(")") {
+                let params_start = trimmed.find('(').unwrap();
+                let params_end = trimmed.find(')').unwrap();
+                let params = &trimmed[params_start + 1..params_end];
+
+                if !params.is_empty() {
+                    // Each parameter should have a colon for type annotation.
+                    assert!(
+                        params.contains(':'),
+                        "Parameters should have type annotations: {}",
+                        trimmed
+                    );
+                }
+            }
+
+            // Return type (if any) should have heap sigil.
+            if trimmed.ends_with("@") {
+                // This shouldn't happen - types should be complete.
+                panic!("Function signature ends with incomplete type: {}", trimmed);
+            }
+        }
+    }
+}
+
+/// Test that variable declarations have proper type and value.
+#[test]
+fn test_variable_declaration_format() {
+    let config = WorldGenConfig::default();
+    let wf = gen_worldfile_seeded(42, config);
+
+    for line in wf.lines() {
+        let trimmed = line.trim();
+
+        // Check let declarations.
+        if trimmed.starts_with("let ") {
+            assert!(
+                trimmed.contains(": ") && trimmed.contains(" = "),
+                "let should have type and value: {}",
+                trimmed
+            );
+        }
+
+        // Check var declarations.
+        if trimmed.starts_with("var ") {
+            assert!(
+                trimmed.contains(": ") && trimmed.contains(" = "),
+                "var should have type and value: {}",
+                trimmed
+            );
+        }
+    }
+}
+
+/// Verify primitive type variety in generated code.
+#[test]
+fn test_primitive_type_variety() {
+    let config = WorldGenConfig::default();
+
+    let mut type_counts = std::collections::HashMap::new();
+
+    for seed in 0..50 {
+        let wf = gen_worldfile_seeded(seed, config.clone());
+
+        // Count occurrences of each primitive type.
+        for ty in ["@bool", "@u8", "@i8", "@u16", "@i16", "@u32", "@i32",
+                   "@u64", "@i64", "@f32", "@f64", "@string"] {
+            let count = wf.matches(ty).count();
+            *type_counts.entry(ty).or_insert(0) += count;
+        }
+    }
+
+    // Should generate at least a few of the common types.
+    let common_types = ["@u32", "@i32", "@bool", "@string"];
+    for ty in common_types {
+        let count = type_counts.get(ty).copied().unwrap_or(0);
+        assert!(
+            count > 0,
+            "Should generate {} at least once across 50 seeds, found {}",
+            ty,
+            count
+        );
+    }
+}
+
+/// Test that comparison operators in bool expressions work correctly.
+#[test]
+fn test_comparison_operators() {
+    let config = WorldGenConfig::default();
+
+    let mut found_ops = std::collections::HashSet::new();
+
+    for seed in 0..100 {
+        let wf = gen_worldfile_seeded(seed, config.clone());
+
+        // Check for comparison operators.
+        if wf.contains(".<") { found_ops.insert(".<"); }
+        if wf.contains(".>") { found_ops.insert(".>"); }
+        if wf.contains("<=") { found_ops.insert("<="); }
+        if wf.contains(">=") { found_ops.insert(">="); }
+        if wf.contains("==") { found_ops.insert("=="); }
+        if wf.contains("!=") { found_ops.insert("!="); }
+
+        if found_ops.len() >= 3 {
+            break;
+        }
+    }
+
+    assert!(
+        found_ops.len() >= 2,
+        "Should generate at least 2 different comparison operators, found: {:?}",
+        found_ops
+    );
+}
+
+/// Verify that salsa tracked types are deterministic across runs.
+#[test]
+fn test_salsa_type_determinism() {
+    let config = WorldGenConfig::default();
+
+    // Generate the same seed multiple times and verify identical output.
+    for seed in [42, 123, 456] {
+        let wf1 = gen_worldfile_seeded(seed, config.clone());
+        let wf2 = gen_worldfile_seeded(seed, config.clone());
+        let wf3 = gen_worldfile_seeded(seed, config.clone());
+
+        assert_eq!(wf1, wf2, "Seed {} should be deterministic", seed);
+        assert_eq!(wf2, wf3, "Seed {} should be deterministic", seed);
     }
 }

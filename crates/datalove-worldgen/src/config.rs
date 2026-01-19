@@ -3,7 +3,7 @@
 use datalove_datalit::ast_gen::AstGenConfig;
 
 /// Configuration for worldfile generation.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct WorldGenConfig {
     /// Number of modules to generate (min, max).
     pub module_count: (usize, usize),
@@ -23,20 +23,27 @@ pub struct WorldGenConfig {
     /// Maximum nesting depth for control flow.
     pub max_control_flow_depth: usize,
 
-    /// Probability of generating an if statement (0.0-1.0).
-    pub if_probability: f64,
+    /// Probability of generating an if statement (0-100 percent).
+    pub if_probability: u32,
 
-    /// Probability of generating a loop statement (0.0-1.0).
-    pub loop_probability: f64,
+    /// Probability of generating a loop statement (0-100 percent).
+    pub loop_probability: u32,
 
-    /// Probability of using a type alias instead of a structural type.
-    pub type_alias_usage_probability: f64,
+    /// Probability of using a type alias instead of a structural type (0-100 percent).
+    pub type_alias_usage_probability: u32,
 
-    /// Probability of calling another function instead of a literal.
-    pub function_call_probability: f64,
+    /// Probability of calling another function instead of a literal (0-100 percent).
+    pub function_call_probability: u32,
 
     /// Configuration for datalit expression generation.
     pub type_config: AstGenConfig,
+}
+
+impl WorldGenConfig {
+    /// Check probability as bool using rng.
+    pub fn check_probability<R: rand::Rng>(&self, rng: &mut R, pct: u32) -> bool {
+        rng.gen_range(0..100) < pct
+    }
 }
 
 impl Default for WorldGenConfig {
@@ -56,10 +63,10 @@ impl Default for WorldGenConfig {
             type_aliases_per_module: (0, 2),
             script_statements: (1, 5),
             max_control_flow_depth: 2,
-            if_probability: 0.3,
-            loop_probability: 0.2,
-            type_alias_usage_probability: 0.3,
-            function_call_probability: 0.3,
+            if_probability: 30,
+            loop_probability: 20,
+            type_alias_usage_probability: 30,
+            function_call_probability: 30,
             type_config,
         }
     }

@@ -1,8 +1,8 @@
 //! Worldfile assembly and entry point.
 
 use rand::{Rng, SeedableRng};
+use datalove_datalit::Database;
 use crate::config::WorldGenConfig;
-use crate::context::GenContext;
 use crate::gen_module::{plan_module_graph, gen_module_type_aliases, gen_module_function_sigs, gen_module};
 use crate::gen_script::gen_script;
 
@@ -10,12 +10,29 @@ use crate::gen_script::gen_script;
 ///
 /// Returns the worldfile as a string that can be parsed and typechecked.
 pub fn gen_worldfile_seeded(seed: u64, config: WorldGenConfig) -> String {
+    let db = Database::default();
+    gen_worldfile_tracked(&db, seed, config)
+}
+
+/// Internal tracked function for worldfile generation.
+///
+/// Must be tracked to allow creation of Salsa tracked structs.
+#[salsa::tracked]
+fn gen_worldfile_tracked<'db>(
+    db: &'db dyn salsa::Database,
+    seed: u64,
+    config: WorldGenConfig,
+) -> String {
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    gen_worldfile(&mut rng, &config)
+    gen_worldfile_inner(db, &mut rng, &config)
 }
 
 /// Generate a complete worldfile.
-fn gen_worldfile<R: Rng>(rng: &mut R, config: &WorldGenConfig) -> String {
+fn gen_worldfile_inner<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &WorldGenConfig,
+) -> String {
     let mut sections = Vec::new();
 
     // Plan module graph.
@@ -23,12 +40,8 @@ fn gen_worldfile<R: Rng>(rng: &mut R, config: &WorldGenConfig) -> String {
 
     // First pass: generate type aliases and function signatures for all modules.
     for module in &mut modules {
-        module.type_aliases = gen_module_type_aliases(rng, config);
-
-        let mut ctx = GenContext::new();
-        ctx.type_aliases = module.type_aliases.clone();
-
-        module.functions = gen_module_function_sigs(rng, config, &ctx);
+        module.type_aliases = gen_module_type_aliases(db, rng, config);
+        module.functions = gen_module_function_sigs(db, rng, config);
     }
 
     // Second pass: generate complete module source.
@@ -36,7 +49,7 @@ fn gen_worldfile<R: Rng>(rng: &mut R, config: &WorldGenConfig) -> String {
         let prior_modules: Vec<_> = modules[..i].to_vec();
         let module = &modules[i];
 
-        let source = gen_module(rng, module, config, &prior_modules);
+        let source = gen_module(db, rng, module, config, &prior_modules);
 
         sections.push(format!(
             "----------\nmodule {}\n----------\n\n{}",
@@ -46,7 +59,7 @@ fn gen_worldfile<R: Rng>(rng: &mut R, config: &WorldGenConfig) -> String {
     }
 
     // Generate script section.
-    let script_source = gen_script(rng, config, &modules);
+    let script_source = gen_script(db, rng, config, &modules);
     sections.push(format!(
         "----------\nscript\n----------\n\n{}",
         script_source
