@@ -28,29 +28,6 @@ impl std::fmt::Display for ConversionError {
 
 impl std::error::Error for ConversionError {}
 
-/// Extract a single expression from a ParsedStatements that contains exactly one Ret statement.
-pub fn extract_expr_from_parsed<'db>(
-    _db: &'db dyn salsa::Database,
-    parsed: ast::ParsedStatements<'db>,
-) -> Result<ast::ExprFun<'db>, ConversionError> {
-    let statements = parsed.statements;
-    if statements.len() != 1 {
-        return Err(ConversionError::InvalidScriptStructure(
-            format!("expected 1 statement, got {}", statements.len())
-        ));
-    }
-    match &statements[0] {
-        ast::Statement::Ret(ret) => {
-            ret.value.ok_or_else(|| ConversionError::InvalidScriptStructure(
-                "bare ret statement has no value".S()
-            ))
-        }
-        other => Err(ConversionError::InvalidScriptStructure(
-            format!("expected Ret statement, got {:?}", std::mem::discriminant(other))
-        )),
-    }
-}
-
 /// Convert a datafun ExprFun to datalit::ast_serde::ExprFull.
 ///
 /// Only works for pure datalit expressions. Returns error for datafun-only constructs.

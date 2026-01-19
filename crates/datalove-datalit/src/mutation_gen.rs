@@ -4,10 +4,9 @@
 //! Used to verify both datalit and datafun parsers/typecheckers produce equivalent errors.
 
 use rmx::prelude::*;
-use rand::{Rng, SeedableRng};
+use rand::Rng;
 
 use crate::ast::*;
-use crate::ast_gen::{AstGenConfig, gen_expr_full_seeded};
 use crate::pretty::pretty_print;
 
 /// Result of applying a mutation.
@@ -1095,18 +1094,4 @@ fn pretty_type_hint<'db>(
             out.push_str(name.as_str(db));
         }
     }
-}
-
-/// Generate a mutated expression from a seed.
-///
-/// Combines AST generation with mutation application for comprehensive testing.
-pub fn gen_mutated_expr<'db>(
-    db: &'db dyn salsa::Database,
-    seed: u64,
-    mutation: Mutation,
-    config: AstGenConfig,
-) -> Option<MutationResult> {
-    let expr = gen_expr_full_seeded(db, seed, config);
-    let mut rng = rand::rngs::StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
-    mutation.apply(db, expr, &mut rng)
 }

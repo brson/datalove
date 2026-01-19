@@ -90,40 +90,6 @@ where
     Ok(())
 }
 
-/// Run the application loop with a provided event source.
-pub fn run_app_with_events<B, E>(
-    terminal: &mut Terminal<B>,
-    app: &mut datalove_repl_rat::RatatuiApp<E>,
-    events: &mut dyn Iterator<Item = Event>,
-) -> AnyResult<()>
-where
-    B: ratatui::backend::Backend,
-    E: datalove_repl_rat::ReplExecutor,
-{
-    loop {
-        // Poll for worker results before drawing.
-        app.poll_results();
-
-        terminal.draw(|f| datalove_repl_rat::ui(f, app))?;
-
-        if app.should_exit() {
-            break;
-        }
-
-        if let Some(Event::Key(key)) = events.next() {
-            handle_key_event(app, key);
-        } else {
-            // No more events, but keep polling for pending results.
-            app.poll_results();
-            if !app.has_pending_work() {
-                break;
-            }
-        }
-    }
-
-    Ok(())
-}
-
 /// Handle a key event.
 fn handle_key_event<E: datalove_repl_rat::ReplExecutor>(
     app: &mut datalove_repl_rat::RatatuiApp<E>,

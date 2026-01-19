@@ -43,17 +43,6 @@ fn parse_bracer<'db>(
     ast::ParseResult::new(db, expr, parser.take_expr_spans())
 }
 
-/// Parse a datalit expression directly from a vector of tokens.
-pub fn parse_from_tokens<'db>(
-    db: &'db dyn crate::Db,
-    tokens: Vec<TreeToken<'db>>,
-    source_text: bct::text::Text<'db>,
-) -> ast::ParseResult<'db> {
-    let mut parser = Parser::new(db, tokens, source_text);
-    let expr = parser.parse_expr_full();
-    ast::ParseResult::new(db, expr, parser.take_expr_spans())
-}
-
 /// Parse a type hint and heap from a vector of tokens.
 ///
 /// Returns the parsed type hint and the number of tokens consumed.

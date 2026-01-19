@@ -1134,31 +1134,6 @@ fn gen_expr_full_with_heap<'db, R: Rng>(
     ExprFull::new(db, type_hint_opt, expr_and_heap)
 }
 
-/// Generate an ExprFull matching the given type hint.
-fn gen_expr_full_matching_type<'db, R: Rng>(
-    db: &'db dyn salsa::Database,
-    rng: &mut R,
-    type_hint: TypeHint<'db>,
-    config: &AstGenConfig,
-    depth: usize,
-) -> ExprFull<'db> {
-    let heap = gen_heap(rng, config);
-    gen_expr_full_with_heap(db, rng, type_hint, heap, config, depth)
-}
-
-/// Generate a random ExprFull with random type.
-///
-/// Note: This function cannot be marked with #[salsa::tracked] because it requires mutable RNG.
-/// Callers should wrap calls in their own tracked functions if needed.
-pub fn gen_expr_full<'db, R: Rng>(
-    db: &'db dyn salsa::Database,
-    rng: &mut R,
-    config: &AstGenConfig,
-) -> ExprFull<'db> {
-    let type_hint = gen_type_hint(db, rng, config, 0);
-    gen_expr_full_matching_type(db, rng, type_hint, config, 0)
-}
-
 /// Generate an ExprFull with a fixed heap for the entire expression tree.
 fn gen_expr_full_with_fixed_heap<'db, R: Rng>(
     db: &'db dyn salsa::Database,

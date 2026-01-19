@@ -41,15 +41,6 @@ pub fn disable_query_logging() -> Vec<QueryLogEntry> {
     QUERY_LOG.with(|log| log.borrow_mut().take().unwrap_or_default())
 }
 
-/// Clear logged entries without disabling logging.
-pub fn clear_query_log() {
-    QUERY_LOG.with(|log| {
-        if let Some(ref mut entries) = *log.borrow_mut() {
-            entries.clear();
-        }
-    });
-}
-
 /// Log a query execution event.
 ///
 /// Does nothing if logging is not enabled.
