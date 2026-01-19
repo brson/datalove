@@ -15,6 +15,9 @@ pub mod tracked_lower;
 // Drop analysis for IR lowering.
 pub mod drop_analysis;
 
+// Salsa-tracked drop analysis functions.
+pub mod tracked_drop_analysis;
+
 // Module graph abstraction (core compiler uses this).
 pub mod module_graph;
 

@@ -17,11 +17,8 @@ use datalove_datafun_tycheck::{
 };
 
 use crate::module_graph::parse_module_graph_with_mode;
-use crate::tracked_lower::{
-    analyze_module_graph_drops_with_mode,
-    lower_module_graph_with_mode,
-    ModuleGraphLoweringResult,
-};
+use crate::tracked_drop_analysis::analyze_module_graph_drops_with_mode;
+use crate::tracked_lower::{lower_module_graph_with_mode, ModuleGraphLoweringResult};
 
 /// Input for module compilation - the output of package resolution.
 pub struct ModuleCompilationInput {

@@ -12,7 +12,8 @@ use serde::{Serialize, Deserialize};
 
 use datalove_datafun_compiler::Database;
 use datalove_datafun_compiler::module_graph::parse_module_graph;
-use datalove_datafun_compiler::tracked_lower::{analyze_module_graph_drops, lower_module_graph};
+use datalove_datafun_compiler::tracked_drop_analysis::analyze_module_graph_drops;
+use datalove_datafun_compiler::tracked_lower::lower_module_graph;
 use datalove_ct::query_log::{enable_query_logging, disable_query_logging, get_executed_modules};
 use datalove_datafun_tycheck::typecheck_module_graph;
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
