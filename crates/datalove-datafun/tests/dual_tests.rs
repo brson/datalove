@@ -546,8 +546,41 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Analyze using both pipelines.
     let analysis = analyze_worldfile_dual(parsed);
 
+    // Check if any module has typecheck errors (AOT can't compile broken modules).
+    let has_module_typecheck_errors = analysis.sections.iter().any(|s| {
+        s.section_type == "module"
+            && matches!(s.typecheck, datafun::pipeline::TypecheckResult::Error { .. })
+    });
+
     // Check for failures.
     for section in &analysis.sections {
+        // Skip AOT checks if modules have typecheck errors (modules with errors aren't lowered).
+        if !has_module_typecheck_errors {
+            // Check AOT compilation succeeded.
+            if let Some(AotCompileResult::Error { message }) = &section.aot_compile {
+                return Err(format!("AOT compile failed: {}", message));
+            }
+
+            // Check link succeeded.
+            if let Some(LinkResult::Error { message }) = &section.link {
+                return Err(format!("Link failed: {}", message));
+            }
+
+            // Check execution succeeded.
+            match &section.execution {
+                Some(ExecutionResult::Error { message, .. }) => {
+                    return Err(format!("Execution failed: {}", message));
+                }
+                Some(ExecutionResult::Skipped { reason }) => {
+                    // Skipped due to earlier failure is already caught above.
+                    if !reason.contains("failed") {
+                        return Err(format!("Execution skipped: {}", reason));
+                    }
+                }
+                _ => {}
+            }
+        }
+
         if !section.ir_match {
             // If ir_diff is None, report lowering status for debugging.
             let detail = section.ir_diff.as_deref().unwrap_or_else(|| {
