@@ -18,7 +18,7 @@ use datalove_datafun_tycheck::{
 };
 
 use crate::lower;
-use crate::tracked_ownership_analysis::{SingleModuleDropAnalysis, ModuleGraphDropAnalysis};
+use crate::tracked_ownership_analysis::{SingleModuleAnalysis, ModuleGraphAnalysis};
 
 /// Function ID map for cross-module call resolution.
 ///
@@ -159,7 +159,7 @@ pub fn lower_module<'db>(
     ir_module_id: IrModuleId,
     parsed: ParsedStatements<'db>,
     typecheck_result: SingleModuleTypecheckResult<'db>,
-    drop_analysis: SingleModuleDropAnalysis<'db>,
+    drop_analysis: SingleModuleAnalysis<'db>,
     func_id_map: FuncIdMap<'db>,
 ) -> SingleModuleLoweringResult<'db> {
     let module_id = module.id(db);
@@ -254,7 +254,7 @@ pub fn lower_module_graph<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    drop_analysis: ModuleGraphDropAnalysis<'db>,
+    drop_analysis: ModuleGraphAnalysis<'db>,
 ) -> ModuleGraphLoweringResult<'db> {
     let graph = parsed_graph.graph(db);
 
@@ -326,7 +326,7 @@ pub fn lower_module_graph_parallel<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    drop_analysis: ModuleGraphDropAnalysis<'db>,
+    drop_analysis: ModuleGraphAnalysis<'db>,
 ) -> ModuleGraphLoweringResult<'db> {
     use rayon::prelude::*;
 
@@ -402,7 +402,7 @@ pub fn lower_module_graph_with_mode<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    drop_analysis: ModuleGraphDropAnalysis<'db>,
+    drop_analysis: ModuleGraphAnalysis<'db>,
     mode: ParallelMode,
 ) -> ModuleGraphLoweringResult<'db> {
     match mode {

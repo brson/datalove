@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "Drop analysis error in bad_function: OutParamNotInitialized { ret_stmt_idx: None, name: \"x\" }, OutParamNotInitialized { ret_stmt_idx: Some(1), name: \"x\" }",
+                message: "Ownership error in bad_function: OutParamNotInitialized { ret_stmt_idx: None, name: \"x\" }, OutParamNotInitialized { ret_stmt_idx: Some(1), name: \"x\" }",
             ),
             output: "",
         ),

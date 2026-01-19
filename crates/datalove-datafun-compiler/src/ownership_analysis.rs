@@ -53,7 +53,7 @@ use crate::ir_ext::IrTypeExt;
 // ============================================================================
 
 /// Pre-computed drop analyses for functions in a script unit.
-pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionDropAnalysis>;
+pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionAnalysis>;
 
 /// Identifies a binding (parameter or let/var).
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
@@ -235,7 +235,7 @@ pub struct DropSchedule {
 
 /// Result of analyzing a function.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct FunctionDropAnalysis {
+pub struct FunctionAnalysis {
     /// Errors detected during analysis.
     pub errors: Vec<AnalysisError>,
     /// Computed drop schedule.
@@ -809,7 +809,7 @@ pub fn analyze_function<'db>(
     func: StmtFun<'db>,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
-) -> FunctionDropAnalysis {
+) -> FunctionAnalysis {
     let mut ctx = AnalysisCtx::new(db, expr_types, call_targets);
 
     // Enter function scope.
@@ -829,7 +829,7 @@ pub fn analyze_function<'db>(
     let _final_drops = ctx.exit_scope();
     // Note: Final drops are handled by lowering's implicit return path.
 
-    FunctionDropAnalysis {
+    FunctionAnalysis {
         errors: ctx.errors,
         schedule: ctx.schedule,
         bindings: ctx.bindings,
@@ -869,7 +869,7 @@ pub fn analyze_script_functions<'db>(
 
 /// Result of analyzing script-level statements.
 #[derive(Clone, Debug)]
-pub struct ScriptDropAnalysis {
+pub struct ScriptAnalysis {
     /// Errors detected during analysis.
     pub errors: Vec<AnalysisError>,
     /// Computed drop schedule.
@@ -896,7 +896,7 @@ pub fn analyze_script_statements<'db>(
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     stmts: &[Statement<'db>],
     for_aot: bool,
-) -> ScriptDropAnalysis {
+) -> ScriptAnalysis {
     let mut ctx = AnalysisCtx::new(db, expr_types, call_targets);
 
     // Enter scope. For AOT, use Function scope so bindings get dropped.
@@ -910,7 +910,7 @@ pub fn analyze_script_statements<'db>(
     // Exit scope. For AOT, capture final drops. For REPL, they're empty.
     let final_drops = ctx.exit_scope();
 
-    ScriptDropAnalysis {
+    ScriptAnalysis {
         errors: ctx.errors,
         schedule: ctx.schedule,
         bindings: ctx.bindings,

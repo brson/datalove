@@ -7,7 +7,7 @@ use datalove_datafun_ast::ast;
 use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::ResolvedCallTarget;
 use datalove_datafun_ir::{IrType, IrFunction, Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId};
-use crate::ownership_analysis::FunctionDropAnalysis;
+use crate::ownership_analysis::FunctionAnalysis;
 use super::context::LowerCtx;
 use super::stmt::lower_statement_indexed;
 use super::LowerError;
@@ -24,7 +24,7 @@ pub fn lower_function_for_module<'db>(
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     func: ast::StmtFun<'db>,
     func_id: FuncId,
-    analysis: FunctionDropAnalysis,
+    analysis: FunctionAnalysis,
 ) -> Result<IrFunction, LowerError> {
     let mut ctx = LowerCtx::new_for_module(db, expr_types, call_targets, func_id_map);
 
@@ -38,7 +38,7 @@ pub fn lower_function_body<'db>(
     ctx: &mut LowerCtx<'db>,
     func_id: FuncId,
     func: ast::StmtFun<'db>,
-    analysis: FunctionDropAnalysis,
+    analysis: FunctionAnalysis,
 ) -> Result<IrFunction, LowerError> {
     // Assert no analysis errors - caller should have checked.
     assert!(

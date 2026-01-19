@@ -1,12 +1,8 @@
-//! Salsa-tracked API for drop analysis.
+//! Salsa-tracked API for ownership analysis.
 //!
-//! Provides memoized, per-module drop analysis following the same pattern as
-//! the typecheck module. Each module is analyzed independently, enabling
+//! Provides memoized, per-module ownership analysis following the same pattern
+//! as the typecheck module. Each module is analyzed independently, enabling
 //! incremental recompilation and parallel execution.
-//!
-//! Drop analysis runs after typechecking and before lowering. It computes drop
-//! schedules for resource management and detects ownership errors (use-after-move,
-//! move-in-loop, etc).
 
 use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, HashMap};
@@ -20,56 +16,56 @@ use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
-use crate::ownership_analysis::{self, FunctionDropAnalysis};
+use crate::ownership_analysis::{self, FunctionAnalysis};
 
-/// Result of drop analysis for a single function.
+/// Result of ownership analysis for a single function.
 #[salsa::tracked]
-pub struct SingleFunctionDropAnalysis<'db> {
+pub struct SingleFunctionAnalysis<'db> {
     /// Name of the function.
     pub func_name: String,
 
-    /// Drop analysis result (None if analysis failed with errors).
+    /// Analysis result (None if analysis failed with errors).
     #[returns(ref)]
-    pub analysis: Option<FunctionDropAnalysis>,
+    pub analysis: Option<FunctionAnalysis>,
 
-    /// Errors from drop analysis.
+    /// Errors from analysis.
     #[returns(ref)]
     pub errors: Vec<String>,
 }
 
-/// Result of drop analysis for a single module.
+/// Result of ownership analysis for a single module.
 #[salsa::tracked]
-pub struct SingleModuleDropAnalysis<'db> {
+pub struct SingleModuleAnalysis<'db> {
     /// Module that was analyzed.
     pub module_id: ModuleId,
 
-    /// Per-function drop analysis results.
+    /// Per-function analysis results.
     #[returns(ref)]
-    pub function_analyses: BTreeMap<String, SingleFunctionDropAnalysis<'db>>,
+    pub function_analyses: BTreeMap<String, SingleFunctionAnalysis<'db>>,
 
     /// Aggregated errors from all functions.
     #[returns(ref)]
     pub errors: Vec<String>,
 }
 
-/// Result of drop analysis for an entire module graph.
+/// Result of ownership analysis for an entire module graph.
 #[salsa::tracked]
-pub struct ModuleGraphDropAnalysis<'db> {
-    /// Per-module drop analysis results.
+pub struct ModuleGraphAnalysis<'db> {
+    /// Per-module analysis results.
     #[returns(ref)]
-    pub module_results: BTreeMap<ModuleId, SingleModuleDropAnalysis<'db>>,
+    pub module_results: BTreeMap<ModuleId, SingleModuleAnalysis<'db>>,
 
     /// Whether all modules analyzed successfully.
     pub success: bool,
 }
 
-impl<'db> ModuleGraphDropAnalysis<'db> {
-    /// Check if drop analysis succeeded (no errors).
+impl<'db> ModuleGraphAnalysis<'db> {
+    /// Check if analysis succeeded (no errors).
     pub fn is_ok(&self, db: &'db dyn salsa::Database) -> bool {
         self.success(db)
     }
 
-    /// Get all drop analysis errors across all modules.
+    /// Get all analysis errors across all modules.
     pub fn all_errors(&self, db: &'db dyn salsa::Database) -> Vec<String> {
         self.module_results(db)
             .values()
@@ -78,14 +74,14 @@ impl<'db> ModuleGraphDropAnalysis<'db> {
     }
 }
 
-/// Analyze drops for a single module.
+/// Analyze a single module for ownership errors.
 #[salsa::tracked]
-pub fn analyze_module_drops<'db>(
+pub fn analyze_module<'db>(
     db: &'db dyn salsa::Database,
     module: Module,
     parsed: ParsedStatements<'db>,
     typecheck_result: SingleModuleTypecheckResult<'db>,
-) -> SingleModuleDropAnalysis<'db> {
+) -> SingleModuleAnalysis<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
 
@@ -112,7 +108,7 @@ pub fn analyze_module_drops<'db>(
                     .map(|e| format!("{:?}", e))
                     .collect();
                 let formatted = format!(
-                    "Drop analysis error in {}: {}",
+                    "Ownership error in {}: {}",
                     func_name,
                     error_msgs.join(", ")
                 );
@@ -120,7 +116,7 @@ pub fn analyze_module_drops<'db>(
                 (None, vec![formatted])
             };
 
-            let single_analysis = SingleFunctionDropAnalysis::new(
+            let single_analysis = SingleFunctionAnalysis::new(
                 db,
                 func_name.clone(),
                 opt_analysis,
@@ -132,16 +128,16 @@ pub fn analyze_module_drops<'db>(
 
     log_query("ownership_analysis", module_path, QueryPhase::End);
 
-    SingleModuleDropAnalysis::new(db, module_id, function_analyses, all_errors)
+    SingleModuleAnalysis::new(db, module_id, function_analyses, all_errors)
 }
 
-/// Analyze drops for an entire module graph.
+/// Analyze an entire module graph for ownership errors.
 #[salsa::tracked]
-pub fn analyze_module_graph_drops<'db>(
+pub fn analyze_module_graph<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-) -> ModuleGraphDropAnalysis<'db> {
+) -> ModuleGraphAnalysis<'db> {
     let graph = parsed_graph.graph(db);
 
     // Build module lookup.
@@ -169,7 +165,7 @@ pub fn analyze_module_graph_drops<'db>(
         let single_typecheck = *typecheck_module_results.get(module_id)
             .expect("module should have typecheck result");
 
-        let result = analyze_module_drops(db, module, parsed.clone(), single_typecheck);
+        let result = analyze_module(db, module, parsed.clone(), single_typecheck);
 
         if !result.errors(db).is_empty() {
             all_success = false;
@@ -178,15 +174,15 @@ pub fn analyze_module_graph_drops<'db>(
         module_results.insert(*module_id, result);
     }
 
-    ModuleGraphDropAnalysis::new(db, module_results, all_success)
+    ModuleGraphAnalysis::new(db, module_results, all_success)
 }
 
-/// Analyze drops for a module graph using parallel execution.
-pub fn analyze_module_graph_drops_parallel<'db>(
+/// Analyze module graph for ownership errors using parallel execution.
+pub fn analyze_module_graph_parallel<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-) -> ModuleGraphDropAnalysis<'db> {
+) -> ModuleGraphAnalysis<'db> {
     use rayon::prelude::*;
 
     let db_salsa = db.as_salsa_db();
@@ -219,22 +215,22 @@ pub fn analyze_module_graph_drops_parallel<'db>(
     // Analyze modules in parallel - populates salsa's memoization cache.
     work.into_par_iter().for_each(|(db_clone, module, parsed, single_typecheck)| {
         let db_s = db_clone.as_salsa_db();
-        let _ = analyze_module_drops(db_s, module, parsed, single_typecheck);
+        let _ = analyze_module(db_s, module, parsed, single_typecheck);
     });
 
     // Delegate to tracked function which aggregates results.
-    analyze_module_graph_drops(db_salsa, parsed_graph, typecheck_result)
+    analyze_module_graph(db_salsa, parsed_graph, typecheck_result)
 }
 
-/// Analyze module graph drops with configurable parallelism.
-pub fn analyze_module_graph_drops_with_mode<'db>(
+/// Analyze module graph for ownership errors with configurable parallelism.
+pub fn analyze_module_graph_with_mode<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     mode: ParallelMode,
-) -> ModuleGraphDropAnalysis<'db> {
+) -> ModuleGraphAnalysis<'db> {
     match mode {
-        ParallelMode::Sequential => analyze_module_graph_drops(db.as_salsa_db(), parsed_graph, typecheck_result),
-        ParallelMode::Parallel => analyze_module_graph_drops_parallel(db, parsed_graph, typecheck_result),
+        ParallelMode::Sequential => analyze_module_graph(db.as_salsa_db(), parsed_graph, typecheck_result),
+        ParallelMode::Parallel => analyze_module_graph_parallel(db, parsed_graph, typecheck_result),
     }
 }
