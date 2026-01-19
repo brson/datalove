@@ -38,6 +38,7 @@ Then we'll add I/O to it &mdash; carefully.
   <div class="thing-box">
     <p>Modern compilation and execution architecture with
        <em>fully-memoized recompilation</em> and <em>rapid script iteration</em>,
+       <em>fully-parallelized compiler pipelinie</em>,
        interactive (<em>REPL</em>) interpreter with <em>JIT</em>,
        <em>compiles</em> to <em>staticly-linked</em> binaries.</p>
   </div>
