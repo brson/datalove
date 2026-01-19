@@ -41,7 +41,7 @@
 
 ## On deck
 
-- comptime/const execution
+- worldfile generator
 - updates feed
 - roadmap status page
 - clean up benchmarks
@@ -79,6 +79,7 @@
 
 ## Backburner
 
+- comptime / const evaluation
 - allocation statistics
 - jit statistics
 - cleanup and specify bidirectional typechecking
@@ -93,7 +94,6 @@
 ## Far future
 
 - named types
-- comptime
 - first-class type variables
 - termination proofs
 - autodiff
