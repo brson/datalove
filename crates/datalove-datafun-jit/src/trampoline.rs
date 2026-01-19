@@ -177,8 +177,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     let ctx_ptr = match get_dispatch_context() {
         Some(ptr) => ptr,
         None => {
-            eprintln!("JIT dispatch: no context set");
-            return 0;
+            panic!("JIT dispatch: no context set");
         }
     };
 
@@ -193,8 +192,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     let ir_func = match ctx.exec_ctx.get_function(&func_ref, ctx.registry) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("JIT dispatch: function lookup failed: {:?}", e);
-            return 0;
+            panic!("JIT dispatch: function lookup failed: {:?}", e);
         }
     };
 
@@ -229,7 +227,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
                 crate::bridge::call_jit(code_ptr, uses_sret, rt_handle, &arg_vals, dest, &ir_func.return_type)
             };
             if let Err(e) = result {
-                eprintln!("JIT dispatch: JIT call failed: {}", e);
+                panic!("JIT dispatch: JIT call failed: {}", e);
             }
             0 // Return value written via dest/sret
         }
@@ -246,7 +244,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
                 ctx.frames,
             );
             if let Err(e) = result {
-                eprintln!("JIT dispatch: interpreter call failed: {:?}", e);
+                panic!("JIT dispatch: interpreter call failed: {:?}", e);
             }
             0 // Return value written via dest
         }
