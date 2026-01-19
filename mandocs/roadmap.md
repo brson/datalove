@@ -41,6 +41,7 @@
 
 ## On deck
 
+- clean up benchmarks
 - datalit syntax cleanup
   - map set type syntax
   - usize/isize -> index/offset
