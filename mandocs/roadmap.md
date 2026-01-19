@@ -41,6 +41,7 @@
 
 ## On deck
 
+- comptime/const execution
 - updates feed
 - roadmap status page
 - clean up benchmarks
@@ -78,8 +79,9 @@
 
 ## Backburner
 
+- allocation statistics
+- jit statistics
 - cleanup and specify bidirectional typechecking
-- comptime/const execution
 - sourceless parsing
 - lsp - needs a project/workspace concept
 - deterministic builds - compiler pipeline is already deterministic

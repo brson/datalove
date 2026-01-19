@@ -39,7 +39,10 @@
 
 - Termination proofs.
 - Compile-time evaluation.
+- Refinement types.
 - Bidirectionality.
 - Globally-unioned type-variable instantiations
   and closure instantiations.
 - Direct SSA lowering.
+- Session types.
+- Guaranteed explicit drops.
