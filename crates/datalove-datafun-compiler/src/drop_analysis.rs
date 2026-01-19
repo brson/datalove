@@ -11,6 +11,7 @@
 //! - Loops (values from previous iterations)
 
 use rmx::prelude::*;
+use rmx::std::collections::BTreeMap;
 use std::collections::HashMap;
 use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{
@@ -46,7 +47,7 @@ pub enum OutParamInitState {
 }
 
 /// Information about a binding.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct BindingInfo {
     /// Name of the binding (for debugging).
     pub name: String,
@@ -75,7 +76,7 @@ impl BindingInfo {
 /// Each variant includes a `local_index` for span lookup during diagnostic emission.
 /// The local_index is the expression's sequential index within its function, which
 /// is stable regardless of parallel vs sequential compilation order.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum AnalysisError {
     /// Using a value after it was moved.
     /// D001
@@ -166,40 +167,40 @@ fn format_single_error(error: &AnalysisError) -> String {
 ///
 /// Keyed by statement/expression identity. During lowering, after processing
 /// each AST node, check if there are drops scheduled for it.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
 pub struct DropSchedule {
     /// Drops to emit after processing a statement.
     /// Key is statement index in the body.
-    pub after_stmt: HashMap<usize, Vec<BindingId>>,
+    pub after_stmt: BTreeMap<usize, Vec<BindingId>>,
 
     /// Drops to emit at the end of a then-branch before jumping to join.
     /// Key is the StmtIf index in the body.
-    pub then_branch_exit: HashMap<usize, Vec<BindingId>>,
+    pub then_branch_exit: BTreeMap<usize, Vec<BindingId>>,
 
     /// Drops to emit at the end of an else-branch before jumping to join.
     /// Key is the StmtIf index in the body.
-    pub else_branch_exit: HashMap<usize, Vec<BindingId>>,
+    pub else_branch_exit: BTreeMap<usize, Vec<BindingId>>,
 
     /// Drops to emit before a return statement.
     /// Key is the return statement index in the body.
-    pub before_return: HashMap<usize, Vec<BindingId>>,
+    pub before_return: BTreeMap<usize, Vec<BindingId>>,
 
     /// Drops to emit before TryReturn in checked/optional operators.
     /// Key is the statement index containing the expression with try.
-    pub before_try_return: HashMap<usize, Vec<BindingId>>,
+    pub before_try_return: BTreeMap<usize, Vec<BindingId>>,
 
     /// Drops to emit at end of loop body before looping back.
-    pub loop_body_end: HashMap<usize, Vec<BindingId>>,
+    pub loop_body_end: BTreeMap<usize, Vec<BindingId>>,
 
     /// Drops to emit before break.
-    pub before_break: HashMap<usize, Vec<BindingId>>,
+    pub before_break: BTreeMap<usize, Vec<BindingId>>,
 
     /// Drops to emit before continue.
-    pub before_continue: HashMap<usize, Vec<BindingId>>,
+    pub before_continue: BTreeMap<usize, Vec<BindingId>>,
 }
 
 /// Result of analyzing a function.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct FunctionDropAnalysis {
     /// Errors detected during analysis.
     pub errors: Vec<AnalysisError>,

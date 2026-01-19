@@ -1,8 +1,19 @@
-//! Salsa-tracked API for IR lowering.
+//! Salsa-tracked API for drop analysis and IR lowering.
 //!
-//! Provides memoized, per-module IR lowering following the same pattern as
-//! the typecheck module. Each module is lowered independently, enabling
-//! incremental recompilation and parallel execution.
+//! Provides memoized, per-module drop analysis and IR lowering following the
+//! same pattern as the typecheck module. Each module is processed independently,
+//! enabling incremental recompilation and parallel execution.
+//!
+//! ## Pipeline
+//!
+//! The compilation pipeline is:
+//! ```text
+//! Parse → Typecheck → Drop Analysis → Lower
+//! ```
+//!
+//! Drop analysis is a separate phase that runs after typechecking and before
+//! lowering. It computes drop schedules for resource management and detects
+//! ownership errors (use-after-move, move-in-loop, etc).
 
 use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, HashMap};
@@ -17,7 +28,7 @@ use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
-use crate::drop_analysis;
+use crate::drop_analysis::{self, FunctionDropAnalysis};
 use crate::lower;
 
 /// Function ID map for cross-module call resolution.
@@ -82,6 +93,231 @@ pub fn compute_func_id_map<'db>(
     FuncIdMap::new(db, entries)
 }
 
+// ============================================================================
+// Drop Analysis Types and Functions
+// ============================================================================
+
+/// Result of drop analysis for a single function.
+#[salsa::tracked]
+pub struct SingleFunctionDropAnalysis<'db> {
+    /// Name of the function.
+    pub func_name: String,
+
+    /// Drop analysis result (None if analysis failed with errors).
+    #[returns(ref)]
+    pub analysis: Option<FunctionDropAnalysis>,
+
+    /// Errors from drop analysis.
+    #[returns(ref)]
+    pub errors: Vec<String>,
+}
+
+/// Result of drop analysis for a single module.
+#[salsa::tracked]
+pub struct SingleModuleDropAnalysis<'db> {
+    /// Module that was analyzed.
+    pub module_id: ModuleId,
+
+    /// Per-function drop analysis results.
+    #[returns(ref)]
+    pub function_analyses: BTreeMap<String, SingleFunctionDropAnalysis<'db>>,
+
+    /// Aggregated errors from all functions.
+    #[returns(ref)]
+    pub errors: Vec<String>,
+}
+
+/// Result of drop analysis for an entire module graph.
+#[salsa::tracked]
+pub struct ModuleGraphDropAnalysis<'db> {
+    /// Per-module drop analysis results.
+    #[returns(ref)]
+    pub module_results: BTreeMap<ModuleId, SingleModuleDropAnalysis<'db>>,
+
+    /// Whether all modules analyzed successfully.
+    pub success: bool,
+}
+
+impl<'db> ModuleGraphDropAnalysis<'db> {
+    /// Check if drop analysis succeeded (no errors).
+    pub fn is_ok(&self, db: &'db dyn salsa::Database) -> bool {
+        self.success(db)
+    }
+
+    /// Get all drop analysis errors across all modules.
+    pub fn all_errors(&self, db: &'db dyn salsa::Database) -> Vec<String> {
+        self.module_results(db)
+            .values()
+            .flat_map(|r| r.errors(db).iter().cloned())
+            .collect()
+    }
+}
+
+/// Analyze drops for a single module.
+#[salsa::tracked]
+pub fn analyze_module_drops<'db>(
+    db: &'db dyn salsa::Database,
+    module: Module,
+    parsed: ParsedStatements<'db>,
+    typecheck_result: SingleModuleTypecheckResult<'db>,
+) -> SingleModuleDropAnalysis<'db> {
+    let module_id = module.id(db);
+    let module_path = module_id.path(db);
+
+    log_query("drop_analysis", module_path, QueryPhase::Start);
+
+    let expr_types = typecheck_result.expr_types(db);
+    let call_targets = typecheck_result.call_targets(db);
+
+    let mut function_analyses = BTreeMap::new();
+    let mut all_errors = Vec::new();
+
+    for statement in &parsed.statements {
+        if let Statement::Fun(func) = statement {
+            let func_name = func.name(db).text(db).S();
+
+            // Run drop analysis.
+            let analysis = drop_analysis::analyze_function(db, *func, expr_types, call_targets);
+
+            let (opt_analysis, errors) = if analysis.errors.is_empty() {
+                (Some(analysis), Vec::new())
+            } else {
+                // Format errors same as original: single error string with comma-separated errors.
+                let error_msgs: Vec<String> = analysis.errors.iter()
+                    .map(|e| format!("{:?}", e))
+                    .collect();
+                let formatted = format!(
+                    "Drop analysis error in {}: {}",
+                    func_name,
+                    error_msgs.join(", ")
+                );
+                all_errors.push(formatted.clone());
+                (None, vec![formatted])
+            };
+
+            let single_analysis = SingleFunctionDropAnalysis::new(
+                db,
+                func_name.clone(),
+                opt_analysis,
+                errors,
+            );
+            function_analyses.insert(func_name, single_analysis);
+        }
+    }
+
+    log_query("drop_analysis", module_path, QueryPhase::End);
+
+    SingleModuleDropAnalysis::new(db, module_id, function_analyses, all_errors)
+}
+
+/// Analyze drops for an entire module graph.
+#[salsa::tracked]
+pub fn analyze_module_graph_drops<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+    typecheck_result: ModuleGraphTypecheckResult<'db>,
+) -> ModuleGraphDropAnalysis<'db> {
+    let graph = parsed_graph.graph(db);
+
+    // Build module lookup.
+    let module_map: HashMap<ModuleId, Module> = graph.iter_modules(db)
+        .map(|m| (m.id(db), m))
+        .collect();
+
+    // Get per-module typecheck results.
+    let typecheck_errors = typecheck_result.module_errors(db);
+    let typecheck_module_results = typecheck_result.module_results(db);
+
+    // Analyze each module.
+    let mut module_results = BTreeMap::new();
+    let mut all_success = true;
+
+    for (module_id, parsed) in parsed_graph.statements_only(db).iter() {
+        // Skip modules with typecheck errors.
+        if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
+            continue;
+        }
+
+        let module = *module_map.get(module_id).expect("module should exist");
+
+        // Get the tracked per-module typecheck result.
+        let single_typecheck = *typecheck_module_results.get(module_id)
+            .expect("module should have typecheck result");
+
+        let result = analyze_module_drops(db, module, parsed.clone(), single_typecheck);
+
+        if !result.errors(db).is_empty() {
+            all_success = false;
+        }
+
+        module_results.insert(*module_id, result);
+    }
+
+    ModuleGraphDropAnalysis::new(db, module_results, all_success)
+}
+
+/// Analyze drops for a module graph using parallel execution.
+pub fn analyze_module_graph_drops_parallel<'db>(
+    db: &'db dyn DbClone,
+    parsed_graph: ParsedModuleGraph<'db>,
+    typecheck_result: ModuleGraphTypecheckResult<'db>,
+) -> ModuleGraphDropAnalysis<'db> {
+    use rayon::prelude::*;
+
+    let db_salsa = db.as_salsa_db();
+    let graph = parsed_graph.graph(db_salsa);
+
+    // Build module lookup.
+    let module_map: HashMap<ModuleId, Module> = graph.iter_modules(db_salsa)
+        .map(|m| (m.id(db_salsa), m))
+        .collect();
+
+    let typecheck_errors = typecheck_result.module_errors(db_salsa);
+    let typecheck_module_results = typecheck_result.module_results(db_salsa);
+
+    // Prepare work items for parallel execution.
+    let work: Vec<_> = parsed_graph.statements_only(db_salsa)
+        .iter()
+        .filter_map(|(module_id, parsed)| {
+            // Skip modules with typecheck errors.
+            if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
+                return None;
+            }
+
+            let module = *module_map.get(module_id)?;
+            let single_typecheck = *typecheck_module_results.get(module_id)?;
+
+            Some((db.dyn_clone(), module, parsed.clone(), single_typecheck))
+        })
+        .collect();
+
+    // Analyze modules in parallel - populates salsa's memoization cache.
+    work.into_par_iter().for_each(|(db_clone, module, parsed, single_typecheck)| {
+        let db_s = db_clone.as_salsa_db();
+        let _ = analyze_module_drops(db_s, module, parsed, single_typecheck);
+    });
+
+    // Delegate to tracked function which aggregates results.
+    analyze_module_graph_drops(db_salsa, parsed_graph, typecheck_result)
+}
+
+/// Analyze module graph drops with configurable parallelism.
+pub fn analyze_module_graph_drops_with_mode<'db>(
+    db: &'db dyn DbClone,
+    parsed_graph: ParsedModuleGraph<'db>,
+    typecheck_result: ModuleGraphTypecheckResult<'db>,
+    mode: ParallelMode,
+) -> ModuleGraphDropAnalysis<'db> {
+    match mode {
+        ParallelMode::Sequential => analyze_module_graph_drops(db.as_salsa_db(), parsed_graph, typecheck_result),
+        ParallelMode::Parallel => analyze_module_graph_drops_parallel(db, parsed_graph, typecheck_result),
+    }
+}
+
+// ============================================================================
+// Lowering Types and Functions
+// ============================================================================
+
 /// Result of lowering a single module to IR.
 #[salsa::tracked]
 pub struct SingleModuleLoweringResult<'db> {
@@ -95,7 +331,7 @@ pub struct SingleModuleLoweringResult<'db> {
     #[returns(ref)]
     pub functions: Vec<IrFunction>,
 
-    /// Lowering errors (from drop analysis or IR generation).
+    /// Lowering errors (IR generation only, not drop analysis).
     #[returns(ref)]
     pub errors: Vec<String>,
 
@@ -149,8 +385,9 @@ impl<'db> ModuleGraphLoweringResult<'db> {
 /// This is a tracked function enabling per-module memoization. The `module`
 /// parameter serves as the primary cache key.
 ///
-/// Drop analysis is performed as part of lowering. If drop analysis fails
-/// for a function, that function is skipped and an error is recorded.
+/// Requires pre-computed drop analysis results. Functions with drop analysis
+/// errors are skipped (but those errors are already captured in the drop
+/// analysis result, not here).
 #[salsa::tracked]
 pub fn lower_module<'db>(
     db: &'db dyn salsa::Database,
@@ -158,6 +395,7 @@ pub fn lower_module<'db>(
     ir_module_id: IrModuleId,
     parsed: ParsedStatements<'db>,
     typecheck_result: SingleModuleTypecheckResult<'db>,
+    drop_analysis: SingleModuleDropAnalysis<'db>,
     func_id_map: FuncIdMap<'db>,
 ) -> SingleModuleLoweringResult<'db> {
     let module_id = module.id(db);
@@ -170,6 +408,9 @@ pub fn lower_module<'db>(
 
     // Convert FuncIdMap to HashMap for efficient lookup during lowering.
     let func_id_hashmap = func_id_map.to_hashmap(db);
+
+    // Get pre-computed drop analysis results.
+    let function_analyses = drop_analysis.function_analyses(db);
 
     let mut functions = Vec::new();
     let mut errors = Vec::new();
@@ -186,7 +427,7 @@ pub fn lower_module<'db>(
         }
     }
 
-    // Process each function: drop analysis then lowering.
+    // Process each function using pre-computed drop analysis.
     let mut func_idx = 0;
     for statement in &parsed.statements {
         if let Statement::Fun(func) = statement {
@@ -194,20 +435,17 @@ pub fn lower_module<'db>(
             let func_id = func_ids[func_idx].1;
             func_idx += 1;
 
-            // Run drop analysis.
-            let analysis = drop_analysis::analyze_function(db, *func, expr_types, call_targets);
-
-            if !analysis.errors.is_empty() {
-                let error_msgs: Vec<String> = analysis.errors.iter()
-                    .map(|e| format!("{:?}", e))
-                    .collect();
-                errors.push(format!(
-                    "Drop analysis error in {}: {}",
-                    func_name,
-                    error_msgs.join(", ")
-                ));
+            // Get pre-computed drop analysis for this function.
+            let Some(single_analysis) = function_analyses.get(&func_name) else {
+                errors.push(format!("Lowering error in {}: missing drop analysis", func_name));
                 continue;
-            }
+            };
+
+            // Skip functions that had drop analysis errors.
+            let Some(analysis) = single_analysis.analysis(db).clone() else {
+                // Drop analysis errors are already captured separately.
+                continue;
+            };
 
             // Lower to IR.
             match lower::lower_function_for_module(
@@ -245,11 +483,14 @@ pub fn lower_module<'db>(
 ///
 /// Processes modules in dependency order, calling the per-module `lower_module`
 /// function for each. Each per-module result is cached independently.
+///
+/// Requires pre-computed drop analysis results.
 #[salsa::tracked]
 pub fn lower_module_graph<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
+    drop_analysis: ModuleGraphDropAnalysis<'db>,
 ) -> ModuleGraphLoweringResult<'db> {
     let graph = parsed_graph.graph(db);
 
@@ -264,6 +505,9 @@ pub fn lower_module_graph<'db>(
     // Get per-module typecheck results.
     let typecheck_errors = typecheck_result.module_errors(db);
     let typecheck_module_results = typecheck_result.module_results(db);
+
+    // Get per-module drop analysis results.
+    let drop_analysis_results = drop_analysis.module_results(db);
 
     // Lower each module.
     let mut module_results = BTreeMap::new();
@@ -283,12 +527,17 @@ pub fn lower_module_graph<'db>(
         let single_typecheck = *typecheck_module_results.get(module_id)
             .expect("module should have typecheck result");
 
+        // Get the tracked per-module drop analysis result.
+        let single_drop_analysis = *drop_analysis_results.get(module_id)
+            .expect("module should have drop analysis result");
+
         let result = lower_module(
             db,
             module,
             ir_module_id,
             parsed.clone(),
             single_typecheck,
+            single_drop_analysis,
             func_id_map,
         );
 
@@ -307,10 +556,13 @@ pub fn lower_module_graph<'db>(
 /// Lowers modules in parallel using rayon to warm salsa's memoization cache,
 /// then delegates to the tracked `lower_module_graph` function which will
 /// hit the warmed cache.
+///
+/// Requires pre-computed drop analysis results.
 pub fn lower_module_graph_parallel<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
+    drop_analysis: ModuleGraphDropAnalysis<'db>,
 ) -> ModuleGraphLoweringResult<'db> {
     use rayon::prelude::*;
 
@@ -327,6 +579,7 @@ pub fn lower_module_graph_parallel<'db>(
 
     let typecheck_errors = typecheck_result.module_errors(db_salsa);
     let typecheck_module_results = typecheck_result.module_results(db_salsa);
+    let drop_analysis_results = drop_analysis.module_results(db_salsa);
 
     // Prepare work items for parallel execution.
     let work: Vec<_> = parsed_graph.statements_only(db_salsa)
@@ -343,18 +596,22 @@ pub fn lower_module_graph_parallel<'db>(
             // Get the tracked per-module typecheck result.
             let single_typecheck = *typecheck_module_results.get(module_id)?;
 
+            // Get the tracked per-module drop analysis result.
+            let single_drop_analysis = *drop_analysis_results.get(module_id)?;
+
             Some((
                 db.dyn_clone(),
                 module,
                 IrModuleId(ir_module_idx as u32),
                 parsed.clone(),
                 single_typecheck,
+                single_drop_analysis,
             ))
         })
         .collect();
 
     // Lower modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck)| {
+    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_drop_analysis)| {
         let db_s = db_clone.as_salsa_db();
 
         // This populates the cache.
@@ -364,24 +621,28 @@ pub fn lower_module_graph_parallel<'db>(
             ir_module_id,
             parsed,
             single_typecheck,
+            single_drop_analysis,
             func_id_map,
         );
     });
 
     // Delegate to tracked function which aggregates results.
     // All lower_module calls will be cache hits from the parallel phase.
-    lower_module_graph(db_salsa, parsed_graph, typecheck_result)
+    lower_module_graph(db_salsa, parsed_graph, typecheck_result, drop_analysis)
 }
 
 /// Lower module graph with configurable parallelism.
+///
+/// Requires pre-computed drop analysis results.
 pub fn lower_module_graph_with_mode<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
+    drop_analysis: ModuleGraphDropAnalysis<'db>,
     mode: ParallelMode,
 ) -> ModuleGraphLoweringResult<'db> {
     match mode {
-        ParallelMode::Sequential => lower_module_graph(db.as_salsa_db(), parsed_graph, typecheck_result),
-        ParallelMode::Parallel => lower_module_graph_parallel(db, parsed_graph, typecheck_result),
+        ParallelMode::Sequential => lower_module_graph(db.as_salsa_db(), parsed_graph, typecheck_result, drop_analysis),
+        ParallelMode::Parallel => lower_module_graph_parallel(db, parsed_graph, typecheck_result, drop_analysis),
     }
 }

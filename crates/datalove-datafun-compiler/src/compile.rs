@@ -17,7 +17,11 @@ use datalove_datafun_tycheck::{
 };
 
 use crate::module_graph::parse_module_graph_with_mode;
-use crate::tracked_lower::{lower_module_graph_with_mode, ModuleGraphLoweringResult};
+use crate::tracked_lower::{
+    analyze_module_graph_drops_with_mode,
+    lower_module_graph_with_mode,
+    ModuleGraphLoweringResult,
+};
 
 /// Input for module compilation - the output of package resolution.
 pub struct ModuleCompilationInput {
@@ -63,7 +67,8 @@ impl<'db> ModuleCompilationOutput<'db> {
 /// This is the main entry point for compilation. It:
 /// 1. Parses all modules
 /// 2. Typechecks all modules
-/// 3. Lowers to IR (including drop analysis)
+/// 3. Performs drop analysis (ownership checking)
+/// 4. Lowers to IR
 ///
 /// The result contains all compilation artifacts. Interpreter integration
 /// (building ModuleFunctionRegistry, etc.) is handled by the caller.
@@ -118,32 +123,36 @@ fn lower_and_collect_results<'db>(
         typecheck_errors.insert(path, error_strings);
     }
 
-    // Lower to IR.
-    let lowering_result = lower_module_graph_with_mode(db, parsed_graph, typecheck_result, mode);
+    // Drop analysis pass (runs before lowering).
+    let drop_analysis = analyze_module_graph_drops_with_mode(db, parsed_graph, typecheck_result, mode);
 
-    // Collect lowering results and errors.
-    let mut module_ir_dumps: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    // Collect drop analysis errors.
     let mut drop_analysis_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (module_id, result) in drop_analysis.module_results(db.as_salsa_db()) {
+        let errors = result.errors(db.as_salsa_db());
+        if !errors.is_empty() {
+            let path = module_id.path(db.as_salsa_db()).clone();
+            drop_analysis_errors.insert(path, errors.clone());
+        }
+    }
+
+    // Lower to IR (consumes drop analysis).
+    let lowering_result = lower_module_graph_with_mode(db, parsed_graph, typecheck_result, drop_analysis, mode);
+
+    // Collect lowering errors and IR dumps.
+    let mut module_ir_dumps: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut lowering_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
     for (module_id, result) in lowering_result.module_results(db.as_salsa_db()) {
         let module_path = module_id.path(db.as_salsa_db()).clone();
 
-        // Separate drop analysis errors from lowering errors.
+        // Lowering errors (no drop analysis errors mixed in).
         let errors = result.errors(db.as_salsa_db());
-        for error in errors {
-            if error.starts_with("Drop analysis error") {
-                drop_analysis_errors.entry(module_path.clone())
-                    .or_default()
-                    .push(error.clone());
-            } else {
-                lowering_errors.entry(module_path.clone())
-                    .or_default()
-                    .push(error.clone());
-            }
+        if !errors.is_empty() {
+            lowering_errors.insert(module_path.clone(), errors.clone());
         }
 
-        // Collect IR dumps (no errors mixed in).
+        // Collect IR dumps.
         let ir_dumps: Vec<String> = result.functions(db.as_salsa_db())
             .iter()
             .map(|ir_func| format!("{}", ir_func))
