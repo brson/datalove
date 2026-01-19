@@ -13,7 +13,7 @@ use serde::{Serialize, Deserialize};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 
 use crate::pipeline::{
-    ModuleCompilationPipeline, TypecheckResult, LoweringResult, format_module_lowering_result,
+    ModuleCompilationPipeline, TypecheckResult, LoweringResult, format_lowering_result,
 };
 
 /// Result of analyzing a worldfile with IR interpreter.
@@ -88,25 +88,12 @@ pub fn analyze_worldfile(
                 _ => TypecheckResult::Success,
             };
 
-            // Look up drop analysis errors.
-            let drop_key = format!("{}", module_path);
-            let has_drop_errors = compiled.drop_analysis_errors.keys()
-                .any(|k| k.starts_with(&drop_key));
-
             // Look up lowering results for this module.
             let has_typecheck_errors = matches!(&typecheck, TypecheckResult::Error { .. });
-            let lowering = if has_drop_errors {
-                let errors: Vec<_> = compiled.drop_analysis_errors.iter()
-                    .filter(|(k, _)| k.starts_with(&drop_key))
-                    .flat_map(|(_, v)| v.iter().cloned())
-                    .collect();
-                LoweringResult::Error { message: format!("Drop analysis errors: {}", errors.join("; ")) }
-            } else {
-                match compiled.module_lowering_results.get(&module_path) {
-                    Some(ir_dumps) => format_module_lowering_result(ir_dumps, has_typecheck_errors),
-                    None => LoweringResult::Skipped,
-                }
-            };
+            let ir_dumps = compiled.module_ir_dumps.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
+            let drop_errs = compiled.drop_analysis_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
+            let lowering_errs = compiled.lowering_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
+            let lowering = format_lowering_result(ir_dumps, drop_errs, lowering_errs, has_typecheck_errors);
 
             results.push(SectionResult {
                 section_type: "module".S(),

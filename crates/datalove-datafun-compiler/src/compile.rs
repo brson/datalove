@@ -43,7 +43,9 @@ pub struct ModuleCompilationOutput<'db> {
     pub typecheck_errors: BTreeMap<String, Vec<String>>,
     /// Drop analysis errors by module path.
     pub drop_analysis_errors: BTreeMap<String, Vec<String>>,
-    /// IR dumps by module path (for debugging/display).
+    /// IR lowering errors by module path (distinct from drop analysis).
+    pub lowering_errors: BTreeMap<String, Vec<String>>,
+    /// IR dumps by module path (for debugging/display, no errors mixed in).
     pub module_ir_dumps: BTreeMap<String, Vec<String>>,
 }
 
@@ -51,15 +53,8 @@ impl<'db> ModuleCompilationOutput<'db> {
     /// Check if compilation succeeded (no errors).
     pub fn is_successful(&self) -> bool {
         self.typecheck_errors.values().all(|e| e.is_empty())
-            && self.drop_analysis_errors.is_empty()
-            && !self.has_lowering_errors()
-    }
-
-    /// Check if there are lowering errors in the IR dumps.
-    fn has_lowering_errors(&self) -> bool {
-        self.module_ir_dumps.values()
-            .flatten()
-            .any(|s| is_lowering_error(s))
+            && self.drop_analysis_errors.values().all(|e| e.is_empty())
+            && self.lowering_errors.values().all(|e| e.is_empty())
     }
 }
 
@@ -129,33 +124,30 @@ fn lower_and_collect_results<'db>(
     // Collect lowering results and errors.
     let mut module_ir_dumps: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut drop_analysis_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut lowering_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
     for (module_id, result) in lowering_result.module_results(db.as_salsa_db()) {
         let module_path = module_id.path(db.as_salsa_db()).clone();
 
-        // Collect errors (includes both drop analysis and lowering errors).
+        // Separate drop analysis errors from lowering errors.
         let errors = result.errors(db.as_salsa_db());
-        if !errors.is_empty() {
-            // Separate drop analysis errors from other lowering errors.
-            for error in errors {
-                if error.contains("Drop analysis error") {
-                    drop_analysis_errors.entry(module_path.clone())
-                        .or_default()
-                        .push(error.clone());
-                }
+        for error in errors {
+            if error.starts_with("Drop analysis error") {
+                drop_analysis_errors.entry(module_path.clone())
+                    .or_default()
+                    .push(error.clone());
+            } else {
+                lowering_errors.entry(module_path.clone())
+                    .or_default()
+                    .push(error.clone());
             }
         }
 
-        // Collect IR dumps.
-        let mut ir_dumps = Vec::new();
-        for ir_func in result.functions(db.as_salsa_db()) {
-            ir_dumps.push(format!("{}", ir_func));
-        }
-
-        // Add any errors to the IR dumps for backwards compatibility.
-        for error in errors {
-            ir_dumps.push(error.clone());
-        }
+        // Collect IR dumps (no errors mixed in).
+        let ir_dumps: Vec<String> = result.functions(db.as_salsa_db())
+            .iter()
+            .map(|ir_func| format!("{}", ir_func))
+            .collect();
 
         module_ir_dumps.insert(module_path, ir_dumps);
     }
@@ -167,6 +159,7 @@ fn lower_and_collect_results<'db>(
         lowering_result,
         typecheck_errors,
         drop_analysis_errors,
+        lowering_errors,
         module_ir_dumps,
     }
 }
@@ -198,30 +191,27 @@ pub enum LoweringResult {
 // Helper functions
 // ============================================================================
 
-/// Check if a lowering result string represents an error.
-pub fn is_lowering_error(s: &str) -> bool {
-    s.starts_with("Error")
-        || s.starts_with("Drop analysis error")
-        || s.starts_with("Missing drop analysis")
-}
-
-/// Format lowering result from IR dumps.
-pub fn format_module_lowering_result(
+/// Format lowering result for display.
+///
+/// Takes IR dumps and errors (both drop analysis and lowering errors).
+pub fn format_lowering_result(
     ir_dumps: &[String],
+    drop_analysis_errors: &[String],
+    lowering_errors: &[String],
     has_typecheck_errors: bool,
 ) -> LoweringResult {
     if has_typecheck_errors {
         return LoweringResult::Skipped;
     }
 
-    let has_errors = ir_dumps.iter().any(|s| is_lowering_error(s));
+    // Combine all errors.
+    let all_errors: Vec<_> = drop_analysis_errors.iter()
+        .chain(lowering_errors.iter())
+        .cloned()
+        .collect();
 
-    if has_errors {
-        let errors: Vec<_> = ir_dumps.iter()
-            .filter(|s| is_lowering_error(s))
-            .cloned()
-            .collect();
-        LoweringResult::Error { message: errors.join("\n") }
+    if !all_errors.is_empty() {
+        LoweringResult::Error { message: all_errors.join("\n") }
     } else if ir_dumps.is_empty() {
         LoweringResult::Skipped
     } else {

@@ -291,7 +291,8 @@ impl ModuleCompilationPipeline {
             resolution_error: None,
             path_to_errors: output.typecheck_errors,
             drop_analysis_errors: output.drop_analysis_errors,
-            module_lowering_results: output.module_ir_dumps,
+            lowering_errors: output.lowering_errors,
+            module_ir_dumps: output.module_ir_dumps,
         }
     }
 }
@@ -331,7 +332,8 @@ pub struct CompiledModules<'db> {
     pub resolution_error: Option<String>,
     pub path_to_errors: BTreeMap<String, Vec<String>>,
     pub drop_analysis_errors: BTreeMap<String, Vec<String>>,
-    pub module_lowering_results: BTreeMap<String, Vec<String>>,
+    pub lowering_errors: BTreeMap<String, Vec<String>>,
+    pub module_ir_dumps: BTreeMap<String, Vec<String>>,
 }
 
 impl<'db> CompiledModules<'db> {
@@ -339,8 +341,8 @@ impl<'db> CompiledModules<'db> {
     pub fn is_successful(&self) -> bool {
         self.resolution_error.is_none()
             && self.path_to_errors.values().all(|errors| errors.is_empty())
-            && self.drop_analysis_errors.is_empty()
-            && !self.has_lowering_errors()
+            && self.drop_analysis_errors.values().all(|errors| errors.is_empty())
+            && self.lowering_errors.values().all(|errors| errors.is_empty())
     }
 
     /// Check if there are any errors.
@@ -360,27 +362,15 @@ impl<'db> CompiledModules<'db> {
             errors.extend(error_list.iter().cloned());
         }
 
-        for (func_name, error_list) in &self.drop_analysis_errors {
-            for error in error_list {
-                errors.push(format!("Drop analysis error in {}: {}", func_name, error));
-            }
+        for error_list in self.drop_analysis_errors.values() {
+            errors.extend(error_list.iter().cloned());
         }
 
-        for error_list in self.module_lowering_results.values() {
-            for error in error_list {
-                if is_lowering_error(error) {
-                    errors.push(error.clone());
-                }
-            }
+        for error_list in self.lowering_errors.values() {
+            errors.extend(error_list.iter().cloned());
         }
 
         errors
-    }
-
-    fn has_lowering_errors(&self) -> bool {
-        self.module_lowering_results.values()
-            .flatten()
-            .any(|s| is_lowering_error(s))
     }
 
     /// Get all typecheck errors.
@@ -394,6 +384,14 @@ impl<'db> CompiledModules<'db> {
     /// Get all drop analysis errors.
     pub fn all_drop_analysis_errors(&self) -> Vec<String> {
         self.drop_analysis_errors.values()
+            .flatten()
+            .cloned()
+            .collect()
+    }
+
+    /// Get all lowering errors.
+    pub fn all_lowering_errors(&self) -> Vec<String> {
+        self.lowering_errors.values()
             .flatten()
             .cloned()
             .collect()
@@ -1110,8 +1108,8 @@ pub struct ScriptLowerResult {
     pub ir_unit: Option<IrScriptUnit>,
 }
 
-// Re-export helper functions from compiler for backwards compatibility.
-pub use datalove_datafun_compiler::compile::{is_lowering_error, format_module_lowering_result};
+// Re-export helper functions from compiler.
+pub use datalove_datafun_compiler::compile::format_lowering_result;
 
 // ============================================================================
 // AOT compilation

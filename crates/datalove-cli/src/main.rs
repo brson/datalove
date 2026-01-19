@@ -572,8 +572,8 @@ impl ScriptWorldCommand {
                 render::render_module_type_diagnostics(&db, &type_diags, &self.file_path, &cwd);
             }
 
-            // Also report any drop analysis errors that don't have diagnostics yet.
-            for error in compiled.all_drop_analysis_errors() {
+            // Also report any lowering errors that don't have diagnostics yet.
+            for error in compiled.all_lowering_errors() {
                 eprintln!("{}", error);
             }
 

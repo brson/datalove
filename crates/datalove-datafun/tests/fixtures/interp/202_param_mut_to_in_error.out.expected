@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "Drop analysis errors: Drop analysis error in outer: CannotMoveBorrowed { local_index: 0, name: \"y\" }",
+                message: "Drop analysis error in outer: CannotMoveBorrowed { local_index: 0, name: \"y\" }",
             ),
             output: "",
         ),

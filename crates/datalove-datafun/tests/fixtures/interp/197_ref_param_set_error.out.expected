@@ -7,8 +7,8 @@ Analysis(
                 status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: "Lowering error in try_set_ref: variable not mutable: x",
+                status: "Error",
+                message: "Lowering error in try_set_ref: variable not mutable: x",
             ),
             output: "",
         ),

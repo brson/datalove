@@ -42,8 +42,14 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         return Ok(format!("Typecheck error: {}\n", all_typecheck_errors.join("; ")));
     }
 
+    // Check for lowering errors.
+    let all_lowering_errors = compiled.all_lowering_errors();
+    if !all_lowering_errors.is_empty() {
+        return Ok(format!("{}\n", all_lowering_errors.join("\n")));
+    }
+
     // Collect IR dump from all modules.
-    let output: String = compiled.module_lowering_results.values()
+    let output: String = compiled.module_ir_dumps.values()
         .flatten()
         .cloned()
         .collect::<Vec<_>>()

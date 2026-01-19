@@ -231,25 +231,11 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
                 _ => datafun::pipeline::TypecheckResult::Success,
             };
 
-            let drop_key = format!("{}", module_path);
-            let has_drop_errors = compiled.drop_analysis_errors.keys()
-                .any(|k| k.starts_with(&drop_key));
-
             let has_typecheck_errors = matches!(&typecheck, datafun::pipeline::TypecheckResult::Error { .. });
-            let lowering = if has_drop_errors {
-                let errors: Vec<_> = compiled.drop_analysis_errors.iter()
-                    .filter(|(k, _)| k.starts_with(&drop_key))
-                    .flat_map(|(_, v)| v.iter().cloned())
-                    .collect();
-                datafun::pipeline::LoweringResult::Error {
-                    message: format!("Drop analysis errors: {}", errors.join("; "))
-                }
-            } else {
-                match compiled.module_lowering_results.get(&module_path) {
-                    Some(ir_dumps) => datafun::pipeline::format_module_lowering_result(ir_dumps, has_typecheck_errors),
-                    None => datafun::pipeline::LoweringResult::Skipped,
-                }
-            };
+            let ir_dumps = compiled.module_ir_dumps.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
+            let drop_errs = compiled.drop_analysis_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
+            let lowering_errs = compiled.lowering_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
+            let lowering = datafun::pipeline::format_lowering_result(ir_dumps, drop_errs, lowering_errs, has_typecheck_errors);
 
             results.push(DualSectionResult {
                 section_type: "module".to_string(),

@@ -14,7 +14,7 @@ use serde::{Serialize, Deserialize};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 
 use crate::pipeline::{
-    ModuleCompilationPipeline, TypecheckResult, LoweringResult, is_lowering_error,
+    ModuleCompilationPipeline, TypecheckResult, LoweringResult,
 };
 
 /// Result of analyzing a module-only worldfile with IR interpreter.
@@ -91,28 +91,12 @@ pub fn analyze_modules_worldfile(
         });
     }
 
-    // Check for drop analysis errors using consolidated helper.
-    let all_drop_errors = compiled.all_drop_analysis_errors();
-    if !all_drop_errors.is_empty() {
-        return Ok(ModulesAnalysis {
-            typecheck: TypecheckResult::Success,
-            lowering: LoweringResult::Error {
-                message: format!("Drop analysis errors: {}", all_drop_errors.join("; ")),
-            },
-            output: String::new(),
-        });
-    }
-
     // Check for lowering errors.
-    let lowering_errors: Vec<String> = compiled.module_lowering_results.values()
-        .flatten()
-        .filter(|s| is_lowering_error(s))
-        .cloned()
-        .collect();
-    if !lowering_errors.is_empty() {
+    let all_lowering_errors = compiled.all_lowering_errors();
+    if !all_lowering_errors.is_empty() {
         return Ok(ModulesAnalysis {
             typecheck: TypecheckResult::Success,
-            lowering: LoweringResult::Error { message: lowering_errors.join("\n") },
+            lowering: LoweringResult::Error { message: all_lowering_errors.join("\n") },
             output: String::new(),
         });
     }
@@ -138,7 +122,7 @@ pub fn analyze_modules_worldfile(
     }
 
     // Collect IR dump from all modules.
-    let ir_dump: String = compiled.module_lowering_results.values()
+    let ir_dump: String = compiled.module_ir_dumps.values()
         .flatten()
         .cloned()
         .collect::<Vec<_>>()
