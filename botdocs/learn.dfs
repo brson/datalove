@@ -341,7 +341,35 @@ end fun
 
 
 // =========================================================================
-// 14. TYPE SYSTEM NOTES
+// 14. TYPE ALIASES
+// =========================================================================
+
+// Type aliases provide names for structural types.
+type Age: u32
+type Point: { x: f32, y: f32 }
+type MaybeInt: ?int
+type IntResult: !int
+
+// Use aliases in function signatures.
+fun make_point(x: f32, y: f32): Point
+  ret { x = x, y = y }
+end fun
+
+fun get_age(): Age
+  ret 25
+end fun
+
+// Aliases can reference other aliases (if defined earlier).
+type PointList: [Point]
+
+// Restrictions:
+// - Must be defined before use (no forward references).
+// - Cannot shadow primitive types (bool, u32, int, string, etc.).
+// - Purely syntactic: no runtime difference from the structural type.
+
+
+// =========================================================================
+// 15. TYPE SYSTEM NOTES
 // =========================================================================
 
 // Numeric widening: smaller types widen to larger.
@@ -363,7 +391,7 @@ end fun
 
 
 // =========================================================================
-// 15. PUTTING IT ALL TOGETHER
+// 16. PUTTING IT ALL TOGETHER
 // =========================================================================
 
 // Example: Fibonacci with checked arithmetic.
