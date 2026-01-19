@@ -1051,7 +1051,9 @@ name = "datalove-bench"
 version = "0.1.0"
 dependencies = [
  "bcts",
+ "datalove-datafun",
  "datalove-datafun-compiler",
+ "datalove-datafun-jit",
  "datalove-datafun-tycheck",
  "divan",
 ]
