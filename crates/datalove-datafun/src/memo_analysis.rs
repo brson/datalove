@@ -17,7 +17,7 @@ use datalove_ct::query_log::{enable_query_logging, disable_query_logging, get_ex
 use datalove_datafun_tycheck::typecheck_module_graph;
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 
-use crate::incremental::IncrementalModuleWorld;
+use crate::incremental::{IncrementalModuleWorld, extract_dependencies};
 
 /// Action types for memoization testing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -274,7 +274,8 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             .unwrap_or_else(|| "removed".to_string());
 
         // Capture dependents BEFORE applying the action (important for remove).
-        let dependents_before = world.get_dependents(&db, &section.path);
+        let path_deps_before = extract_dependencies(&world, &db);
+        let dependents_before = world.get_dependents(&section.path, &path_deps_before);
 
         // Apply action to module world.
         match section.action {
@@ -293,15 +294,18 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             }
         }
 
+        // Extract dependencies after the action.
+        let path_deps = extract_dependencies(&world, &db);
+
         // Use dependents from before the action (for remove) or after (for changes).
         let dependents = if section.action == Action::ModuleRemove {
             dependents_before
         } else {
-            world.get_dependents(&db, &section.path)
+            world.get_dependents(&section.path, &path_deps)
         };
 
         // Prepare and run compilation with query logging.
-        let (graph, resolved_requires) = world.prepare_for_compile(&mut db);
+        let (graph, resolved_requires) = world.prepare_for_compile(&mut db, &path_deps);
 
         enable_query_logging();
         let parsed_graph = parse_module_graph(&db, graph, resolved_requires);

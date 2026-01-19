@@ -69,7 +69,7 @@ use datalove_datafun_compiler::module_graph::{
 use datalove_datafun_interp::{CallDispatcher, ModuleFunctionRegistry, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;
 
-use crate::incremental::IncrementalModuleWorld;
+use crate::incremental::{IncrementalModuleWorld, extract_dependencies};
 
 // Re-export result types from compiler for backwards compatibility.
 pub use datalove_datafun_compiler::compile::{TypecheckResult, LoweringResult};
@@ -206,7 +206,8 @@ impl ModuleCompilationPipeline {
         db: &'db dyn DbClone,
         mode: ParallelMode,
     ) -> CompiledModules<'db> {
-        let (module_graph, resolved_requires) = self.world.build_fresh(db.as_salsa_db());
+        let path_deps = extract_dependencies(&self.world, db.as_salsa_db());
+        let (module_graph, resolved_requires) = self.world.build_fresh(db.as_salsa_db(), &path_deps);
         self.compile_impl_with_mode(db, module_graph, resolved_requires, mode)
     }
 
@@ -228,7 +229,9 @@ impl ModuleCompilationPipeline {
         db: &'db mut D,
         mode: ParallelMode,
     ) -> (CompiledModules<'db>, &'db D) {
-        let (module_graph, resolved_requires) = self.world.prepare_for_compile(db);
+        // Extract dependencies first (reads from db).
+        let path_deps = extract_dependencies(&self.world, db);
+        let (module_graph, resolved_requires) = self.world.prepare_for_compile(db, &path_deps);
 
         // Reborrow as immutable for the rest of compilation.
         let db_ref: &'db D = &*db;
