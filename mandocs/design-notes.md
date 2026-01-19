@@ -177,3 +177,50 @@ fun get_age(ref contact: Contact): int
   ret contact.age
 end fun
 ```
+
+Type aliases do not accept type parameters,
+but you can alias an instantiation of types with parameters.
+
+```datalove
+type alias myset: set<int>
+```
+
+Type aliases may not refer to themselves;
+they are not self-recursive.
+
+Type aliases are heap-agnostic,
+the heap is applied when the alias is named:
+
+```datalove
+type alias number: int
+
+let foo: @number = 1
+```
+
+Type aliases are valid at the module and script level,
+not within functions.
+
+Name resolution between type aliases is unidirectional both in scripts and modules.
+We do this for efficiency, even though we allow functions to be mutually recursive.
+
+Functions can resolve type aliases in both directions.
+This probably implies two passes: one single-direction pass
+that resolves everything not a function;
+then one for functions.
+
+Valid:
+
+```datalove
+type alias number: int
+type alias mynumber: number
+```
+
+Invalid:
+
+```datalove
+type alias mynumber: number // Can't resolve forward reference
+type alias number: int
+```
+
+Shadowing primitives or other in-scope aliases is not allowed.
+
