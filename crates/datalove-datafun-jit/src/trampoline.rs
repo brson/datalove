@@ -219,9 +219,10 @@ pub unsafe extern "C" fn __jit_dispatch_call(
         tydesc: ret_tydesc,
     };
 
-    // Check if target is JIT-compiled.
-    match ctx.jit_engine.get_compiled(&func_key) {
-        Some((code_ptr, uses_sret)) => {
+    // Try to JIT compile the target function (or get existing compiled code).
+    // This triggers compilation when the call count threshold is reached.
+    match ctx.jit_engine.record_call_with_context(func_key, ir_func, ctx.exec_ctx, ctx.registry) {
+        Ok(Some((code_ptr, uses_sret))) => {
             // Call JIT code directly.
             // SAFETY: code_ptr is valid JIT code.
             let result = unsafe {
@@ -232,8 +233,8 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             }
             0 // Return value written via dest/sret
         }
-        None => {
-            // Call interpreter with normal ownership semantics.
+        Ok(None) | Err(_) => {
+            // Not yet compiled or compilation failed - fall back to interpreter.
             // For In-mode non-copy args, interpreter takes ownership and destroys them.
             // JIT caller must not access these args after the call returns.
             let result = ctx.interp.call_in_context(
