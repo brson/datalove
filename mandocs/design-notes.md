@@ -152,11 +152,11 @@ TODO: How are generics translated?
 ### Type aliases
 
 Datafun has a structural type system.
-We can asign names with `type alias`.
+We can asign names with `type`.
 
 ```datalove
 // `Contact` is an alias for a struct.
-type alias Contact: {
+type Contact: {
   name: string,
   age: int,
 }
@@ -178,11 +178,14 @@ fun get_age(ref contact: Contact): int
 end fun
 ```
 
+Imported aliases are not re-exported
+(nor are imported functions).
+
 Type aliases do not accept type parameters,
 but you can alias an instantiation of types with parameters.
 
 ```datalove
-type alias myset: set<int>
+type myset: set<int>
 ```
 
 Type aliases may not refer to themselves;
@@ -192,7 +195,7 @@ Type aliases are heap-agnostic,
 the heap is applied when the alias is named:
 
 ```datalove
-type alias number: int
+type number: int
 
 let foo: @number = 1
 ```
@@ -211,16 +214,23 @@ then one for functions.
 Valid:
 
 ```datalove
-type alias number: int
-type alias mynumber: number
+type number: int
+type mynumber: number
 ```
 
 Invalid:
 
 ```datalove
-type alias mynumber: number // Can't resolve forward reference
-type alias number: int
+type mynumber: number // Can't resolve forward reference
+type number: int
 ```
 
 Shadowing primitives or other in-scope aliases is not allowed.
+
+In type hints and type annotations,
+aliases are resolved during name resolution,
+after parsing,
+and either before or part of typechecking,
+whatever fits the current model.
+
 
