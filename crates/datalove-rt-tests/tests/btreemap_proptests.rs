@@ -118,7 +118,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -157,7 +157,7 @@ proptest! {
         }
 
         // Verify map length matches unique keys.
-        prop_assert_eq!(map.len, unique_keys.len() as u32);
+        prop_assert_eq!(map.len, rtdt::Usize(unique_keys.len() as u32));
 
         // Clean up.
         let status = unsafe {
@@ -186,7 +186,7 @@ proptest! {
         // Insert in original order.
         let mut map1 = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map1_ptr = &mut map1 as *mut rtdt::Map as *mut u8;
 
@@ -214,7 +214,7 @@ proptest! {
         entries.reverse();
         let mut map2 = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map2_ptr = &mut map2 as *mut rtdt::Map as *mut u8;
 
@@ -265,7 +265,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -287,7 +287,7 @@ proptest! {
             );
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-            prop_assert_eq!(map.len, 1);
+            prop_assert_eq!(map.len, rtdt::Usize(1));
 
             // Update with remaining values.
             for value in &values[1..] {
@@ -305,7 +305,7 @@ proptest! {
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
                 // Length should remain 1.
-                prop_assert_eq!(map.len, 1);
+                prop_assert_eq!(map.len, rtdt::Usize(1));
             }
 
             // Clean up.
@@ -326,7 +326,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -350,7 +350,7 @@ proptest! {
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             }
 
-            prop_assert_eq!(map.len, num_entries as u32);
+            prop_assert_eq!(map.len, rtdt::Usize(num_entries as u32));
 
             // Clean up.
             let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
@@ -370,7 +370,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -395,7 +395,7 @@ proptest! {
             }
 
             let len_before_clear = map.len;
-            prop_assert!(len_before_clear > 0);
+            prop_assert!(len_before_clear > rtdt::Usize(0));
 
             // Clear the map.
             let status = datalove_rt::c::dtlv_rti_btreemap_clear_local(
@@ -406,7 +406,7 @@ proptest! {
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
             // Length should be zero.
-            prop_assert_eq!(map.len, 0);
+            prop_assert_eq!(map.len, rtdt::Usize(0));
             prop_assert!(map.root.is_null());
 
             // Clean up.
@@ -429,7 +429,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -458,7 +458,7 @@ proptest! {
                         &*map_tydesc,
                     );
                     prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-                    prop_assert_eq!(map.len, 0);
+                    prop_assert_eq!(map.len, rtdt::Usize(0));
                 }
             }
 
@@ -484,7 +484,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -531,7 +531,7 @@ proptest! {
                 unique_keys.insert(*key);
             }
 
-            prop_assert_eq!(map.len, unique_keys.len() as u32);
+            prop_assert_eq!(map.len, rtdt::Usize(unique_keys.len() as u32));
 
             // Clean up.
             let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
@@ -555,7 +555,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -588,7 +588,7 @@ proptest! {
                 // We must NOT destroy them here - the btreemap now owns them.
             }
 
-            prop_assert_eq!(map.len, unique_keys.len() as u32);
+            prop_assert_eq!(map.len, rtdt::Usize(unique_keys.len() as u32));
 
             let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -609,7 +609,7 @@ proptest! {
 
         let mut map1 = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map1_ptr = &mut map1 as *mut rtdt::Map as *mut u8;
 
@@ -643,7 +643,7 @@ proptest! {
         entries.reverse();
         let mut map2 = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map2_ptr = &mut map2 as *mut rtdt::Map as *mut u8;
 
@@ -699,7 +699,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -725,7 +725,7 @@ proptest! {
                     &*_value_tydesc,
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-                prop_assert_eq!(map.len, 1);
+                prop_assert_eq!(map.len, rtdt::Usize(1));
 
                 // Note: key_rt and value_rt have been moved into the btreemap.
                 // We must NOT destroy them here - the btreemap now owns them.
@@ -748,7 +748,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -778,7 +778,7 @@ proptest! {
                 // We must NOT destroy them here - the btreemap now owns them.
             }
 
-            prop_assert_eq!(map.len, num_entries as u32);
+            prop_assert_eq!(map.len, rtdt::Usize(num_entries as u32));
 
             let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -797,7 +797,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -828,12 +828,12 @@ proptest! {
             }
 
             let len_before_clear = map.len;
-            prop_assert!(len_before_clear > 0);
+            prop_assert!(len_before_clear > rtdt::Usize(0));
 
             let status = datalove_rt::c::dtlv_rti_btreemap_clear_local(rt, map_ptr, &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-            prop_assert_eq!(map.len, 0);
+            prop_assert_eq!(map.len, rtdt::Usize(0));
             prop_assert!(map.root.is_null());
 
             let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
@@ -855,7 +855,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -887,7 +887,7 @@ proptest! {
                 } else {
                     let status = datalove_rt::c::dtlv_rti_btreemap_clear_local(rt, map_ptr, &*map_tydesc);
                     prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-                    prop_assert_eq!(map.len, 0);
+                    prop_assert_eq!(map.len, rtdt::Usize(0));
                 }
             }
 
@@ -912,7 +912,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -971,7 +971,7 @@ proptest! {
                 unique_keys.insert(format!("key_{}", key));
             }
 
-            prop_assert_eq!(map.len, unique_keys.len() as u32);
+            prop_assert_eq!(map.len, rtdt::Usize(unique_keys.len() as u32));
 
             let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1028,7 +1028,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1106,7 +1106,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1182,7 +1182,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
@@ -1250,7 +1250,7 @@ proptest! {
 
         let mut map = rtdt::Map {
             root: ptr::null(),
-            len: 0,
+            len: rtdt::Usize(0),
         };
         let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
 
