@@ -62,21 +62,7 @@ anonymous tuples, structs, and enums;
 strings, lists, maps and sets.
 
 ```datalove
-{
-  name = "Ada",
-  born = 1815,
-  interests = ["mathematics", "poetry", "music"],
-  address_book = set {
-    {
-      kind = enum Friend,
-      name = "Charles",
-    },
-    {
-      kind = enum Family,
-      name = "George",
-    },
-  },
-}
+todo
 ```
 
 It also includes _tensors_ (multi-dimensional arrays)
@@ -109,21 +95,7 @@ A simple pure-functional language that feels like an imperative language, built
 on the datalit type system.
 
 ```datalove
-typealias Person: {
-  name: string,
-  born: int,
-  interests: [string],
-  address_book: set {
-    {
-      kind: enum { Friend, Family },
-      name: string,
-    }
-  }
-}
-
-fun get_friends(ref person: Person): [string]
-  // todo
-end fun
+todo
 ```
 
 
