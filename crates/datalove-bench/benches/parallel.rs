@@ -14,31 +14,115 @@ use datalove_datafun_tycheck::{
     ParallelMode as TypecheckParallelMode,
 };
 
-const NUM_MODULES: usize = 20;
-const FUNCTIONS_PER_MODULE: usize = 50;
+// Enough modules for parallelism, small enough for fast benchmarks.
+const NUM_MODULES: usize = 32;
+const FUNCTIONS_PER_MODULE: usize = 30;
+const TYPE_ALIASES_PER_MODULE: usize = 5;
 
 fn main() {
     divan::main();
 }
 
-/// Generate source code for a module with many functions.
+/// Generate source code for a module with type aliases and functions.
+///
+/// The generated code exercises:
+/// - Type aliases (for parser/tycheck work)
+/// - Owned types like `int` (bigint) and lists (for ownership analysis)
+/// - Clone operations `$` (for ownership tracking)
+/// - Complex control flow with loops and conditionals (for lowering)
+/// - Mutable variables (for lowering)
+/// - Checked arithmetic (for lowering)
 fn generate_module_source(module_idx: usize, num_functions: usize) -> String {
     let mut source = String::new();
 
-    for func_idx in 0..num_functions {
-        // Generate a function with some arithmetic and control flow.
+    // Generate type aliases.
+    for alias_idx in 0..TYPE_ALIASES_PER_MODULE {
         source.push_str(&format!(
-            "fun func_{}_{}(a: @i32, b: @i32): @i32\n",
-            module_idx, func_idx
+            "type Alias{}_{}: int\n",
+            module_idx, alias_idx
         ));
-        source.push_str("  let x = a +? b\n");
-        source.push_str("  let y = x *? @2\n");
-        source.push_str("  if y >? @100\n");
-        source.push_str("    ret y -? @50\n");
-        source.push_str("  else\n");
-        source.push_str("    ret y +? @50\n");
-        source.push_str("  end if\n");
-        source.push_str("end fun\n\n");
+    }
+    source.push('\n');
+
+    // Generate a struct type alias for ownership testing.
+    source.push_str(&format!(
+        "type Data{}: @{{x: int, y: int}}\n\n",
+        module_idx
+    ));
+
+    for func_idx in 0..num_functions {
+        // Vary function signatures to exercise different code paths.
+        let variant = func_idx % 4;
+
+        match variant {
+            0 => {
+                // Function with owned int types, cloning, and loop.
+                source.push_str(&format!(
+                    "fun func_{}_{}(n: int, acc: int): !int\n",
+                    module_idx, func_idx
+                ));
+                source.push_str("  var i: u32 = @0\n");
+                source.push_str("  var result: int = acc$\n");
+                source.push_str("  loop while i .< @10\n");
+                source.push_str("    set result = result + n$\n");
+                source.push_str("    set i = i +! @1\n");
+                source.push_str("  end loop\n");
+                source.push_str("  ret ok result\n");
+                source.push_str("end fun\n\n");
+            }
+            1 => {
+                // Function with ref parameter (ownership borrowing).
+                source.push_str(&format!(
+                    "fun func_{}_{}(ref x: int, y: int): int\n",
+                    module_idx, func_idx
+                ));
+                source.push_str("  let a = x$ + y\n");
+                source.push_str("  let b = a$ * :int/@2\n");
+                source.push_str("  if b .> :int/@1000\n");
+                source.push_str("    ret b - :int/@500\n");
+                source.push_str("  else\n");
+                source.push_str("    ret b + :int/@500\n");
+                source.push_str("  end if\n");
+                source.push_str("end fun\n\n");
+            }
+            2 => {
+                // Function with option type and early return.
+                source.push_str(&format!(
+                    "fun func_{}_{}(val: ?int): ?int\n",
+                    module_idx, func_idx
+                ));
+                source.push_str("  let x = val?\n");
+                source.push_str("  let y = x$ * :int/@3\n");
+                source.push_str("  let z = y$ + :int/@100\n");
+                source.push_str("  if z .> :int/@500\n");
+                source.push_str("    ret some z - :int/@200\n");
+                source.push_str("  else\n");
+                source.push_str("    ret some z\n");
+                source.push_str("  end if\n");
+                source.push_str("end fun\n\n");
+            }
+            3 => {
+                // Function with result type, nested conditionals, mutable state.
+                source.push_str(&format!(
+                    "fun func_{}_{}(a: int, b: int, cond: @bool): !int\n",
+                    module_idx, func_idx
+                ));
+                source.push_str("  var result: int = a$\n");
+                source.push_str("  if cond\n");
+                source.push_str("    set result = result + b$\n");
+                source.push_str("    if result .> :int/@100\n");
+                source.push_str("      set result = result * :int/@2\n");
+                source.push_str("    else\n");
+                source.push_str("      set result = result + :int/@50\n");
+                source.push_str("    end if\n");
+                source.push_str("  else\n");
+                source.push_str("    set result = result - b\n");
+                source.push_str("  end if\n");
+                source.push_str("  ret ok result\n");
+                source.push_str("end fun\n\n");
+            }
+            _ => unreachable!(),
+        }
     }
 
     source
