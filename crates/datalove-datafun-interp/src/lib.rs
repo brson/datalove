@@ -1080,11 +1080,9 @@ impl IrInterpreter {
                 // Skip drop if already dropped (can happen with move semantics).
                 let val = match self.read_operand(operand, frame, frames) {
                     Ok(v) => v,
-                    Err(InterpError::UninitializedValue(_)) => {
-                        // Already dropped, skip.
-                        return Ok(());
-                    }
-                    Err(InterpError::UninitializedSlot(_)) => {
+                    Err(InterpError::UninitializedValue(_))
+                    | Err(InterpError::UninitializedSlot(_))
+                    | Err(InterpError::UninitializedParam(_)) => {
                         // Already dropped, skip.
                         return Ok(());
                     }

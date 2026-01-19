@@ -163,6 +163,8 @@ impl CallDispatcher for ChaosDispatcher {
         rt_handle: LocalRtHandle,
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
+        use datalove_datafun_interp::ExecutionContext;
+
         let key = FunctionKey::from(func_ref);
 
         // Randomly decide whether to try JIT.
@@ -170,10 +172,29 @@ impl CallDispatcher for ChaosDispatcher {
             return DispatchResult::NotHandled;
         }
 
-        // For now, use record_call (without stubs) to avoid leak in trampoline path.
-        // Functions with calls will fall back to interpreter.
-        // TODO: Fix trampoline ownership semantics for full mixed-mode support.
-        match self.jit.record_call(key, func) {
+        // For external functions, use the callee's unit's context to find local functions.
+        // _callee_ctx_owned keeps the context alive for the duration of this function.
+        let _callee_ctx_owned: Option<ExecutionContext>;
+        let compile_ctx = match func_ref {
+            FuncRef::External { unit, .. } => {
+                match call_ctx.registry.unit_functions(*unit) {
+                    Some(unit_funcs) => {
+                        _callee_ctx_owned = Some(ExecutionContext::new(unit_funcs));
+                        _callee_ctx_owned.as_ref().unwrap()
+                    }
+                    None => {
+                        return DispatchResult::NotHandled;
+                    }
+                }
+            }
+            _ => {
+                _callee_ctx_owned = None;
+                call_ctx.exec_ctx
+            }
+        };
+
+        // Use record_call_with_context to enable JIT for functions with calls.
+        match self.jit.record_call_with_context(key, func, compile_ctx, call_ctx.registry) {
             Ok(Some((code_ptr, uses_sret))) => {
                 // Compiled! Randomly decide whether to use it.
                 if self.should_use_jit() {
@@ -181,7 +202,7 @@ impl CallDispatcher for ChaosDispatcher {
                     let mut dispatch_ctx = DispatchContext {
                         jit_engine: &mut self.jit,
                         interp: call_ctx.interp,
-                        exec_ctx: call_ctx.exec_ctx,
+                        exec_ctx: compile_ctx,
                         registry: call_ctx.registry,
                         frames: call_ctx.frames,
                     };

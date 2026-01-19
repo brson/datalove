@@ -191,8 +191,10 @@ impl JitEngine {
 
         match state {
             FunctionState::Interpreted { call_count } => {
-                *call_count += 1;
-                if *call_count >= self.threshold {
+                // Use saturating_add to avoid overflow. u32::MAX indicates permanently
+                // interpreted (e.g., function uses unsupported features).
+                *call_count = call_count.saturating_add(1);
+                if *call_count >= self.threshold && *call_count != u32::MAX {
                     // Compile the function with context.
                     let (code_ptr, uses_sret) = self.compiler.compile_function_with_context(func, ctx, registry)?;
                     *state = FunctionState::Compiled { code_ptr, uses_sret };
@@ -742,19 +744,46 @@ impl CallDispatcher for JitEngine {
         rt_handle: LocalRtHandle,
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
+        use datalove_datafun_interp::ExecutionContext;
+
         let key = FunctionKey::from(func_ref);
 
-        // For now, use record_call (without stubs) to avoid leak in trampoline path.
-        // Functions with calls will fall back to interpreter.
-        // TODO: Fix trampoline ownership semantics for full mixed-mode support.
-        match self.record_call(key, func) {
+        // For external functions, we need to use the callee's unit's context to find
+        // its local functions. For local/module functions, use the caller's context.
+        // _callee_ctx_owned keeps the context alive for the duration of this function.
+        let _callee_ctx_owned: Option<ExecutionContext>;
+        let compile_ctx = match func_ref {
+            FuncRef::External { unit, .. } => {
+                // External function - get context from callee's unit.
+                match call_ctx.registry.unit_functions(*unit) {
+                    Some(unit_funcs) => {
+                        _callee_ctx_owned = Some(ExecutionContext::new(unit_funcs));
+                        _callee_ctx_owned.as_ref().unwrap()
+                    }
+                    None => {
+                        // Unit not found, fall back to interpreter.
+                        return DispatchResult::NotHandled;
+                    }
+                }
+            }
+            _ => {
+                // Local or module function - use caller's context.
+                _callee_ctx_owned = None;
+                call_ctx.exec_ctx
+            }
+        };
+
+        // Use record_call_with_context to enable JIT for functions with calls.
+        // This creates stubs for callees so JIT code can call back to interpreter.
+        match self.record_call_with_context(key, func, compile_ctx, call_ctx.registry) {
             Ok(Some((code_ptr, uses_sret))) => {
                 // JIT code available - set up dispatch context and call it.
                 // The trampoline needs this context to route calls back to the interpreter.
+                // Use the callee's context for runtime dispatch as well.
                 let mut dispatch_ctx = DispatchContext {
                     jit_engine: self,
                     interp: call_ctx.interp,
-                    exec_ctx: call_ctx.exec_ctx,
+                    exec_ctx: compile_ctx,
                     registry: call_ctx.registry,
                     frames: call_ctx.frames,
                 };
@@ -782,7 +811,10 @@ impl CallDispatcher for JitEngine {
             Err(e) => {
                 // Check if this is an error that we should fall back for.
                 let error_str = e.to_string();
-                if error_str.contains("unsupported:") || error_str.contains("Duplicate definition") {
+                if error_str.contains("unsupported:")
+                    || error_str.contains("Duplicate definition")
+                    || error_str.contains("not yet declared")
+                {
                     // Mark as not JIT-able and fall back to interpreter.
                     self.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
                     DispatchResult::NotHandled
