@@ -81,17 +81,6 @@ fn create_u64_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     })
 }
 
-fn create_string_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
-    arena.alloc(rtdt::TyDesc {
-        type_tag: rtdt::TyTag::String,
-        size: std::mem::size_of::<rtdt::String>() as u32,
-        align: std::mem::align_of::<rtdt::String>() as u32,
-        type_info: rtdt::TyInfo {
-            nothing: rtdt::TyInfoNothing,
-        },
-    })
-}
-
 /// Create a Table<u32> type descriptor (single column named "x").
 fn create_table_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     let col_tydesc = create_u32_tydesc(arena);
