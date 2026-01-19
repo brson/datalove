@@ -92,6 +92,9 @@ struct ScriptCommand {
     /// Run without loading the sys library.
     #[arg(long)]
     no_sys: bool,
+    /// Enable the JIT compiler for function execution.
+    #[arg(long)]
+    jit: bool,
 }
 
 #[derive(clap::Args)]
@@ -342,6 +345,20 @@ impl ReplCommand {
 
 impl ScriptCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
+        if self.jit {
+            // Run with JIT in a spawned thread to work around Cranelift JIT
+            // limitations with PIE binaries.
+            let file_path = self.file_path.clone();
+            let no_sys = self.no_sys;
+            std::thread::spawn(move || {
+                Self::run_impl(&file_path, no_sys, true)
+            }).join().expect("script thread panicked")
+        } else {
+            Self::run_impl(&self.file_path, self.no_sys, false)
+        }
+    }
+
+    fn run_impl(file_path: &PathBuf, no_sys: bool, jit: bool) -> AnyResult<()> {
         use datalove_datafun as datafun;
         use datafun::pipeline::ModuleCompilationPipeline;
 
@@ -349,7 +366,7 @@ impl ScriptCommand {
 
         // Load sys library unless --no-sys.
         let mut pipeline = ModuleCompilationPipeline::new();
-        if !self.no_sys {
+        if !no_sys {
             rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
         }
 
@@ -362,12 +379,21 @@ impl ScriptCommand {
             bail!("Compilation failed with {} error(s):\n{}", errors.len(), errors.join("\n"));
         }
 
+        // Create JIT engine if --jit flag is set (threshold=1 compiles on first call).
+        let call_dispatcher: Option<Box<dyn datalove_datafun_interp::CallDispatcher>> = if jit {
+            let jit_engine = datalove_datafun_jit::JitEngine::new(1)
+                .map_err(|e| anyhow!("Failed to create JIT engine: {:?}", e))?;
+            Some(Box::new(jit_engine))
+        } else {
+            None
+        };
+
         // Create script compilation context with Stderr mode for debuglog output.
-        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None);
+        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, call_dispatcher);
 
         // Read the script file.
-        let script_source = rmx::std::fs::read_to_string(&self.file_path)
-            .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
+        let script_source = rmx::std::fs::read_to_string(file_path)
+            .with_context(|| format!("Failed to read script file: {}", file_path.display()))?;
 
         // Execute the script as a fragment.
         let result = ctx.eval_fragment(&script_source);
@@ -376,12 +402,12 @@ impl ScriptCommand {
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
         if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &result.typecheck {
             let parse_diags = ctx.get_parse_diagnostics();
-            render::render_parse_diagnostics(ctx.db(), &parse_diags, &self.file_path, &cwd);
+            render::render_parse_diagnostics(ctx.db(), &parse_diags, file_path, &cwd);
             bail!("Parse error");
         }
         if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &result.typecheck {
             let type_diags = ctx.get_type_diagnostics();
-            render::render_type_diagnostics(ctx.db(), &type_diags, &self.file_path, &cwd);
+            render::render_type_diagnostics(ctx.db(), &type_diags, file_path, &cwd);
             bail!("Type error");
         }
         if let datafun::pipeline::LoweringResult::Error { message } = &result.lowering {
