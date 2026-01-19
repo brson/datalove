@@ -149,110 +149,150 @@ fn setup_graph(db: &Database, sources: &[(String, String)]) -> ModuleGraph {
     builder.build()
 }
 
+// Benchmarks prime prior phases in setup, then re-call them (memoized) during measurement.
+// This isolates the target phase timing since memoized calls are essentially free.
+
 #[divan::bench]
 fn parse_sequential(bencher: divan::Bencher) {
     let sources = generate_sources();
-    bencher.bench_local(|| {
-        let db = Database::default();
-        let graph = setup_graph(&db, &sources);
-        divan::black_box(
-            parse_module_graph_with_mode(&db, graph, BTreeMap::new(), ParallelMode::Sequential)
-        );
-    });
+    bencher
+        .with_inputs(|| {
+            let db = Database::default();
+            let graph = setup_graph(&db, &sources);
+            (db, graph)
+        })
+        .bench_local_values(|(db, graph)| {
+            let result = parse_module_graph_with_mode(&db, graph, BTreeMap::new(), ParallelMode::Sequential);
+            let _ = divan::black_box(result);
+        });
 }
 
 #[divan::bench]
 fn parse_parallel(bencher: divan::Bencher) {
     let sources = generate_sources();
-    bencher.bench_local(|| {
-        let db = Database::default();
-        let graph = setup_graph(&db, &sources);
-        divan::black_box(
-            parse_module_graph_with_mode(&db, graph, BTreeMap::new(), ParallelMode::Parallel)
-        );
-    });
+    bencher
+        .with_inputs(|| {
+            let db = Database::default();
+            let graph = setup_graph(&db, &sources);
+            (db, graph)
+        })
+        .bench_local_values(|(db, graph)| {
+            let result = parse_module_graph_with_mode(&db, graph, BTreeMap::new(), ParallelMode::Parallel);
+            let _ = divan::black_box(result);
+        });
 }
 
 #[divan::bench]
 fn typecheck_sequential(bencher: divan::Bencher) {
     let sources = generate_sources();
-    bencher.bench_local(|| {
-        let db = Database::default();
-        let graph = setup_graph(&db, &sources);
-        let parsed = parse_module_graph(&db, graph, BTreeMap::new());
-        divan::black_box(
-            typecheck_module_graph_with_mode(&db, parsed, TypecheckParallelMode::Sequential)
-        );
-    });
+    bencher
+        .with_inputs(|| {
+            let db = Database::default();
+            let graph = setup_graph(&db, &sources);
+            // Prime: parse is memoized after this.
+            let _ = parse_module_graph(&db, graph, BTreeMap::new());
+            (db, graph)
+        })
+        .bench_local_values(|(db, graph)| {
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new()); // Memoized.
+            let result = typecheck_module_graph_with_mode(&db, parsed, TypecheckParallelMode::Sequential);
+            let _ = divan::black_box(result);
+        });
 }
 
 #[divan::bench]
 fn typecheck_parallel(bencher: divan::Bencher) {
     let sources = generate_sources();
-    bencher.bench_local(|| {
-        let db = Database::default();
-        let graph = setup_graph(&db, &sources);
-        let parsed = parse_module_graph(&db, graph, BTreeMap::new());
-        divan::black_box(
-            typecheck_module_graph_with_mode(&db, parsed, TypecheckParallelMode::Parallel)
-        );
-    });
+    bencher
+        .with_inputs(|| {
+            let db = Database::default();
+            let graph = setup_graph(&db, &sources);
+            let _ = parse_module_graph(&db, graph, BTreeMap::new());
+            (db, graph)
+        })
+        .bench_local_values(|(db, graph)| {
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+            let result = typecheck_module_graph_with_mode(&db, parsed, TypecheckParallelMode::Parallel);
+            let _ = divan::black_box(result);
+        });
 }
 
 #[divan::bench]
 fn ownership_sequential(bencher: divan::Bencher) {
     let sources = generate_sources();
-    bencher.bench_local(|| {
-        let db = Database::default();
-        let graph = setup_graph(&db, &sources);
-        let parsed = parse_module_graph(&db, graph, BTreeMap::new());
-        let typechecked = typecheck_module_graph(&db, parsed);
-        divan::black_box(
-            analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential)
-        );
-    });
+    bencher
+        .with_inputs(|| {
+            let db = Database::default();
+            let graph = setup_graph(&db, &sources);
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+            let _ = typecheck_module_graph(&db, parsed);
+            (db, graph)
+        })
+        .bench_local_values(|(db, graph)| {
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+            let typechecked = typecheck_module_graph(&db, parsed);
+            let result = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential);
+            let _ = divan::black_box(result);
+        });
 }
 
 #[divan::bench]
 fn ownership_parallel(bencher: divan::Bencher) {
     let sources = generate_sources();
-    bencher.bench_local(|| {
-        let db = Database::default();
-        let graph = setup_graph(&db, &sources);
-        let parsed = parse_module_graph(&db, graph, BTreeMap::new());
-        let typechecked = typecheck_module_graph(&db, parsed);
-        divan::black_box(
-            analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Parallel)
-        );
-    });
+    bencher
+        .with_inputs(|| {
+            let db = Database::default();
+            let graph = setup_graph(&db, &sources);
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+            let _ = typecheck_module_graph(&db, parsed);
+            (db, graph)
+        })
+        .bench_local_values(|(db, graph)| {
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+            let typechecked = typecheck_module_graph(&db, parsed);
+            let result = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Parallel);
+            let _ = divan::black_box(result);
+        });
 }
 
 #[divan::bench]
 fn lower_sequential(bencher: divan::Bencher) {
     let sources = generate_sources();
-    bencher.bench_local(|| {
-        let db = Database::default();
-        let graph = setup_graph(&db, &sources);
-        let parsed = parse_module_graph(&db, graph, BTreeMap::new());
-        let typechecked = typecheck_module_graph(&db, parsed);
-        let ownership = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential);
-        divan::black_box(
-            lower_module_graph_with_mode(&db, parsed, typechecked, ownership, ParallelMode::Sequential)
-        );
-    });
+    bencher
+        .with_inputs(|| {
+            let db = Database::default();
+            let graph = setup_graph(&db, &sources);
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+            let typechecked = typecheck_module_graph(&db, parsed);
+            let _ = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential);
+            (db, graph)
+        })
+        .bench_local_values(|(db, graph)| {
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+            let typechecked = typecheck_module_graph(&db, parsed);
+            let ownership = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential);
+            let result = lower_module_graph_with_mode(&db, parsed, typechecked, ownership, ParallelMode::Sequential);
+            let _ = divan::black_box(result);
+        });
 }
 
 #[divan::bench]
 fn lower_parallel(bencher: divan::Bencher) {
     let sources = generate_sources();
-    bencher.bench_local(|| {
-        let db = Database::default();
-        let graph = setup_graph(&db, &sources);
-        let parsed = parse_module_graph(&db, graph, BTreeMap::new());
-        let typechecked = typecheck_module_graph(&db, parsed);
-        let ownership = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential);
-        divan::black_box(
-            lower_module_graph_with_mode(&db, parsed, typechecked, ownership, ParallelMode::Parallel)
-        );
-    });
+    bencher
+        .with_inputs(|| {
+            let db = Database::default();
+            let graph = setup_graph(&db, &sources);
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+            let typechecked = typecheck_module_graph(&db, parsed);
+            let _ = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential);
+            (db, graph)
+        })
+        .bench_local_values(|(db, graph)| {
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+            let typechecked = typecheck_module_graph(&db, parsed);
+            let ownership = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential);
+            let result = lower_module_graph_with_mode(&db, parsed, typechecked, ownership, ParallelMode::Parallel);
+            let _ = divan::black_box(result);
+        });
 }
