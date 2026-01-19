@@ -38,7 +38,6 @@ datalove-rtdt.path = "../datalove-rtdt"
 
 [dev-dependencies]
 datalove-exampletest.path = "../datalove-exampletest"
-datalove-datafun-aot-cranelift.path = "../datalove-datafun-aot-cranelift"
 rand = "0.8"
 
 [[test]]

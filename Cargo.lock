@@ -1090,6 +1090,7 @@ dependencies = [
  "datalove-diagnostic",
  "datalove-exampletest",
  "datalove-rt",
+ "datalove-rtdt",
  "ron",
  "rustmax",
  "salsa",
@@ -1132,7 +1133,6 @@ version = "0.1.0"
 dependencies = [
  "bcts",
  "datalove-ct",
- "datalove-datafun-aot-cranelift",
  "datalove-datafun-ast",
  "datalove-datafun-interp",
  "datalove-datafun-intrinsics",
