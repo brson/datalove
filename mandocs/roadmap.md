@@ -55,7 +55,6 @@
 - widening coercions
 - match
 - generics
-- type aliases
 
 
 
