@@ -145,14 +145,16 @@ A simple pure-functional language that feels like an imperative language, built
 on the datalit type system.
 
 ```datalove
-// A book from the catalog
-let book: {
+// Type aliases reduce repetition
+type Book: {
   title: string,
   author: string,
   year: i32,
   pages: u32,
   available: bool
-} = {
+}
+
+let book: Book = {
   title = "Nineteen Eighty-Four",
   author = "George Orwell",
   year = 1949,
@@ -160,7 +162,7 @@ let book: {
   available = true
 }
 
-// Check if a book can be checked out
+// Simple if/else
 fun can_checkout(avail: bool, copies: u32): bool
   if avail and copies .> 0
     ret true
@@ -169,20 +171,86 @@ fun can_checkout(avail: bool, copies: u32): bool
   end if
 end fun
 
-// Calculate total pages with overflow checking
+// Checked arithmetic returns result types
 fun total_pages(a: u32, b: u32): !u32
   ret a +! b
 end fun
 
-// Safe average that handles division by zero
+// Optional arithmetic for safe division
 fun avg_rating(sum: int, count: int): ?int
   ret sum /? count
 end fun
+```
 
-// Use the functions with catalog data
-let checkout_ok = can_checkout(true, 3)
-let dystopia_pages = total_pages(328, 311)
-let rating = avg_rating(47, 10)
+Functions use four argument modes to express ownership:
+
+```datalove
+// `ref` borrows read-only; caller keeps ownership
+fun describe(ref b: Book): string
+  ret b.title
+end fun
+
+// `mut` borrows for mutation; caller keeps ownership
+fun mark_unavailable(mut b: Book)
+  set b.available = false
+end fun
+
+// Use the functions
+var my_book: Book = {
+  title = "Brave New World",
+  author = "Aldous Huxley",
+  year = 1932,
+  pages = 311,
+  available = true
+}
+
+let desc = describe(ref my_book)    // my_book still valid
+mark_unavailable(mut my_book)       // my_book.available now false
+```
+
+Loops provide iteration with `break` and `continue`:
+
+```datalove
+// Loop until break
+fun count_to(limit: u32): !u32
+  var n: u32 = @0
+  loop
+    set n = n +! @1
+    if n >= limit
+      break
+    end if
+  end loop
+  ret n
+end fun
+
+// Loop while condition holds
+fun sum_below(limit: u32): u32
+  var n: u32 = @0
+  var total: u32 = @0
+  loop while n .< limit
+    set total = total + n
+    set n = n + @1
+  end loop
+  ret total
+end fun
+```
+
+If statements support `else if` chains:
+
+```datalove
+type Rating: enum { Poor, Fair, Good, Excellent }
+
+fun classify(score: u32): Rating
+  if score .< @50
+    ret enum Poor
+  else if score .< @70
+    ret enum Fair
+  else if score .< @90
+    ret enum Good
+  else
+    ret enum Excellent
+  end if
+end fun
 ```
 
 
