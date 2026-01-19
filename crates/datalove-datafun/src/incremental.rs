@@ -29,7 +29,6 @@ use rmx::std::collections::{BTreeMap, BTreeSet};
 // Re-export core types from compiler.
 pub use datalove_datafun_compiler::incremental::{
     IncrementalModuleWorld,
-    CompileResult,
     topological_sort,
 };
 

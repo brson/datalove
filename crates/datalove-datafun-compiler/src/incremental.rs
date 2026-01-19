@@ -34,9 +34,6 @@ use bct::input::Source;
 use bct::module_graph::{Module, ModuleGraph, ModuleId};
 use salsa::Setter;
 
-use crate::module_graph::parse_module_graph;
-use datalove_datafun_tycheck::typecheck_module_graph;
-
 /// Module world with stable salsa identity for incremental compilation.
 ///
 /// Maintains Module and ModuleGraph objects across edits, ensuring downstream
@@ -199,21 +196,6 @@ impl IncrementalModuleWorld {
         (graph, resolved_requires)
     }
 
-    /// Parse and typecheck all modules.
-    ///
-    /// The `path_deps` parameter provides pre-computed module dependencies as a map
-    /// from source module path to set of dependency module paths.
-    pub fn compile<'db>(
-        &mut self,
-        db: &'db mut dyn salsa::Database,
-        path_deps: &BTreeMap<String, BTreeSet<String>>,
-    ) -> CompileResult<'db> {
-        let (graph, resolved_requires) = self.prepare_for_compile(db, path_deps);
-        let parsed = parse_module_graph(db, graph, resolved_requires);
-        let typechecked = typecheck_module_graph(db, parsed);
-        CompileResult { graph, parsed, typechecked }
-    }
-
     /// Get the cached ModuleGraph.
     pub fn graph(&self) -> Option<ModuleGraph> {
         self.graph
@@ -314,13 +296,6 @@ impl Default for IncrementalModuleWorld {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// Result of `IncrementalModuleWorld::compile`.
-pub struct CompileResult<'db> {
-    pub graph: ModuleGraph,
-    pub parsed: datalove_datafun_tycheck::ParsedModuleGraph<'db>,
-    pub typechecked: datalove_datafun_tycheck::ModuleGraphTypecheckResult<'db>,
 }
 
 /// Sort paths so dependencies come before dependents.
