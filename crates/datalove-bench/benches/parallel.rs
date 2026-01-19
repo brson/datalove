@@ -1,4 +1,4 @@
-//! Benchmarks for parallel vs sequential parsing and typechecking.
+//! Benchmarks for parallel vs sequential compilation phases.
 
 use std::collections::BTreeMap;
 use bct::input::Source;
@@ -6,9 +6,11 @@ use bct::module_graph::ModuleGraphBuilder;
 use datalove_datafun_compiler::{
     Database,
     module_graph::{ModuleGraph, parse_module_graph, parse_module_graph_with_mode, ParallelMode},
+    tracked_ownership_analysis::analyze_module_graph_with_mode,
+    tracked_lower::lower_module_graph_with_mode,
 };
 use datalove_datafun_tycheck::{
-    typecheck_module_graph_with_mode,
+    typecheck_module_graph, typecheck_module_graph_with_mode,
     ParallelMode as TypecheckParallelMode,
 };
 
@@ -109,6 +111,64 @@ fn typecheck_parallel(bencher: divan::Bencher) {
         let parsed = parse_module_graph(&db, graph, BTreeMap::new());
         divan::black_box(
             typecheck_module_graph_with_mode(&db, parsed, TypecheckParallelMode::Parallel)
+        );
+    });
+}
+
+#[divan::bench]
+fn ownership_sequential(bencher: divan::Bencher) {
+    let sources = generate_sources();
+    bencher.bench_local(|| {
+        let db = Database::default();
+        let graph = setup_graph(&db, &sources);
+        let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+        let typechecked = typecheck_module_graph(&db, parsed);
+        divan::black_box(
+            analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential)
+        );
+    });
+}
+
+#[divan::bench]
+fn ownership_parallel(bencher: divan::Bencher) {
+    let sources = generate_sources();
+    bencher.bench_local(|| {
+        let db = Database::default();
+        let graph = setup_graph(&db, &sources);
+        let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+        let typechecked = typecheck_module_graph(&db, parsed);
+        divan::black_box(
+            analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Parallel)
+        );
+    });
+}
+
+#[divan::bench]
+fn lower_sequential(bencher: divan::Bencher) {
+    let sources = generate_sources();
+    bencher.bench_local(|| {
+        let db = Database::default();
+        let graph = setup_graph(&db, &sources);
+        let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+        let typechecked = typecheck_module_graph(&db, parsed);
+        let ownership = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential);
+        divan::black_box(
+            lower_module_graph_with_mode(&db, parsed, typechecked, ownership, ParallelMode::Sequential)
+        );
+    });
+}
+
+#[divan::bench]
+fn lower_parallel(bencher: divan::Bencher) {
+    let sources = generate_sources();
+    bencher.bench_local(|| {
+        let db = Database::default();
+        let graph = setup_graph(&db, &sources);
+        let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+        let typechecked = typecheck_module_graph(&db, parsed);
+        let ownership = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential);
+        divan::black_box(
+            lower_module_graph_with_mode(&db, parsed, typechecked, ownership, ParallelMode::Parallel)
         );
     });
 }
