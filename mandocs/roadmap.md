@@ -32,8 +32,10 @@
 
 ## In progress
 
+- jit
+- type aliases
 - human docs
-
+- pipeline cleanup
 
 
 
@@ -46,12 +48,11 @@
 - riders - waiting for workspaces
 - rtcalls - waiting for native riders
 - std.string - waiting for rtcalls
-- assert statements - needed for std_tests
+- assert statements - needed for std_tests?
 - fully reactive scripts
 - clone and coerce
 - clone, working heap types, and default syntax everywhere
 - widening coercions
-- jit
 - match
 - generics
 - type aliases
