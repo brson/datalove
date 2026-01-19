@@ -1,14 +1,41 @@
-//! Drop analysis for IR lowering.
+//! Ownership and liveness analysis.
 //!
-//! This module computes precise drop points for values at compile time.
-//! It runs on the AST before lowering and produces a `DropSchedule` that
-//! lowering consumes to emit Drop instructions at the right places.
+//! This module performs static analysis of value ownership, detecting errors
+//! and computing drop schedules. It runs on the AST after typechecking and
+//! before IR lowering.
 //!
-//! The analysis handles:
-//! - Scope exits (let bindings going out of scope)
-//! - Branch convergence (values moved in some paths but not others)
-//! - Early returns (return statements, try operators)
-//! - Loops (values from previous iterations)
+//! # Analysis performed
+//!
+//! **Ownership tracking**: Values are either Live (owned) or Moved (ownership
+//! transferred). Moving a value transfers ownership; using it again is an error.
+//!
+//! **Borrow checking**: Borrowed parameters (ref, mut, out) cannot be moved
+//! since the caller retains ownership. Additionally, immutable refs cannot be
+//! passed where mutable refs are required.
+//!
+//! **Initialization tracking**: Out parameters must be initialized (via `set`)
+//! before the function returns, and cannot be read before initialization.
+//!
+//! **Drop scheduling**: As a byproduct of liveness analysis, computes precise
+//! drop points for the IR lowering phase.
+//!
+//! # Errors detected
+//!
+//! - D001 UseAfterMove: using a value after ownership was transferred
+//! - D002 DoubleMove: transferring ownership twice
+//! - D003 CannotMoveBorrowed: attempting to move a ref/mut/out parameter
+//! - D004 CannotMutFromRef: passing immutable ref where mutable is required
+//! - D005 ReadUninitializedOutParam: reading out param before initialization
+//! - D006 OutParamNotInitialized: returning without initializing out param
+//! - D007 MoveInLoop: moving outer-scoped value inside loop body
+//!
+//! # Drop scheduling
+//!
+//! The `DropSchedule` tells IR lowering when to emit Drop instructions:
+//! - After statements when bindings go out of scope
+//! - At branch exits for convergence (value moved in one branch, not other)
+//! - Before return/break/continue for cleanup
+//! - At loop body end for iteration-scoped bindings
 
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
@@ -20,6 +47,10 @@ use datalove_datafun_ast::ast::{
 };
 use datalove_datafun_ir::IrType;
 use crate::ir_ext::IrTypeExt;
+
+// ============================================================================
+// Core types
+// ============================================================================
 
 /// Pre-computed drop analyses for functions in a script unit.
 pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionDropAnalysis>;
@@ -71,11 +102,15 @@ impl BindingInfo {
     }
 }
 
-/// Error detected during drop analysis.
+// ============================================================================
+// Error types
+// ============================================================================
+
+/// Error detected during ownership analysis.
 ///
-/// Each variant includes a `local_index` for span lookup during diagnostic emission.
-/// The local_index is the expression's sequential index within its function, which
-/// is stable regardless of parallel vs sequential compilation order.
+/// Each variant includes a `local_index` for span lookup during diagnostic
+/// emission. The local_index is the expression's sequential index within its
+/// function, stable regardless of parallel vs sequential compilation order.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum AnalysisError {
     /// Using a value after it was moved.
@@ -124,12 +159,7 @@ pub enum AnalysisError {
     },
 }
 
-/// Format drop analysis errors as proper error messages.
-///
-/// Returns a formatted error string suitable for display.
-/// Note: This doesn't emit via Salsa accumulators since lowering
-/// is not a tracked function. The error messages use diagnostic-style
-/// formatting but are returned as strings.
+/// Format analysis errors for display.
 pub fn format_analysis_errors(errors: &[AnalysisError]) -> String {
     errors.iter()
         .map(|e| format_single_error(e))
@@ -163,10 +193,14 @@ fn format_single_error(error: &AnalysisError) -> String {
     }
 }
 
+// ============================================================================
+// Analysis results
+// ============================================================================
+
 /// Drop schedule computed by analysis.
 ///
-/// Keyed by statement/expression identity. During lowering, after processing
-/// each AST node, check if there are drops scheduled for it.
+/// Keyed by statement index. During lowering, after processing each AST node,
+/// check if there are drops scheduled for it.
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
 pub struct DropSchedule {
     /// Drops to emit after processing a statement.
@@ -210,7 +244,11 @@ pub struct FunctionDropAnalysis {
     pub bindings: Vec<BindingInfo>,
 }
 
-/// Context for drop analysis.
+// ============================================================================
+// Analysis context
+// ============================================================================
+
+/// Context for ownership and liveness analysis.
 struct AnalysisCtx<'db> {
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
@@ -509,7 +547,6 @@ impl<'db> AnalysisCtx<'db> {
 
     /// Get the type of an expression.
     fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
-        use salsa::plumbing::AsId;
         let expr_id = expr.as_id();
         let index = expr_id.index() as usize;
         match self.expr_types.get(index).copied().flatten() {
@@ -762,7 +799,11 @@ impl<'db> AnalysisCtx<'db> {
     }
 }
 
-/// Analyze a function and compute drop schedule.
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Analyze a function for ownership errors and compute drop schedule.
 pub fn analyze_function<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
@@ -782,7 +823,7 @@ pub fn analyze_function<'db>(
     }
 
     // Analyze function body.
-    analyze_statements(&mut ctx, func.body(db), &[]);
+    analyze_statements(&mut ctx, func.body(db));
 
     // Exit function scope - remaining live bindings need dropping at implicit return.
     let _final_drops = ctx.exit_scope();
@@ -864,7 +905,7 @@ pub fn analyze_script_statements<'db>(
     ctx.enter_scope(scope_kind);
 
     // Analyze statements.
-    analyze_statements(&mut ctx, stmts, &[]);
+    analyze_statements(&mut ctx, stmts);
 
     // Exit scope. For AOT, capture final drops. For REPL, they're empty.
     let final_drops = ctx.exit_scope();
@@ -877,18 +918,13 @@ pub fn analyze_script_statements<'db>(
     }
 }
 
-/// Analyze a list of statements.
-///
-/// `stmt_path` is the index path from the root to the current statement list.
-fn analyze_statements<'db>(
-    ctx: &mut AnalysisCtx<'db>,
-    stmts: &[Statement<'db>],
-    stmt_path: &[usize],
-) {
-    for (i, stmt) in stmts.iter().enumerate() {
-        let mut current_path = stmt_path.to_vec();
-        current_path.push(i);
+// ============================================================================
+// Statement analysis
+// ============================================================================
 
+/// Analyze statements for ownership tracking.
+fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>]) {
+    for (i, stmt) in stmts.iter().enumerate() {
         match stmt {
             Statement::Let(let_stmt) => {
                 analyze_let(ctx, let_stmt, i);
@@ -1089,7 +1125,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
         ctx.alloc_binding(name, inner_ty, false, None);
     }
 
-    analyze_statements(ctx, &stmt.then_body, &[]);
+    analyze_statements(ctx, &stmt.then_body);
     let then_drops = ctx.exit_scope();
     let state_after_then = ctx.scope_stack.last()
         .map(|f| f.current_state.C())
@@ -1116,7 +1152,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
             ctx.alloc_binding(name, ty, false, None);
         }
 
-        analyze_statements(ctx, else_body, &[]);
+        analyze_statements(ctx, else_body);
         let else_drops = ctx.exit_scope();
 
         if !else_drops.is_empty() {
@@ -1229,7 +1265,7 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLoop<'db>, stmt_idx:
 
     ctx.enter_scope(ScopeKind::Loop);
 
-    analyze_statements(ctx, &stmt.body, &[]);
+    analyze_statements(ctx, &stmt.body);
 
     // Check for outer-scope bindings that were moved inside the loop body.
     // This is an error because the loop could iterate multiple times.
