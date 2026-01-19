@@ -161,11 +161,21 @@ pub fn gen_expr<R: Rng>(
     let matching_vars = ctx.variables_of_type(type_hint);
     let can_use_var = !matching_vars.is_empty() && rng.gen_bool(0.4);
 
+    // Check if the expected type is a type alias (module-local).
+    let is_type_alias = ctx.type_aliases.iter().any(|a| a.name == type_hint.trim_start_matches('@').trim_start_matches('#'));
+
     // Check if we can call a function.
-    let matching_fns: Vec<_> = ctx
-        .callable_functions()
-        .filter(|f| f.return_type.as_deref() == Some(type_hint))
-        .collect();
+    // If expected type is a type alias, only call local functions to avoid cross-module alias conflicts.
+    let matching_fns: Vec<_> = if is_type_alias {
+        ctx.functions
+            .iter()
+            .filter(|f| f.return_type.as_deref() == Some(type_hint))
+            .collect()
+    } else {
+        ctx.callable_functions()
+            .filter(|f| f.return_type.as_deref() == Some(type_hint))
+            .collect()
+    };
     let can_call_fn = !matching_fns.is_empty()
         && rng.gen_bool(config.function_call_probability);
 

@@ -148,3 +148,122 @@ fn test_print_example_worldfile() {
     println!("{}", wf);
     println!("========================================");
 }
+
+/// Test 1000 seeds for comprehensive coverage.
+///
+/// This test is ignored by default since it takes longer.
+/// Run with: cargo test -p datalove-worldgen test_1000_seeds -- --ignored
+#[test]
+#[ignore]
+fn test_1000_seeds_typecheck() {
+    let config = WorldGenConfig::default();
+    let mut failed_seeds = Vec::new();
+
+    for seed in 0..1000 {
+        let wf = gen_worldfile_seeded(seed, config.clone());
+        let errors = typecheck_worldfile(&wf);
+
+        if !errors.is_empty() {
+            failed_seeds.push((seed, errors));
+        }
+    }
+
+    if !failed_seeds.is_empty() {
+        eprintln!("Failed {} out of 1000 seeds:", failed_seeds.len());
+        for (seed, errors) in failed_seeds.iter().take(5) {
+            eprintln!("\nSeed {}:", seed);
+            for err in errors {
+                eprintln!("  {}", err);
+            }
+        }
+        if failed_seeds.len() > 5 {
+            eprintln!("... and {} more", failed_seeds.len() - 5);
+        }
+        panic!("{} out of 1000 seeds failed to typecheck", failed_seeds.len());
+    }
+}
+
+/// Track coverage of language constructs across many seeds.
+#[test]
+fn test_construct_coverage() {
+    let config = WorldGenConfig::default();
+    let mut coverage = ConstructCoverage::default();
+
+    // Test 100 seeds for coverage.
+    for seed in 0..100 {
+        let wf = gen_worldfile_seeded(seed, config.clone());
+        coverage.count(&wf);
+    }
+
+    // Print coverage report.
+    println!("Construct coverage across 100 seeds:");
+    println!("  modules:        {}", coverage.modules);
+    println!("  functions:      {}", coverage.functions);
+    println!("  let statements: {}", coverage.lets);
+    println!("  var statements: {}", coverage.vars);
+    println!("  set statements: {}", coverage.sets);
+    println!("  if statements:  {}", coverage.ifs);
+    println!("  loops:          {}", coverage.loops);
+    println!("  breaks:         {}", coverage.breaks);
+    println!("  continues:      {}", coverage.continues);
+    println!("  ret statements: {}", coverage.rets);
+    println!("  type aliases:   {}", coverage.type_aliases);
+    println!("  requires:       {}", coverage.requires);
+    println!("  imports:        {}", coverage.imports);
+    println!("  function calls: {}", coverage.function_calls);
+
+    // Assert minimum coverage for key constructs.
+    assert!(coverage.modules >= 100, "Should have at least 100 modules");
+    assert!(coverage.functions >= 100, "Should have at least 100 functions");
+    assert!(coverage.lets >= 50, "Should have at least 50 let statements");
+    assert!(coverage.vars >= 20, "Should have at least 20 var statements");
+    assert!(coverage.rets >= 100, "Should have at least 100 ret statements");
+    assert!(coverage.ifs >= 10, "Should have at least 10 if statements");
+    assert!(coverage.loops >= 5, "Should have at least 5 loops");
+}
+
+#[derive(Default)]
+struct ConstructCoverage {
+    modules: usize,
+    functions: usize,
+    lets: usize,
+    vars: usize,
+    sets: usize,
+    ifs: usize,
+    loops: usize,
+    breaks: usize,
+    continues: usize,
+    rets: usize,
+    type_aliases: usize,
+    requires: usize,
+    imports: usize,
+    function_calls: usize,
+}
+
+impl ConstructCoverage {
+    fn count(&mut self, wf: &str) {
+        // Count occurrences of various constructs.
+        self.modules += wf.matches("module local/").count();
+        self.functions += wf.matches("fun ").count();
+        self.lets += wf.matches("let ").count();
+        self.vars += wf.matches("var ").count();
+        self.sets += wf.matches("set ").count();
+        self.ifs += wf.matches("if ").count();
+        self.loops += wf.matches("loop").count();
+        self.breaks += wf.matches("break").count();
+        self.continues += wf.matches("continue").count();
+        self.rets += wf.matches("ret ").count() + wf.matches("ret\n").count();
+        self.type_aliases += wf.matches("type Type").count();
+        self.requires += wf.matches("require module").count();
+        self.imports += wf.matches("import ").count();
+
+        // Count function calls (fn0, fn1, fn2 patterns).
+        for line in wf.lines() {
+            if (line.contains("fn0(") || line.contains("fn1(") || line.contains("fn2("))
+                && !line.trim().starts_with("fun ")
+            {
+                self.function_calls += 1;
+            }
+        }
+    }
+}
