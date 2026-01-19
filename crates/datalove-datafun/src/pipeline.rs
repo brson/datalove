@@ -50,7 +50,7 @@ use std::sync::Arc;
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 use datalove_datafun_ir::{IrModuleId, FuncId, IrType, IrScriptUnit};
 use datalove_datafun_compiler::lower;
-use datalove_datafun_compiler::drop_analysis;
+use datalove_datafun_compiler::ownership_analysis;
 use datalove_datafun_compiler::compile::{
     ModuleCompilationInput, ModuleCompilationOutput,
     compile_modules as compiler_compile_modules,
@@ -673,13 +673,13 @@ impl<'db> ScriptCompilationContext<'db> {
         let call_targets = tycheck_result.call_targets(self.db);
         let stmts = parsed.statements.to_vec();
 
-        let func_analyses = match drop_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts) {
+        let func_analyses = match ownership_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts) {
             Ok(analyses) => analyses,
             Err(errors) => {
                 // Format error messages for function-level drop analysis errors.
                 let error_msgs: Vec<String> = errors.into_iter()
                     .map(|(func_name, errs)| {
-                        format!("{}: {}", func_name, drop_analysis::format_analysis_errors(&errs))
+                        format!("{}: {}", func_name, ownership_analysis::format_analysis_errors(&errs))
                     })
                     .collect();
                 return ScriptLowerResult {
@@ -795,13 +795,13 @@ impl<'db> ScriptCompilationContext<'db> {
         let call_targets = tycheck_result.call_targets(self.db);
         let stmts = parsed.statements.to_vec();
 
-        let func_analyses = match drop_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts) {
+        let func_analyses = match ownership_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts) {
             Ok(analyses) => analyses,
             Err(errors) => {
                 // Format error messages for function-level drop analysis errors.
                 let error_msgs: Vec<String> = errors.into_iter()
                     .map(|(func_name, errs)| {
-                        format!("{}: {}", func_name, drop_analysis::format_analysis_errors(&errs))
+                        format!("{}: {}", func_name, ownership_analysis::format_analysis_errors(&errs))
                     })
                     .collect();
                 return ScriptUnitResult {

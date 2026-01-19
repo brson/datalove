@@ -20,7 +20,7 @@ use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
-use crate::drop_analysis::{self, FunctionDropAnalysis};
+use crate::ownership_analysis::{self, FunctionDropAnalysis};
 
 /// Result of drop analysis for a single function.
 #[salsa::tracked]
@@ -89,7 +89,7 @@ pub fn analyze_module_drops<'db>(
     let module_id = module.id(db);
     let module_path = module_id.path(db);
 
-    log_query("drop_analysis", module_path, QueryPhase::Start);
+    log_query("ownership_analysis", module_path, QueryPhase::Start);
 
     let expr_types = typecheck_result.expr_types(db);
     let call_targets = typecheck_result.call_targets(db);
@@ -102,7 +102,7 @@ pub fn analyze_module_drops<'db>(
             let func_name = func.name(db).text(db).S();
 
             // Run drop analysis.
-            let analysis = drop_analysis::analyze_function(db, *func, expr_types, call_targets);
+            let analysis = ownership_analysis::analyze_function(db, *func, expr_types, call_targets);
 
             let (opt_analysis, errors) = if analysis.errors.is_empty() {
                 (Some(analysis), Vec::new())
@@ -130,7 +130,7 @@ pub fn analyze_module_drops<'db>(
         }
     }
 
-    log_query("drop_analysis", module_path, QueryPhase::End);
+    log_query("ownership_analysis", module_path, QueryPhase::End);
 
     SingleModuleDropAnalysis::new(db, module_id, function_analyses, all_errors)
 }

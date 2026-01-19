@@ -7,7 +7,7 @@ use datalove_datafun_ast::ast;
 use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::ResolvedCallTarget;
 use datalove_datafun_ir::{IrType, IrFunction, Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId};
-use crate::drop_analysis::FunctionDropAnalysis;
+use crate::ownership_analysis::FunctionDropAnalysis;
 use super::context::LowerCtx;
 use super::stmt::lower_statement_indexed;
 use super::LowerError;
@@ -15,7 +15,7 @@ use super::LowerError;
 /// Lower a function to IR with available module functions in scope.
 ///
 /// The `func_id` parameter is the pre-assigned module-local function ID.
-/// Caller must run `drop_analysis::analyze_function` first, check for errors,
+/// Caller must run `ownership_analysis::analyze_function` first, check for errors,
 /// and pass the result here. This function asserts that `analysis` has no errors.
 pub fn lower_function_for_module<'db>(
     db: &'db dyn salsa::Database,

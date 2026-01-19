@@ -18,7 +18,7 @@ use datalove_datafun_tycheck::{
 };
 
 use crate::lower;
-use crate::tracked_drop_analysis::{SingleModuleDropAnalysis, ModuleGraphDropAnalysis};
+use crate::tracked_ownership_analysis::{SingleModuleDropAnalysis, ModuleGraphDropAnalysis};
 
 /// Function ID map for cross-module call resolution.
 ///

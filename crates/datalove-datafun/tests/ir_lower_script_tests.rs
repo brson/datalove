@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_compiler::lower::{self, ScriptLowerContext};
-use datalove_datafun_compiler::drop_analysis;
+use datalove_datafun_compiler::ownership_analysis;
 use bct::input::Source;
 use datalove_datafun_ast::ast::Statement;
 
@@ -46,7 +46,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));
 
                 // Run drop analysis on all functions first.
-                let func_analyses = match drop_analysis::analyze_script_functions(&db, expr_types, call_targets, &stmts) {
+                let func_analyses = match ownership_analysis::analyze_script_functions(&db, expr_types, call_targets, &stmts) {
                     Ok(analyses) => analyses,
                     Err(errors) => {
                         for (func_name, errs) in errors {

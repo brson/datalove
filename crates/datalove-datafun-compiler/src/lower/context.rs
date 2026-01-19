@@ -13,7 +13,7 @@ use datalove_datafun_ir::{
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
 };
 use crate::ir_ext::IrTypeExt;
-use crate::drop_analysis::{BindingId, DropSchedule, BindingInfo};
+use crate::ownership_analysis::{BindingId, DropSchedule, BindingInfo};
 use super::LowerError;
 
 /// Context for a single loop during lowering.

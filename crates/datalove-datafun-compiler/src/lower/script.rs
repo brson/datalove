@@ -10,7 +10,7 @@ use datalove_datafun_ir::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
     ExportBinding, BlockId, IrModuleId, FuncId,
 };
-use crate::drop_analysis::{ScriptFunctionAnalyses, analyze_script_statements, format_analysis_errors};
+use crate::ownership_analysis::{ScriptFunctionAnalyses, analyze_script_statements, format_analysis_errors};
 use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;

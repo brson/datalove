@@ -12,11 +12,11 @@ pub mod lower;
 // Salsa-tracked IR lowering functions.
 pub mod tracked_lower;
 
-// Drop analysis for IR lowering.
-pub mod drop_analysis;
+// Ownership and liveness analysis.
+pub mod ownership_analysis;
 
-// Salsa-tracked drop analysis functions.
-pub mod tracked_drop_analysis;
+// Salsa-tracked ownership analysis functions.
+pub mod tracked_ownership_analysis;
 
 // Module graph abstraction (core compiler uses this).
 pub mod module_graph;
