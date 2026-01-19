@@ -3,12 +3,16 @@
 //! Converts `IrType` to runtime `TyDesc` pointers. TyDescs provide size, alignment,
 //! and type-specific info (field offsets, element types) for runtime operations.
 
+use std::collections::HashMap;
+
 use datalove_rtdt as rtdt;
 use datalove_rtdt::{TyDesc, TyDescRef};
 use datalove_datafun_ir::IrType;
 
 /// Table for converting `IrType` to runtime `TyDesc` pointers.
 pub struct IrTyDescTable {
+    /// Cache mapping IrType to existing TyDesc pointer.
+    cache: HashMap<IrType, *const TyDesc>,
     /// Storage for TyDesc allocations.
     tydescs: Vec<Box<TyDesc>>,
     /// Storage for tuple field arrays.
@@ -26,6 +30,7 @@ pub struct IrTyDescTable {
 impl IrTyDescTable {
     pub fn new() -> Self {
         Self {
+            cache: HashMap::new(),
             tydescs: Vec::new(),
             tuple_fields: Vec::new(),
             struct_fields: Vec::new(),
@@ -37,9 +42,14 @@ impl IrTyDescTable {
 
     /// Get or create a TyDesc for the given IrType.
     pub fn get_or_create(&mut self, ty: &IrType) -> *const TyDesc {
+        if let Some(&ptr) = self.cache.get(ty) {
+            return ptr;
+        }
         let tydesc = self.create_tydesc(ty);
         self.tydescs.push(tydesc);
-        &**self.tydescs.last().unwrap() as *const TyDesc
+        let ptr = &**self.tydescs.last().unwrap() as *const TyDesc;
+        self.cache.insert(ty.clone(), ptr);
+        ptr
     }
 
     fn create_tydesc(&mut self, ty: &IrType) -> Box<TyDesc> {
@@ -514,5 +524,80 @@ impl IrTyDescTable {
 impl Default for IrTyDescTable {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_primitive_caching() {
+        let mut table = IrTyDescTable::new();
+
+        let td1 = table.get_or_create(&IrType::I64);
+        let td2 = table.get_or_create(&IrType::I64);
+
+        assert_eq!(td1, td2, "Same type should return same pointer");
+        assert_eq!(table.tydescs.len(), 1, "Should only allocate once");
+    }
+
+    #[test]
+    fn test_different_types_not_shared() {
+        let mut table = IrTyDescTable::new();
+
+        let td1 = table.get_or_create(&IrType::I64);
+        let td2 = table.get_or_create(&IrType::I32);
+
+        assert_ne!(td1, td2, "Different types should return different pointers");
+        assert_eq!(table.tydescs.len(), 2);
+    }
+
+    #[test]
+    fn test_tuple_caching() {
+        let mut table = IrTyDescTable::new();
+
+        let tuple_ty = IrType::Tuple(vec![IrType::I64, IrType::Bool]);
+        let td1 = table.get_or_create(&tuple_ty);
+        let td2 = table.get_or_create(&tuple_ty);
+
+        assert_eq!(td1, td2, "Same tuple type should return same pointer");
+    }
+
+    #[test]
+    fn test_result_caching() {
+        let mut table = IrTyDescTable::new();
+
+        let result_ty = IrType::Result(Box::new(IrType::U32));
+        let td1 = table.get_or_create(&result_ty);
+        let td2 = table.get_or_create(&result_ty);
+
+        assert_eq!(td1, td2, "Same Result type should return same pointer");
+    }
+
+    #[test]
+    fn test_repeated_calls_no_growth() {
+        let mut table = IrTyDescTable::new();
+
+        let types = [IrType::I64, IrType::Bool, IrType::U32];
+
+        // First pass: create all types.
+        for ty in &types {
+            table.get_or_create(ty);
+        }
+        let count_after_first = table.tydescs.len();
+
+        // Many repeated calls should not grow the table.
+        for _ in 0..1000 {
+            for ty in &types {
+                table.get_or_create(ty);
+            }
+        }
+
+        assert_eq!(
+            table.tydescs.len(),
+            count_after_first,
+            "Repeated calls should not allocate new tydescs"
+        );
     }
 }
