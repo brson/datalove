@@ -97,7 +97,7 @@ pub struct SingleModuleLoweringResult<'db> {
     #[returns(ref)]
     pub functions: Vec<IrFunction>,
 
-    /// Lowering errors (IR generation only, not drop analysis).
+    /// Lowering errors (IR generation only, not ownership analysis).
     #[returns(ref)]
     pub errors: Vec<String>,
 
@@ -151,8 +151,8 @@ impl<'db> ModuleGraphLoweringResult<'db> {
 /// This is a tracked function enabling per-module memoization. The `module`
 /// parameter serves as the primary cache key.
 ///
-/// Requires pre-computed drop analysis results. Functions with drop analysis
-/// errors are skipped (but those errors are already captured in the drop
+/// Requires pre-computed ownership analysis results. Functions with ownership analysis
+/// errors are skipped (but those errors are already captured in the ownership
 /// analysis result, not here).
 #[salsa::tracked]
 pub fn lower_module<'db>(
@@ -161,7 +161,7 @@ pub fn lower_module<'db>(
     ir_module_id: IrModuleId,
     parsed: ParsedStatements<'db>,
     typecheck_result: SingleModuleTypecheckResult<'db>,
-    drop_analysis: SingleModuleAnalysis<'db>,
+    ownership_analysis: SingleModuleAnalysis<'db>,
     func_id_map: FuncIdMap<'db>,
 ) -> SingleModuleLoweringResult<'db> {
     let module_id = module.id(db);
@@ -175,8 +175,8 @@ pub fn lower_module<'db>(
     // Convert FuncIdMap to HashMap for efficient lookup during lowering.
     let func_id_hashmap = func_id_map.to_hashmap(db);
 
-    // Get pre-computed drop analysis results.
-    let function_analyses = drop_analysis.function_analyses(db);
+    // Get pre-computed ownership analysis results.
+    let function_analyses = ownership_analysis.function_analyses(db);
 
     // Build map of function name -> resolved param types from exports.
     // This is needed to resolve type aliases in function parameters.
@@ -204,7 +204,7 @@ pub fn lower_module<'db>(
         }
     }
 
-    // Process each function using pre-computed drop analysis.
+    // Process each function using pre-computed ownership analysis.
     let mut func_idx = 0;
     for statement in &parsed.statements {
         if let Statement::Fun(func) = statement {
@@ -215,13 +215,13 @@ pub fn lower_module<'db>(
             // Get resolved param types for this function.
             let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
 
-            // Get pre-computed drop analysis for this function.
+            // Get pre-computed ownership analysis for this function.
             let Some(single_analysis) = function_analyses.get(&func_name) else {
-                errors.push(format!("Lowering error in {}: missing drop analysis", func_name));
+                errors.push(format!("Lowering error in {}: missing ownership analysis", func_name));
                 continue;
             };
 
-            // Skip functions that had drop analysis errors.
+            // Skip functions that had ownership analysis errors.
             let Some(analysis) = single_analysis.analysis(db).clone() else {
                 // Drop analysis errors are already captured separately.
                 continue;
@@ -265,13 +265,13 @@ pub fn lower_module<'db>(
 /// Processes modules in dependency order, calling the per-module `lower_module`
 /// function for each. Each per-module result is cached independently.
 ///
-/// Requires pre-computed drop analysis results.
+/// Requires pre-computed ownership analysis results.
 #[salsa::tracked]
 pub fn lower_module_graph<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    drop_analysis: ModuleGraphAnalysis<'db>,
+    ownership_analysis: ModuleGraphAnalysis<'db>,
 ) -> ModuleGraphLoweringResult<'db> {
     let graph = parsed_graph.graph(db);
 
@@ -287,8 +287,8 @@ pub fn lower_module_graph<'db>(
     let typecheck_errors = typecheck_result.module_errors(db);
     let typecheck_module_results = typecheck_result.module_results(db);
 
-    // Get per-module drop analysis results.
-    let drop_analysis_results = drop_analysis.module_results(db);
+    // Get per-module ownership analysis results.
+    let ownership_analysis_results = ownership_analysis.module_results(db);
 
     // Lower each module.
     let mut module_results = BTreeMap::new();
@@ -308,9 +308,9 @@ pub fn lower_module_graph<'db>(
         let single_typecheck = *typecheck_module_results.get(module_id)
             .expect("module should have typecheck result");
 
-        // Get the tracked per-module drop analysis result.
-        let single_drop_analysis = *drop_analysis_results.get(module_id)
-            .expect("module should have drop analysis result");
+        // Get the tracked per-module ownership analysis result.
+        let single_ownership_analysis = *ownership_analysis_results.get(module_id)
+            .expect("module should have ownership analysis result");
 
         let result = lower_module(
             db,
@@ -318,7 +318,7 @@ pub fn lower_module_graph<'db>(
             ir_module_id,
             parsed.clone(),
             single_typecheck,
-            single_drop_analysis,
+            single_ownership_analysis,
             func_id_map,
         );
 
@@ -338,12 +338,12 @@ pub fn lower_module_graph<'db>(
 /// then delegates to the tracked `lower_module_graph` function which will
 /// hit the warmed cache.
 ///
-/// Requires pre-computed drop analysis results.
+/// Requires pre-computed ownership analysis results.
 pub fn lower_module_graph_parallel<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    drop_analysis: ModuleGraphAnalysis<'db>,
+    ownership_analysis: ModuleGraphAnalysis<'db>,
 ) -> ModuleGraphLoweringResult<'db> {
     use rayon::prelude::*;
 
@@ -360,7 +360,7 @@ pub fn lower_module_graph_parallel<'db>(
 
     let typecheck_errors = typecheck_result.module_errors(db_salsa);
     let typecheck_module_results = typecheck_result.module_results(db_salsa);
-    let drop_analysis_results = drop_analysis.module_results(db_salsa);
+    let ownership_analysis_results = ownership_analysis.module_results(db_salsa);
 
     // Prepare work items for parallel execution.
     let work: Vec<_> = parsed_graph.statements_only(db_salsa)
@@ -377,8 +377,8 @@ pub fn lower_module_graph_parallel<'db>(
             // Get the tracked per-module typecheck result.
             let single_typecheck = *typecheck_module_results.get(module_id)?;
 
-            // Get the tracked per-module drop analysis result.
-            let single_drop_analysis = *drop_analysis_results.get(module_id)?;
+            // Get the tracked per-module ownership analysis result.
+            let single_ownership_analysis = *ownership_analysis_results.get(module_id)?;
 
             Some((
                 db.dyn_clone(),
@@ -386,13 +386,13 @@ pub fn lower_module_graph_parallel<'db>(
                 IrModuleId(ir_module_idx as u32),
                 parsed.clone(),
                 single_typecheck,
-                single_drop_analysis,
+                single_ownership_analysis,
             ))
         })
         .collect();
 
     // Lower modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_drop_analysis)| {
+    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_ownership_analysis)| {
         let db_s = db_clone.as_salsa_db();
 
         // This populates the cache.
@@ -402,28 +402,28 @@ pub fn lower_module_graph_parallel<'db>(
             ir_module_id,
             parsed,
             single_typecheck,
-            single_drop_analysis,
+            single_ownership_analysis,
             func_id_map,
         );
     });
 
     // Delegate to tracked function which aggregates results.
     // All lower_module calls will be cache hits from the parallel phase.
-    lower_module_graph(db_salsa, parsed_graph, typecheck_result, drop_analysis)
+    lower_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis)
 }
 
 /// Lower module graph with configurable parallelism.
 ///
-/// Requires pre-computed drop analysis results.
+/// Requires pre-computed ownership analysis results.
 pub fn lower_module_graph_with_mode<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    drop_analysis: ModuleGraphAnalysis<'db>,
+    ownership_analysis: ModuleGraphAnalysis<'db>,
     mode: ParallelMode,
 ) -> ModuleGraphLoweringResult<'db> {
     match mode {
-        ParallelMode::Sequential => lower_module_graph(db.as_salsa_db(), parsed_graph, typecheck_result, drop_analysis),
-        ParallelMode::Parallel => lower_module_graph_parallel(db, parsed_graph, typecheck_result, drop_analysis),
+        ParallelMode::Sequential => lower_module_graph(db.as_salsa_db(), parsed_graph, typecheck_result, ownership_analysis),
+        ParallelMode::Parallel => lower_module_graph_parallel(db, parsed_graph, typecheck_result, ownership_analysis),
     }
 }

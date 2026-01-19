@@ -291,7 +291,7 @@ impl ModuleCompilationPipeline {
             shared,
             resolution_error: None,
             path_to_errors: output.typecheck_errors,
-            drop_analysis_errors: output.drop_analysis_errors,
+            ownership_errors: output.ownership_errors,
             lowering_errors: output.lowering_errors,
             module_ir_dumps: output.module_ir_dumps,
         }
@@ -332,7 +332,7 @@ pub struct CompiledModules<'db> {
     pub shared: Arc<SharedModuleContext<'db>>,
     pub resolution_error: Option<String>,
     pub path_to_errors: BTreeMap<String, Vec<String>>,
-    pub drop_analysis_errors: BTreeMap<String, Vec<String>>,
+    pub ownership_errors: BTreeMap<String, Vec<String>>,
     pub lowering_errors: BTreeMap<String, Vec<String>>,
     pub module_ir_dumps: BTreeMap<String, Vec<String>>,
 }
@@ -342,7 +342,7 @@ impl<'db> CompiledModules<'db> {
     pub fn is_successful(&self) -> bool {
         self.resolution_error.is_none()
             && self.path_to_errors.values().all(|errors| errors.is_empty())
-            && self.drop_analysis_errors.values().all(|errors| errors.is_empty())
+            && self.ownership_errors.values().all(|errors| errors.is_empty())
             && self.lowering_errors.values().all(|errors| errors.is_empty())
     }
 
@@ -363,7 +363,7 @@ impl<'db> CompiledModules<'db> {
             errors.extend(error_list.iter().cloned());
         }
 
-        for error_list in self.drop_analysis_errors.values() {
+        for error_list in self.ownership_errors.values() {
             errors.extend(error_list.iter().cloned());
         }
 
@@ -382,9 +382,9 @@ impl<'db> CompiledModules<'db> {
             .collect()
     }
 
-    /// Get all drop analysis errors.
-    pub fn all_drop_analysis_errors(&self) -> Vec<String> {
-        self.drop_analysis_errors.values()
+    /// Get all ownership analysis errors.
+    pub fn all_ownership_errors(&self) -> Vec<String> {
+        self.ownership_errors.values()
             .flatten()
             .cloned()
             .collect()

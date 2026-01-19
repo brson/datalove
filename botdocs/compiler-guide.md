@@ -104,7 +104,7 @@ Each phase has a tracked function that salsa memoizes:
 | `parse_module_ast` | `module` | `ParsedStatements` (no spans) |
 | `typecheck_module` | `module`, `parsed`, `requires` | `SingleModuleTypecheckResult` |
 | `analyze_module` | `module`, `parsed`, `typecheck` | `SingleModuleAnalysis` |
-| `lower_module` | `module`, `ir_idx`, `parsed`, `typecheck`, `drop_analysis`, `func_ids` | `SingleModuleLoweringResult` |
+| `lower_module` | `module`, `ir_idx`, `parsed`, `typecheck`, `ownership_analysis`, `func_ids` | `SingleModuleLoweringResult` |
 
 Graph-level functions (`*_module_graph`) aggregate per-module results.
 
@@ -217,7 +217,7 @@ Errors are tracked separately in `ModuleCompilationOutput`:
 ```rust
 pub struct ModuleCompilationOutput<'db> {
     pub typecheck_errors: BTreeMap<String, Vec<String>>,
-    pub drop_analysis_errors: BTreeMap<String, Vec<String>>,
+    pub ownership_errors: BTreeMap<String, Vec<String>>,
     pub lowering_errors: BTreeMap<String, Vec<String>>,
     // ...
 }

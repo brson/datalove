@@ -91,9 +91,9 @@ pub fn analyze_worldfile(
             // Look up lowering results for this module.
             let has_typecheck_errors = matches!(&typecheck, TypecheckResult::Error { .. });
             let ir_dumps = compiled.module_ir_dumps.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
-            let drop_errs = compiled.drop_analysis_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
+            let ownership_errs = compiled.ownership_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
             let lowering_errs = compiled.lowering_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
-            let lowering = format_lowering_result(ir_dumps, drop_errs, lowering_errs, has_typecheck_errors);
+            let lowering = format_lowering_result(ir_dumps, ownership_errs, lowering_errs, has_typecheck_errors);
 
             results.push(SectionResult {
                 section_type: "module".S(),

@@ -42,9 +42,9 @@ pub struct ModuleCompilationOutput<'db> {
     pub lowering_result: ModuleGraphLoweringResult<'db>,
     /// Typecheck errors by module path.
     pub typecheck_errors: BTreeMap<String, Vec<String>>,
-    /// Drop analysis errors by module path.
-    pub drop_analysis_errors: BTreeMap<String, Vec<String>>,
-    /// IR lowering errors by module path (distinct from drop analysis).
+    /// Ownership analysis errors by module path.
+    pub ownership_errors: BTreeMap<String, Vec<String>>,
+    /// IR lowering errors by module path (distinct from ownership analysis).
     pub lowering_errors: BTreeMap<String, Vec<String>>,
     /// IR dumps by module path (for debugging/display, no errors mixed in).
     pub module_ir_dumps: BTreeMap<String, Vec<String>>,
@@ -54,7 +54,7 @@ impl<'db> ModuleCompilationOutput<'db> {
     /// Check if compilation succeeded (no errors).
     pub fn is_successful(&self) -> bool {
         self.typecheck_errors.values().all(|e| e.is_empty())
-            && self.drop_analysis_errors.values().all(|e| e.is_empty())
+            && self.ownership_errors.values().all(|e| e.is_empty())
             && self.lowering_errors.values().all(|e| e.is_empty())
     }
 }
@@ -64,7 +64,7 @@ impl<'db> ModuleCompilationOutput<'db> {
 /// This is the main entry point for compilation. It:
 /// 1. Parses all modules
 /// 2. Typechecks all modules
-/// 3. Performs drop analysis (ownership checking)
+/// 3. Performs ownership analysis
 /// 4. Lowers to IR
 ///
 /// The result contains all compilation artifacts. Interpreter integration
@@ -120,21 +120,21 @@ fn lower_and_collect_results<'db>(
         typecheck_errors.insert(path, error_strings);
     }
 
-    // Drop analysis pass (runs before lowering).
-    let drop_analysis = analyze_module_graph_with_mode(db, parsed_graph, typecheck_result, mode);
+    // Ownership analysis pass (runs before lowering).
+    let ownership_analysis = analyze_module_graph_with_mode(db, parsed_graph, typecheck_result, mode);
 
-    // Collect drop analysis errors.
-    let mut drop_analysis_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (module_id, result) in drop_analysis.module_results(db.as_salsa_db()) {
+    // Collect ownership analysis errors.
+    let mut ownership_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (module_id, result) in ownership_analysis.module_results(db.as_salsa_db()) {
         let errors = result.errors(db.as_salsa_db());
         if !errors.is_empty() {
             let path = module_id.path(db.as_salsa_db()).clone();
-            drop_analysis_errors.insert(path, errors.clone());
+            ownership_errors.insert(path, errors.clone());
         }
     }
 
-    // Lower to IR (consumes drop analysis).
-    let lowering_result = lower_module_graph_with_mode(db, parsed_graph, typecheck_result, drop_analysis, mode);
+    // Lower to IR (consumes ownership analysis).
+    let lowering_result = lower_module_graph_with_mode(db, parsed_graph, typecheck_result, ownership_analysis, mode);
 
     // Collect lowering errors and IR dumps.
     let mut module_ir_dumps: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -143,7 +143,7 @@ fn lower_and_collect_results<'db>(
     for (module_id, result) in lowering_result.module_results(db.as_salsa_db()) {
         let module_path = module_id.path(db.as_salsa_db()).clone();
 
-        // Lowering errors (no drop analysis errors mixed in).
+        // Lowering errors (no ownership analysis errors mixed in).
         let errors = result.errors(db.as_salsa_db());
         if !errors.is_empty() {
             lowering_errors.insert(module_path.clone(), errors.clone());
@@ -164,7 +164,7 @@ fn lower_and_collect_results<'db>(
         typecheck_result,
         lowering_result,
         typecheck_errors,
-        drop_analysis_errors,
+        ownership_errors,
         lowering_errors,
         module_ir_dumps,
     }
@@ -199,10 +199,10 @@ pub enum LoweringResult {
 
 /// Format lowering result for display.
 ///
-/// Takes IR dumps and errors (both drop analysis and lowering errors).
+/// Takes IR dumps and errors (both ownership analysis and lowering errors).
 pub fn format_lowering_result(
     ir_dumps: &[String],
-    drop_analysis_errors: &[String],
+    ownership_errors: &[String],
     lowering_errors: &[String],
     has_typecheck_errors: bool,
 ) -> LoweringResult {
@@ -211,7 +211,7 @@ pub fn format_lowering_result(
     }
 
     // Combine all errors.
-    let all_errors: Vec<_> = drop_analysis_errors.iter()
+    let all_errors: Vec<_> = ownership_errors.iter()
         .chain(lowering_errors.iter())
         .cloned()
         .collect();
