@@ -486,3 +486,90 @@ fn test_salsa_type_determinism() {
         assert_eq!(wf2, wf3, "Seed {} should be deterministic", seed);
     }
 }
+
+/// Verify that modules with cross-module function calls typecheck correctly.
+#[test]
+fn test_cross_module_calls_typecheck() {
+    let config = WorldGenConfig::default();
+
+    // Find seeds that generate cross-module calls and verify they typecheck.
+    let mut found_cross_module_call = false;
+
+    for seed in 0..500 {
+        let wf = gen_worldfile_seeded(seed, config.clone());
+
+        // Check if this worldfile has a cross-module call.
+        let has_cross_call = has_cross_module_call(&wf);
+
+        if has_cross_call {
+            found_cross_module_call = true;
+
+            // Verify it typechecks.
+            let errors = typecheck_worldfile(&wf);
+            if !errors.is_empty() {
+                eprintln!("Seed {} has cross-module call but failed typecheck:", seed);
+                eprintln!("{}", wf);
+                eprintln!("\nErrors:");
+                for err in &errors {
+                    eprintln!("  {}", err);
+                }
+                panic!("Cross-module call in seed {} failed to typecheck", seed);
+            }
+        }
+    }
+
+    assert!(
+        found_cross_module_call,
+        "Should find at least one cross-module function call in 500 seeds"
+    );
+}
+
+/// Check if a worldfile contains a cross-module function call.
+fn has_cross_module_call(wf: &str) -> bool {
+    let parts: Vec<&str> = wf.split("----------").collect();
+
+    let mut i = 1;
+    while i + 1 < parts.len() {
+        let header = parts[i].trim();
+        let content = parts[i + 1].trim();
+
+        // Check if this is a module section (not script) with imports.
+        if header.starts_with("module local/gen/") && content.contains("require module") {
+            // Extract imported function names.
+            let mut imported: Vec<String> = Vec::new();
+            for line in content.lines() {
+                if line.starts_with("import ") {
+                    if let Some(name) = line.split('.').last() {
+                        imported.push(name.trim().to_string());
+                    }
+                }
+            }
+
+            // Check for calls to imported functions in function bodies.
+            let mut in_fun = false;
+            for line in content.lines() {
+                let l = line.trim();
+                if l.starts_with("fun ") {
+                    in_fun = true;
+                    continue;
+                }
+                if l == "end fun" {
+                    in_fun = false;
+                    continue;
+                }
+                if in_fun {
+                    for imp in &imported {
+                        let pattern = format!("{}(", imp);
+                        if l.contains(&pattern) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        i += 2;
+    }
+
+    false
+}
+
