@@ -62,20 +62,81 @@ anonymous tuples, structs, and enums;
 strings, lists, maps and sets.
 
 ```datalove
-todo
+// Booleans
+let available: bool = true
+
+// Fixed integers with explicit heap
+let pages: u32 = 384
+let year: i32 = 1984
+
+// Arbitrary precision bigint
+let library_id: int = 9780451524935
+
+// Floats
+let rating: f32 = 4.5
+
+// Strings
+let title: string = "Nineteen Eighty-Four"
+let author: string = "George Orwell"
+
+// Anonymous tuple - a (title, year) pair
+let published: (string, i32) = ("Brave New World", 1932)
+
+// Anonymous struct - a book record
+let book: { title: string, author: string, pages: u32 } = {
+  title = "Fahrenheit 451",
+  author = "Ray Bradbury",
+  pages = 158
+}
+
+// Anonymous enum - genre classification
+let genre: enum { Fiction, NonFiction, Reference } = enum Fiction
+
+// List of ratings
+let reviews: [f32] = [4.5, 4.0, 5.0, 3.5]
+
+// Map from ISBN to title
+let catalog: map<int, string> = map {
+  9780451524935 = "Nineteen Eighty-Four",
+  9780060850524 = "Brave New World"
+}
+
+// Set of authors in the collection
+let authors: set<string> = set { "Orwell", "Huxley", "Bradbury" }
 ```
 
-It also includes _tensors_ (multi-dimensional arrays)
-and _tables_ (dataframes / structs-of-arrays).
+
+
+
+It also includes _tables_ (dataframes / structs-of-arrays).
 
 ```datalove
-todo
+// Book catalog as a table (columnar layout)
+: {|
+  title: string,
+  author: string,
+  year: i32
+|} / {|
+  title,              author,          year
+  "1984",             "Orwell",        1949
+  "Brave New World",  "Huxley",        1932
+  "Fahrenheit 451",   "Bradbury",      1953
+|}
 ```
+
+
+
 
 It also includes optional and result types.
 
 ```datalove
-todo
+// Optional subtitle - some books have one, some don't
+let subtitle: ?string = none
+let with_sub: ?string = "A Novel"
+
+// Result type - checking out might fail
+let checkout: !string = "Checked out successfully"
+let failed: !string = error "Book not available"
 ```
 
 It includes two dynamic types:
@@ -83,7 +144,19 @@ It includes two dynamic types:
 and `error`, the payload for result types.
 
 ```datalove
-todo
+// Dynamic data - heterogeneous catalog entries
+let entry1: data = data "1984"
+let entry2: data = data 384
+let entry3: data = data true
+
+// Typed data payload
+let typed_entry: data = data : { title: string, pages: u32 } / {
+  title = "1984",
+  pages = 384
+}
+
+// Error values carry diagnostic information
+let err: error = error "Book not found in catalog"
 ```
 
 
@@ -95,7 +168,29 @@ A simple pure-functional language that feels like an imperative language, built
 on the datalit type system.
 
 ```datalove
-todo
+// Calculate total page count with checked arithmetic
+fun total_pages(a: u32, b: u32, c: u32): !u32
+  let sum = a +! b
+  ret sum +! c
+end fun
+
+// Look up a book's availability
+fun is_available(copies: u32): bool
+  if copies .> 0
+    ret true
+  else
+    ret false
+  end if
+end fun
+
+// Safe division for computing averages
+fun average_rating(total: int, count: int): ?int
+  ret total /? count
+end fun
+
+// Using the functions
+let dystopian_pages = total_pages(328, 311, 158)
+let can_checkout = is_available(3)
 ```
 
 
