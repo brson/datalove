@@ -2,8 +2,8 @@
 module local/test/base
 ----------
 
-fun double(x: u32): u32
-    ret x +! x
+fun double(x: int): int
+    ret x + x
 end fun
 
 ----------
@@ -13,7 +13,7 @@ module local/test/derived
 require module local/test/base
 import base.double
 
-fun quadruple(x: u32): u32
+fun quadruple(x: int): int
     ret double(double(x))
 end fun
 

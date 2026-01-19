@@ -4,16 +4,15 @@ DualAnalysis(
             section_type: "module",
             name: Some("local/test/structops"),
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "line 4, col 9: error[F016]: mismatched types: expected `{x: @u32, y: @u32}`, found `{x: int, y: int}`",
-                ],
+                status: "Success",
             ),
             interp_lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: "fn double_coords(p0):\nblock0:\n    v0 = copy p0\n    v1 = getfield v0.0\n    v2 = copy p0\n    v3 = getfield v2.0\n    v4, v5 = add.checked v1, v3\n    branch v5, block1, block2\nblock1:\n    v6 = const \"arithmetic overflow\"\n    v7 = error_from v6\n    v8 = err v7\n    return v8\nblock2:\n    v9 = copy p0\n    v10 = getfield v9.1\n    v11 = copy p0\n    v12 = getfield v11.1\n    v13, v14 = add.checked v10, v12\n    branch v14, block3, block4\nblock3:\n    v15 = const \"arithmetic overflow\"\n    v16 = error_from v15\n    v17 = err v16\n    return v17\nblock4:\n    v18 = pack Struct0 {v4, v13}\n    v19 = ok v18\n    return v19\n",
             ),
             aot_lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: "fn double_coords(p0):\nblock0:\n    v0 = copy p0\n    v1 = getfield v0.0\n    v2 = copy p0\n    v3 = getfield v2.0\n    v4, v5 = add.checked v1, v3\n    branch v5, block1, block2\nblock1:\n    v6 = const \"arithmetic overflow\"\n    v7 = error_from v6\n    v8 = err v7\n    return v8\nblock2:\n    v9 = copy p0\n    v10 = getfield v9.1\n    v11 = copy p0\n    v12 = getfield v11.1\n    v13, v14 = add.checked v10, v12\n    branch v14, block3, block4\nblock3:\n    v15 = const \"arithmetic overflow\"\n    v16 = error_from v15\n    v17 = err v16\n    return v17\nblock4:\n    v18 = pack Struct0 {v4, v13}\n    v19 = ok v18\n    return v19\n",
             ),
             ir_match: true,
             interp_output: "",
@@ -27,27 +26,25 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = const 10u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = call m0.f0(v2)\n    v4 = getfieldref v3.0\n    debuglog v4\n    v5 = getfieldref v3.1\n    debuglog v5\n    unit_end\nexports:\n    original = v2\n    doubled = v3\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = const 10u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = call m0.f0(v2)\n    debuglog v3\n    drop v3\n    unit_end\nexports:\n    original = v2\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = const 10u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = call m0.f0(v2)\n    v4 = getfieldref v3.0\n    debuglog v4\n    v5 = getfieldref v3.1\n    debuglog v5\n    unit_end\nexports:\n    original = v2\n    doubled = v3\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = const 10u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = call m0.f0(v2)\n    debuglog v3\n    drop v3\n    unit_end\nexports:\n    original = v2\n",
             ),
             ir_match: true,
-            interp_output: "",
-            aot_output: "",
+            interp_output: "ok @{x = @10, y = @20}\n",
+            aot_output: "ok @{x = @10, y = @20}\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
-                status: "Error",
-                message: "unsupported: module function (IrModuleId(0), FuncId(0)) not pre-compiled",
+                status: "Success",
             )),
             link: Some(LinkResult(
-                status: "Skipped",
-                reason: "AOT compile failed",
+                status: "Success",
             )),
             execution: Some(ExecutionResult(
-                status: "Skipped",
-                reason: "AOT compile failed",
+                status: "Success",
+                exit_code: 0,
             )),
         ),
     ],

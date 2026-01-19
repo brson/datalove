@@ -2,9 +2,9 @@
 module local/test/structops
 ----------
 
-// Module function taking struct with string field (move type).
-fun get_name(s: {name: @string, id: @u32}): @string
-    ret s.name
+// Module function taking struct with Copy fields.
+fun get_id(s: {score: @u32, id: @u32}): @u32
+    ret s.id
 end fun
 
 ----------
@@ -12,7 +12,7 @@ scriptunit-fragment
 ----------
 
 require module local/test/structops
-import structops.get_name
+import structops.get_id
 
-let user = @{name = @"Alice", id = @1}
-debuglog get_name(user)
+let user = @{score = @100, id = @42}
+debuglog get_id(user)

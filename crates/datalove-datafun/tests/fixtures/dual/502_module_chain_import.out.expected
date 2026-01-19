@@ -4,16 +4,15 @@ DualAnalysis(
             section_type: "module",
             name: Some("local/test/base"),
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "line 3, col 9: error[F049]: try operator `+!` return type mismatch: expected `Result`, found `u32`",
-                ],
+                status: "Success",
             ),
             interp_lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: "fn double(p0):\nblock0:\n    v0 = add p0, p0\n    drop p0\n    return v0\n",
             ),
             aot_lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: "fn double(p0):\nblock0:\n    v0 = add p0, p0\n    drop p0\n    return v0\n",
             ),
             ir_match: true,
             interp_output: "",
@@ -46,27 +45,25 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = call m1.f0(v0)\n    debuglog v1\n    unit_end\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = call m1.f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = call m1.f0(v0)\n    debuglog v1\n    unit_end\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = call m1.f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n",
             ),
             ir_match: true,
-            interp_output: "",
-            aot_output: "",
+            interp_output: "@40\n",
+            aot_output: "@40\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
-                status: "Error",
-                message: "unsupported: module function (IrModuleId(0), FuncId(0)) not pre-compiled",
+                status: "Success",
             )),
             link: Some(LinkResult(
-                status: "Skipped",
-                reason: "AOT compile failed",
+                status: "Success",
             )),
             execution: Some(ExecutionResult(
-                status: "Skipped",
-                reason: "AOT compile failed",
+                status: "Success",
+                exit_code: 0,
             )),
         ),
     ],

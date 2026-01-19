@@ -6,9 +6,8 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "line 3, col 9: error[F049]: try operator `+!` return type mismatch: expected `Result`, found `u32`",
-                    "line 7, col 9: error[F049]: try operator `-!` return type mismatch: expected `Result`, found `u32`",
-                    "line 11, col 9: error[F049]: try operator `*!` return type mismatch: expected `Result`, found `u32`",
+                    "line 3, col 9: error[F016]: mismatched types: expected `int`, found `u32`",
+                    "line 7, col 9: error[F016]: mismatched types: expected `int`, found `u32`",
                 ],
             ),
             interp_lowering: LoweringResult(
@@ -29,11 +28,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = call m0.f0(v0)\n    debuglog v1\n    v2 = const 5u32\n    v3 = call m0.f1(v2)\n    debuglog v3\n    v4 = const 5u32\n    v5 = call m0.f2(v4)\n    debuglog v5\n    unit_end\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call m0.f0(v0)\n    debuglog v1\n    drop v1\n    v2 = const 5int\n    v3 = call m0.f1(v2)\n    debuglog v3\n    drop v3\n    v4 = const 5int\n    v5 = call m0.f2(v4)\n    debuglog v5\n    drop v5\n    unit_end\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = call m0.f0(v0)\n    debuglog v1\n    v2 = const 5u32\n    v3 = call m0.f1(v2)\n    debuglog v3\n    v4 = const 5u32\n    v5 = call m0.f2(v4)\n    debuglog v5\n    unit_end\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call m0.f0(v0)\n    debuglog v1\n    drop v1\n    v2 = const 5int\n    v3 = call m0.f1(v2)\n    debuglog v3\n    drop v3\n    v4 = const 5int\n    v5 = call m0.f2(v4)\n    debuglog v5\n    drop v5\n    unit_end\n",
             ),
             ir_match: true,
             interp_output: "",

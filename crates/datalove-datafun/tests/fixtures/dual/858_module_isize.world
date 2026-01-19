@@ -2,20 +2,20 @@
 module local/test/isize_math
 ----------
 
-fun add(a: isize, b: isize): isize
-    ret a +! b
+fun add(a: isize, b: isize): !isize
+    ret ok (a +! b)
 end fun
 
-fun sub(a: isize, b: isize): isize
-    ret a -! b
+fun sub(a: isize, b: isize): !isize
+    ret ok (a -! b)
 end fun
 
-fun mul(a: isize, b: isize): isize
-    ret a *! b
+fun mul(a: isize, b: isize): !isize
+    ret ok (a *! b)
 end fun
 
-fun negate(n: isize): isize
-    ret icall neg_wrapping_isize(n)
+fun negate(n: isize): !isize
+    ret ok (-! n)
 end fun
 
 fun max_of(a: isize, b: isize): isize

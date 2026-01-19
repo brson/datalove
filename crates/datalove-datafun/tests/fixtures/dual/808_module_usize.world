@@ -2,16 +2,16 @@
 module local/test/usize_math
 ----------
 
-fun add(a: usize, b: usize): usize
-    ret a +! b
+fun add(a: usize, b: usize): !usize
+    ret ok (a +! b)
 end fun
 
-fun sub(a: usize, b: usize): usize
-    ret a -! b
+fun sub(a: usize, b: usize): !usize
+    ret ok (a -! b)
 end fun
 
-fun mul(a: usize, b: usize): usize
-    ret a *! b
+fun mul(a: usize, b: usize): !usize
+    ret ok (a *! b)
 end fun
 
 fun max_of(a: usize, b: usize): usize

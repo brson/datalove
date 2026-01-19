@@ -2,14 +2,12 @@
 module local/test/fib
 ----------
 
-// Fibonacci with option for bounds checking.
-fun fib(n: u32): ?u32
+// Fibonacci using int arithmetic.
+fun fib(n: int): int
     if n <= @1
-        ret some n
+        ret n
     end if
-    let a = fib(n -! @1)?
-    let b = fib(n -! @2)?
-    ret some (a +? b)
+    ret fib(n - @1) + fib(n - @2)
 end fun
 
 ----------
@@ -19,14 +17,7 @@ scriptunit-fragment
 require module local/test/fib
 import fib.fib
 
-fun unwrap(opt: ?u32, default: u32): u32
-    if opt |val|
-        ret val
-    end if
-    ret default
-end fun
-
-debuglog unwrap(fib(@0), @999)
-debuglog unwrap(fib(@1), @999)
-debuglog unwrap(fib(@5), @999)
-debuglog unwrap(fib(@10), @999)
+debuglog fib(@0)
+debuglog fib(@1)
+debuglog fib(@5)
+debuglog fib(@10)

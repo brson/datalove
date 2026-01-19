@@ -6,7 +6,8 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "line 6, col 24: error[F049]: try operator `-!` return type mismatch: expected `Result`, found `u32`",
+                    "line 3, col 8: error[F016]: mismatched types: expected `int`, found `u32`",
+                    "line 6, col 23: error[F016]: mismatched types: expected `int`, found `u32`",
                 ],
             ),
             interp_lowering: LoweringResult(
@@ -27,11 +28,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = call m0.f0(v0)\n    debuglog v1\n    unit_end\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call m0.f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = call m0.f0(v0)\n    debuglog v1\n    unit_end\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call m0.f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n",
             ),
             ir_match: true,
             interp_output: "",

@@ -6,9 +6,8 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "line 3, col 9: error[F049]: try operator `+!` return type mismatch: expected `Result`, found `usize`",
-                    "line 7, col 9: error[F049]: try operator `-!` return type mismatch: expected `Result`, found `usize`",
-                    "line 11, col 9: error[F049]: try operator `*!` return type mismatch: expected `Result`, found `usize`",
+                    "local/test/usize_math: CannotSynthesize",
+                    "local/test/usize_math: CannotSynthesize",
                 ],
             ),
             interp_lowering: LoweringResult(
@@ -29,11 +28,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100usize\n    v1 = const 50usize\n    v2 = call m0.f0(v0, v1)\n    debuglog v2\n    v3 = call m0.f1(v0, v1)\n    debuglog v3\n    v4 = call m0.f2(v0, v1)\n    debuglog v4\n    v5 = call m0.f3(v0, v1)\n    debuglog v5\n    v6 = call m0.f4(v0, v1)\n    debuglog v6\n    unit_end\nexports:\n    a = v0\n    b = v1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100usize\n    v1 = const 50usize\n    v2 = call m0.f0(v0, v1)\n    debuglog v2\n    drop v2\n    v3 = call m0.f1(v0, v1)\n    debuglog v3\n    drop v3\n    v4 = call m0.f2(v0, v1)\n    debuglog v4\n    drop v4\n    v5 = call m0.f3(v0, v1)\n    debuglog v5\n    v6 = call m0.f4(v0, v1)\n    debuglog v6\n    unit_end\nexports:\n    a = v0\n    b = v1\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100usize\n    v1 = const 50usize\n    v2 = call m0.f0(v0, v1)\n    debuglog v2\n    v3 = call m0.f1(v0, v1)\n    debuglog v3\n    v4 = call m0.f2(v0, v1)\n    debuglog v4\n    v5 = call m0.f3(v0, v1)\n    debuglog v5\n    v6 = call m0.f4(v0, v1)\n    debuglog v6\n    unit_end\nexports:\n    a = v0\n    b = v1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100usize\n    v1 = const 50usize\n    v2 = call m0.f0(v0, v1)\n    debuglog v2\n    drop v2\n    v3 = call m0.f1(v0, v1)\n    debuglog v3\n    drop v3\n    v4 = call m0.f2(v0, v1)\n    debuglog v4\n    drop v4\n    v5 = call m0.f3(v0, v1)\n    debuglog v5\n    v6 = call m0.f4(v0, v1)\n    debuglog v6\n    unit_end\nexports:\n    a = v0\n    b = v1\n",
             ),
             ir_match: true,
             interp_output: "",
