@@ -44,7 +44,6 @@
 //! portions of the compilation.
 
 use rmx::prelude::*;
-use serde::{Serialize, Deserialize};
 use rmx::std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
@@ -52,9 +51,12 @@ use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 use datalove_datafun_ir::{IrModuleId, FuncId, IrType, IrScriptUnit};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_compiler::drop_analysis;
-use datalove_datafun_compiler::tracked_lower::lower_module_graph_with_mode;
+use datalove_datafun_compiler::compile::{
+    ModuleCompilationInput, ModuleCompilationOutput,
+    compile_modules as compiler_compile_modules,
+};
 use datalove_datafun_tycheck::{
-    typecheck_module_graph, typecheck_module_graph_with_mode,
+    typecheck_module_graph,
     type_check_script_units, create_batch_spec,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
     UnitTypecheckResultTracked,
@@ -62,35 +64,15 @@ use datalove_datafun_tycheck::{
 };
 use datalove_datafun_compiler::module_graph::{
     ModuleGraph, ModuleGraphTypecheckResult, ModuleId,
-    ParsedModuleGraph, parse_module_graph_with_mode,
+    ParsedModuleGraph,
 };
 use datalove_datafun_interp::{CallDispatcher, ModuleFunctionRegistry, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;
 
 use crate::incremental::IncrementalModuleWorld;
 
-// ============================================================================
-// Result types
-// ============================================================================
-
-/// Typecheck result summary (serializable).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "status")]
-pub enum TypecheckResult {
-    Success,
-    ParseError { errors: Vec<String> },
-    Error { errors: Vec<String> },
-    Skipped,
-}
-
-/// Lowering result summary (serializable).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "status")]
-pub enum LoweringResult {
-    Success { ir: String },
-    Error { message: String },
-    Skipped,
-}
+// Re-export result types from compiler for backwards compatibility.
+pub use datalove_datafun_compiler::compile::{TypecheckResult, LoweringResult};
 
 // ============================================================================
 // Module compilation pipeline
@@ -263,93 +245,40 @@ impl ModuleCompilationPipeline {
         resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
         mode: ParallelMode,
     ) -> CompiledModules<'db> {
-        let parsed_graph = parse_module_graph_with_mode(db, module_graph.clone(), resolved_requires, mode);
-        let graph_typecheck = typecheck_module_graph_with_mode(db, parsed_graph, mode);
-        self.compile_from_typecheck_result(db, module_graph, parsed_graph, graph_typecheck, mode)
+        // Delegate to compiler for parsing, typechecking, and lowering.
+        let input = ModuleCompilationInput {
+            graph: module_graph,
+            resolved_requires,
+        };
+        let output = compiler_compile_modules(db, input, mode);
+
+        // Build ModuleFunctionRegistry from IR functions (interpreter-specific).
+        self.wrap_compiler_output(db, output)
     }
 
-    /// Compile from parsed and typechecked module graph.
-    fn compile_from_typecheck_result<'db>(
+    /// Wrap compiler output with interpreter-specific structures.
+    fn wrap_compiler_output<'db>(
         &self,
         db: &'db dyn DbClone,
-        module_graph: ModuleGraph,
-        parsed_graph: ParsedModuleGraph<'db>,
-        graph_typecheck: ModuleGraphTypecheckResult<'db>,
-        mode: ParallelMode,
+        output: ModuleCompilationOutput<'db>,
     ) -> CompiledModules<'db> {
-        // Collect typecheck errors with location info from pending diagnostics.
-        let module_results = graph_typecheck.module_results(db.as_salsa_db());
-        let mut path_to_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for (module_id, result) in module_results {
-            let errors = result.errors(db.as_salsa_db());
-            if errors.is_empty() {
-                continue;
-            }
-            let path = module_id.path(db.as_salsa_db()).clone();
-
-            // Format pending diagnostics with location info.
-            let pending = result.pending_diagnostics(db.as_salsa_db());
-            let span_lookup = datalove_datafun_tycheck::ModuleGraphSpanLookup::new(&parsed_graph, *module_id);
-            let formatted = datalove_datafun_tycheck::format_pending_diagnostics(db.as_salsa_db(), pending, &span_lookup);
-
-            // Use formatted diagnostics if available, otherwise fall back to raw error format.
-            let error_strings = if !formatted.is_empty() {
-                formatted
-            } else {
-                errors.iter()
-                    .map(|e| format!("{}: {:?}", path, e))
-                    .collect()
-            };
-            path_to_errors.insert(path, error_strings);
-        }
-
-        // Lower to IR using tracked lowering API.
-        let lowering_result = lower_module_graph_with_mode(db, parsed_graph, graph_typecheck, mode);
-
         // Convert FuncIdMap to HashMap.
         let func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> =
-            lowering_result.func_id_map(db.as_salsa_db()).to_hashmap(db.as_salsa_db());
+            output.lowering_result.func_id_map(db.as_salsa_db()).to_hashmap(db.as_salsa_db());
 
-        // Build module registry and collect results.
+        // Build module registry from IR functions.
         let mut module_registry = ModuleFunctionRegistry::new();
-        let mut module_lowering_results: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        let mut drop_analysis_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-
-        for (module_id, result) in lowering_result.module_results(db.as_salsa_db()) {
-            let module_path = module_id.path(db.as_salsa_db()).clone();
+        for (_module_id, result) in output.lowering_result.module_results(db.as_salsa_db()) {
             let ir_module_id = result.ir_module_id(db.as_salsa_db());
-
-            // Collect errors (includes both drop analysis and lowering errors).
-            let errors = result.errors(db.as_salsa_db());
-            if !errors.is_empty() {
-                // Separate drop analysis errors from other lowering errors.
-                for error in errors {
-                    if error.contains("Drop analysis error") {
-                        let key = format!("{}", module_path);
-                        drop_analysis_errors.entry(key).or_default().push(error.clone());
-                    }
-                }
-            }
-
-            // Add functions to module registry and collect IR dumps.
-            let mut ir_dumps = Vec::new();
             for ir_func in result.functions(db.as_salsa_db()) {
-                ir_dumps.push(format!("{}", ir_func));
                 module_registry.add_module_function(ir_module_id, ir_func.id, ir_func.clone());
             }
-
-            // Add any errors to the IR dumps for backwards compatibility.
-            for error in errors {
-                ir_dumps.push(error.clone());
-            }
-
-            module_lowering_results.insert(module_path, ir_dumps);
         }
 
         let shared = Arc::new(SharedModuleContext {
-            module_graph,
-            parsed_graph,
-            graph_typecheck,
+            module_graph: output.module_graph,
+            parsed_graph: output.parsed_graph,
+            graph_typecheck: output.typecheck_result,
             func_id_map,
             module_registry: Arc::new(module_registry),
         });
@@ -357,9 +286,9 @@ impl ModuleCompilationPipeline {
         CompiledModules {
             shared,
             resolution_error: None,
-            path_to_errors,
-            drop_analysis_errors,
-            module_lowering_results,
+            path_to_errors: output.typecheck_errors,
+            drop_analysis_errors: output.drop_analysis_errors,
+            module_lowering_results: output.module_ir_dumps,
         }
     }
 }
@@ -1175,40 +1104,8 @@ pub struct ScriptLowerResult {
     pub ir_unit: Option<IrScriptUnit>,
 }
 
-// ============================================================================
-// Helper functions
-// ============================================================================
-
-/// Check if a lowering result string represents an error.
-pub fn is_lowering_error(s: &str) -> bool {
-    s.starts_with("Error")
-        || s.starts_with("Drop analysis error")
-        || s.starts_with("Missing drop analysis")
-}
-
-/// Format lowering result from IR dumps.
-pub fn format_module_lowering_result(
-    ir_dumps: &[String],
-    has_typecheck_errors: bool,
-) -> LoweringResult {
-    if has_typecheck_errors {
-        return LoweringResult::Skipped;
-    }
-
-    let has_errors = ir_dumps.iter().any(|s| is_lowering_error(s));
-
-    if has_errors {
-        let errors: Vec<_> = ir_dumps.iter()
-            .filter(|s| is_lowering_error(s))
-            .cloned()
-            .collect();
-        LoweringResult::Error { message: errors.join("\n") }
-    } else if ir_dumps.is_empty() {
-        LoweringResult::Skipped
-    } else {
-        LoweringResult::Success { ir: ir_dumps.join("\n") }
-    }
-}
+// Re-export helper functions from compiler for backwards compatibility.
+pub use datalove_datafun_compiler::compile::{is_lowering_error, format_module_lowering_result};
 
 // ============================================================================
 // AOT compilation

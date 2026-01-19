@@ -18,6 +18,9 @@ pub mod drop_analysis;
 // Module graph abstraction (core compiler uses this).
 pub mod module_graph;
 
+// Module compilation from pre-resolved graphs.
+pub mod compile;
+
 #[salsa::db]
 #[derive(Default, Clone)]
 pub struct Database {
