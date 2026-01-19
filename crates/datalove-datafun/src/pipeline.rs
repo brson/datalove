@@ -1,12 +1,15 @@
-//! Datafun compilation pipeline.
+//! Two-stage compilation pipeline: modules first, then scripts.
 //!
-//! Two-stage compilation: modules first, then scripts.
+//! # Overview
 //!
-//! - [`ModuleCompilationPipeline`]: compiles modules through parsing, typechecking,
-//!   drop analysis, and IR lowering. Supports incremental recompilation.
+//! Compilation proceeds in two stages:
 //!
-//! - [`ScriptCompilationContext`]: incrementally compiles and executes script
-//!   fragments and expressions against compiled modules.
+//! 1. **Module compilation** ([`ModuleCompilationPipeline`]): Parses, typechecks,
+//!    analyzes drops, and lowers modules to IR. Produces [`CompiledModules`].
+//!
+//! 2. **Script execution** ([`ScriptCompilationContext`]): Incrementally compiles
+//!    and executes script fragments against the compiled modules. Multiple
+//!    independent script contexts can share the same module compilation.
 //!
 //! # Example
 //!
@@ -24,24 +27,21 @@
 //!
 //! # Incremental Compilation
 //!
-//! The pipeline supports incremental recompilation after source changes. Use
-//! `compile_fresh` for the first compilation (only needs `&db`), then
-//! `update_source` and `compile` for subsequent updates (needs `&mut db`).
+//! After initial compilation with `compile_fresh` (requires `&db`), use
+//! `update_source` and `compile` for incremental updates (requires `&mut db`).
+//! The pipeline preserves salsa identity across updates, enabling memoization.
 //!
 //! ```ignore
-//! let mut pipeline = ModuleCompilationPipeline::new();
-//! pipeline.add_module(&db, "local", "pkg", "main", source_v1);
 //! let compiled1 = pipeline.compile_fresh(&db);
 //!
-//! // Edit a module and recompile incrementally.
-//! pipeline.update_source(&mut db, "local", "pkg", "main", source_v2);
+//! pipeline.update_source(&mut db, "local", "pkg", "main", new_source);
 //! let (compiled2, db) = pipeline.compile(&mut db);
 //! ```
 //!
-//! The `&mut db` requirement for `compile` comes from salsa: updating existing
-//! tracked structs requires mutable access. The pipeline preserves module and
-//! graph identity across updates, enabling salsa to skip recomputing unchanged
-//! portions of the compilation.
+//! # Parallelism
+//!
+//! Set `DATALOVE_PARALLEL=1` to enable parallel compilation, or use the
+//! `*_with_mode` methods for explicit control.
 
 use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, HashMap};
@@ -78,10 +78,10 @@ pub use datalove_datafun_compiler::compile::{TypecheckResult, LoweringResult};
 // Module compilation pipeline
 // ============================================================================
 
-/// Compiles modules through parsing, typechecking, drop analysis, and IR lowering.
+/// Module compilation pipeline with incremental recompilation support.
 ///
-/// Supports both one-shot compilation (`compile_fresh`) and incremental
-/// recompilation (`compile`) after source updates.
+/// Compiles modules through parsing, typechecking, drop analysis, and IR lowering.
+/// Use `compile_fresh` for initial compilation, then `compile` for incremental updates.
 pub struct ModuleCompilationPipeline {
     world: IncrementalModuleWorld,
 }
@@ -306,10 +306,10 @@ impl Default for ModuleCompilationPipeline {
 // Shared module context
 // ============================================================================
 
-/// Shared context for module functions, shareable across multiple script contexts.
+/// Compiled module data shared across script contexts.
 ///
-/// This contains all the compiled module data that can be shared across multiple
-/// concurrent script execution contexts.
+/// Contains the module graph, typecheck results, and function registry.
+/// Thread-safe via `Arc` wrapping.
 pub struct SharedModuleContext<'db> {
     pub module_graph: ModuleGraph,
     pub parsed_graph: ParsedModuleGraph<'db>,
@@ -322,7 +322,10 @@ pub struct SharedModuleContext<'db> {
 // Compiled modules
 // ============================================================================
 
-/// Result of compiling modules, ready for script execution.
+/// Result of module compilation.
+///
+/// Call `script_context()` to create script execution contexts. Multiple
+/// independent contexts can share the same compilation.
 pub struct CompiledModules<'db> {
     pub shared: Arc<SharedModuleContext<'db>>,
     pub resolution_error: Option<String>,
@@ -401,13 +404,11 @@ impl<'db> CompiledModules<'db> {
         typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(db, self.shared.parsed_graph)
     }
 
-    /// Create a context for compiling and executing scripts against these modules.
+    /// Create a script execution context.
     ///
-    /// Can be called multiple times to create independent script contexts that
-    /// share the same module compilation.
-    ///
-    /// The optional `call_dispatcher` enables JIT compilation or other call
-    /// dispatch mechanisms.
+    /// Can be called multiple times to create independent contexts sharing the
+    /// same module compilation. The optional `call_dispatcher` enables JIT or
+    /// custom call dispatch.
     pub fn script_context(
         &self,
         db: &'db dyn salsa::Database,
@@ -461,10 +462,11 @@ impl<'db> CompiledModules<'db> {
 // Script compilation context
 // ============================================================================
 
-/// Incrementally compiles and executes script fragments and expressions.
+/// Script execution context with persistent bindings.
 ///
-/// Maintains state across evaluations: bindings from `let` and `var` statements
-/// persist and can be used in subsequent expressions.
+/// Compiles and executes script fragments (`eval_fragment`) and expressions
+/// (`eval_expr`). Bindings from `let` and `var` statements persist across
+/// evaluations.
 pub struct ScriptCompilationContext<'db> {
     db: &'db dyn salsa::Database,
     pub script_ctx: lower::ScriptLowerContext,
@@ -1090,20 +1092,21 @@ impl<'db> ScriptCompilationContext<'db> {
 // Script result types
 // ============================================================================
 
-/// Result of compiling and executing a script unit.
+/// Result of `eval_fragment` or `eval_expr`.
 pub struct ScriptUnitResult {
     pub typecheck: TypecheckResult,
     pub lowering: LoweringResult,
-    /// Type of the result expression (if any).
+    /// Type of the result expression, if any.
     pub ty: Option<String>,
-    /// Pretty-printed output value or error message.
+    /// Pretty-printed output value or execution error.
     pub output: String,
 }
 
-/// Result of lowering a script unit to IR (without execution).
+/// Result of `lower_fragment` or `lower_expr` (IR without execution).
 pub struct ScriptLowerResult {
     pub typecheck: TypecheckResult,
     pub lowering: LoweringResult,
+    /// The lowered IR unit, if successful.
     pub ir_unit: Option<IrScriptUnit>,
 }
 
@@ -1114,7 +1117,7 @@ pub use datalove_datafun_compiler::compile::{is_lowering_error, format_module_lo
 // AOT compilation
 // ============================================================================
 
-/// Ahead-of-time compilation to native executables.
+/// AOT compilation: compile scripts to native executables via Cranelift.
 pub mod aot {
     use rmx::prelude::*;
     use std::path::{Path, PathBuf};
