@@ -33,9 +33,9 @@
 ## In progress
 
 - jit
-- type aliases
 - human docs
-- pipeline cleanup
+- script/pipeline compilation unification
+
 
 
 
