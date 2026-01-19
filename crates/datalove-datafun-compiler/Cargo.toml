@@ -10,7 +10,6 @@ slow_tests = []
 index-64 = [
     "datalove-rtdt/index-64",
     "datalove-datafun-ir/index-64",
-    "datalove-datafun-interp/index-64",
     "datalove-datafun-tycheck/index-64",
     "datalove-datafun-parser/index-64",
     "datalove-datafun-intrinsics/index-64",
@@ -30,7 +29,6 @@ datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
 datalove-datafun-ir.path = "../datalove-datafun-ir"
 datalove-datafun-parser.path = "../datalove-datafun-parser"
 datalove-datafun-tycheck.path = "../datalove-datafun-tycheck"
-datalove-datafun-interp.path = "../datalove-datafun-interp"
 datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"
 datalove-rt.path = "../datalove-rt"
