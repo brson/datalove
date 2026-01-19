@@ -1,0 +1,222 @@
+//! Statement generation.
+
+use rand::Rng;
+use crate::config::WorldGenConfig;
+use crate::context::{GenContext, Variable};
+use crate::gen_type::gen_type_hint_with_heap;
+use crate::gen_expr::{gen_expr, gen_bool_expr};
+
+/// Generate a let statement.
+pub fn gen_let<R: Rng>(
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext,
+    var_counter: &mut usize,
+    indent: &str,
+) -> String {
+    let name = format!("v{}", *var_counter);
+    *var_counter += 1;
+
+    let type_hint = gen_type_hint_with_heap(rng, config, ctx, 0);
+    let value = gen_expr(rng, &type_hint, config, ctx);
+
+    ctx.variables.push(Variable {
+        name: name.clone(),
+        type_hint: type_hint.clone(),
+        is_mutable: false,
+    });
+
+    format!("{}let {}: {} = {}", indent, name, type_hint, value)
+}
+
+/// Generate a var statement.
+pub fn gen_var<R: Rng>(
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext,
+    var_counter: &mut usize,
+    indent: &str,
+) -> String {
+    let name = format!("v{}", *var_counter);
+    *var_counter += 1;
+
+    let type_hint = gen_type_hint_with_heap(rng, config, ctx, 0);
+    let value = gen_expr(rng, &type_hint, config, ctx);
+
+    ctx.variables.push(Variable {
+        name: name.clone(),
+        type_hint: type_hint.clone(),
+        is_mutable: true,
+    });
+
+    format!("{}var {}: {} = {}", indent, name, type_hint, value)
+}
+
+/// Generate a set statement.
+pub fn gen_set<R: Rng>(
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &GenContext,
+    indent: &str,
+) -> Option<String> {
+    let mutable_vars = ctx.mutable_variables();
+    if mutable_vars.is_empty() {
+        return None;
+    }
+
+    let var = mutable_vars[rng.gen_range(0..mutable_vars.len())];
+    let value = gen_expr(rng, &var.type_hint, config, ctx);
+
+    Some(format!("{}set {} = {}", indent, var.name, value))
+}
+
+/// Generate a return statement.
+pub fn gen_ret<R: Rng>(
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &GenContext,
+    indent: &str,
+) -> String {
+    match &ctx.return_type {
+        Some(return_type) => {
+            let value = gen_expr(rng, return_type, config, ctx);
+            format!("{}ret {}", indent, value)
+        }
+        None => format!("{}ret", indent),
+    }
+}
+
+/// Generate an if statement.
+pub fn gen_if<R: Rng>(
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext,
+    var_counter: &mut usize,
+    indent: &str,
+) -> String {
+    let condition = gen_bool_expr(rng, config, ctx);
+    let mut result = format!("{}if {}\n", indent, condition);
+
+    // Generate then-body.
+    let inner_indent = format!("{}  ", indent);
+    ctx.control_flow_depth += 1;
+
+    let then_stmt_count = rng.gen_range(1..=2);
+    for _ in 0..then_stmt_count {
+        let stmt = gen_simple_statement(rng, config, ctx, var_counter, &inner_indent);
+        result.push_str(&stmt);
+        result.push('\n');
+    }
+
+    // Maybe generate else-body.
+    if rng.gen_bool(0.5) {
+        result.push_str(&format!("{}else\n", indent));
+        let else_stmt_count = rng.gen_range(1..=2);
+        for _ in 0..else_stmt_count {
+            let stmt = gen_simple_statement(rng, config, ctx, var_counter, &inner_indent);
+            result.push_str(&stmt);
+            result.push('\n');
+        }
+    }
+
+    ctx.control_flow_depth -= 1;
+    result.push_str(&format!("{}end if", indent));
+    result
+}
+
+/// Generate a loop statement.
+pub fn gen_loop<R: Rng>(
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext,
+    var_counter: &mut usize,
+    indent: &str,
+) -> String {
+    // Use while-condition loops to ensure termination.
+    let condition = gen_bool_expr(rng, config, ctx);
+    let mut result = format!("{}loop while {}\n", indent, condition);
+
+    let inner_indent = format!("{}  ", indent);
+    ctx.control_flow_depth += 1;
+    ctx.loop_depth += 1;
+
+    let body_stmt_count = rng.gen_range(1..=3);
+    for i in 0..body_stmt_count {
+        // Last statement might be a break.
+        if i == body_stmt_count - 1 && rng.gen_bool(0.5) {
+            result.push_str(&format!("{}break\n", inner_indent));
+        } else {
+            let stmt = gen_loop_body_statement(rng, config, ctx, var_counter, &inner_indent);
+            result.push_str(&stmt);
+            result.push('\n');
+        }
+    }
+
+    ctx.loop_depth -= 1;
+    ctx.control_flow_depth -= 1;
+    result.push_str(&format!("{}end loop", indent));
+    result
+}
+
+/// Generate a simple statement (let, var, set).
+fn gen_simple_statement<R: Rng>(
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext,
+    var_counter: &mut usize,
+    indent: &str,
+) -> String {
+    let choice = rng.gen_range(0..10);
+    match choice {
+        0..=3 => gen_let(rng, config, ctx, var_counter, indent),
+        4..=6 => gen_var(rng, config, ctx, var_counter, indent),
+        7..=9 => gen_set(rng, config, ctx, indent)
+            .unwrap_or_else(|| gen_let(rng, config, ctx, var_counter, indent)),
+        _ => gen_let(rng, config, ctx, var_counter, indent),
+    }
+}
+
+/// Generate a statement suitable for loop body (may include break/continue).
+fn gen_loop_body_statement<R: Rng>(
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext,
+    var_counter: &mut usize,
+    indent: &str,
+) -> String {
+    let choice = rng.gen_range(0..15);
+    match choice {
+        0..=4 => gen_let(rng, config, ctx, var_counter, indent),
+        5..=8 => gen_var(rng, config, ctx, var_counter, indent),
+        9..=11 => gen_set(rng, config, ctx, indent)
+            .unwrap_or_else(|| gen_let(rng, config, ctx, var_counter, indent)),
+        12 => format!("{}break", indent),
+        13 => format!("{}continue", indent),
+        14 if !ctx.at_max_depth(config) => gen_if(rng, config, ctx, var_counter, indent),
+        _ => gen_let(rng, config, ctx, var_counter, indent),
+    }
+}
+
+/// Generate a function body statement.
+pub fn gen_body_statement<R: Rng>(
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext,
+    var_counter: &mut usize,
+    indent: &str,
+) -> String {
+    // Check probabilities for control flow.
+    let can_if = !ctx.at_max_depth(config) && rng.gen_bool(config.if_probability);
+    let can_loop = !ctx.at_max_depth(config) && rng.gen_bool(config.loop_probability);
+
+    let choice = rng.gen_range(0..10);
+    match choice {
+        0..=3 => gen_let(rng, config, ctx, var_counter, indent),
+        4..=5 => gen_var(rng, config, ctx, var_counter, indent),
+        6..=7 => gen_set(rng, config, ctx, indent)
+            .unwrap_or_else(|| gen_let(rng, config, ctx, var_counter, indent)),
+        8 if can_if => gen_if(rng, config, ctx, var_counter, indent),
+        9 if can_loop => gen_loop(rng, config, ctx, var_counter, indent),
+        _ => gen_let(rng, config, ctx, var_counter, indent),
+    }
+}

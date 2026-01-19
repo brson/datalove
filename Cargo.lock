@@ -1367,6 +1367,21 @@ name = "datalove-rtdt"
 version = "0.1.0"
 
 [[package]]
+name = "datalove-worldgen"
+version = "0.1.0"
+dependencies = [
+ "bcts",
+ "datalove-datafun",
+ "datalove-datafun-ast",
+ "datalove-datafun-pkg",
+ "datalove-datafun-tycheck",
+ "datalove-datalit",
+ "rand 0.8.5",
+ "rustmax",
+ "salsa",
+]
+
+[[package]]
 name = "derive_more"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

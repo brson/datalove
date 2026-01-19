@@ -1,0 +1,19 @@
+[package]
+name = "datalove-worldgen"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+rmx.workspace = true
+bct.workspace = true
+salsa.workspace = true
+rand = "0.8"
+datalove-datalit.path = "../datalove-datalit"
+datalove-datafun-ast.path = "../datalove-datafun-ast"
+
+[dev-dependencies]
+datalove-datafun.path = "../datalove-datafun"
+datalove-datafun-pkg.path = "../datalove-datafun-pkg"
+datalove-datafun-tycheck.path = "../datalove-datafun-tycheck"
