@@ -22,3 +22,24 @@
 
 
 
+## Type System Restrictions
+
+- Linear types.
+- No interior mutability.
+- Pure functions / no side effects.
+- Almost-total functions.
+  Infinite loops are possible;
+  we may be able to prove termination in some cases.
+- Whole program compilation.
+- In / out argument modes.
+  Could enable bidirectionality ala Mercury?
+
+
+## Capabilities Potentially Enabled by Restrictions
+
+- Termination proofs.
+- Compile-time evaluation.
+- Bidirectionality.
+- Globally-unioned type-variable instantiations
+  and closure instantiations.
+- Direct SSA lowering.

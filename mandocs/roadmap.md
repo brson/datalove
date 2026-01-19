@@ -91,3 +91,7 @@
 ## Far future
 
 - named types
+- comptime
+- first-class type variables
+- termination proofs
+- autodiff
