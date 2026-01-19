@@ -32,6 +32,7 @@
 
 ## In progress
 
+- worldfile generator
 - jit
 - human docs
 - script/pipeline compilation unification
@@ -41,7 +42,6 @@
 
 ## On deck
 
-- worldfile generator
 - updates feed
 - roadmap status page
 - clean up benchmarks
