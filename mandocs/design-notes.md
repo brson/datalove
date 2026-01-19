@@ -152,15 +152,28 @@ TODO: How are generics translated?
 ### Type aliases
 
 Datafun has a structural type system.
-We can asign names with `typealias`.
+We can asign names with `type alias`.
 
 ```datalove
 // `Contact` is an alias for a struct.
-typealias Contact: {
+type alias Contact: {
   name: string,
   age: int,
 }
 ```
 
+As always, `:` precedes a type definition.
+After this `Contact` is an alias for the same structural type -
+it is not a new type.
 
+Type aliases can be imported:
 
+```datalove
+require local/test/foo
+
+import foo.Contact
+
+fun get_age(ref contact: Contact): int
+  ret contact.age
+end fun
+```
