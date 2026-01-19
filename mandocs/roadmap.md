@@ -41,6 +41,8 @@
 
 ## On deck
 
+- updates feed
+- roadmap status page
 - clean up benchmarks
 - datalit syntax cleanup
   - map set type syntax
@@ -68,7 +70,6 @@
 - testable docs
 - multiple scripts
 - analysis caching
-- updates feed
 - type declarations
 - simple multithreading
 
