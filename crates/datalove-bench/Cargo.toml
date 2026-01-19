@@ -1,0 +1,17 @@
+[package]
+name = "datalove-bench"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+publish = false
+
+[dev-dependencies]
+divan = "0.1"
+datalove-datafun-compiler = { path = "../datalove-datafun-compiler" }
+datalove-datafun-tycheck = { path = "../datalove-datafun-tycheck" }
+bct.workspace = true
+
+[[bench]]
+name = "parallel"
+harness = false

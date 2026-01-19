@@ -34,26 +34,13 @@ test-time-all:
         RUST_TEST_TIME_DOCTEST=1000,10000 \
         cargo +nightly test --all -- -Zunstable-options --report-time
 
-# Benchmark parallel vs sequential module parsing.
-bench-parse:
-    cargo test -p datalove-datafun-compiler --lib --release bench_parallel_parsing -- --nocapture --ignored
+# Run all benchmarks.
+bench:
+    cargo bench -p datalove-bench
 
-# Benchmark parallel vs sequential module parsing (debug mode).
-bench-parse-debug:
-    cargo test -p datalove-datafun-compiler --lib bench_parallel_parsing -- --nocapture --ignored
-
-# Benchmark parallel vs sequential typechecking.
-bench-typecheck:
-    cargo test -p datalove-datafun-compiler --lib --release bench_parallel_typechecking -- --nocapture --ignored
-
-# Benchmark parallel vs sequential typechecking (debug mode).
-bench-typecheck-debug:
-    cargo test -p datalove-datafun-compiler --lib bench_parallel_typechecking -- --nocapture --ignored
-
-# Run all parallelization benchmarks.
-bench-parallel:
-    just bench-parse
-    just bench-typecheck
+# Run benchmarks matching filter.
+bench-filter FILTER:
+    cargo bench -p datalove-bench -- {{FILTER}}
 
 test-sanitizers-all:
     just test-sanitizers-stable
