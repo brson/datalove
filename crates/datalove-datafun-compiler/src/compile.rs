@@ -17,7 +17,7 @@ use datalove_datafun_tycheck::{
 };
 
 use crate::module_graph::parse_module_graph_with_mode;
-use crate::tracked_ownership_analysis::analyze_module_graph_with_mode;
+use crate::tracked_ownership_analysis::{analyze_module_graph_with_mode, ModuleGraphAnalysis};
 use crate::tracked_lower::{lower_module_graph_with_mode, ModuleGraphLoweringResult};
 
 /// Input for module compilation - the output of package resolution.
@@ -81,17 +81,20 @@ pub fn compile_modules<'db>(
         mode,
     );
     let typecheck_result = typecheck_module_graph_with_mode(db, parsed_graph, mode);
+    let ownership_analysis = analyze_module_graph_with_mode(db, parsed_graph, typecheck_result, mode);
+    let lowering_result = lower_module_graph_with_mode(db, parsed_graph, typecheck_result, ownership_analysis, mode);
 
-    lower_and_collect_results(db, input.graph, parsed_graph, typecheck_result, mode)
+    collect_results(db, input.graph, parsed_graph, typecheck_result, ownership_analysis, lowering_result)
 }
 
-/// Lower modules and collect all compilation results.
-fn lower_and_collect_results<'db>(
+/// Collect all compilation results into the output structure.
+fn collect_results<'db>(
     db: &'db dyn DbClone,
     module_graph: ModuleGraph,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    mode: ParallelMode,
+    ownership_analysis: ModuleGraphAnalysis<'db>,
+    lowering_result: ModuleGraphLoweringResult<'db>,
 ) -> ModuleCompilationOutput<'db> {
     // Collect typecheck errors with location info from pending diagnostics.
     let module_results = typecheck_result.module_results(db.as_salsa_db());
@@ -120,9 +123,6 @@ fn lower_and_collect_results<'db>(
         typecheck_errors.insert(path, error_strings);
     }
 
-    // Ownership analysis pass (runs before lowering).
-    let ownership_analysis = analyze_module_graph_with_mode(db, parsed_graph, typecheck_result, mode);
-
     // Collect ownership analysis errors.
     let mut ownership_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (module_id, result) in ownership_analysis.module_results(db.as_salsa_db()) {
@@ -132,9 +132,6 @@ fn lower_and_collect_results<'db>(
             ownership_errors.insert(path, errors.clone());
         }
     }
-
-    // Lower to IR (consumes ownership analysis).
-    let lowering_result = lower_module_graph_with_mode(db, parsed_graph, typecheck_result, ownership_analysis, mode);
 
     // Collect lowering errors and IR dumps.
     let mut module_ir_dumps: BTreeMap<String, Vec<String>> = BTreeMap::new();
