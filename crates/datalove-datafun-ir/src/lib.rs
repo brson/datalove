@@ -295,6 +295,10 @@ impl IrType {
             TypeHint::ParseError(_) => {
                 IrType::Error
             }
+            TypeHint::Alias(_) => {
+                // Type aliases should be resolved before IR generation.
+                IrType::Error
+            }
         }
     }
 

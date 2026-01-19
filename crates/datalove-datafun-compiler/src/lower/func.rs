@@ -17,6 +17,9 @@ use super::LowerError;
 /// The `func_id` parameter is the pre-assigned module-local function ID.
 /// Caller must run `ownership_analysis::analyze_function` first, check for errors,
 /// and pass the result here. This function asserts that `analysis` has no errors.
+///
+/// If `resolved_param_types` is provided, use those types for parameters instead of
+/// deriving from AST type hints. This is necessary when type aliases are used.
 pub fn lower_function_for_module<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
@@ -25,20 +28,25 @@ pub fn lower_function_for_module<'db>(
     func: ast::StmtFun<'db>,
     func_id: FuncId,
     analysis: FunctionAnalysis,
+    resolved_param_types: Option<&[IrType]>,
 ) -> Result<IrFunction, LowerError> {
     let mut ctx = LowerCtx::new_for_module(db, expr_types, call_targets, func_id_map);
 
-    lower_function_body(&mut ctx, func_id, func, analysis)
+    lower_function_body(&mut ctx, func_id, func, analysis, resolved_param_types)
 }
 
 /// Lower a function body given an already-allocated FuncId and pre-computed drop analysis.
 ///
 /// The caller must ensure `analysis` has no errors before calling this function.
+///
+/// If `resolved_param_types` is provided, use those types for parameters instead of
+/// deriving from AST type hints. This is necessary when type aliases are used.
 pub fn lower_function_body<'db>(
     ctx: &mut LowerCtx<'db>,
     func_id: FuncId,
     func: ast::StmtFun<'db>,
     analysis: FunctionAnalysis,
+    resolved_param_types: Option<&[IrType]>,
 ) -> Result<IrFunction, LowerError> {
     // Assert no analysis errors - caller should have checked.
     assert!(
@@ -65,9 +73,14 @@ pub fn lower_function_body<'db>(
     // Record binding operands to match analysis order.
     let mut params: Vec<ParamId> = Vec::new();
     let mut param_modes = Vec::new();
-    for p in func.params(ctx.db) {
+    let func_params = func.params(ctx.db);
+    for (i, p) in func_params.iter().enumerate() {
         let param_name = p.name.text(ctx.db).to_string();
-        let param_type = IrType::from_type_hint(ctx.db, &p.type_hint);
+        // Use resolved type if available, otherwise fall back to AST type hint.
+        let param_type = match resolved_param_types {
+            Some(types) => types[i].clone(),
+            None => IrType::from_type_hint(ctx.db, &p.type_hint),
+        };
         let mode = match p.mode {
             ast::ParamMode::In => ParamMode::In,
             ast::ParamMode::Out => ParamMode::Out,

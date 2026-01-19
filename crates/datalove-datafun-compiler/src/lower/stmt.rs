@@ -121,6 +121,10 @@ pub fn lower_statement_indexed<'db>(
             // Refs are Copy and don't need drops.
             Ok(())
         }
+        Statement::TypeAlias(_) => {
+            // Type aliases are resolved at typecheck time; nothing to lower.
+            Ok(())
+        }
         Statement::ParseError(_) => {
             Err(LowerError::ParseError)
         }

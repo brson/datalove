@@ -51,6 +51,7 @@ use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 use datalove_datafun_ir::{IrModuleId, FuncId, IrType, IrScriptUnit};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_compiler::ownership_analysis;
+use datalove_datafun_compiler::ir_ext::IrTypeExt;
 use datalove_datafun_compiler::compile::{
     ModuleCompilationInput, ModuleCompilationOutput,
     compile_modules as compiler_compile_modules,
@@ -673,7 +674,17 @@ impl<'db> ScriptCompilationContext<'db> {
         let call_targets = tycheck_result.call_targets(self.db);
         let stmts = parsed.statements.to_vec();
 
-        let func_analyses = match ownership_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts) {
+        // Build map of function name -> resolved param types for type alias support.
+        let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+        for (name, func_type) in tycheck_result.function_types(self.db) {
+            let param_types: Vec<IrType> = func_type.param_types(self.db)
+                .iter()
+                .map(|ty| IrType::from_tycheck(self.db, ty))
+                .collect();
+            func_param_types.insert(name.text(self.db).S(), param_types);
+        }
+
+        let func_analyses = match ownership_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts, Some(&func_param_types)) {
             Ok(analyses) => analyses,
             Err(errors) => {
                 // Format error messages for function-level drop analysis errors.
@@ -701,6 +712,7 @@ impl<'db> ScriptCompilationContext<'db> {
             stmts,
             func_analyses,
             for_aot,
+            Some(&func_param_types),
         ) {
             Ok(unit) => unit,
             Err(e) => {
@@ -795,7 +807,17 @@ impl<'db> ScriptCompilationContext<'db> {
         let call_targets = tycheck_result.call_targets(self.db);
         let stmts = parsed.statements.to_vec();
 
-        let func_analyses = match ownership_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts) {
+        // Build map of function name -> resolved param types for type alias support.
+        let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+        for (name, func_type) in tycheck_result.function_types(self.db) {
+            let param_types: Vec<IrType> = func_type.param_types(self.db)
+                .iter()
+                .map(|ty| IrType::from_tycheck(self.db, ty))
+                .collect();
+            func_param_types.insert(name.text(self.db).S(), param_types);
+        }
+
+        let func_analyses = match ownership_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts, Some(&func_param_types)) {
             Ok(analyses) => analyses,
             Err(errors) => {
                 // Format error messages for function-level drop analysis errors.
@@ -825,6 +847,7 @@ impl<'db> ScriptCompilationContext<'db> {
             stmts,
             func_analyses,
             false,
+            Some(&func_param_types),
         ) {
             Ok(unit) => unit,
             Err(e) => {

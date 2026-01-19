@@ -11,6 +11,7 @@ use datalove_datafun_ir::{
     ExportBinding, BlockId, IrModuleId, FuncId,
 };
 use crate::ownership_analysis::{ScriptFunctionAnalyses, analyze_script_statements, format_analysis_errors};
+use crate::ir_ext::IrTypeExt;
 use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;
@@ -39,6 +40,16 @@ pub fn lower_script_unit<'db>(
     let expr_types = tycheck_result.expr_types(db);
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
+    // Build map of function name -> resolved param types for type alias support.
+    let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+    for (name, func_type) in tycheck_result.function_types(db) {
+        let param_types: Vec<IrType> = func_type.param_types(db)
+            .iter()
+            .map(|ty| IrType::from_tycheck(db, ty))
+            .collect();
+        func_param_types.insert(name.text(db).to_string(), param_types);
+    }
+
     let result = match kind {
         ScriptUnitKind::Fragment(stmts) => {
             // Analyze script statements for drop schedule.
@@ -58,7 +69,7 @@ pub fn lower_script_unit<'db>(
             // Lower all statements with index tracking.
             for (idx, stmt) in stmts.iter().enumerate() {
                 ctx.current_stmt_idx = Some(idx);
-                lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses)?;
+                lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, Some(&func_param_types))?;
             }
             ctx.current_stmt_idx = None;
 
@@ -102,6 +113,9 @@ pub fn lower_script_unit<'db>(
 /// Caller must first call `analyze_script_functions` to get `func_analyses`.
 ///
 /// When `for_aot` is true, emits Drop instructions for script-level bindings at unit end.
+///
+/// If `func_param_types` is provided, use those resolved param types for function parameters
+/// instead of deriving from AST type hints. This is needed for type alias support.
 pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
@@ -111,6 +125,7 @@ pub fn lower_script_fragment_raw<'db>(
     stmts: Vec<Statement<'db>>,
     func_analyses: ScriptFunctionAnalyses<'db>,
     for_aot: bool,
+    func_param_types: Option<&HashMap<String, Vec<IrType>>>,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
@@ -131,7 +146,7 @@ pub fn lower_script_fragment_raw<'db>(
     // Lower all statements with index tracking.
     for (idx, stmt) in stmts.iter().enumerate() {
         ctx.current_stmt_idx = Some(idx);
-        lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses)?;
+        lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, func_param_types)?;
     }
     ctx.current_stmt_idx = None;
 
@@ -197,11 +212,15 @@ pub fn lower_script_expr<'db>(
 ///
 /// This handles function definitions by lowering them and adding to the unit's functions.
 /// The `func_analyses` map must contain pre-computed analyses for all function statements.
+///
+/// If `func_param_types` is provided, use those resolved param types for function parameters
+/// instead of deriving from AST type hints. This is needed for type alias support.
 fn lower_statement_for_script<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &Statement<'db>,
     stmt_idx: usize,
     func_analyses: &ScriptFunctionAnalyses<'db>,
+    func_param_types: Option<&HashMap<String, Vec<IrType>>>,
 ) -> Result<(), LowerError> {
     match stmt {
         Statement::Let(let_stmt) => {
@@ -367,8 +386,14 @@ fn lower_statement_for_script<'db>(
             ctx.next_param = 0;
             ctx.next_binding_id = 0;
 
-            // Lower the function body.
-            let func = lower_function_body(ctx, func_id, *fun_stmt, analysis)?;
+            // Look up resolved param types for this function.
+            let func_name_str = fun_stmt.name(ctx.db).text(ctx.db);
+            let resolved_params = func_param_types
+                .and_then(|m| m.get(func_name_str))
+                .map(|v| v.as_slice());
+
+            // Lower the function body with resolved param types for type alias support.
+            let func = lower_function_body(ctx, func_id, *fun_stmt, analysis, resolved_params)?;
 
             // Restore parent state.
             ctx.blocks = saved_blocks;
@@ -463,6 +488,10 @@ fn lower_statement_for_script<'db>(
                     ctx.emit(Instruction::Drop { operand });
                 }
             }
+            Ok(())
+        }
+        Statement::TypeAlias(_) => {
+            // Type aliases are resolved at typecheck time; nothing to lower.
             Ok(())
         }
         Statement::ParseError(_) => {

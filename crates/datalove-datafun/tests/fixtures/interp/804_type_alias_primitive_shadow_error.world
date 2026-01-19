@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+// Error: cannot shadow primitive type name.
+type int: u32

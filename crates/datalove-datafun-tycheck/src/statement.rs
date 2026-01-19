@@ -7,10 +7,53 @@ use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
 use crate::context::TypeContext;
 use crate::check::check_expr;
-use crate::types::{convert_type_hint, type_to_string, unit_type};
+use crate::types::{convert_type_hint_with_aliases, type_to_string, unit_type, is_primitive_name};
 use crate::ModuleId;
 
 pub use crate::{Type, TypeAndHeap, TypeFunction, TypeError};
+
+// ============================================================================
+// Type Alias Collection
+// ============================================================================
+
+/// Collect type aliases from statements (pass 0).
+///
+/// Type aliases must be defined before use (no forward references).
+pub fn collect_type_aliases<'db>(
+    ctx: &mut TypeContext<'db>,
+    statements: &[Statement<'db>],
+) {
+    let db = ctx.db;
+
+    for statement in statements {
+        if let Statement::TypeAlias(stmt) = statement {
+            let name = stmt.name;
+            let name_str = name.as_str(db);
+
+            // Check for shadowing primitive types.
+            if is_primitive_name(name_str) {
+                ctx.add_error(TypeError::CannotShadowPrimitive(name_str.to_string()));
+                continue;
+            }
+
+            // Check for duplicate type alias.
+            if ctx.lookup_type_alias(name).is_some() {
+                ctx.add_error(TypeError::DuplicateTypeAlias(name_str.to_string()));
+                continue;
+            }
+
+            // Resolve the type hint using already-collected aliases.
+            match convert_type_hint_with_aliases(db, stmt.type_hint, &ctx.type_aliases) {
+                Ok(ty) => {
+                    ctx.add_type_alias(name, ty);
+                }
+                Err(e) => {
+                    ctx.add_error(e);
+                }
+            }
+        }
+    }
+}
 
 // ============================================================================
 // Variable Declaration Helper
@@ -30,7 +73,7 @@ fn check_variable_decl<'db>(
 
     let var_type = match type_hint {
         Some(hint) => {
-            match convert_type_hint(db, hint) {
+            match convert_type_hint_with_aliases(db, hint, &ctx.type_aliases) {
                 Ok(expected_type) => {
                     match check_expr(ctx, value, expected_type) {
                         Ok(()) => Some(expected_type),
@@ -62,7 +105,9 @@ fn check_variable_decl<'db>(
     }
 }
 
-/// Collect function signature without checking body (first pass).
+/// Collect function signature without checking body (pass 1).
+///
+/// Uses type aliases from the context (collected in pass 0).
 pub fn collect_function_signature<'db>(
     ctx: &mut TypeContext<'db>,
     stmt: &StmtFun<'db>,
@@ -77,7 +122,7 @@ pub fn collect_function_signature<'db>(
     let mut param_types = Vec::new();
     let mut param_modes = Vec::new();
     for param in params {
-        match convert_type_hint(db, param.type_hint) {
+        match convert_type_hint_with_aliases(db, param.type_hint, &ctx.type_aliases) {
             Ok(ty) => {
                 param_types.push(ty);
                 param_modes.push(param.mode);
@@ -92,7 +137,7 @@ pub fn collect_function_signature<'db>(
     // Convert return type (default to Void if not specified).
     let ret_ty = match return_type {
         Some(type_hint) => {
-            match convert_type_hint(db, type_hint) {
+            match convert_type_hint_with_aliases(db, type_hint, &ctx.type_aliases) {
                 Ok(ty) => ty,
                 Err(e) => {
                     ctx.add_error(e);
@@ -438,6 +483,11 @@ pub fn check_statement<'db>(
                 ctx.add_error(e);
             }
             ctx.ref_context = old_ref_context;
+        }
+
+        Statement::TypeAlias(_) => {
+            // Type aliases are handled in pass 0 (collect_type_aliases).
+            // Nothing to do here.
         }
 
         Statement::ParseError(_) => {

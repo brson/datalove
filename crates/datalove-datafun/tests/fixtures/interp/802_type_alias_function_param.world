@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Type alias used in function parameter.
+type MyInt: int
+
+fun double(n: MyInt): MyInt
+    ret n + n
+end fun
+
+let result = double(@6)

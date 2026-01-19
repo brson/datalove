@@ -120,6 +120,19 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
 }
 
 // ============================================================================
+// Primitive Type Names
+// ============================================================================
+
+/// Check if a name is a primitive type name that cannot be shadowed.
+pub fn is_primitive_name(name: &str) -> bool {
+    matches!(name,
+        "bool" | "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "u64" | "i64" |
+        "usize" | "isize" | "f32" | "f64" | "int" | "string" | "data" | "error" |
+        "tuple" | "enum" | "map" | "set" | "tensor"
+    )
+}
+
+// ============================================================================
 // Type Hint Conversion
 // ============================================================================
 
@@ -279,6 +292,10 @@ fn convert_type_hint_inner<'db>(
         }
 
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
+        TypeHint::Alias(name) => {
+            // Type alias cannot be resolved without alias map.
+            return Err(TypeError::UnresolvedTypeAlias(name.as_str(db).to_string()));
+        }
         TypeHint::Table(t) => {
             let columns: Result<Vec<_>, TypeError> = t.columns.iter()
                 .map(|c| {
@@ -286,6 +303,198 @@ fn convert_type_hint_inner<'db>(
                     let c_heap = c.type_hint.heap(db);
                     let c_hint = c.type_hint.type_hint(db);
                     let c_ty = convert_type_hint_inner(db, c_heap, c_hint)?;
+                    Ok(datalit::tycheck::TypeNamedField {
+                        name,
+                        ty: to_datalit_type_and_heap(db, c_ty)?,
+                    })
+                })
+                .collect();
+            Type::Datalit(datalit::tycheck::Type::Table(
+                datalit::tycheck::TypeTable { columns: columns? }
+            ))
+        }
+    };
+
+    Ok(TypeAndHeap::new(db, heap, ty))
+}
+
+use std::collections::HashMap;
+use bct::text::InternedText;
+
+/// Convert a type hint to a type, resolving type aliases.
+pub fn convert_type_hint_with_aliases<'db>(
+    db: &'db dyn crate::Db,
+    type_hint_and_heap: TypeHintAndHeap<'db>,
+    aliases: &HashMap<InternedText<'db>, TypeAndHeap<'db>>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let heap = type_hint_and_heap.heap(db);
+    let type_hint = type_hint_and_heap.type_hint(db);
+    convert_type_hint_with_aliases_inner(db, heap, type_hint, aliases)
+}
+
+fn convert_type_hint_with_aliases_inner<'db>(
+    db: &'db dyn crate::Db,
+    heap: datalit::ast::Heap,
+    type_hint: TypeHint<'db>,
+    aliases: &HashMap<InternedText<'db>, TypeAndHeap<'db>>,
+) -> Result<TypeAndHeap<'db>, TypeError> {
+    let ty = match type_hint {
+        TypeHint::Bool => Type::Datalit(datalit::tycheck::Type::Bool),
+        TypeHint::U8 => Type::Datalit(datalit::tycheck::Type::U8),
+        TypeHint::I8 => Type::Datalit(datalit::tycheck::Type::I8),
+        TypeHint::U16 => Type::Datalit(datalit::tycheck::Type::U16),
+        TypeHint::I16 => Type::Datalit(datalit::tycheck::Type::I16),
+        TypeHint::U32 => Type::Datalit(datalit::tycheck::Type::U32),
+        TypeHint::I32 => Type::Datalit(datalit::tycheck::Type::I32),
+        TypeHint::U64 => Type::Datalit(datalit::tycheck::Type::U64),
+        TypeHint::I64 => Type::Datalit(datalit::tycheck::Type::I64),
+        TypeHint::Usize => Type::Datalit(datalit::tycheck::Type::Usize),
+        TypeHint::Isize => Type::Datalit(datalit::tycheck::Type::Isize),
+        TypeHint::F32 => Type::Datalit(datalit::tycheck::Type::F32),
+        TypeHint::F64 => Type::Datalit(datalit::tycheck::Type::F64),
+        TypeHint::Int => Type::Datalit(datalit::tycheck::Type::Int),
+        TypeHint::String => Type::Datalit(datalit::tycheck::Type::String),
+        TypeHint::Data => Type::Datalit(datalit::tycheck::Type::Data),
+        TypeHint::Error => Type::Datalit(datalit::tycheck::Type::Error),
+
+        TypeHint::AnonTuple(t) => {
+            let fields: Result<Vec<_>, TypeError> = t.fields.iter()
+                .map(|f| {
+                    let f_heap = f.heap(db);
+                    let f_hint = f.type_hint(db);
+                    let f_ty = convert_type_hint_with_aliases_inner(db, f_heap, f_hint, aliases)?;
+                    to_datalit_type_and_heap(db, f_ty)
+                })
+                .collect();
+            Type::Datalit(datalit::tycheck::Type::AnonTuple(
+                datalit::tycheck::TypeAnonTuple { fields: fields? }
+            ))
+        }
+
+        TypeHint::AnonStruct(s) => {
+            let fields: Result<Vec<_>, TypeError> = s.fields.iter()
+                .map(|f| {
+                    let name = f.name;
+                    let f_heap = f.type_hint.heap(db);
+                    let f_hint = f.type_hint.type_hint(db);
+                    let f_ty = convert_type_hint_with_aliases_inner(db, f_heap, f_hint, aliases)?;
+                    Ok(datalit::tycheck::TypeNamedField {
+                        name,
+                        ty: to_datalit_type_and_heap(db, f_ty)?,
+                    })
+                })
+                .collect();
+            Type::Datalit(datalit::tycheck::Type::AnonStruct(
+                datalit::tycheck::TypeAnonStruct { fields: fields? }
+            ))
+        }
+
+        TypeHint::AnonEnum(e) => {
+            let variants: Result<Vec<_>, TypeError> = e.variants.iter()
+                .map(|v| {
+                    let name = v.name;
+                    let payload = v.payload.map(|p| {
+                        let p_heap = p.heap(db);
+                        let p_hint = p.type_hint(db);
+                        let p_ty = convert_type_hint_with_aliases_inner(db, p_heap, p_hint, aliases)?;
+                        to_datalit_type_and_heap(db, p_ty)
+                    }).transpose()?;
+                    Ok(datalit::tycheck::TypeEnumVariant { name, payload })
+                })
+                .collect();
+            Type::Datalit(datalit::tycheck::Type::AnonEnum(
+                datalit::tycheck::TypeAnonEnum { variants: variants? }
+            ))
+        }
+
+        TypeHint::List(l) => {
+            let elem_heap = l.element_type.heap(db);
+            let elem_hint = l.element_type.type_hint(db);
+            let elem_ty = convert_type_hint_with_aliases_inner(db, elem_heap, elem_hint, aliases)?;
+            Type::Datalit(datalit::tycheck::Type::List(
+                datalit::tycheck::TypeList {
+                    element_type: to_datalit_type_and_heap(db, elem_ty)?
+                }
+            ))
+        }
+
+        TypeHint::Map(m) => {
+            let key_heap = m.key_type.heap(db);
+            let key_hint = m.key_type.type_hint(db);
+            let key_ty = convert_type_hint_with_aliases_inner(db, key_heap, key_hint, aliases)?;
+            let value_heap = m.value_type.heap(db);
+            let value_hint = m.value_type.type_hint(db);
+            let value_ty = convert_type_hint_with_aliases_inner(db, value_heap, value_hint, aliases)?;
+            Type::Datalit(datalit::tycheck::Type::Map(
+                datalit::tycheck::TypeMap {
+                    key_type: to_datalit_type_and_heap(db, key_ty)?,
+                    value_type: to_datalit_type_and_heap(db, value_ty)?,
+                }
+            ))
+        }
+
+        TypeHint::Set(s) => {
+            let elem_heap = s.element_type.heap(db);
+            let elem_hint = s.element_type.type_hint(db);
+            let elem_ty = convert_type_hint_with_aliases_inner(db, elem_heap, elem_hint, aliases)?;
+            Type::Datalit(datalit::tycheck::Type::Set(
+                datalit::tycheck::TypeSet {
+                    element_type: to_datalit_type_and_heap(db, elem_ty)?
+                }
+            ))
+        }
+
+        TypeHint::Option(o) => {
+            let inner_heap = o.inner_type.heap(db);
+            let inner_hint = o.inner_type.type_hint(db);
+            let inner_ty = convert_type_hint_with_aliases_inner(db, inner_heap, inner_hint, aliases)?;
+            Type::Datalit(datalit::tycheck::Type::Option(
+                datalit::tycheck::TypeOption {
+                    inner_type: to_datalit_type_and_heap(db, inner_ty)?
+                }
+            ))
+        }
+
+        TypeHint::Result(r) => {
+            let inner_heap = r.inner_type.heap(db);
+            let inner_hint = r.inner_type.type_hint(db);
+            let inner_ty = convert_type_hint_with_aliases_inner(db, inner_heap, inner_hint, aliases)?;
+            Type::Datalit(datalit::tycheck::Type::Result(
+                datalit::tycheck::TypeResult {
+                    inner_type: to_datalit_type_and_heap(db, inner_ty)?
+                }
+            ))
+        }
+
+        TypeHint::Tensor(t) => {
+            let elem_heap = t.element_type.heap(db);
+            let elem_hint = t.element_type.type_hint(db);
+            let elem_ty = convert_type_hint_with_aliases_inner(db, elem_heap, elem_hint, aliases)?;
+            Type::Datalit(datalit::tycheck::Type::Tensor(
+                datalit::tycheck::TypeTensor {
+                    element_type: to_datalit_type_and_heap(db, elem_ty)?,
+                    rank: t.rank,
+                }
+            ))
+        }
+
+        TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
+
+        TypeHint::Alias(name) => {
+            // Look up the alias in the map.
+            if let Some(resolved_ty) = aliases.get(&name) {
+                return Ok(*resolved_ty);
+            }
+            return Err(TypeError::UnresolvedTypeAlias(name.as_str(db).to_string()));
+        }
+
+        TypeHint::Table(t) => {
+            let columns: Result<Vec<_>, TypeError> = t.columns.iter()
+                .map(|c| {
+                    let name = c.name;
+                    let c_heap = c.type_hint.heap(db);
+                    let c_hint = c.type_hint.type_hint(db);
+                    let c_ty = convert_type_hint_with_aliases_inner(db, c_heap, c_hint, aliases)?;
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
                         ty: to_datalit_type_and_heap(db, c_ty)?,

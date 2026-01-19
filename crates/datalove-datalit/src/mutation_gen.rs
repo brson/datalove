@@ -1090,6 +1090,10 @@ fn pretty_type_hint<'db>(
             }
             out.push_str(" |}");
         }
+
+        TypeHint::Alias(name) => {
+            out.push_str(name.as_str(db));
+        }
     }
 }
 

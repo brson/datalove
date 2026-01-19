@@ -474,6 +474,10 @@ pub fn convert_type_hint<'db>(
         }
 
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
+        TypeHint::Alias(_) => {
+            // Type aliases are resolved by datafun typechecker, not datalit.
+            return Err(TypeError::CannotSynthesize);
+        }
     };
 
     Ok(TypeAndHeap::new(db, heap, ty))

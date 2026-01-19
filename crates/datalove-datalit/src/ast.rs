@@ -74,6 +74,7 @@ pub enum TypeHint<'db> {
     Table(TypeHintTable<'db>),
     Data,
     Error,
+    Alias(InternedText<'db>),
     ParseError(TypeHintParseError<'db>),
 }
 

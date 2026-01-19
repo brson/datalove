@@ -88,6 +88,9 @@ fn type_hint_to_string(db: &dyn salsa::Database, type_hint: datalove_datalit::as
         TypeHint::Table(_) => {
             return format!("{}table", heap_prefix);
         }
+        TypeHint::Alias(name) => {
+            return format!("{}{}", heap_prefix, name.as_str(db));
+        }
     };
 
     format!("{}{}", heap_prefix, base_type)
@@ -242,6 +245,24 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
         TypeError::UndefinedVariable => {
             json!({
                 "kind": "UndefinedVariable"
+            })
+        }
+        TypeError::UnresolvedTypeAlias(name) => {
+            json!({
+                "kind": "UnresolvedTypeAlias",
+                "name": name
+            })
+        }
+        TypeError::DuplicateTypeAlias(name) => {
+            json!({
+                "kind": "DuplicateTypeAlias",
+                "name": name
+            })
+        }
+        TypeError::CannotShadowPrimitive(name) => {
+            json!({
+                "kind": "CannotShadowPrimitive",
+                "name": name
             })
         }
     }

@@ -43,6 +43,8 @@ pub struct ParseResult<'db> {
     pub set_spans: Vec<SpanEntry>,
     /// Function definition spans, indexed by local_index.
     pub fun_spans: Vec<SpanEntry>,
+    /// Type alias spans, indexed by local_index.
+    pub type_alias_spans: Vec<SpanEntry>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -60,6 +62,7 @@ pub enum Statement<'db> {
     Break(StmtBreak),
     Continue(StmtContinue),
     DebugLog(StmtDebugLog<'db>),
+    TypeAlias(StmtTypeAlias<'db>),
     ParseError(StmtParseError<'db>),
 }
 
@@ -225,6 +228,15 @@ pub struct StmtContinue {
 #[derive(salsa::Update)]
 pub struct StmtDebugLog<'db> {
     pub value: ExprFun<'db>,
+}
+
+/// Type alias statement: `type Name: structural_type`.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct StmtTypeAlias<'db> {
+    pub name: InternedText<'db>,
+    pub type_hint: datalit::ast::TypeHintAndHeap<'db>,
+    pub local_index: u32,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

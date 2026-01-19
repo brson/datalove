@@ -127,6 +127,12 @@ pub enum TypeError {
     FunctionRequiresReturnValue,
     /// Undefined variable reference.
     UndefinedVariable,
+    /// Unresolved type alias (forward reference).
+    UnresolvedTypeAlias(String),
+    /// Duplicate type alias definition.
+    DuplicateTypeAlias(String),
+    /// Cannot shadow primitive type name.
+    CannotShadowPrimitive(String),
 }
 
 /// Pending diagnostic for unified diagnostic emission.
@@ -352,6 +358,13 @@ pub struct TypecheckResult<'db> {
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     #[returns(ref)]
     pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+
+    /// Function signatures defined in this script.
+    ///
+    /// Contains resolved function types needed for lowering when type aliases
+    /// are used in function parameters.
+    #[returns(ref)]
+    pub function_types: Vec<(InternedText<'db>, TypeFunction<'db>)>,
 }
 
 /// Result of typechecking a single expression.
@@ -463,6 +476,12 @@ pub struct UnitTypecheckResultTracked<'db> {
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     #[returns(ref)]
     pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+    /// Function signatures defined in this script unit.
+    ///
+    /// Contains resolved function types needed for lowering when type aliases
+    /// are used in function parameters.
+    #[returns(ref)]
+    pub function_types: Vec<(InternedText<'db>, TypeFunction<'db>)>,
 }
 
 /// Result of typechecking multiple script units together.
@@ -529,6 +548,10 @@ pub struct SingleModuleTypecheckResult<'db> {
     #[returns(ref)]
     pub exports: Vec<(InternedText<'db>, TypeFunction<'db>)>,
 
+    /// Exported type aliases.
+    #[returns(ref)]
+    pub exported_type_aliases: Vec<(InternedText<'db>, TypeAndHeap<'db>)>,
+
     /// Imported functions: (local_name, source_module_id, source_name).
     #[returns(ref)]
     pub imports: Vec<(InternedText<'db>, ModuleId, InternedText<'db>)>,
@@ -551,6 +574,10 @@ pub struct ModuleExports<'db> {
     /// Function signatures as a vector of (name, type) pairs.
     #[returns(ref)]
     pub functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
+
+    /// Type aliases as a vector of (name, type) pairs.
+    #[returns(ref)]
+    pub type_aliases: Vec<(InternedText<'db>, TypeAndHeap<'db>)>,
 }
 
 /// Imported functions for a module.
@@ -719,11 +746,13 @@ pub use context::{
 };
 
 // Re-export statement functions.
-pub use statement::collect_function_signature;
+pub use statement::{collect_function_signature, collect_type_aliases};
 
 // Re-export type utilities.
 pub use types::{
     convert_type_hint,
+    convert_type_hint_with_aliases,
+    is_primitive_name,
     type_to_string,
     unit_type,
 };

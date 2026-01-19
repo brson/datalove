@@ -17,6 +17,8 @@ use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
+use datalove_datafun_ir::IrType;
+use crate::ir_ext::IrTypeExt;
 use crate::lower;
 use crate::tracked_ownership_analysis::{SingleModuleAnalysis, ModuleGraphAnalysis};
 
@@ -176,6 +178,17 @@ pub fn lower_module<'db>(
     // Get pre-computed drop analysis results.
     let function_analyses = drop_analysis.function_analyses(db);
 
+    // Build map of function name -> resolved param types from exports.
+    // This is needed to resolve type aliases in function parameters.
+    let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+    for (name, func_type) in typecheck_result.exports(db) {
+        let param_types: Vec<IrType> = func_type.param_types(db)
+            .iter()
+            .map(|ty| IrType::from_tycheck(db, ty))
+            .collect();
+        func_param_types.insert(name.text(db).S(), param_types);
+    }
+
     let mut functions = Vec::new();
     let mut errors = Vec::new();
     let mut func_ids = Vec::new();
@@ -199,6 +212,9 @@ pub fn lower_module<'db>(
             let func_id = func_ids[func_idx].1;
             func_idx += 1;
 
+            // Get resolved param types for this function.
+            let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
+
             // Get pre-computed drop analysis for this function.
             let Some(single_analysis) = function_analyses.get(&func_name) else {
                 errors.push(format!("Lowering error in {}: missing drop analysis", func_name));
@@ -220,6 +236,7 @@ pub fn lower_module<'db>(
                 *func,
                 func_id,
                 analysis,
+                resolved_params,
             ) {
                 Ok(ir_func) => {
                     functions.push(ir_func);

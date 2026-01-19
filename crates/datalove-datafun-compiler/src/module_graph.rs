@@ -105,6 +105,7 @@ pub fn parse_module_graph<'db>(
             full_result.ret_spans.clone(),
             full_result.set_spans.clone(),
             full_result.fun_spans.clone(),
+            full_result.type_alias_spans.clone(),
         );
         statements_only.push((module_id, parsed));
         spans_list.push((module_id, spans));

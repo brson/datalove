@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2026-01-17
+Last verified: 2026-01-18
 
 ## Overview
 
@@ -147,6 +147,7 @@ Hex literals can be used with any integer type or f32. With f32, the hex value i
 | `let` | `let name: type = expr` | Implemented |
 | `var` | `var name: type = expr` | Implemented (mutable slot) |
 | `set` | `set name = expr` | Implemented (mutate var or mut/out param) |
+| `type` | `type Name: structural_type` | Implemented (type alias) |
 | `fun` | `fun name(...): ret_type ... end fun` | Implemented |
 | `ret` | `ret expr` | Implemented |
 | `require module` | `require module sys/std/bool` | Implemented |
@@ -427,6 +428,53 @@ end fun
 - Typechecked against a central definition table
 - Interpreter executes via Rust operations
 - AOT compiles to inline Cranelift IR instructions (no call overhead)
+
+### 2.11 Type Aliases
+
+Type aliases provide names for structural types, improving readability without creating new types.
+
+**Syntax:**
+```
+type AliasName: structural_type
+```
+
+**Examples:**
+```
+type Age: u32
+type Point: { x: f32, y: f32 }
+type Callback: { on_success: bool, data: int }
+
+fun create_point(x: f32, y: f32): Point
+  ret { x = x, y = y }
+end fun
+
+fun process(p: Point): Age
+  ret @25
+end fun
+```
+
+**Processing Order:**
+
+Type aliases are collected in Pass 0 of typechecking, before function signatures (Pass 1) and statement typechecking (Pass 2). This means:
+- Aliases must be defined before use (no forward references)
+- Function parameters and return types can reference any alias defined earlier in the file
+- Aliases defined in imported modules are available after the import
+
+**Restrictions:**
+
+| Restriction | Error |
+|-------------|-------|
+| Forward reference | `UnresolvedTypeAlias` |
+| Duplicate alias name | `DuplicateTypeAlias` |
+| Shadowing primitive type | `CannotShadowPrimitive` |
+
+**Primitives that cannot be shadowed:** `bool`, `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, `usize`, `isize`, `f32`, `int`, `string`
+
+**Semantics:**
+- Type aliases are purely syntactic - the alias name resolves to the structural type during typechecking
+- No runtime representation difference between aliased and structural types
+- Aliases can reference other aliases (if defined earlier)
+- Aliases can be used in type hints, function parameters, and return types
 
 ---
 

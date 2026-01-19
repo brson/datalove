@@ -35,6 +35,8 @@ pub struct TypeContext<'db> {
     pub(crate) functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
     /// Function ASTs for resolving call targets (name -> (AST, module_id)).
     pub(crate) function_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<ModuleId>)>,
+    /// Type aliases (name -> resolved type).
+    pub(crate) type_aliases: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
     /// Expected return type for current function (if inside a function).
     pub(crate) expected_return_type: Option<TypeAndHeap<'db>>,
     /// Whether current function has no declared return type (void function).
@@ -76,6 +78,7 @@ impl<'db> TypeContext<'db> {
             variables: HashMap::new(),
             functions: HashMap::new(),
             function_asts: HashMap::new(),
+            type_aliases: HashMap::new(),
             expected_return_type: None,
             is_void_function: false,
             errors: Vec::new(),
@@ -318,6 +321,16 @@ impl<'db> TypeContext<'db> {
 
     pub fn lookup_function(&self, name: InternedText<'db>) -> Option<TypeFunction<'db>> {
         self.functions.get(&name).copied()
+    }
+
+    /// Add a type alias to the context.
+    pub fn add_type_alias(&mut self, name: InternedText<'db>, ty: TypeAndHeap<'db>) {
+        self.type_aliases.insert(name, ty);
+    }
+
+    /// Look up a type alias by name.
+    pub fn lookup_type_alias(&self, name: InternedText<'db>) -> Option<TypeAndHeap<'db>> {
+        self.type_aliases.get(&name).copied()
     }
 
     /// Look up the resolved function AST by name.

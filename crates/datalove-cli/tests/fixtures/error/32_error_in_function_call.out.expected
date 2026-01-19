@@ -3,7 +3,7 @@
    [38;5;246m│[0m
  [38;5;246m2 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;201ma[0m
  [38;5;240m  │[0m     [38;5;201m┬[0m  
- [38;5;240m  │[0m     [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', or 'debuglog'
+ [38;5;240m  │[0m     [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', or 'type'
 [38;5;246m───╯[0m
 [31m[P010] Error:[0m unexpected token in expression
    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/32_error_in_function_call.dfs:5:13[38;5;246m][0m

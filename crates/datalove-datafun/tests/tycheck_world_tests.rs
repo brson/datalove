@@ -172,6 +172,24 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "kind": "UndefinedVariable"
             })
         }
+        TypeError::UnresolvedTypeAlias(name) => {
+            json!({
+                "kind": "UnresolvedTypeAlias",
+                "name": name
+            })
+        }
+        TypeError::DuplicateTypeAlias(name) => {
+            json!({
+                "kind": "DuplicateTypeAlias",
+                "name": name
+            })
+        }
+        TypeError::CannotShadowPrimitive(name) => {
+            json!({
+                "kind": "CannotShadowPrimitive",
+                "name": name
+            })
+        }
     }
 }
 

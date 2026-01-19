@@ -201,24 +201,30 @@ impl<'db> Parser<'db> {
                     let columns = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::Table(ast::TypeHintTable { columns })
+                } else if let Some(word) = self.peek_word() {
+                    // Unknown identifier - could be a type alias.
+                    // Check if it looks like a mis-cased primitive first.
+                    let lower = word.to_lowercase();
+                    match lower.as_str() {
+                        "int" | "bool" | "string" | "data" | "error" |
+                        "u8" | "i8" | "u16" | "i16" | "u32" | "i32" |
+                        "u64" | "i64" | "usize" | "isize" | "f32" | "f64" => {
+                            let ts = self.peek_text_span();
+                            let message = format!("unknown type '{}', did you mean '{}'?", word, lower);
+                            self.emit_type_hint_error(ts, &message, "D008", "unexpected token in type hint")
+                        }
+                        _ => {
+                            // Treat as type alias reference.
+                            use rmx::prelude::*;
+                            let name = InternedText::new(self.db, word.S());
+                            self.next(); // consume the identifier
+                            ast::TypeHint::Alias(name)
+                        }
+                    }
                 } else {
                     let ts = self.peek_text_span();
-                    // Check if this looks like a capitalized type name.
-                    let message = if let Some(word) = self.peek_word() {
-                        let lower = word.to_lowercase();
-                        match lower.as_str() {
-                            "int" | "bool" | "string" | "data" | "error" |
-                            "u8" | "i8" | "u16" | "i16" | "u32" | "i32" |
-                            "u64" | "i64" | "usize" | "isize" | "f32" | "f64" => {
-                                format!("unknown type '{}', did you mean '{}'?", word, lower)
-                            }
-                            _ => format!("unknown type '{}'", word)
-                        }
-                    } else {
-                        "unexpected token in type hint".to_string()
-                    };
                     self.emit_type_hint_error(ts,
-                        &message,
+                        "unexpected token in type hint",
                         "D008",
                         "unexpected token in type hint"
                     )

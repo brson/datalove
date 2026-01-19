@@ -396,6 +396,10 @@ fn pretty_type_hint<'db>(
             out.push_str(e.message.as_str(db));
             out.push('>');
         }
+
+        TypeHint::Alias(name) => {
+            out.push_str(name.as_str(db));
+        }
     }
 }
 

@@ -56,6 +56,8 @@ pub(super) struct Parser<'db> {
     set_spans: Vec<SpanEntry>,
     /// Accumulated function definition spans, indexed by local_index.
     fun_spans: Vec<SpanEntry>,
+    /// Accumulated type alias spans, indexed by local_index.
+    type_alias_spans: Vec<SpanEntry>,
     /// Optional context for error messages showing the enclosing branch's opening token.
     branch_context: Option<(TextSpan<'db>, &'static str)>,
     /// Current function name for expression identity (None for script-level).
@@ -88,6 +90,7 @@ impl<'db> Parser<'db> {
             ret_spans: Vec::new(),
             set_spans: Vec::new(),
             fun_spans: Vec::new(),
+            type_alias_spans: Vec::new(),
             branch_context: None,
             current_fn_name: None,
             expr_counter: 0,
@@ -128,6 +131,7 @@ impl<'db> Parser<'db> {
             ret_spans: Vec::new(),
             set_spans: Vec::new(),
             fun_spans: Vec::new(),
+            type_alias_spans: Vec::new(),
             branch_context: context,
             current_fn_name: None,
             expr_counter: 0,
@@ -163,6 +167,7 @@ impl<'db> Parser<'db> {
             ret_spans: Vec::new(),
             set_spans: Vec::new(),
             fun_spans: Vec::new(),
+            type_alias_spans: Vec::new(),
             branch_context: context,
             current_fn_name: self.current_fn_name,
             expr_counter: self.expr_counter,
@@ -413,6 +418,11 @@ impl<'db> Parser<'db> {
         rmx::std::mem::take(&mut self.fun_spans)
     }
 
+    /// Take the accumulated type alias spans (consumes them).
+    pub(super) fn take_type_alias_spans(&mut self) -> Vec<SpanEntry> {
+        rmx::std::mem::take(&mut self.type_alias_spans)
+    }
+
     /// Merge spans from a sub-parser into this parser.
     pub(super) fn merge_spans_from(&mut self, sub: &mut Self) {
         self.expr_spans.append(&mut sub.expr_spans);
@@ -421,6 +431,7 @@ impl<'db> Parser<'db> {
         self.ret_spans.append(&mut sub.ret_spans);
         self.set_spans.append(&mut sub.set_spans);
         self.fun_spans.append(&mut sub.fun_spans);
+        self.type_alias_spans.append(&mut sub.type_alias_spans);
     }
 
     /// Get next statement index and increment counter.
@@ -467,6 +478,14 @@ impl<'db> Parser<'db> {
         use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
         self.fun_spans.push(SpanEntry::new(ts.text.as_id(), ts.span));
+        index
+    }
+
+    /// Record a type alias span and return its local_index.
+    pub(super) fn record_type_alias_span(&mut self, ts: TextSpan<'db>) -> u32 {
+        use salsa::plumbing::AsId;
+        let index = self.next_stmt_index();
+        self.type_alias_spans.push(SpanEntry::new(ts.text.as_id(), ts.span));
         index
     }
 

@@ -54,6 +54,7 @@ pub enum TypeHint {
     Table(TypeHintTable),
     Data,
     Error,
+    Alias(String),
     ParseError(TypeHintParseError),
 }
 
@@ -326,6 +327,7 @@ impl TypeHint {
             crate::ast::TypeHint::Table(t) => TypeHint::Table(TypeHintTable::from_ast(db, t)),
             crate::ast::TypeHint::Data => TypeHint::Data,
             crate::ast::TypeHint::Error => TypeHint::Error,
+            crate::ast::TypeHint::Alias(name) => TypeHint::Alias(name.as_str(db).to_string()),
             crate::ast::TypeHint::ParseError(e) => TypeHint::ParseError(TypeHintParseError::from_ast(db, e)),
         }
     }

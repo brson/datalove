@@ -34,12 +34,13 @@ impl<'db> Parser<'db> {
             Some("break") => self.parse_break(),
             Some("continue") => self.parse_continue(),
             Some("debuglog") => self.parse_debuglog(),
+            Some("type") => self.parse_type_alias(),
             _ => {
                 let ts = self.peek_text_span();
                 self.emit_stmt_error(ts,
                     "unexpected statement",
                     "P001",
-                    "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', or 'debuglog'"
+                    "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', or 'type'"
                 )
             }
         };
@@ -767,6 +768,43 @@ impl<'db> Parser<'db> {
         self.eat_word("debuglog");
         let value = self.parse_expr_full();
         ast::Statement::DebugLog(ast::StmtDebugLog { value })
+    }
+
+    fn parse_type_alias(&mut self) -> ast::Statement<'db> {
+        let ts = self.peek_text_span();
+        self.eat_word("type");
+        let local_index = self.record_type_alias_span(ts);
+
+        let name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
+                    "expected name after 'type'",
+                    "P022",
+                    "expected name",
+                );
+            }
+        };
+
+        // Need `:` sigil.
+        if !self.eat_sigil(Sigil::Colon) {
+            let ts = self.peek_text_span();
+            return self.emit_stmt_error(ts,
+                "expected ':' after type alias name",
+                "P023",
+                "expected ':'"
+            );
+        }
+
+        // Parse the type hint.
+        let type_hint = self.parse_type_hint_and_heap();
+
+        ast::Statement::TypeAlias(ast::StmtTypeAlias {
+            name,
+            type_hint,
+            local_index,
+        })
     }
 
     /// Delegate to datalit parser for type hints.

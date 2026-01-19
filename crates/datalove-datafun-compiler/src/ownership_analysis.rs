@@ -804,11 +804,17 @@ impl<'db> AnalysisCtx<'db> {
 // ============================================================================
 
 /// Analyze a function for ownership errors and compute drop schedule.
+///
+/// If `resolved_param_types` is provided, use those types for parameters instead of
+/// deriving from AST type hints. This is necessary when type aliases are used in
+/// function parameters, since the AST type hint contains an alias reference rather
+/// than the resolved type.
 pub fn analyze_function<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+    resolved_param_types: Option<&[IrType]>,
 ) -> FunctionAnalysis {
     let mut ctx = AnalysisCtx::new(db, expr_types, call_targets);
 
@@ -816,9 +822,14 @@ pub fn analyze_function<'db>(
     ctx.enter_scope(ScopeKind::Function);
 
     // Register parameters as bindings.
-    for param in func.params(db) {
+    let params = func.params(db);
+    for (i, param) in params.iter().enumerate() {
         let name = param.name.text(db).S();
-        let ty = IrType::from_type_hint(db, &param.type_hint);
+        // Use resolved type if available, otherwise fall back to AST type hint.
+        let ty = match resolved_param_types {
+            Some(types) => types[i].clone(),
+            None => IrType::from_type_hint(db, &param.type_hint),
+        };
         ctx.alloc_binding(name, ty, false, Some(param.mode));
     }
 
@@ -840,21 +851,30 @@ pub fn analyze_function<'db>(
 ///
 /// Returns a map of function analyses, or an error if any function has analysis errors.
 /// Call this before lowering to ensure all functions are valid.
+///
+/// If `func_param_types` is provided, use those resolved param types for the given functions.
+/// This is needed when type aliases are used in function parameters.
 pub fn analyze_script_functions<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     stmts: &[Statement<'db>],
+    func_param_types: Option<&HashMap<String, Vec<IrType>>>,
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError>)>> {
     let mut analyses = HashMap::new();
     let mut errors = Vec::new();
 
     for stmt in stmts {
         if let Statement::Fun(func) = stmt {
-            let analysis = analyze_function(db, *func, expr_types, call_targets);
+            // Look up resolved param types if available.
+            let func_name = func.name(db).text(db);
+            let resolved_params = func_param_types
+                .and_then(|m| m.get(func_name))
+                .map(|v| v.as_slice());
+
+            let analysis = analyze_function(db, *func, expr_types, call_targets, resolved_params);
             if !analysis.errors.is_empty() {
-                let func_name = func.name(db).text(db).S();
-                errors.push((func_name, analysis.errors.C()));
+                errors.push((func_name.S(), analysis.errors.C()));
             }
             analyses.insert(*func, analysis);
         }
@@ -964,6 +984,9 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>])
             Statement::DebugLog(stmt) => {
                 // Debuglog borrows its value, so analyze the expression but don't consume it.
                 ctx.analyze_expr_moves(stmt.value, false);
+            }
+            Statement::TypeAlias(_) => {
+                // Type aliases are resolved at typecheck time; nothing to analyze.
             }
             Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
                 // No drops.
@@ -1316,7 +1339,7 @@ end fun
         let func = parse_function(db, source);
         let expr_types = &[];
         let call_targets = &[];
-        let analysis = analyze_function(db, func, expr_types, call_targets);
+        let analysis = analyze_function(db, func, expr_types, call_targets, None);
 
         assert!(analysis.errors.is_empty());
     }
@@ -1339,7 +1362,7 @@ end fun
         let func = parse_function(db, source);
         // Without full expr_types, types default to Unit (Copy), so no drops scheduled.
         // This just tests that analysis completes without panicking.
-        let analysis = analyze_function(db, func, &[], &[]);
+        let analysis = analyze_function(db, func, &[], &[], None);
 
         // No errors expected even without type info.
         assert!(analysis.errors.is_empty());
@@ -1356,7 +1379,7 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let analysis = analyze_function(db, func, &[], &[]);
+        let analysis = analyze_function(db, func, &[], &[], None);
 
         // Should have one binding (the ref param).
         assert_eq!(analysis.bindings.len(), 1);
@@ -1377,7 +1400,7 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let analysis = analyze_function(db, func, &[], &[]);
+        let analysis = analyze_function(db, func, &[], &[], None);
 
         // Should have one binding (the in param).
         assert_eq!(analysis.bindings.len(), 1);
@@ -1400,7 +1423,7 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let analysis = analyze_function(db, func, &[], &[]);
+        let analysis = analyze_function(db, func, &[], &[], None);
 
         // Should have an error for moving the ref param.
         assert!(!analysis.errors.is_empty(), "should have error for moving ref param");
@@ -1423,7 +1446,7 @@ end fun
         "#;
 
         let func = parse_function(db, source);
-        let analysis = analyze_function(db, func, &[], &[]);
+        let analysis = analyze_function(db, func, &[], &[], None);
 
         // Should have three bindings.
         assert_eq!(analysis.bindings.len(), 3);

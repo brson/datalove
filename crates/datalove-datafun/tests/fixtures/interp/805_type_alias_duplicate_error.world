@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// Error: duplicate type alias definition.
+type MyInt: int
+type MyInt: u32

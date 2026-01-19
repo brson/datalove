@@ -16,6 +16,8 @@ use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
+use datalove_datafun_ir::IrType;
+use crate::ir_ext::IrTypeExt;
 use crate::ownership_analysis::{self, FunctionAnalysis};
 
 /// Result of ownership analysis for a single function.
@@ -90,6 +92,17 @@ pub fn analyze_module<'db>(
     let expr_types = typecheck_result.expr_types(db);
     let call_targets = typecheck_result.call_targets(db);
 
+    // Build map of function name -> resolved param types from exports.
+    // This is needed to resolve type aliases in function parameters.
+    let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+    for (name, func_type) in typecheck_result.exports(db) {
+        let param_types: Vec<IrType> = func_type.param_types(db)
+            .iter()
+            .map(|ty| IrType::from_tycheck(db, ty))
+            .collect();
+        func_param_types.insert(name.text(db).S(), param_types);
+    }
+
     let mut function_analyses = BTreeMap::new();
     let mut all_errors = Vec::new();
 
@@ -97,8 +110,11 @@ pub fn analyze_module<'db>(
         if let Statement::Fun(func) = statement {
             let func_name = func.name(db).text(db).S();
 
-            // Run drop analysis.
-            let analysis = ownership_analysis::analyze_function(db, *func, expr_types, call_targets);
+            // Get resolved param types for this function.
+            let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
+
+            // Run ownership analysis.
+            let analysis = ownership_analysis::analyze_function(db, *func, expr_types, call_targets, resolved_params);
 
             let (opt_analysis, errors) = if analysis.errors.is_empty() {
                 (Some(analysis), Vec::new())

@@ -783,6 +783,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         }
         TypeHint::ParseError(_) => (Expr::None, heap),
         TypeHint::Table(_) => todo!("table expression generation not yet implemented"),
+        TypeHint::Alias(_) => {
+            // Type aliases cannot be generated directly - they must be resolved first.
+            (Expr::None, heap)
+        }
     }
 }
 

@@ -2,49 +2,18 @@
   "ast": {
     "expr": {
       "expr": {
-        "ParseError": {
-          "message": "expected '/' after type hint"
+        "Int": {
+          "value": "42"
         }
       },
-      "heap": "Omitted"
+      "heap": "Local"
     },
     "type_hint": {
       "heap": "Local",
       "type_hint": {
-        "ParseError": {
-          "message": "unknown type 'Foobar'"
-        }
+        "Alias": "Foobar"
       }
     }
   },
-  "diagnostics": [
-    {
-      "code": "D008",
-      "labels": [
-        {
-          "message": "unexpected token in type hint",
-          "span": [
-            3,
-            9
-          ],
-          "text": "Foobar"
-        }
-      ],
-      "message": "unknown type 'Foobar'"
-    },
-    {
-      "code": "D012",
-      "labels": [
-        {
-          "message": "expected '/' separator between type hint and expression",
-          "span": [
-            3,
-            9
-          ],
-          "text": "Foobar"
-        }
-      ],
-      "message": "expected '/' after type hint"
-    }
-  ]
+  "diagnostics": []
 }

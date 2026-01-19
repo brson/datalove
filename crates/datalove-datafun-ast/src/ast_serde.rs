@@ -27,6 +27,7 @@ pub enum Statement {
     Break(StmtBreak),
     Continue(StmtContinue),
     DebugLog(StmtDebugLog),
+    TypeAlias(StmtTypeAlias),
     ParseError(StmtParseError),
 }
 
@@ -145,6 +146,12 @@ pub struct StmtContinue {}
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtDebugLog {
     pub value: ExprFun,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtTypeAlias {
+    pub name: String,
+    pub type_hint: datalove_datalit::ast_serde::TypeHintAndHeap,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -461,7 +468,17 @@ impl Statement {
             crate::ast::Statement::Break(_) => Statement::Break(StmtBreak {}),
             crate::ast::Statement::Continue(_) => Statement::Continue(StmtContinue {}),
             crate::ast::Statement::DebugLog(s) => Statement::DebugLog(StmtDebugLog::from_ast(db, s)),
+            crate::ast::Statement::TypeAlias(s) => Statement::TypeAlias(StmtTypeAlias::from_ast(db, s)),
             crate::ast::Statement::ParseError(s) => Statement::ParseError(StmtParseError::from_ast(db, s)),
+        }
+    }
+}
+
+impl StmtTypeAlias {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtTypeAlias<'db>) -> Self {
+        StmtTypeAlias {
+            name: ast.name.as_str(db).to_string(),
+            type_hint: datalove_datalit::ast_serde::TypeHintAndHeap::from_ast(db, ast.type_hint),
         }
     }
 }

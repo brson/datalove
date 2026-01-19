@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Error: forward reference to type alias (used before defined).
+let x: Later = @42
+
+type Later: int

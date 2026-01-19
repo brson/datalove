@@ -10,6 +10,8 @@ use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_compiler::lower::{self, ScriptLowerContext};
 use datalove_datafun_compiler::ownership_analysis;
+use datalove_datafun_compiler::ir_ext::IrTypeExt;
+use datalove_datafun_ir::IrType;
 use bct::input::Source;
 use datalove_datafun_ast::ast::Statement;
 
@@ -45,8 +47,18 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
                 output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));
 
+                // Build map of function name -> resolved param types for type alias support.
+                let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+                for (name, func_type) in tycheck_result.function_types(&db) {
+                    let param_types: Vec<IrType> = func_type.param_types(&db)
+                        .iter()
+                        .map(|ty| IrType::from_tycheck(&db, ty))
+                        .collect();
+                    func_param_types.insert(name.text(&db).S(), param_types);
+                }
+
                 // Run drop analysis on all functions first.
-                let func_analyses = match ownership_analysis::analyze_script_functions(&db, expr_types, call_targets, &stmts) {
+                let func_analyses = match ownership_analysis::analyze_script_functions(&db, expr_types, call_targets, &stmts, Some(&func_param_types)) {
                     Ok(analyses) => analyses,
                     Err(errors) => {
                         for (func_name, errs) in errors {
@@ -64,7 +76,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 // Script tests don't use modules, so use empty func_id_map.
                 // Use for_aot=false since these tests verify REPL behavior with persistent bindings.
                 let func_id_map = HashMap::new();
-                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, false) {
+                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, false, Some(&func_param_types)) {
                     Ok(ir_unit) => {
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

@@ -11,8 +11,8 @@ use datalove_ct::query_log::{log_query, QueryPhase};
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
 use crate::context::{TypeContext, ScriptTypeContext, ScriptTypecheckResultRaw, ExprTypecheckResultRaw};
-use crate::statement::{check_statement, collect_function_signature};
-use crate::types::{convert_type_hint, unit_type};
+use crate::statement::{check_statement, collect_function_signature, collect_type_aliases};
+use crate::types::{convert_type_hint_with_aliases, unit_type};
 
 pub use datalove_datafun_ast::spans::DatafunSpans;
 pub use bct::module_graph::ModuleId;
@@ -129,7 +129,10 @@ pub fn type_check_script_units<'db>(
         // Typecheck this unit based on kind.
         match unit.kind(db) {
             ScriptUnitKind::Fragment(script) => {
-                // First pass: collect function signatures from this unit.
+                // Pass 0: collect type aliases.
+                collect_type_aliases(&mut ctx, &script.statements);
+
+                // Pass 1: collect function signatures from this unit.
                 for statement in &script.statements {
                     if let Statement::Fun(stmt) = statement {
                         collect_function_signature(&mut ctx, stmt, None);
@@ -201,7 +204,9 @@ pub fn type_check_script_units<'db>(
         let errors = ctx.errors.into_iter()
             .map(|e| TypeErrorEntry::new(db, e))
             .collect();
-        let result = UnitTypecheckResultTracked::new(db, errors, ctx.expr_types, ctx.call_targets);
+        // Extract function types for lowering (needed when type aliases are used in params).
+        let function_types: Vec<_> = ctx.functions.into_iter().collect();
+        let result = UnitTypecheckResultTracked::new(db, errors, ctx.expr_types, ctx.call_targets, function_types);
         results.push(result);
     }
 
@@ -243,14 +248,17 @@ pub fn type_check_script_with_context<'db>(
         ctx.add_function(*name, *func_ty);
     }
 
-    // First pass: collect function signatures from this unit.
+    // Pass 0: collect type aliases.
+    collect_type_aliases(&mut ctx, &parsed.statements);
+
+    // Pass 1: collect function signatures from this unit.
     for statement in &parsed.statements {
         if let Statement::Fun(stmt) = statement {
             collect_function_signature(&mut ctx, stmt, None);
         }
     }
 
-    // Second pass: typecheck all statements.
+    // Pass 2: typecheck all statements.
     for statement in &parsed.statements {
         check_statement(&mut ctx, &statement);
     }
@@ -382,14 +390,17 @@ pub fn type_check_with_module_graph<'db>(
         }
     }
 
-    // First pass: collect all function signatures (script-local, no module).
+    // Pass 0: collect type aliases.
+    collect_type_aliases(&mut ctx, &parsed.statements);
+
+    // Pass 1: collect all function signatures (script-local, no module).
     for statement in &parsed.statements {
         if let Statement::Fun(stmt) = statement {
             collect_function_signature(&mut ctx, stmt, None);
         }
     }
 
-    // Second pass: type check all statements (including function bodies).
+    // Pass 2: type check all statements (including function bodies).
     for statement in &parsed.statements {
         check_statement(&mut ctx, &statement);
     }
@@ -403,7 +414,10 @@ pub fn type_check_with_module_graph<'db>(
         .map(|e| TypeErrorEntry::new(db, e))
         .collect();
 
-    TypecheckResult::new(db, parsed, errors, ctx.expr_types, ctx.call_targets)
+    // Extract function types for lowering (needed when type aliases are used in params).
+    let function_types: Vec<_> = ctx.functions.into_iter().collect();
+
+    TypecheckResult::new(db, parsed, errors, ctx.expr_types, ctx.call_targets, function_types)
 }
 
 /// Typecheck a module graph (package-agnostic).
@@ -456,20 +470,23 @@ pub fn typecheck_module<'db>(
         }
     }
 
-    // Collect all function signatures from this module.
+    // Pass 0: collect type aliases.
+    collect_type_aliases(&mut ctx, &parsed.statements);
+
+    // Pass 1: collect all function signatures from this module.
     for statement in &parsed.statements {
         if let Statement::Fun(stmt) = statement {
             collect_function_signature(&mut ctx, stmt, Some(module_id));
         }
     }
 
-    // Type check all statements.
+    // Pass 2: type check all statements.
     for statement in &parsed.statements {
         check_statement(&mut ctx, &statement);
     }
 
     // Collect exports for this module.
-    let exports = collect_module_exports(db, parsed);
+    let collected_exports = collect_module_exports_full(db, parsed);
 
     // Build imports list for result.
     let imports: Vec<_> = resolved_imports.iter()
@@ -483,7 +500,8 @@ pub fn typecheck_module<'db>(
         module_id,
         ctx.errors.C(),
         ctx.pending_diagnostics.C(),
-        exports,
+        collected_exports.functions,
+        collected_exports.type_aliases,
         imports,
         ctx.expr_types.C(),
         ctx.call_targets.C(),
@@ -565,7 +583,7 @@ pub fn typecheck_module_graph<'db>(
         }
 
         // Build exports.
-        let exports = ModuleExports::new(db, module_id, result.exports(db).C());
+        let exports = ModuleExports::new(db, module_id, result.exports(db).C(), result.exported_type_aliases(db).C());
         module_exports_map.insert(module_id, exports);
 
         // Build imports.
@@ -733,7 +751,7 @@ pub fn resolve_module_exports<'db>(
     parsed: ParsedStatements<'db>,
 ) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
     let _ = module; // Used as memoization key.
-    collect_module_exports_impl(db, parsed)
+    collect_module_exports_impl(db, parsed).functions
 }
 
 /// All module exports collected from the graph.
@@ -906,14 +924,47 @@ fn resolve_module_imports_internal<'db>(
     (resolved_imports, import_errors)
 }
 
+/// Collected exports from a module.
+struct CollectedExports<'db> {
+    functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
+    type_aliases: Vec<(InternedText<'db>, TypeAndHeap<'db>)>,
+}
+
 /// Implementation of export collection (non-tracked).
 fn collect_module_exports_impl<'db>(
     db: &'db dyn crate::Db,
     parsed: ParsedStatements<'db>,
-) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
+) -> CollectedExports<'db> {
+    use crate::types::is_primitive_name;
+
+    // Pass 0: collect type aliases first.
+    let mut type_aliases_map: HashMap<InternedText<'db>, TypeAndHeap<'db>> = HashMap::new();
+    let mut type_aliases_vec = Vec::new();
+
+    for statement in &parsed.statements {
+        if let Statement::TypeAlias(stmt) = statement {
+            let name = stmt.name;
+            let name_str = name.as_str(db);
+
+            // Skip invalid names.
+            if is_primitive_name(name_str) {
+                continue;
+            }
+            if type_aliases_map.contains_key(&name) {
+                continue;
+            }
+
+            // Resolve the type hint using already-collected aliases.
+            if let Ok(ty) = convert_type_hint_with_aliases(db, stmt.type_hint, &type_aliases_map) {
+                type_aliases_map.insert(name, ty);
+                type_aliases_vec.push((name, ty));
+            }
+        }
+    }
+
+    // Pass 1: collect all top-level function signatures.
     let mut functions = Vec::new();
 
-    // Collect all top-level function signatures.
     for statement in &parsed.statements {
         if let Statement::Fun(stmt) = statement {
             let name = stmt.name(db);
@@ -925,7 +976,7 @@ fn collect_module_exports_impl<'db>(
             let mut param_modes = Vec::new();
             let mut has_error = false;
             for param in params {
-                match convert_type_hint(db, param.type_hint) {
+                match convert_type_hint_with_aliases(db, param.type_hint, &type_aliases_map) {
                     Ok(ty) => {
                         param_types.push(ty);
                         param_modes.push(param.mode);
@@ -944,7 +995,7 @@ fn collect_module_exports_impl<'db>(
             // Convert return type (default to unit if not specified).
             let ret_ty = match return_type {
                 Some(type_hint) => {
-                    match convert_type_hint(db, type_hint) {
+                    match convert_type_hint_with_aliases(db, type_hint, &type_aliases_map) {
                         Ok(ty) => ty,
                         Err(_) => continue,
                     }
@@ -961,16 +1012,17 @@ fn collect_module_exports_impl<'db>(
         }
     }
 
-    functions
+    CollectedExports {
+        functions,
+        type_aliases: type_aliases_vec,
+    }
 }
 
-/// Collect function signatures exported from a module (legacy non-tracked version).
-///
-/// Used by `typecheck_module` for its internal export collection.
-fn collect_module_exports<'db>(
+/// Collect all exports (functions and type aliases) from a module.
+fn collect_module_exports_full<'db>(
     db: &'db dyn crate::Db,
     parsed: ParsedStatements<'db>,
-) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
+) -> CollectedExports<'db> {
     collect_module_exports_impl(db, parsed)
 }
 
@@ -990,11 +1042,11 @@ fn build_script_module_functions<'db>(
 
     for module_spec in modules {
         // Use collect_module_exports_impl to get function signatures.
-        let exports = collect_module_exports_impl(db, module_spec.parsed.C());
+        let collected = collect_module_exports_impl(db, module_spec.parsed.C());
 
         // Build function info map with ASTs.
         let mut funcs = HashMap::new();
-        for (name, func_ty) in exports {
+        for (name, func_ty) in collected.functions {
             // Find the corresponding AST.
             for statement in &module_spec.parsed.statements {
                 if let Statement::Fun(stmt) = statement {
