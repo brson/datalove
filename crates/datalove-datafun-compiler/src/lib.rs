@@ -24,9 +24,6 @@ pub mod module_graph;
 // Module compilation from pre-resolved graphs.
 pub mod compile;
 
-// Incremental compilation with stable salsa identity.
-pub mod incremental;
-
 #[salsa::db]
 #[derive(Default, Clone)]
 pub struct Database {
