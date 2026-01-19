@@ -5,7 +5,7 @@ strongly and statically typed -
 for efficient data modeling and transformation.
 
 
-## 🚧 Do not contribute, do not use 🚧
+## ☠ Do not contribute; do not use ☠
 
 This project is not open to contribution.
 Issues and pull requests will be closed without consideration.
