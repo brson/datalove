@@ -39,16 +39,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         // Int (bigint) arithmetic operations require runtime calls.
-        // We require both operands to also be Int (widening from fixed-width not yet supported).
+        // Binary ops require matching operand types, so if dest is Int, operands must be Int.
         if matches!(dest_ty, IrType::Int) {
-            if matches!(lhs_ty, IrType::Int) && matches!(rhs_ty, IrType::Int) {
-                return self.compile_int_binop(builder, dest, op, lhs, rhs);
-            } else {
-                return Err(AotError::Unsupported(format!(
-                    "Int BinOp with widening from fixed-width types not yet supported: {:?} {:?} {:?}",
-                    lhs_ty, op, rhs_ty
-                )));
-            }
+            debug_assert!(
+                matches!(lhs_ty, IrType::Int) && matches!(rhs_ty, IrType::Int),
+                "Int BinOp operands must both be Int: {:?} {:?} {:?}",
+                lhs_ty, op, rhs_ty
+            );
+            return self.compile_int_binop(builder, dest, op, lhs, rhs);
         }
 
         let lhs_val = self.get_operand_value(builder, lhs)?;
