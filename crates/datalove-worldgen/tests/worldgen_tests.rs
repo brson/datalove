@@ -212,6 +212,7 @@ fn test_construct_coverage() {
     println!("  imports:        {}", coverage.imports);
     println!("  function calls: {}", coverage.function_calls);
     println!("  arithmetic:     {}", coverage.arithmetic);
+    println!("  unary negation: {}", coverage.unary_negation);
     println!("  logical not:    {}", coverage.logical_not);
     println!("  logical and:    {}", coverage.logical_and);
     println!("  logical or:     {}", coverage.logical_or);
@@ -244,6 +245,7 @@ struct ConstructCoverage {
     imports: usize,
     function_calls: usize,
     arithmetic: usize,
+    unary_negation: usize,
     logical_not: usize,
     logical_and: usize,
     logical_or: usize,
@@ -287,6 +289,9 @@ impl ConstructCoverage {
                 }
             }
         }
+
+        // Count unary negation (format: -(: type / value)).
+        self.unary_negation += wf.matches("-(: ").count();
 
         // Count logical operators.
         self.logical_not += wf.matches("not ").count();
@@ -609,6 +614,47 @@ fn test_logical_operators() {
     assert!(found_and, "Should generate 'and' expressions");
     assert!(found_or, "Should generate 'or' expressions");
     assert!(found_xor, "Should generate 'xor' expressions");
+}
+
+/// Verify that unary negation is generated and typechecks correctly.
+#[test]
+fn test_unary_negation() {
+    let config = WorldGenConfig::default();
+
+    let mut found_int_neg = false;
+    let mut found_float_neg = false;
+
+    for seed in 0..300 {
+        let wf = gen_worldfile_seeded(seed, config.clone());
+
+        // Look for unary negation patterns: -(: type / value)
+        if wf.contains("-(: int /") { found_int_neg = true; }
+        if wf.contains("-(: @f32 /") || wf.contains("-(: @f64 /")
+            || wf.contains("-(: #f32 /") || wf.contains("-(: #f64 /")
+        {
+            found_float_neg = true;
+        }
+
+        // Verify worldfiles with negation typecheck.
+        if found_int_neg || found_float_neg {
+            let errors = typecheck_worldfile(&wf);
+            if !errors.is_empty() {
+                eprintln!("Seed {} failed with unary negation:", seed);
+                eprintln!("{}", wf);
+                for err in &errors {
+                    eprintln!("  {}", err);
+                }
+                panic!("Unary negation worldfile failed to typecheck");
+            }
+        }
+
+        if found_int_neg && found_float_neg {
+            break;
+        }
+    }
+
+    assert!(found_int_neg, "Should generate unary negation on bigints");
+    assert!(found_float_neg, "Should generate unary negation on floats");
 }
 
 /// Verify that modules with cross-module function calls typecheck correctly.

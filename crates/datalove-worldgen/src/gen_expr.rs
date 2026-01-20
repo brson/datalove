@@ -16,6 +16,14 @@ fn supports_bare_arithmetic(type_hint: TypeHint<'_>) -> bool {
     matches!(type_hint, TypeHint::F32 | TypeHint::F64 | TypeHint::Int)
 }
 
+/// Check if a type supports unary negation.
+///
+/// Only floats and bigints support bare unary `-`.
+/// Fixed ints do NOT support unary negation (use `-?` or `-!` instead).
+fn supports_unary_negation(type_hint: TypeHint<'_>) -> bool {
+    matches!(type_hint, TypeHint::F32 | TypeHint::F64 | TypeHint::Int)
+}
+
 /// Generate an expression matching the given type.
 ///
 /// May be a literal, variable reference, function call, or arithmetic expression.
@@ -83,10 +91,11 @@ pub fn gen_expr<'db, R: Rng>(
     }
 }
 
-/// Generate an arithmetic expression (operand op operand).
+/// Generate an arithmetic expression (binary or unary).
 ///
 /// Supports floats (f32, f64) and bigints (int).
 /// Division only works for floats; bigints must use /! or /?.
+/// Unary negation works for floats and bigints.
 fn gen_arithmetic_expr<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
@@ -95,6 +104,11 @@ fn gen_arithmetic_expr<'db, R: Rng>(
 ) -> String {
     let inner_type = type_hint.type_hint(db);
     let is_float = matches!(inner_type, TypeHint::F32 | TypeHint::F64);
+
+    // 20% chance to generate unary negation instead of binary op.
+    if supports_unary_negation(inner_type) && rng.gen_bool(0.2) {
+        return gen_unary_negation(db, rng, type_hint, config);
+    }
 
     // Floats support all four operators; bigints don't support bare /.
     let ops: &[&str] = if is_float {
@@ -119,6 +133,32 @@ fn gen_arithmetic_expr<'db, R: Rng>(
     }
 }
 
+/// Generate a unary negation expression.
+///
+/// Only works for floats and bigints.
+fn gen_unary_negation<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    type_hint: TypeHintAndHeap<'db>,
+    config: &WorldGenConfig,
+) -> String {
+    let inner_type = type_hint.type_hint(db);
+
+    let operand = gen_literal(db, rng, type_hint, config);
+
+    // Both floats and ints need type hints for unary negation.
+    // Without hints, the literal might be inferred as a different type.
+    // For floats: -(: @f64 / @123.4)
+    // For ints: -(: int / 59) - note: int doesn't use heap sigil
+    let type_str = if matches!(inner_type, TypeHint::Int) {
+        "int".to_string()
+    } else {
+        pretty_type_hint_and_heap(db, type_hint)
+    };
+
+    format!("-(: {} / {})", type_str, operand)
+}
+
 /// Generate a literal expression matching the given type using datalit.
 fn gen_literal<'db, R: Rng>(
     db: &'db dyn salsa::Database,
@@ -126,8 +166,14 @@ fn gen_literal<'db, R: Rng>(
     type_hint: TypeHintAndHeap<'db>,
     config: &WorldGenConfig,
 ) -> String {
+    use datalove_datalit::ast::Heap;
+
     let type_hint_inner = type_hint.type_hint(db);
     let heap = type_hint.heap(db);
+
+    // Int (bigint) literals don't use heap sigils - they're always plain numbers.
+    // Using @123 or #123 for int would be parsed as fixed int, not bigint.
+    let is_int = matches!(type_hint_inner, TypeHint::Int);
 
     let (expr, expr_heap) = ast_gen::gen_expr_matching_type(
         db,
@@ -138,7 +184,9 @@ fn gen_literal<'db, R: Rng>(
         0,
     );
 
-    pretty_expr_with_heap(db, expr, expr_heap)
+    let effective_heap = if is_int { Heap::Omitted } else { expr_heap };
+
+    pretty_expr_with_heap(db, expr, effective_heap)
 }
 
 /// Generate a function call expression.
