@@ -210,8 +210,8 @@ fn test_cmp_total_tuple_equal() -> AnyResult<()> {
 #[test]
 fn test_cmp_total_map_empty_equal() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": map<@u32, @u32> / map{}")?;
-    let typechecked_b = compile_str(&db, ": map<@u32, @u32> / map{}")?;
+    let typechecked_a = compile_str(&db, ": map<u32, u32> / map{}")?;
+    let typechecked_b = compile_str(&db, ": map<u32, u32> / map{}")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -280,7 +280,7 @@ fn test_cmp_total_map_equal() -> AnyResult<()> {
 #[test]
 fn test_cmp_total_map_empty_vs_nonempty() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": map<@u32, @u32> / map{}")?;
+    let typechecked_a = compile_str(&db, ": map<u32, u32> / map{}")?;
     let typechecked_b = compile_str(&db, "map{10 = 100}")?;
 
     let rt = Runtime::new();
@@ -457,8 +457,8 @@ fn test_cmp_total_map_greater_by_key() -> AnyResult<()> {
 #[test]
 fn test_cmp_total_set_empty_equal() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": set<@u32> / set{}")?;
-    let typechecked_b = compile_str(&db, ": set<@u32> / set{}")?;
+    let typechecked_a = compile_str(&db, ": set<u32> / set{}")?;
+    let typechecked_b = compile_str(&db, ": set<u32> / set{}")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -527,7 +527,7 @@ fn test_cmp_total_set_equal() -> AnyResult<()> {
 #[test]
 fn test_cmp_total_set_empty_vs_nonempty() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": set<@u32> / set{}")?;
+    let typechecked_a = compile_str(&db, ": set<u32> / set{}")?;
     let typechecked_b = compile_str(&db, "set{10}")?;
 
     let rt = Runtime::new();

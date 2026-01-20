@@ -10,31 +10,31 @@
                   "value": "42"
                 }
               },
-              "heap": "Local"
+              "heap": "Omitted"
             },
             "type_hint": null
           },
           "variant_name": "Ok"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "AnonEnum": {
           "variants": [
             {
               "name": "Ok",
               "payload": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "type_hint": "U32"
               }
             },
             {
               "name": "Err",
               "payload": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "type_hint": "String"
               }
             }

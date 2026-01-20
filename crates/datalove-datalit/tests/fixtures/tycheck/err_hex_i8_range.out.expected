@@ -6,10 +6,10 @@
           "value": "0x80"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": "I8"
     }
   },

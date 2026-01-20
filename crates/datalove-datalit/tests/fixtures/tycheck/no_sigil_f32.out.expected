@@ -6,7 +6,7 @@
           "value": "3.14"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
       "heap": "Omitted",

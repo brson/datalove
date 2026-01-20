@@ -1,73 +1,73 @@
 [
   {
-    "input": ": u32 / @1",
+    "input": ": u32 / 1",
     "parse": {
       "Command": {
-        "Expression": ": u32 / @1"
+        "Expression": ": u32 / 1"
       }
     },
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "u32",
-        "value": "@1"
+        "value": "1"
       }
     },
     "environment": []
   },
   {
-    "input": ": i32 / @-5",
+    "input": ": i32 / -5",
     "parse": {
       "Command": {
-        "Expression": ": i32 / @-5"
+        "Expression": ": i32 / -5"
       }
     },
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "i32",
-        "value": "@-5"
+        "value": "-5"
       }
     },
     "environment": []
   },
   {
-    "input": ": u64 / @42",
+    "input": ": u64 / 42",
     "parse": {
       "Command": {
-        "Expression": ": u64 / @42"
+        "Expression": ": u64 / 42"
       }
     },
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "u64",
-        "value": "@42"
+        "value": "42"
       }
     },
     "environment": []
   },
   {
-    "input": ": u32 / @10 + @20",
+    "input": ": u32 / 10 + 20",
     "parse": {
       "Command": {
-        "Expression": ": u32 / @10 + @20"
+        "Expression": ": u32 / 10 + 20"
       }
     },
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "int",
-        "value": "@30"
+        "value": "30"
       }
     },
     "environment": []
   },
   {
-    "input": "@10 / @2",
+    "input": "10 / 2",
     "parse": {
       "Command": {
-        "Expression": "@10 / @2"
+        "Expression": "10 / 2"
       }
     },
     "eval": {

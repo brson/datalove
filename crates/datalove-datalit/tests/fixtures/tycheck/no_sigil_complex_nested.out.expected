@@ -12,7 +12,7 @@
                       "value": "\"point\""
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               },
@@ -39,7 +39,7 @@
                                                     "value": "1"
                                                   }
                                                 },
-                                                "heap": "Local"
+                                                "heap": "Omitted"
                                               },
                                               "type_hint": null
                                             }
@@ -53,7 +53,7 @@
                                                     "value": "\"a\""
                                                   }
                                                 },
-                                                "heap": "Local"
+                                                "heap": "Omitted"
                                               },
                                               "type_hint": null
                                             }
@@ -61,7 +61,7 @@
                                         ]
                                       }
                                     },
-                                    "heap": "Local"
+                                    "heap": "Omitted"
                                   },
                                   "type_hint": null
                                 }
@@ -74,7 +74,7 @@
                         {
                           "expr": {
                             "expr": "None",
-                            "heap": "Local"
+                            "heap": "Omitted"
                           },
                           "type_hint": null
                         }
@@ -89,7 +89,7 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
       "heap": "Omitted",

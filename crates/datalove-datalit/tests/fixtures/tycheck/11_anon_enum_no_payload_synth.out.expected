@@ -7,7 +7,7 @@
           "variant_name": "Ok"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },
@@ -19,9 +19,9 @@
           "message": "type annotation required",
           "span": [
             0,
-            1
+            4
           ],
-          "text": ""
+          "text": "enum"
         }
       ],
       "message": "cannot infer type for anonymous enum"

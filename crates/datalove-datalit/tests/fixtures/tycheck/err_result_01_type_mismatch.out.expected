@@ -10,7 +10,7 @@
                   "value": "\"wrong type\""
                 }
               },
-              "heap": "Local"
+              "heap": "Omitted"
             },
             "type_hint": null
           }
@@ -19,11 +19,11 @@
       "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "Result": {
           "inner_type": {
-            "heap": "Local",
+            "heap": "Omitted",
             "type_hint": "U32"
           }
         }
@@ -37,10 +37,10 @@
         {
           "message": "expected `u32`, found `string`",
           "span": [
-            14,
-            15
+            12,
+            24
           ],
-          "text": ""
+          "text": "\"wrong type\""
         }
       ],
       "message": "mismatched types"

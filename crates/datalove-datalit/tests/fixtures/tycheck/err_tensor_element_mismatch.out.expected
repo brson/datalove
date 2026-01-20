@@ -55,7 +55,7 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },
@@ -66,8 +66,8 @@
         {
           "message": "expected `u32`, found `string`",
           "span": [
-            21,
-            28
+            20,
+            27
           ],
           "text": "\"three\""
         }

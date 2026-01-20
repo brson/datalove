@@ -12,7 +12,7 @@
                       "value": "1"
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               },
@@ -23,7 +23,7 @@
                       "value": "\"a\""
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               }
@@ -32,22 +32,22 @@
               "key": {
                 "expr": {
                   "expr": {
-                    "Int": {
-                      "value": "2"
+                    "ParseError": {
+                      "message": "unexpected token in Parser expression"
                     }
                   },
-                  "heap": "Global"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               },
               "value": {
                 "expr": {
                   "expr": {
-                    "String": {
-                      "value": "\"b\""
+                    "ParseError": {
+                      "message": "expected '=' between map key and value"
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               }
@@ -55,31 +55,29 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },
   "diagnostics": [
     {
-      "code": "T035",
+      "code": "T017",
       "labels": [
         {
-          "message": "expected @, found #",
+          "message": "parse error occurred here",
           "span": [
-            18,
-            19
+            15,
+            16
           ],
           "text": "#"
         }
       ],
-      "message": "heap allocation mismatch in map keys"
+      "message": "cannot type-check expression with parse errors"
     }
   ],
   "errors": [
     {
-      "actual_heap": "#",
-      "expected_heap": "",
-      "kind": "HeapMismatch"
+      "kind": "CannotSynthesize"
     }
   ],
   "root_type": null

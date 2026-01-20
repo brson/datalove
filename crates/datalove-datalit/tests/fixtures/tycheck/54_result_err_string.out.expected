@@ -10,20 +10,20 @@
                   "value": "\"failed\""
                 }
               },
-              "heap": "Local"
+              "heap": "Omitted"
             },
             "type_hint": null
           }
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "Result": {
           "inner_type": {
-            "heap": "Local",
+            "heap": "Omitted",
             "type_hint": "U32"
           }
         }

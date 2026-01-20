@@ -473,7 +473,7 @@ fn test_memguard_to_valueguard_workflow() -> AnyResult<()> {
 #[test]
 fn test_guards_with_complex_type() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": set <@u32> / set { 1, 2, 3 }")?;
+    let typechecked = compile_str(&db, ": set <u32> / set { 1, 2, 3 }")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);

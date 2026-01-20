@@ -2,18 +2,26 @@
   "ast": {
     "expr": {
       "expr": {
-        "Int": {
-          "value": "42"
+        "ParseError": {
+          "message": "expected '/' after type hint"
         }
       },
       "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Global",
-      "type_hint": "U32"
+      "heap": "Omitted",
+      "type_hint": {
+        "ParseError": {
+          "message": "unexpected token in type hint"
+        }
+      }
     }
   },
   "diagnostics": [],
-  "errors": [],
-  "root_type": "#u32"
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
 }

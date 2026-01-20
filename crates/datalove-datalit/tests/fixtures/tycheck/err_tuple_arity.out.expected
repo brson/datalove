@@ -40,7 +40,7 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
       "heap": "Omitted",
@@ -48,11 +48,11 @@
         "AnonTuple": {
           "fields": [
             {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U32"
             },
             {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U32"
             }
           ]

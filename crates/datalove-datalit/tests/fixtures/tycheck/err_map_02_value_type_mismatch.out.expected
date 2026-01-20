@@ -12,7 +12,7 @@
                       "value": "1"
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               },
@@ -23,7 +23,7 @@
                       "value": "42"
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               }
@@ -31,18 +31,18 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "Map": {
           "key_type": {
-            "heap": "Local",
+            "heap": "Omitted",
             "type_hint": "U32"
           },
           "value_type": {
-            "heap": "Local",
+            "heap": "Omitted",
             "type_hint": "String"
           }
         }
@@ -56,10 +56,10 @@
         {
           "message": "expected `string`, found `u32`",
           "span": [
-            37,
-            38
+            32,
+            34
           ],
-          "text": ""
+          "text": "42"
         }
       ],
       "message": "mismatched types"

@@ -6,7 +6,7 @@
           "value": "99999999999999999999"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },
@@ -18,9 +18,9 @@
           "message": "value too large for u32",
           "span": [
             0,
-            1
+            20
           ],
-          "text": ""
+          "text": "99999999999999999999"
         }
       ],
       "message": "integer literal out of range"

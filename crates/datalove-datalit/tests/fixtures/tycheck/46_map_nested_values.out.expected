@@ -12,7 +12,7 @@
                       "value": "1"
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               },
@@ -28,21 +28,21 @@
                                 "value": "\"a\""
                               }
                             },
-                            "heap": "Local"
+                            "heap": "Omitted"
                           },
                           "type_hint": null
                         },
                         {
                           "expr": {
                             "expr": "True",
-                            "heap": "Local"
+                            "heap": "Omitted"
                           },
                           "type_hint": null
                         }
                       ]
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               }
@@ -55,7 +55,7 @@
                       "value": "2"
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               },
@@ -71,21 +71,21 @@
                                 "value": "\"b\""
                               }
                             },
-                            "heap": "Local"
+                            "heap": "Omitted"
                           },
                           "type_hint": null
                         },
                         {
                           "expr": {
                             "expr": "False",
-                            "heap": "Local"
+                            "heap": "Omitted"
                           },
                           "type_hint": null
                         }
                       ]
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               }
@@ -93,27 +93,27 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "Map": {
           "key_type": {
-            "heap": "Local",
+            "heap": "Omitted",
             "type_hint": "U32"
           },
           "value_type": {
-            "heap": "Local",
+            "heap": "Omitted",
             "type_hint": {
               "AnonTuple": {
                 "fields": [
                   {
-                    "heap": "Local",
+                    "heap": "Omitted",
                     "type_hint": "String"
                   },
                   {
-                    "heap": "Local",
+                    "heap": "Omitted",
                     "type_hint": "Bool"
                   }
                 ]

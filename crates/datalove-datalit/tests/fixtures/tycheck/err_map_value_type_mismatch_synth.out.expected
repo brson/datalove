@@ -12,7 +12,7 @@
                       "value": "1"
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               },
@@ -23,7 +23,7 @@
                       "value": "\"a\""
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               }
@@ -36,7 +36,7 @@
                       "value": "2"
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               },
@@ -47,7 +47,7 @@
                       "value": "42"
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               }
@@ -55,7 +55,7 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },
@@ -66,10 +66,10 @@
         {
           "message": "expected `string`, found `u32`",
           "span": [
-            23,
-            24
+            19,
+            21
           ],
-          "text": ""
+          "text": "42"
         }
       ],
       "message": "mismatched value types in map"

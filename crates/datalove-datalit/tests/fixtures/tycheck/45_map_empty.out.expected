@@ -6,18 +6,18 @@
           "entries": []
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "Map": {
           "key_type": {
-            "heap": "Local",
+            "heap": "Omitted",
             "type_hint": "U32"
           },
           "value_type": {
-            "heap": "Local",
+            "heap": "Omitted",
             "type_hint": "String"
           }
         }

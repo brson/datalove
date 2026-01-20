@@ -2,57 +2,26 @@
   "ast": {
     "expr": {
       "expr": {
-        "AnonTuple": {
-          "elements": [
-            {
-              "expr": {
-                "expr": "True",
-                "heap": "Local"
-              },
-              "type_hint": null
-            },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "42"
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": null
-            }
-          ]
+        "ParseError": {
+          "message": "expected '/' after type hint"
         }
       },
-      "heap": "Global"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Global",
+      "heap": "Omitted",
       "type_hint": {
-        "AnonTuple": {
-          "fields": [
-            {
-              "heap": "Omitted",
-              "type_hint": "Bool"
-            },
-            {
-              "heap": "Omitted",
-              "type_hint": "U32"
-            }
-          ]
+        "ParseError": {
+          "message": "unexpected token in type hint"
         }
       }
     }
   },
   "diagnostics": [],
-  "errors": [],
-  "root_type": {
-    "fields": [
-      "bool",
-      "u32"
-    ],
-    "heap": "#",
-    "kind": "AnonTuple"
-  }
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
 }

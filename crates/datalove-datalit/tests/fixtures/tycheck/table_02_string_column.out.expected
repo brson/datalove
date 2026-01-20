@@ -17,7 +17,7 @@
                         "value": "\"Alice\""
                       }
                     },
-                    "heap": "Local"
+                    "heap": "Omitted"
                   },
                   "type_hint": null
                 },
@@ -28,7 +28,7 @@
                         "value": "25"
                       }
                     },
-                    "heap": "Local"
+                    "heap": "Omitted"
                   },
                   "type_hint": null
                 }
@@ -43,7 +43,7 @@
                         "value": "\"Bob\""
                       }
                     },
-                    "heap": "Local"
+                    "heap": "Omitted"
                   },
                   "type_hint": null
                 },
@@ -54,7 +54,7 @@
                         "value": "30"
                       }
                     },
-                    "heap": "Local"
+                    "heap": "Omitted"
                   },
                   "type_hint": null
                 }

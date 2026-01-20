@@ -1,1 +1,1 @@
-: @[@string] / @[@"hello", @"world", @"test"]
+: [string] / ["hello", "world", "test"]

@@ -11,7 +11,7 @@
                     "value": "1"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -22,21 +22,21 @@
                     "value": "\"bad\""
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             }
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "Set": {
           "element_type": {
-            "heap": "Local",
+            "heap": "Omitted",
             "type_hint": "U32"
           }
         }
@@ -50,10 +50,10 @@
         {
           "message": "expected `u32`, found `string`",
           "span": [
-            27,
+            23,
             28
           ],
-          "text": ""
+          "text": "\"bad\""
         }
       ],
       "message": "mismatched types"

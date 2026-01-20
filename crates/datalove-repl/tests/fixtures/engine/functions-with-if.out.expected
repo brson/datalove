@@ -1,9 +1,9 @@
 [
   {
-    "input": "fun abs(x: @i32): @i32\n  if x .< @0\n    ret @0 - x\n  else\n    ret x\n  end if\nend fun",
+    "input": "fun abs(x: i32): i32\n  if x .< 0\n    ret 0 - x\n  else\n    ret x\n  end if\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun abs(x: @i32): @i32\n  if x .< @0\n    ret @0 - x\n  else\n    ret x\n  end if\nend fun"
+        "ScriptStatement": "fun abs(x: i32): i32\n  if x .< 0\n    ret 0 - x\n  else\n    ret x\n  end if\nend fun"
       }
     },
     "eval": {
@@ -12,10 +12,10 @@
     "environment": []
   },
   {
-    "input": "abs(@5)",
+    "input": "abs(5)",
     "parse": {
       "Command": {
-        "Expression": "abs(@5)"
+        "Expression": "abs(5)"
       }
     },
     "eval": {
@@ -24,10 +24,10 @@
     "environment": []
   },
   {
-    "input": "abs(@-5)",
+    "input": "abs(-5)",
     "parse": {
       "Command": {
-        "Expression": "abs(@-5)"
+        "Expression": "abs(-5)"
       }
     },
     "eval": {
@@ -36,10 +36,10 @@
     "environment": []
   },
   {
-    "input": "fun classify(x: @u32): @u32\n  if x .< @10\n    ret @1\n  else\n    if x .< @20\n      ret @2\n    else\n      ret @3\n    end if\n  end if\nend fun",
+    "input": "fun classify(x: u32): u32\n  if x .< 10\n    ret 1\n  else\n    if x .< 20\n      ret 2\n    else\n      ret 3\n    end if\n  end if\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun classify(x: @u32): @u32\n  if x .< @10\n    ret @1\n  else\n    if x .< @20\n      ret @2\n    else\n      ret @3\n    end if\n  end if\nend fun"
+        "ScriptStatement": "fun classify(x: u32): u32\n  if x .< 10\n    ret 1\n  else\n    if x .< 20\n      ret 2\n    else\n      ret 3\n    end if\n  end if\nend fun"
       }
     },
     "eval": {
@@ -56,17 +56,17 @@
     ]
   },
   {
-    "input": "classify(@5)",
+    "input": "classify(5)",
     "parse": {
       "Command": {
-        "Expression": "classify(@5)"
+        "Expression": "classify(5)"
       }
     },
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "u32",
-        "value": "@1"
+        "value": "1"
       }
     },
     "environment": [
@@ -78,17 +78,17 @@
     ]
   },
   {
-    "input": "classify(@15)",
+    "input": "classify(15)",
     "parse": {
       "Command": {
-        "Expression": "classify(@15)"
+        "Expression": "classify(15)"
       }
     },
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "u32",
-        "value": "@2"
+        "value": "2"
       }
     },
     "environment": [
@@ -100,17 +100,17 @@
     ]
   },
   {
-    "input": "classify(@25)",
+    "input": "classify(25)",
     "parse": {
       "Command": {
-        "Expression": "classify(@25)"
+        "Expression": "classify(25)"
       }
     },
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "u32",
-        "value": "@3"
+        "value": "3"
       }
     },
     "environment": [
@@ -122,10 +122,10 @@
     ]
   },
   {
-    "input": "fun grade(score: @u32): @u32\n  if score >= @90\n    ret @4\n  else\n    if score >= @80\n      ret @3\n    else\n      if score >= @70\n        ret @2\n      else\n        ret @1\n      end if\n    end if\n  end if\nend fun",
+    "input": "fun grade(score: u32): u32\n  if score >= 90\n    ret 4\n  else\n    if score >= 80\n      ret 3\n    else\n      if score >= 70\n        ret 2\n      else\n        ret 1\n      end if\n    end if\n  end if\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun grade(score: @u32): @u32\n  if score >= @90\n    ret @4\n  else\n    if score >= @80\n      ret @3\n    else\n      if score >= @70\n        ret @2\n      else\n        ret @1\n      end if\n    end if\n  end if\nend fun"
+        "ScriptStatement": "fun grade(score: u32): u32\n  if score >= 90\n    ret 4\n  else\n    if score >= 80\n      ret 3\n    else\n      if score >= 70\n        ret 2\n      else\n        ret 1\n      end if\n    end if\n  end if\nend fun"
       }
     },
     "eval": {
@@ -147,17 +147,17 @@
     ]
   },
   {
-    "input": "grade(@95)",
+    "input": "grade(95)",
     "parse": {
       "Command": {
-        "Expression": "grade(@95)"
+        "Expression": "grade(95)"
       }
     },
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "u32",
-        "value": "@4"
+        "value": "4"
       }
     },
     "environment": [
@@ -174,17 +174,17 @@
     ]
   },
   {
-    "input": "grade(@85)",
+    "input": "grade(85)",
     "parse": {
       "Command": {
-        "Expression": "grade(@85)"
+        "Expression": "grade(85)"
       }
     },
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "u32",
-        "value": "@3"
+        "value": "3"
       }
     },
     "environment": [
@@ -201,17 +201,17 @@
     ]
   },
   {
-    "input": "grade(@75)",
+    "input": "grade(75)",
     "parse": {
       "Command": {
-        "Expression": "grade(@75)"
+        "Expression": "grade(75)"
       }
     },
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "u32",
-        "value": "@2"
+        "value": "2"
       }
     },
     "environment": [
@@ -228,17 +228,17 @@
     ]
   },
   {
-    "input": "grade(@65)",
+    "input": "grade(65)",
     "parse": {
       "Command": {
-        "Expression": "grade(@65)"
+        "Expression": "grade(65)"
       }
     },
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "u32",
-        "value": "@1"
+        "value": "1"
       }
     },
     "environment": [

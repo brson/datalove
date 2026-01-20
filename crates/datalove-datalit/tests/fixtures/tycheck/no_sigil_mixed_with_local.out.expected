@@ -11,7 +11,7 @@
                     "value": "42"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -22,7 +22,7 @@
                     "value": "100"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             }
@@ -41,7 +41,7 @@
               "type_hint": "U32"
             },
             {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U32"
             }
           ]

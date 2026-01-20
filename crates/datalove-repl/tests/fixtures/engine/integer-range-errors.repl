@@ -1,32 +1,32 @@
-let u8_overflow: @u8 = @256
+let u8_overflow: u8 = 256
 ---
-let u8_negative: @u8 = @-1
+let u8_negative: u8 = -1
 ---
-let i8_overflow: @i8 = @128
+let i8_overflow: i8 = 128
 ---
-let i8_underflow: @i8 = @-129
+let i8_underflow: i8 = -129
 ---
-let u16_overflow: @u16 = @65536
+let u16_overflow: u16 = 65536
 ---
-let u16_negative: @u16 = @-1
+let u16_negative: u16 = -1
 ---
-let i16_overflow: @i16 = @32768
+let i16_overflow: i16 = 32768
 ---
-let i16_underflow: @i16 = @-32769
+let i16_underflow: i16 = -32769
 ---
-let u32_overflow: @u32 = @4294967296
+let u32_overflow: u32 = 4294967296
 ---
-let u32_negative: @u32 = @-1
+let u32_negative: u32 = -1
 ---
-let i32_overflow: @i32 = @2147483648
+let i32_overflow: i32 = 2147483648
 ---
-let i32_underflow: @i32 = @-2147483649
+let i32_underflow: i32 = -2147483649
 ---
-let u64_overflow: @u64 = @18446744073709551616
+let u64_overflow: u64 = 18446744073709551616
 ---
-let u64_negative: @u64 = @-1
+let u64_negative: u64 = -1
 ---
-let i64_overflow: @i64 = @9223372036854775808
+let i64_overflow: i64 = 9223372036854775808
 ---
-let i64_underflow: @i64 = @-9223372036854775809
+let i64_underflow: i64 = -9223372036854775809
 ---

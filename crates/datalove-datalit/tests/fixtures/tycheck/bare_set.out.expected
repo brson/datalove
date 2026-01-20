@@ -7,21 +7,21 @@
             {
               "expr": {
                 "expr": "True",
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
             {
               "expr": {
                 "expr": "False",
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             }
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },

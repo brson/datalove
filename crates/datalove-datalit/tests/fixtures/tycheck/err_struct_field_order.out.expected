@@ -35,24 +35,24 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "AnonStruct": {
           "fields": [
             {
               "name": "x",
               "type_hint": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "type_hint": "U32"
               }
             },
             {
               "name": "y",
               "type_hint": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "type_hint": "U32"
               }
             }

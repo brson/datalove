@@ -6,7 +6,7 @@
           "message": "expected 3 elements per row but got 2"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
       "heap": "Omitted",

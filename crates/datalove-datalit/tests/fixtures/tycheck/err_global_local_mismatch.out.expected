@@ -2,38 +2,25 @@
   "ast": {
     "expr": {
       "expr": {
-        "Int": {
-          "value": "42"
+        "ParseError": {
+          "message": "expected '/' after type hint"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Global",
-      "type_hint": "U32"
+      "heap": "Omitted",
+      "type_hint": {
+        "ParseError": {
+          "message": "unexpected token in type hint"
+        }
+      }
     }
   },
-  "diagnostics": [
-    {
-      "code": "T037",
-      "labels": [
-        {
-          "message": "expected #, found ",
-          "span": [
-            0,
-            1
-          ],
-          "text": ":"
-        }
-      ],
-      "message": "heap allocation mismatch"
-    }
-  ],
+  "diagnostics": [],
   "errors": [
     {
-      "actual_heap": "",
-      "expected_heap": "#",
-      "kind": "HeapMismatch"
+      "kind": "CannotSynthesize"
     }
   ],
   "root_type": null

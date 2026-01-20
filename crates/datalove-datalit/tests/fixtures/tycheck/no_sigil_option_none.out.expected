@@ -2,7 +2,7 @@
   "ast": {
     "expr": {
       "expr": "None",
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
       "heap": "Omitted",

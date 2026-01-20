@@ -13,16 +13,16 @@
               "heap": "Omitted"
             },
             "type_hint": {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "Int"
             }
           }
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": "Error"
     }
   },

@@ -1,23 +1,23 @@
 [
   {
-    "input": "let struct_in_list = @[@{x = @1}, @{x = @2}]",
+    "input": "let struct_in_list = [{x = 1}, {x = 2}]",
     "parse": {
       "Command": {
-        "ScriptStatement": "let struct_in_list = @[@{x = @1}, @{x = @2}]"
+        "ScriptStatement": "let struct_in_list = [{x = 1}, {x = 2}]"
       }
     },
     "eval": {
       "SuccessLet": {
         "name": "struct_in_list",
         "ty": "list<{x: u32}>",
-        "value": "@[@{x = @1}, @{x = @2}]"
+        "value": "[{x = 1}, {x = 2}]"
       }
     },
     "environment": [
       {
         "name": "struct_in_list",
         "ty": "list<{x: u32}>",
-        "value": "@[@{x = @1}, @{x = @2}]"
+        "value": "[{x = 1}, {x = 2}]"
       }
     ]
   },
@@ -32,7 +32,7 @@
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "list<{x: u32}>",
-        "value": "@[@{x = @1}, @{x = @2}]"
+        "value": "[{x = 1}, {x = 2}]"
       }
     },
     "environment": [
@@ -44,24 +44,24 @@
     ]
   },
   {
-    "input": "let list_in_struct = @{items = @[@1, @2, @3]}",
+    "input": "let list_in_struct = {items = [1, 2, 3]}",
     "parse": {
       "Command": {
-        "ScriptStatement": "let list_in_struct = @{items = @[@1, @2, @3]}"
+        "ScriptStatement": "let list_in_struct = {items = [1, 2, 3]}"
       }
     },
     "eval": {
       "SuccessLet": {
         "name": "list_in_struct",
         "ty": "{items: list<u32>}",
-        "value": "@{items = @[@1, @2, @3]}"
+        "value": "{items = [1, 2, 3]}"
       }
     },
     "environment": [
       {
         "name": "list_in_struct",
         "ty": "{items: list<u32>}",
-        "value": "@{items = @[@1, @2, @3]}"
+        "value": "{items = [1, 2, 3]}"
       },
       {
         "name": "struct_in_list",
@@ -81,7 +81,7 @@
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "{items: list<u32>}",
-        "value": "@{items = @[@1, @2, @3]}"
+        "value": "{items = [1, 2, 3]}"
       }
     },
     "environment": [

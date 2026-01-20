@@ -1,15 +1,15 @@
-fun factorial(n: @u32): @u32
-  if n <= @1
-    ret @1
+fun factorial(n: u32): u32
+  if n <= 1
+    ret 1
   else
-    ret n * factorial(n - @1)
+    ret n * factorial(n - 1)
   end if
 end fun
 ---
-factorial(@5)
+factorial(5)
 ---
-factorial(@0)
+factorial(0)
 ---
-factorial(@1)
+factorial(1)
 ---
-factorial(@10)
+factorial(10)

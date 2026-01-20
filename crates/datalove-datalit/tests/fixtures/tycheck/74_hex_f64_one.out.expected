@@ -6,10 +6,10 @@
           "value": "0x3FF0000000000000"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": "F64"
     }
   },

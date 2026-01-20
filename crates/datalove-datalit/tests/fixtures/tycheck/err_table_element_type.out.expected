@@ -17,7 +17,7 @@
                         "value": "\"hello\""
                       }
                     },
-                    "heap": "Local"
+                    "heap": "Omitted"
                   },
                   "type_hint": null
                 },
@@ -28,7 +28,7 @@
                         "value": "2"
                       }
                     },
-                    "heap": "Local"
+                    "heap": "Omitted"
                   },
                   "type_hint": null
                 }
@@ -71,9 +71,9 @@
           "message": "expected `u32`, found `string`",
           "span": [
             37,
-            38
+            44
           ],
-          "text": ""
+          "text": "\"hello\""
         }
       ],
       "message": "mismatched types"

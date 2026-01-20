@@ -6,10 +6,10 @@
           "value": "4294967295"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": "U32"
     }
   },

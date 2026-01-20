@@ -1,17 +1,17 @@
-fun double(x: @u32): @u32
+fun double(x: u32): u32
   ret x + x
 end fun
 ---
-double(@21)
+double(21)
 ---
-fun add(a: @u32, b: @u32): @u32
+fun add(a: u32, b: u32): u32
   ret a + b
 end fun
 ---
-add(@10, @20)
+add(10, 20)
 ---
-fun get_five(): @u32
-  ret @5
+fun get_five(): u32
+  ret 5
 end fun
 ---
 get_five()

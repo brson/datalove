@@ -11,7 +11,7 @@
                     "value": "\"a\""
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -22,7 +22,7 @@
                     "value": "\"b\""
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -33,21 +33,21 @@
                     "value": "\"c\""
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             }
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "Set": {
           "element_type": {
-            "heap": "Local",
+            "heap": "Omitted",
             "type_hint": "String"
           }
         }

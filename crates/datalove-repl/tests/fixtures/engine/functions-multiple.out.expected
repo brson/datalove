@@ -1,9 +1,9 @@
 [
   {
-    "input": "fun inc(x: @u32): @u32\n  ret x + @1\nend fun",
+    "input": "fun inc(x: u32): u32\n  ret x + 1\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun inc(x: @u32): @u32\n  ret x + @1\nend fun"
+        "ScriptStatement": "fun inc(x: u32): u32\n  ret x + 1\nend fun"
       }
     },
     "eval": {
@@ -12,10 +12,10 @@
     "environment": []
   },
   {
-    "input": "fun double(x: @u32): @u32\n  ret x + x\nend fun",
+    "input": "fun double(x: u32): u32\n  ret x + x\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun double(x: @u32): @u32\n  ret x + x\nend fun"
+        "ScriptStatement": "fun double(x: u32): u32\n  ret x + x\nend fun"
       }
     },
     "eval": {
@@ -24,10 +24,10 @@
     "environment": []
   },
   {
-    "input": "inc(@5)",
+    "input": "inc(5)",
     "parse": {
       "Command": {
-        "Expression": "inc(@5)"
+        "Expression": "inc(5)"
       }
     },
     "eval": {
@@ -36,10 +36,10 @@
     "environment": []
   },
   {
-    "input": "double(@5)",
+    "input": "double(5)",
     "parse": {
       "Command": {
-        "Expression": "double(@5)"
+        "Expression": "double(5)"
       }
     },
     "eval": {
@@ -48,10 +48,10 @@
     "environment": []
   },
   {
-    "input": "double(inc(@5))",
+    "input": "double(inc(5))",
     "parse": {
       "Command": {
-        "Expression": "double(inc(@5))"
+        "Expression": "double(inc(5))"
       }
     },
     "eval": {
@@ -60,10 +60,10 @@
     "environment": []
   },
   {
-    "input": "inc(double(@5))",
+    "input": "inc(double(5))",
     "parse": {
       "Command": {
-        "Expression": "inc(double(@5))"
+        "Expression": "inc(double(5))"
       }
     },
     "eval": {
@@ -72,10 +72,10 @@
     "environment": []
   },
   {
-    "input": "fun multiply(a: @u32, b: @u32): @u32\n  ret a * b\nend fun",
+    "input": "fun multiply(a: u32, b: u32): u32\n  ret a * b\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun multiply(a: @u32, b: @u32): @u32\n  ret a * b\nend fun"
+        "ScriptStatement": "fun multiply(a: u32, b: u32): u32\n  ret a * b\nend fun"
       }
     },
     "eval": {
@@ -84,10 +84,10 @@
     "environment": []
   },
   {
-    "input": "fun add(a: @u32, b: @u32): @u32\n  ret a + b\nend fun",
+    "input": "fun add(a: u32, b: u32): u32\n  ret a + b\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun add(a: @u32, b: @u32): @u32\n  ret a + b\nend fun"
+        "ScriptStatement": "fun add(a: u32, b: u32): u32\n  ret a + b\nend fun"
       }
     },
     "eval": {
@@ -96,10 +96,10 @@
     "environment": []
   },
   {
-    "input": "fun compute(x: @u32, y: @u32): @u32\n  let a = add(x, y)\n  let b = multiply(a, @2)\n  ret b\nend fun",
+    "input": "fun compute(x: u32, y: u32): u32\n  let a = add(x, y)\n  let b = multiply(a, 2)\n  ret b\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun compute(x: @u32, y: @u32): @u32\n  let a = add(x, y)\n  let b = multiply(a, @2)\n  ret b\nend fun"
+        "ScriptStatement": "fun compute(x: u32, y: u32): u32\n  let a = add(x, y)\n  let b = multiply(a, 2)\n  ret b\nend fun"
       }
     },
     "eval": {
@@ -108,10 +108,10 @@
     "environment": []
   },
   {
-    "input": "compute(@3, @4)",
+    "input": "compute(3, 4)",
     "parse": {
       "Command": {
-        "Expression": "compute(@3, @4)"
+        "Expression": "compute(3, 4)"
       }
     },
     "eval": {

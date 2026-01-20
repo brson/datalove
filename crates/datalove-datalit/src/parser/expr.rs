@@ -395,6 +395,7 @@ impl<'db> Parser<'db> {
                     }
                     _ => {
                         let ts = self.peek_text_span();
+                        self.next(); // Consume unexpected token to prevent infinite loop.
                         self.emit_expr_error(ts,
                             "unexpected token in Parser expression",
                             "D020",
@@ -452,6 +453,7 @@ impl<'db> Parser<'db> {
             }
             _ => {
                 let ts = self.peek_text_span();
+                self.next(); // Consume unexpected token to prevent infinite loop.
                 self.emit_expr_error(ts,
                     "unexpected tree node in Parser expression",
                     "D018",

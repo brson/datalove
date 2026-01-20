@@ -55,7 +55,7 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
       "heap": "Omitted",
@@ -77,8 +77,8 @@
         {
           "message": "expected `u32`, found `f32`",
           "span": [
-            42,
-            43
+            41,
+            42
           ],
           "text": "4"
         }

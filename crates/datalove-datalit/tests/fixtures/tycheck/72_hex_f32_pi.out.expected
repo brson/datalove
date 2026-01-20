@@ -6,10 +6,10 @@
           "value": "0x40490FDB"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": "F32"
     }
   },

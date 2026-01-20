@@ -2,10 +2,10 @@
   "ast": {
     "expr": {
       "expr": "True",
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": "F64"
     }
   },

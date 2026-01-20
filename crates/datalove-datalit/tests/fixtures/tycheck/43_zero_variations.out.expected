@@ -11,7 +11,7 @@
                     "value": "0"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -22,7 +22,7 @@
                     "value": "0"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -33,7 +33,7 @@
                     "value": "0"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -44,7 +44,7 @@
                     "value": "0"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -55,38 +55,38 @@
                     "value": "0.0"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             }
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "AnonTuple": {
           "fields": [
             {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U32"
             },
             {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "I32"
             },
             {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U64"
             },
             {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "I64"
             },
             {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "F32"
             }
           ]
