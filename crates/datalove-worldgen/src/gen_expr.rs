@@ -1,16 +1,24 @@
 //! Expression generation using datalit's type-directed generation.
 
 use rand::Rng;
-use datalove_datalit::ast::TypeHintAndHeap;
+use datalove_datalit::ast::{TypeHint, TypeHintAndHeap};
 use datalove_datalit::ast_gen;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, FunctionSig, types_match};
 use crate::gen_type::{gen_bool_type, gen_u32_type};
-use crate::pretty::pretty_expr_with_heap;
+use crate::pretty::{pretty_expr_with_heap, pretty_type_hint_and_heap};
+
+/// Check if a type supports bare arithmetic operators.
+///
+/// Floats and bigints support bare arithmetic.
+/// Float literals need type hints to avoid f32/f64 inference issues.
+fn supports_bare_arithmetic(type_hint: TypeHint<'_>) -> bool {
+    matches!(type_hint, TypeHint::F32 | TypeHint::F64 | TypeHint::Int)
+}
 
 /// Generate an expression matching the given type.
 ///
-/// May be a literal, variable reference, or function call.
+/// May be a literal, variable reference, function call, or arithmetic expression.
 pub fn gen_expr<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
@@ -35,26 +43,79 @@ pub fn gen_expr<'db, R: Rng>(
     let can_call_fn = !matching_fns.is_empty()
         && config.check_probability(rng, config.function_call_probability);
 
-    if can_use_var && !can_call_fn {
+    // Check if we can generate an arithmetic expression.
+    let can_arith = supports_bare_arithmetic(type_hint.type_hint(db))
+        && config.check_probability(rng, config.arithmetic_probability);
+
+    if can_use_var && !can_call_fn && !can_arith {
         // Use a variable.
         let var = matching_vars[rng.gen_range(0..matching_vars.len())];
         var.name.clone()
-    } else if can_call_fn && !can_use_var {
+    } else if can_call_fn && !can_use_var && !can_arith {
         // Call a function.
         let func = matching_fns[rng.gen_range(0..matching_fns.len())];
         gen_function_call(db, rng, func, config, ctx)
-    } else if can_use_var && can_call_fn {
-        // Choose randomly.
-        if rng.gen_bool(0.5) {
-            let var = matching_vars[rng.gen_range(0..matching_vars.len())];
-            var.name.clone()
-        } else {
-            let func = matching_fns[rng.gen_range(0..matching_fns.len())];
-            gen_function_call(db, rng, func, config, ctx)
+    } else if can_arith && !can_use_var && !can_call_fn {
+        // Generate arithmetic expression.
+        gen_arithmetic_expr(db, rng, type_hint, config)
+    } else if can_use_var || can_call_fn || can_arith {
+        // Multiple options available, choose randomly.
+        let mut options = Vec::new();
+        if can_use_var { options.push(0); }
+        if can_call_fn { options.push(1); }
+        if can_arith { options.push(2); }
+
+        match options[rng.gen_range(0..options.len())] {
+            0 => {
+                let var = matching_vars[rng.gen_range(0..matching_vars.len())];
+                var.name.clone()
+            }
+            1 => {
+                let func = matching_fns[rng.gen_range(0..matching_fns.len())];
+                gen_function_call(db, rng, func, config, ctx)
+            }
+            2 => gen_arithmetic_expr(db, rng, type_hint, config),
+            _ => unreachable!(),
         }
     } else {
         // Generate a literal using datalit.
         gen_literal(db, rng, type_hint, config)
+    }
+}
+
+/// Generate an arithmetic expression (operand op operand).
+///
+/// Supports floats (f32, f64) and bigints (int).
+/// Division only works for floats; bigints must use /! or /?.
+fn gen_arithmetic_expr<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    type_hint: TypeHintAndHeap<'db>,
+    config: &WorldGenConfig,
+) -> String {
+    let inner_type = type_hint.type_hint(db);
+    let is_float = matches!(inner_type, TypeHint::F32 | TypeHint::F64);
+
+    // Floats support all four operators; bigints don't support bare /.
+    let ops: &[&str] = if is_float {
+        &["+", "-", "*", "/"]
+    } else {
+        &["+", "-", "*"]
+    };
+    let op = ops[rng.gen_range(0..ops.len())];
+
+    // Generate literal operands.
+    let lhs = gen_literal(db, rng, type_hint, config);
+    let rhs = gen_literal(db, rng, type_hint, config);
+
+    if is_float {
+        // Float operands need type hints to avoid f32/f64 inference issues.
+        // Syntax: (: @f64 / @123.4) + (: @f64 / @56.7)
+        let type_str = pretty_type_hint_and_heap(db, type_hint);
+        format!("(: {} / {}) {} (: {} / {})", type_str, lhs, op, type_str, rhs)
+    } else {
+        // Bigints don't need type hints.
+        format!("{} {} {}", lhs, op, rhs)
     }
 }
 
@@ -362,10 +423,10 @@ mod tests {
         for ty_hint in types {
             let ty = TypeHintAndHeap::new(db, Heap::Local, ty_hint);
             let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
-            // All expressions should start with @ for local heap.
+            // Expressions should start with @ for local heap, or (: for typed arithmetic.
             assert!(
-                expr.starts_with("@"),
-                "Expression should start with @: {}",
+                expr.starts_with("@") || expr.starts_with("(: @"),
+                "Expression should start with @ or (: @: {}",
                 expr
             );
         }

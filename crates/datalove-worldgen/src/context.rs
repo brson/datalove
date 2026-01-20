@@ -89,17 +89,32 @@ impl<'db> GenContext<'db> {
     /// Get all callable functions (local + imported, with shadowing).
     ///
     /// Local functions shadow imported functions with the same name.
+    /// Later imports shadow earlier imports with the same name.
     pub fn callable_functions(&self) -> impl Iterator<Item = &FunctionSig<'db>> {
         // Collect local function names for shadowing check.
         let local_names: std::collections::HashSet<_> =
             self.functions.iter().map(|f| f.name.as_str()).collect();
 
-        // Return local functions + non-shadowed imports.
-        self.functions.iter().chain(
-            self.imported_functions
-                .iter()
-                .filter(move |f| !local_names.contains(f.name.as_str())),
-        )
+        // For imported functions, later imports shadow earlier ones.
+        // Keep track of which names we've seen (iterating in reverse).
+        let mut seen_import_names = std::collections::HashSet::new();
+        let non_shadowed_imports: Vec<_> = self.imported_functions
+            .iter()
+            .rev()
+            .filter(|f| {
+                if local_names.contains(f.name.as_str()) {
+                    false // Shadowed by local
+                } else if seen_import_names.contains(f.name.as_str()) {
+                    false // Shadowed by later import
+                } else {
+                    seen_import_names.insert(f.name.as_str());
+                    true
+                }
+            })
+            .collect();
+
+        // Return local functions + non-shadowed imports (reversed back to original order).
+        self.functions.iter().chain(non_shadowed_imports.into_iter().rev())
     }
 
     /// Find variables of a specific type.

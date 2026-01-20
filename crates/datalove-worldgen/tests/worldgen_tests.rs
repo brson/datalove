@@ -211,6 +211,7 @@ fn test_construct_coverage() {
     println!("  requires:       {}", coverage.requires);
     println!("  imports:        {}", coverage.imports);
     println!("  function calls: {}", coverage.function_calls);
+    println!("  arithmetic:     {}", coverage.arithmetic);
 
     // Assert minimum coverage for key constructs.
     assert!(coverage.modules >= 100, "Should have at least 100 modules");
@@ -238,6 +239,7 @@ struct ConstructCoverage {
     requires: usize,
     imports: usize,
     function_calls: usize,
+    arithmetic: usize,
 }
 
 impl ConstructCoverage {
@@ -263,6 +265,18 @@ impl ConstructCoverage {
                 && !line.trim().starts_with("fun ")
             {
                 self.function_calls += 1;
+            }
+        }
+
+        // Count arithmetic expressions (+ - * on @int).
+        // Look for patterns like "@123 + @456" which indicate bigint arithmetic.
+        for line in wf.lines() {
+            if line.contains(" + @") || line.contains(" - @") || line.contains(" * @") {
+                // Check if it's actually @int arithmetic (not comparison).
+                let l = line.trim();
+                if l.contains("@int") || (l.contains("= @") && (l.contains(" + ") || l.contains(" - ") || l.contains(" * "))) {
+                    self.arithmetic += 1;
+                }
             }
         }
     }
@@ -485,6 +499,60 @@ fn test_salsa_type_determinism() {
         assert_eq!(wf1, wf2, "Seed {} should be deterministic", seed);
         assert_eq!(wf2, wf3, "Seed {} should be deterministic", seed);
     }
+}
+
+/// Verify that arithmetic expressions are generated for bigints and floats.
+#[test]
+fn test_arithmetic_expressions() {
+    let config = WorldGenConfig::default();
+
+    // Track bigint operators.
+    let mut int_add = false;
+    let mut int_sub = false;
+    let mut int_mul = false;
+
+    // Track float operators.
+    let mut float_add = false;
+    let mut float_sub = false;
+    let mut float_mul = false;
+    let mut float_div = false;
+
+    for seed in 0..300 {
+        let wf = gen_worldfile_seeded(seed, config.clone());
+
+        for line in wf.lines() {
+            // Check for bigint arithmetic (simple format: @123 + @456).
+            if line.contains("@int") {
+                if line.contains(" + ") { int_add = true; }
+                if line.contains(" - ") { int_sub = true; }
+                if line.contains(" * ") { int_mul = true; }
+            }
+
+            // Check for float arithmetic (type-hinted format: (: @f32 / @val) op (: @f32 / @val)).
+            if line.contains("(: @f32") || line.contains("(: @f64") {
+                if line.contains(") + (") { float_add = true; }
+                if line.contains(") - (") { float_sub = true; }
+                if line.contains(") * (") { float_mul = true; }
+                if line.contains(") / (") { float_div = true; }
+            }
+        }
+
+        // Break early if we found all operators.
+        if int_add && int_sub && int_mul && float_add && float_sub && float_mul && float_div {
+            break;
+        }
+    }
+
+    // Assert bigint arithmetic.
+    assert!(int_add, "Should generate addition (+) on bigints");
+    assert!(int_sub, "Should generate subtraction (-) on bigints");
+    assert!(int_mul, "Should generate multiplication (*) on bigints");
+
+    // Assert float arithmetic.
+    assert!(float_add, "Should generate addition (+) on floats");
+    assert!(float_sub, "Should generate subtraction (-) on floats");
+    assert!(float_mul, "Should generate multiplication (*) on floats");
+    assert!(float_div, "Should generate division (/) on floats");
 }
 
 /// Verify that modules with cross-module function calls typecheck correctly.

@@ -35,6 +35,9 @@ pub struct WorldGenConfig {
     /// Probability of calling another function instead of a literal (0-100 percent).
     pub function_call_probability: u32,
 
+    /// Probability of generating an arithmetic expression for floats/bigints (0-100 percent).
+    pub arithmetic_probability: u32,
+
     /// Configuration for datalit expression generation.
     pub type_config: AstGenConfig,
 }
@@ -67,6 +70,7 @@ impl Default for WorldGenConfig {
             loop_probability: 20,
             type_alias_usage_probability: 30,
             function_call_probability: 30,
+            arithmetic_probability: 30,
             type_config,
         }
     }
