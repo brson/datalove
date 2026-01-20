@@ -1,0 +1,34 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "heap": "Omitted",
+            "kind": "Er",
+            "payload": {
+              "expr": {
+                "heap": "Omitted",
+                "kind": "Error",
+                "type_hint": null,
+                "value": {
+                  "expr": {
+                    "heap": "Local",
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "42"
+                  }
+                }
+              }
+            },
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}
