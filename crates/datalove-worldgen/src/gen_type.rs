@@ -216,7 +216,7 @@ mod tests {
     fn test_format_type_alias_inner<'db>(db: &'db dyn salsa::Database) {
         let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
         let formatted = format_type_alias(db, "Counter", ty);
-        assert_eq!(formatted, "type Counter: @u32");
+        assert_eq!(formatted, "type Counter: u32");
     }
 
     #[test]

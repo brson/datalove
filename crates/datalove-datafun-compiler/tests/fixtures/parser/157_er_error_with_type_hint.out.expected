@@ -19,7 +19,7 @@
                     "heap": "Omitted",
                     "kind": "Float",
                     "type_hint": {
-                      "heap": "Local",
+                      "heap": "Omitted",
                       "type_hint": "F64"
                     },
                     "value": "19.0"
@@ -28,7 +28,7 @@
               }
             },
             "type_hint": {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U32"
             }
           }

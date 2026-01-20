@@ -328,11 +328,8 @@ mod tests {
         let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
         let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
 
-        // Should produce a u32 literal with @ prefix.
-        assert!(expr.starts_with("@"), "u32 expression should start with @: {}", expr);
-        // Should be parseable as a number (after stripping @).
-        let num_str = &expr[1..];
-        assert!(num_str.parse::<u32>().is_ok(), "Should be valid u32: {}", expr);
+        // Should produce a u32 literal (no sigil).
+        assert!(expr.parse::<u32>().is_ok(), "Should be valid u32: {}", expr);
     }
 
     #[test]
@@ -350,10 +347,10 @@ mod tests {
         let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::Bool);
         let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
 
-        // Should produce @true or @false.
+        // Should produce true or false.
         assert!(
-            expr == "@true" || expr == "@false",
-            "bool expression should be @true or @false: {}",
+            expr == "true" || expr == "false",
+            "bool expression should be true or false: {}",
             expr
         );
     }
@@ -373,8 +370,8 @@ mod tests {
         let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::String);
         let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
 
-        // Should produce @"..." string.
-        assert!(expr.starts_with("@\""), "string should start with @\": {}", expr);
+        // Should produce "..." string.
+        assert!(expr.starts_with("\""), "string should start with \": {}", expr);
         assert!(expr.ends_with("\""), "string should end with \": {}", expr);
     }
 
@@ -569,12 +566,8 @@ mod tests {
         for ty_hint in types {
             let ty = TypeHintAndHeap::new(db, Heap::Local, ty_hint);
             let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
-            // Expressions should start with @ for local heap, or (: for typed arithmetic.
-            assert!(
-                expr.starts_with("@") || expr.starts_with("(: @"),
-                "Expression should start with @ or (: @: {}",
-                expr
-            );
+            // Expressions should not be empty.
+            assert!(!expr.is_empty(), "Expression should not be empty");
         }
     }
 
@@ -593,8 +586,8 @@ mod tests {
         let ty = TypeHintAndHeap::new(db, Heap::Global, TypeHint::U32);
         let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
 
-        // Should produce #... for global heap.
-        assert!(expr.starts_with("#"), "Global heap should use #: {}", expr);
+        // Heap sigils no longer output, just verify it produces valid expression.
+        assert!(expr.parse::<u32>().is_ok(), "Should be valid u32: {}", expr);
     }
 
     #[test]

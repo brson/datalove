@@ -351,27 +351,18 @@ fn test_heap_sigils_in_output() {
     for seed in 0..100 {
         let wf = gen_worldfile_seeded(seed, config.clone());
 
-        // Look for @type patterns (local heap).
-        if wf.contains("@u32") || wf.contains("@i32") || wf.contains("@bool")
-            || wf.contains("@u64") || wf.contains("@string")
+        // Heap sigils no longer output, just verify we generate types.
+        if wf.contains("u32") || wf.contains("i32") || wf.contains("bool")
+            || wf.contains("u64") || wf.contains("string")
         {
             found_local = true;
-        }
-
-        // Look for #type patterns (global heap).
-        if wf.contains("#u32") || wf.contains("#i32") || wf.contains("#bool")
-            || wf.contains("#u64") || wf.contains("#string")
-        {
-            found_global = true;
-        }
-
-        if found_local && found_global {
+            found_global = true; // Heap distinction no longer visible in output.
             break;
         }
     }
 
-    assert!(found_local, "Should generate types with local heap (@)");
-    assert!(found_global, "Should generate types with global heap (#)");
+    assert!(found_local, "Should generate types in worldfile");
+    assert!(found_global, "Should generate types in worldfile");
 }
 
 /// Verify that generated expressions match their declared types.
@@ -401,12 +392,12 @@ fn test_type_alias_format() {
 
     let wf = gen_worldfile_seeded(42, config);
 
-    // Type aliases should be in format "type Name: @type".
+    // Type aliases should be in format "type Name: type" (no heap sigils).
     for line in wf.lines() {
         if line.starts_with("type Type") {
             assert!(
-                line.contains(": @") || line.contains(": #"),
-                "Type alias should have heap sigil: {}",
+                line.contains(": "),
+                "Type alias should have type: {}",
                 line
             );
         }
@@ -488,16 +479,16 @@ fn test_primitive_type_variety() {
     for seed in 0..200 {
         let wf = gen_worldfile_seeded(seed, config.clone());
 
-        // Count occurrences of each primitive type.
-        for ty in ["@bool", "@u8", "@i8", "@u16", "@i16", "@u32", "@i32",
-                   "@u64", "@i64", "@usize", "@isize", "@f32", "@f64", "@string"] {
+        // Count occurrences of each primitive type (no sigils).
+        for ty in ["bool", "u8", "i8", "u16", "i16", "u32", "i32",
+                   "u64", "i64", "usize", "isize", "f32", "f64", "string"] {
             let count = wf.matches(ty).count();
             *type_counts.entry(ty).or_insert(0) += count;
         }
     }
 
     // Should generate at least a few of the common types.
-    let common_types = ["@u32", "@i32", "@bool", "@string"];
+    let common_types = ["u32", "i32", "bool", "string"];
     for ty in common_types {
         let count = type_counts.get(ty).copied().unwrap_or(0);
         assert!(
@@ -509,7 +500,7 @@ fn test_primitive_type_variety() {
     }
 
     // usize/isize should also be generated (they have weight 5 in leaf_only).
-    for ty in ["@usize", "@isize"] {
+    for ty in ["usize", "isize"] {
         let count = type_counts.get(ty).copied().unwrap_or(0);
         assert!(
             count > 0,
@@ -586,15 +577,15 @@ fn test_arithmetic_expressions() {
         let wf = gen_worldfile_seeded(seed, config.clone());
 
         for line in wf.lines() {
-            // Check for bigint arithmetic (simple format: @123 + @456).
-            if line.contains("@int") {
+            // Check for bigint arithmetic (simple format: 123 + 456).
+            if line.contains("int") {
                 if line.contains(" + ") { int_add = true; }
                 if line.contains(" - ") { int_sub = true; }
                 if line.contains(" * ") { int_mul = true; }
             }
 
-            // Check for float arithmetic (type-hinted format: (: @f32 / @val) op (: @f32 / @val)).
-            if line.contains("(: @f32") || line.contains("(: @f64") {
+            // Check for float arithmetic (type-hinted format: (: f32 / val) op (: f32 / val)).
+            if line.contains("(: f32") || line.contains("(: f64") {
                 if line.contains(") + (") { float_add = true; }
                 if line.contains(") - (") { float_sub = true; }
                 if line.contains(") * (") { float_mul = true; }
@@ -675,9 +666,7 @@ fn test_unary_negation() {
 
         // Look for unary negation patterns: -(: type / value)
         if wf.contains("-(: int /") { found_int_neg = true; }
-        if wf.contains("-(: @f32 /") || wf.contains("-(: @f64 /")
-            || wf.contains("-(: #f32 /") || wf.contains("-(: #f64 /")
-        {
+        if wf.contains("-(: f32 /") || wf.contains("-(: f64 /") {
             found_float_neg = true;
         }
 

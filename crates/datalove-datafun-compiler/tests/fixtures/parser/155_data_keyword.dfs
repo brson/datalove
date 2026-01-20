@@ -1,1 +1,1 @@
-let x = data @42
+let x = data 42
