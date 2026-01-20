@@ -1368,6 +1368,14 @@ name = "datalove-rtdt"
 version = "0.1.0"
 
 [[package]]
+name = "datalove-tests"
+version = "0.1.0"
+dependencies = [
+ "datalove-worldgen",
+ "rustmax",
+]
+
+[[package]]
 name = "datalove-worldgen"
 version = "0.1.0"
 dependencies = [
