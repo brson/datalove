@@ -38,6 +38,9 @@ pub struct WorldGenConfig {
     /// Probability of generating an arithmetic expression for floats/bigints (0-100 percent).
     pub arithmetic_probability: u32,
 
+    /// Probability of generating a debuglog statement (0-100 percent).
+    pub debuglog_probability: u32,
+
     /// Configuration for datalit expression generation.
     pub type_config: AstGenConfig,
 }
@@ -71,6 +74,7 @@ impl Default for WorldGenConfig {
             type_alias_usage_probability: 30,
             function_call_probability: 30,
             arithmetic_probability: 30,
+            debuglog_probability: 20,
             type_config,
         }
     }

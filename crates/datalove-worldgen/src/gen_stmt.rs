@@ -76,6 +76,22 @@ pub fn gen_set<'db, R: Rng>(
     Some(format!("{}set {} = {}", indent, var.name, value))
 }
 
+/// Generate a debuglog statement.
+///
+/// Prints an existing variable's value for interpreter output comparison.
+pub fn gen_debuglog<'db, R: Rng>(
+    _db: &'db dyn salsa::Database,
+    rng: &mut R,
+    ctx: &GenContext<'db>,
+    indent: &str,
+) -> Option<String> {
+    if ctx.variables.is_empty() {
+        return None;
+    }
+    let var = &ctx.variables[rng.gen_range(0..ctx.variables.len())];
+    Some(format!("{}debuglog {}", indent, var.name))
+}
+
 /// Generate a return statement.
 pub fn gen_ret<'db, R: Rng>(
     db: &'db dyn salsa::Database,
@@ -229,11 +245,12 @@ pub fn gen_body_statement<'db, R: Rng>(
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
-    // Check probabilities for control flow.
+    // Check probabilities for control flow and debuglog.
     let can_if = !ctx.at_max_depth(config) && config.check_probability(rng, config.if_probability);
     let can_loop = !ctx.at_max_depth(config) && config.check_probability(rng, config.loop_probability);
+    let can_debuglog = config.check_probability(rng, config.debuglog_probability);
 
-    let choice = rng.gen_range(0..10);
+    let choice = rng.gen_range(0..12);
     match choice {
         0..=3 => gen_let(db, rng, config, ctx, var_counter, indent),
         4..=5 => gen_var(db, rng, config, ctx, var_counter, indent),
@@ -241,6 +258,8 @@ pub fn gen_body_statement<'db, R: Rng>(
             .unwrap_or_else(|| gen_let(db, rng, config, ctx, var_counter, indent)),
         8 if can_if => gen_if(db, rng, config, ctx, var_counter, indent),
         9 if can_loop => gen_loop(db, rng, config, ctx, var_counter, indent),
+        10..=11 if can_debuglog => gen_debuglog(db, rng, ctx, indent)
+            .unwrap_or_else(|| gen_let(db, rng, config, ctx, var_counter, indent)),
         _ => gen_let(db, rng, config, ctx, var_counter, indent),
     }
 }

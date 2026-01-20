@@ -219,6 +219,7 @@ fn test_construct_coverage() {
     println!("  logical and:    {}", coverage.logical_and);
     println!("  logical or:     {}", coverage.logical_or);
     println!("  logical xor:    {}", coverage.logical_xor);
+    println!("  debuglogs:      {}", coverage.debuglogs);
 
     // Assert minimum coverage for key constructs.
     assert!(coverage.modules >= 100, "Should have at least 100 modules");
@@ -228,6 +229,7 @@ fn test_construct_coverage() {
     assert!(coverage.rets >= 100, "Should have at least 100 ret statements");
     assert!(coverage.ifs >= 10, "Should have at least 10 if statements");
     assert!(coverage.loops >= 5, "Should have at least 5 loops");
+    assert!(coverage.debuglogs >= 10, "Should have at least 10 debuglog statements");
 }
 
 #[derive(Default)]
@@ -254,6 +256,7 @@ struct ConstructCoverage {
     logical_and: usize,
     logical_or: usize,
     logical_xor: usize,
+    debuglogs: usize,
 }
 
 impl ConstructCoverage {
@@ -326,6 +329,9 @@ impl ConstructCoverage {
         self.logical_and += wf.matches(" and ").count();
         self.logical_or += wf.matches(" or ").count();
         self.logical_xor += wf.matches(" xor ").count();
+
+        // Count debuglog statements.
+        self.debuglogs += wf.matches("debuglog ").count();
     }
 }
 
