@@ -3,4 +3,4 @@ scriptunit-expr
 ----------
 
 // Create Data from a bool.
-@data @true
+data true

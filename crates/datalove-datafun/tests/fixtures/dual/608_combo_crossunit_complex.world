@@ -2,12 +2,12 @@
 module local/test/utils
 ----------
 
-fun add_one(x: @u32): !@u32
-    ret ok (x +! @1)
+fun add_one(x: u32): !u32
+    ret ok (x +! 1)
 end fun
 
-fun add_two(x: @u32): !@u32
-    ret ok (x +! @2)
+fun add_two(x: u32): !u32
+    ret ok (x +! 2)
 end fun
 
 ----------
@@ -18,13 +18,13 @@ require module local/test/utils
 import utils.add_one
 import utils.add_two
 
-fun process(x: @u32, flag: bool): !@u32
+fun process(x: u32, flag: bool): !u32
     if flag
         ret add_two(x)
     end if
     ret add_one(x)
 end fun
 
-debuglog process(@4, @true)
-debuglog process(@5, @false)
-debuglog process(@10, @true)
+debuglog process(4, true)
+debuglog process(5, false)
+debuglog process(10, true)

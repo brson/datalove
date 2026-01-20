@@ -3,9 +3,9 @@ module local/test/outops
 ----------
 
 // Module function taking out param.
-fun init_42(out x: @u32): @bool
-    set x = @42
-    ret @true
+fun init_42(out x: u32): bool
+    set x = 42
+    ret true
 end fun
 
 ----------
@@ -16,7 +16,7 @@ scriptunit-fragment
 require module local/test/outops
 import outops.init_42
 
-var s: {a: @u32, b: @u32} = {a = @0, b = @0}
+var s: {a: u32, b: u32} = {a = 0, b = 0}
 let _ok = init_42(s.a)
 debuglog s.a
 debuglog s.b

@@ -4,11 +4,11 @@ scriptunit-fragment
 
 // Test conditional move convergence - list moved in one branch.
 fun test_cond(cond: bool): u32
-    let x = [@1, @2]
+    let x = [1, 2]
     if cond
         let _sink = x
     end if
-    ret @0
+    ret 0
 end fun
 
 debuglog test_cond(true)

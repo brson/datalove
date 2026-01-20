@@ -1,4 +1,4 @@
 fun test()
-    var x = @1
-    set x @2
+    var x = 1
+    set x 2
 end fun

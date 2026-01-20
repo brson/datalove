@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let xs = @[@"hello", @"world"]
+let xs = ["hello", "world"]
 debuglog xs

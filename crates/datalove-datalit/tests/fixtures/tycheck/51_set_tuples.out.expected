@@ -107,13 +107,13 @@
   "root_type": {
     "element_type": {
       "fields": [
-        "@u32",
-        "@string"
+        "u32",
+        "string"
       ],
-      "heap": "@",
+      "heap": "",
       "kind": "AnonTuple"
     },
-    "heap": "@",
+    "heap": "",
     "kind": "Set"
   }
 }

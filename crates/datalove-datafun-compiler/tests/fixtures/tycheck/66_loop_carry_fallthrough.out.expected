@@ -6,8 +6,8 @@
         {
           "message": "not found in this scope",
           "span": [
-            80,
-            81
+            78,
+            79
           ],
           "text": "i"
         }

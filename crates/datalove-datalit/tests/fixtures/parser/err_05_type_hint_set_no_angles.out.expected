@@ -6,10 +6,10 @@
           "elements": []
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "ParseError": {
           "message": "expected <> after set keyword"
@@ -24,8 +24,8 @@
         {
           "message": "expected '<' after 'set'",
           "span": [
-            3,
-            6
+            2,
+            5
           ],
           "text": "set"
         }

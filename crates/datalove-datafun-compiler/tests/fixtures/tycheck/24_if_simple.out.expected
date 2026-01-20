@@ -8,10 +8,10 @@
       "params": [
         {
           "name": "x",
-          "type": "@u32"
+          "type": "u32"
         }
       ],
-      "return_type": "@u32"
+      "return_type": "u32"
     }
   ]
 }

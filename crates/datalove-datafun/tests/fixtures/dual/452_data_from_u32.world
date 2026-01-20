@@ -3,5 +3,5 @@ scriptunit-fragment
 ----------
 
 // Create Data from u32.
-let d: data = @data @42
+let d: data = data 42
 debuglog d

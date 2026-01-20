@@ -127,15 +127,15 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "@",
-    "key_type": "@u32",
+    "heap": "",
+    "key_type": "u32",
     "kind": "Map",
     "value_type": {
       "fields": [
-        "@string",
-        "@bool"
+        "string",
+        "bool"
       ],
-      "heap": "@",
+      "heap": "",
       "kind": "AnonTuple"
     }
   }

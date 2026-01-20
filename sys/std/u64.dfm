@@ -58,7 +58,7 @@ end fun
 
 fun is_power_of_two(self: u64): bool
   if self == (: u64 / 0)
-    ret @false
+    ret false
   else
     ret count_ones(self) == (: u64 / 1)
   end if
@@ -67,7 +67,7 @@ end fun
 // Integer log base 2. Returns none if self is zero.
 fun ilog2(self: u64): ?u64
   if self == (: u64 / 0)
-    ret @none
+    ret none
   else
     ret some sub_saturating((: u64 / 63), leading_zeros(self))
   end if
@@ -87,7 +87,7 @@ fun next_power_of_two(self: u64): ?u64
       if ilog2(self) |log|
         let next_exp = add_saturating(log, (: u64 / 1))
         if next_exp >= (: u64 / 64)
-          ret @none
+          ret none
         else
           ret shift_left((: u64 / 1), next_exp)
         end if
@@ -109,7 +109,7 @@ fun pow_checked(self: u64, exp: u64): ?u64
       if mul_checked(result, base) |next_result|
         set result = next_result
       else
-        ret @none
+        ret none
       end if
     end if
     set e = shift_right_wrapping(e, (: u64 / 1))
@@ -117,7 +117,7 @@ fun pow_checked(self: u64, exp: u64): ?u64
       if mul_checked(base, base) |next_base|
         set base = next_base
       else
-        ret @none
+        ret none
       end if
     end if
   end loop
@@ -129,13 +129,13 @@ fun pow_saturating(self: u64, exp: u64): u64
   var result: u64 = (: u64 / 1)
   var base: u64 = self
   var e: u64 = exp
-  var overflow: bool = @false
+  var overflow: bool = false
   loop while e .> (: u64 / 0)
     if bitand(e, (: u64 / 1)) == (: u64 / 1)
       if mul_checked(result, base) |next_result|
         set result = next_result
       else
-        set overflow = @true
+        set overflow = true
       end if
     end if
     set e = shift_right_wrapping(e, (: u64 / 1))
@@ -143,7 +143,7 @@ fun pow_saturating(self: u64, exp: u64): u64
       if mul_checked(base, base) |next_base|
         set base = next_base
       else
-        set overflow = @true
+        set overflow = true
       end if
     end if
   end loop
@@ -231,7 +231,7 @@ fun neg_checked(self: u64): ?u64
   if self == (: u64 / 0)
     ret some (: u64 / 0)
   else
-    ret @none
+    ret none
   end if
 end fun
 
@@ -253,7 +253,7 @@ end fun
 
 fun rem_checked(self: u64, other: u64): ?u64
   if other == (: u64 / 0)
-    ret @none
+    ret none
   else
     ret some icall rem_u64(self, other)
   end if
@@ -384,7 +384,7 @@ end fun
 // Returns none if shift >= 64.
 fun shift_left(self: u64, n: u64): ?u64
   if n >= (: u64 / 64)
-    ret @none
+    ret none
   else
     ret some icall shl_u64(self, n)
   end if
@@ -393,7 +393,7 @@ end fun
 // Returns none if shift >= 64.
 fun shift_right(self: u64, n: u64): ?u64
   if n >= (: u64 / 64)
-    ret @none
+    ret none
   else
     ret some icall shr_u64(self, n)
   end if

@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = pack Tuple3 {v0, v1, v2}\n    v4 = const \"tuple holder\"\n    v5 = pack Struct0 {v3, v4}\n    v6 = getfield v5.0\n    v7 = getfieldref v6.0\n    debuglog v7\n    v8 = getfield v5.0\n    v9 = getfieldref v8.1\n    debuglog v9\n    v10 = getfield v5.0\n    v11 = getfieldref v10.2\n    debuglog v11\n    v12 = getfieldref v5.1\n    debuglog v12\n    drop v5\n    unit_end\nexports:\n    s = v5\n",
             ),
             ir_match: true,
-            interp_output: "@1\n@2\n@3\n@\"tuple holder\"\n",
-            aot_output: "@1\n@2\n@3\n@\"tuple holder\"\n",
+            interp_output: "1\n2\n3\n\"tuple holder\"\n",
+            aot_output: "1\n2\n3\n\"tuple holder\"\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

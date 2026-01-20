@@ -6,8 +6,8 @@
         {
           "message": "continue statement here",
           "span": [
-            27,
-            35
+            26,
+            34
           ],
           "text": "continue"
         }
@@ -28,7 +28,7 @@
       "kind": "function",
       "name": "bad_continue",
       "params": [],
-      "return_type": "@u32"
+      "return_type": "u32"
     }
   ]
 }

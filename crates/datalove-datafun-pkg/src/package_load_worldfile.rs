@@ -106,7 +106,7 @@ pub fn load_world_from_worldfile(
 /// module sys/std/u32
 /// ----------
 ///
-/// fun add(x: @u32, y: @u32): @u32
+/// fun add(x: u32, y: u32): u32
 ///   ret x + y
 /// end fun
 ///
@@ -554,7 +554,7 @@ end fun
 module sys/std/u32
 ----------
 
-fun add(x: @u32, y: @u32): @u32
+fun add(x: u32, y: u32): u32
   ret x + y
 end fun
 

@@ -4,7 +4,7 @@ module local/test/base
 
 // Use int to avoid widening issues.
 fun add_one(x: int): int
-    ret x + :int/@1
+    ret x + :int/1
 end fun
 
 ----------
@@ -26,5 +26,5 @@ require module local/test/mid
 import mid.add_two
 
 fun main(): int
-    ret add_two(:int/@10)
+    ret add_two(:int/10)
 end fun

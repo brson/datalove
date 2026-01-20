@@ -18,7 +18,7 @@
       "code": "T037",
       "labels": [
         {
-          "message": "expected #, found @",
+          "message": "expected #, found ",
           "span": [
             0,
             1
@@ -31,7 +31,7 @@
   ],
   "errors": [
     {
-      "actual_heap": "@",
+      "actual_heap": "",
       "expected_heap": "#",
       "kind": "HeapMismatch"
     }

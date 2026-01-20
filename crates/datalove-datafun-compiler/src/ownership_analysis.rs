@@ -1330,7 +1330,7 @@ mod tests {
     fn test_simple_function() {
         let ref db = crate::Database::default();
         let source = r#"
-fun test(): @u32
+fun test(): u32
     let x = @42
     ret x
 end fun
@@ -1350,7 +1350,7 @@ end fun
         // This test just verifies the analysis runs without panicking.
         let ref db = crate::Database::default();
         let source = r#"
-fun test(cond: @bool): @u32
+fun test(cond: bool): u32
     let x = [@1, @2]
     if cond
         let _sink = x
@@ -1373,7 +1373,7 @@ end fun
         // Verify that ref params have param_mode = Some(Ref).
         let ref db = crate::Database::default();
         let source = r#"
-fun test(ref x: @u32): @u32
+fun test(ref x: u32): u32
     ret x
 end fun
         "#;
@@ -1394,7 +1394,7 @@ end fun
         // Verify that regular in params have param_mode = Some(In).
         let ref db = crate::Database::default();
         let source = r#"
-fun test(x: @u32): @u32
+fun test(x: u32): u32
     ret x
 end fun
         "#;
@@ -1440,7 +1440,7 @@ end fun
         // Verify mixed parameter modes are tracked correctly.
         let ref db = crate::Database::default();
         let source = r#"
-fun test(a: @u32, ref b: @u32, c: @u32): @u32
+fun test(a: u32, ref b: u32, c: u32): u32
     ret a
 end fun
         "#;

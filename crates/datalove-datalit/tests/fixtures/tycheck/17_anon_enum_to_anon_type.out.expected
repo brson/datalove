@@ -30,7 +30,7 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "@",
+    "heap": "",
     "kind": "AnonEnum",
     "variants": [
       {

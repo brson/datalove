@@ -1,2 +1,2 @@
-fun increment(accum: u64, amount: u8): !@u64
+fun increment(accum: u64, amount: u8): !u64
 end fun

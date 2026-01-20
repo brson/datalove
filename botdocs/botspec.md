@@ -44,11 +44,11 @@ These types widen to `int` like other fixed integers. See `botdocs/index-64.md` 
 
 | Type | Syntax | Example | Interpreter Status |
 |------|--------|---------|-------------------|
-| List | `[@T]` | `[1, 2, 3]` | Implemented |
-| Map | `@map<@K, @V>` | `@map { 0 = 5, 2 = 2 }` | Implemented |
-| Set | `@set<@T>` | `@set { 1, 2, 3 }` | Implemented |
-| Tensor | `@tensor<@T, N>` | - | [PARTIAL: parsed only] |
-| Table | `{| col: @T, ... |}` | `{| x, y; 1, 2 |}` | Implemented |
+| List | `[T]` | `[1, 2, 3]` | Implemented |
+| Map | `map<K, V>` | `map { 0 = 5, 2 = 2 }` | Implemented |
+| Set | `set<T>` | `set { 1, 2, 3 }` | Implemented |
+| Tensor | `tensor<T, N>` | - | [PARTIAL: parsed only] |
+| Table | `{| col: T, ... |}` | `{| x, y; 1, 2 |}` | Implemented |
 
 **Table Type:**
 
@@ -71,8 +71,8 @@ Example with type hint:
 ```
 : {| x: u32, y: u32 |} / {|
   x, y
-  @1, @2
-  @3, @4
+  1, 2
+  3, 4
 |}
 ```
 
@@ -82,19 +82,19 @@ Column projections (e.g., `table.x`) have type "list of column type" but cannot 
 
 **Anonymous Tuple:** (Implemented)
 ```
-: (@bool, @u32) / (@true, 1)
+: (bool, u32) / (true, 1)
 : () / ()
 ```
 
 **Anonymous Struct:** (Implemented)
 ```
-: { field1: @bool, field2: @u32 } / { field1 = @true, field2 = 1 }
+: { field1: bool, field2: u32 } / { field1 = true, field2 = 1 }
 ```
 
 **Anonymous Enum:** (Implemented)
 ```
-: @enum { Foo, Bar(@u32) } / @enum Foo
-: @enum { Bar(@u32) } / @enum Bar(2)
+: enum { Foo, Bar(u32) } / enum Foo
+: enum { Bar(u32) } / enum Bar(2)
 ```
 
 Note: Named tuples, structs, and enums were removed from the language.
@@ -103,36 +103,23 @@ Note: Named tuples, structs, and enums were removed from the language.
 
 | Type | Syntax | Values | Interpreter Status |
 |------|--------|--------|-------------------|
-| Option | `?@T` | value or `@none` | Implemented |
-| Result | `!@T` | value or `@error "msg"` | Implemented |
-| Data | `@data` | `@data 1`, `@data : int / 1` | Implemented |
-| Error | `@error` | `@error "oops"`, `@error : int / 1` | Implemented (as result payload) |
+| Option | `?T` | value or `none` | Implemented |
+| Result | `!T` | value or `error "msg"` | Implemented |
+| Data | `data` | `data 1`, `data : int / 1` | Implemented |
+| Error | `error` | `error "oops"`, `error : int / 1` | Implemented (as result payload) |
 
-### 1.5 Heap Annotations
-
-Every type has an associated heap:
-- `@` - Local heap (default)
-- `#` - Global heap
-- (omitted) - Inferred
-
-```
-: @u32 / @1    // local
-: #u32 / #1    // global
-: u32 / 1      // inferred
-```
-
-### 1.6 Literal Syntax
+### 1.5 Literal Syntax
 
 **Type hint syntax:** `: type / expression`
 ```
-: @u32 / 42
+: u32 / 42
 ```
 
 **Hex literals:** `0x` prefix for hexadecimal values
 ```
-: @u32 / 0xFF        // integer value 255
-: @u8 / 0x7F         // integer value 127
-: @f32 / 0xABABABAB  // f32 bit pattern coercion
+: u32 / 0xFF        // integer value 255
+: u8 / 0x7F         // integer value 127
+: f32 / 0xABABABAB  // f32 bit pattern coercion
 ```
 Hex literals can be used with any integer type or f32. With f32, the hex value is interpreted as a raw bit pattern.
 
@@ -298,10 +285,10 @@ Unconditional loop with break/continue control flow:
 
 ```
 fun count_to_three(): !u32
-    var n: u32 = @0
+    var n: u32 = 0
     loop
-        set n = n +! @1
-        if n >= @3
+        set n = n +! 1
+        if n >= 3
             break
         end if
     end loop
@@ -315,9 +302,9 @@ Conditional loop that checks condition at start of each iteration:
 
 ```
 fun count_while(): u32
-    var n: u32 = @0
-    loop while n .< @10
-        set n = n + @1
+    var n: u32 = 0
+    loop while n .< 10
+        set n = n + 1
     end loop
     ret n
 end fun
@@ -449,7 +436,7 @@ fun create_point(x: f32, y: f32): Point
 end fun
 
 fun process(p: Point): Age
-  ret @25
+  ret 25
 end fun
 ```
 
@@ -505,8 +492,8 @@ isize -> int
 - `some expr` - wrap in Some variant
 - `ok expr` - wrap in Ok variant
 - `er expr` - wrap error in Err variant
-- `@none` - None variant (requires type context)
-- `@error expr` - error literal (requires type context in Result)
+- `none` - None variant (requires type context)
+- `error expr` - error literal (requires type context in Result)
 
 ### 3.4 Copy vs Linear Types
 

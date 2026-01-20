@@ -1,1 +1,1 @@
-: @enum Status { Ok, Error } / @enum Ok(@42)
+: enum Status { Ok, Error } / enum Ok(42)

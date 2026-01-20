@@ -1,1 +1,1 @@
-let greeting = @"world"
+let greeting = "world"

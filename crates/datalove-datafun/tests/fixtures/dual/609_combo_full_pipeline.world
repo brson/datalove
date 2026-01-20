@@ -32,6 +32,6 @@ fun unwrap(opt: ?u32, default: u32): u32
 end fun
 
 // (2 + 3) * 4 = 20
-debuglog unwrap(pipeline(@2, @3, @4), @999)
+debuglog unwrap(pipeline(2, 3, 4), 999)
 // (10 + 20) * 2 = 60
-debuglog unwrap(pipeline(@10, @20, @2), @999)
+debuglog unwrap(pipeline(10, 20, 2), 999)

@@ -54,93 +54,12 @@ impl<'db> Parser<'db> {
     }
 
     fn parse_expr_and_heap(&mut self) -> ast::ExprAndHeap<'db> {
-        // Heap sigils: @ for local, # for global.
-        let heap = if self.peek_sigil(Sigil::At) {
-            self.eat_sigil(Sigil::At);
-            ast::Heap::Local
-        } else if self.peek_sigil(Sigil::Hash) {
-            self.eat_sigil(Sigil::Hash);
-            ast::Heap::Global
-        } else {
-            // No heap sigil - check if it's a bare literal (allowed for inference).
-            // Check for negative numbers first (minus sign followed by digits).
-            if self.peek_sigil(Sigil::Minus) {
-                ast::Heap::Omitted
-            } else {
-                match self.peek() {
-                    Some(TreeToken::Token(token)) => {
-                    match token.kind(self.db) {
-                        TokenKind::String => {
-                            // Bare string literal - use Omitted heap.
-                            ast::Heap::Omitted
-                        }
-                        TokenKind::Word => {
-                            if let Some(word) = token.word_str(self.db) {
-                                if parser_util::is_numeric_literal(word) {
-                                    // Bare number literal (decimal or hex) - use Omitted heap.
-                                    ast::Heap::Omitted
-                                } else if matches!(word, "data" | "error" | "tensor" | "tuple" | "enum" | "map" | "set" | "true" | "false" | "none" | "some" | "ok" | "er") {
-                                    // Keywords are allowed without heap sigils.
-                                    ast::Heap::Omitted
-                                } else {
-                                    // Not a number or keyword - this is an error.
-                                    let ts = self.peek_text_span();
-                                    let error_node = self.emit_expr_error(ts,
-                                        "expected heap sigil @ or # before expression",
-                                        "D009",
-                                        "expected '@' or '#' before expression"
-                                    );
-                                    return ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_node };
-                                }
-                            } else {
-                                // No word string - error.
-                                let ts = self.peek_text_span();
-                                let error_node = self.emit_expr_error(ts,
-                                    "expected heap sigil @ or # before expression",
-                                    "D010",
-                                    "expected '@' or '#' before expression"
-                                );
-                                return ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_node };
-                            }
-                        }
-                        _ => {
-                            // Unknown token kind - error.
-                            let ts = self.peek_text_span();
-                            let error_node = self.emit_expr_error(ts,
-                                "expected heap sigil @ or # before expression",
-                                "D011",
-                                "expected '@' or '#' before expression"
-                            );
-                            return ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_node };
-                        }
-                    }
-                }
-                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) |
-                Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) |
-                Some(TreeToken::Branch { sigil: Sigil::BraceOpen, .. }) |
-                Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
-                    // Bare branch (anonymous tuple, list, struct, or table) - use Omitted heap.
-                    ast::Heap::Omitted
-                }
-                _ => {
-                    // Not a token or branch - error.
-                    let ts = self.peek_text_span();
-                    let error_node = self.emit_expr_error(ts,
-                        "expected heap sigil @ or # before expression",
-                        "D012",
-                        "expected '@' or '#' before expression"
-                    );
-                    return ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_node };
-                }
-                }
-            }
-        };
         let expr = self.parse_expr();
-        ast::ExprAndHeap { heap, expr }
+        ast::ExprAndHeap { heap: ast::Heap::Omitted, expr }
     }
 
     fn parse_expr(&mut self) -> ast::Expr<'db> {
-        // Heap sigil already consumed. Now parse keywords, literals, and structures.
+        // Parse keywords, literals, and structures.
         // Check for negative number literals first (- followed by digits).
         if self.peek_sigil(Sigil::Minus) {
             // Peek ahead to see if this is a negative number.

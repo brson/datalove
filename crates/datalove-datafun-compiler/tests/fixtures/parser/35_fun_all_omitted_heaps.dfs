@@ -1,4 +1,4 @@
 fun process(x: u32, y: string): bool
-    let z: u64 = @100
-    @true
+    let z: u64 = 100
+    true
 end fun

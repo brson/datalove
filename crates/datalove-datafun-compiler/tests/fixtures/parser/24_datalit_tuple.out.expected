@@ -33,9 +33,7 @@
                 }
               }
             ],
-            "heap": "Local",
-            "kind": "AnonTuple",
-            "type_hint": null
+            "kind": "Tuple"
           }
         }
       }

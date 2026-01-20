@@ -11,20 +11,8 @@ use super::state::Parser;
 
 impl<'db> Parser<'db> {
     pub(super) fn parse_type_hint_and_heap(&mut self) -> ast::TypeHintAndHeap<'db> {
-        // Heap sigils: @ for local, # for global.
-        // If omitted, defaults to Heap::Omitted (inferred).
-        let heap = if self.peek_sigil(Sigil::At) {
-            self.eat_sigil(Sigil::At);
-            ast::Heap::Local
-        } else if self.peek_sigil(Sigil::Hash) {
-            self.eat_sigil(Sigil::Hash);
-            ast::Heap::Global
-        } else {
-            // No heap sigil - default to Omitted (inferred).
-            ast::Heap::Omitted
-        };
         let type_hint = self.parse_type_hint();
-        ast::TypeHintAndHeap::new(self.db, heap, type_hint)
+        ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, type_hint)
     }
 
     fn parse_type_hint(&mut self) -> ast::TypeHint<'db> {

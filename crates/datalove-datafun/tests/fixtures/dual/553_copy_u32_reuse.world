@@ -7,7 +7,7 @@ fun use_u32(x: u32): u32
     ret x
 end fun
 
-let x: u32 = @42
+let x: u32 = 42
 debuglog use_u32(x)
 debuglog use_u32(x)
 debuglog x

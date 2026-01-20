@@ -6,19 +6,19 @@
         {
           "message": "type mismatch",
           "span": [
-            25,
-            33
+            24,
+            30
           ],
-          "text": "@1 +! @2"
+          "text": "1 +! 2"
         }
       ],
-      "message": "mismatched types: expected `@!@u32`, found `u32`"
+      "message": "mismatched types: expected `!u32`, found `u32`"
     }
   ],
   "errors": [
     {
       "actual": "u32",
-      "expected": "@!@u32",
+      "expected": "!u32",
       "kind": "TypeMismatch"
     }
   ],
@@ -27,7 +27,7 @@
       "kind": "function",
       "name": "add",
       "params": [],
-      "return_type": "!@u32"
+      "return_type": "!u32"
     }
   ]
 }

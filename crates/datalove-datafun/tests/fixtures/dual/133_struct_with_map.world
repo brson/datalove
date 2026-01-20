@@ -3,9 +3,9 @@ scriptunit-fragment
 ----------
 
 // Struct with map field.
-let config = @{
-    name = @"settings",
-    data = @map { @"key1" = @100, @"key2" = @200 }
+let config = {
+    name = "settings",
+    data = map { "key1" = 100, "key2" = 200 }
 }
 debuglog config.name
 debuglog config.data

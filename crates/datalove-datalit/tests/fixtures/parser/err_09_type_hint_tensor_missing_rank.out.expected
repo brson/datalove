@@ -32,10 +32,10 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "ParseError": {
           "message": "expected rank (positive integer)"

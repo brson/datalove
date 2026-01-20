@@ -9,7 +9,7 @@
             "type_hint": null,
             "value": {
               "expr": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "kind": "Int",
                 "type_hint": null,
                 "value": "0"
@@ -22,7 +22,7 @@
             "type_hint": null,
             "value": {
               "expr": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "kind": "Int",
                 "type_hint": null,
                 "value": "0"
@@ -47,7 +47,7 @@
                     "op": "Add",
                     "rhs": {
                       "expr": {
-                        "heap": "Local",
+                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "1"
@@ -69,7 +69,7 @@
                     "op": "Gt",
                     "rhs": {
                       "expr": {
-                        "heap": "Local",
+                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "5"
@@ -98,7 +98,7 @@
                     "op": "Eq",
                     "rhs": {
                       "expr": {
-                        "heap": "Local",
+                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "2"
@@ -127,7 +127,7 @@
                     "op": "Eq",
                     "rhs": {
                       "expr": {
-                        "heap": "Local",
+                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "4"
@@ -159,7 +159,7 @@
                     "op": "Add",
                     "rhs": {
                       "expr": {
-                        "heap": "Local",
+                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "1"
@@ -185,7 +185,7 @@
         "name": "skip_evens",
         "params": [],
         "return_type": {
-          "heap": "Local",
+          "heap": "Omitted",
           "type_hint": "U32"
         }
       }

@@ -1,5 +1,5 @@
-fun shadow(x: @int): @int
-  let x = x + : @int / @1
-  let x = x * : @int / @2
+fun shadow(x: int): int
+  let x = x + : int / 1
+  let x = x * : int / 2
   ret x
 end fun

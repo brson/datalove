@@ -16,4 +16,4 @@ fun unwrap_or_default(r: !u32, default: u32): u32
 end fun
 
 // 3 - 10 underflows u32, returns Err -> default 999.
-debuglog unwrap_or_default(checked_sub(@3, @10), @999)
+debuglog unwrap_or_default(checked_sub(3, 10), 999)

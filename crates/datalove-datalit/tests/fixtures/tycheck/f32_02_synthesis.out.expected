@@ -12,5 +12,5 @@
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@f32"
+  "root_type": "f32"
 }

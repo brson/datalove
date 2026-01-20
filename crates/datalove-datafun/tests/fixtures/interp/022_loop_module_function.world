@@ -3,10 +3,10 @@ module local/test/loops
 ----------
 
 fun sum_to_n(n: int): int
-    var i = :int/@0
-    var total = :int/@0
+    var i = :int/0
+    var total = :int/0
     loop
-        set i = i + :int/@1
+        set i = i + :int/1
         set total = total + i
         if i == n
             break
@@ -26,4 +26,4 @@ import loops.sum_to_n
 scriptunit-expr
 ----------
 
-sum_to_n(:int/@5)
+sum_to_n(:int/5)

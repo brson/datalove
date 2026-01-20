@@ -1,3 +1,3 @@
-fun negate_optional(x: @u32): ?u32
+fun negate_optional(x: u32): ?u32
   ret -?x
 end fun

@@ -6,8 +6,8 @@ scriptunit-fragment
 // This is an error because the loop could iterate multiple times,
 // and on subsequent iterations the variable would be in Moved state.
 
-var a: int = :int/@4
-var b: int = :int/@5
+var a: int = :int/4
+var b: int = :int/5
 
 loop
     if a == b

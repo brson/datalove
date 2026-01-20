@@ -3,9 +3,9 @@ module local/test/mutops
 ----------
 
 // Module function taking mut param.
-fun set_to_42(mut x: @u32): @bool
-    set x = @42
-    ret @true
+fun set_to_42(mut x: u32): bool
+    set x = 42
+    ret true
 end fun
 
 ----------
@@ -16,7 +16,7 @@ scriptunit-fragment
 require module local/test/mutops
 import mutops.set_to_42
 
-var s: {a: @u32, b: @u32} = {a = @100, b = @200}
+var s: {a: u32, b: u32} = {a = 100, b = 200}
 let _ok = set_to_42(s.a)
 debuglog s.a
 debuglog s.b

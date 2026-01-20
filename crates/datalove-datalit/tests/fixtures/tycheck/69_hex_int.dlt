@@ -1,1 +1,1 @@
-: @int / @0xFFFFFFFF
+: int / 0xFFFFFFFF

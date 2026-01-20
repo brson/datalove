@@ -4,10 +4,10 @@ scriptunit-fragment
 
 // Factorial: n! = n * (n-1)!
 fun factorial(n: u32): !u32
-    if n .< @2
-        ret ok @1
+    if n .< 2
+        ret ok 1
     else
-        ret ok (n *! factorial(n -! @1)!)
+        ret ok (n *! factorial(n -! 1)!)
     end if
 end fun
 
@@ -15,4 +15,4 @@ end fun
 scriptunit-expr
 ----------
 
-factorial(@5)
+factorial(5)

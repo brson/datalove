@@ -2,4 +2,4 @@
 scriptunit-expr
 ----------
 
-: @u32 / @0xFF
+: u32 / 0xFF

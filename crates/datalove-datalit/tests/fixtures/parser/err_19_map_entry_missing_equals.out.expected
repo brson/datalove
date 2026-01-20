@@ -12,7 +12,7 @@
                       "value": "1"
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               },
@@ -31,7 +31,7 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },
@@ -42,10 +42,10 @@
         {
           "message": "expected '=' after key",
           "span": [
-            10,
-            11
+            8,
+            9
           ],
-          "text": "@"
+          "text": "2"
         }
       ],
       "message": "expected '=' between map key and value"

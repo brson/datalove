@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let x = : @i32 / @0x7F
+let x = : i32 / 0x7F
 debuglog x

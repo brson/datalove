@@ -3,4 +3,4 @@ scriptunit-expr
 ----------
 
 // Simplified: just create and return a Result::Err.
-: !u32 / er @error @40
+: !u32 / er error 40

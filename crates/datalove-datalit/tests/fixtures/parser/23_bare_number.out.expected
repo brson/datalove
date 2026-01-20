@@ -9,7 +9,7 @@
       "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": "U32"
     }
   },

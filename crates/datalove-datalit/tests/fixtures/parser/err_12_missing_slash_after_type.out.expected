@@ -9,7 +9,7 @@
       "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": "U32"
     }
   },
@@ -20,10 +20,10 @@
         {
           "message": "expected '/' separator between type hint and expression",
           "span": [
-            7,
+            6,
             8
           ],
-          "text": "@"
+          "text": "42"
         }
       ],
       "message": "expected '/' after type hint"

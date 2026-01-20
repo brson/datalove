@@ -6,7 +6,7 @@
           "message": "expected {} after map keyword"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },
@@ -17,8 +17,8 @@
         {
           "message": "expected '{' after 'map'",
           "span": [
-            1,
-            4
+            0,
+            3
           ],
           "text": "map"
         }

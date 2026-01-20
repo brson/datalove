@@ -1,4 +1,4 @@
-fun test_result_missing_error_binding(a: @!u8): u8
+fun test_result_missing_error_binding(a: !u8): u8
     if a |value|
         ret value
     else

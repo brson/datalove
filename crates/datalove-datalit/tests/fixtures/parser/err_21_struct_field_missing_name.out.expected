@@ -21,7 +21,7 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },
@@ -32,8 +32,8 @@
         {
           "message": "expected field name",
           "span": [
-            3,
-            4
+            2,
+            3
           ],
           "text": "="
         }

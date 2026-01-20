@@ -2,6 +2,6 @@
 scriptunit-fragment
 ----------
 
-var s = @{x = @10, y = @20}
-set s.x = @99
+var s = {x = 10, y = 20}
+set s.x = 99
 debuglog s.x

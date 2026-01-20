@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let x: error = @error @42
+let x: error = error 42
 debuglog x

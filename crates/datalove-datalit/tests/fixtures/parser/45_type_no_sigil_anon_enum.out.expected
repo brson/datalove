@@ -10,14 +10,14 @@
                   "value": "42"
                 }
               },
-              "heap": "Local"
+              "heap": "Omitted"
             },
             "type_hint": null
           },
           "variant_name": "Ok"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
       "heap": "Omitted",
@@ -27,7 +27,7 @@
             {
               "name": "Ok",
               "payload": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "type_hint": "U32"
               }
             },

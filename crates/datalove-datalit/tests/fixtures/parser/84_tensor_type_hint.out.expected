@@ -11,7 +11,7 @@
                     "value": "1.0"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -22,7 +22,7 @@
                     "value": "2.0"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -33,7 +33,7 @@
                     "value": "3.0"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -44,7 +44,7 @@
                     "value": "4.0"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -55,7 +55,7 @@
                     "value": "5.0"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -66,7 +66,7 @@
                     "value": "6.0"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             }
@@ -77,14 +77,14 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "Tensor": {
           "element_type": {
-            "heap": "Local",
+            "heap": "Omitted",
             "type_hint": "F32"
           },
           "rank": 2

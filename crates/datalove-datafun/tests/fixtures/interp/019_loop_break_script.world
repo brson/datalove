@@ -2,10 +2,10 @@
 scriptunit-fragment
 ----------
 
-var x = :int/@0
+var x = :int/0
 loop
-    set x = x + :int/@1
-    if x == :int/@5
+    set x = x + :int/1
+    if x == :int/5
         break
     end if
 end loop

@@ -33,8 +33,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = call m0.f0(v0, v1)\n    debuglog v2\n    drop v2\n    v3 = const 4294967295u32\n    v4 = const 1u32\n    v5 = call m0.f0(v3, v4)\n    debuglog v5\n    drop v5\n    unit_end\n",
             ),
             ir_match: true,
-            interp_output: "ok @30\n@error @\"arithmetic overflow\"\n",
-            aot_output: "ok @30\n@error @\"arithmetic overflow\"\n",
+            interp_output: "ok 30\nerror \"arithmetic overflow\"\n",
+            aot_output: "ok 30\nerror \"arithmetic overflow\"\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

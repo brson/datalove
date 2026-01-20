@@ -34,7 +34,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = move unit1.v3\n    unit_end v0\n",
             ),
-            output: "@8",
+            output: "8",
         ),
     ],
 )

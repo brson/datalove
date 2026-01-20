@@ -5,7 +5,7 @@
         "kind": "Let",
         "name": "x",
         "type_hint": {
-          "heap": "Local",
+          "heap": "Omitted",
           "type_hint": {
             "Map": {
               "key_type": {
@@ -22,7 +22,7 @@
         "value": {
           "expr": {
             "entries": [],
-            "heap": "Local",
+            "heap": "Omitted",
             "kind": "Map",
             "type_hint": null
           }

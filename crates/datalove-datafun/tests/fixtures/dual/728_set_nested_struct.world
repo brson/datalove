@@ -3,6 +3,6 @@ scriptunit-fragment
 ----------
 
 // Nested set on struct: set s.inner.x = value
-var s = @{inner = @{x = @1, y = @2}}
-set s.inner.x = @99
+var s = {inner = {x = 1, y = 2}}
+set s.inner.x = 99
 debuglog s.inner.x

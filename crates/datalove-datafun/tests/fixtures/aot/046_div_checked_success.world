@@ -15,4 +15,4 @@ fun checked_div(a: u32, b: u32): ?u32
 end fun
 
 // 42 / 7 = 6, no error.
-debuglog unwrap_or_default(checked_div(@42, @7), @999)
+debuglog unwrap_or_default(checked_div(42, 7), 999)

@@ -3,9 +3,9 @@ scriptunit-fragment
 ----------
 
 // Try option with field projection - none case (early return).
-fun test(): ?@u32
-    let input: ?(@u32, @u32) = none
-    let x: @u32 = input?.0
+fun test(): ?u32
+    let input: ?(u32, u32) = none
+    let x: u32 = input?.0
     ret some x
 end fun
 

@@ -51,7 +51,7 @@ end fun
 // Checked absolute value. Returns none for MIN.
 fun abs_checked(self: isize): ?isize
   if self == min_value()
-    ret @none
+    ret none
   else
     ret some abs(self)
   end if
@@ -136,7 +136,7 @@ end fun
 
 fun neg_checked(self: isize): ?isize
   if self == min_value()
-    ret @none
+    ret none
   else
     ret some icall neg_wrapping_isize(self)
   end if
@@ -164,7 +164,7 @@ fun rem_checked(self: isize, other: isize): ?isize
   let zero = (: isize / 0)
   let neg_one = (: isize / -1)
   if other == zero
-    ret @none
+    ret none
   else
     if self == min_value()
       if other == neg_one
@@ -262,7 +262,7 @@ end fun
 // Checked left shift. Returns none if n >= 32.
 fun shift_left(self: isize, n: u32): ?isize
   if n >= 32
-    ret @none
+    ret none
   else
     let u = icall isize_to_usize(self)
     let result = icall shl_usize(u, n)
@@ -273,7 +273,7 @@ end fun
 // Checked arithmetic right shift. Returns none if n >= 32.
 fun shift_right(self: isize, n: u32): ?isize
   if n >= 32
-    ret @none
+    ret none
   else
     ret some icall sshr_isize(self, n)
   end if

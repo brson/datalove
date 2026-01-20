@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let x: u32 = @4294967295
+let x: u32 = 4294967295
 debuglog x

@@ -1,1 +1,1 @@
-let output: list = @42
+let output: list = 42

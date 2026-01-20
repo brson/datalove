@@ -16,4 +16,4 @@ fun unwrap(opt: ?i8, default: i8): i8
 end fun
 
 // Overflow case: 127 + 1 overflows i8, string should be dropped.
-debuglog unwrap(test_drop(@127, @1), @99)
+debuglog unwrap(test_drop(127, 1), 99)

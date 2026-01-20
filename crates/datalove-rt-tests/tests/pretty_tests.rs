@@ -126,163 +126,163 @@ fn test_pretty(source: &str, expected: &str) -> AnyResult<()> {
 
 #[test]
 fn test_pretty_bool_true() -> AnyResult<()> {
-    test_pretty(": @bool / @true", "@true")
+    test_pretty(": bool / true", "true")
 }
 
 #[test]
 fn test_pretty_bool_false() -> AnyResult<()> {
-    test_pretty(": @bool / @false", "@false")
+    test_pretty(": bool / false", "false")
 }
 
 #[test]
 fn test_pretty_u8() -> AnyResult<()> {
-    test_pretty(": @u8 / 42", "@42")
+    test_pretty(": u8 / 42", "42")
 }
 
 #[test]
 fn test_pretty_i8_positive() -> AnyResult<()> {
-    test_pretty(": @i8 / 42", "@42")
+    test_pretty(": i8 / 42", "42")
 }
 
 #[test]
 fn test_pretty_i8_negative() -> AnyResult<()> {
-    test_pretty(": @i8 / -42", "@-42")
+    test_pretty(": i8 / -42", "-42")
 }
 
 #[test]
 fn test_pretty_u16() -> AnyResult<()> {
-    test_pretty(": @u16 / 1000", "@1000")
+    test_pretty(": u16 / 1000", "1000")
 }
 
 #[test]
 fn test_pretty_i16_negative() -> AnyResult<()> {
-    test_pretty(": @i16 / -1000", "@-1000")
+    test_pretty(": i16 / -1000", "-1000")
 }
 
 #[test]
 fn test_pretty_u32() -> AnyResult<()> {
-    test_pretty(": @u32 / 12345", "@12345")
+    test_pretty(": u32 / 12345", "12345")
 }
 
 #[test]
 fn test_pretty_i32_negative() -> AnyResult<()> {
-    test_pretty(": @i32 / -12345", "@-12345")
+    test_pretty(": i32 / -12345", "-12345")
 }
 
 #[test]
 fn test_pretty_u64() -> AnyResult<()> {
-    test_pretty(": @u64 / 9876543210", "@9876543210")
+    test_pretty(": u64 / 9876543210", "9876543210")
 }
 
 #[test]
 fn test_pretty_i64_negative() -> AnyResult<()> {
-    test_pretty(": @i64 / -9876543210", "@-9876543210")
+    test_pretty(": i64 / -9876543210", "-9876543210")
 }
 
 #[test]
 fn test_pretty_f32() -> AnyResult<()> {
-    test_pretty(": @f32 / 3.14", "@3.14")
+    test_pretty(": f32 / 3.14", "3.14")
 }
 
 #[test]
 fn test_pretty_f32_integer() -> AnyResult<()> {
-    test_pretty(": @f32 / 42.0", "@42")
+    test_pretty(": f32 / 42.0", "42")
 }
 
 #[test]
 fn test_pretty_f32_negative() -> AnyResult<()> {
-    test_pretty(": @f32 / -2.5", "@-2.5")
+    test_pretty(": f32 / -2.5", "-2.5")
 }
 
 // Bigints
 
 #[test]
 fn test_pretty_int_zero() -> AnyResult<()> {
-    test_pretty(": @int / 0", "@0")
+    test_pretty(": int / 0", "0")
 }
 
 #[test]
 fn test_pretty_int_small_positive() -> AnyResult<()> {
-    test_pretty(": @int / 42", "@42")
+    test_pretty(": int / 42", "42")
 }
 
 #[test]
 fn test_pretty_int_small_negative() -> AnyResult<()> {
-    test_pretty(": @int / -42", "@-42")
+    test_pretty(": int / -42", "-42")
 }
 
 #[test]
 fn test_pretty_int_large() -> AnyResult<()> {
     // 2^64 = 18446744073709551616
-    test_pretty(": @int / 18446744073709551616", "@18446744073709551616")
+    test_pretty(": int / 18446744073709551616", "18446744073709551616")
 }
 
 #[test]
 fn test_pretty_int_large_negative() -> AnyResult<()> {
-    test_pretty(": @int / -18446744073709551616", "@-18446744073709551616")
+    test_pretty(": int / -18446744073709551616", "-18446744073709551616")
 }
 
 // Strings
 
 #[test]
 fn test_pretty_string_simple() -> AnyResult<()> {
-    test_pretty(": @string / \"hello\"", "@\"hello\"")
+    test_pretty(": string / \"hello\"", "@\"hello\"")
 }
 
 #[test]
 fn test_pretty_string_empty() -> AnyResult<()> {
-    test_pretty(": @string / \"\"", "@\"\"")
+    test_pretty(": string / \"\"", "@\"\"")
 }
 
 #[test]
 fn test_pretty_string_with_spaces() -> AnyResult<()> {
-    test_pretty(": @string / \"hello world\"", "@\"hello world\"")
+    test_pretty(": string / \"hello world\"", "@\"hello world\"")
 }
 
 #[test]
 fn test_pretty_string_with_quotes() -> AnyResult<()> {
     // Source uses \" to represent embedded quotes.
-    test_pretty(r#": @string / "say \"hello\"""#, r#"@"say \"hello\"""#)
+    test_pretty(r#": string / "say \"hello\"""#, r#""say \"hello\"""#)
 }
 
 #[test]
 fn test_pretty_string_with_newline() -> AnyResult<()> {
     // Source has actual newline character, pretty-printed output escapes it.
-    test_pretty(": @string / \"line1\nline2\"", "@\"line1\\nline2\"")
+    test_pretty(": string / \"line1\nline2\"", "@\"line1\\nline2\"")
 }
 
 #[test]
 fn test_pretty_string_with_tab() -> AnyResult<()> {
     // Source has actual tab character, pretty-printed output escapes it.
-    test_pretty(": @string / \"col1\tcol2\"", "@\"col1\\tcol2\"")
+    test_pretty(": string / \"col1\tcol2\"", "@\"col1\\tcol2\"")
 }
 
 #[test]
 fn test_pretty_string_with_backslash() -> AnyResult<()> {
     // Source uses \\ to represent literal backslashes, pretty-printed output escapes them.
-    test_pretty(r#": @string / "path\\to\\file""#, r#"@"path\\to\\file""#)
+    test_pretty(r#": string / "path\\to\\file""#, r#""path\\to\\file""#)
 }
 
 // Tuples
 
 #[test]
 fn test_pretty_tuple_pair() -> AnyResult<()> {
-    test_pretty(": @(@u32, @bool) / @(@42, @true)", "@(@42, @true)")
+    test_pretty(": (@u32, @bool) / (42, true)", "(42, true)")
 }
 
 #[test]
 fn test_pretty_tuple_triple() -> AnyResult<()> {
     test_pretty(
-        ": @(@u32, @string, @bool) / @(@1, @\"hi\", @false)",
-        "@(@1, @\"hi\", @false)",
+        ": (@u32, @string, @bool) / (1, @\"hi\", false)",
+        "(1, @\"hi\", false)",
     )
 }
 
 #[test]
 fn test_pretty_tuple_nested() -> AnyResult<()> {
     test_pretty(
-        ": @(@(@u32, @u32), @bool) / @(@(@1, @2), @true)",
-        "@(@(@1, @2), @true)",
+        ": ((@u32, @u32), @bool) / ((1, 2), true)",
+        "((1, 2), true)",
     )
 }
 
@@ -290,48 +290,48 @@ fn test_pretty_tuple_nested() -> AnyResult<()> {
 
 #[test]
 fn test_pretty_option_none() -> AnyResult<()> {
-    test_pretty(": @?@u32 / @none", "@none")
+    test_pretty(": ?@u32 / none", "none")
 }
 
 #[test]
 fn test_pretty_option_some() -> AnyResult<()> {
-    test_pretty(": @?@u32 / some @42", "some @42")
+    test_pretty(": ?@u32 / some 42", "some 42")
 }
 
 #[test]
 fn test_pretty_option_some_string() -> AnyResult<()> {
-    test_pretty(": @?@string / some @\"hello\"", "some @\"hello\"")
+    test_pretty(": ?@string / some \"hello\"", "some \"hello\"")
 }
 
 // Result
 
 #[test]
 fn test_pretty_result_ok() -> AnyResult<()> {
-    test_pretty(": @!@u32 / ok @42", "ok @42")
+    test_pretty(": !u32 / ok 42", "ok 42")
 }
 
 // Lists
 
 #[test]
 fn test_pretty_list_empty() -> AnyResult<()> {
-    test_pretty(": @[@u32] / @[]", "@[]")
+    test_pretty(": [u32] / []", "[]")
 }
 
 #[test]
 fn test_pretty_list_single() -> AnyResult<()> {
-    test_pretty(": @[@u32] / @[@1]", "@[@1]")
+    test_pretty(": [u32] / [1]", "[1]")
 }
 
 #[test]
 fn test_pretty_list_multiple() -> AnyResult<()> {
-    test_pretty(": @[@u32] / @[@1, @2, @3]", "@[@1, @2, @3]")
+    test_pretty(": [u32] / [1, 2, 3]", "[1, 2, 3]")
 }
 
 #[test]
 fn test_pretty_list_strings() -> AnyResult<()> {
     test_pretty(
-        ": @[@string] / @[@\"a\", @\"b\", @\"c\"]",
-        "@[@\"a\", @\"b\", @\"c\"]",
+        ": [string] / [@\"a\", @\"b\", @\"c\"]",
+        "[@\"a\", @\"b\", @\"c\"]",
     )
 }
 
@@ -339,25 +339,25 @@ fn test_pretty_list_strings() -> AnyResult<()> {
 
 #[test]
 fn test_pretty_set_empty() -> AnyResult<()> {
-    test_pretty(": @set <@u32> / @set {}", "@set {}")
+    test_pretty(": set <@u32> / set {}", "set {}")
 }
 
 #[test]
 fn test_pretty_set_single() -> AnyResult<()> {
-    test_pretty(": @set <@u32> / @set { 42 }", "@set {@42}")
+    test_pretty(": set <@u32> / set { 42 }", "set {42}")
 }
 
 #[test]
 fn test_pretty_set_multiple() -> AnyResult<()> {
     // Sets are ordered, so output should be sorted.
-    test_pretty(": @set <@u32> / @set { 3, 1, 2 }", "@set {@1, @2, @3}")
+    test_pretty(": set <@u32> / set { 3, 1, 2 }", "set {1, 2, 3}")
 }
 
 #[test]
 fn test_pretty_set_strings() -> AnyResult<()> {
     test_pretty(
-        ": @set <@string> / @set { \"banana\", \"apple\" }",
-        "@set {@\"apple\", @\"banana\"}",
+        ": set <@string> / set { \"banana\", \"apple\" }",
+        "set {@\"apple\", @\"banana\"}",
     )
 }
 
@@ -365,14 +365,14 @@ fn test_pretty_set_strings() -> AnyResult<()> {
 
 #[test]
 fn test_pretty_map_empty() -> AnyResult<()> {
-    test_pretty(": @map <@u32, @string> / @map {}", "@map {}")
+    test_pretty(": map <@u32, @string> / map {}", "map {}")
 }
 
 #[test]
 fn test_pretty_map_single() -> AnyResult<()> {
     test_pretty(
-        ": @map <@u32, @string> / @map { 1 = \"one\" }",
-        "@map {@1 = @\"one\"}",
+        ": map <@u32, @string> / map { 1 = \"one\" }",
+        "map {1 = \"one\"}",
     )
 }
 
@@ -380,16 +380,16 @@ fn test_pretty_map_single() -> AnyResult<()> {
 fn test_pretty_map_multiple() -> AnyResult<()> {
     // Maps are ordered by key.
     test_pretty(
-        ": @map <@u32, @string> / @map { 2 = \"two\", 1 = \"one\" }",
-        "@map {@1 = @\"one\", @2 = @\"two\"}",
+        ": map <@u32, @string> / map { 2 = \"two\", 1 = \"one\" }",
+        "map {1 = \"one\", 2 = \"two\"}",
     )
 }
 
 #[test]
 fn test_pretty_map_string_keys() -> AnyResult<()> {
     test_pretty(
-        ": @map <@string, @u32> / @map { \"b\" = 2, \"a\" = 1 }",
-        "@map {@\"a\" = @1, @\"b\" = @2}",
+        ": map <@string, @u32> / map { \"b\" = 2, \"a\" = 1 }",
+        "map {@\"a\" = 1, @\"b\" = 2}",
     )
 }
 
@@ -398,40 +398,40 @@ fn test_pretty_map_string_keys() -> AnyResult<()> {
 #[test]
 fn test_pretty_list_of_tuples() -> AnyResult<()> {
     test_pretty(
-        ": @[@(@u32, @string)] / @[@(@1, @\"a\"), @(@2, @\"b\")]",
-        "@[@(@1, @\"a\"), @(@2, @\"b\")]",
+        ": [(@u32, @string)] / [(1, @\"a\"), (2, @\"b\")]",
+        "[(1, @\"a\"), (2, @\"b\")]",
     )
 }
 
 #[test]
 fn test_pretty_map_of_lists() -> AnyResult<()> {
     test_pretty(
-        ": @map<@string, @[@u32]> / @map{@\"nums\" = @[@1, @2, @3]}",
-        "@map {@\"nums\" = @[@1, @2, @3]}",
+        ": map<@string, [u32]> / map{@\"nums\" = [1, 2, 3]}",
+        "map {@\"nums\" = [1, 2, 3]}",
     )
 }
 
 #[test]
 fn test_pretty_set_of_tuples() -> AnyResult<()> {
     test_pretty(
-        ": @set<@(@u32, @u32)> / @set{@(@1, @2), @(@3, @4)}",
-        "@set {@(@1, @2), @(@3, @4)}",
+        ": set<(@u32, @u32)> / set{(1, 2), (3, 4)}",
+        "set {(1, 2), (3, 4)}",
     )
 }
 
 #[test]
 fn test_pretty_option_of_list() -> AnyResult<()> {
     test_pretty(
-        ": @?@[@u32] / some @[@1, @2, @3]",
-        "some @[@1, @2, @3]",
+        ": ?[u32] / some [1, 2, 3]",
+        "some [1, 2, 3]",
     )
 }
 
 #[test]
 fn test_pretty_deeply_nested() -> AnyResult<()> {
     test_pretty(
-        ": @map<@string, @?@[@(@u32, @bool)]> / @map{@\"data\" = some @[@(@1, @true)]}",
-        "@map {@\"data\" = some @[@(@1, @true)]}",
+        ": map<@string, ?[(@u32, @bool)]> / map{@\"data\" = some [(1, true)]}",
+        "map {@\"data\" = some [(1, true)]}",
     )
 }
 
@@ -440,48 +440,48 @@ fn test_pretty_deeply_nested() -> AnyResult<()> {
 #[test]
 fn test_pretty_tensor_1d() -> AnyResult<()> {
     test_pretty(
-        ": @tensor<@u32, 1> / @tensor [3] [@1, @2, @3]",
-        "@tensor [3] [@1, @2, @3]",
+        ": tensor<@u32, 1> / tensor [3] [1, 2, 3]",
+        "tensor [3] [1, 2, 3]",
     )
 }
 
 #[test]
 fn test_pretty_tensor_1d_empty() -> AnyResult<()> {
     test_pretty(
-        ": @tensor<@u32, 1> / @tensor [0] []",
-        "@tensor [0] []",
+        ": tensor<@u32, 1> / tensor [0] []",
+        "tensor [0] []",
     )
 }
 
 #[test]
 fn test_pretty_tensor_2d() -> AnyResult<()> {
     test_pretty(
-        ": @tensor<@u32, 2> / @tensor [2, 3] [@1 @2 @3, @4 @5 @6]",
-        "@tensor [2, 3] [@1 @2 @3, @4 @5 @6]",
+        ": tensor<@u32, 2> / tensor [2, 3] [1 2 3, 4 5 6]",
+        "tensor [2, 3] [1 2 3, 4 5 6]",
     )
 }
 
 #[test]
 fn test_pretty_tensor_2d_single_row() -> AnyResult<()> {
     test_pretty(
-        ": @tensor<@u32, 2> / @tensor [1, 3] [@1 @2 @3]",
-        "@tensor [1, 3] [@1 @2 @3]",
+        ": tensor<@u32, 2> / tensor [1, 3] [1 2 3]",
+        "tensor [1, 3] [1 2 3]",
     )
 }
 
 #[test]
 fn test_pretty_tensor_3d() -> AnyResult<()> {
     test_pretty(
-        ": @tensor<@u32, 3> / @tensor [2, 2, 2] [@1 @2, @3 @4, @5 @6, @7 @8]",
-        "@tensor [2, 2, 2] [@1 @2, @3 @4, @5 @6, @7 @8]",
+        ": tensor<@u32, 3> / tensor [2, 2, 2] [1 2, 3 4, 5 6, 7 8]",
+        "tensor [2, 2, 2] [1 2, 3 4, 5 6, 7 8]",
     )
 }
 
 #[test]
 fn test_pretty_tensor_f32() -> AnyResult<()> {
     test_pretty(
-        ": @tensor<@f32, 1> / @tensor [3] [@1.5, @2.5, @3.5]",
-        "@tensor [3] [@1.5, @2.5, @3.5]",
+        ": tensor<@f32, 1> / tensor [3] [1.5, 2.5, 3.5]",
+        "tensor [3] [1.5, 2.5, 3.5]",
     )
 }
 
@@ -491,30 +491,30 @@ fn test_pretty_tensor_f32() -> AnyResult<()> {
 fn test_pretty_table_empty() -> AnyResult<()> {
     test_pretty(
         ": {| x: u32, y: u32 |} / {| x, y |}",
-        "@{| x, y |}",
+        "{| x, y |}",
     )
 }
 
 #[test]
 fn test_pretty_table_single_row() -> AnyResult<()> {
     test_pretty(
-        ": {| x: u32, y: u32 |} / {| x, y; @1, @2 |}",
-        "@{| x, y; @1, @2 |}",
+        ": {| x: u32, y: u32 |} / {| x, y; 1, 2 |}",
+        "{| x, y; 1, 2 |}",
     )
 }
 
 #[test]
 fn test_pretty_table_multiple_rows() -> AnyResult<()> {
     test_pretty(
-        ": {| x: u32, y: u32 |} / {| x, y; @1, @2; @3, @4 |}",
-        "@{| x, y; @1, @2; @3, @4 |}",
+        ": {| x: u32, y: u32 |} / {| x, y; 1, 2; 3, 4 |}",
+        "{| x, y; 1, 2; 3, 4 |}",
     )
 }
 
 #[test]
 fn test_pretty_table_with_strings() -> AnyResult<()> {
     test_pretty(
-        r#": {| name: string, age: u32 |} / {| name, age; @"Alice", @30 |}"#,
-        r#"@{| name, age; @"Alice", @30 |}"#,
+        r#": {| name: string, age: u32 |} / {| name, age; "Alice", 30 |}"#,
+        r#"{| name, age; "Alice", 30 |}"#,
     )
 }

@@ -34,7 +34,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = call m0.f0()\n    unit_end v0\n",
             ),
-            output: "@map {@1 = @1000, @2 = @2000}",
+            output: "map {1 = 1000, 2 = 2000}",
         ),
     ],
 )

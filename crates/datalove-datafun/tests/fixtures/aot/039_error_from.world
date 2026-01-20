@@ -5,11 +5,11 @@ scriptunit-fragment
 // Test ErrorFrom instruction - create an Error from a value.
 // The function returns an Err result, triggering UnitEarlyReturn when unwrapped.
 fun get_err(): !u32
-    ret er @error @99
+    ret er error 99
 end fun
 
 // This call returns Err, triggering UnitEarlyReturn.
 // Expected output: the error wrapped in Result (early exit).
 let x: u32 = get_err()!
-debuglog @999
+debuglog 999
 

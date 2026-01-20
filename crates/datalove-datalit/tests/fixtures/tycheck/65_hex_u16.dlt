@@ -1,1 +1,1 @@
-: @u16 / @0xFFFF
+: u16 / 0xFFFF

@@ -20,7 +20,7 @@ AotAnalysis(
                 status: "Success",
                 exit_code: 0,
             )),
-            output: "@(@\"label\", @123456789012345678901234567890)\n",
+            output: "(\"label\", 123456789012345678901234567890)\n",
         ),
     ],
 )

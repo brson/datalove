@@ -6,7 +6,7 @@
           "message": "expected variant name after enum keyword"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },
@@ -17,8 +17,8 @@
         {
           "message": "expected enum variant name",
           "span": [
-            1,
-            5
+            0,
+            4
           ],
           "text": "enum"
         }

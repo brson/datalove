@@ -4,8 +4,8 @@ scriptunit-fragment
 
 // Parser doesn't recognize '<' as comparison operator (should be '.<').
 // The '< b' part is unconsumed after parsing the let statement.
-let a = @100
-let b = @200
+let a = 100
+let b = 200
 let lt = a < b
 
 ----------

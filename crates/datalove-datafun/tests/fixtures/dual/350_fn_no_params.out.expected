@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn get_five():\nblock0:\n    v0 = const 5u32\n    return v0\nexports:\n    get_five = f0\n",
             ),
             ir_match: true,
-            interp_output: "@5\n",
-            aot_output: "@5\n",
+            interp_output: "5\n",
+            aot_output: "5\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

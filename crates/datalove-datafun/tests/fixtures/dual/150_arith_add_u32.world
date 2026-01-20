@@ -2,6 +2,6 @@
 scriptunit-fragment
 ----------
 
-let a: int = @10
-let b: int = @32
+let a: int = 10
+let b: int = 32
 debuglog (a + b)

@@ -7,10 +7,10 @@
           "variant_name": "Foo"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "AnonEnum": {
           "variants": [
@@ -34,8 +34,8 @@
         {
           "message": "expected variant name",
           "span": [
-            10,
-            11
+            9,
+            10
           ],
           "text": ","
         }

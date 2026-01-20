@@ -33,7 +33,7 @@
                 }
               }
             ],
-            "heap": "Local",
+            "heap": "Omitted",
             "kind": "List",
             "type_hint": null
           }

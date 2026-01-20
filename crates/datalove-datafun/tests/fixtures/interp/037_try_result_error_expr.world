@@ -4,7 +4,7 @@ scriptunit-fragment
 
 // Function that returns an error result.
 fun get_error(): !u32
-    ret er @error @1
+    ret er error 1
 end fun
 
 ----------

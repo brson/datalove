@@ -6,8 +6,8 @@
         {
           "message": "type mismatch",
           "span": [
-            32,
-            33
+            29,
+            30
           ],
           "text": "a"
         }

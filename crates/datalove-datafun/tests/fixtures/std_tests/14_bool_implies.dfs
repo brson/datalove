@@ -2,4 +2,4 @@ require module sys/std/bool
 
 import bool.implies
 
-let output = (implies(@true, @true), implies(@true, @false), implies(@false, @true), implies(@false, @false))
+let output = (implies(true, true), implies(true, false), implies(false, true), implies(false, false))

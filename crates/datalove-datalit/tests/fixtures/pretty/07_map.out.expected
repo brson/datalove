@@ -1,1 +1,1 @@
-: @map<@u32, @string> / @map {@0 = @"zero", @1 = @"one"}
+: map<u32, string> / map {0 = "zero", 1 = "one"}

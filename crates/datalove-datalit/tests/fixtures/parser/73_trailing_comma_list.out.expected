@@ -11,7 +11,7 @@
                     "value": "1"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -22,7 +22,7 @@
                     "value": "2"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             },
@@ -33,14 +33,14 @@
                     "value": "3"
                   }
                 },
-                "heap": "Local"
+                "heap": "Omitted"
               },
               "type_hint": null
             }
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },

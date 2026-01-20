@@ -1,1 +1,1 @@
-@(some @42, @none)
+(some 42, none)

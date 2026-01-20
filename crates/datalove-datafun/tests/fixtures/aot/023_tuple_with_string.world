@@ -5,5 +5,5 @@ scriptunit-fragment
 // Test packing aggregate (string) into tuple.
 
 let s: string = "hello"
-let t: (string, u32) = (s, @42)
+let t: (string, u32) = (s, 42)
 debuglog t

@@ -1,4 +1,4 @@
-fun test(a: ?@u32): u32
+fun test(a: ?u32): u32
     if a |x
         ret x
     end if

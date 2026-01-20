@@ -6,8 +6,8 @@
         {
           "message": "operator `+` cannot be applied to type `(u32, u32)`",
           "span": [
-            40,
-            45
+            38,
+            43
           ],
           "text": "a + b"
         }

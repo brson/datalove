@@ -2,7 +2,7 @@
 scriptunit-fragment
 ----------
 
-var y = @10
+var y = 10
 
 ----------
 scriptunit-expr

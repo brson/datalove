@@ -10,7 +10,7 @@
             "mode": "In",
             "name": "a",
             "type_hint": {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U32"
             }
           },
@@ -18,7 +18,7 @@
             "mode": "Out",
             "name": "b",
             "type_hint": {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U32"
             }
           },
@@ -26,7 +26,7 @@
             "mode": "Ref",
             "name": "c",
             "type_hint": {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U32"
             }
           },
@@ -34,7 +34,7 @@
             "mode": "Mut",
             "name": "d",
             "type_hint": {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U32"
             }
           }

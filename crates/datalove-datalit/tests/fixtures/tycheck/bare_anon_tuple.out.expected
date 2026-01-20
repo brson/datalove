@@ -44,11 +44,11 @@
   "errors": [],
   "root_type": {
     "fields": [
-      "@bool",
-      "@u32",
-      "@f32"
+      "bool",
+      "u32",
+      "f32"
     ],
-    "heap": "@",
+    "heap": "",
     "kind": "AnonTuple"
   }
 }

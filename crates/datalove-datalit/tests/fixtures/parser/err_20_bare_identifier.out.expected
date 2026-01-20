@@ -3,27 +3,27 @@
     "expr": {
       "expr": {
         "ParseError": {
-          "message": "unexpected identifier 'foobar'"
+          "message": "unexpected token in Parser expression"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },
   "diagnostics": [
     {
-      "code": "D019",
+      "code": "D020",
       "labels": [
         {
-          "message": "unexpected identifier",
+          "message": "unexpected token",
           "span": [
-            1,
-            7
+            0,
+            1
           ],
-          "text": "foobar"
+          "text": "@"
         }
       ],
-      "message": "unexpected identifier 'foobar'"
+      "message": "unexpected token in Parser expression"
     }
   ]
 }

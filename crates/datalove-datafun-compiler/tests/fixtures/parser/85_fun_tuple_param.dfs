@@ -1,2 +1,2 @@
-fun get_first(t: (@u32, @u32)): @u32
+fun get_first(t: (u32, u32)): u32
 end fun

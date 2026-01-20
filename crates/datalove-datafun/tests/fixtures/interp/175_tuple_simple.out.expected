@@ -10,7 +10,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = const true\n    v2 = pack Tuple2 {v0, v1}\n    unit_end v2\n",
             ),
-            output: "@(@42, @true)",
+            output: "(42, true)",
         ),
     ],
 )

@@ -28,8 +28,8 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "element_type": "@bool",
-    "heap": "@",
+    "element_type": "bool",
+    "heap": "",
     "kind": "Set"
   }
 }

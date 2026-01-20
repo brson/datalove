@@ -4,11 +4,11 @@ scriptunit-fragment
 
 // While loop in function context
 fun count_up(n: int): int
-    var sum = :int/@0
-    var i = :int/@0
+    var sum = :int/0
+    var i = :int/0
     loop while i .< n
         set sum = sum + i
-        set i = i + :int/@1
+        set i = i + :int/1
     end loop
     ret sum
 end fun
@@ -17,4 +17,4 @@ end fun
 scriptunit-expr
 ----------
 
-count_up(:int/@6)
+count_up(:int/6)

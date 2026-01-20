@@ -895,8 +895,8 @@ mod tests {
         let db = Database::default();
 
         let (graph, ids) = build_graph(&db, &[
-            ("b", "fun helper(): @i32\n  ret @1\nend fun"),
-            ("a", "fun main(): @i32\n  ret @2\nend fun"),
+            ("b", "fun helper(): i32\n  ret 1\nend fun"),
+            ("a", "fun main(): i32\n  ret 2\nend fun"),
         ]);
         let mut requires = BTreeMap::new();
         requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
@@ -920,8 +920,8 @@ mod tests {
         let mut db = Database::default();
 
         // Create modules with Sources we can mutate.
-        let source_b = bct::input::Source::new(&db, "fun helper(): @i32\n  ret @1\nend fun".to_string());
-        let source_a = bct::input::Source::new(&db, "fun main(): @i32\n  ret @2\nend fun".to_string());
+        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
+        let source_a = bct::input::Source::new(&db, "fun main(): i32\n  ret 2\nend fun".to_string());
 
         let mut builder = ModuleGraphBuilder::new(&db);
         let id_b = builder.add_module("b".to_string(), source_b);
@@ -946,7 +946,7 @@ mod tests {
         let hash_b1 = parsed1.module_content_hashes(&db)[&id_b];
 
         // Mutate only B's source.
-        source_b.set_text(&mut db).to("fun helper(): @i32\n  ret @999\nend fun".to_string());
+        source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".to_string());
 
         // Second run: only B should re-typecheck.
         let parsed2 = parse_module_graph(&db, graph, requires);
@@ -975,7 +975,7 @@ mod tests {
         // Verify no re-typecheck when nothing changes.
         let db = Database::default();
 
-        let source_a = bct::input::Source::new(&db, "fun main(): @i32\n  ret @1\nend fun".to_string());
+        let source_a = bct::input::Source::new(&db, "fun main(): i32\n  ret 1\nend fun".to_string());
         let mut builder = ModuleGraphBuilder::new(&db);
         let id_a = builder.add_module("a".to_string(), source_a);
         let graph = builder.build();
@@ -1008,9 +1008,9 @@ mod tests {
         let mut db = Database::default();
 
         // B exports a function, A imports it.
-        let source_b = bct::input::Source::new(&db, "fun helper(): @i32\n  ret @1\nend fun".to_string());
+        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
         let source_a = bct::input::Source::new(&db,
-            "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret helper()\nend fun".to_string());
+            "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun".to_string());
 
         let mut builder = ModuleGraphBuilder::new(&db);
         let id_b = builder.add_module("test/b".to_string(), source_b);
@@ -1036,7 +1036,7 @@ mod tests {
 
         // Change only A (the importing module).
         source_a.set_text(&mut db).to(
-            "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret @42\nend fun".to_string());
+            "require module /test/b\nimport b.helper\nfun main(): i32\n  ret 42\nend fun".to_string());
 
         // Second run: only A should re-typecheck.
         let parsed2 = parse_module_graph(&db, graph, requires);
@@ -1062,9 +1062,9 @@ mod tests {
         let db = Database::default();
 
         // B exports a function, A imports it.
-        let source_b = bct::input::Source::new(&db, "fun helper(): @i32\n  ret @1\nend fun".to_string());
+        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
         let source_a = bct::input::Source::new(&db,
-            "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret helper()\nend fun".to_string());
+            "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun".to_string());
 
         let mut builder = ModuleGraphBuilder::new(&db);
         let id_b = builder.add_module("test/b".to_string(), source_b);
@@ -1105,8 +1105,8 @@ mod tests {
 
         // Create modules with imports.
         let (graph, ids) = build_graph_logging(&db, &[
-            ("b", "fun helper(): @i32\n  ret @1\nend fun"),
-            ("a", "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret helper()\nend fun"),
+            ("b", "fun helper(): i32\n  ret 1\nend fun"),
+            ("a", "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun"),
         ]);
         let mut requires = BTreeMap::new();
         requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
@@ -1248,9 +1248,9 @@ mod tests {
 
         // Create multiple modules.
         let (graph, _ids) = build_graph_logging(&db, &[
-            ("a", "fun fa(): @i32\n  ret @1\nend fun"),
-            ("b", "fun fb(): @i32\n  ret @2\nend fun"),
-            ("c", "fun fc(): @i32\n  ret @3\nend fun"),
+            ("a", "fun fa(): i32\n  ret 1\nend fun"),
+            ("b", "fun fb(): i32\n  ret 2\nend fun"),
+            ("c", "fun fc(): i32\n  ret 3\nend fun"),
         ]);
 
         // First: parallel typecheck populates cache.
@@ -1286,8 +1286,8 @@ mod tests {
 
         // Create modules with imports to test cross-module resolution.
         let (graph, ids) = build_graph(&db, &[
-            ("b", "fun helper(): @i32\n  ret @42\nend fun"),
-            ("a", "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret helper()\nend fun"),
+            ("b", "fun helper(): i32\n  ret 42\nend fun"),
+            ("a", "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun"),
         ]);
         let mut requires = BTreeMap::new();
         requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
@@ -1300,8 +1300,8 @@ mod tests {
         // Typecheck in parallel (on fresh db to avoid cache).
         let db2 = Database::default();
         let (graph2, ids2) = build_graph(&db2, &[
-            ("b", "fun helper(): @i32\n  ret @42\nend fun"),
-            ("a", "require module /test/b\nimport b.helper\nfun main(): @i32\n  ret helper()\nend fun"),
+            ("b", "fun helper(): i32\n  ret 42\nend fun"),
+            ("a", "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun"),
         ]);
         let mut requires2 = BTreeMap::new();
         requires2.insert(ids2[1], vec![("b".to_string(), ids2[0])]);
@@ -1337,8 +1337,8 @@ mod tests {
         let mut db = Database::default();
 
         // Create modules with mutable sources.
-        let source_b = bct::input::Source::new(&db, "fun helper(): @i32\n  ret @1\nend fun".to_string());
-        let source_a = bct::input::Source::new(&db, "fun main(): @i32\n  ret @2\nend fun".to_string());
+        let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
+        let source_a = bct::input::Source::new(&db, "fun main(): i32\n  ret 2\nend fun".to_string());
 
         let mut builder = ModuleGraphBuilder::new(&db);
         let id_b = builder.add_module("b".to_string(), source_b);
@@ -1359,7 +1359,7 @@ mod tests {
         assert_eq!(first_tc.len(), 2, "first run should typecheck both modules");
 
         // Mutate only B's source.
-        source_b.set_text(&mut db).to("fun helper(): @i32\n  ret @999\nend fun".to_string());
+        source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".to_string());
 
         // Second run with parallel: only B should re-typecheck.
         // Using sequential typecheck for verification since parallel doesn't log to query_log.

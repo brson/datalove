@@ -1,17 +1,28 @@
 {
-  "diagnostics": [],
-  "errors": [
+  "diagnostics": [
     {
-      "field_name": "age",
-      "kind": "FieldNotFound",
-      "type": "{name: @string}"
+      "code": "F001",
+      "labels": [
+        {
+          "message": "not found in this scope",
+          "span": [
+            34,
+            35
+          ],
+          "text": "s"
+        }
+      ],
+      "message": "cannot find value `s` in this scope"
     }
   ],
-  "judgements": [
+  "errors": [
     {
-      "kind": "variable",
-      "name": "s",
-      "type": "{name: @string}"
+      "kind": "CannotSynthesize"
+    },
+    {
+      "kind": "UnresolvedName",
+      "name": "s"
     }
-  ]
+  ],
+  "judgements": []
 }

@@ -54,7 +54,7 @@
             10,
             11
           ],
-          "text": "@"
+          "text": ""
         }
       ],
       "message": "mismatched types in list"

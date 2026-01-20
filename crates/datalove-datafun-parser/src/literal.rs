@@ -47,22 +47,12 @@ impl<'db> Parser<'db> {
         self.create_expr(expr_kind, ts)
     }
 
-    /// Parse heap sigil and expression.
+    /// Parse literal expression.
     fn parse_lit_expr_and_heap(
         &mut self,
         type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
     ) -> (datalit::ast::Heap, ast::ExprFunKind<'db>) {
-        // Heap sigils: @ for local, # for global.
-        let heap = if self.peek_sigil(Sigil::At) {
-            self.eat_sigil(Sigil::At);
-            datalit::ast::Heap::Local
-        } else if self.peek_sigil(Sigil::Hash) {
-            self.eat_sigil(Sigil::Hash);
-            datalit::ast::Heap::Global
-        } else {
-            datalit::ast::Heap::Omitted
-        };
-
+        let heap = datalit::ast::Heap::Omitted;
         let expr_kind = self.parse_lit_expr(heap, type_hint);
         (heap, expr_kind)
     }

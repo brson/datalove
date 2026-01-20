@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const true\n    v1 = const true\n    v2 = logic_and v0, v1\n    v3 = const false\n    v4 = logic_or v2, v3\n    debuglog v4\n    v5 = const true\n    v6 = const false\n    v7 = const false\n    v8 = logic_and v6, v7\n    v9 = logic_or v5, v8\n    debuglog v9\n    v10 = const true\n    v11 = logic_not v10\n    v12 = const true\n    v13 = logic_or v11, v12\n    debuglog v13\n    v14 = const false\n    v15 = logic_not v14\n    v16 = const true\n    v17 = logic_and v15, v16\n    debuglog v17\n    v18 = const true\n    v19 = const false\n    v20 = const true\n    v21 = logic_and v19, v20\n    v22 = logic_xor v18, v21\n    debuglog v22\n    unit_end\n",
             ),
             ir_match: true,
-            interp_output: "@true\n@true\n@true\n@true\n@true\n",
-            aot_output: "@true\n@true\n@true\n@true\n@true\n",
+            interp_output: "true\ntrue\ntrue\ntrue\ntrue\n",
+            aot_output: "true\ntrue\ntrue\ntrue\ntrue\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

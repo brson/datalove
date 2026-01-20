@@ -3,7 +3,7 @@ module local/test/utils
 ----------
 
 fun helper(): u32
-    ret @42
+    ret 42
 end fun
 
 ----------

@@ -69,8 +69,8 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "element_type": "@u32",
-    "heap": "@",
+    "element_type": "u32",
+    "heap": "",
     "kind": "List"
   }
 }

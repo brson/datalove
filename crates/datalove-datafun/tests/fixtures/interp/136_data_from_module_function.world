@@ -4,7 +4,7 @@ module local/test/wrapper
 
 // Module function that creates data.
 fun wrap(): data
-    ret @data @true
+    ret data true
 end fun
 
 ----------

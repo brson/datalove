@@ -2,4 +2,4 @@
 scriptunit-fragment
 ----------
 
-debuglog @{count = @123}
+debuglog {count = 123}

@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = call f0(v2)\n    v4 = getfieldref v3.0\n    debuglog v4\n    v5 = getfieldref v3.1\n    debuglog v5\n    unit_end\n\nfn swap_coords(p0):\nblock0:\n    v0 = copy p0\n    v1 = getfield v0.1\n    v2 = copy p0\n    v3 = getfield v2.0\n    v4 = pack Struct0 {v1, v3}\n    return v4\nexports:\n    swap_coords = f0\n    original = v2\n    swapped = v3\n",
             ),
             ir_match: true,
-            interp_output: "@2\n@1\n",
-            aot_output: "@2\n@1\n",
+            interp_output: "2\n1\n",
+            aot_output: "2\n1\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 123u32\n    v1 = pack Struct0 {v0}\n    debuglog v1\n    unit_end\n",
             ),
             ir_match: true,
-            interp_output: "@{count = @123}\n",
-            aot_output: "@{count = @123}\n",
+            interp_output: "{count = 123}\n",
+            aot_output: "{count = 123}\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

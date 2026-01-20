@@ -20,7 +20,7 @@
             0,
             1
           ],
-          "text": "@"
+          "text": ""
         }
       ],
       "message": "integer literal out of range"

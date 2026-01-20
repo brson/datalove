@@ -1,5 +1,5 @@
-fun add(a: @int, b: @int): @int
+fun add(a: int, b: int): int
   ret a + b
 end fun
 
-let result = add(: @int / @10, : @int / @20)
+let result = add(: int / 10, : int / 20)

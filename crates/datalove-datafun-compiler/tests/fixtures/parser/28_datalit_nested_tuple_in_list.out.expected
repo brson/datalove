@@ -28,9 +28,7 @@
                       }
                     }
                   ],
-                  "heap": "Local",
-                  "kind": "AnonTuple",
-                  "type_hint": null
+                  "kind": "Tuple"
                 }
               },
               {
@@ -53,13 +51,11 @@
                       }
                     }
                   ],
-                  "heap": "Local",
-                  "kind": "AnonTuple",
-                  "type_hint": null
+                  "kind": "Tuple"
                 }
               }
             ],
-            "heap": "Local",
+            "heap": "Omitted",
             "kind": "List",
             "type_hint": null
           }

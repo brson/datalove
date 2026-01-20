@@ -9,7 +9,7 @@
       "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "ParseError": {
           "message": "unexpected token in type hint"
@@ -24,8 +24,8 @@
         {
           "message": "unexpected token in type hint",
           "span": [
-            3,
-            4
+            2,
+            3
           ],
           "text": "."
         }
@@ -38,8 +38,8 @@
         {
           "message": "expected '/' separator between type hint and expression",
           "span": [
-            3,
-            4
+            2,
+            3
           ],
           "text": "."
         }

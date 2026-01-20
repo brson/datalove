@@ -5,11 +5,11 @@ module local/test/main
 // Error test: passing Ref-mode param to In-mode param (non-Copy type).
 // The outer function borrows (Ref mode), then tries to transfer ownership to inner.
 // This should fail because ref params of non-Copy types cannot be moved.
-fun inner(x: int): @bool
-    ret x == :int/@100
+fun inner(x: int): bool
+    ret x == :int/100
 end fun
 
-fun outer(ref y: int): @bool
+fun outer(ref y: int): bool
     ret inner(y)
 end fun
 
@@ -20,7 +20,7 @@ scriptunit-fragment
 require module local/test/main
 import main.outer
 
-let val: int = :int/@100
+let val: int = :int/100
 let result = outer(val)
 let output = result
 

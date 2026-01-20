@@ -66,7 +66,7 @@ fn test_runtime_multiple_instances() {
 #[test]
 fn test_memguard_new() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @u32 / 42")?;
+    let typechecked = compile_str(&db, ": u32 / 42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -90,7 +90,7 @@ fn test_memguard_new() -> AnyResult<()> {
 #[test]
 fn test_memguard_ptr() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @u32 / 42")?;
+    let typechecked = compile_str(&db, ": u32 / 42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -113,7 +113,7 @@ fn test_memguard_ptr() -> AnyResult<()> {
 #[test]
 fn test_memguard_tydesc() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @u32 / 42")?;
+    let typechecked = compile_str(&db, ": u32 / 42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -134,7 +134,7 @@ fn test_memguard_tydesc() -> AnyResult<()> {
 #[test]
 fn test_memguard_leak() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @u32 / 42")?;
+    let typechecked = compile_str(&db, ": u32 / 42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -161,7 +161,7 @@ fn test_memguard_leak() -> AnyResult<()> {
 #[test]
 fn test_memguard_into_value() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @u32 / 42")?;
+    let typechecked = compile_str(&db, ": u32 / 42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -206,7 +206,7 @@ fn test_memguard_into_value() -> AnyResult<()> {
 #[test]
 fn test_memguard_drop() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @u32 / 42")?;
+    let typechecked = compile_str(&db, ": u32 / 42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -230,7 +230,7 @@ fn test_memguard_drop() -> AnyResult<()> {
 #[test]
 fn test_valueguard_from_raw() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @u32 / 42")?;
+    let typechecked = compile_str(&db, ": u32 / 42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -274,7 +274,7 @@ fn test_valueguard_from_raw() -> AnyResult<()> {
 #[test]
 fn test_valueguard_ptr() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @u32 / 42")?;
+    let typechecked = compile_str(&db, ": u32 / 42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -314,7 +314,7 @@ fn test_valueguard_ptr() -> AnyResult<()> {
 #[test]
 fn test_valueguard_tydesc() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @u32 / 42")?;
+    let typechecked = compile_str(&db, ": u32 / 42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -350,7 +350,7 @@ fn test_valueguard_tydesc() -> AnyResult<()> {
 #[test]
 fn test_valueguard_leak() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @u32 / 42")?;
+    let typechecked = compile_str(&db, ": u32 / 42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -395,7 +395,7 @@ fn test_valueguard_leak() -> AnyResult<()> {
 #[test]
 fn test_valueguard_drop() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @u32 / 42")?;
+    let typechecked = compile_str(&db, ": u32 / 42")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -473,7 +473,7 @@ fn test_memguard_to_valueguard_workflow() -> AnyResult<()> {
 #[test]
 fn test_guards_with_complex_type() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @set <@u32> / @set { 1, 2, 3 }")?;
+    let typechecked = compile_str(&db, ": set <@u32> / set { 1, 2, 3 }")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);

@@ -3,9 +3,9 @@ module local/test/mutops_move
 ----------
 
 // Module function taking mut param with move type.
-fun set_to_42(mut x: int): @bool
-    set x = :int/@42
-    ret @true
+fun set_to_42(mut x: int): bool
+    set x = :int/42
+    ret true
 end fun
 
 ----------
@@ -16,6 +16,6 @@ scriptunit-fragment
 require module local/test/mutops_move
 import mutops_move.set_to_42
 
-var t: (int, int) = (:int/@100, :int/@200)
+var t: (int, int) = (:int/100, :int/200)
 let _ok = set_to_42(t.0)
 debuglog t.0

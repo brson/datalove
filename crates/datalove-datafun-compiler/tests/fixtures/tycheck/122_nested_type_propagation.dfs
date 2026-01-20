@@ -1,2 +1,2 @@
 // Nested propagation: [(int, int)]
-let n: [(@int, @int)] = @[@(@1, @2), @(@3, @4)]
+let n: [(int, int)] = [(1, 2), (3, 4)]

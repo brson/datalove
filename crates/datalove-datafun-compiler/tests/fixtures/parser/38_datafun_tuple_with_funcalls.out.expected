@@ -34,7 +34,7 @@
             "mode": "In",
             "name": "a",
             "type_hint": {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U32"
             }
           },
@@ -42,13 +42,13 @@
             "mode": "In",
             "name": "b",
             "type_hint": {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U32"
             }
           }
         ],
         "return_type": {
-          "heap": "Local",
+          "heap": "Omitted",
           "type_hint": "U32"
         }
       },
@@ -58,7 +58,7 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "heap": "Local",
+            "heap": "Omitted",
             "kind": "Int",
             "type_hint": null,
             "value": "10"
@@ -71,7 +71,7 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "heap": "Local",
+            "heap": "Omitted",
             "kind": "Int",
             "type_hint": null,
             "value": "20"

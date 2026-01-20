@@ -10,7 +10,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 255u32\n    unit_end v0\n",
             ),
-            output: "@255",
+            output: "255",
         ),
     ],
 )

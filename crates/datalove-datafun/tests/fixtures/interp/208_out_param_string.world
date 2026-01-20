@@ -3,14 +3,14 @@ module local/test/main
 ----------
 
 // Test out param with linear type (string).
-fun init_string(out x: @string): @bool
-    set x = @"hello"
-    ret @true
+fun init_string(out x: string): bool
+    set x = "hello"
+    ret true
 end fun
 
-fun test(): @string
-    var s: @string = @""
-    let _ok: @bool = init_string(s)
+fun test(): string
+    var s: string = ""
+    let _ok: bool = init_string(s)
     ret s
 end fun
 

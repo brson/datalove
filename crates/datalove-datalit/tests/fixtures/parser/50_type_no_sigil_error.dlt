@@ -1,1 +1,1 @@
-: error / @error @"failed"
+: error / error "failed"

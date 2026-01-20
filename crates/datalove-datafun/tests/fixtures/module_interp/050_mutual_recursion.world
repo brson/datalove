@@ -4,21 +4,21 @@ module local/test/main
 
 // Mutual recursion: is_even calls is_odd and vice versa.
 fun is_even(n: u32): !bool
-    if n == @0
-        ret ok @true
+    if n == 0
+        ret ok true
     else
-        ret is_odd(n -! @1)
+        ret is_odd(n -! 1)
     end if
 end fun
 
 fun is_odd(n: u32): !bool
-    if n == @0
-        ret ok @false
+    if n == 0
+        ret ok false
     else
-        ret is_even(n -! @1)
+        ret is_even(n -! 1)
     end if
 end fun
 
 fun main(): !bool
-    ret is_even(@6)
+    ret is_even(6)
 end fun

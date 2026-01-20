@@ -14,4 +14,4 @@ fun unwrap(opt: ?u32, default: u32): u32
     ret default
 end fun
 
-debuglog unwrap(div_opt(@100, @0), @999)
+debuglog unwrap(div_opt(100, 0), 999)

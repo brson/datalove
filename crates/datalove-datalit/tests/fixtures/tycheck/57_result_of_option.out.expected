@@ -50,10 +50,10 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "@",
+    "heap": "",
     "inner_type": {
-      "heap": "@",
-      "inner_type": "@u32",
+      "heap": "",
+      "inner_type": "u32",
       "kind": "Option"
     },
     "kind": "Result"

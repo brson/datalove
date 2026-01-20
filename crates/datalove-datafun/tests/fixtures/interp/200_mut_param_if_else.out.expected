@@ -34,7 +34,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = call m0.f1()\n    v1 = call m0.f2()\n    v2 = pack Tuple2 {v0, v1}\n    unit_end v2\n",
             ),
-            output: "@(@42, @99)",
+            output: "(42, 99)",
         ),
     ],
 )

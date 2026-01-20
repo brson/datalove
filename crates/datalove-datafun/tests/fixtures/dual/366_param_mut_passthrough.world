@@ -3,16 +3,16 @@ scriptunit-fragment
 ----------
 
 // Test mut param passthrough with read-modify-write.
-fun inner(mut x: int): @bool
-    let ten: int = @10
+fun inner(mut x: int): bool
+    let ten: int = 10
     set x = x + ten
-    ret @true
+    ret true
 end fun
 
-fun outer(mut x: int): @bool
+fun outer(mut x: int): bool
     ret inner(x)
 end fun
 
-var n: int = @5
+var n: int = 5
 let _ok = outer(n)
 debuglog n

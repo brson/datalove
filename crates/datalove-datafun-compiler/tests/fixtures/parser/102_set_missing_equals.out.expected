@@ -9,7 +9,7 @@
             "type_hint": null,
             "value": {
               "expr": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "kind": "Int",
                 "type_hint": null,
                 "value": "1"
@@ -35,10 +35,10 @@
         {
           "message": "expected '='",
           "span": [
-            36,
-            37
+            35,
+            36
           ],
-          "text": "@"
+          "text": "2"
         }
       ],
       "message": "expected '=' after set target"

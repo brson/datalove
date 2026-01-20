@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let x: i64 = @-9223372036854775808
+let x: i64 = -9223372036854775808
 debuglog x

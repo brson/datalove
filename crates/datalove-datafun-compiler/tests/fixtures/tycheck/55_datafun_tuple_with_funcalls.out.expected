@@ -8,14 +8,14 @@
       "params": [
         {
           "name": "a",
-          "type": "@int"
+          "type": "int"
         },
         {
           "name": "b",
-          "type": "@int"
+          "type": "int"
         }
       ],
-      "return_type": "@int"
+      "return_type": "int"
     },
     {
       "kind": "variable",
@@ -30,7 +30,7 @@
     {
       "kind": "variable",
       "name": "output",
-      "type": "(@int, @int)"
+      "type": "(int, int)"
     }
   ]
 }

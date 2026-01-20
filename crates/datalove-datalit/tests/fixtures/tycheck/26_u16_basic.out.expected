@@ -15,5 +15,5 @@
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@u16"
+  "root_type": "u16"
 }

@@ -2,7 +2,7 @@
 scriptunit-fragment
 ----------
 
-let t = @(@42, @true, @99)
+let t = (42, true, 99)
 let n = t.0
 let b = t.1
 let x = t.2

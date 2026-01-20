@@ -1,4 +1,4 @@
 fun try_in_wrong_return(): u32
-    let x: ?@u32 = some(42)
+    let x: ?u32 = some(42)
     ret x?
 end fun

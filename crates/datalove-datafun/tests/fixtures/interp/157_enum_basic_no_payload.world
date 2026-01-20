@@ -3,7 +3,7 @@ scriptunit-fragment
 ----------
 
 // Basic enum variant without payload.
-let status = : @enum { Active, Inactive } / @enum Active
+let status = : enum { Active, Inactive } / enum Active
 
 ----------
 scriptunit-expr

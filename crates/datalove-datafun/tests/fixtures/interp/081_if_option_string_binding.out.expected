@@ -22,7 +22,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = move unit0.s0\n    unit_end v0\n",
             ),
-            output: "@\"hello world\"",
+            output: "\"hello world\"",
         ),
     ],
 )

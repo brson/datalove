@@ -5,9 +5,9 @@ scriptunit-fragment
 // Test inline ref param: callee borrows, caller retains ownership.
 
 fun read_int(ref x: int): int
-    ret x + :int/@0
+    ret x + :int/0
 end fun
 
-let val: int = @42
+let val: int = 42
 debuglog read_int(val)
 debuglog read_int(val)

@@ -3,7 +3,7 @@ scriptunit-fragment
 ----------
 
 // Struct with string fields - tests move semantics for non-Copy types.
-let person = @{name = @"Alice", city = @"Boston"}
+let person = {name = "Alice", city = "Boston"}
 
 ----------
 scriptunit-expr

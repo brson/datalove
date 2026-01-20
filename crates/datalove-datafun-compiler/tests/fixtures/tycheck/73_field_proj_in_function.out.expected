@@ -8,10 +8,10 @@
       "params": [
         {
           "name": "t",
-          "type": "(@u32, @u32)"
+          "type": "(u32, u32)"
         }
       ],
-      "return_type": "@u32"
+      "return_type": "u32"
     },
     {
       "kind": "function",
@@ -19,15 +19,15 @@
       "params": [
         {
           "name": "t",
-          "type": "(@u32, @u32)"
+          "type": "(u32, u32)"
         }
       ],
-      "return_type": "@u32"
+      "return_type": "u32"
     },
     {
       "kind": "variable",
       "name": "pair",
-      "type": "(@u32, @u32)"
+      "type": "(u32, u32)"
     },
     {
       "kind": "variable",

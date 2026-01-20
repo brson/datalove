@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let x: u64 = @0xDEADBEEF
+let x: u64 = 0xDEADBEEF
 debuglog x

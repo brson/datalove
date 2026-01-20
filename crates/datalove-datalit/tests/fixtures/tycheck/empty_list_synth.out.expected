@@ -15,10 +15,10 @@
   "root_type": {
     "element_type": {
       "fields": [],
-      "heap": "@",
+      "heap": "",
       "kind": "AnonTuple"
     },
-    "heap": "@",
+    "heap": "",
     "kind": "List"
   }
 }

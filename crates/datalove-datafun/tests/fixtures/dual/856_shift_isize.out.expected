@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 16isize\n    v1 = const -16isize\n    v2 = intrinsic IsizeToUsize(v0)\n    v3 = const 0u32\n    v4 = intrinsic ShlUsize(v2, v3)\n    v5 = intrinsic UsizeToIsize(v4)\n    debuglog v5\n    v6 = const 4u32\n    v7 = intrinsic ShlUsize(v2, v6)\n    v8 = intrinsic UsizeToIsize(v7)\n    debuglog v8\n    v9 = const 0u32\n    v10 = intrinsic SshrIsize(v0, v9)\n    debuglog v10\n    v11 = const 2u32\n    v12 = intrinsic SshrIsize(v0, v11)\n    debuglog v12\n    v13 = const 2u32\n    v14 = intrinsic SshrIsize(v1, v13)\n    debuglog v14\n    v15 = const -256isize\n    v16 = const 4u32\n    v17 = intrinsic SshrIsize(v15, v16)\n    debuglog v17\n    unit_end\nexports:\n    pos = v0\n    neg = v1\n    pos_u = v2\n    big_neg = v15\n",
             ),
             ir_match: true,
-            interp_output: "@16\n@256\n@16\n@4\n@-4\n@-16\n",
-            aot_output: "@16\n@256\n@16\n@4\n@-4\n@-16\n",
+            interp_output: "16\n256\n16\n4\n-4\n-16\n",
+            aot_output: "16\n256\n16\n4\n-4\n-16\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

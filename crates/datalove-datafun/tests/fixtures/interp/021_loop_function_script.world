@@ -3,10 +3,10 @@ scriptunit-fragment
 ----------
 
 fun count_to_n(n: int): int
-    var i = :int/@0
-    var total = :int/@0
+    var i = :int/0
+    var total = :int/0
     loop
-        set i = i + :int/@1
+        set i = i + :int/1
         set total = total + i
         if i == n
             break
@@ -19,4 +19,4 @@ end fun
 scriptunit-expr
 ----------
 
-count_to_n(:int/@4)
+count_to_n(:int/4)

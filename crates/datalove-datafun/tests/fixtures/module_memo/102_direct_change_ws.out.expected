@@ -3,7 +3,7 @@
     {
       "action": "add",
       "module": "local/test/a",
-      "source_hash": "527eb9f5165b60da",
+      "source_hash": "1a7d0eca8a6a16ae",
       "results": {
         "local/test/a": {
           "is_direct": true,
@@ -28,7 +28,7 @@
     {
       "action": "module-change-ws",
       "module": "local/test/a",
-      "source_hash": "d4b041715d466b61",
+      "source_hash": "dac4ed6dc7fae774",
       "results": {
         "local/test/a": {
           "is_direct": true,

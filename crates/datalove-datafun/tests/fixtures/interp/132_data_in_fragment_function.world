@@ -4,7 +4,7 @@ scriptunit-fragment
 
 // Function in fragment that returns data.
 fun get_data(): data
-    ret @data "wrapped string"
+    ret data "wrapped string"
 end fun
 
 ----------

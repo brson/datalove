@@ -6,7 +6,7 @@
           "message": "expected shape [...] after tensor keyword"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },

@@ -6,7 +6,7 @@
       "kind": "function",
       "name": "a",
       "params": [],
-      "return_type": "@u8"
+      "return_type": "u8"
     },
     {
       "kind": "variable",

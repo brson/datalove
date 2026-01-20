@@ -6,10 +6,10 @@
           "entries": []
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "ParseError": {
           "message": "expected <> after map keyword"
@@ -24,8 +24,8 @@
         {
           "message": "expected '<' after 'map'",
           "span": [
-            3,
-            6
+            2,
+            5
           ],
           "text": "map"
         }

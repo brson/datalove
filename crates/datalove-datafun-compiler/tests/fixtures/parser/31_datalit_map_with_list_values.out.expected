@@ -11,7 +11,7 @@
               {
                 "key": {
                   "expr": {
-                    "heap": "Local",
+                    "heap": "Omitted",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "1"
@@ -37,7 +37,7 @@
                         }
                       }
                     ],
-                    "heap": "Local",
+                    "heap": "Omitted",
                     "kind": "List",
                     "type_hint": null
                   }
@@ -46,7 +46,7 @@
               {
                 "key": {
                   "expr": {
-                    "heap": "Local",
+                    "heap": "Omitted",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "2"
@@ -72,14 +72,14 @@
                         }
                       }
                     ],
-                    "heap": "Local",
+                    "heap": "Omitted",
                     "kind": "List",
                     "type_hint": null
                   }
                 }
               }
             ],
-            "heap": "Local",
+            "heap": "Omitted",
             "kind": "Map",
             "type_hint": null
           }

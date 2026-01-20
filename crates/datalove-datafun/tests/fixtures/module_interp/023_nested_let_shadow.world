@@ -4,18 +4,18 @@ module local/test/main
 
 // Test let shadowing in nested scopes (if branches).
 fun main(): u32
-    let x: u32 = @1
-    let cond: bool = @true
+    let x: u32 = 1
+    let cond: bool = true
     if cond
-        let x: u32 = @2
-        let inner_cond: bool = @true
+        let x: u32 = 2
+        let inner_cond: bool = true
         if inner_cond
-            let x: u32 = @3
+            let x: u32 = 3
             ret x
         else
-            ret @99
+            ret 99
         end if
     else
-        ret @88
+        ret 88
     end if
 end fun

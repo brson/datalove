@@ -8,10 +8,10 @@
       "params": [
         {
           "name": "n",
-          "type": "@int"
+          "type": "int"
         }
       ],
-      "return_type": "@int"
+      "return_type": "int"
     }
   ]
 }

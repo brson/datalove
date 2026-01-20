@@ -7,10 +7,10 @@ fun test_branch(cond: bool): u32
     let s: string = "test string"
     if cond
         let _sink = s
-        ret @1
+        ret 1
     else
         let _sink2 = s
-        ret @0
+        ret 0
     end if
 end fun
 

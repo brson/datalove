@@ -22,7 +22,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = copy unit0.v2\n    unit_end v0\n",
             ),
-            output: "@{x = @10, y = @20}",
+            output: "{x = 10, y = 20}",
         ),
     ],
 )

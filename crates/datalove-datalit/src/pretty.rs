@@ -18,7 +18,7 @@ pub fn pretty_print<'db>(
 /// Pretty print a runtime value with type hint.
 ///
 /// Combines the type from typechecking with the runtime value to produce
-/// output in the format `: @type / @value`.
+/// output in the format `: type / @value`.
 pub fn pretty_print_runtime_value<'db>(
     db: &'db dyn crate::Db,
     ty: &TypeAndHeap<'db>,
@@ -108,13 +108,7 @@ fn pretty_type_and_heap<'db>(
     ty: &TypeAndHeap<'db>,
     out: &mut String,
 ) {
-    // Print heap sigil.
-    match ty.heap(db) {
-        Heap::Local => out.push('@'),
-        Heap::Global => out.push('#'),
-        Heap::Omitted => {}
-    }
-
+    // Heap sigils have been removed from the language.
     pretty_type(db, ty.ty(db), out);
 }
 
@@ -262,13 +256,7 @@ fn pretty_type_hint_and_heap<'db>(
     th: TypeHintAndHeap<'db>,
     out: &mut String,
 ) {
-    // Print heap sigil.
-    match th.heap(db) {
-        Heap::Local => out.push('@'),
-        Heap::Global => out.push('#'),
-        Heap::Omitted => {}
-    }
-
+    // Heap sigils have been removed from the language.
     pretty_type_hint(db, th.type_hint(db), out);
 }
 
@@ -409,13 +397,7 @@ fn pretty_expr_and_heap<'db>(
     out: &mut String,
     indent: usize,
 ) {
-    // Print heap sigil.
-    match eh.heap {
-        Heap::Local => out.push('@'),
-        Heap::Global => out.push('#'),
-        Heap::Omitted => {}
-    }
-
+    // Heap sigils have been removed from the language.
     pretty_expr(db, eh.expr, out, indent);
 }
 

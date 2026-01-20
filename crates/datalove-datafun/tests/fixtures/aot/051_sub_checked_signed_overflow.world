@@ -16,4 +16,4 @@ fun checked_sub(a: i32, b: i32): ?i32
 end fun
 
 // -2147483648 - 1 overflows i32, returns None -> default 999.
-debuglog unwrap_or_default(checked_sub(@-2147483648, @1), @999)
+debuglog unwrap_or_default(checked_sub(-2147483648, 1), 999)

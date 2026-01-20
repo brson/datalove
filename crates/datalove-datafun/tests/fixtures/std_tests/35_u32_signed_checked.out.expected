@@ -1,1 +1,1 @@
-@(some @15, some @7, @none, @none, some @5, some @13, @none, @none, some @852516352, some @3147483648)
+(some 15, some 7, none, none, some 5, some 13, none, none, some 852516352, some 3147483648)

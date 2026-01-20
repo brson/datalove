@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-debuglog @true
-debuglog @false
+debuglog true
+debuglog false

@@ -32,7 +32,7 @@
             "mode": "In",
             "name": "accum",
             "type_hint": {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U64"
             }
           },
@@ -40,7 +40,7 @@
             "mode": "In",
             "name": "amount",
             "type_hint": {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U8"
             }
           }
@@ -50,7 +50,7 @@
           "type_hint": {
             "Result": {
               "inner_type": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "type_hint": "U64"
               }
             }

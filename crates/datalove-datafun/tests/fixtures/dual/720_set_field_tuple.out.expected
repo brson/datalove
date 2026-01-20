@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Tuple2 {v0, v1}\n    store s0, v2\n    v3 = const 88u32\n    setfield s0.1, v3\n    v4 = getfieldref s0.1\n    debuglog v4\n    unit_end\nexports:\n    t = s0\n",
             ),
             ir_match: true,
-            interp_output: "@88\n",
-            aot_output: "@88\n",
+            interp_output: "88\n",
+            aot_output: "88\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

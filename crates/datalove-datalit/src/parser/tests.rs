@@ -8,7 +8,7 @@ use super::parse_for_test;
 #[test]
 fn test_parse_bool() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@true"));
+    let source = Source::new(db, S("true"));
     let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr.clone();
     assert!(matches!(expr, ast::Expr::True));
@@ -17,7 +17,7 @@ fn test_parse_bool() {
 #[test]
 fn test_parse_bool_with_type() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": @bool / @true"));
+    let source = Source::new(db, S(": bool / true"));
     let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     assert!(matches!(type_hint, ast::TypeHint::Bool));
@@ -28,7 +28,7 @@ fn test_parse_bool_with_type() {
 #[test]
 fn test_parse_int() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@42"));
+    let source = Source::new(db, S("42"));
     let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr.clone();
     match expr {
@@ -40,7 +40,7 @@ fn test_parse_int() {
 #[test]
 fn test_parse_tuple() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@(@true, @1)"));
+    let source = Source::new(db, S("(true, 1)"));
     let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr.clone();
     match expr {
@@ -52,7 +52,7 @@ fn test_parse_tuple() {
 #[test]
 fn test_parse_list() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@[@1, @2, @3]"));
+    let source = Source::new(db, S("[1, 2, 3]"));
     let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr.clone();
     match expr {
@@ -64,7 +64,7 @@ fn test_parse_list() {
 #[test]
 fn test_parse_float() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@1.0"));
+    let source = Source::new(db, S("1.0"));
     let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr.clone();
     match expr {
@@ -77,7 +77,7 @@ fn test_parse_float() {
 #[test]
 fn test_parse_float_with_type() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": @f32 / @1.0"));
+    let source = Source::new(db, S(": f32 / 1.0"));
     let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     assert!(matches!(type_hint, ast::TypeHint::F32));
@@ -91,7 +91,7 @@ fn test_parse_float_with_type() {
 #[test]
 fn test_parse_anon_enum_type() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": @enum { Foo, Bar(@u32) } / @enum Foo"));
+    let source = Source::new(db, S(": enum { Foo, Bar(u32) } / enum Foo"));
     let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
@@ -106,7 +106,7 @@ fn test_parse_anon_enum_type() {
 #[test]
 fn test_parse_string() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(r#": @string / @"hello world""#));
+    let source = Source::new(db, S(r#": string / "hello world""#));
     let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr.clone();
     match expr {
@@ -120,7 +120,7 @@ fn test_parse_string() {
 #[test]
 fn test_parse_map() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": @map <@u32, @u32> / @map { @0 = @5, @2 = @2 }"));
+    let source = Source::new(db, S(": map <u32, u32> / map { 0 = 5, 2 = 2 }"));
     let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
@@ -139,7 +139,7 @@ fn test_parse_map() {
 #[test]
 fn test_parse_set() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": @set <@u32> / @set { @1, @2, @3 }"));
+    let source = Source::new(db, S(": set <u32> / set { 1, 2, 3 }"));
     let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
@@ -158,7 +158,7 @@ fn test_parse_set() {
 #[test]
 fn test_parse_enum_variant_no_payload() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@enum Foo"));
+    let source = Source::new(db, S("enum Foo"));
     let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr.clone();
     match expr {
@@ -173,7 +173,7 @@ fn test_parse_enum_variant_no_payload() {
 #[test]
 fn test_parse_enum_variant_with_payload() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@enum Bar(@2)"));
+    let source = Source::new(db, S("enum Bar(2)"));
     let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr.clone();
     match expr {
@@ -188,7 +188,7 @@ fn test_parse_enum_variant_with_payload() {
 #[test]
 fn test_parse_enum_variant_with_tuple() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@enum Baz(@(@true, @1))"));
+    let source = Source::new(db, S("enum Baz((true, 1))"));
     let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr.clone();
     match expr {
@@ -209,8 +209,8 @@ fn test_parse_enum_variant_with_tuple() {
 #[test]
 fn test_parse_enum_variant_with_extra_tokens_error() {
     let ref db = crate::Database::default();
-    // This should error: Ok(@u32, @string) - multiple types without explicit tuple.
-    let source = Source::new(db, S(": @enum { Ok(@u32, @string) } / @enum Ok(@1)"));
+    // This should error: Ok(u32, string) - multiple types without explicit tuple.
+    let source = Source::new(db, S(": enum { Ok(u32, string) } / enum Ok(1)"));
     let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap().type_hint(db);
     match type_hint {
@@ -240,7 +240,7 @@ fn test_parse_enum_variant_with_extra_tokens_error() {
 fn test_parse_list_multiline() {
     // Datalit parser doesn't split on newlines, but newlines in whitespace are fine.
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@[\n@1,\n@2,\n@3\n]"));
+    let source = Source::new(db, S("[\n1,\n2,\n3\n]"));
     let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr.clone();
     match expr {
@@ -253,7 +253,7 @@ fn test_parse_list_multiline() {
 fn test_parse_tuple_multiline() {
     // Datalit parser doesn't split on newlines, but newlines in whitespace are fine.
     let ref db = crate::Database::default();
-    let source = Source::new(db, S("@(\n@true,\n@1\n)"));
+    let source = Source::new(db, S("(\ntrue,\n1\n)"));
     let ast = parse_for_test(db, source);
     let expr = ast.expr(db).expr.clone();
     match expr {

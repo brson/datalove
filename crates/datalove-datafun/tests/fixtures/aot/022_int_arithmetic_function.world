@@ -20,7 +20,7 @@ fun neg_int(a: int): int
     ret -a
 end fun
 
-debuglog add_ints(@10, @32)
-debuglog sub_ints(@100, @42)
-debuglog mul_ints(@7, @6)
-debuglog neg_int(@42)
+debuglog add_ints(10, 32)
+debuglog sub_ints(100, 42)
+debuglog mul_ints(7, 6)
+debuglog neg_int(42)

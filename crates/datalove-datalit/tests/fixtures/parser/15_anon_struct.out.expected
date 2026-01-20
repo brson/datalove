@@ -9,7 +9,7 @@
               "value": {
                 "expr": {
                   "expr": "True",
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               }
@@ -23,7 +23,7 @@
                       "value": "42"
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": null
               }
@@ -37,10 +37,10 @@
                       "value": "2"
                     }
                   },
-                  "heap": "Local"
+                  "heap": "Omitted"
                 },
                 "type_hint": {
-                  "heap": "Local",
+                  "heap": "Omitted",
                   "type_hint": "U32"
                 }
               }
@@ -48,31 +48,31 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "AnonStruct": {
           "fields": [
             {
               "name": "field1",
               "type_hint": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "type_hint": "Bool"
               }
             },
             {
               "name": "field2",
               "type_hint": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "type_hint": "U32"
               }
             },
             {
               "name": "field3",
               "type_hint": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "type_hint": "U32"
               }
             }

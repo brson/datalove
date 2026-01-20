@@ -4,12 +4,12 @@ module local/test/main
 
 // Test passing Ref-mode param to Mut-mode param.
 // Should error - can't get mutable reference from immutable reference.
-fun inner(mut x: @u32): @bool
-    set x = @42
-    ret @true
+fun inner(mut x: u32): bool
+    set x = 42
+    ret true
 end fun
 
-fun outer(ref y: @u32): @bool
+fun outer(ref y: u32): bool
     ret inner(y)
 end fun
 
@@ -23,5 +23,5 @@ require module local/test/main
 scriptunit-expr
 ----------
 
-@true
+true
 

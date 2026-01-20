@@ -3,17 +3,17 @@ scriptunit-fragment
 ----------
 
 // Test passing Mut-mode param to Mut-mode param (mut->mut).
-fun inner(mut x: @u32): @bool
-    set x = @42
-    ret @true
+fun inner(mut x: u32): bool
+    set x = 42
+    ret true
 end fun
 
-fun outer(mut y: @u32): @bool
+fun outer(mut y: u32): bool
     ret inner(y)
 end fun
 
-fun test(): @u32
-    var n: @u32 = @0
+fun test(): u32
+    var n: u32 = 0
     let _ok = outer(n)
     ret n
 end fun

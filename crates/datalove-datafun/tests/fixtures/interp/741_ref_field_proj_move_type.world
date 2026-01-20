@@ -8,5 +8,5 @@ fun takes_ref(ref x: int): int
     ret x
 end fun
 
-let t: (int, int) = (@100, @200)
+let t: (int, int) = (100, 200)
 debuglog takes_ref(t.0)

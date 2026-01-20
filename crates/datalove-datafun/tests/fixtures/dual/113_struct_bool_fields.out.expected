@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const true\n    v1 = const false\n    v2 = const true\n    v3 = pack Struct0 {v0, v1, v2}\n    v4 = getfieldref v3.0\n    debuglog v4\n    v5 = getfieldref v3.1\n    debuglog v5\n    v6 = getfieldref v3.2\n    debuglog v6\n    unit_end\nexports:\n    flags = v3\n",
             ),
             ir_match: true,
-            interp_output: "@true\n@false\n@true\n",
-            aot_output: "@true\n@false\n@true\n",
+            interp_output: "true\nfalse\ntrue\n",
+            aot_output: "true\nfalse\ntrue\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

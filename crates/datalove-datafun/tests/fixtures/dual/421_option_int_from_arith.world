@@ -4,8 +4,8 @@ scriptunit-fragment
 
 // Return ?int where int comes from arithmetic.
 fun test(): ?int
-    let x: @u32 = @10
-    let y: int = x + @0
+    let x: u32 = 10
+    let y: int = x + 0
     ret some y
 end fun
 

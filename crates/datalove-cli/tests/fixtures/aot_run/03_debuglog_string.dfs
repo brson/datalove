@@ -1,1 +1,1 @@
-debuglog(@"hello world")
+debuglog("hello world")

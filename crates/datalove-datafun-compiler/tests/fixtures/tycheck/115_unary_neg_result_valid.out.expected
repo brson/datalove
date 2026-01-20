@@ -3,7 +3,7 @@
   "errors": [
     {
       "actual": "u32",
-      "expected": "@!u32",
+      "expected": "!u32",
       "kind": "TypeMismatch"
     }
   ],
@@ -14,7 +14,7 @@
       "params": [
         {
           "name": "x",
-          "type": "@u32"
+          "type": "u32"
         }
       ],
       "return_type": "!u32"

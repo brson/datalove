@@ -3,15 +3,15 @@ scriptunit-fragment
 ----------
 
 // Struct with loop - set field multiple times.
-var s = @{x = @0}
+var s = {x = 0}
 loop
-    set s.x = @1
+    set s.x = 1
     break
 end loop
 debuglog s.x
 
 loop
-    set s.x = @2
+    set s.x = 2
     break
 end loop
 debuglog s.x

@@ -1,1 +1,1 @@
-@set { @true, @false }
+set { true, false }

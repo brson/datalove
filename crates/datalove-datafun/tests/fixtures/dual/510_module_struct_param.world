@@ -3,11 +3,11 @@ module local/test/structops
 ----------
 
 // Module function taking struct parameter.
-fun get_x(s: {x: @u32, y: @u32}): @u32
+fun get_x(s: {x: u32, y: u32}): u32
     ret s.x
 end fun
 
-fun get_y(s: {x: @u32, y: @u32}): @u32
+fun get_y(s: {x: u32, y: u32}): u32
     ret s.y
 end fun
 
@@ -19,6 +19,6 @@ require module local/test/structops
 import structops.get_x
 import structops.get_y
 
-let point = @{x = @100, y = @200}
+let point = {x = 100, y = 200}
 debuglog get_x(point)
 debuglog get_y(point)

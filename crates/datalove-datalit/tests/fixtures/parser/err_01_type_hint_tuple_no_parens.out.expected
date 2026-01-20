@@ -6,10 +6,10 @@
           "elements": []
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "ParseError": {
           "message": "expected () after tuple keyword"
@@ -24,8 +24,8 @@
         {
           "message": "expected '(' after 'tuple'",
           "span": [
-            3,
-            8
+            2,
+            7
           ],
           "text": "tuple"
         }

@@ -10,14 +10,14 @@
                   "value": "42"
                 }
               },
-              "heap": "Local"
+              "heap": "Omitted"
             },
             "type_hint": null
           },
           "variant_name": "Bar"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },

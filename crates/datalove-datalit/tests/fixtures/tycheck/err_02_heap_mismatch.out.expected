@@ -32,7 +32,7 @@
   "errors": [
     {
       "actual_heap": "#",
-      "expected_heap": "@",
+      "expected_heap": "",
       "kind": "HeapMismatch"
     }
   ],

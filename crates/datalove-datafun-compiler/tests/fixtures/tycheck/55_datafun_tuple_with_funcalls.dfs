@@ -1,7 +1,7 @@
-fun add(a: @int, b: @int): @int
+fun add(a: int, b: int): int
   let result = a + b
 end fun
 
-let x = : @int / @10
-let y = : @int / @20
+let x = : int / 10
+let y = : int / 20
 let output = (add(x, y), add(y, x))

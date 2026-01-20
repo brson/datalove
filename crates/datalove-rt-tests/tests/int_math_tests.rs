@@ -115,7 +115,7 @@ fn test_int_add_positive() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @5", ": @int / @3", ": @int / @8",
+            ": int / 5", ": int / 3", ": int / 8",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_add(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -133,7 +133,7 @@ fn test_int_add_zero() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @42", ": @int / @0", ": @int / @42",
+            ": int / 42", ": int / 0", ": int / 42",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_add(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -152,7 +152,7 @@ fn test_int_add_negative() -> AnyResult<()> {
         // -5 + 3 = -2
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @-5", ": @int / @3", ": @int / @-2",
+            ": int / -5", ": int / 3", ": int / -2",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_add(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -171,7 +171,7 @@ fn test_int_add_large() -> AnyResult<()> {
         // Multi-limb addition: 3000000000 + 2000000000 = 5000000000.
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @3000000000", ": @int / @2000000000", ": @int / @5000000000",
+            ": int / 3000000000", ": int / 2000000000", ": int / 5000000000",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_add(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -190,7 +190,7 @@ fn test_int_add_result_zero() -> AnyResult<()> {
         // 5 + (-5) = 0
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @5", ": @int / @-5", ": @int / @0",
+            ": int / 5", ": int / -5", ": int / 0",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_add(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -212,7 +212,7 @@ fn test_int_sub_positive() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @8", ": @int / @3", ": @int / @5",
+            ": int / 8", ": int / 3", ": int / 5",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_sub(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -231,7 +231,7 @@ fn test_int_sub_result_negative() -> AnyResult<()> {
         // 3 - 8 = -5
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @3", ": @int / @8", ": @int / @-5",
+            ": int / 3", ": int / 8", ": int / -5",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_sub(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -250,7 +250,7 @@ fn test_int_sub_zero() -> AnyResult<()> {
         // 5 - 5 = 0
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @5", ": @int / @5", ": @int / @0",
+            ": int / 5", ": int / 5", ": int / 0",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_sub(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -269,7 +269,7 @@ fn test_int_sub_large() -> AnyResult<()> {
         // 5000000000 - 3000000000 = 2000000000
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @5000000000", ": @int / @3000000000", ": @int / @2000000000",
+            ": int / 5000000000", ": int / 3000000000", ": int / 2000000000",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_sub(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -291,7 +291,7 @@ fn test_int_mul_positive() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @6", ": @int / @7", ": @int / @42",
+            ": int / 6", ": int / 7", ": int / 42",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_mul(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -309,7 +309,7 @@ fn test_int_mul_zero() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @42", ": @int / @0", ": @int / @0",
+            ": int / 42", ": int / 0", ": int / 0",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_mul(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -328,7 +328,7 @@ fn test_int_mul_negative() -> AnyResult<()> {
         // -6 * 7 = -42
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @-6", ": @int / @7", ": @int / @-42",
+            ": int / -6", ": int / 7", ": int / -42",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_mul(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -347,7 +347,7 @@ fn test_int_mul_both_negative() -> AnyResult<()> {
         // -6 * -7 = 42
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @-6", ": @int / @-7", ": @int / @42",
+            ": int / -6", ": int / -7", ": int / 42",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_mul(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -366,7 +366,7 @@ fn test_int_mul_large() -> AnyResult<()> {
         // 1000000 * 1000000 = 1000000000000
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @1000000", ": @int / @1000000", ": @int / @1000000000000",
+            ": int / 1000000", ": int / 1000000", ": int / 1000000000000",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_mul(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -385,8 +385,8 @@ fn test_int_neg_positive() -> AnyResult<()> {
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
 
-    let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, ": @int / @42")?;
-    let (ptr_expected, tydesc_expected) = instantiate_int(&db, &rt, &mut tydesc_table, ": @int / @-42")?;
+    let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 42")?;
+    let (ptr_expected, tydesc_expected) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / -42")?;
 
     let result_ptr = unsafe {
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
@@ -423,8 +423,8 @@ fn test_int_neg_negative() -> AnyResult<()> {
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
 
-    let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, ": @int / @-42")?;
-    let (ptr_expected, tydesc_expected) = instantiate_int(&db, &rt, &mut tydesc_table, ": @int / @42")?;
+    let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / -42")?;
+    let (ptr_expected, tydesc_expected) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 42")?;
 
     let result_ptr = unsafe {
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
@@ -461,8 +461,8 @@ fn test_int_neg_zero() -> AnyResult<()> {
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
 
-    let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, ": @int / @0")?;
-    let (ptr_expected, tydesc_expected) = instantiate_int(&db, &rt, &mut tydesc_table, ": @int / @0")?;
+    let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 0")?;
+    let (ptr_expected, tydesc_expected) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 0")?;
 
     let result_ptr = unsafe {
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
@@ -507,7 +507,7 @@ fn test_int_div_exact() -> AnyResult<()> {
         // 42 / 6 = 7
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @42", ": @int / @6", ": @int / @7",
+            ": int / 42", ": int / 6", ": int / 7",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -526,7 +526,7 @@ fn test_int_div_truncate() -> AnyResult<()> {
         // 43 / 6 = 7 (truncated)
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @43", ": @int / @6", ": @int / @7",
+            ": int / 43", ": int / 6", ": int / 7",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -545,7 +545,7 @@ fn test_int_div_negative_dividend() -> AnyResult<()> {
         // -42 / 6 = -7
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @-42", ": @int / @6", ": @int / @-7",
+            ": int / -42", ": int / 6", ": int / -7",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -564,7 +564,7 @@ fn test_int_div_negative_divisor() -> AnyResult<()> {
         // 42 / -6 = -7
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @42", ": @int / @-6", ": @int / @-7",
+            ": int / 42", ": int / -6", ": int / -7",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -583,7 +583,7 @@ fn test_int_div_both_negative() -> AnyResult<()> {
         // -42 / -6 = 7
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @-42", ": @int / @-6", ": @int / @7",
+            ": int / -42", ": int / -6", ": int / 7",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -598,8 +598,8 @@ fn test_int_div_by_zero() -> AnyResult<()> {
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
 
-    let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, ": @int / @42")?;
-    let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, ": @int / @0")?;
+    let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 42")?;
+    let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 0")?;
 
     let result_ptr = unsafe {
         datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_a, 1)
@@ -635,7 +635,7 @@ fn test_int_div_large() -> AnyResult<()> {
         // 1000000000000 / 1000000 = 1000000
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @1000000000000", ": @int / @1000000", ": @int / @1000000",
+            ": int / 1000000000000", ": int / 1000000", ": int / 1000000",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -654,7 +654,7 @@ fn test_int_div_zero_dividend() -> AnyResult<()> {
         // 0 / 42 = 0
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @0", ": @int / @42", ": @int / @0",
+            ": int / 0", ": int / 42", ": int / 0",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -680,9 +680,9 @@ fn test_int_div_multi_limb_divisor() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @10000000000000000000",
-            ": @int / @10000000000",
-            ": @int / @1000000000",
+            ": int / 10000000000000000000",
+            ": int / 10000000000",
+            ": int / 1000000000",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -702,9 +702,9 @@ fn test_int_div_multi_limb_exact() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @12884901891",
-            ": @int / @4294967297",
-            ": @int / @3",
+            ": int / 12884901891",
+            ": int / 4294967297",
+            ": int / 3",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -723,9 +723,9 @@ fn test_int_div_multi_limb_with_remainder() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @12884901892",
-            ": @int / @4294967297",
-            ": @int / @3",
+            ": int / 12884901892",
+            ": int / 4294967297",
+            ": int / 3",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -744,9 +744,9 @@ fn test_int_div_multi_limb_negative() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @-12884901891",
-            ": @int / @4294967297",
-            ": @int / @-3",
+            ": int / -12884901891",
+            ": int / 4294967297",
+            ": int / -3",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -765,9 +765,9 @@ fn test_int_div_dividend_smaller_than_divisor() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @100",
-            ": @int / @4294967297",
-            ": @int / @0",
+            ": int / 100",
+            ": int / 4294967297",
+            ": int / 0",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -795,9 +795,9 @@ fn test_int_div_multi_limb_no_shift() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @18446744073709551616",
-            ": @int / @9223372036854775808",
-            ": @int / @2",
+            ": int / 18446744073709551616",
+            ": int / 9223372036854775808",
+            ": int / 2",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -822,9 +822,9 @@ fn test_int_add_very_large() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @18446744073709551616",
-            ": @int / @18446744073709551616",
-            ": @int / @36893488147419103232",
+            ": int / 18446744073709551616",
+            ": int / 18446744073709551616",
+            ": int / 36893488147419103232",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_add(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -843,9 +843,9 @@ fn test_int_sub_very_large() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @36893488147419103232",
-            ": @int / @18446744073709551616",
-            ": @int / @18446744073709551616",
+            ": int / 36893488147419103232",
+            ": int / 18446744073709551616",
+            ": int / 18446744073709551616",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_sub(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -865,9 +865,9 @@ fn test_int_mul_very_large() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @4294967296",
-            ": @int / @4294967296",
-            ": @int / @18446744073709551616",
+            ": int / 4294967296",
+            ": int / 4294967296",
+            ": int / 18446744073709551616",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_mul(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -887,7 +887,7 @@ fn test_int_add_different_sign_b_larger() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @3", ": @int / @-8", ": @int / @-5",
+            ": int / 3", ": int / -8", ": int / -5",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_add(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -906,7 +906,7 @@ fn test_int_sub_a_is_zero() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @0", ": @int / @5", ": @int / @-5",
+            ": int / 0", ": int / 5", ": int / -5",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_sub(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -925,7 +925,7 @@ fn test_int_add_a_is_zero() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @0", ": @int / @-5", ": @int / @-5",
+            ": int / 0", ": int / -5", ": int / -5",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_add(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -967,8 +967,8 @@ mod proptests {
             let rt = Runtime::new();
             let mut tydesc_table = TyDescTable::new(&db);
 
-            let a_expr = format!(": @int / @{}", a);
-            let b_expr = format!(": @int / @{}", b);
+            let a_expr = format!(": int / {}", a);
+            let b_expr = format!(": int / {}", b);
 
             let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).unwrap();
             let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, &b_expr).unwrap();
@@ -1019,8 +1019,8 @@ mod proptests {
             let rt = Runtime::new();
             let mut tydesc_table = TyDescTable::new(&db);
 
-            let a_expr = format!(": @int / @{}", a);
-            let b_expr = format!(": @int / @{}", b);
+            let a_expr = format!(": int / {}", a);
+            let b_expr = format!(": int / {}", b);
 
             let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).unwrap();
             let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, &b_expr).unwrap();
@@ -1071,8 +1071,8 @@ mod proptests {
             let rt = Runtime::new();
             let mut tydesc_table = TyDescTable::new(&db);
 
-            let a_expr = format!(": @int / @{}", a);
-            let b_expr = format!(": @int / @{}", b);
+            let a_expr = format!(": int / {}", a);
+            let b_expr = format!(": int / {}", b);
 
             let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).unwrap();
             let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, &b_expr).unwrap();
@@ -1123,7 +1123,7 @@ mod proptests {
             let rt = Runtime::new();
             let mut tydesc_table = TyDescTable::new(&db);
 
-            let a_expr = format!(": @int / @{}", a);
+            let a_expr = format!(": int / {}", a);
 
             let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).unwrap();
 
@@ -1168,8 +1168,8 @@ mod proptests {
             let rt = Runtime::new();
             let mut tydesc_table = TyDescTable::new(&db);
 
-            let a_expr = format!(": @int / @{}", a);
-            let b_expr = format!(": @int / @{}", b);
+            let a_expr = format!(": int / {}", a);
+            let b_expr = format!(": int / {}", b);
 
             let (ptr_a, tydesc_a) = instantiate_int(&db, &rt, &mut tydesc_table, &a_expr).unwrap();
             let (ptr_b, tydesc_b) = instantiate_int(&db, &rt, &mut tydesc_table, &b_expr).unwrap();
@@ -1233,9 +1233,9 @@ fn test_int_div_knuth_refinement_three_limb_check() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @39614081257132168796771975167",
-            ": @int / @9223372041149743103",
-            ": @int / @4294967294",
+            ": int / 39614081257132168796771975167",
+            ": int / 9223372041149743103",
+            ": int / 4294967294",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -1257,9 +1257,9 @@ fn test_int_div_knuth_refinement_overflow_check() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @39614081257132168796771975168",
-            ": @int / @9223372036854775807",
-            ": @int / @4294967296",
+            ": int / 39614081257132168796771975168",
+            ": int / 9223372036854775807",
+            ": int / 4294967296",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -1282,9 +1282,9 @@ fn test_int_div_knuth_add_back() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @39614081257132168792477007872",
-            ": @int / @9223372041149743103",
-            ": @int / @4294967294",
+            ": int / 39614081257132168792477007872",
+            ": int / 9223372041149743103",
+            ": int / 4294967294",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -1305,9 +1305,9 @@ fn test_int_div_knuth_multiple_refinements() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @79228162514264337593543950335",
-            ": @int / @13835058055282163712",
-            ": @int / @5726623061",
+            ": int / 79228162514264337593543950335",
+            ": int / 13835058055282163712",
+            ": int / 5726623061",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -1329,9 +1329,9 @@ fn test_int_div_knuth_borrow_propagation() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @170141183460469231731687303715884105727",
-            ": @int / @9223372041149743104",
-            ": @int / @18446744065119617027",
+            ": int / 170141183460469231731687303715884105727",
+            ": int / 9223372041149743104",
+            ": int / 18446744065119617027",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },
@@ -1355,9 +1355,9 @@ fn test_int_div_knuth_refinement_break() -> AnyResult<()> {
     unsafe {
         test_binary_int_op(
             &db, &rt, &mut tydesc_table,
-            ": @int / @39614081275578912861891592192",
-            ": @int / @9223372045444710399",
-            ": @int / @4294967294",
+            ": int / 39614081275578912861891592192",
+            ": int / 9223372045444710399",
+            ": int / 4294967294",
             |rt, a, a_td, b, b_td, out, out_td| {
                 datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
             },

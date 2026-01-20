@@ -46,16 +46,16 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "@",
+    "heap": "",
     "kind": "AnonEnum",
     "variants": [
       {
         "name": "Ok",
-        "payload": "@u32"
+        "payload": "u32"
       },
       {
         "name": "Err",
-        "payload": "@string"
+        "payload": "string"
       }
     ]
   }

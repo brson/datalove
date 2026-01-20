@@ -2,4 +2,4 @@ require module sys/std/bool
 
 import bool.or
 
-let output = (or(@true, @true), or(@true, @false), or(@false, @true), or(@false, @false))
+let output = (or(true, true), or(true, false), or(false, true), or(false, false))

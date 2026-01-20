@@ -53,10 +53,10 @@
   "errors": [],
   "root_type": {
     "fields": [
-      "@int",
-      "@int"
+      "int",
+      "int"
     ],
-    "heap": "@",
+    "heap": "",
     "kind": "AnonTuple"
   }
 }

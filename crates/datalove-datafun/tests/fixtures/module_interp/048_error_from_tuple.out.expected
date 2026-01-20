@@ -6,5 +6,5 @@ ModulesAnalysis(
         status: "Success",
         ir: "fn make_error():\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = pack Tuple3 {v0, v1, v2}\n    v4 = error_from v3\n    return v4\n\nfn main():\nblock0:\n    v0 = call m0.f0()\n    return v0\n",
     ),
-    output: "@error @(@1, @2, @3)",
+    output: "error (1, 2, 3)",
 )

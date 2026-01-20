@@ -1,1 +1,1 @@
-@tensor [2, 2] [1 2, "three" 4]
+tensor [2, 2] [1 2, "three" 4]

@@ -3,11 +3,11 @@ require module sys/std/result
 import result.unwrap_or
 import result.unwrap_or_zero
 
-let val1: @u32 = @42
-let val2: @u32 = @42
+let val1: u32 = 42
+let val2: u32 = 42
 let ok1: !u32 = ok val1
 let ok2: !u32 = ok val2
 
-// Note: @error literal to !u32 coercion doesn't work in scripts.
+// Note: error literal to !u32 coercion doesn't work in scripts.
 // Testing only Ok path for now.
 let output = (unwrap_or(ok1, 99), unwrap_or_zero(ok2))

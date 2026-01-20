@@ -1,1 +1,1 @@
-: @error / @error @42
+: error / error 42

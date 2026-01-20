@@ -1,2 +1,2 @@
-let x = @"test"
+let x = "test"
 let y = x

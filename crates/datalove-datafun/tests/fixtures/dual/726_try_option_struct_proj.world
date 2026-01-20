@@ -3,9 +3,9 @@ scriptunit-fragment
 ----------
 
 // Try option with named field projection: a?.x
-fun test(): ?@u32
-    let input: ?@{x: @u32, y: @u32} = some @{x = @5, y = @6}
-    let val: @u32 = input?.x
+fun test(): ?u32
+    let input: ?{x: u32, y: u32} = some {x = 5, y = 6}
+    let val: u32 = input?.x
     ret some val
 end fun
 

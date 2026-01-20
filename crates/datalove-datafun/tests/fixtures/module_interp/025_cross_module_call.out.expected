@@ -6,5 +6,5 @@ ModulesAnalysis(
         status: "Success",
         ir: "fn main():\nblock0:\n    v0 = call m0.f0()\n    return v0\n\nfn helper():\nblock0:\n    v0 = const 42u32\n    return v0\n",
     ),
-    output: "@42",
+    output: "42",
 )

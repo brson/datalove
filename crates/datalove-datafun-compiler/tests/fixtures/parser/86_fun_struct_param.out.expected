@@ -17,14 +17,14 @@
                     {
                       "name": "x",
                       "type_hint": {
-                        "heap": "Local",
+                        "heap": "Omitted",
                         "type_hint": "U32"
                       }
                     },
                     {
                       "name": "y",
                       "type_hint": {
-                        "heap": "Local",
+                        "heap": "Omitted",
                         "type_hint": "U32"
                       }
                     }
@@ -35,7 +35,7 @@
           }
         ],
         "return_type": {
-          "heap": "Local",
+          "heap": "Omitted",
           "type_hint": "U32"
         }
       }

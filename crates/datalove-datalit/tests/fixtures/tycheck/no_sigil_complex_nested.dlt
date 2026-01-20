@@ -1,1 +1,1 @@
-: map<string, [?{x: u32, y: string}]> / @map{@"point" = [some @{x = @1, y = @"a"}, @none]}
+: map<string, [?{x: u32, y: string}]> / map{"point" = [some {x = 1, y = "a"}, none]}

@@ -13,6 +13,6 @@ scriptunit-fragment
 require module local/test/bigmath
 import bigmath.add_ints
 
-let x: int = @100
-let y: int = @200
+let x: int = 100
+let y: int = 200
 debuglog add_ints(x, y)

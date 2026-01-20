@@ -1,1 +1,1 @@
-: @enum {A, B(@u32)} / @enum A
+: enum {A, B(u32)} / enum A

@@ -11,5 +11,5 @@
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@bool"
+  "root_type": "bool"
 }

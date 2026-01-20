@@ -2,8 +2,8 @@
 scriptunit-fragment
 ----------
 
-let a: i32 = @-10
-let b: i32 = @-10
-let c: i32 = @10
+let a: i32 = -10
+let b: i32 = -10
+let c: i32 = 10
 debuglog (a == b)
 debuglog (a == c)

@@ -265,12 +265,8 @@ impl<'db> Parser<'db> {
             }
         }
 
-        // Check if it starts with a heap sigil (@ or #) or type hint (`:`) - use new inline variants.
-        // Note: `: type / expr` syntax starts without a heap sigil.
-        if self.peek_sigil(Sigil::At)
-            || self.peek_sigil(Sigil::Hash)
-            || self.peek_colon_type_hint()
-        {
+        // Check if it starts with a type hint (`:`) - use new inline variants.
+        if self.peek_colon_type_hint() {
             return self.parse_lit_expr_full();
         }
 
@@ -323,6 +319,12 @@ impl<'db> Parser<'db> {
                                         "error" => ast::ExprFunKind::Error(ast::ExprError { heap, type_hint: None, value }),
                                         _ => unreachable!(),
                                     };
+                                    self.create_expr(expr_kind, ts)
+                                }
+                                // tensor is a keyword followed by shape and data brackets.
+                                "tensor" if self.peek_second_sigil(Sigil::BracketOpen) => {
+                                    let ts = self.peek_text_span();
+                                    let expr_kind = self.parse_lit_expr(datalit::ast::Heap::Omitted, None);
                                     self.create_expr(expr_kind, ts)
                                 }
                                 // Intrinsic call: icall name(args)

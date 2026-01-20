@@ -2,7 +2,7 @@
 scriptunit-fragment
 ----------
 
-let x: u32 = @10
-let y: u32 = @32
+let x: u32 = 10
+let y: u32 = 32
 debuglog x
 debuglog y

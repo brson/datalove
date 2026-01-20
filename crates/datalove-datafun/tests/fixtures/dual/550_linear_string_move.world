@@ -6,7 +6,7 @@ scriptunit-fragment
 fun get_length(s: string): u32
     // String is consumed here.
     let _sink = s
-    ret @5
+    ret 5
 end fun
 
 let s: string = "hello"

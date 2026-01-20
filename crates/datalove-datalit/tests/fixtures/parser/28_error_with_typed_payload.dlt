@@ -1,1 +1,1 @@
-: @error / @error : @int / 1
+: error / error : int / 1

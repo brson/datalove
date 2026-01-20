@@ -12,7 +12,7 @@
             },
             "value": {
               "expr": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "kind": "Int",
                 "type_hint": null,
                 "value": "100"
@@ -58,10 +58,10 @@
         {
           "message": "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', or 'type'",
           "span": [
-            63,
-            64
+            62,
+            66
           ],
-          "text": "@"
+          "text": "true"
         }
       ],
       "message": "unexpected statement"

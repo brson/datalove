@@ -17,4 +17,4 @@ import utils.double
 scriptunit-expr
 ----------
 
-double(@7)
+double(7)

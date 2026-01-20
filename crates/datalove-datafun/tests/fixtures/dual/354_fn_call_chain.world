@@ -6,4 +6,4 @@ fun double(n: int): int
     ret n + n
 end fun
 
-debuglog double(:int/@5)
+debuglog double(:int/5)

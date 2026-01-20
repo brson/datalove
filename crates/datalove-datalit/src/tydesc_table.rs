@@ -1052,7 +1052,7 @@ mod tests {
     #[test]
     fn test_create_tuple_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@(@true, @42)")?;
+        let typechecked = compile(&db, "(true, 42)")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1080,7 +1080,7 @@ mod tests {
     #[test]
     fn test_create_struct_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@{x = @1, y = @2}")?;
+        let typechecked = compile(&db, "{x = 1, y = 2}")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1110,7 +1110,7 @@ mod tests {
     #[test]
     fn test_create_enum_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @enum { Ok, Error } / @enum Ok")?;
+        let typechecked = compile(&db, ": enum { Ok, Error } / enum Ok")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1138,7 +1138,7 @@ mod tests {
     #[test]
     fn test_create_enum_with_payload_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@42)")?;
+        let typechecked = compile(&db, ": enum { Ok(u32), Err(string) } / enum Ok(42)")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1168,7 +1168,7 @@ mod tests {
     #[test]
     fn test_create_list_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@[@1, @2, @3]")?;
+        let typechecked = compile(&db, "[1, 2, 3]")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1190,7 +1190,7 @@ mod tests {
     #[test]
     fn test_create_map_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @map <@u32, @string> / @map { @1 = @\"one\", @2 = @\"two\" }")?;
+        let typechecked = compile(&db, ": map <u32, string> / map { 1 = \"one\", 2 = \"two\" }")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1215,7 +1215,7 @@ mod tests {
     #[test]
     fn test_create_set_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @set <@u32> / @set { @1, @2, @3 }")?;
+        let typechecked = compile(&db, ": set <u32> / set { 1, 2, 3 }")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1237,7 +1237,7 @@ mod tests {
     #[test]
     fn test_create_option_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@u32 / some @42")?;
+        let typechecked = compile(&db, ": ?u32 / some 42")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1259,7 +1259,7 @@ mod tests {
     #[test]
     fn test_create_result_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @!@u32 / ok @42")?;
+        let typechecked = compile(&db, ": !u32 / ok 42")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1301,7 +1301,7 @@ mod tests {
     #[test]
     fn test_nested_tuple_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@(@(@1, @2), @(@3, @4))")?;
+        let typechecked = compile(&db, "((1, 2), (3, 4))")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1331,7 +1331,7 @@ mod tests {
     #[test]
     fn test_option_of_list_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@[@u32] / some @[@1, @2]")?;
+        let typechecked = compile(&db, ": ?[u32] / some [1, 2]")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1354,7 +1354,7 @@ mod tests {
     #[test]
     fn test_list_of_option_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @[@?@u32] / @[some @42, @none]")?;
+        let typechecked = compile(&db, ": [?u32] / [some 42, none]")?;
         let root_type = typechecked.root_type(&db).unwrap();
 
         let mut table = TyDescTable::new(&db);

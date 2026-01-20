@@ -479,7 +479,7 @@ fn apply_heap_mismatch<'db>(
         let mut elem_strs: Vec<String> = elements.iter().map(|e| pretty_print(db, *e)).collect();
 
         // Modify the last element's heap.
-        // Format is: [: type / @value] or [@value] (without type hint).
+        // Format is: [: type / @value] or [value] (without type hint).
         // The heap sigil is either after " / " (with type hint) or at the start (without).
         let last_idx = elem_strs.len() - 1;
         let last_str = &elem_strs[last_idx];
@@ -600,7 +600,7 @@ fn apply_arity_mismatch<'db>(
             let mut type_str = String::new();
             pretty_type_hint_and_heap(db, type_hint, &mut type_str);
 
-            // Build struct with fewer fields: `: type / @{field1: v1, field2: v2}`
+            // Build struct with fewer fields: `: type / {field1: v1, field2: v2}`
             let source = format!(": {} / {}{{{}}}", type_str, heap_str, field_strs.join(", "));
 
             Some(MutationResult {

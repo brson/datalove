@@ -5,17 +5,17 @@ scriptunit-fragment
 // Test debuglog of temporary expressions.
 // The expression results are temporaries that must be dropped after debuglog.
 
-let a: int = @10
-let b: int = @32
+let a: int = 10
+let b: int = 32
 debuglog (a + b)
 
-let c: int = @100
-let d: int = @42
+let c: int = 100
+let d: int = 42
 debuglog (c - d)
 
-let e: int = @7
-let f: int = @6
+let e: int = 7
+let f: int = 6
 debuglog (e * f)
 
-let g: int = @42
+let g: int = 42
 debuglog (-g)

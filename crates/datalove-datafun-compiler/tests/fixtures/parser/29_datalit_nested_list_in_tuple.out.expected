@@ -36,23 +36,21 @@
                       }
                     }
                   ],
-                  "heap": "Local",
+                  "heap": "Omitted",
                   "kind": "List",
                   "type_hint": null
                 }
               },
               {
                 "expr": {
-                  "heap": "Local",
+                  "heap": "Omitted",
                   "kind": "Int",
                   "type_hint": null,
                   "value": "100"
                 }
               }
             ],
-            "heap": "Local",
-            "kind": "AnonTuple",
-            "type_hint": null
+            "kind": "Tuple"
           }
         }
       }

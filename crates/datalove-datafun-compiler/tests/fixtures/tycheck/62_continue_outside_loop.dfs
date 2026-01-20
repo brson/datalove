@@ -1,4 +1,4 @@
-fun bad_continue(): @u32
+fun bad_continue(): u32
   continue
-  ret @0
+  ret 0
 end fun

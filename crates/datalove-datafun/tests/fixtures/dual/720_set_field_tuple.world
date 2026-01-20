@@ -2,6 +2,6 @@
 scriptunit-fragment
 ----------
 
-var t = @(@10, @20)
-set t.1 = @88
+var t = (10, 20)
+set t.1 = 88
 debuglog t.1

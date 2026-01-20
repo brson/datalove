@@ -4,10 +4,10 @@ scriptunit-fragment
 
 // Test inline function with ref param.
 fun read_int(ref x: int): int
-    ret x + :int/@0
+    ret x + :int/0
 end fun
 
-let val: int = @42
+let val: int = 42
 let result1 = read_int(val)
 let result2 = read_int(val)
 let output = (result1, result2)

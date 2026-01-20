@@ -1,2 +1,2 @@
-fun demo(a: @u32, out b: @u32, ref c: @u32, mut d: @u32)
+fun demo(a: u32, out b: u32, ref c: u32, mut d: u32)
 end fun

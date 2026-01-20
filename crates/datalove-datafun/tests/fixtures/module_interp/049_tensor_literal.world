@@ -3,5 +3,5 @@ module local/test/main
 ----------
 
 fun main(): tensor<u32, 2>
-    ret @tensor [2, 2] [@1 @2, @3 @4]
+    ret tensor [2, 2] [1 2, 3 4]
 end fun

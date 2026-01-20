@@ -7,10 +7,10 @@
           "variant_name": "Foo"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "ParseError": {
           "message": "expected {} after enum keyword"
@@ -25,8 +25,8 @@
         {
           "message": "expected '{' after 'enum'",
           "span": [
-            3,
-            7
+            2,
+            6
           ],
           "text": "enum"
         }

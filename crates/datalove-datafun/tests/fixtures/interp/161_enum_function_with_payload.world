@@ -3,8 +3,8 @@ scriptunit-fragment
 ----------
 
 // Function returning enum with payload.
-fun get_result(): @enum { Ok(@u32), Err }
-    ret @enum Ok(@42)
+fun get_result(): enum { Ok(u32), Err }
+    ret enum Ok(42)
 end fun
 
 ----------

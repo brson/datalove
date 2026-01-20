@@ -17,4 +17,4 @@ fun unwrap_or_default(r: !i32, default: i32): i32
 end fun
 
 // Negating i32::MIN overflows, returns Err -> default 999.
-debuglog unwrap_or_default(checked_neg(@-2147483648), @999)
+debuglog unwrap_or_default(checked_neg(-2147483648), 999)

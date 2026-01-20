@@ -3,8 +3,8 @@ scriptunit-fragment
 ----------
 
 // Function returning enum without payload.
-fun get_status(): @enum { Active, Inactive }
-    ret @enum Active
+fun get_status(): enum { Active, Inactive }
+    ret enum Active
 end fun
 
 ----------

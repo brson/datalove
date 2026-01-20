@@ -16,4 +16,4 @@ fun unwrap_or_default(r: !u32, default: u32): u32
 end fun
 
 // 7 * 6 = 42, no overflow.
-debuglog unwrap_or_default(checked_mul(@7, @6), @999)
+debuglog unwrap_or_default(checked_mul(7, 6), 999)

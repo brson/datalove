@@ -9,4 +9,4 @@ fun double(n: MyInt): MyInt
     ret n + n
 end fun
 
-let result = double(@6)
+let result = double(6)

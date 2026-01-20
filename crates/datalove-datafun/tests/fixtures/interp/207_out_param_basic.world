@@ -3,14 +3,14 @@ module local/test/main
 ----------
 
 // Test basic out param: callee writes value to caller's slot.
-fun init_value(out x: @u32): @bool
-    set x = @42
-    ret @true
+fun init_value(out x: u32): bool
+    set x = 42
+    ret true
 end fun
 
-fun test(): @u32
-    var n: @u32 = @5
-    let _ok: @bool = init_value(n)
+fun test(): u32
+    var n: u32 = 5
+    let _ok: bool = init_value(n)
     ret n
 end fun
 

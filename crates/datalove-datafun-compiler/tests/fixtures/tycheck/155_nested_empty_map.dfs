@@ -1,1 +1,1 @@
-let x: @map<u32, @map<u32, string>> = @map { 1 = @map {} }
+let x: map<u32, map<u32, string>> = map { 1 = map {} }

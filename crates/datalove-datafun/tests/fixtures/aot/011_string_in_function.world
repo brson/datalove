@@ -5,7 +5,7 @@ scriptunit-fragment
 fun test_string(): u32
     let s: string = "hello"
     debuglog s
-    ret @0
+    ret 0
 end fun
 
 debuglog test_string()

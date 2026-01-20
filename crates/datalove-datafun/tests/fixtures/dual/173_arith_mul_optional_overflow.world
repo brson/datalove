@@ -15,4 +15,4 @@ fun unwrap(opt: ?u32, default: u32): u32
 end fun
 
 // Large multiplication that overflows u32.
-debuglog unwrap(mul_opt(@1000000, @5000), @999)
+debuglog unwrap(mul_opt(1000000, 5000), 999)

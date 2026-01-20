@@ -32,10 +32,10 @@
           ]
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": {
-      "heap": "Local",
+      "heap": "Omitted",
       "type_hint": {
         "ParseError": {
           "message": "expected comma between tensor element type and rank"
@@ -50,8 +50,8 @@
         {
           "message": "expected ',' after element type",
           "span": [
-            16,
-            17
+            14,
+            15
           ],
           "text": "2"
         }

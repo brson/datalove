@@ -3,10 +3,10 @@ module local/test/main
 ----------
 
 fun main(): i64
-    let cond: bool = @true
+    let cond: bool = true
     if cond
-        ret @1
+        ret 1
     else
-        ret @0
+        ret 0
     end if
 end fun

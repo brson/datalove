@@ -3,11 +3,11 @@ scriptunit-fragment
 ----------
 
 // Struct with various field types (excluding float which isn't implemented).
-let record = @{
-    id = @42,
-    name = @"test",
-    active = @true,
-    count = @100
+let record = {
+    id = 42,
+    name = "test",
+    active = true,
+    count = 100
 }
 debuglog record.id
 debuglog record.name

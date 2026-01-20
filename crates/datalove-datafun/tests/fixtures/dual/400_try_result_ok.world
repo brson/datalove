@@ -3,6 +3,6 @@ scriptunit-fragment
 ----------
 
 // Try operator with Ok result - unwraps successfully.
-let input: !@u32 = ok @42
-let x: @u32 = input!
+let input: !u32 = ok 42
+let x: u32 = input!
 debuglog x

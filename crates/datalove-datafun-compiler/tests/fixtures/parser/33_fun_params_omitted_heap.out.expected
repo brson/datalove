@@ -28,7 +28,7 @@
           "type_hint": {
             "Result": {
               "inner_type": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "type_hint": "U64"
               }
             }

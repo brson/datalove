@@ -20,7 +20,7 @@
     {
       "kind": "variable",
       "name": "output",
-      "type": "(@u32, @f32, @bool)"
+      "type": "(u32, f32, bool)"
     }
   ]
 }

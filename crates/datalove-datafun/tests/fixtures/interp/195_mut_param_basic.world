@@ -4,15 +4,15 @@ module local/test/main
 
 // Test basic mut param write with Copy type.
 // set_to_42() sets the param to 42 and returns a bool.
-fun set_to_42(mut x: @u32): @bool
-    set x = @42
-    ret @true
+fun set_to_42(mut x: u32): bool
+    set x = 42
+    ret true
 end fun
 
 // Test wrapper that calls set_to_42 and returns the modified value.
-fun test(): @u32
-    var n: @u32 = @5
-    let _ok: @bool = set_to_42(n)
+fun test(): u32
+    var n: u32 = 5
+    let _ok: bool = set_to_42(n)
     ret n
 end fun
 

@@ -3,11 +3,11 @@ scriptunit-fragment
 ----------
 
 // Test mut param with copy type.
-fun set_to_100(mut x: @u32): @bool
-    set x = @100
-    ret @true
+fun set_to_100(mut x: u32): bool
+    set x = 100
+    ret true
 end fun
 
-var n: @u32 = @5
+var n: u32 = 5
 let _ok = set_to_100(n)
 debuglog n

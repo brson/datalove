@@ -3,14 +3,14 @@ scriptunit-fragment
 ----------
 
 // Unit 1: define var x
-var x: u32 = @1
+var x: u32 = 1
 
 ----------
 scriptunit-fragment
 ----------
 
 // Unit 2: shadow with let x
-let x: u32 = @2
+let x: u32 = 2
 
 ----------
 scriptunit-expr

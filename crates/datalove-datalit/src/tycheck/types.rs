@@ -161,24 +161,16 @@ pub enum TypeError {
 
 /// Check if two heaps are compatible.
 ///
-/// Omitted heap is generic and compatible with any heap.
-pub fn heaps_compatible(h1: Heap, h2: Heap) -> bool {
-    match (h1, h2) {
-        (Heap::Local, Heap::Local) => true,
-        (Heap::Global, Heap::Global) => true,
-        (Heap::Omitted, _) => true,
-        (_, Heap::Omitted) => true,
-        _ => false,
-    }
+/// Heap sigils have been removed from the language, so all heaps are now compatible.
+pub fn heaps_compatible(_h1: Heap, _h2: Heap) -> bool {
+    true
 }
 
 /// Convert a heap to a string for error messages.
-pub fn heap_to_string(heap: Heap) -> String {
-    match heap {
-        Heap::Local => "@".S(),
-        Heap::Global => "#".S(),
-        Heap::Omitted => "".S(),
-    }
+///
+/// Heap sigils have been removed from the language.
+pub fn heap_to_string(_heap: Heap) -> String {
+    "".S()
 }
 
 // ============================================================================
@@ -510,11 +502,7 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
         Type::AnonTuple(t) => {
             let fields: Vec<_> = t.fields.C()
                 .iter()
-                .map(|f| {
-                    let heap = heap_to_string(f.heap(db));
-                    let ty_str = type_to_string(db, f.ty(db));
-                    format!("{}{}", heap, ty_str)
-                })
+                .map(|f| type_to_string(db, f.ty(db)))
                 .collect();
             format!("({})", fields.join(", "))
         }
@@ -523,61 +511,54 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
                 .iter()
                 .map(|f| {
                     let name = f.name.as_str(db);
-                    let heap = heap_to_string(f.ty.heap(db));
                     let ty_str = type_to_string(db, f.ty.ty(db));
-                    format!("{}: {}{}", name, heap, ty_str)
+                    format!("{}: {}", name, ty_str)
                 })
                 .collect();
             format!("{{{}}}", fields.join(", "))
         }
         Type::AnonEnum(_) => {
-            format!("@enum{{...}}")
+            format!("enum{{...}}")
         }
         Type::List(l) => {
             let elem = l.element_type;
-            let heap = heap_to_string(elem.heap(db));
             let ty_str = type_to_string(db, elem.ty(db));
-            format!("[{}{}]", heap, ty_str)
+            format!("[{}]", ty_str)
         }
         Type::Map(m) => {
             let key = m.key_type;
             let value = m.value_type;
-            format!("@map<{}, {}>",
-                format!("{}{}", heap_to_string(key.heap(db)), type_to_string(db, key.ty(db))),
-                format!("{}{}", heap_to_string(value.heap(db)), type_to_string(db, value.ty(db))))
+            format!("map<{}, {}>",
+                type_to_string(db, key.ty(db)),
+                type_to_string(db, value.ty(db)))
         }
         Type::Set(s) => {
             let elem = s.element_type;
-            let heap = heap_to_string(elem.heap(db));
             let ty_str = type_to_string(db, elem.ty(db));
-            format!("@set<{}{}>", heap, ty_str)
+            format!("set<{}>", ty_str)
         }
         Type::Option(o) => {
             let inner = o.inner_type;
-            let heap = heap_to_string(inner.heap(db));
             let ty_str = type_to_string(db, inner.ty(db));
-            format!("@?{}{}", heap, ty_str)
+            format!("?{}", ty_str)
         }
         Type::Result(r) => {
             let inner = r.inner_type;
-            let heap = heap_to_string(inner.heap(db));
             let ty_str = type_to_string(db, inner.ty(db));
-            format!("@!{}{}", heap, ty_str)
+            format!("!{}", ty_str)
         }
         Type::Tensor(t) => {
             let elem = t.element_type;
-            let heap = heap_to_string(elem.heap(db));
             let ty_str = type_to_string(db, elem.ty(db));
-            format!("@tensor<{}{}, {}>", heap, ty_str, t.rank)
+            format!("tensor<{}, {}>", ty_str, t.rank)
         }
         Type::Table(t) => {
             let cols: Vec<_> = t.columns.C()
                 .iter()
                 .map(|c| {
                     let name = c.name.as_str(db);
-                    let heap = heap_to_string(c.ty.heap(db));
                     let ty_str = type_to_string(db, c.ty.ty(db));
-                    format!("{}: {}{}", name, heap, ty_str)
+                    format!("{}: {}", name, ty_str)
                 })
                 .collect();
             format!("{{| {} |}}", cols.join(", "))

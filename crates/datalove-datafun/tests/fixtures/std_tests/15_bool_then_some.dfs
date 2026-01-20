@@ -2,4 +2,4 @@ require module sys/std/bool
 
 import bool.then_some
 
-let output = (then_some(@true, 42), then_some(@false, 42))
+let output = (then_some(true, 42), then_some(false, 42))

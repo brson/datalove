@@ -1,1 +1,1 @@
-let output = @"hello world"
+let output = "hello world"

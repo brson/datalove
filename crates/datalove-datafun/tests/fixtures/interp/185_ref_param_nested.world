@@ -3,11 +3,11 @@ module local/test/main
 ----------
 
 // Two functions: outer passes its ref param to inner's ref param.
-fun inner(ref x: int): @bool
-    ret @true
+fun inner(ref x: int): bool
+    ret true
 end fun
 
-fun outer(ref y: int): @bool
+fun outer(ref y: int): bool
     ret inner(y)
 end fun
 
@@ -18,7 +18,7 @@ scriptunit-fragment
 require module local/test/main
 import main.outer
 
-let val: int = :int/@100
+let val: int = :int/100
 let result1 = outer(val)
 let output = result1
 

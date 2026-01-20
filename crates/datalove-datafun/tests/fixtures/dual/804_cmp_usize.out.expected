@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 10usize\n    v1 = const 20usize\n    v2 = const 10usize\n    v3 = const 0usize\n    v4 = const 4294967295usize\n    v5 = eq v0, v2\n    debuglog v5\n    v6 = eq v0, v1\n    debuglog v6\n    v7 = ne v0, v1\n    debuglog v7\n    v8 = ne v0, v2\n    debuglog v8\n    v9 = lt v0, v1\n    debuglog v9\n    v10 = lt v1, v0\n    debuglog v10\n    v11 = lt v3, v4\n    debuglog v11\n    v12 = le v0, v1\n    debuglog v12\n    v13 = le v0, v2\n    debuglog v13\n    v14 = le v1, v0\n    debuglog v14\n    v15 = gt v1, v0\n    debuglog v15\n    v16 = gt v0, v1\n    debuglog v16\n    v17 = gt v4, v3\n    debuglog v17\n    v18 = ge v1, v0\n    debuglog v18\n    v19 = ge v0, v2\n    debuglog v19\n    v20 = ge v0, v1\n    debuglog v20\n    unit_end\nexports:\n    a = v0\n    b = v1\n    c = v2\n    zero = v3\n    max = v4\n",
             ),
             ir_match: true,
-            interp_output: "@true\n@false\n@true\n@false\n@true\n@false\n@true\n@true\n@true\n@false\n@true\n@false\n@true\n@true\n@true\n@false\n",
-            aot_output: "@true\n@false\n@true\n@false\n@true\n@false\n@true\n@true\n@true\n@false\n@true\n@false\n@true\n@true\n@true\n@false\n",
+            interp_output: "true\nfalse\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\nfalse\n",
+            aot_output: "true\nfalse\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\nfalse\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

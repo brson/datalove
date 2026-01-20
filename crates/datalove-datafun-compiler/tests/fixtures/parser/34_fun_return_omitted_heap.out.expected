@@ -26,9 +26,9 @@
           "message": "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', or 'type'",
           "span": [
             25,
-            26
+            27
           ],
-          "text": "@"
+          "text": "42"
         }
       ],
       "message": "unexpected statement"

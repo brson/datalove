@@ -99,22 +99,22 @@ fn test_typecheck_equiv(db: &datalove_datafun_compiler::Database, expr_text: &st
 #[test]
 fn test_simple_bool_true() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, "@true").unwrap();
-    test_typecheck_equiv(&db, "@true").unwrap();
+    test_parse_equiv(&db, "true").unwrap();
+    test_typecheck_equiv(&db, "true").unwrap();
 }
 
 #[test]
 fn test_simple_bool_false() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, "@false").unwrap();
-    test_typecheck_equiv(&db, "@false").unwrap();
+    test_parse_equiv(&db, "false").unwrap();
+    test_typecheck_equiv(&db, "false").unwrap();
 }
 
 #[test]
 fn test_simple_int() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, "@42").unwrap();
-    test_typecheck_equiv(&db, "@42").unwrap();
+    test_parse_equiv(&db, "42").unwrap();
+    test_typecheck_equiv(&db, "42").unwrap();
 }
 
 // Note: Skipping typed_int test - `: type / value` syntax not supported by datafun parser
@@ -122,15 +122,15 @@ fn test_simple_int() {
 #[test]
 fn test_simple_string() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, r#"@"hello""#).unwrap();
-    test_typecheck_equiv(&db, r#"@"hello""#).unwrap();
+    test_parse_equiv(&db, r#""hello""#).unwrap();
+    test_typecheck_equiv(&db, r#""hello""#).unwrap();
 }
 
 #[test]
 fn test_simple_list() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, "@[1, 2, 3]").unwrap();
-    test_typecheck_equiv(&db, "@[1, 2, 3]").unwrap();
+    test_parse_equiv(&db, "[1, 2, 3]").unwrap();
+    test_typecheck_equiv(&db, "[1, 2, 3]").unwrap();
 }
 
 // Note: Skipping typed_list - `: type / value` syntax not supported by datafun parser
@@ -139,26 +139,26 @@ fn test_simple_list() {
 #[test]
 fn test_nested_list() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, "@[[1, 2], [3, 4]]").unwrap();
-    test_typecheck_equiv(&db, "@[[1, 2], [3, 4]]").unwrap();
+    test_parse_equiv(&db, "[[1, 2], [3, 4]]").unwrap();
+    test_typecheck_equiv(&db, "[[1, 2], [3, 4]]").unwrap();
 }
 
 #[test]
 fn test_anon_tuple() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, "@(1, 2, 3)").unwrap();
-    test_typecheck_equiv(&db, "@(1, 2, 3)").unwrap();
+    test_parse_equiv(&db, "(1, 2, 3)").unwrap();
+    test_typecheck_equiv(&db, "(1, 2, 3)").unwrap();
 }
 
 #[test]
 fn test_anon_struct() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, "@{x = 1, y = 2}").unwrap();
-    test_typecheck_equiv(&db, "@{x = 1, y = 2}").unwrap();
+    test_parse_equiv(&db, "{x = 1, y = 2}").unwrap();
+    test_typecheck_equiv(&db, "{x = 1, y = 2}").unwrap();
 }
 
-// Note: Skipping map test - @{1: 10} syntax not supported (datalit uses struct syntax)
-// Note: Skipping set test - @{1, 2, 3} syntax not supported (datalit uses `set {...}`)
+// Note: Skipping map test - {1: 10} syntax not supported (datalit uses struct syntax)
+// Note: Skipping set test - {1, 2, 3} syntax not supported (datalit uses `set {...}`)
 // Note: Skipping option_none test - `: type / value` syntax not supported by datafun parser
 
 // ============================================================================
@@ -212,9 +212,9 @@ fn make_compatible_config() -> AstGenConfig {
             // Map and set work with min_collection_size: 1.
             map_type: 10,
             set_type: 10,
-            // Option type works with type hints for @none.
+            // Option type works with type hints for none.
             option_type: 10,
-            // Result type works with type hints for @error.
+            // Result type works with type hints for error.
             result_type: 10,
             tensor_type: 10, // Works with min_collection_size: 1
             anon_tuple_type: 10,

@@ -3,8 +3,8 @@ scriptunit-fragment
 ----------
 
 // While loop with immediately false condition - never executes body
-var x = :int/@42
+var x = :int/42
 loop while false
-    set x = :int/@0
+    set x = :int/0
 end loop
 debuglog x

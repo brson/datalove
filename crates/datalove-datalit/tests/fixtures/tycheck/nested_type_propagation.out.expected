@@ -107,13 +107,13 @@
   "root_type": {
     "element_type": {
       "fields": [
-        "@int",
-        "@int"
+        "int",
+        "int"
       ],
-      "heap": "@",
+      "heap": "",
       "kind": "AnonTuple"
     },
-    "heap": "@",
+    "heap": "",
     "kind": "List"
   }
 }

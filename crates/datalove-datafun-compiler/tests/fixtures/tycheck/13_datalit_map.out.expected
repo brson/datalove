@@ -5,7 +5,7 @@
     {
       "kind": "variable",
       "name": "x",
-      "type": "@map<@u32, @u32>"
+      "type": "map<u32, u32>"
     }
   ]
 }

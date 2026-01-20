@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let m = @map { @1 = @100, @2 = @200 }
+let m = map { 1 = 100, 2 = 200 }
 debuglog m

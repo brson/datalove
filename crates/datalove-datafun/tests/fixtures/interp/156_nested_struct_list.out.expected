@@ -22,7 +22,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = move unit0.v5\n    unit_end v0\n",
             ),
-            output: "@{items = @[@1, @2, @3], label = @\"numbers\"}",
+            output: "{items = [1, 2, 3], label = \"numbers\"}",
         ),
     ],
 )

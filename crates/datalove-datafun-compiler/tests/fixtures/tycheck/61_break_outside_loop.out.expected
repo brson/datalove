@@ -6,8 +6,8 @@
         {
           "message": "break statement here",
           "span": [
-            24,
-            29
+            23,
+            28
           ],
           "text": "break"
         }
@@ -28,7 +28,7 @@
       "kind": "function",
       "name": "bad_break",
       "params": [],
-      "return_type": "@u32"
+      "return_type": "u32"
     }
   ]
 }

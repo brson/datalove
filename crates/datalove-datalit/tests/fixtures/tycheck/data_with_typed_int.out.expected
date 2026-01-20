@@ -28,5 +28,5 @@
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@data"
+  "root_type": "data"
 }

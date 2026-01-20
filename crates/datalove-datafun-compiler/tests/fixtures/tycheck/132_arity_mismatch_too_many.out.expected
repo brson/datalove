@@ -1,27 +1,13 @@
 {
   "diagnostics": [
     {
-      "code": "F011",
-      "labels": [
-        {
-          "message": "cannot infer type",
-          "span": [
-            37,
-            38
-          ],
-          "text": "@"
-        }
-      ],
-      "message": "type inference blocked by syntax error"
-    },
-    {
       "code": "F045",
       "labels": [
         {
           "message": "expected 1 argument",
           "span": [
-            75,
-            81
+            72,
+            78
           ],
           "text": "double"
         },
@@ -54,16 +40,16 @@
       "params": [
         {
           "name": "x",
-          "type": "@u32"
+          "type": "u32"
         }
       ],
-      "return_type": "@u32"
+      "return_type": "u32"
     },
     {
       "kind": "function",
       "name": "test",
       "params": [],
-      "return_type": "@u32"
+      "return_type": "u32"
     }
   ]
 }

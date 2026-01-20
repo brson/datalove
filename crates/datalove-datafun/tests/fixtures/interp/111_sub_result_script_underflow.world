@@ -4,11 +4,11 @@ scriptunit-fragment
 
 // -! in script with underflow - early returns with Err
 fun get_a(): u32
-    ret @3
+    ret 3
 end fun
 
 fun get_b(): u32
-    ret @10
+    ret 10
 end fun
 
 let output: u32 = get_a() -! get_b()

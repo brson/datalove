@@ -38,7 +38,7 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "element_type": "@i16",
+    "element_type": "i16",
     "heap": "",
     "kind": "List"
   }

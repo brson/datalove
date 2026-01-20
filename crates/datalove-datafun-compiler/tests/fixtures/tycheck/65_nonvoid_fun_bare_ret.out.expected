@@ -6,8 +6,8 @@
         {
           "message": "bare return in non-void function",
           "span": [
-            28,
-            31
+            27,
+            30
           ],
           "text": "ret"
         }
@@ -28,7 +28,7 @@
       "kind": "function",
       "name": "bad_nonvoid",
       "params": [],
-      "return_type": "@u32"
+      "return_type": "u32"
     }
   ]
 }

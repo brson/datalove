@@ -3,5 +3,5 @@ scriptunit-fragment
 ----------
 
 // Create Error from bool.
-let e: error = @error @true
+let e: error = error true
 debuglog e

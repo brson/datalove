@@ -10,7 +10,7 @@
             "elements": [
               {
                 "expr": {
-                  "heap": "Local",
+                  "heap": "Omitted",
                   "kind": "Int",
                   "type_hint": null,
                   "value": "42"
@@ -18,7 +18,7 @@
               },
               {
                 "expr": {
-                  "heap": "Local",
+                  "heap": "Omitted",
                   "kind": "Int",
                   "type_hint": null,
                   "value": "99"

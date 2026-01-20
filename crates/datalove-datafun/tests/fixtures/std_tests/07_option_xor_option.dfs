@@ -3,14 +3,14 @@ require module sys/std/option
 import option.xor_option
 import option.unwrap_or_zero
 
-let some_a1: @?u32 = some @10
-let some_a2: @?u32 = some @10
-let some_b1: @?u32 = some @20
-let some_b2: @?u32 = some @20
-let none_val1: @?u32 = @none
-let none_val2: @?u32 = @none
-let none_val3: @?u32 = @none
-let none_val4: @?u32 = @none
+let some_a1: ?u32 = some 10
+let some_a2: ?u32 = some 10
+let some_b1: ?u32 = some 20
+let some_b2: ?u32 = some 20
+let none_val1: ?u32 = none
+let none_val2: ?u32 = none
+let none_val3: ?u32 = none
+let none_val4: ?u32 = none
 
 // Test all combinations and unwrap for comparison.
 let output = (

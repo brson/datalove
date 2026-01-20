@@ -3,9 +3,9 @@ scriptunit-fragment
 ----------
 
 // Struct containing another struct.
-let outer = @{
-    inner = @{x = @10, y = @20},
-    label = @"nested"
+let outer = {
+    inner = {x = 10, y = 20},
+    label = "nested"
 }
 debuglog outer.inner.x
 debuglog outer.inner.y

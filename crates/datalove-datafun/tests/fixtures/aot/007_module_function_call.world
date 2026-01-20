@@ -13,4 +13,4 @@ scriptunit-fragment
 require module local/test/utils
 import utils.identity
 
-debuglog identity(@42)
+debuglog identity(42)

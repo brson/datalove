@@ -18,16 +18,12 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
 - `;` - Semicolon
   - Statement separator (alternative to newline)
 
-### Heap Allocation
+### Reserved (Previously Heap Allocation)
 - `@` - At
-  - Local heap allocation sigil
-  - Type hint: `let x: @u32`
-  - Value literal: `let x = @42`
+  - Currently unused (previously local heap sigil)
 
 - `#` - Hash
-  - Global heap allocation sigil
-  - Type hint: `let x: #u32`
-  - Value literal: `let x = #42`
+  - Currently unused (previously global heap sigil)
 
 ### Type Constructors / Modifiers
 - `?` - Question
@@ -63,9 +59,9 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
 
 - `=` - Equals
   - Assignment in let statements: `let x = value`
-  - Struct field assignment: `{ x = @1 }`
-  - Map entry assignment: `map { @1 = @10 }`
-  - Carry binding: `loop carry (x = @0)`
+  - Struct field assignment: `{ x = 1 }`
+  - Map entry assignment: `map { 1 = 10 }`
+  - Carry binding: `loop carry (x = 0)`
 
 - `|` - Pipe
   - Binding delimiter in if statements: `if condition |x|`
@@ -75,19 +71,19 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - Function parameters: `fun foo(a: u32, b: u32)`
   - Function calls: `foo(1, 2)`
   - Tuples: `(1, 2, 3)`
-  - Tuple type hints: `tuple (u32, u32)`
+  - Tuple type hints: `(u32, u32)`
   - Expression grouping
-  - Carry/bring clauses: `loop carry (x = @0)`
+  - Carry/bring clauses: `loop carry (x = 0)`
 
 - `{` `}` - BraceOpen, BraceClose
-  - Maps: `@map { @1 = @10, @2 = @20 }`
-  - Sets: `@set { @1, @2, @3 }`
-  - Structs: `@struct { x = @1, y = @2 }` or `@{ x = @1 }`
+  - Maps: `map { 1 = 10, 2 = 20 }`
+  - Sets: `set { 1, 2, 3 }`
+  - Structs: `{ x = 1, y = 2 }`
   - Enum type hints: `enum { A, B(u32) }`
-  - Anonymous struct type hints: `struct { x: u32 }`
+  - Anonymous struct type hints: `{ x: u32 }`
 
 - `[` `]` - BracketOpen, BracketClose
-  - Lists: `@[1, 2, 3]`
+  - Lists: `[1, 2, 3]`
   - List types: `[u32]`
   - Tensor shape: `tensor [2, 3] [...]`
   - Tensor data: `tensor [...] [1, 2, 3, 4]`

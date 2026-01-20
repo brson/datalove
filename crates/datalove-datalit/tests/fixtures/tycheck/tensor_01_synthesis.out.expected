@@ -63,7 +63,7 @@
   "errors": [],
   "root_type": {
     "element_type": "u32",
-    "heap": "@",
+    "heap": "",
     "kind": "Tensor",
     "rank": 2
   }

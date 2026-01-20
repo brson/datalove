@@ -4,10 +4,10 @@ scriptunit-fragment
 
 // Fibonacci: fib(n) = fib(n-1) + fib(n-2)
 fun fib(n: u32): !u32
-    if n .< @2
+    if n .< 2
         ret ok n
     else
-        ret ok (fib(n -! @1)! +! fib(n -! @2)!)
+        ret ok (fib(n -! 1)! +! fib(n -! 2)!)
     end if
 end fun
 
@@ -15,4 +15,4 @@ end fun
 scriptunit-expr
 ----------
 
-fib(@10)
+fib(10)

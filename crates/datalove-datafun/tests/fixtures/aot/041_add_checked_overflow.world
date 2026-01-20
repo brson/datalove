@@ -15,4 +15,4 @@ fun checked_add(a: u32, b: u32): ?u32
 end fun
 
 // 4294967295 + 1 overflows u32, returns None -> default 999.
-debuglog unwrap_or_default(checked_add(@4294967295, @1), @999)
+debuglog unwrap_or_default(checked_add(4294967295, 1), 999)

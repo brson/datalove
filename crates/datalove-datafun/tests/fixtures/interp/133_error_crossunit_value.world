@@ -3,7 +3,7 @@ scriptunit-fragment
 ----------
 
 // Store error in a let binding.
-let e = @error @100
+let e = error 100
 
 ----------
 scriptunit-expr

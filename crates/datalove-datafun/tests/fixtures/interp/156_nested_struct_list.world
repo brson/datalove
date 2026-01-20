@@ -3,7 +3,7 @@ scriptunit-fragment
 ----------
 
 // Struct containing a list - nested move types.
-let container = @{items = @[@1, @2, @3], label = @"numbers"}
+let container = {items = [1, 2, 3], label = "numbers"}
 
 ----------
 scriptunit-expr

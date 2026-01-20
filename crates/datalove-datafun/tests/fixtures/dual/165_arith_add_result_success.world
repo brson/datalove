@@ -7,4 +7,4 @@ fun add_checked(a: u32, b: u32): !u32
     ret ok (a +! b)
 end fun
 
-debuglog add_checked(@10, @20)
+debuglog add_checked(10, 20)

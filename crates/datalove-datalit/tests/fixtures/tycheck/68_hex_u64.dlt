@@ -1,1 +1,1 @@
-: @u64 / @0xFFFFFFFF
+: u64 / 0xFFFFFFFF

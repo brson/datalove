@@ -4,25 +4,29 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "ParseError",
+                errors: [
+                    "unexpected token after expression",
+                ],
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn get_result():\nblock0:\n    v0 = const 42u32\n    v1 = enum_variant 1 v0\n    return v1\nexports:\n    get_result = f0\n",
+                status: "Skipped",
             ),
-            output: "(fragment executed)",
+            output: "",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "UnresolvedName(\"get_result\")",
+                ],
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call unit0.f0()\n    unit_end v0\n",
+                status: "Skipped",
             ),
-            output: "@enum Ok(@42)",
+            output: "",
         ),
     ],
 )

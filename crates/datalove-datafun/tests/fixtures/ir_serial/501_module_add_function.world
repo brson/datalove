@@ -13,4 +13,4 @@ scriptunit-fragment
 require module local/test/math
 import math.add
 
-debuglog add(@10, @32)
+debuglog add(10, 32)

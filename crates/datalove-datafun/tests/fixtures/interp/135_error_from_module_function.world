@@ -4,7 +4,7 @@ module local/test/errors
 
 // Module function that creates an error.
 fun make_err(): error
-    ret @error "module error"
+    ret error "module error"
 end fun
 
 ----------

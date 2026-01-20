@@ -7,26 +7,12 @@
           "message": "operands must have the same type",
           "span": [
             34,
-            41
+            40
           ],
-          "text": "n == @0"
+          "text": "n == 0"
         }
       ],
       "message": "mismatched types: expected `u64`, found `u32`"
-    },
-    {
-      "code": "F011",
-      "labels": [
-        {
-          "message": "cannot infer type",
-          "span": [
-            99,
-            100
-          ],
-          "text": "#"
-        }
-      ],
-      "message": "type inference blocked by syntax error"
     }
   ],
   "errors": [

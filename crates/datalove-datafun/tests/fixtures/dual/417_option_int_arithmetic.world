@@ -4,10 +4,10 @@ scriptunit-fragment
 
 // Test Option<int> return with arithmetic.
 fun test(): ?int
-    let a: ?@u32 = some @10
-    let b: ?@u32 = some @20
-    let x: @u32 = a?
-    let y: @u32 = b?
+    let a: ?u32 = some 10
+    let b: ?u32 = some 20
+    let x: u32 = a?
+    let y: u32 = b?
     ret some (x + y)
 end fun
 

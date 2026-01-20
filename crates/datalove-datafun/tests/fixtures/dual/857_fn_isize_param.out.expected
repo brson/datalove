@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 100isize\n    v1 = const -50isize\n    v2 = call f0(v0, v1)\n    debuglog v2\n    v3 = const -42isize\n    v4 = call f1(v3)\n    debuglog v4\n    v5 = const 42isize\n    v6 = call f1(v5)\n    debuglog v6\n    v7 = const 10isize\n    v8 = call f2(v7)\n    debuglog v8\n    v9 = const -10isize\n    v10 = call f2(v9)\n    debuglog v10\n    v11 = const 0isize\n    v12 = call f2(v11)\n    debuglog v12\n    unit_end\n\nfn add_isize(p0, p1):\nblock0:\n    v0 = intrinsic IsizeToUsize(p0)\n    v1 = intrinsic IsizeToUsize(p1)\n    v2 = intrinsic AddWrappingUsize(v0, v1)\n    v3 = intrinsic UsizeToIsize(v2)\n    return v3\nfn abs_isize(p0):\nblock0:\n    v0 = const 0isize\n    v1 = lt p0, v0\n    branch v1, block1, block2\nblock1:\n    v2 = intrinsic NegWrappingIsize(p0)\n    return v2\nblock2:\n    v3 = copy p0\n    return v3\nfn signum_isize(p0):\nblock0:\n    v0 = const 0isize\n    v1 = const 1isize\n    v2 = const -1isize\n    v3 = gt p0, v0\n    branch v3, block1, block2\nblock1:\n    return v1\nblock2:\n    v4 = lt p0, v0\n    branch v4, block3, block4\nblock3:\n    return v2\nblock4:\n    return v0\nexports:\n    add_isize = f0\n    abs_isize = f1\n    signum_isize = f2\n",
             ),
             ir_match: true,
-            interp_output: "@50\n@42\n@42\n@1\n@-1\n@0\n",
-            aot_output: "@50\n@42\n@42\n@1\n@-1\n@0\n",
+            interp_output: "50\n42\n42\n1\n-1\n0\n",
+            aot_output: "50\n42\n42\n1\n-1\n0\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

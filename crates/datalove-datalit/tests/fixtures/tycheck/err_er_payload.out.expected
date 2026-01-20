@@ -40,7 +40,7 @@
             15,
             16
           ],
-          "text": "@"
+          "text": ""
         }
       ],
       "message": "er payload must be an error expression"

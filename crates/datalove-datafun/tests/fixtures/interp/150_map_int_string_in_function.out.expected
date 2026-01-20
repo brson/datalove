@@ -22,7 +22,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = call unit0.f0()\n    unit_end v0\n",
             ),
-            output: "@map {@1 = @\"one\", @2 = @\"two\", @3 = @\"three\"}",
+            output: "map {1 = \"one\", 2 = \"two\", 3 = \"three\"}",
         ),
     ],
 )

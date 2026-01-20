@@ -40,12 +40,12 @@ end fun
 
 fun is_finite(self: f32): bool
   if is_nan(self)
-    ret @false
+    ret false
   else
     if is_infinite(self)
-      ret @false
+      ret false
     else
-      ret @true
+      ret true
     end if
   end if
 end fun
@@ -53,43 +53,43 @@ end fun
 fun is_normal(self: f32): bool
   if is_finite(self)
     if is_zero(self)
-      ret @false
+      ret false
     else
       if is_subnormal(self)
-        ret @false
+        ret false
       else
-        ret @true
+        ret true
       end if
     end if
   else
-    ret @false
+    ret false
   end if
 end fun
 
 fun is_subnormal(self: f32): bool
   if is_finite(self)
     if is_zero(self)
-      ret @false
+      ret false
     else
       let bits = icall f32_to_bits(self)
-      let exponent_mask = @0x7F800000
+      let exponent_mask = 0x7F800000
       let exponent = icall bitand_u32(bits, exponent_mask)
       ret exponent == 0
     end if
   else
-    ret @false
+    ret false
   end if
 end fun
 
 fun is_sign_positive(self: f32): bool
   let bits = icall f32_to_bits(self)
-  let sign_bit = @0x80000000
+  let sign_bit = 0x80000000
   ret icall bitand_u32(bits, sign_bit) == 0
 end fun
 
 fun is_sign_negative(self: f32): bool
   let bits = icall f32_to_bits(self)
-  let sign_bit = @0x80000000
+  let sign_bit = 0x80000000
   ret icall bitand_u32(bits, sign_bit) != 0
 end fun
 
@@ -104,9 +104,9 @@ fun signum(self: f32): f32
     ret self
   else
     if is_sign_positive(self)
-      ret @1.0
+      ret 1.0
     else
-      ret @-1.0
+      ret -1.0
     end if
   end if
 end fun
@@ -140,7 +140,7 @@ end fun
 // Arithmetic.
 
 fun recip(self: f32): f32
-  ret @1.0 / self
+  ret 1.0 / self
 end fun
 
 fun sqrt(self: f32): f32
@@ -172,7 +172,7 @@ end fun
 // Comparison utilities.
 
 fun is_zero(self: f32): bool
-  ret self == @0.0
+  ret self == 0.0
 end fun
 
 // Total ordering comparison. Returns -1 if self < other, 0 if equal, 1 if self > other.
@@ -182,7 +182,7 @@ fun total_cmp(self: f32, other: f32): i32
   let b_bits = icall f32_to_bits(other)
 
   // Convert to signed for total ordering.
-  let sign_bit = @0x80000000
+  let sign_bit = 0x80000000
   let a_signed = icall u32_to_i32(a_bits)
   let b_signed = icall u32_to_i32(b_bits)
 
@@ -191,12 +191,12 @@ fun total_cmp(self: f32, other: f32): i32
   var b_ord: i32 = b_signed
 
   if icall bitand_u32(a_bits, sign_bit) != 0
-    let mask = @0x7FFFFFFF
+    let mask = 0x7FFFFFFF
     set a_ord = icall u32_to_i32(icall bitxor_u32(a_bits, mask))
   end if
 
   if icall bitand_u32(b_bits, sign_bit) != 0
-    let mask = @0x7FFFFFFF
+    let mask = 0x7FFFFFFF
     set b_ord = icall u32_to_i32(icall bitxor_u32(b_bits, mask))
   end if
 

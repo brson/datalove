@@ -9,7 +9,7 @@
             "type_hint": null,
             "value": {
               "expr": {
-                "heap": "Local",
+                "heap": "Omitted",
                 "kind": "Int",
                 "type_hint": null,
                 "value": "0"
@@ -36,7 +36,7 @@
                         "op": "Add",
                         "rhs": {
                           "expr": {
-                            "heap": "Local",
+                            "heap": "Omitted",
                             "kind": "Int",
                             "type_hint": null,
                             "value": "1"
@@ -64,7 +64,7 @@
                     "op": "Ge",
                     "rhs": {
                       "expr": {
-                        "heap": "Local",
+                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "3"
@@ -97,7 +97,7 @@
         "name": "nested_loops",
         "params": [],
         "return_type": {
-          "heap": "Local",
+          "heap": "Omitted",
           "type_hint": "U32"
         }
       }

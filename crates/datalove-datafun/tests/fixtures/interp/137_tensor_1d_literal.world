@@ -2,4 +2,4 @@
 scriptunit-expr
 ----------
 
-@tensor [3] [@1, @2, @3]
+tensor [3] [1, 2, 3]

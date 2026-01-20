@@ -15,5 +15,5 @@
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@i64"
+  "root_type": "i64"
 }

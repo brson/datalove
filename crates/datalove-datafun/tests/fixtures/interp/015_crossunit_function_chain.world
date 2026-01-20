@@ -3,7 +3,7 @@ scriptunit-fragment
 ----------
 
 fun add_one(n: int): int
-    ret n + :int/@1
+    ret n + :int/1
 end fun
 
 ----------
@@ -18,4 +18,4 @@ end fun
 scriptunit-expr
 ----------
 
-add_two(:int/@10) + add_one(:int/@100)
+add_two(:int/10) + add_one(:int/100)

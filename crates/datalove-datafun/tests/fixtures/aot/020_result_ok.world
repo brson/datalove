@@ -5,7 +5,7 @@ scriptunit-fragment
 // if-result has IR lowering issues with unreachable blocks.
 
 fun get_ok(): !u32
-    ret ok @42
+    ret ok 42
 end fun
 
 let r: !u32 = get_ok()

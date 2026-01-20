@@ -1,2 +1,2 @@
-debuglog(@true)
-debuglog(@false)
+debuglog(true)
+debuglog(false)

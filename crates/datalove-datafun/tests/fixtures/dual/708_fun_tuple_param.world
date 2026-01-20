@@ -2,10 +2,10 @@
 scriptunit-fragment
 ----------
 
-fun get_first(t: (@u32, @u32)): @u32
+fun get_first(t: (u32, u32)): u32
     ret t.0
 end fun
 
-let pair: (@u32, @u32) = @(42, 99)
+let pair: (u32, u32) = (42, 99)
 let x = get_first(pair)
 debuglog x

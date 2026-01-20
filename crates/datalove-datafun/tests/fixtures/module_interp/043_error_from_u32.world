@@ -4,7 +4,7 @@ module local/test/main
 
 // Return error containing u32 from module function.
 fun make_error(): error
-    ret @error @42
+    ret error 42
 end fun
 
 fun main(): error

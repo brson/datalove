@@ -1,1 +1,1 @@
-let output: set = @42
+let output: set = 42

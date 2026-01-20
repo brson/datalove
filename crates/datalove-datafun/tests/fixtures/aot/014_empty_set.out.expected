@@ -6,7 +6,10 @@ AotAnalysis(
             typecheck: TypecheckResult(
                 status: "ParseError",
                 errors: [
-                    "expected <> after set keyword",
+                    "unclosed \'<\'",
+                    "unmatched \']\'",
+                    "unexpected token after type",
+                    "expected \'=\' after let binding",
                 ],
             ),
             lowering: LoweringResult(

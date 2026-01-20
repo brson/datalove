@@ -2,23 +2,28 @@
   "ast": {
     "expr": {
       "expr": {
-        "Some": {
-          "payload": {
-            "expr": {
-              "expr": {
-                "Int": {
-                  "value": "42"
-                }
-              },
-              "heap": "Local"
-            },
-            "type_hint": null
-          }
+        "ParseError": {
+          "message": "unexpected token in Parser expression"
         }
       },
-      "heap": "Local"
+      "heap": "Omitted"
     },
     "type_hint": null
   },
-  "diagnostics": []
+  "diagnostics": [
+    {
+      "code": "D020",
+      "labels": [
+        {
+          "message": "unexpected token",
+          "span": [
+            0,
+            1
+          ],
+          "text": "@"
+        }
+      ],
+      "message": "unexpected token in Parser expression"
+    }
+  ]
 }

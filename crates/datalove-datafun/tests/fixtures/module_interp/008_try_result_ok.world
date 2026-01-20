@@ -3,7 +3,7 @@ module local/test/main
 ----------
 
 fun main(): !u32
-    let input: !u32 = ok @42
+    let input: !u32 = ok 42
     let x: u32 = input!
     ret ok x
 end fun

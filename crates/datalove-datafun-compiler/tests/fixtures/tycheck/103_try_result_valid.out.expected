@@ -12,13 +12,13 @@
           "text": "42"
         }
       ],
-      "message": "mismatched types: expected `@!u32`, found `u32`"
+      "message": "mismatched types: expected `!u32`, found `u32`"
     }
   ],
   "errors": [
     {
       "actual": "u32",
-      "expected": "@!u32",
+      "expected": "!u32",
       "kind": "TypeMismatch"
     }
   ],

@@ -3,13 +3,13 @@ module local/test/main
 ----------
 
 fun test(): !u32
-    ret ok @42
+    ret ok 42
 end fun
 
 fun main(): u32
     if test() |val|
         ret val
     else |err|
-        ret @999
+        ret 999
     end if
 end fun

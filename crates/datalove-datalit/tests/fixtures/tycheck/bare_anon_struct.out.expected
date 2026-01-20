@@ -59,18 +59,18 @@
     "fields": [
       {
         "name": "x",
-        "type": "@u32"
+        "type": "u32"
       },
       {
         "name": "y",
-        "type": "@f32"
+        "type": "f32"
       },
       {
         "name": "z",
-        "type": "@string"
+        "type": "string"
       }
     ],
-    "heap": "@",
+    "heap": "",
     "kind": "AnonStruct"
   }
 }

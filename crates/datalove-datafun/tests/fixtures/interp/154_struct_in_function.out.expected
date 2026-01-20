@@ -22,7 +22,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = call unit0.f0()\n    unit_end v0\n",
             ),
-            output: "@{x = @100, y = @200}",
+            output: "{x = 100, y = 200}",
         ),
     ],
 )

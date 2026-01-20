@@ -16,7 +16,7 @@
                 "op": "Ge",
                 "rhs": {
                   "expr": {
-                    "heap": "Local",
+                    "heap": "Omitted",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "90"
@@ -38,7 +38,7 @@
                     "op": "Ge",
                     "rhs": {
                       "expr": {
-                        "heap": "Local",
+                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "80"
@@ -60,7 +60,7 @@
                         "op": "Ge",
                         "rhs": {
                           "expr": {
-                            "heap": "Local",
+                            "heap": "Omitted",
                             "kind": "Int",
                             "type_hint": null,
                             "value": "70"
@@ -73,7 +73,7 @@
                         "kind": "Ret",
                         "value": {
                           "expr": {
-                            "heap": "Local",
+                            "heap": "Omitted",
                             "kind": "Int",
                             "type_hint": null,
                             "value": "1"
@@ -87,7 +87,7 @@
                         "kind": "Ret",
                         "value": {
                           "expr": {
-                            "heap": "Local",
+                            "heap": "Omitted",
                             "kind": "Int",
                             "type_hint": null,
                             "value": "2"
@@ -103,7 +103,7 @@
                     "kind": "Ret",
                     "value": {
                       "expr": {
-                        "heap": "Local",
+                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "3"
@@ -119,7 +119,7 @@
                 "kind": "Ret",
                 "value": {
                   "expr": {
-                    "heap": "Local",
+                    "heap": "Omitted",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "4"
@@ -136,13 +136,13 @@
             "mode": "In",
             "name": "score",
             "type_hint": {
-              "heap": "Local",
+              "heap": "Omitted",
               "type_hint": "U32"
             }
           }
         ],
         "return_type": {
-          "heap": "Local",
+          "heap": "Omitted",
           "type_hint": "U32"
         }
       }

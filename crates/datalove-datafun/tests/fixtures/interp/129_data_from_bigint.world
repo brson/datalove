@@ -4,9 +4,9 @@ module local/test/main
 
 // Create Data from a bigint (explicit Int type via parameter).
 fun make_data(x: int): data
-    ret @data x
+    ret data x
 end fun
 
 fun main(): data
-    ret make_data(@9999999999999999999)
+    ret make_data(9999999999999999999)
 end fun

@@ -3,10 +3,10 @@ scriptunit-fragment
 ----------
 
 // Triple nested struct.
-let deep = @{
-    a = @{
-        b = @{
-            c = @42
+let deep = {
+    a = {
+        b = {
+            c = 42
         }
     }
 }

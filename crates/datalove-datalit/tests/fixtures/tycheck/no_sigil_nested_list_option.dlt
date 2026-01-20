@@ -1,1 +1,1 @@
-: [?u32] / [some @42, @none, some @100]
+: [?u32] / [some 42, none, some 100]
