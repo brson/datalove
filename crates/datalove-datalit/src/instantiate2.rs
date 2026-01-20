@@ -117,6 +117,8 @@ fn instantiate_expr_into<'db>(
         (Expr::Int(int_expr), Type::I32) => instantiate_i32(rt, db, int_expr, dest_ptr),
         (Expr::Int(int_expr), Type::U64) => instantiate_u64(rt, db, int_expr, dest_ptr),
         (Expr::Int(int_expr), Type::I64) => instantiate_i64(rt, db, int_expr, dest_ptr),
+        (Expr::Int(int_expr), Type::Usize) => instantiate_usize(rt, db, int_expr, dest_ptr),
+        (Expr::Int(int_expr), Type::Isize) => instantiate_isize(rt, db, int_expr, dest_ptr),
         (Expr::Int(int_expr), Type::Int) => instantiate_bigint(rt, db, int_expr, dest_ptr),
 
         (Expr::Float(float_expr), Type::F32) => instantiate_f32(rt, db, float_expr, dest_ptr),
@@ -131,6 +133,8 @@ fn instantiate_expr_into<'db>(
         (Expr::Hex(hex_expr), Type::I32) => instantiate_hex_i32(rt, db, hex_expr, dest_ptr),
         (Expr::Hex(hex_expr), Type::U64) => instantiate_hex_u64(rt, db, hex_expr, dest_ptr),
         (Expr::Hex(hex_expr), Type::I64) => instantiate_hex_i64(rt, db, hex_expr, dest_ptr),
+        (Expr::Hex(hex_expr), Type::Usize) => instantiate_hex_usize(rt, db, hex_expr, dest_ptr),
+        (Expr::Hex(hex_expr), Type::Isize) => instantiate_hex_isize(rt, db, hex_expr, dest_ptr),
         (Expr::Hex(hex_expr), Type::Int) => instantiate_hex_bigint(rt, db, hex_expr, dest_ptr),
 
         // Hex literals for floats - interpret as bit patterns.
@@ -313,6 +317,26 @@ fn instantiate_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
     }
 }
 
+fn instantiate_usize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+    let value_str = int_expr.value.as_str(db);
+    let value: datalove_rtdt::UsizeRepr = value_str.parse()?;
+    unsafe {
+        *(dest_ptr as *mut datalove_rtdt::Usize) = datalove_rtdt::Usize(value);
+        Ok(dest_ptr as *const u8)
+    }
+}
+
+fn instantiate_isize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+    let value_str = int_expr.value.as_str(db);
+    let value: datalove_rtdt::IsizeRepr = value_str.parse()?;
+    unsafe {
+        *(dest_ptr as *mut datalove_rtdt::Isize) = datalove_rtdt::Isize(value);
+        Ok(dest_ptr as *const u8)
+    }
+}
+
 fn instantiate_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, float_expr: &ExprFloat, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = float_expr.value.as_str(db);
@@ -419,6 +443,26 @@ fn instantiate_hex_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
     let value = u64::from_str_radix(parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut i64) = value as i64;
+        Ok(dest_ptr as *const u8)
+    }
+}
+
+fn instantiate_hex_usize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+    let value_str = hex_expr.value.as_str(db);
+    let value = datalove_rtdt::UsizeRepr::from_str_radix(parse_hex_str(value_str), 16)?;
+    unsafe {
+        *(dest_ptr as *mut datalove_rtdt::Usize) = datalove_rtdt::Usize(value);
+        Ok(dest_ptr as *const u8)
+    }
+}
+
+fn instantiate_hex_isize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+    let value_str = hex_expr.value.as_str(db);
+    let value = datalove_rtdt::UsizeRepr::from_str_radix(parse_hex_str(value_str), 16)?;
+    unsafe {
+        *(dest_ptr as *mut datalove_rtdt::Isize) = datalove_rtdt::Isize(value as datalove_rtdt::IsizeRepr);
         Ok(dest_ptr as *const u8)
     }
 }
