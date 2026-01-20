@@ -346,3 +346,73 @@ th {
         grid-template-columns: 1fr;
     }
 }
+
+/* Posts feed styles */
+.rss-link {
+    text-align: center;
+    margin-top: -1rem;
+}
+
+.feed-list {
+    margin-top: 2rem;
+}
+
+.post {
+    margin-bottom: 3rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--accent);
+}
+
+.post:last-child {
+    border-bottom: none;
+}
+
+.post-header {
+    margin-bottom: 1rem;
+}
+
+.post-title {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+}
+
+.post-meta {
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+.post-date {
+    margin-right: 1rem;
+}
+
+.post-category {
+    padding: 0.1rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--bg);
+}
+
+.category-news {
+    background: var(--accent-1);
+}
+
+.category-release {
+    background: var(--accent-2);
+}
+
+.category-dev {
+    background: var(--accent-4);
+}
+
+.post-content {
+    margin-top: 1rem;
+}
+
+.post-content p:first-child {
+    margin-top: 0;
+}
+
+.post-content p:last-child {
+    margin-bottom: 0;
+}

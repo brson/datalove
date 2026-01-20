@@ -3,6 +3,7 @@ use rmx::prelude::*;
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
+mod feed;
 mod render;
 
 fn main() -> AnyResult<()> {
@@ -802,6 +803,21 @@ impl DocsCommand {
                 fs::write(&output_path, rendered)?;
                 println!("{} -> {}", file_name, output_name);
             }
+        }
+
+        // Generate posts feed.
+        let posts_dir = input_dir.join("posts");
+        let posts = feed::parse_posts(&posts_dir)?;
+
+        if !posts.is_empty() {
+            // Load posts template.
+            let posts_template_path = input_dir.join("posts-template.html");
+            let posts_template_content = fs::read_to_string(&posts_template_path)
+                .with_context(|| format!("Failed to read posts template: {}", posts_template_path.display()))?;
+            tera.add_raw_template("posts-template.html", &posts_template_content)?;
+
+            feed::generate_feed_page(&posts, &tera, &output_dir)?;
+            feed::generate_rss(&posts, &output_dir, "https://datalove.dev")?;
         }
 
         println!("Documentation generated in {}", output_dir.display());

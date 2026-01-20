@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Posts - Datalove</title>
+    <meta name="description" content="Latest news and updates from Datalove.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="alternate" type="application/rss+xml" title="Datalove Posts" href="posts.xml">
+</head>
+<body>
+    <nav>
+        <a href="index.html"><span class="nav-logo" role="img" aria-label="Datalove"></span></a>
+    </nav>
+    <main>
+        <h1>Posts</h1>
+        <p class="rss-link"><a href="posts.xml">RSS</a></p>
+
+        <section class="feed-list">
+            {% for post in posts %}
+            <article class="post" id="{{ post.slug }}">
+                <header class="post-header">
+                    <h2 class="post-title">{{ post.title }}</h2>
+                    <div class="post-meta">
+                        <span class="post-date">{{ post.date }}</span>
+                        <span class="post-category category-{{ post.category }}">{{ post.category }}</span>
+                    </div>
+                </header>
+
+                <div class="post-content">
+                    {{ post.content_html | safe }}
+                </div>
+            </article>
+            {% endfor %}
+        </section>
+    </main>
+    <script data-manual src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script>
+    Prism.languages.datalove = {
+        'comment': [
+            /\/\/.*/,
+            /\/\*[\s\S]*?\*\//
+        ],
+        'string': /"(?:[^"\\]|\\.)*"/,
+        'number': /\b\d+(?:\.\d+)?\b/,
+        'boolean': /\b(?:true|false)\b/,
+        'variant': /\b(?:ok|er|some|none)\b/,
+        'type-name': /\b(?:bool|u8|u16|u32|u64|i8|i16|i32|i64|int|f32|f64|string|list|map|set|tensor|data|error)\b/,
+        'keyword': /\b(?:let|fun|ret|if|else|end|require|import|break|continue|loop|module|in|out|mut|ref|struct|enum)\b/,
+        'function': /\b[a-z_][a-z0-9_]*(?=\s*\()/,
+        'op-cmp': /\.[<>]|[<>]=|[!=]=/,
+        'op-result': /[+\-*\/]!|!/,
+        'op-option': /[+\-*\/]\?|\?/,
+        'brace-curly': /[{}]/,
+        'brace-paren': /[()]/,
+        'brace-angle': /[<>]/,
+        'brace-square': /[\[\]]/,
+        'type-colon': /:/,
+        'punctuation': /[;,.]/
+    };
+    Prism.languages.datalit = Prism.languages.datalove;
+    Prism.languages.datafun = Prism.languages.datalove;
+    Prism.highlightAll();
+    </script>
+</body>
+</html>

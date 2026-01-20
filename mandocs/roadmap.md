@@ -18,7 +18,7 @@
 - [x] script runner
 - pipeline tools
 - [x] interpreter
-- [~] jit
+- [x] jit
 - [x] aot
 - compute-only core library
 - core->runtime calls

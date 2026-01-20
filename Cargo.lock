@@ -1080,6 +1080,7 @@ dependencies = [
  "pulldown-cmark",
  "rustmax",
  "salsa",
+ "serde",
 ]
 
 [[package]]

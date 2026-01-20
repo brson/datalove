@@ -14,9 +14,6 @@ Then we'll add I/O to it &mdash; carefully.
 > Datalove is a testbed for my personal compiler and language design experiments.
 > There is no recommended way to install or test.
 
-
-
-
 <br>
 
 <h2><center>4 Things to Remember <br> … about Datalove</center></h2>
