@@ -8,3 +8,15 @@ edition.workspace = true
 [dependencies]
 rmx.workspace = true
 datalove-worldgen.path = "../datalove-worldgen"
+datalove-datafun.path = "../datalove-datafun"
+datalove-datafun-pkg.path = "../datalove-datafun-pkg"
+datalove-datafun-ir.path = "../datalove-datafun-ir"
+datalove-datafun-jit.path = "../datalove-datafun-jit"
+datalove-datafun-aot-cranelift.path = "../datalove-datafun-aot-cranelift"
+datalove-rt.path = "../datalove-rt"
+rand = "0.8"
+
+[[test]]
+name = "worldgen_dual_tests"
+path = "tests/worldgen_dual_tests.rs"
+harness = false

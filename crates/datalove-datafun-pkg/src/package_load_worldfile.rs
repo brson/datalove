@@ -347,7 +347,8 @@ fn parse_worldfile(content: &str) -> AnyResult<(Vec<Section>, Option<String>)> {
         }
 
         // Check if this is a script section.
-        if header_line == "script" {
+        // Accept both "script" and "scriptunit-fragment" for compatibility.
+        if header_line == "script" || header_line == "scriptunit-fragment" {
             i += 1;
 
             if i >= lines.len() {

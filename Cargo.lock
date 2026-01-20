@@ -1371,7 +1371,14 @@ version = "0.1.0"
 name = "datalove-tests"
 version = "0.1.0"
 dependencies = [
+ "datalove-datafun",
+ "datalove-datafun-aot-cranelift",
+ "datalove-datafun-ir",
+ "datalove-datafun-jit",
+ "datalove-datafun-pkg",
+ "datalove-rt",
  "datalove-worldgen",
+ "rand 0.8.5",
  "rustmax",
 ]
 

@@ -61,7 +61,7 @@ fn gen_worldfile_inner<'db, R: Rng>(
     // Generate script section.
     let script_source = gen_script(db, rng, config, &modules);
     sections.push(format!(
-        "----------\nscript\n----------\n\n{}",
+        "----------\nscriptunit-fragment\n----------\n\n{}",
         script_source
     ));
 
