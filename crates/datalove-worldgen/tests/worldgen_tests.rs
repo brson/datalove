@@ -199,6 +199,7 @@ fn test_construct_coverage() {
     println!("Construct coverage across 100 seeds:");
     println!("  modules:        {}", coverage.modules);
     println!("  functions:      {}", coverage.functions);
+    println!("  void functions: {}", coverage.void_functions);
     println!("  let statements: {}", coverage.lets);
     println!("  var statements: {}", coverage.vars);
     println!("  set statements: {}", coverage.sets);
@@ -232,6 +233,7 @@ fn test_construct_coverage() {
 struct ConstructCoverage {
     modules: usize,
     functions: usize,
+    void_functions: usize,
     lets: usize,
     vars: usize,
     sets: usize,
@@ -257,6 +259,15 @@ impl ConstructCoverage {
         // Count occurrences of various constructs.
         self.modules += wf.matches("module local/").count();
         self.functions += wf.matches("fun ").count();
+
+        // Count void functions (fun name(...) without : return_type).
+        for line in wf.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("fun ") && trimmed.ends_with(")") {
+                self.void_functions += 1;
+            }
+        }
+
         self.lets += wf.matches("let ").count();
         self.vars += wf.matches("var ").count();
         self.sets += wf.matches("set ").count();
@@ -655,6 +666,65 @@ fn test_unary_negation() {
 
     assert!(found_int_neg, "Should generate unary negation on bigints");
     assert!(found_float_neg, "Should generate unary negation on floats");
+}
+
+/// Verify that void functions are generated and typecheck correctly.
+#[test]
+fn test_void_functions() {
+    let config = WorldGenConfig::default();
+
+    let mut found_void_with_ret = false;
+    let mut found_void_without_ret = false;
+
+    for seed in 0..200 {
+        let wf = gen_worldfile_seeded(seed, config.clone());
+
+        // Look for void function patterns.
+        let lines: Vec<&str> = wf.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+            // Void function signature: "fun name(...)" without ": type"
+            if trimmed.starts_with("fun ") && trimmed.ends_with(")") {
+                // Check if the function has a ret statement before end fun.
+                let mut has_ret = false;
+                for j in (i + 1)..lines.len() {
+                    let inner = lines[j].trim();
+                    if inner == "end fun" {
+                        break;
+                    }
+                    if inner == "ret" {
+                        has_ret = true;
+                    }
+                }
+
+                if has_ret {
+                    found_void_with_ret = true;
+                } else {
+                    found_void_without_ret = true;
+                }
+            }
+        }
+
+        // Verify worldfiles typecheck.
+        if found_void_with_ret || found_void_without_ret {
+            let errors = typecheck_worldfile(&wf);
+            if !errors.is_empty() {
+                eprintln!("Seed {} failed with void functions:", seed);
+                eprintln!("{}", wf);
+                for err in &errors {
+                    eprintln!("  {}", err);
+                }
+                panic!("Void function worldfile failed to typecheck");
+            }
+        }
+
+        if found_void_with_ret && found_void_without_ret {
+            break;
+        }
+    }
+
+    assert!(found_void_with_ret, "Should generate void functions with bare ret");
+    assert!(found_void_without_ret, "Should generate void functions without ret");
 }
 
 /// Verify that modules with cross-module function calls typecheck correctly.

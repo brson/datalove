@@ -88,8 +88,16 @@ pub fn gen_function<'db, R: Rng>(
     }
 
     // Generate return statement.
-    let ret_stmt = gen_ret(db, rng, config, &ctx, "  ");
-    lines.push(ret_stmt);
+    // Void functions can optionally omit the ret statement entirely.
+    let include_ret = match sig.return_type {
+        Some(_) => true,  // Non-void functions must return a value.
+        None => rng.gen_bool(0.5),  // Void functions: 50% include bare ret.
+    };
+
+    if include_ret {
+        let ret_stmt = gen_ret(db, rng, config, &ctx, "  ");
+        lines.push(ret_stmt);
+    }
 
     lines.push("end fun".to_string());
     lines.join("\n")
