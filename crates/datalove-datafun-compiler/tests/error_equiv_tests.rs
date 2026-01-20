@@ -316,6 +316,8 @@ fn make_mutation_config() -> AstGenConfig {
             i32_type: 10,
             u64_type: 5,
             i64_type: 5,
+            usize_type: 5,
+            isize_type: 5,
             f32_type: 5,
             f64_type: 5,
             int_type: 5,

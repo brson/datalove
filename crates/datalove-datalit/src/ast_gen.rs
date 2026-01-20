@@ -82,6 +82,8 @@ pub struct TypeWeights {
     pub i32_type: u32,
     pub u64_type: u32,
     pub i64_type: u32,
+    pub usize_type: u32,
+    pub isize_type: u32,
     pub f32_type: u32,
     pub f64_type: u32,
     pub int_type: u32,
@@ -114,6 +116,8 @@ impl Default for TypeWeights {
             i32_type: 10,
             u64_type: 5,
             i64_type: 5,
+            usize_type: 5,
+            isize_type: 5,
             f32_type: 5,
             f64_type: 5,
             int_type: 5,
@@ -149,6 +153,8 @@ impl TypeWeights {
             i32_type: 10,
             u64_type: 5,
             i64_type: 5,
+            usize_type: 5,
+            isize_type: 5,
             f32_type: 5,
             f64_type: 5,
             int_type: 5,
@@ -267,6 +273,8 @@ pub fn gen_type_hint<'db, R: Rng>(
         if config.type_weights.i32_type == 0 { leaf.i32_type = 0; }
         if config.type_weights.u64_type == 0 { leaf.u64_type = 0; }
         if config.type_weights.i64_type == 0 { leaf.i64_type = 0; }
+        if config.type_weights.usize_type == 0 { leaf.usize_type = 0; }
+        if config.type_weights.isize_type == 0 { leaf.isize_type = 0; }
         if config.type_weights.f32_type == 0 { leaf.f32_type = 0; }
         if config.type_weights.f64_type == 0 { leaf.f64_type = 0; }
         if config.type_weights.int_type == 0 { leaf.int_type = 0; }
@@ -308,6 +316,8 @@ pub fn gen_type_hint<'db, R: Rng>(
     add_choice(weights.anon_enum_type, 21);
     add_choice(weights.data_type, 22);
     add_choice(weights.error_type, 23);
+    add_choice(weights.usize_type, 24);
+    add_choice(weights.isize_type, 25);
 
     if choices.is_empty() {
         return TypeHint::Bool;
@@ -407,6 +417,8 @@ pub fn gen_type_hint<'db, R: Rng>(
         }
         22 => TypeHint::Data,
         23 => TypeHint::Error,
+        24 => TypeHint::Usize,
+        25 => TypeHint::Isize,
         _ => TypeHint::Bool,
     }
 }
@@ -442,6 +454,8 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
         if config.type_weights.i32_type == 0 { leaf.i32_type = 0; }
         if config.type_weights.u64_type == 0 { leaf.u64_type = 0; }
         if config.type_weights.i64_type == 0 { leaf.i64_type = 0; }
+        if config.type_weights.usize_type == 0 { leaf.usize_type = 0; }
+        if config.type_weights.isize_type == 0 { leaf.isize_type = 0; }
         if config.type_weights.f32_type == 0 { leaf.f32_type = 0; }
         if config.type_weights.f64_type == 0 { leaf.f64_type = 0; }
         if config.type_weights.int_type == 0 { leaf.int_type = 0; }
@@ -482,6 +496,8 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
     add_choice(weights.anon_enum_type, 21);
     add_choice(weights.data_type, 22);
     add_choice(weights.error_type, 23);
+    add_choice(weights.usize_type, 24);
+    add_choice(weights.isize_type, 25);
 
     if choices.is_empty() {
         return TypeHint::Bool;
@@ -581,6 +597,8 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
         }
         22 => TypeHint::Data,
         23 => TypeHint::Error,
+        24 => TypeHint::Usize,
+        25 => TypeHint::Isize,
         _ => TypeHint::Bool,
     }
 }

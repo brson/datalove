@@ -129,6 +129,8 @@ mod tests {
                     | TypeHint::I32
                     | TypeHint::U64
                     | TypeHint::I64
+                    | TypeHint::Usize
+                    | TypeHint::Isize
                     | TypeHint::F32
                     | TypeHint::F64
                     | TypeHint::Int
