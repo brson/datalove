@@ -205,6 +205,7 @@ fn test_construct_coverage() {
     println!("  set statements: {}", coverage.sets);
     println!("  if statements:  {}", coverage.ifs);
     println!("  loops:          {}", coverage.loops);
+    println!("  bare loops:     {}", coverage.bare_loops);
     println!("  breaks:         {}", coverage.breaks);
     println!("  continues:      {}", coverage.continues);
     println!("  ret statements: {}", coverage.rets);
@@ -239,6 +240,7 @@ struct ConstructCoverage {
     sets: usize,
     ifs: usize,
     loops: usize,
+    bare_loops: usize,
     breaks: usize,
     continues: usize,
     rets: usize,
@@ -273,6 +275,15 @@ impl ConstructCoverage {
         self.sets += wf.matches("set ").count();
         self.ifs += wf.matches("if ").count();
         self.loops += wf.matches("loop").count();
+
+        // Count bare loops (just "loop" without "while").
+        for line in wf.lines() {
+            let trimmed = line.trim();
+            if trimmed == "loop" {
+                self.bare_loops += 1;
+            }
+        }
+
         self.breaks += wf.matches("break").count();
         self.continues += wf.matches("continue").count();
         self.rets += wf.matches("ret ").count() + wf.matches("ret\n").count();
@@ -725,6 +736,47 @@ fn test_void_functions() {
 
     assert!(found_void_with_ret, "Should generate void functions with bare ret");
     assert!(found_void_without_ret, "Should generate void functions without ret");
+}
+
+/// Verify that bare loops are generated and typecheck correctly.
+#[test]
+fn test_bare_loops() {
+    let config = WorldGenConfig::default();
+
+    let mut found_bare_loop = false;
+    let mut found_while_loop = false;
+
+    for seed in 0..200 {
+        let wf = gen_worldfile_seeded(seed, config.clone());
+
+        for line in wf.lines() {
+            let trimmed = line.trim();
+            if trimmed == "loop" {
+                found_bare_loop = true;
+            }
+            if trimmed.starts_with("loop while ") {
+                found_while_loop = true;
+            }
+        }
+
+        // Verify worldfiles typecheck.
+        let errors = typecheck_worldfile(&wf);
+        if !errors.is_empty() {
+            eprintln!("Seed {} failed:", seed);
+            eprintln!("{}", wf);
+            for err in &errors {
+                eprintln!("  {}", err);
+            }
+            panic!("Bare loop worldfile failed to typecheck");
+        }
+
+        if found_bare_loop && found_while_loop {
+            break;
+        }
+    }
+
+    assert!(found_bare_loop, "Should generate bare loops");
+    assert!(found_while_loop, "Should generate while loops");
 }
 
 /// Verify that modules with cross-module function calls typecheck correctly.

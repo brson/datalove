@@ -133,6 +133,10 @@ pub fn gen_if<'db, R: Rng>(
 }
 
 /// Generate a loop statement.
+///
+/// Generates either:
+/// - `loop while condition` - conditional loop
+/// - `loop` - bare infinite loop (must have break)
 pub fn gen_loop<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
@@ -141,9 +145,15 @@ pub fn gen_loop<'db, R: Rng>(
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
-    // Use while-condition loops to ensure termination.
-    let condition = gen_bool_expr(db, rng, config, ctx);
-    let mut result = format!("{}loop while {}\n", indent, condition);
+    // 30% chance to generate bare loop, 70% loop while.
+    let is_bare_loop = rng.gen_bool(0.3);
+
+    let mut result = if is_bare_loop {
+        format!("{}loop\n", indent)
+    } else {
+        let condition = gen_bool_expr(db, rng, config, ctx);
+        format!("{}loop while {}\n", indent, condition)
+    };
 
     let inner_indent = format!("{}  ", indent);
     ctx.control_flow_depth += 1;
@@ -151,8 +161,10 @@ pub fn gen_loop<'db, R: Rng>(
 
     let body_stmt_count = rng.gen_range(1..=3);
     for i in 0..body_stmt_count {
-        // Last statement might be a break.
-        if i == body_stmt_count - 1 && rng.gen_bool(0.5) {
+        // For bare loops, always end with break to prevent infinite loop.
+        // For while loops, last statement might be a break.
+        let is_last = i == body_stmt_count - 1;
+        if is_last && (is_bare_loop || rng.gen_bool(0.5)) {
             result.push_str(&format!("{}break\n", inner_indent));
         } else {
             let stmt = gen_loop_body_statement(db, rng, config, ctx, var_counter, &inner_indent);
