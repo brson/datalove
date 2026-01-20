@@ -2,11 +2,11 @@ default:
     just --list
 
 test:
-    cargo test --all --all-targets
+    cargo test --all --lib --bins --tests --examples
 
 # Run tests with 64-bit collection indexes.
 test-64:
-    cargo test --all --all-targets --features index-64
+    cargo test --all --lib --bins --tests --examples --features index-64
 
 test-slow:
     cargo test -p datalove-rt --features slow_tests
@@ -18,7 +18,7 @@ test-ci: test test-slow
 
 # Run tests with parallelism enabled.
 test-parallel:
-    DATALOVE_PARALLEL=1 cargo test --all --all-targets
+    DATALOVE_PARALLEL=1 cargo test --all --lib --bins --tests --examples
 
 # Time all tests, showing only tests that take over 1 second.
 test-time:
