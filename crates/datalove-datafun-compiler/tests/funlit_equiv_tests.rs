@@ -198,9 +198,9 @@ fn make_compatible_config() -> AstGenConfig {
             // 64-bit ints work with SmallNonNegative strategy (values 0-255).
             u64_type: 10,
             i64_type: 10,
-            // usize/isize - set to 0 to preserve original random distribution.
-            usize_type: 0,
-            isize_type: 0,
+            // usize/isize work with SmallNonNegative strategy.
+            usize_type: 10,
+            isize_type: 10,
             // Float works after fixing parser to consume dot before checking decimal.
             f32_type: 10,
             f64_type: 10,
