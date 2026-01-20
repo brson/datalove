@@ -300,15 +300,21 @@ impl ConstructCoverage {
             }
         }
 
-        // Count arithmetic expressions (+ - * on @int).
-        // Look for patterns like "@123 + @456" which indicate bigint arithmetic.
+        // Count arithmetic expressions.
         for line in wf.lines() {
-            if line.contains(" + @") || line.contains(" - @") || line.contains(" * @") {
-                // Check if it's actually @int arithmetic (not comparison).
-                let l = line.trim();
-                if l.contains("@int") || (l.contains("= @") && (l.contains(" + ") || l.contains(" - ") || l.contains(" * "))) {
-                    self.arithmetic += 1;
-                }
+            // Float arithmetic: (: @f32 / ...) + (: @f32 / ...) patterns.
+            if (line.contains("(: @f32") || line.contains("(: @f64")
+                || line.contains("(: #f32") || line.contains("(: #f64"))
+                && (line.contains(") + (") || line.contains(") - (")
+                    || line.contains(") * (") || line.contains(") / ("))
+            {
+                self.arithmetic += 1;
+            }
+            // Bigint arithmetic: lines with `: int =` and arithmetic operators.
+            else if line.contains(": int =")
+                && (line.contains(" + ") || line.contains(" - ") || line.contains(" * "))
+            {
+                self.arithmetic += 1;
             }
         }
 
@@ -472,7 +478,8 @@ fn test_primitive_type_variety() {
 
     let mut type_counts = std::collections::HashMap::new();
 
-    for seed in 0..50 {
+    // Use more seeds to ensure less common types appear.
+    for seed in 0..200 {
         let wf = gen_worldfile_seeded(seed, config.clone());
 
         // Count occurrences of each primitive type.
@@ -489,7 +496,18 @@ fn test_primitive_type_variety() {
         let count = type_counts.get(ty).copied().unwrap_or(0);
         assert!(
             count > 0,
-            "Should generate {} at least once across 50 seeds, found {}",
+            "Should generate {} at least once across 200 seeds, found {}",
+            ty,
+            count
+        );
+    }
+
+    // usize/isize should also be generated (they have weight 5 in leaf_only).
+    for ty in ["@usize", "@isize"] {
+        let count = type_counts.get(ty).copied().unwrap_or(0);
+        assert!(
+            count > 0,
+            "Should generate {} at least once across 200 seeds, found {}",
             ty,
             count
         );
