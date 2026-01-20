@@ -212,6 +212,10 @@ fn test_construct_coverage() {
     println!("  imports:        {}", coverage.imports);
     println!("  function calls: {}", coverage.function_calls);
     println!("  arithmetic:     {}", coverage.arithmetic);
+    println!("  logical not:    {}", coverage.logical_not);
+    println!("  logical and:    {}", coverage.logical_and);
+    println!("  logical or:     {}", coverage.logical_or);
+    println!("  logical xor:    {}", coverage.logical_xor);
 
     // Assert minimum coverage for key constructs.
     assert!(coverage.modules >= 100, "Should have at least 100 modules");
@@ -240,6 +244,10 @@ struct ConstructCoverage {
     imports: usize,
     function_calls: usize,
     arithmetic: usize,
+    logical_not: usize,
+    logical_and: usize,
+    logical_or: usize,
+    logical_xor: usize,
 }
 
 impl ConstructCoverage {
@@ -279,6 +287,12 @@ impl ConstructCoverage {
                 }
             }
         }
+
+        // Count logical operators.
+        self.logical_not += wf.matches("not ").count();
+        self.logical_and += wf.matches(" and ").count();
+        self.logical_or += wf.matches(" or ").count();
+        self.logical_xor += wf.matches(" xor ").count();
     }
 }
 
@@ -553,6 +567,48 @@ fn test_arithmetic_expressions() {
     assert!(float_sub, "Should generate subtraction (-) on floats");
     assert!(float_mul, "Should generate multiplication (*) on floats");
     assert!(float_div, "Should generate division (/) on floats");
+}
+
+/// Verify that logical operators are generated and typecheck correctly.
+#[test]
+fn test_logical_operators() {
+    let config = WorldGenConfig::default();
+
+    let mut found_not = false;
+    let mut found_and = false;
+    let mut found_or = false;
+    let mut found_xor = false;
+
+    for seed in 0..300 {
+        let wf = gen_worldfile_seeded(seed, config.clone());
+
+        if wf.contains("not ") { found_not = true; }
+        if wf.contains(" and ") { found_and = true; }
+        if wf.contains(" or ") { found_or = true; }
+        if wf.contains(" xor ") { found_xor = true; }
+
+        // Verify worldfiles with logical operators typecheck.
+        if found_not || found_and || found_or || found_xor {
+            let errors = typecheck_worldfile(&wf);
+            if !errors.is_empty() {
+                eprintln!("Seed {} failed with logical operators:", seed);
+                eprintln!("{}", wf);
+                for err in &errors {
+                    eprintln!("  {}", err);
+                }
+                panic!("Logical operator worldfile failed to typecheck");
+            }
+        }
+
+        if found_not && found_and && found_or && found_xor {
+            break;
+        }
+    }
+
+    assert!(found_not, "Should generate 'not' expressions");
+    assert!(found_and, "Should generate 'and' expressions");
+    assert!(found_or, "Should generate 'or' expressions");
+    assert!(found_xor, "Should generate 'xor' expressions");
 }
 
 /// Verify that modules with cross-module function calls typecheck correctly.

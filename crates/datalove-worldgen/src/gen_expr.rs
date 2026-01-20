@@ -158,31 +158,53 @@ fn gen_function_call<'db, R: Rng>(
     format!("{}({})", func.name, args.join(", "))
 }
 
-/// Generate a boolean expression.
-pub fn gen_bool_expr<'db, R: Rng>(
+/// Generate an atomic boolean expression (literal or variable only).
+///
+/// Used as operand for `not` to avoid precedence issues.
+fn gen_bool_atom<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    _rng: &mut R,
+    _config: &WorldGenConfig,
+    ctx: &GenContext<'db>,
+) -> String {
+    let bool_type = gen_bool_type(db);
+    let bool_vars = ctx.variables_of_type(db, bool_type);
+
+    if !bool_vars.is_empty() && _rng.gen_bool(0.3) {
+        // Variable reference.
+        let var = bool_vars[_rng.gen_range(0..bool_vars.len())];
+        var.name.clone()
+    } else {
+        // Literal.
+        if _rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() }
+    }
+}
+
+/// Generate a simple boolean expression (no logical operators).
+///
+/// Used as operands for logical operators to avoid deep recursion.
+fn gen_simple_bool_expr<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
     ctx: &GenContext<'db>,
 ) -> String {
     let bool_type = gen_bool_type(db);
-
-    // Check for bool variables.
     let bool_vars = ctx.variables_of_type(db, bool_type);
     let has_bool_var = !bool_vars.is_empty();
 
     let choice = rng.gen_range(0..10);
     match choice {
-        0..=3 => {
+        0..=4 => {
             // Simple literal.
             if rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() }
         }
-        4..=5 if has_bool_var => {
+        5..=6 if has_bool_var => {
             // Variable reference.
             let var = bool_vars[rng.gen_range(0..bool_vars.len())];
             var.name.clone()
         }
-        6..=8 => {
+        7..=9 => {
             // Comparison expression.
             let ty = gen_u32_type(db);
             let lhs = gen_expr(db, rng, ty, config, ctx);
@@ -194,6 +216,43 @@ pub fn gen_bool_expr<'db, R: Rng>(
         _ => {
             // Simple literal fallback.
             if rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() }
+        }
+    }
+}
+
+/// Generate a boolean expression.
+///
+/// May include logical operators (not, and, or, xor).
+pub fn gen_bool_expr<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &GenContext<'db>,
+) -> String {
+    let choice = rng.gen_range(0..15);
+    match choice {
+        0..=7 => {
+            // Simple expression (literal, variable, comparison).
+            gen_simple_bool_expr(db, rng, config, ctx)
+        }
+        8..=9 => {
+            // Unary not - use atom to avoid precedence issues.
+            // `not` has higher precedence than comparison, so `not a < b` parses as `(not a) < b`.
+            let operand = gen_bool_atom(db, rng, config, ctx);
+            format!("not {}", operand)
+        }
+        10..=14 => {
+            // Binary logical operator.
+            // and/or/xor have lower precedence than comparison, so this is safe.
+            let lhs = gen_simple_bool_expr(db, rng, config, ctx);
+            let rhs = gen_simple_bool_expr(db, rng, config, ctx);
+            let ops = ["and", "or", "xor"];
+            let op = ops[rng.gen_range(0..ops.len())];
+            format!("{} {} {}", lhs, op, rhs)
+        }
+        _ => {
+            // Fallback.
+            gen_simple_bool_expr(db, rng, config, ctx)
         }
     }
 }
@@ -390,6 +449,45 @@ mod tests {
         }
 
         assert!(found_comparison, "Should generate comparison expressions");
+    }
+
+    #[test]
+    fn test_gen_bool_expr_logical_operators() {
+        let db = Database::default();
+        test_gen_bool_expr_logical_operators_inner(&db);
+    }
+
+    #[salsa::tracked]
+    fn test_gen_bool_expr_logical_operators_inner<'db>(db: &'db dyn salsa::Database) {
+        let config = WorldGenConfig::default();
+        let ctx = GenContext::new();
+
+        let mut found_not = false;
+        let mut found_and = false;
+        let mut found_or = false;
+        let mut found_xor = false;
+
+        for seed in 0..200 {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let expr = gen_bool_expr(db, &mut rng, &config, &ctx);
+            if expr.starts_with("not ") {
+                found_not = true;
+            }
+            if expr.contains(" and ") {
+                found_and = true;
+            }
+            if expr.contains(" or ") {
+                found_or = true;
+            }
+            if expr.contains(" xor ") {
+                found_xor = true;
+            }
+        }
+
+        assert!(found_not, "Should generate 'not' expressions");
+        assert!(found_and, "Should generate 'and' expressions");
+        assert!(found_or, "Should generate 'or' expressions");
+        assert!(found_xor, "Should generate 'xor' expressions");
     }
 
     #[test]
