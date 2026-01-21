@@ -352,44 +352,35 @@ pub fn check_statement<'db>(
                 let inner_type = Type::Datalit(inner_ty.ty(db).C());
                 let binding_ty = TypeAndHeap::new(db, inner_heap, inner_type);
 
-                // Add binding to context for then body (save old if shadowing).
-                let old_binding = ctx.variables.insert(binding_name, binding_ty);
+                // Save all variables before entering then branch.
+                let saved_variables = ctx.variables.C();
+
+                // Add binding to context for then body.
+                ctx.variables.insert(binding_name, binding_ty);
 
                 // Type check then body.
                 for stmt in then_body {
                     check_statement(ctx, stmt);
                 }
 
-                // Restore old binding or remove.
-                if let Some(old) = old_binding {
-                    ctx.variables.insert(binding_name, old);
-                } else {
-                    ctx.variables.remove(&binding_name);
-                }
+                // Restore all variables after then branch.
+                ctx.variables = saved_variables;
 
                 // Type check else body if present.
                 if let Some(else_stmts) = else_body {
+                    // Save all variables before entering else branch.
+                    let saved_variables = ctx.variables.C();
+
                     // If there's an else binding, bind error type for Result.
                     if let Some(else_binding_name) = else_binding {
                         if let Type::Datalit(datalit::tycheck::Type::Result(_)) = condition_ty.ty(db) {
-                            // Bind Error type (save old if shadowing).
+                            // Bind Error type.
                             let error_ty = TypeAndHeap::new(
                                 db,
                                 datalit::ast::Heap::Omitted,
                                 Type::Datalit(datalit::tycheck::Type::Error),
                             );
-                            let old_else_binding = ctx.variables.insert(else_binding_name, error_ty);
-
-                            for stmt in else_stmts {
-                                check_statement(ctx, stmt);
-                            }
-
-                            // Restore old binding or remove.
-                            if let Some(old) = old_else_binding {
-                                ctx.variables.insert(else_binding_name, old);
-                            } else {
-                                ctx.variables.remove(&else_binding_name);
-                            }
+                            ctx.variables.insert(else_binding_name, error_ty);
                         } else {
                             let actual_type = type_to_string(db, condition_ty.ty(db));
                             let err = ctx.error_type_mismatch(
@@ -400,11 +391,14 @@ pub fn check_statement<'db>(
                             );
                             ctx.add_error(err);
                         }
-                    } else {
-                        for stmt in else_stmts {
-                            check_statement(ctx, stmt);
-                        }
                     }
+
+                    for stmt in else_stmts {
+                        check_statement(ctx, stmt);
+                    }
+
+                    // Restore all variables after else branch.
+                    ctx.variables = saved_variables;
                 }
             } else {
                 // No binding: check condition is bool type.
@@ -418,16 +412,28 @@ pub fn check_statement<'db>(
                     ctx.add_error(e);
                 }
 
+                // Save variables before entering then branch.
+                let saved_variables = ctx.variables.C();
+
                 // Type check then body.
                 for stmt in then_body {
                     check_statement(ctx, stmt);
                 }
 
+                // Restore variables after then branch.
+                ctx.variables = saved_variables;
+
                 // Type check else body if present.
                 if let Some(else_stmts) = else_body {
+                    // Save variables before entering else branch.
+                    let saved_variables = ctx.variables.C();
+
                     for stmt in else_stmts {
                         check_statement(ctx, stmt);
                     }
+
+                    // Restore variables after else branch.
+                    ctx.variables = saved_variables;
                 }
             }
         }
@@ -450,10 +456,16 @@ pub fn check_statement<'db>(
                 }
             }
 
+            // Save variables before entering loop body.
+            let saved_variables = ctx.variables.C();
+
             // Type check loop body.
             for body_stmt in body {
                 check_statement(ctx, body_stmt);
             }
+
+            // Restore variables after loop body.
+            ctx.variables = saved_variables;
 
             // Decrement loop depth.
             ctx.loop_depth -= 1;

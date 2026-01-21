@@ -179,8 +179,6 @@ pub struct FunctionCompiler<'a, M: Module> {
     rt_handle_param: Option<cl_ir::Value>,
     /// Sret pointer (implicit second parameter for aggregate returns).
     sret_param: Option<cl_ir::Value>,
-    /// Counter for unique static data names (e.g., string bytes).
-    static_data_counter: u32,
 }
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
@@ -214,7 +212,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             tydesc_emitter: TyDescEmitter::new(),
             rt_handle_param: None,
             sret_param: None,
-            static_data_counter: 0,
         }
     }
 
@@ -251,7 +248,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             tydesc_emitter: TyDescEmitter::new(),
             rt_handle_param: None,
             sret_param: None,
-            static_data_counter: 0,
         }
     }
 
@@ -290,7 +286,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             tydesc_emitter,
             rt_handle_param: None,
             sret_param: None,
-            static_data_counter: 0,
         }
     }
 

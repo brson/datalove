@@ -125,6 +125,9 @@ pub fn gen_if<'db, R: Rng>(
     let inner_indent = format!("{}  ", indent);
     ctx.control_flow_depth += 1;
 
+    // Save variables before entering then branch.
+    let saved_variables = ctx.variables.clone();
+
     let then_stmt_count = rng.gen_range(1..=2);
     for _ in 0..then_stmt_count {
         let stmt = gen_simple_statement(db, rng, config, ctx, var_counter, &inner_indent);
@@ -132,15 +135,25 @@ pub fn gen_if<'db, R: Rng>(
         result.push('\n');
     }
 
+    // Restore variables after then branch.
+    ctx.variables = saved_variables;
+
     // Maybe generate else-body.
     if rng.gen_bool(0.5) {
         result.push_str(&format!("{}else\n", indent));
+
+        // Save variables before entering else branch.
+        let saved_variables = ctx.variables.clone();
+
         let else_stmt_count = rng.gen_range(1..=2);
         for _ in 0..else_stmt_count {
             let stmt = gen_simple_statement(db, rng, config, ctx, var_counter, &inner_indent);
             result.push_str(&stmt);
             result.push('\n');
         }
+
+        // Restore variables after else branch.
+        ctx.variables = saved_variables;
     }
 
     ctx.control_flow_depth -= 1;
@@ -175,6 +188,9 @@ pub fn gen_loop<'db, R: Rng>(
     ctx.control_flow_depth += 1;
     ctx.loop_depth += 1;
 
+    // Save variables before entering loop body.
+    let saved_variables = ctx.variables.clone();
+
     let body_stmt_count = rng.gen_range(1..=3);
     for i in 0..body_stmt_count {
         // For bare loops, always end with break to prevent infinite loop.
@@ -188,6 +204,9 @@ pub fn gen_loop<'db, R: Rng>(
             result.push('\n');
         }
     }
+
+    // Restore variables after loop body.
+    ctx.variables = saved_variables;
 
     ctx.loop_depth -= 1;
     ctx.control_flow_depth -= 1;

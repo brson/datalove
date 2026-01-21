@@ -68,6 +68,8 @@ pub fn gen_function<'db, R: Rng>(
     ctx.type_aliases = module_ctx.type_aliases.clone();
     ctx.functions = module_ctx.functions.clone();
     ctx.imported_functions = module_ctx.imported_functions.clone();
+    // Set current function name to prevent self-recursive calls.
+    ctx.current_function_name = Some(sig.name.clone());
 
     // Add parameters as variables.
     for (name, ty) in &sig.params {

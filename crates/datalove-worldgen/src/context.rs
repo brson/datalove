@@ -71,6 +71,9 @@ pub struct GenContext<'db> {
 
     /// Current control flow nesting depth.
     pub control_flow_depth: usize,
+
+    /// Name of the current function being generated (to prevent self-recursion).
+    pub current_function_name: Option<String>,
 }
 
 impl<'db> GenContext<'db> {
@@ -83,6 +86,7 @@ impl<'db> GenContext<'db> {
             return_type: None,
             loop_depth: 0,
             control_flow_depth: 0,
+            current_function_name: None,
         }
     }
 
@@ -90,7 +94,11 @@ impl<'db> GenContext<'db> {
     ///
     /// Local functions shadow imported functions with the same name.
     /// Later imports shadow earlier imports with the same name.
+    /// The current function (if set) is excluded to prevent self-recursion.
     pub fn callable_functions(&self) -> impl Iterator<Item = &FunctionSig<'db>> {
+        // Get current function name to exclude.
+        let current_fn = self.current_function_name.as_deref();
+
         // Collect local function names for shadowing check.
         let local_names: std::collections::HashSet<_> =
             self.functions.iter().map(|f| f.name.as_str()).collect();
@@ -114,7 +122,13 @@ impl<'db> GenContext<'db> {
             .collect();
 
         // Return local functions + non-shadowed imports (reversed back to original order).
-        self.functions.iter().chain(non_shadowed_imports.into_iter().rev())
+        // Exclude the current function to prevent self-recursion.
+        self.functions.iter()
+            .filter(move |f| current_fn != Some(f.name.as_str()))
+            .chain(
+                non_shadowed_imports.into_iter().rev()
+                    .filter(move |f| current_fn != Some(f.name.as_str()))
+            )
     }
 
     /// Find variables of a specific type.

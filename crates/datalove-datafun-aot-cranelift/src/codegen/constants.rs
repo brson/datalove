@@ -1,5 +1,7 @@
 //! Constant instruction compilation.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use cranelift_codegen::ir::{types as cl_types, InstBuilder, MemFlags};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{Linkage, Module};
@@ -10,6 +12,9 @@ use crate::types::PTR_TYPE;
 use crate::AotError;
 
 use super::FunctionCompiler;
+
+/// Global counter for unique static data names across all function compilations.
+static GLOBAL_STATIC_DATA_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Compile a constant instruction.
@@ -231,10 +236,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     pub(super) fn emit_static_bytes(&mut self, bytes: &[u8]) -> Result<cranelift_module::DataId, AotError> {
         use cranelift_module::DataDescription;
 
-        // Generate unique name for this data, including function name for uniqueness.
-        let id = self.static_data_counter;
-        self.static_data_counter += 1;
-        let name = format!("__string_bytes_{}_{}", self.func.name, id);
+        // Generate globally unique name for this data using an atomic counter.
+        // This avoids collisions when multiple modules have functions with the same name.
+        let global_id = GLOBAL_STATIC_DATA_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let name = format!("__string_bytes_{}", global_id);
 
         let data_id = self.module
             .declare_data(&name, Linkage::Local, false, false)

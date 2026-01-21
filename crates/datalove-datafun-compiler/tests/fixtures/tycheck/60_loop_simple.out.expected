@@ -13,31 +13,12 @@
         }
       ],
       "message": "mismatched types: expected `int`, found `u32`"
-    },
-    {
-      "code": "F016",
-      "labels": [
-        {
-          "message": "type mismatch",
-          "span": [
-            116,
-            117
-          ],
-          "text": "n"
-        }
-      ],
-      "message": "mismatched types: expected `u32`, found `int`"
     }
   ],
   "errors": [
     {
       "actual": "u32",
       "expected": "int",
-      "kind": "TypeMismatch"
-    },
-    {
-      "actual": "int",
-      "expected": "u32",
       "kind": "TypeMismatch"
     }
   ],
