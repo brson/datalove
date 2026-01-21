@@ -18,7 +18,6 @@ use datalove_datafun_tycheck::{
 
 use crate::module_graph::parse_module_graph_with_mode;
 use crate::tracked_ownership_analysis::{analyze_module_graph_with_mode, ModuleGraphAnalysis};
-use crate::tracked_lower::{empty_lowering_result, lower_module_graph_with_mode, ModuleGraphLoweringResult};
 
 /// Input for module compilation - the output of package resolution.
 pub struct ModuleCompilationInput {
@@ -28,9 +27,11 @@ pub struct ModuleCompilationInput {
     pub resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
 }
 
-/// Output of module compilation - before interpreter integration.
+/// Output of module compilation - analysis results without lowering.
 ///
-/// Contains all compilation artifacts needed to build interpreter structures.
+/// Contains parsing, typechecking, and ownership analysis results.
+/// Callers who need IR lowering should call `lower_module_graph_with_mode`
+/// after checking for errors.
 pub struct ModuleCompilationOutput<'db> {
     /// The input module graph.
     pub module_graph: ModuleGraph,
@@ -38,37 +39,30 @@ pub struct ModuleCompilationOutput<'db> {
     pub parsed_graph: ParsedModuleGraph<'db>,
     /// Typecheck results per module.
     pub typecheck_result: ModuleGraphTypecheckResult<'db>,
-    /// IR lowering results per module.
-    pub lowering_result: ModuleGraphLoweringResult<'db>,
+    /// Ownership analysis results per module.
+    pub ownership_analysis: ModuleGraphAnalysis<'db>,
     /// Typecheck errors by module path.
     pub typecheck_errors: BTreeMap<String, Vec<String>>,
     /// Ownership analysis errors by module path.
     pub ownership_errors: BTreeMap<String, Vec<String>>,
-    /// IR lowering errors by module path (distinct from ownership analysis).
-    pub lowering_errors: BTreeMap<String, Vec<String>>,
-    /// IR dumps by module path (for debugging/display, no errors mixed in).
-    pub module_ir_dumps: BTreeMap<String, Vec<String>>,
 }
 
 impl<'db> ModuleCompilationOutput<'db> {
-    /// Check if compilation succeeded (no errors).
+    /// Check if analysis succeeded (no errors).
     pub fn is_successful(&self) -> bool {
         self.typecheck_errors.values().all(|e| e.is_empty())
             && self.ownership_errors.values().all(|e| e.is_empty())
-            && self.lowering_errors.values().all(|e| e.is_empty())
     }
 }
 
-/// Compile modules from pre-resolved input.
+/// Analyze modules from pre-resolved input.
 ///
-/// This is the main entry point for compilation. It:
-/// 1. Parses all modules
-/// 2. Typechecks all modules
-/// 3. Performs ownership analysis
-/// 4. Lowers to IR
+/// Runs parsing, typechecking, and ownership analysis. Does NOT run IR lowering.
+/// Callers who need IR should call `lower_module_graph_with_mode` after checking
+/// that `is_successful()` returns true.
 ///
-/// The result contains all compilation artifacts. Interpreter integration
-/// (building ModuleFunctionRegistry, etc.) is handled by the caller.
+/// This separation allows callers to skip lowering entirely when analysis fails,
+/// and gives them control over when/if lowering happens.
 pub fn compile_modules<'db>(
     db: &'db dyn DbClone,
     input: ModuleCompilationInput,
@@ -83,26 +77,16 @@ pub fn compile_modules<'db>(
     let typecheck_result = typecheck_module_graph_with_mode(db, parsed_graph, mode);
     let ownership_analysis = analyze_module_graph_with_mode(db, parsed_graph, typecheck_result, mode);
 
-    // Skip lowering if any analysis failed.
-    let has_errors = has_analysis_errors(db.as_salsa_db(), &typecheck_result, &ownership_analysis);
-
-    let lowering_result = if has_errors {
-        empty_lowering_result(db.as_salsa_db(), parsed_graph)
-    } else {
-        lower_module_graph_with_mode(db, parsed_graph, typecheck_result, ownership_analysis, mode)
-    };
-
-    collect_results(db, input.graph, parsed_graph, typecheck_result, ownership_analysis, lowering_result)
+    collect_results(db, input.graph, parsed_graph, typecheck_result, ownership_analysis)
 }
 
-/// Collect all compilation results into the output structure.
+/// Collect all analysis results into the output structure.
 fn collect_results<'db>(
     db: &'db dyn DbClone,
     module_graph: ModuleGraph,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
-    lowering_result: ModuleGraphLoweringResult<'db>,
 ) -> ModuleCompilationOutput<'db> {
     // Collect typecheck errors with location info from pending diagnostics.
     let module_results = typecheck_result.module_results(db.as_salsa_db());
@@ -141,37 +125,13 @@ fn collect_results<'db>(
         }
     }
 
-    // Collect lowering errors and IR dumps.
-    let mut module_ir_dumps: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut lowering_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-
-    for (module_id, result) in lowering_result.module_results(db.as_salsa_db()) {
-        let module_path = module_id.path(db.as_salsa_db()).clone();
-
-        // Lowering errors (no ownership analysis errors mixed in).
-        let errors = result.errors(db.as_salsa_db());
-        if !errors.is_empty() {
-            lowering_errors.insert(module_path.clone(), errors.clone());
-        }
-
-        // Collect IR dumps.
-        let ir_dumps: Vec<String> = result.functions(db.as_salsa_db())
-            .iter()
-            .map(|ir_func| format!("{}", ir_func))
-            .collect();
-
-        module_ir_dumps.insert(module_path, ir_dumps);
-    }
-
     ModuleCompilationOutput {
         module_graph,
         parsed_graph,
         typecheck_result,
-        lowering_result,
+        ownership_analysis,
         typecheck_errors,
         ownership_errors,
-        lowering_errors,
-        module_ir_dumps,
     }
 }
 
@@ -201,16 +161,6 @@ pub enum LoweringResult {
 // ============================================================================
 // Helper functions
 // ============================================================================
-
-/// Check if any module has typecheck or ownership errors.
-fn has_analysis_errors(
-    db: &dyn salsa::Database,
-    typecheck_result: &ModuleGraphTypecheckResult,
-    ownership_analysis: &ModuleGraphAnalysis,
-) -> bool {
-    typecheck_result.module_errors(db).values().any(|e| !e.is_empty())
-        || !ownership_analysis.success(db)
-}
 
 /// Format lowering result for display.
 ///

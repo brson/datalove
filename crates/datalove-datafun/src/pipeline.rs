@@ -56,6 +56,9 @@ use datalove_datafun_compiler::compile::{
     ModuleCompilationInput, ModuleCompilationOutput,
     compile_modules as compiler_compile_modules,
 };
+use datalove_datafun_compiler::tracked_lower::{
+    lower_module_graph_with_mode, ModuleGraphLoweringResult,
+};
 use datalove_datafun_tycheck::{
     typecheck_module_graph,
     type_check_script_units, create_batch_spec,
@@ -249,15 +252,28 @@ impl ModuleCompilationPipeline {
         resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
         mode: ParallelMode,
     ) -> CompiledModules<'db> {
-        // Delegate to compiler for parsing, typechecking, and lowering.
+        // Run parsing, typechecking, and ownership analysis.
         let input = ModuleCompilationInput {
             graph: module_graph,
             resolved_requires,
         };
         let output = compiler_compile_modules(db, input, mode);
 
-        // Build ModuleFunctionRegistry from IR functions (interpreter-specific).
-        self.wrap_compiler_output(db, output)
+        // Only run lowering if analysis succeeded.
+        let lowering_result = if output.is_successful() {
+            Some(lower_module_graph_with_mode(
+                db,
+                output.parsed_graph,
+                output.typecheck_result,
+                output.ownership_analysis,
+                mode,
+            ))
+        } else {
+            None
+        };
+
+        // Build interpreter structures from results.
+        self.wrap_compiler_output(db, output, lowering_result)
     }
 
     /// Wrap compiler output with interpreter-specific structures.
@@ -265,19 +281,53 @@ impl ModuleCompilationPipeline {
         &self,
         db: &'db dyn DbClone,
         output: ModuleCompilationOutput<'db>,
+        lowering_result: Option<ModuleGraphLoweringResult<'db>>,
     ) -> CompiledModules<'db> {
-        // Convert FuncIdMap to HashMap.
-        let func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> =
-            output.lowering_result.func_id_map(db.as_salsa_db()).to_hashmap(db.as_salsa_db());
+        // Build func_id_map and module registry from lowering result if available.
+        let (func_id_map, module_registry, lowering_errors, module_ir_dumps) =
+            if let Some(ref lowering) = lowering_result {
+                // Convert FuncIdMap to HashMap.
+                let func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> =
+                    lowering.func_id_map(db.as_salsa_db()).to_hashmap(db.as_salsa_db());
 
-        // Build module registry from IR functions.
-        let mut module_registry = ModuleFunctionRegistry::new();
-        for (_module_id, result) in output.lowering_result.module_results(db.as_salsa_db()) {
-            let ir_module_id = result.ir_module_id(db.as_salsa_db());
-            for ir_func in result.functions(db.as_salsa_db()) {
-                module_registry.add_module_function(ir_module_id, ir_func.id, ir_func.clone());
-            }
-        }
+                // Build module registry from IR functions.
+                let mut registry = ModuleFunctionRegistry::new();
+                let mut lowering_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+                let mut module_ir_dumps: BTreeMap<String, Vec<String>> = BTreeMap::new();
+
+                for (module_id, result) in lowering.module_results(db.as_salsa_db()) {
+                    let ir_module_id = result.ir_module_id(db.as_salsa_db());
+                    let module_path = module_id.path(db.as_salsa_db()).clone();
+
+                    // Collect lowering errors.
+                    let errors = result.errors(db.as_salsa_db());
+                    if !errors.is_empty() {
+                        lowering_errors.insert(module_path.clone(), errors.clone());
+                    }
+
+                    // Collect IR dumps.
+                    let ir_dumps: Vec<String> = result.functions(db.as_salsa_db())
+                        .iter()
+                        .map(|ir_func| format!("{}", ir_func))
+                        .collect();
+                    module_ir_dumps.insert(module_path, ir_dumps);
+
+                    // Add functions to registry.
+                    for ir_func in result.functions(db.as_salsa_db()) {
+                        registry.add_module_function(ir_module_id, ir_func.id, ir_func.clone());
+                    }
+                }
+
+                (func_id_map, registry, lowering_errors, module_ir_dumps)
+            } else {
+                // No lowering - use empty structures.
+                // Still need func_id_map for script compilation even without lowering.
+                use datalove_datafun_compiler::tracked_lower::compute_func_id_map;
+                let func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> =
+                    compute_func_id_map(db.as_salsa_db(), output.parsed_graph)
+                        .to_hashmap(db.as_salsa_db());
+                (func_id_map, ModuleFunctionRegistry::new(), BTreeMap::new(), BTreeMap::new())
+            };
 
         let shared = Arc::new(SharedModuleContext {
             module_graph: output.module_graph,
@@ -292,8 +342,8 @@ impl ModuleCompilationPipeline {
             resolution_error: None,
             path_to_errors: output.typecheck_errors,
             ownership_errors: output.ownership_errors,
-            lowering_errors: output.lowering_errors,
-            module_ir_dumps: output.module_ir_dumps,
+            lowering_errors,
+            module_ir_dumps,
         }
     }
 }
