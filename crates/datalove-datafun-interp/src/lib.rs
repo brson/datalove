@@ -495,10 +495,8 @@ impl IrInterpreter {
             return Ok(());
         }
 
-        // Find the target block to get its parameters.
-        let target_block = blocks.iter()
-            .find(|b| b.id == target)
-            .ok_or(InterpError::BlockNotFound(target))?;
+        // Direct indexing: blocks are renumbered so blocks[i].id.0 == i.
+        let target_block = &blocks[target.0 as usize];
 
         // Pass each argument to the corresponding block parameter.
         for (param_id, arg) in target_block.params.iter().zip(args.iter()) {
