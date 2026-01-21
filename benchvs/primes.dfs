@@ -33,7 +33,7 @@ fun count_primes(limit: u32): !u32
   ret ok count
 end fun
 
-let result = count_primes(10000)
+let result = count_primes(1000000)
 if result |value|
   debuglog(value)
 else |err|

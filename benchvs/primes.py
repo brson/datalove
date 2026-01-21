@@ -22,5 +22,5 @@ def count_primes(limit: int) -> int:
             count += 1
     return count
 
-result = count_primes(10_000)
+result = count_primes(1_000_000)
 print(result)

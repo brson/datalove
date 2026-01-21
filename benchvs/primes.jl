@@ -31,5 +31,5 @@ function count_primes(limit::Int)::Int
     return count
 end
 
-result = count_primes(10_000)
+result = count_primes(1_000_000)
 println(result)
