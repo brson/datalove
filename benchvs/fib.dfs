@@ -1,15 +1,15 @@
 // Fibonacci benchmark - compute fib(40) iteratively
 // Uses int (bigint) for the computation.
 
-fun fib(n: u32): !int
+fun fib(n: u32): !u32
   if n .< 2
-    ret ok (n + 0)
+    ret ok (n +! 0)
   end if
-  var a: int = 0
-  var b: int = 1
+  var a: u32 = 0
+  var b: u32 = 1
   var i: u32 = 2
   loop while i <= n
-    let next = a + b
+    let next = a +! b
     set a = b
     set b = next
     set i = i +! 1
@@ -21,5 +21,5 @@ let result = fib(40)
 if result |value|
   debuglog(value)
 else |err|
-  debuglog(@false)
+  debuglog(false)
 end if
