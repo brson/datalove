@@ -256,7 +256,26 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     }
 
     // Run interpreter pipeline.
-    let mut interp_ctx = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Buffer, None);
+    let Some(mut interp_ctx) = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Buffer, None) else {
+        // Module compilation failed, script execution skipped.
+        // Both lowerings are Skipped, so they match.
+        results.push(DualSectionResult {
+            section_type: "scriptunit-fragment".to_string(),
+            name: None,
+            typecheck: datafun::pipeline::TypecheckResult::Skipped,
+            interp_lowering: datafun::pipeline::LoweringResult::Skipped,
+            aot_lowering: datafun::pipeline::LoweringResult::Skipped,
+            ir_match: true,
+            ir_diff: None,
+            interp_output: String::new(),
+            aot_output: String::new(),
+            output_match: true,
+            aot_compile: None,
+            link: None,
+            execution: None,
+        });
+        return DualAnalysis { sections: results };
+    };
     interp_ctx.clear_debug_buffer();
     let interp_result = interp_ctx.eval_fragment(fragment_source);
     let interp_output = interp_ctx.get_debug_buffer();
@@ -267,7 +286,26 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     let compiled2 = pipeline2.compile_fresh(&db);
 
     // Run AOT pipeline.
-    let mut aot_ctx = compiled2.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled, None);
+    let Some(mut aot_ctx) = compiled2.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled, None) else {
+        // Module compilation failed for AOT, but interp succeeded.
+        // This shouldn't happen if both use the same input, but handle it.
+        results.push(DualSectionResult {
+            section_type: "scriptunit-fragment".to_string(),
+            name: None,
+            typecheck: datafun::pipeline::TypecheckResult::Skipped,
+            interp_lowering: interp_result.lowering,
+            aot_lowering: datafun::pipeline::LoweringResult::Skipped,
+            ir_match: false,
+            ir_diff: None,
+            interp_output,
+            aot_output: String::new(),
+            output_match: false,
+            aot_compile: None,
+            link: None,
+            execution: None,
+        });
+        return DualAnalysis { sections: results };
+    };
     let aot_lower_result = aot_ctx.lower_fragment_for_aot(fragment_source);
 
     // If typecheck failed, return early.

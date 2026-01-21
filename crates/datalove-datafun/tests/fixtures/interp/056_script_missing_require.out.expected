@@ -18,10 +18,7 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"module helper\")",
-                ],
+                status: "Skipped",
             ),
             lowering: LoweringResult(
                 status: "Skipped",
@@ -32,10 +29,7 @@ Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"add_one\")",
-                ],
+                status: "Skipped",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

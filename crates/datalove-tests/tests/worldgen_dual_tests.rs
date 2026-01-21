@@ -105,11 +105,18 @@ fn run_with_chaos_interp(
         }
     };
 
-    let mut ctx = compiled.script_context(
+    let Some(mut ctx) = compiled.script_context(
         db,
         datalove_rt::c::DebugOutputMode::Buffer,
         Some(Box::new(chaos)),
-    );
+    ) else {
+        return RunResult {
+            compiled: true,
+            debuglog: String::new(),
+            success: false,
+            error: Some("Module compilation failed".to_string()),
+        };
+    };
 
     let mut debuglog = String::new();
     let mut success = true;
@@ -211,7 +218,14 @@ fn run_with_aot(
     };
 
     // Lower for AOT.
-    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Disabled, None);
+    let Some(mut ctx) = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Disabled, None) else {
+        return RunResult {
+            compiled: true,
+            debuglog: String::new(),
+            success: false,
+            error: Some("Module compilation failed".to_string()),
+        };
+    };
     let lower_result = ctx.lower_fragment_for_aot(fragment_source);
 
     if !matches!(lower_result.typecheck, datafun::pipeline::TypecheckResult::Success) {

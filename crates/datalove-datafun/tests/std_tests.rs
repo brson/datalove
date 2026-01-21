@@ -55,7 +55,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     }
 
     // Create script compilation context (module specs are built internally from module graph).
-    let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Disabled, None);
+    let Some(mut ctx) = compiled.script_context(&db, datafun::DebugOutputMode::Disabled, None) else {
+        return Err("Module compilation failed".to_string());
+    };
 
     // Run the script as a fragment.
     let result = ctx.eval_fragment(&script_text);

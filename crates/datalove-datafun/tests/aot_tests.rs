@@ -17,7 +17,7 @@ use serde::{Serialize, Deserialize};
 use std::path::Path;
 
 use datalove_datafun as datafun;
-use datafun::pipeline::aot as pipeline_aot;
+use datafun::pipeline::{aot as pipeline_aot, TypecheckResult, LoweringResult};
 use datalove_datafun_ir::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 
@@ -137,7 +137,28 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
     }
 
     // Create script compilation context with Disabled mode (we don't use interpreter).
-    let mut ctx = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled, None);
+    let Some(mut ctx) = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled, None) else {
+        // Module compilation failed, return skipped results for all script sections.
+        for section in &parsed.sections {
+            if matches!(section, WorldfileSection::ScriptFragment { .. } | WorldfileSection::ScriptExpr { .. }) {
+                results.push(AotSectionResult {
+                    section_type: match section {
+                        WorldfileSection::ScriptFragment { .. } => "scriptunit-fragment".to_string(),
+                        WorldfileSection::ScriptExpr { .. } => "scriptunit-expr".to_string(),
+                        _ => unreachable!(),
+                    },
+                    name: None,
+                    typecheck: TypecheckResult::Skipped,
+                    lowering: LoweringResult::Skipped,
+                    aot_compile: None,
+                    link: None,
+                    execution: None,
+                    output: String::new(),
+                });
+            }
+        }
+        return AotAnalysis { sections: results };
+    };
 
     // Process script units via AOT.
     for section in &parsed.sections {

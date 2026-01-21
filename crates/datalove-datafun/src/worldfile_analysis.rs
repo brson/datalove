@@ -107,6 +107,7 @@ pub fn analyze_worldfile(
     }
 
     // Create script compilation context with Buffer mode for capturing debuglog output.
+    // Returns None if module compilation failed.
     let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, None);
 
     // Process script units using the context.
@@ -123,40 +124,66 @@ pub fn analyze_worldfile(
                 // Module action sections are for memo tests only.
             }
             WorldfileSection::ScriptFragment { source } => {
-                // Clear debug buffer before execution.
-                ctx.clear_debug_buffer();
-                let unit_result = ctx.eval_fragment(source);
-                // Capture debug output.
-                let debug_output = ctx.get_debug_buffer();
-                results.push(SectionResult {
-                    section_type: "scriptunit-fragment".S(),
-                    name: None,
-                    typecheck: unit_result.typecheck,
-                    lowering: unit_result.lowering,
-                    output: unit_result.output,
-                    debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
-                });
+                if let Some(ref mut ctx) = ctx {
+                    // Clear debug buffer before execution.
+                    ctx.clear_debug_buffer();
+                    let unit_result = ctx.eval_fragment(source);
+                    // Capture debug output.
+                    let debug_output = ctx.get_debug_buffer();
+                    results.push(SectionResult {
+                        section_type: "scriptunit-fragment".S(),
+                        name: None,
+                        typecheck: unit_result.typecheck,
+                        lowering: unit_result.lowering,
+                        output: unit_result.output,
+                        debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
+                    });
+                } else {
+                    // Module compilation failed, skip script execution.
+                    results.push(SectionResult {
+                        section_type: "scriptunit-fragment".S(),
+                        name: None,
+                        typecheck: TypecheckResult::Skipped,
+                        lowering: LoweringResult::Skipped,
+                        output: String::new(),
+                        debug_output: None,
+                    });
+                }
             }
             WorldfileSection::ScriptExpr { source } => {
-                // Clear debug buffer before execution.
-                ctx.clear_debug_buffer();
-                let unit_result = ctx.eval_expr(source);
-                // Capture debug output.
-                let debug_output = ctx.get_debug_buffer();
-                results.push(SectionResult {
-                    section_type: "scriptunit-expr".S(),
-                    name: None,
-                    typecheck: unit_result.typecheck,
-                    lowering: unit_result.lowering,
-                    output: unit_result.output,
-                    debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
-                });
+                if let Some(ref mut ctx) = ctx {
+                    // Clear debug buffer before execution.
+                    ctx.clear_debug_buffer();
+                    let unit_result = ctx.eval_expr(source);
+                    // Capture debug output.
+                    let debug_output = ctx.get_debug_buffer();
+                    results.push(SectionResult {
+                        section_type: "scriptunit-expr".S(),
+                        name: None,
+                        typecheck: unit_result.typecheck,
+                        lowering: unit_result.lowering,
+                        output: unit_result.output,
+                        debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
+                    });
+                } else {
+                    // Module compilation failed, skip script execution.
+                    results.push(SectionResult {
+                        section_type: "scriptunit-expr".S(),
+                        name: None,
+                        typecheck: TypecheckResult::Skipped,
+                        lowering: LoweringResult::Skipped,
+                        output: String::new(),
+                        debug_output: None,
+                    });
+                }
             }
         }
     }
 
     // Cleanup.
-    ctx.destroy_all();
+    if let Some(ref mut ctx) = ctx {
+        ctx.destroy_all();
+    }
 
     Ok(Analysis { sections: results })
 }

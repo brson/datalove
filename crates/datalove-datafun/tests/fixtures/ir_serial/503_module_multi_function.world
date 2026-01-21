@@ -2,16 +2,16 @@
 module local/test/ops
 ----------
 
-fun inc(x: u32): u32
-    ret x +! @1
+fun inc(x: u32): !u32
+    ret ok (x +! @1)
 end fun
 
-fun dec(x: u32): u32
-    ret x -! @1
+fun dec(x: u32): !u32
+    ret ok (x -! @1)
 end fun
 
-fun square(x: u32): u32
-    ret x *! x
+fun square(x: u32): !u32
+    ret ok (x *! x)
 end fun
 
 ----------

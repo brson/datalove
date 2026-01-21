@@ -49,8 +49,9 @@ impl<'db> Engine<'db> {
             bail!("Module compilation failed: {}", errors.join("; "));
         }
 
-        // Create script compilation context.
-        let ctx = compiled.script_context(db, datalove_datafun::DebugOutputMode::Disabled, None);
+        // Create script compilation context (safe to unwrap since we checked for errors above).
+        let ctx = compiled.script_context(db, datalove_datafun::DebugOutputMode::Disabled, None)
+            .expect("script_context should succeed after is_successful check");
 
         Ok(Engine {
             db,
@@ -63,10 +64,11 @@ impl<'db> Engine<'db> {
         self.history = ReplHistory::new();
         // Cleanup the current context.
         self.ctx.destroy_all();
-        // Create a new context.
+        // Create a new context (empty pipeline always succeeds).
         let mut pipeline = ModuleCompilationPipeline::new();
         let compiled = pipeline.compile_fresh(self.db);
-        self.ctx = compiled.script_context(self.db, datalove_datafun::DebugOutputMode::Disabled, None);
+        self.ctx = compiled.script_context(self.db, datalove_datafun::DebugOutputMode::Disabled, None)
+            .expect("empty pipeline compilation should succeed");
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {

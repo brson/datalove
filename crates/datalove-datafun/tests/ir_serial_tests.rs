@@ -455,7 +455,29 @@ fn analyze_worldfile_ir_serial(
     }
 
     // Lower for AOT (includes drops).
-    let mut ctx = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled, None);
+    let Some(mut ctx) = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled, None) else {
+        // Module compilation failed (typecheck or ownership errors), script context not created.
+        results.push(IrSerialSectionResult {
+            section_type: "scriptunit-fragment".to_string(),
+            name: None,
+            typecheck: datafun::pipeline::TypecheckResult::Skipped,
+            lowering: datafun::pipeline::LoweringResult::Skipped,
+            direct_interp_output: String::new(),
+            direct_aot_output: String::new(),
+            serialized_ir_size: 0,
+            serialized_registry_size: 0,
+            deser_success: false,
+            deser_error: None,
+            deser_interp_output: String::new(),
+            deser_aot_output: String::new(),
+            interp_output_match: true,
+            aot_output_match: true,
+            aot_compile: None,
+            link: None,
+            execution: None,
+        });
+        return IrSerialAnalysis { sections: results };
+    };
     let lower_result = ctx.lower_fragment_for_aot(fragment_source);
 
     // Get registry before destroying ctx.

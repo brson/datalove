@@ -100,7 +100,35 @@ pub fn analyze_worldfile_with_jit(
     let jit = JitEngine::new(1).expect("JitEngine creation failed");
 
     // Create script compilation context with Buffer mode and JIT enabled.
-    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, Some(Box::new(jit)));
+    let Some(mut ctx) = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, Some(Box::new(jit))) else {
+        // Module compilation failed, return skipped results for script sections.
+        for section in &parsed.sections {
+            match section {
+                WorldfileSection::ScriptFragment { .. } => {
+                    results.push(SectionResult {
+                        section_type: "scriptunit-fragment".to_string(),
+                        name: None,
+                        typecheck: TypecheckResult::Skipped,
+                        lowering: LoweringResult::Skipped,
+                        output: String::new(),
+                        debug_output: None,
+                    });
+                }
+                WorldfileSection::ScriptExpr { .. } => {
+                    results.push(SectionResult {
+                        section_type: "scriptunit-expr".to_string(),
+                        name: None,
+                        typecheck: TypecheckResult::Skipped,
+                        lowering: LoweringResult::Skipped,
+                        output: String::new(),
+                        debug_output: None,
+                    });
+                }
+                _ => {}
+            }
+        }
+        return Ok(Analysis { sections: results });
+    };
 
     // Process script units.
     for section in &parsed.sections {

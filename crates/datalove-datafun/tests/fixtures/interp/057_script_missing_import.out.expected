@@ -18,22 +18,18 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n",
+                status: "Skipped",
             ),
-            output: "(fragment executed)",
+            output: "",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"add_one\")",
-                ],
+                status: "Skipped",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

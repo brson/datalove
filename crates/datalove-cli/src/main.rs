@@ -411,7 +411,9 @@ impl ScriptCommand {
         };
 
         // Create script compilation context with Stderr mode for debuglog output.
-        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, call_dispatcher);
+        // Safe to unwrap since we checked has_errors() above.
+        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, call_dispatcher)
+            .expect("script_context should succeed after error check");
 
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(file_path)
@@ -490,7 +492,9 @@ impl ScriptIrCommand {
         }
 
         // Create script compilation context.
-        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None);
+        // Safe to unwrap since we checked has_errors() above.
+        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None)
+            .expect("script_context should succeed after error check");
 
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(&self.file_path)
@@ -549,7 +553,9 @@ impl AotCompileCommand {
         }
 
         // Create script compilation context.
-        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None);
+        // Safe to unwrap since we checked has_errors() above.
+        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None)
+            .expect("script_context should succeed after error check");
 
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(&self.file_path)
@@ -688,7 +694,9 @@ impl ScriptWorldCommand {
         }
 
         // Create script compilation context.
-        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None);
+        // Safe to unwrap since we checked has_errors() above.
+        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None)
+            .expect("script_context should succeed after error check");
 
         // Execute the script section.
         let script_section = script_sections[0];
