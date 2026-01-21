@@ -26,13 +26,15 @@
 
 - Linear types.
 - No interior mutability.
-- Pure functions / no side effects.
-- Almost-total functions.
+- Pure functions - deterministic, no side effects.
+- Almost-total functions:
   Infinite loops are possible;
   we may be able to prove termination in some cases.
 - Whole program compilation.
-- In / out argument modes.
+- In / out / ref / mut argument modes.
   Could enable bidirectionality ala Mercury?
+
+
 
 
 ## Capabilities Potentially Enabled by Restrictions
