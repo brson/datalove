@@ -84,6 +84,10 @@ pub struct GenContext<'db> {
     /// Variables that have been consumed (moved) and can't be used again.
     /// This is used for ownership tracking - global heap types get moved on first use.
     pub consumed_variables: HashSet<String>,
+
+    /// Variables that are protected from moving inside a loop.
+    /// These can still be borrowed (used in operators) but not moved.
+    pub loop_protected_variables: HashSet<String>,
 }
 
 impl<'db> GenContext<'db> {
@@ -99,6 +103,7 @@ impl<'db> GenContext<'db> {
             current_function_name: None,
             max_callable_function_index: None,
             consumed_variables: HashSet::new(),
+            loop_protected_variables: HashSet::new(),
         }
     }
 
@@ -110,6 +115,16 @@ impl<'db> GenContext<'db> {
     /// Check if a variable has been consumed.
     pub fn is_consumed(&self, name: &str) -> bool {
         self.consumed_variables.contains(name)
+    }
+
+    /// Mark a variable as loop-protected (can be borrowed but not moved).
+    pub fn loop_protect_variable(&mut self, name: &str) {
+        self.loop_protected_variables.insert(name.to_string());
+    }
+
+    /// Check if a variable is loop-protected.
+    pub fn is_loop_protected(&self, name: &str) -> bool {
+        self.loop_protected_variables.contains(name)
     }
 
     /// Get all callable functions (local + imported, with shadowing).
@@ -184,10 +199,10 @@ fn extract_function_index(name: &str) -> Option<usize> {
 }
 
 impl<'db> GenContext<'db> {
-    /// Find variables of a specific type that are not consumed.
+    /// Find variables of a specific type that can be moved.
     ///
-    /// Consumed variables are filtered out because they've already been
-    /// moved and can't be used again.
+    /// Excludes consumed variables (already moved) and loop-protected variables
+    /// (can only be borrowed inside a loop, not moved).
     pub fn variables_of_type(
         &self,
         db: &'db dyn salsa::Database,
@@ -203,6 +218,35 @@ impl<'db> GenContext<'db> {
                 if self.is_consumed(&v.name) {
                     return false;
                 }
+                // Filter out loop-protected variables (can only borrow, not move).
+                if self.is_loop_protected(&v.name) {
+                    return false;
+                }
+                true
+            })
+            .collect()
+    }
+
+    /// Find variables of a specific type that can be borrowed (used in operators).
+    ///
+    /// Excludes consumed variables but allows loop-protected variables since
+    /// operators use ref semantics (borrow, not move).
+    pub fn variables_of_type_for_borrow(
+        &self,
+        db: &'db dyn salsa::Database,
+        type_hint: TypeHint<'db>,
+    ) -> Vec<&Variable<'db>> {
+        self.variables
+            .iter()
+            .filter(|v| {
+                if !types_match(db, v.type_hint.clone(), type_hint.clone()) {
+                    return false;
+                }
+                // Filter out consumed variables.
+                if self.is_consumed(&v.name) {
+                    return false;
+                }
+                // Loop-protected is OK for borrowing.
                 true
             })
             .collect()

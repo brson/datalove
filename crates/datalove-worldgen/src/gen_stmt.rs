@@ -194,19 +194,20 @@ pub fn gen_loop<'db, R: Rng>(
     ctx.control_flow_depth += 1;
     ctx.loop_depth += 1;
 
-    // Save variables and consumed state before entering loop body.
+    // Save variables, consumed, and loop-protected state before entering loop body.
     let saved_variables = ctx.variables.clone();
     let saved_consumed = ctx.consumed_variables.clone();
+    let saved_loop_protected = ctx.loop_protected_variables.clone();
 
-    // Mark all outer-scoped linear variables as consumed to prevent MoveInLoop errors.
-    // Linear types cannot be moved inside a loop since the loop could iterate multiple times.
+    // Mark all outer-scoped linear variables as loop-protected to prevent MoveInLoop errors.
+    // They can still be borrowed (used in operators) but not moved directly.
     let linear_vars: Vec<String> = ctx.variables
         .iter()
         .filter(|v| is_linear_type(&v.type_hint))
         .map(|v| v.name.clone())
         .collect();
     for name in linear_vars {
-        ctx.consume_variable(&name);
+        ctx.loop_protect_variable(&name);
     }
 
     let body_stmt_count = rng.gen_range(1..=3);
@@ -223,9 +224,10 @@ pub fn gen_loop<'db, R: Rng>(
         }
     }
 
-    // Restore variables and consumed state after loop body.
+    // Restore variables, consumed, and loop-protected state after loop body.
     ctx.variables = saved_variables;
     ctx.consumed_variables = saved_consumed;
+    ctx.loop_protected_variables = saved_loop_protected;
 
     ctx.loop_depth -= 1;
     ctx.control_flow_depth -= 1;

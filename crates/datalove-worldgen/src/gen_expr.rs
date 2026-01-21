@@ -75,7 +75,7 @@ pub fn gen_expr<'db, R: Rng>(
         gen_function_call(db, rng, func, config, ctx)
     } else if can_arith && !can_use_var && !can_call_fn {
         // Generate arithmetic expression.
-        gen_arithmetic_expr(db, rng, type_hint, config)
+        gen_arithmetic_expr(db, rng, type_hint, config, ctx)
     } else if can_use_var || can_call_fn || can_arith {
         // Multiple options available, choose randomly.
         let mut options = Vec::new();
@@ -97,7 +97,7 @@ pub fn gen_expr<'db, R: Rng>(
                 let func = &matching_fns[rng.gen_range(0..matching_fns.len())];
                 gen_function_call(db, rng, func, config, ctx)
             }
-            2 => gen_arithmetic_expr(db, rng, type_hint, config),
+            2 => gen_arithmetic_expr(db, rng, type_hint, config, ctx),
             _ => unreachable!(),
         }
     } else {
@@ -111,17 +111,22 @@ pub fn gen_expr<'db, R: Rng>(
 /// Supports floats (f32, f64) and bigints (int).
 /// Division only works for floats; bigints must use /! or /?.
 /// Unary negation works for floats and bigints.
+///
+/// For bigints, may use existing variables as operands since operators
+/// use ref semantics (borrow, not move).
 fn gen_arithmetic_expr<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
+    ctx: &GenContext<'db>,
 ) -> String {
     let is_float = matches!(type_hint, TypeHint::F32 | TypeHint::F64);
+    let is_bigint = matches!(type_hint, TypeHint::Int);
 
     // 20% chance to generate unary negation instead of binary op.
     if supports_unary_negation(&type_hint) && rng.gen_bool(0.2) {
-        return gen_unary_negation(db, rng, type_hint, config);
+        return gen_unary_negation(db, rng, type_hint, config, ctx);
     }
 
     // Floats support all four operators; bigints don't support bare /.
@@ -132,39 +137,85 @@ fn gen_arithmetic_expr<'db, R: Rng>(
     };
     let op = ops[rng.gen_range(0..ops.len())];
 
-    // Generate literal operands.
-    let lhs = gen_literal(db, rng, type_hint.clone(), config);
-    let rhs = gen_literal(db, rng, type_hint.clone(), config);
+    // Generate operands - for bigints, may use variables (operators borrow).
+    let lhs = gen_arith_operand(db, rng, type_hint.clone(), config, ctx, is_bigint);
+    let rhs = gen_arith_operand(db, rng, type_hint.clone(), config, ctx, is_bigint);
 
-    if is_float {
-        // Float operands need type hints to avoid f32/f64 inference issues.
-        // Syntax: (: f64 / 123.4) + (: f64 / 56.7)
-        let type_str = pretty_type_hint(db, type_hint);
-        format!("(: {} / {}) {} (: {} / {})", type_str, lhs, op, type_str, rhs)
+    if is_float || is_bigint {
+        // Float and bigint literals need type hints to avoid inference issues.
+        // Variables already have known types, so no hint needed.
+        let type_str = pretty_type_hint(db, type_hint.clone());
+        let lhs_str = match lhs {
+            ArithOperand::Literal(s) => format!("(: {} / {})", type_str, s),
+            ArithOperand::Variable(s) => s,
+        };
+        let rhs_str = match rhs {
+            ArithOperand::Literal(s) => format!("(: {} / {})", type_str, s),
+            ArithOperand::Variable(s) => s,
+        };
+        format!("{} {} {}", lhs_str, op, rhs_str)
     } else {
-        // Bigints don't need type hints.
-        format!("{} {} {}", lhs, op, rhs)
+        let lhs_str = match lhs {
+            ArithOperand::Literal(s) | ArithOperand::Variable(s) => s,
+        };
+        let rhs_str = match rhs {
+            ArithOperand::Literal(s) | ArithOperand::Variable(s) => s,
+        };
+        format!("{} {} {}", lhs_str, op, rhs_str)
     }
+}
+
+/// Arithmetic operand - either a literal or a variable name.
+enum ArithOperand {
+    Literal(String),
+    Variable(String),
+}
+
+/// Generate an operand for arithmetic expressions.
+///
+/// For bigints, may use an existing variable (operators use ref semantics).
+/// Returns whether the operand is a variable (which already has a known type).
+fn gen_arith_operand<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    type_hint: TypeHint<'db>,
+    config: &WorldGenConfig,
+    ctx: &GenContext<'db>,
+    allow_variables: bool,
+) -> ArithOperand {
+    if allow_variables {
+        // For bigints, 40% chance to use an existing variable if available.
+        let borrowable_vars = ctx.variables_of_type_for_borrow(db, type_hint.clone());
+        if !borrowable_vars.is_empty() && rng.gen_bool(0.4) {
+            let var = borrowable_vars[rng.gen_range(0..borrowable_vars.len())];
+            return ArithOperand::Variable(var.name.clone());
+        }
+    }
+    ArithOperand::Literal(gen_literal(db, rng, type_hint, config))
 }
 
 /// Generate a unary negation expression.
 ///
 /// Only works for floats and bigints.
+/// For bigints, may use an existing variable as operand.
 fn gen_unary_negation<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
+    ctx: &GenContext<'db>,
 ) -> String {
-    let operand = gen_literal(db, rng, type_hint.clone(), config);
+    let is_bigint = matches!(type_hint, TypeHint::Int);
+    let operand = gen_arith_operand(db, rng, type_hint.clone(), config, ctx, is_bigint);
 
-    // Both floats and ints need type hints for unary negation.
-    // Without hints, the literal might be inferred as a different type.
-    // For floats: -(: f64 / 123.4)
-    // For ints: -(: int / 59)
+    // Literals need type hints for unary negation.
+    // Variables already have known types, so no hint needed.
     let type_str = pretty_type_hint(db, type_hint);
 
-    format!("-(: {} / {})", type_str, operand)
+    match operand {
+        ArithOperand::Literal(s) => format!("-(: {} / {})", type_str, s),
+        ArithOperand::Variable(s) => format!("-{}", s),
+    }
 }
 
 /// Generate a literal expression matching the given type using datalit.
