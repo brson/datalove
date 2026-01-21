@@ -355,7 +355,7 @@ fn apply_wrong_element_type<'db>(
         // Build list source via string manipulation.
         let elem_strs: Vec<String> = elements.iter().map(|e| pretty_print(db, *e)).collect();
 
-        // Build outer heap prefix.
+        // Build type prefix.
         
 
         // Build final source with wrong element appended.
@@ -366,7 +366,7 @@ fn apply_wrong_element_type<'db>(
 
         let source = if let Some(th) = expr.type_hint(db) {
             let mut type_str = String::new();
-            pretty_type_hint_and_heap(db, th, &mut type_str);
+            pretty_type_hint(db, th, &mut type_str);
             format!(": {} / {}", type_str, list_body)
         } else {
             list_body
@@ -412,7 +412,7 @@ fn apply_arity_mismatch<'db>(
 
             // Build type hint string.
             let mut type_str = String::new();
-            pretty_type_hint_and_heap(db, type_hint, &mut type_str);
+            pretty_type_hint(db, type_hint, &mut type_str);
 
             // Build tuple with fewer elements: `: type / @(elem1, elem2)`
             let source = format!(": {} / {}({})", type_str, "", elem_strs.join(", "));
@@ -442,7 +442,7 @@ fn apply_arity_mismatch<'db>(
 
             // Build type hint string.
             let mut type_str = String::new();
-            pretty_type_hint_and_heap(db, type_hint, &mut type_str);
+            pretty_type_hint(db, type_hint, &mut type_str);
 
             // Build struct with fewer fields: `: type / {field1: v1, field2: v2}`
             let source = format!(": {} / {}{{{}}}", type_str, "", field_strs.join(", "));
@@ -488,7 +488,7 @@ fn apply_remove_type_hint<'db>(
     let source = match inner_expr {
         Expr::None => format!("{}none", ""),
         Expr::AnonEnum(e) => {
-            // Format: heap { .VariantName payload }
+            // Format: { .VariantName payload }
             let variant = e.variant_name.as_str(db);
             if let Some(payload) = e.payload {
                 let payload_str = pretty_print(db, payload);
@@ -522,18 +522,18 @@ fn apply_wrong_variant<'db>(
     let inner_expr = expr.expr(db);
     
 
-    // Build heap prefix string.
+    // Build type hint prefix string.
     
 
     // Build type hint prefix string.
     let mut type_hint_str = String::new();
     type_hint_str.push_str(": ");
-    pretty_type_hint_and_heap(db, type_hint, &mut type_hint_str);
+    pretty_type_hint(db, type_hint, &mut type_hint_str);
     type_hint_str.push_str(" / ");
 
     match inner_expr {
         Expr::AnonEnum(e) => {
-            // Build source: `: type / heap{ .NonexistentVariant12345 payload }`
+            // Build source: `: type / { .NonexistentVariant12345 payload }`
             let wrong_variant = "NonexistentVariant12345";
             let source = if let Some(payload) = e.payload {
                 let payload_str = pretty_print(db, payload);
@@ -606,7 +606,7 @@ fn apply_duplicate_field<'db>(
 
         // Build type hint string.
         let mut type_str = String::new();
-        pretty_type_hint_and_heap(db, type_hint, &mut type_str);
+        pretty_type_hint(db, type_hint, &mut type_str);
 
         let source = format!(": {} / {}{{{}}}", type_str, "", field_strs.join(", "));
 
@@ -650,7 +650,7 @@ fn apply_wrong_field_name<'db>(
 
         // Build type hint string.
         let mut type_str = String::new();
-        pretty_type_hint_and_heap(db, type_hint, &mut type_str);
+        pretty_type_hint(db, type_hint, &mut type_str);
 
         let source = format!(": {} / {}{{{}}}", type_str, "", field_strs.join(", "));
 
@@ -678,7 +678,7 @@ fn apply_wrong_payload_presence<'db>(
     // Build type hint prefix string.
     let mut type_hint_str = String::new();
     type_hint_str.push_str(": ");
-    pretty_type_hint_and_heap(db, type_hint.clone(), &mut type_hint_str);
+    pretty_type_hint(db, type_hint.clone(), &mut type_hint_str);
     type_hint_str.push_str(" / ");
 
     match (type_hint, inner_expr) {
@@ -729,8 +729,8 @@ fn apply_swap_map_key_value<'db>(
         let val_type = *map_th.value_type;
         let mut key_str = String::new();
         let mut val_str = String::new();
-        pretty_type_hint_and_heap(db, key_type, &mut key_str);
-        pretty_type_hint_and_heap(db, val_type, &mut val_str);
+        pretty_type_hint(db, key_type, &mut key_str);
+        pretty_type_hint(db, val_type, &mut val_str);
         if key_str == val_str {
             return None; // Same types, swap won't cause error.
         }
@@ -747,14 +747,14 @@ fn apply_swap_map_key_value<'db>(
             }
         }).collect();
 
-        // Build outer heap prefix.
+        // Build type prefix.
         
 
         let map_body = format!("{}map {{ {} }}", "", entry_strs.join(", "));
 
         // Build type hint string.
         let mut type_str = String::new();
-        pretty_type_hint_and_heap(db, type_hint, &mut type_str);
+        pretty_type_hint(db, type_hint, &mut type_str);
 
         let source = format!(": {} / {}", type_str, map_body);
 
@@ -771,15 +771,6 @@ fn apply_swap_map_key_value<'db>(
 // ============================================================================
 // Helper functions
 // ============================================================================
-
-/// Pretty-print a type hint.
-fn pretty_type_hint_and_heap<'db>(
-    db: &'db dyn salsa::Database,
-    th: TypeHint<'db>,
-    out: &mut String,
-) {
-    pretty_type_hint(db, th, out);
-}
 
 /// Pretty-print a type hint.
 fn pretty_type_hint<'db>(
@@ -812,7 +803,7 @@ fn pretty_type_hint<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                pretty_type_hint_and_heap(db, field.clone(), out);
+                pretty_type_hint(db, field.clone(), out);
             }
             out.push(')');
         }
@@ -825,7 +816,7 @@ fn pretty_type_hint<'db>(
                 }
                 out.push_str(field.name.as_str(db));
                 out.push_str(": ");
-                pretty_type_hint_and_heap(db, *field.type_hint.clone(), out);
+                pretty_type_hint(db, *field.type_hint.clone(), out);
             }
             out.push('}');
         }
@@ -839,7 +830,7 @@ fn pretty_type_hint<'db>(
                 out.push_str(variant.name.as_str(db));
                 if let Some(payload) = &variant.payload {
                     out.push('(');
-                    pretty_type_hint_and_heap(db, *payload.clone(), out);
+                    pretty_type_hint(db, *payload.clone(), out);
                     out.push(')');
                 }
             }
@@ -848,37 +839,37 @@ fn pretty_type_hint<'db>(
 
         TypeHint::List(l) => {
             out.push('[');
-            pretty_type_hint_and_heap(db, *l.element_type.clone(), out);
+            pretty_type_hint(db, *l.element_type.clone(), out);
             out.push(']');
         }
 
         TypeHint::Map(m) => {
             out.push_str("map<");
-            pretty_type_hint_and_heap(db, *m.key_type.clone(), out);
+            pretty_type_hint(db, *m.key_type.clone(), out);
             out.push_str(", ");
-            pretty_type_hint_and_heap(db, *m.value_type.clone(), out);
+            pretty_type_hint(db, *m.value_type.clone(), out);
             out.push('>');
         }
 
         TypeHint::Set(s) => {
             out.push_str("set<");
-            pretty_type_hint_and_heap(db, *s.element_type.clone(), out);
+            pretty_type_hint(db, *s.element_type.clone(), out);
             out.push('>');
         }
 
         TypeHint::Option(o) => {
             out.push('?');
-            pretty_type_hint_and_heap(db, *o.inner_type.clone(), out);
+            pretty_type_hint(db, *o.inner_type.clone(), out);
         }
 
         TypeHint::Result(r) => {
             out.push('!');
-            pretty_type_hint_and_heap(db, *r.inner_type.clone(), out);
+            pretty_type_hint(db, *r.inner_type.clone(), out);
         }
 
         TypeHint::Tensor(t) => {
             out.push_str("tensor<");
-            pretty_type_hint_and_heap(db, *t.element_type.clone(), out);
+            pretty_type_hint(db, *t.element_type.clone(), out);
             out.push_str(", ");
             out.push_str(&t.rank.S());
             out.push('>');
@@ -899,7 +890,7 @@ fn pretty_type_hint<'db>(
                 }
                 out.push_str(col.name.as_str(db));
                 out.push_str(": ");
-                pretty_type_hint_and_heap(db, *col.type_hint.clone(), out);
+                pretty_type_hint(db, *col.type_hint.clone(), out);
             }
             out.push_str(" |}");
         }

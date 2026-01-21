@@ -795,9 +795,9 @@ fn test_error_equiv_source_mutations_detailed() {
                 // Skip edge cases where `er` keyword + malformed input creates
                 // different parse results. In datafun, `er` accepts any expression
                 // as payload (including bare variable names), while datalit requires
-                // heap-prefixed expressions. When mutations break `error` into `er`,
+                // typed expressions. When mutations break `error` into `er`,
                 // the remaining text parses as a variable in datafun but errors in datalit.
-                if result.source.contains("#er}") || result.source.contains("@er}") {
+                if result.source.contains("er}") {
                     continue;
                 }
 
@@ -899,7 +899,7 @@ fn test_debug_specific_bracket_cases() {
 
     // Check the type hint
     if let Some(_th) = datalit_parsed.type_hint(&db) {
-        eprintln!("Datalit type hint: present (heap always Omitted now)");
+        eprintln!("Datalit type hint: present");
     }
 
     // Parse with datafun

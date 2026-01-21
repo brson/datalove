@@ -4,7 +4,7 @@
 //! and helpers for checking collection elements.
 //!
 //! Organization (parallel to datalit/tycheck/check.rs):
-//! 1. Element checking helper - type and heap compatibility for collection elements
+//! 1. Element checking helper - type compatibility for collection elements
 //! 2. Main check_expr function - entry point for type checking
 //! 3. Collection checking helpers - list, set, map, tensor, tuple, struct, enum
 
@@ -23,7 +23,7 @@ pub use crate::{Type, TypeError};
 /// Check an element's type against expected type.
 ///
 /// This does type coercion checking for collection elements.
-fn check_element_type_and_heap<'db>(
+fn check_element_type<'db>(
     db: &'db dyn crate::Db,
     _elem_expr: ExprFun<'db>,
     elem_ty: Type<'db>,
@@ -518,7 +518,7 @@ pub fn check_tensor_shape_and_elements<'db>(
     );
     for elem in elements {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-        check_element_type_and_heap(db, *elem, elem_ty, &expected_elem)?;
+        check_element_type(db, *elem, elem_ty, &expected_elem)?;
     }
 
     Ok(())
@@ -597,7 +597,7 @@ pub fn check_struct_fields<'db>(
 
         let expected_ty = Type::Datalit(*expected_field.ty.clone());
         let field_value_ty = ctx.synthesize_expr(field.value)?;
-        check_element_type_and_heap(db, field.value, field_value_ty, &expected_ty)?;
+        check_element_type(db, field.value, field_value_ty, &expected_ty)?;
     }
 
     Ok(())

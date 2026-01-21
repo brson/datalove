@@ -95,21 +95,12 @@ pub fn pretty_print_runtime_value<'db>(
         // Build type hint string.
         let mut type_str = String::new();
         type_str.push_str(": ");
-        pretty_type_and_heap(db, ty, &mut type_str);
+        pretty_type(db, ty, &mut type_str);
         type_str.push_str(" / ");
         type_str.push_str(&value_str);
 
         Ok(type_str)
     }
-}
-
-fn pretty_type_and_heap<'db>(
-    db: &'db dyn crate::Db,
-    ty: &Type<'db>,
-    out: &mut String,
-) {
-    // Heap sigils have been removed from the language.
-    pretty_type(db, ty, out);
 }
 
 fn pretty_type<'db>(
@@ -143,7 +134,7 @@ fn pretty_type<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                pretty_type_and_heap(db, field, out);
+                pretty_type(db, field, out);
             }
             out.push(')');
         }
@@ -157,7 +148,7 @@ fn pretty_type<'db>(
                 }
                 out.push_str(field.name.as_str(db));
                 out.push_str(": ");
-                pretty_type_and_heap(db, &field.ty, out);
+                pretty_type(db, &field.ty, out);
             }
             out.push('}');
         }
@@ -172,7 +163,7 @@ fn pretty_type<'db>(
                 out.push_str(variant.name.as_str(db));
                 if let Some(payload) = &variant.payload {
                     out.push('(');
-                    pretty_type_and_heap(db, &*payload.clone(), out);
+                    pretty_type(db, &*payload.clone(), out);
                     out.push(')');
                 }
             }
@@ -181,37 +172,37 @@ fn pretty_type<'db>(
 
         Type::List(l) => {
             out.push('[');
-            pretty_type_and_heap(db, &*l.element_type.clone(), out);
+            pretty_type(db, &*l.element_type.clone(), out);
             out.push(']');
         }
 
         Type::Map(m) => {
             out.push_str("map<");
-            pretty_type_and_heap(db, &*m.key_type.clone(), out);
+            pretty_type(db, &*m.key_type.clone(), out);
             out.push_str(", ");
-            pretty_type_and_heap(db, &*m.value_type.clone(), out);
+            pretty_type(db, &*m.value_type.clone(), out);
             out.push('>');
         }
 
         Type::Set(s) => {
             out.push_str("set<");
-            pretty_type_and_heap(db, &*s.element_type.clone(), out);
+            pretty_type(db, &*s.element_type.clone(), out);
             out.push('>');
         }
 
         Type::Option(o) => {
             out.push('?');
-            pretty_type_and_heap(db, &*o.inner_type.clone(), out);
+            pretty_type(db, &*o.inner_type.clone(), out);
         }
 
         Type::Result(r) => {
             out.push('!');
-            pretty_type_and_heap(db, &*r.inner_type.clone(), out);
+            pretty_type(db, &*r.inner_type.clone(), out);
         }
 
         Type::Tensor(t) => {
             out.push_str("tensor<");
-            pretty_type_and_heap(db, &*t.element_type.clone(), out);
+            pretty_type(db, &*t.element_type.clone(), out);
             out.push_str(", ");
             out.push_str(&t.rank.S());
             out.push('>');
@@ -226,7 +217,7 @@ fn pretty_type<'db>(
                 }
                 out.push_str(col.name.as_str(db));
                 out.push_str(": ");
-                pretty_type_and_heap(db, &col.ty, out);
+                pretty_type(db, &col.ty, out);
             }
             out.push_str(" |}");
         }
@@ -242,22 +233,13 @@ fn pretty_expr_full<'db>(
     // Print type hint if present.
     if let Some(type_hint) = expr.type_hint(db) {
         out.push_str(": ");
-        pretty_type_hint_and_heap(db, type_hint.clone(), out);
+        pretty_type_hint(db, type_hint.clone(), out);
         out.push_str(" / ");
     }
 
     // Print expression.
     let expr_inner = expr.expr(db);
-    pretty_expr_and_heap(db, expr_inner, out, indent);
-}
-
-fn pretty_type_hint_and_heap<'db>(
-    db: &'db dyn crate::Db,
-    th: TypeHint<'db>,
-    out: &mut String,
-) {
-    // Heap sigils have been removed from the language.
-    pretty_type_hint(db, th, out);
+    pretty_expr(db, expr_inner, out, indent);
 }
 
 fn pretty_type_hint<'db>(
@@ -291,7 +273,7 @@ fn pretty_type_hint<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                pretty_type_hint_and_heap(db, field.clone(), out);
+                pretty_type_hint(db, field.clone(), out);
             }
             out.push(')');
         }
@@ -305,7 +287,7 @@ fn pretty_type_hint<'db>(
                 }
                 out.push_str(field.name.as_str(db));
                 out.push_str(": ");
-                pretty_type_hint_and_heap(db, *field.type_hint.clone(), out);
+                pretty_type_hint(db, *field.type_hint.clone(), out);
             }
             out.push('}');
         }
@@ -320,7 +302,7 @@ fn pretty_type_hint<'db>(
                 out.push_str(variant.name.as_str(db));
                 if let Some(payload) = &variant.payload {
                     out.push('(');
-                    pretty_type_hint_and_heap(db, *payload.clone(), out);
+                    pretty_type_hint(db, *payload.clone(), out);
                     out.push(')');
                 }
             }
@@ -329,37 +311,37 @@ fn pretty_type_hint<'db>(
 
         TypeHint::List(l) => {
             out.push('[');
-            pretty_type_hint_and_heap(db, *l.element_type.clone(), out);
+            pretty_type_hint(db, *l.element_type.clone(), out);
             out.push(']');
         }
 
         TypeHint::Map(m) => {
             out.push_str("map<");
-            pretty_type_hint_and_heap(db, *m.key_type.clone(), out);
+            pretty_type_hint(db, *m.key_type.clone(), out);
             out.push_str(", ");
-            pretty_type_hint_and_heap(db, *m.value_type.clone(), out);
+            pretty_type_hint(db, *m.value_type.clone(), out);
             out.push('>');
         }
 
         TypeHint::Set(s) => {
             out.push_str("set<");
-            pretty_type_hint_and_heap(db, *s.element_type.clone(), out);
+            pretty_type_hint(db, *s.element_type.clone(), out);
             out.push('>');
         }
 
         TypeHint::Option(o) => {
             out.push('?');
-            pretty_type_hint_and_heap(db, *o.inner_type.clone(), out);
+            pretty_type_hint(db, *o.inner_type.clone(), out);
         }
 
         TypeHint::Result(r) => {
             out.push('!');
-            pretty_type_hint_and_heap(db, *r.inner_type.clone(), out);
+            pretty_type_hint(db, *r.inner_type.clone(), out);
         }
 
         TypeHint::Tensor(t) => {
             out.push_str("tensor<");
-            pretty_type_hint_and_heap(db, *t.element_type.clone(), out);
+            pretty_type_hint(db, *t.element_type.clone(), out);
             out.push_str(", ");
             out.push_str(&t.rank.S());
             out.push('>');
@@ -374,7 +356,7 @@ fn pretty_type_hint<'db>(
                 }
                 out.push_str(col.name.as_str(db));
                 out.push_str(": ");
-                pretty_type_hint_and_heap(db, *col.type_hint.clone(), out);
+                pretty_type_hint(db, *col.type_hint.clone(), out);
             }
             out.push_str(" |}");
         }
@@ -389,16 +371,6 @@ fn pretty_type_hint<'db>(
             out.push_str(name.as_str(db));
         }
     }
-}
-
-fn pretty_expr_and_heap<'db>(
-    db: &'db dyn crate::Db,
-    eh: &Expr<'db>,
-    out: &mut String,
-    indent: usize,
-) {
-    // Heap sigils have been removed from the language.
-    pretty_expr(db, eh, out, indent);
 }
 
 fn pretty_expr<'db>(

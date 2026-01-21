@@ -171,7 +171,7 @@ fn make_compatible_config() -> AstGenConfig {
 
     AstGenConfig {
         // Type hints work with `: type / expr` syntax.
-        // Omitted heap is allowed because function definitions (which also use `:`)
+        // Type hints work in expression context because function definitions (which also use `:`)
         // are statements, not expressions. In expression context, `:` unambiguously
         // starts a type hint.
         include_type_hints: true,

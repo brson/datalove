@@ -336,33 +336,28 @@ impl ConstructCoverage {
 }
 
 // ============================================================================
-// Tests for TypeHintAndHeap-based type tracking (new features)
+// Tests for type generation
 // ============================================================================
 
-/// Verify that type hints use the @ and # sigils correctly.
+/// Verify that type hints are generated in output.
 #[test]
-fn test_heap_sigils_in_output() {
+fn test_types_in_output() {
     let config = WorldGenConfig::default();
 
-    // Test multiple seeds to find both local and global heap usage.
-    let mut found_local = false;
-    let mut found_global = false;
+    let mut found_types = false;
 
     for seed in 0..100 {
         let wf = gen_worldfile_seeded(seed, config.clone());
 
-        // Heap sigils no longer output, just verify we generate types.
         if wf.contains("u32") || wf.contains("i32") || wf.contains("bool")
             || wf.contains("u64") || wf.contains("string")
         {
-            found_local = true;
-            found_global = true; // Heap distinction no longer visible in output.
+            found_types = true;
             break;
         }
     }
 
-    assert!(found_local, "Should generate types in worldfile");
-    assert!(found_global, "Should generate types in worldfile");
+    assert!(found_types, "Should generate types in worldfile");
 }
 
 /// Verify that generated expressions match their declared types.
@@ -392,7 +387,7 @@ fn test_type_alias_format() {
 
     let wf = gen_worldfile_seeded(42, config);
 
-    // Type aliases should be in format "type Name: type" (no heap sigils).
+    // Type aliases should be in format "type Name: type".
     for line in wf.lines() {
         if line.starts_with("type Type") {
             assert!(
@@ -430,8 +425,8 @@ fn test_function_signature_types() {
                 }
             }
 
-            // Return type (if any) should have heap sigil.
-            if trimmed.ends_with("@") {
+            // Return type (if any) should be complete.
+            if trimmed.ends_with(":") {
                 // This shouldn't happen - types should be complete.
                 panic!("Function signature ends with incomplete type: {}", trimmed);
             }

@@ -6,7 +6,7 @@ use salsa::plumbing::AsId;
 fn type_hint_to_string(db: &dyn salsa::Database, type_hint: &datalove_datalit::ast::TypeHint) -> String {
     use datalove_datalit::ast::TypeHint;
 
-    // Heap is always omitted now, no prefix needed.
+    // Format type for display.
     match type_hint {
         TypeHint::Bool => "bool".to_string(),
         TypeHint::U8 => "u8".to_string(),

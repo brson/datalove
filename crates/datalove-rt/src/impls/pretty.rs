@@ -106,7 +106,6 @@ unsafe fn pretty_u8(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U8);
-        // Heap sigils removed from language.
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -120,7 +119,6 @@ unsafe fn pretty_i8(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I8);
-        // Heap sigils removed from language.
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -134,7 +132,6 @@ unsafe fn pretty_u16(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U16);
-        // Heap sigils removed from language.
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -148,7 +145,6 @@ unsafe fn pretty_i16(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I16);
-        // Heap sigils removed from language.
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -162,7 +158,6 @@ unsafe fn pretty_u32(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U32);
-        // Heap sigils removed from language.
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -176,7 +171,6 @@ unsafe fn pretty_i32(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I32);
-        // Heap sigils removed from language.
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -190,7 +184,6 @@ unsafe fn pretty_u64(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U64);
-        // Heap sigils removed from language.
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -204,7 +197,6 @@ unsafe fn pretty_i64(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I64);
-        // Heap sigils removed from language.
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -218,7 +210,6 @@ unsafe fn pretty_usize(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::Usize);
-        // Heap sigils removed from language.
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -232,7 +223,6 @@ unsafe fn pretty_isize(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::Isize);
-        // Heap sigils removed from language.
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -246,7 +236,6 @@ unsafe fn pretty_f32(
 ) -> Result<(), ()> {
     unsafe {
         let f = &*(value_ref as *const rtdt::F32);
-        // Heap sigils removed from language.
         let s = if f.0.is_nan() {
             "nan".to_string()
         } else if f.0.is_infinite() {
@@ -270,7 +259,6 @@ unsafe fn pretty_f64(
 ) -> Result<(), ()> {
     unsafe {
         let f = &*(value_ref as *const rtdt::F64);
-        // Heap sigils removed from language.
         let s = if f.0.is_nan() {
             "nan".to_string()
         } else if f.0.is_infinite() {
@@ -294,7 +282,6 @@ unsafe fn pretty_int(
 ) -> Result<(), ()> {
     unsafe {
         let int_ptr = value_ref as *const rtdt::Int;
-        // Heap sigils removed from language.
         let s = super::int_math::int_to_string_impl(int_ptr);
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }

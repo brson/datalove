@@ -553,22 +553,20 @@ mod tests {
     }
 
     #[test]
-    fn test_gen_expr_global_heap() {
+    fn test_gen_expr_u32() {
         let db = Database::default();
-        test_gen_expr_global_heap_inner(&db);
+        test_gen_expr_u32_inner(&db);
     }
 
     #[salsa::tracked]
-    fn test_gen_expr_global_heap_inner<'db>(db: &'db dyn salsa::Database) {
+    fn test_gen_expr_u32_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let ctx = GenContext::new();
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
-        // Heap is ignored now, just test U32.
         let ty = TypeHint::U32;
         let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
 
-        // Heap sigils no longer output, just verify it produces valid expression.
         assert!(expr.parse::<u32>().is_ok(), "Should be valid u32: {}", expr);
     }
 

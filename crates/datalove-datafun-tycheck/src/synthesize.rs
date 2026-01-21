@@ -171,7 +171,6 @@ pub fn synthesize_expr<'db>(
             );
 
             // Wrap in datafun type.
-            // Use Heap::Omitted since tuple heap is determined by element heaps.
             let ty = Type::Datalit(datalit_tuple_ty);
             Ok(ty)
         }

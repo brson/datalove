@@ -2,16 +2,15 @@
 //!
 //! Organization (parallel to datalit/tycheck/types.rs):
 //! 1. Re-exports - datalit types
-//! 2. Heap utilities - heap functions
-//! 3. Type predicates - type queries
-//! 4. Type equivalence - comparing types
-//! 5. Type hint conversion - AST to types
-//! 6. Type to string - types to strings for errors
-//! 7. Unit type helper - type constructor
-//! 8. Element compatibility - delegated to datalit
-//! 9. Integer range checking - delegated to datalit
-//! 10. Heap unwrapping - unwrap wrapper types
-//! 11. Expression heap extraction - get heap from expressions
+//! 2. Type predicates - type queries
+//! 3. Type equivalence - comparing types
+//! 4. Type hint conversion - AST to types
+//! 5. Type to string - types to strings for errors
+//! 6. Unit type helper - type constructor
+//! 7. Element compatibility - delegated to datalit
+//! 8. Integer range checking - delegated to datalit
+//! 9. Wrapper unwrapping - unwrap Option/Result types
+//! 10. Type conversion helpers
 
 use datalove_datalit as datalit;
 use datalit::ast::TypeHint;
@@ -606,7 +605,7 @@ pub fn check_hex_fits_wrapped_type<'db>(
 }
 
 // ============================================================================
-// Heap Unwrapping
+// Wrapper Unwrapping
 // ============================================================================
 
 /// Unwrap Option/Result wrappers to get the innermost type.
@@ -630,7 +629,7 @@ pub fn unwrap_wrapper_types<'db>(
 // ============================================================================
 
 /// Convert datafun Type to datalit Type.
-pub fn to_datalit_type_and_heap<'db>(
+pub fn to_datalit_type<'db>(
     _db: &'db dyn crate::Db,
     ty: Type<'db>,
 ) -> Result<crate::Type<'db>, TypeError> {
