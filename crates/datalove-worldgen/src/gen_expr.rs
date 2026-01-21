@@ -27,19 +27,26 @@ fn supports_unary_negation(type_hint: TypeHint<'_>) -> bool {
 /// Generate an expression matching the given type.
 ///
 /// May be a literal, variable reference, function call, or arithmetic expression.
+/// For global heap types, when a variable is used it gets marked as consumed
+/// because ownership is transferred (moved).
 pub fn gen_expr<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     type_hint: TypeHintAndHeap<'db>,
     config: &WorldGenConfig,
-    ctx: &GenContext<'db>,
+    ctx: &mut GenContext<'db>,
 ) -> String {
+    use datalove_datalit::ast::Heap;
+
+    let is_global = type_hint.heap(db) == Heap::Global;
+
     // Check if we can use a variable.
-    let matching_vars = ctx.variables_of_type(db, type_hint);
-    let can_use_var = !matching_vars.is_empty() && rng.gen_bool(0.4);
+    let has_matching_vars = !ctx.variables_of_type(db, type_hint).is_empty();
+    let can_use_var = has_matching_vars && rng.gen_bool(0.4);
 
     // Check if we can call a function.
-    let matching_fns: Vec<_> = ctx.callable_functions()
+    // Clone the matching functions to avoid borrow issues.
+    let matching_fns: Vec<FunctionSig<'db>> = ctx.callable_functions()
         .filter(|f| {
             if let Some(ret_type) = f.return_type {
                 types_match(db, ret_type, type_hint)
@@ -47,6 +54,7 @@ pub fn gen_expr<'db, R: Rng>(
                 false
             }
         })
+        .cloned()
         .collect();
     let can_call_fn = !matching_fns.is_empty()
         && config.check_probability(rng, config.function_call_probability);
@@ -57,11 +65,18 @@ pub fn gen_expr<'db, R: Rng>(
 
     if can_use_var && !can_call_fn && !can_arith {
         // Use a variable.
-        let var = matching_vars[rng.gen_range(0..matching_vars.len())];
-        var.name.clone()
+        let matching_vars = ctx.variables_of_type(db, type_hint);
+        if matching_vars.is_empty() {
+            return gen_literal(db, rng, type_hint, config);
+        }
+        let var_name = matching_vars[rng.gen_range(0..matching_vars.len())].name.clone();
+        if is_global {
+            ctx.consume_variable(&var_name);
+        }
+        var_name
     } else if can_call_fn && !can_use_var && !can_arith {
         // Call a function.
-        let func = matching_fns[rng.gen_range(0..matching_fns.len())];
+        let func = &matching_fns[rng.gen_range(0..matching_fns.len())];
         gen_function_call(db, rng, func, config, ctx)
     } else if can_arith && !can_use_var && !can_call_fn {
         // Generate arithmetic expression.
@@ -75,11 +90,18 @@ pub fn gen_expr<'db, R: Rng>(
 
         match options[rng.gen_range(0..options.len())] {
             0 => {
-                let var = matching_vars[rng.gen_range(0..matching_vars.len())];
-                var.name.clone()
+                let matching_vars = ctx.variables_of_type(db, type_hint);
+                if matching_vars.is_empty() {
+                    return gen_literal(db, rng, type_hint, config);
+                }
+                let var_name = matching_vars[rng.gen_range(0..matching_vars.len())].name.clone();
+                if is_global {
+                    ctx.consume_variable(&var_name);
+                }
+                var_name
             }
             1 => {
-                let func = matching_fns[rng.gen_range(0..matching_fns.len())];
+                let func = &matching_fns[rng.gen_range(0..matching_fns.len())];
                 gen_function_call(db, rng, func, config, ctx)
             }
             2 => gen_arithmetic_expr(db, rng, type_hint, config),
@@ -195,7 +217,7 @@ fn gen_function_call<'db, R: Rng>(
     rng: &mut R,
     func: &FunctionSig<'db>,
     config: &WorldGenConfig,
-    ctx: &GenContext<'db>,
+    ctx: &mut GenContext<'db>,
 ) -> String {
     let args: Vec<String> = func
         .params
@@ -209,6 +231,7 @@ fn gen_function_call<'db, R: Rng>(
 /// Generate an atomic boolean expression (literal or variable only).
 ///
 /// Used as operand for `not` to avoid precedence issues.
+/// Note: bool is a local heap type, so no ownership tracking needed.
 fn gen_bool_atom<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     _rng: &mut R,
@@ -219,7 +242,7 @@ fn gen_bool_atom<'db, R: Rng>(
     let bool_vars = ctx.variables_of_type(db, bool_type);
 
     if !bool_vars.is_empty() && _rng.gen_bool(0.3) {
-        // Variable reference.
+        // Variable reference. Bool is local heap, no consume needed.
         let var = bool_vars[_rng.gen_range(0..bool_vars.len())];
         var.name.clone()
     } else {
@@ -235,7 +258,7 @@ fn gen_simple_bool_expr<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &GenContext<'db>,
+    ctx: &mut GenContext<'db>,
 ) -> String {
     let bool_type = gen_bool_type(db);
     let bool_vars = ctx.variables_of_type(db, bool_type);
@@ -248,9 +271,14 @@ fn gen_simple_bool_expr<'db, R: Rng>(
             if rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() }
         }
         5..=6 if has_bool_var => {
-            // Variable reference.
-            let var = bool_vars[rng.gen_range(0..bool_vars.len())];
-            var.name.clone()
+            // Variable reference. Bool is local heap, no consume needed.
+            let bool_vars = ctx.variables_of_type(db, bool_type);
+            if bool_vars.is_empty() {
+                if rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() }
+            } else {
+                let var = bool_vars[rng.gen_range(0..bool_vars.len())];
+                var.name.clone()
+            }
         }
         7..=9 => {
             // Comparison expression.
@@ -275,7 +303,7 @@ pub fn gen_bool_expr<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &GenContext<'db>,
+    ctx: &mut GenContext<'db>,
 ) -> String {
     let choice = rng.gen_range(0..15);
     match choice {
@@ -322,11 +350,11 @@ mod tests {
     #[salsa::tracked]
     fn test_gen_expr_literal_u32_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
-        let ctx = GenContext::new();
+        let mut ctx = GenContext::new();
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
         let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
-        let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
+        let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
 
         // Should produce a u32 literal with @ prefix.
         assert!(expr.starts_with("@"), "u32 expression should start with @: {}", expr);
@@ -344,11 +372,11 @@ mod tests {
     #[salsa::tracked]
     fn test_gen_expr_literal_bool_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
-        let ctx = GenContext::new();
+        let mut ctx = GenContext::new();
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
         let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::Bool);
-        let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
+        let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
 
         // Should produce @true or @false.
         assert!(
@@ -367,11 +395,11 @@ mod tests {
     #[salsa::tracked]
     fn test_gen_expr_literal_string_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
-        let ctx = GenContext::new();
+        let mut ctx = GenContext::new();
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
         let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::String);
-        let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
+        let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
 
         // Should produce @"..." string.
         assert!(expr.starts_with("@\""), "string should start with @\": {}", expr);
@@ -400,7 +428,7 @@ mod tests {
         let mut used_var = false;
         for seed in 0..100 {
             let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-            let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
+            let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
             if expr == "my_var" {
                 used_var = true;
                 break;
@@ -432,7 +460,7 @@ mod tests {
         });
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
-        let expr = gen_expr(db, &mut rng, ret_ty, &config, &ctx);
+        let expr = gen_expr(db, &mut rng, ret_ty, &config, &mut ctx);
 
         // Should generate function call.
         assert!(
@@ -451,14 +479,14 @@ mod tests {
     #[salsa::tracked]
     fn test_gen_bool_expr_literals_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
-        let ctx = GenContext::new();
+        let mut ctx = GenContext::new();
 
         let mut found_true = false;
         let mut found_false = false;
 
         for seed in 0..100 {
             let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-            let expr = gen_bool_expr(db, &mut rng, &config, &ctx);
+            let expr = gen_bool_expr(db, &mut rng, &config, &mut ctx);
             if expr == "true" {
                 found_true = true;
             }
@@ -480,13 +508,13 @@ mod tests {
     #[salsa::tracked]
     fn test_gen_bool_expr_comparison_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
-        let ctx = GenContext::new();
+        let mut ctx = GenContext::new();
 
         let mut found_comparison = false;
 
         for seed in 0..100 {
             let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-            let expr = gen_bool_expr(db, &mut rng, &config, &ctx);
+            let expr = gen_bool_expr(db, &mut rng, &config, &mut ctx);
             if expr.contains(".<") || expr.contains(".>")
                 || expr.contains("<=") || expr.contains(">=")
                 || expr.contains("==") || expr.contains("!=")
@@ -508,7 +536,7 @@ mod tests {
     #[salsa::tracked]
     fn test_gen_bool_expr_logical_operators_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
-        let ctx = GenContext::new();
+        let mut ctx = GenContext::new();
 
         let mut found_not = false;
         let mut found_and = false;
@@ -517,7 +545,7 @@ mod tests {
 
         for seed in 0..200 {
             let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-            let expr = gen_bool_expr(db, &mut rng, &config, &ctx);
+            let expr = gen_bool_expr(db, &mut rng, &config, &mut ctx);
             if expr.starts_with("not ") {
                 found_not = true;
             }
@@ -547,7 +575,7 @@ mod tests {
     #[salsa::tracked]
     fn test_gen_expr_type_variety_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
-        let ctx = GenContext::new();
+        let mut ctx = GenContext::new();
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
         // Test various primitive types.
@@ -568,7 +596,7 @@ mod tests {
 
         for ty_hint in types {
             let ty = TypeHintAndHeap::new(db, Heap::Local, ty_hint);
-            let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
+            let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
             // Expressions should start with @ for local heap, or (: for typed arithmetic.
             assert!(
                 expr.starts_with("@") || expr.starts_with("(: @"),
@@ -587,11 +615,11 @@ mod tests {
     #[salsa::tracked]
     fn test_gen_expr_global_heap_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
-        let ctx = GenContext::new();
+        let mut ctx = GenContext::new();
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
         let ty = TypeHintAndHeap::new(db, Heap::Global, TypeHint::U32);
-        let expr = gen_expr(db, &mut rng, ty, &config, &ctx);
+        let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
 
         // Should produce #... for global heap.
         assert!(expr.starts_with("#"), "Global heap should use #: {}", expr);
@@ -606,7 +634,7 @@ mod tests {
     #[salsa::tracked]
     fn test_gen_expr_deterministic_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
-        let ctx = GenContext::new();
+        let mut ctx = GenContext::new();
 
         let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
 
@@ -614,8 +642,8 @@ mod tests {
         let mut rng1 = rand::rngs::StdRng::seed_from_u64(42);
         let mut rng2 = rand::rngs::StdRng::seed_from_u64(42);
 
-        let expr1 = gen_expr(db, &mut rng1, ty, &config, &ctx);
-        let expr2 = gen_expr(db, &mut rng2, ty, &config, &ctx);
+        let expr1 = gen_expr(db, &mut rng1, ty, &config, &mut ctx);
+        let expr2 = gen_expr(db, &mut rng2, ty, &config, &mut ctx);
 
         assert_eq!(expr1, expr2, "Same seed should produce same expression");
     }

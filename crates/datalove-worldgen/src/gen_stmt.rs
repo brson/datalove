@@ -62,18 +62,20 @@ pub fn gen_set<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &GenContext<'db>,
+    ctx: &mut GenContext<'db>,
     indent: &str,
 ) -> Option<String> {
-    let mutable_vars = ctx.mutable_variables();
+    let mutable_vars = ctx.mutable_variables(db);
     if mutable_vars.is_empty() {
         return None;
     }
 
-    let var = mutable_vars[rng.gen_range(0..mutable_vars.len())];
-    let value = gen_expr(db, rng, var.type_hint, config, ctx);
+    let var_idx = rng.gen_range(0..mutable_vars.len());
+    let var_name = mutable_vars[var_idx].name.clone();
+    let var_type = mutable_vars[var_idx].type_hint;
+    let value = gen_expr(db, rng, var_type, config, ctx);
 
-    Some(format!("{}set {} = {}", indent, var.name, value))
+    Some(format!("{}set {} = {}", indent, var_name, value))
 }
 
 /// Generate a debuglog statement.
@@ -97,7 +99,7 @@ pub fn gen_ret<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
-    ctx: &GenContext<'db>,
+    ctx: &mut GenContext<'db>,
     indent: &str,
 ) -> String {
     match ctx.return_type {
@@ -125,8 +127,9 @@ pub fn gen_if<'db, R: Rng>(
     let inner_indent = format!("{}  ", indent);
     ctx.control_flow_depth += 1;
 
-    // Save variables before entering then branch.
+    // Save variables and consumed state before entering then branch.
     let saved_variables = ctx.variables.clone();
+    let saved_consumed = ctx.consumed_variables.clone();
 
     let then_stmt_count = rng.gen_range(1..=2);
     for _ in 0..then_stmt_count {
@@ -135,15 +138,17 @@ pub fn gen_if<'db, R: Rng>(
         result.push('\n');
     }
 
-    // Restore variables after then branch.
+    // Restore variables and consumed state after then branch.
     ctx.variables = saved_variables;
+    ctx.consumed_variables = saved_consumed;
 
     // Maybe generate else-body.
     if rng.gen_bool(0.5) {
         result.push_str(&format!("{}else\n", indent));
 
-        // Save variables before entering else branch.
+        // Save variables and consumed state before entering else branch.
         let saved_variables = ctx.variables.clone();
+        let saved_consumed = ctx.consumed_variables.clone();
 
         let else_stmt_count = rng.gen_range(1..=2);
         for _ in 0..else_stmt_count {
@@ -152,8 +157,9 @@ pub fn gen_if<'db, R: Rng>(
             result.push('\n');
         }
 
-        // Restore variables after else branch.
+        // Restore variables and consumed state after else branch.
         ctx.variables = saved_variables;
+        ctx.consumed_variables = saved_consumed;
     }
 
     ctx.control_flow_depth -= 1;
@@ -188,8 +194,9 @@ pub fn gen_loop<'db, R: Rng>(
     ctx.control_flow_depth += 1;
     ctx.loop_depth += 1;
 
-    // Save variables before entering loop body.
+    // Save variables and consumed state before entering loop body.
     let saved_variables = ctx.variables.clone();
+    let saved_consumed = ctx.consumed_variables.clone();
 
     let body_stmt_count = rng.gen_range(1..=3);
     for i in 0..body_stmt_count {
@@ -205,8 +212,9 @@ pub fn gen_loop<'db, R: Rng>(
         }
     }
 
-    // Restore variables after loop body.
+    // Restore variables and consumed state after loop body.
     ctx.variables = saved_variables;
+    ctx.consumed_variables = saved_consumed;
 
     ctx.loop_depth -= 1;
     ctx.control_flow_depth -= 1;

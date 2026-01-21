@@ -1,6 +1,7 @@
 //! Generation context for tracking scope during worldfile generation.
 
-use datalove_datalit::ast::TypeHintAndHeap;
+use std::collections::HashSet;
+use datalove_datalit::ast::{Heap, TypeHintAndHeap};
 use crate::config::WorldGenConfig;
 
 /// A variable in scope.
@@ -79,6 +80,10 @@ pub struct GenContext<'db> {
     /// When set, only functions with index < this value can be called.
     /// Functions are named fn0, fn1, fn2, etc.
     pub max_callable_function_index: Option<usize>,
+
+    /// Variables that have been consumed (moved) and can't be used again.
+    /// This is used for ownership tracking - global heap types get moved on first use.
+    pub consumed_variables: HashSet<String>,
 }
 
 impl<'db> GenContext<'db> {
@@ -93,7 +98,18 @@ impl<'db> GenContext<'db> {
             control_flow_depth: 0,
             current_function_name: None,
             max_callable_function_index: None,
+            consumed_variables: HashSet::new(),
         }
+    }
+
+    /// Mark a variable as consumed (moved). It can't be used again.
+    pub fn consume_variable(&mut self, name: &str) {
+        self.consumed_variables.insert(name.to_string());
+    }
+
+    /// Check if a variable has been consumed.
+    pub fn is_consumed(&self, name: &str) -> bool {
+        self.consumed_variables.contains(name)
     }
 
     /// Get all callable functions (local + imported, with shadowing).
@@ -168,23 +184,45 @@ fn extract_function_index(name: &str) -> Option<usize> {
 }
 
 impl<'db> GenContext<'db> {
-    /// Find variables of a specific type.
+    /// Find variables of a specific type that are not consumed.
+    ///
+    /// For global heap types, consumed variables are filtered out because
+    /// they've already been moved and can't be used again.
     pub fn variables_of_type(
         &self,
         db: &'db dyn salsa::Database,
         type_hint: TypeHintAndHeap<'db>,
     ) -> Vec<&Variable<'db>> {
+        let is_global = type_hint.heap(db) == Heap::Global;
         self.variables
             .iter()
-            .filter(|v| types_match(db, v.type_hint, type_hint))
+            .filter(|v| {
+                if !types_match(db, v.type_hint, type_hint) {
+                    return false;
+                }
+                // Filter out consumed variables for global heap types.
+                if is_global && self.is_consumed(&v.name) {
+                    return false;
+                }
+                true
+            })
             .collect()
     }
 
-    /// Find mutable variables.
-    pub fn mutable_variables(&self) -> Vec<&Variable<'db>> {
+    /// Find mutable variables that are not consumed.
+    pub fn mutable_variables(&self, db: &'db dyn salsa::Database) -> Vec<&Variable<'db>> {
         self.variables
             .iter()
-            .filter(|v| v.is_mutable)
+            .filter(|v| {
+                if !v.is_mutable {
+                    return false;
+                }
+                // Filter out consumed variables for global heap types.
+                if v.type_hint.heap(db) == Heap::Global && self.is_consumed(&v.name) {
+                    return false;
+                }
+                true
+            })
             .collect()
     }
 
@@ -391,7 +429,7 @@ mod tests {
             is_mutable: true,
         });
 
-        let muts = ctx.mutable_variables();
+        let muts = ctx.mutable_variables(db);
         assert_eq!(muts.len(), 2);
         assert!(muts.iter().any(|v| v.name == "mut1"));
         assert!(muts.iter().any(|v| v.name == "mut2"));
