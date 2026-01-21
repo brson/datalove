@@ -1,18 +1,17 @@
 //! Script execution context with persistent bindings.
 
 use rmx::prelude::*;
-use rmx::std::collections::HashMap;
 use std::sync::Arc;
 
-use datalove_datafun_ir::{IrModuleId, FuncId, IrType, IrScriptUnit};
+use datalove_datafun_ir::{IrType, IrScriptUnit};
 use datalove_datafun_compiler::lower;
-use datalove_datafun_compiler::ownership_analysis;
-use datalove_datafun_compiler::ir_ext::IrTypeExt;
+use datalove_datafun_compiler::tracked_script_lower::{
+    AccumulatedLowerBindings, lower_script_fragment_tracked, lower_script_expr_tracked,
+};
 use datalove_datafun_tycheck::{
     type_check_script_units, create_batch_spec,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
 };
-use datalove_datafun_compiler::module_graph::ModuleId;
 use datalove_datafun_interp::{CallDispatcher, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;
 
@@ -75,9 +74,9 @@ impl<'db> CompiledModules<'db> {
             script_ctx,
             env,
             accumulated_unit_specs: Vec::new(),
+            accumulated_lower_bindings: AccumulatedLowerBindings::default(),
             module_specs,
             interp: datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher),
-            func_id_map: self.shared.func_id_map.clone(),
             last_source: None,
             last_batch_spec: None,
         })
@@ -94,9 +93,9 @@ pub struct ScriptCompilationContext<'db> {
     pub script_ctx: lower::ScriptLowerContext,
     pub env: ScriptEnvironment,
     accumulated_unit_specs: Vec<ScriptUnitSpec<'db>>,
+    accumulated_lower_bindings: AccumulatedLowerBindings,
     module_specs: Vec<ModuleSpec<'db>>,
     interp: datalove_datafun_interp::IrInterpreter,
-    func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     last_source: Option<bct::input::Source>,
     last_batch_spec: Option<ScriptBatchSpec<'db>>,
 }
@@ -211,62 +210,40 @@ impl<'db> ScriptCompilationContext<'db> {
             };
         }
 
-        let expr_types = tycheck_result.expr_types(self.db);
-        let call_targets = tycheck_result.call_targets(self.db);
         let stmts = parsed.statements.to_vec();
 
-        // Build map of function name -> resolved param types for type alias support.
-        let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
-        for (name, func_type) in tycheck_result.function_types(self.db) {
-            let param_types: Vec<IrType> = func_type.param_types(self.db)
-                .iter()
-                .map(|ty| IrType::from_tycheck(self.db, ty))
-                .collect();
-            func_param_types.insert(name.text(self.db).S(), param_types);
+        // Call the tracked lowering function.
+        let lower_output = lower_script_fragment_tracked(
+            self.db,
+            tycheck_result,
+            self.module_specs.clone(),
+            self.accumulated_lower_bindings.clone(),
+            stmts,
+            for_aot,
+        );
+
+        // Check for lowering errors.
+        if let Some(error) = lower_output.error(self.db).as_ref() {
+            return ScriptCompilationResult {
+                typecheck: TypecheckResult::Success,
+                lowering: LoweringResult::Error { message: error.clone() },
+                ir_unit: None,
+            };
         }
 
-        let func_analyses = match ownership_analysis::analyze_script_functions(self.db, expr_types, call_targets, &stmts, Some(&func_param_types)) {
-            Ok(analyses) => analyses,
-            Err(errors) => {
-                let error_msgs: Vec<String> = errors.into_iter()
-                    .map(|(func_name, errs)| {
-                        format!("{}: {}", func_name, ownership_analysis::format_analysis_errors(&errs))
-                    })
-                    .collect();
-                return ScriptCompilationResult {
-                    typecheck: TypecheckResult::Success,
-                    lowering: LoweringResult::Error {
-                        message: error_msgs.join("\n"),
-                    },
-                    ir_unit: None,
-                };
-            }
-        };
-
-        let ir_unit = match lower::lower_script_fragment_raw(
-            self.db,
-            expr_types,
-            call_targets,
-            &self.func_id_map,
-            self.script_ctx.clone(),
-            stmts,
-            func_analyses,
-            for_aot,
-            Some(&func_param_types),
-        ) {
-            Ok(unit) => unit,
-            Err(e) => {
-                return ScriptCompilationResult {
-                    typecheck: TypecheckResult::Success,
-                    lowering: LoweringResult::Error { message: format!("{}", e) },
-                    ir_unit: None,
-                };
-            }
-        };
-
+        let ir_unit = lower_output.ir_unit(self.db).clone().expect("ir_unit should be Some when error is None");
         let ir_dump = format!("{}", ir_unit);
 
-        let unit_index = self.script_ctx.current_unit;
+        // Update accumulated state for next unit.
+        let unit_index = self.accumulated_lower_bindings.current_unit;
+        self.accumulated_lower_bindings.add_exports(
+            unit_index,
+            lower_output.new_exports(self.db),
+            lower_output.value_types(self.db),
+            lower_output.slot_types(self.db),
+        );
+
+        // Also update script_ctx for interpreter use (maps exports to execution-time bindings).
         self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.value_types, &ir_unit.slot_types);
         self.script_ctx.current_unit += 1;
 
@@ -323,28 +300,38 @@ impl<'db> ScriptCompilationContext<'db> {
             };
         }
 
-        let ir_unit = match lower::lower_script_expr(
+        // Call the tracked lowering function.
+        let lower_output = lower_script_expr_tracked(
             self.db,
-            tycheck_result.expr_types(self.db),
-            tycheck_result.call_targets(self.db),
-            &self.func_id_map,
-            self.script_ctx.clone(),
+            tycheck_result,
+            self.module_specs.clone(),
+            self.accumulated_lower_bindings.clone(),
             expr,
             for_aot,
-        ) {
-            Ok(unit) => unit,
-            Err(e) => {
-                return ScriptCompilationResult {
-                    typecheck: TypecheckResult::Success,
-                    lowering: LoweringResult::Error { message: format!("{}", e) },
-                    ir_unit: None,
-                };
-            }
-        };
+        );
 
+        // Check for lowering errors.
+        if let Some(error) = lower_output.error(self.db).as_ref() {
+            return ScriptCompilationResult {
+                typecheck: TypecheckResult::Success,
+                lowering: LoweringResult::Error { message: error.clone() },
+                ir_unit: None,
+            };
+        }
+
+        let ir_unit = lower_output.ir_unit(self.db).clone().expect("ir_unit should be Some when error is None");
         let ir_dump = format!("{}", ir_unit);
 
-        let unit_index = self.script_ctx.current_unit;
+        // Update accumulated state for next unit.
+        let unit_index = self.accumulated_lower_bindings.current_unit;
+        self.accumulated_lower_bindings.add_exports(
+            unit_index,
+            lower_output.new_exports(self.db),
+            lower_output.value_types(self.db),
+            lower_output.slot_types(self.db),
+        );
+
+        // Also update script_ctx for interpreter use.
         self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.value_types, &ir_unit.slot_types);
         self.script_ctx.current_unit += 1;
 

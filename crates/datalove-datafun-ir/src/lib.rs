@@ -433,7 +433,7 @@ impl IrType {
 }
 
 /// Metadata about a function definition.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct FuncDef {
     pub id: FuncId,
     pub name: String,
@@ -443,7 +443,7 @@ pub struct FuncDef {
 /// Symbol table for IR resolution.
 ///
 /// Maps function IDs to their definitions and provides name lookup.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SymbolTable {
     /// All function definitions, indexed by FuncId.
     pub functions: Vec<FuncDef>,
@@ -452,6 +452,22 @@ pub struct SymbolTable {
     name_to_func: HashMap<String, FuncId>,
     /// Next FuncId to allocate.
     next_func_id: u32,
+}
+
+// Manual Eq/PartialEq/Hash for SymbolTable that ignores the transient name_to_func field.
+impl PartialEq for SymbolTable {
+    fn eq(&self, other: &Self) -> bool {
+        self.functions == other.functions && self.next_func_id == other.next_func_id
+    }
+}
+
+impl Eq for SymbolTable {}
+
+impl std::hash::Hash for SymbolTable {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.functions.hash(state);
+        self.next_func_id.hash(state);
+    }
 }
 
 impl SymbolTable {
@@ -910,7 +926,7 @@ pub struct IrModule {
 }
 
 /// What a script unit exports to subsequent units.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum ExportBinding {
     /// An SSA value (from let binding).
     Value(ValueId),
@@ -924,7 +940,7 @@ pub enum ExportBinding {
 ///
 /// Script units are executed sequentially and can reference values from
 /// previous units via ExternalValue/ExternalSlot operands.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct IrScriptUnit {
     pub blocks: Vec<IrBlock>,
     pub value_count: u32,

@@ -359,3 +359,40 @@ fn test_per_unit_function_propagation() {
 
     ctx.destroy_all();
 }
+
+/// Test per-unit lowering memoization with cross-unit function calls.
+///
+/// Verifies that ownership analysis and IR lowering work correctly with
+/// accumulated bindings from prior units, and that memoization doesn't
+/// break cross-unit function resolution.
+#[test]
+fn test_per_unit_lowering_memoization() {
+    let db = make_db();
+    let mut pipeline = ModuleCompilationPipeline::new();
+    let compiled = pipeline.compile_fresh(&db);
+    let mut ctx = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+
+    // Unit 1: define a function that returns a list (ownership implications).
+    let r1 = ctx.eval_fragment("fun make_list(n: u32): [u32]\n  ret [n, n]\nend fun");
+    assert!(matches!(r1.typecheck, TypecheckResult::Success),
+        "make_list function failed: {:?}", r1.typecheck);
+
+    // Unit 2: call the function and store result.
+    let r2 = ctx.eval_fragment("let items = make_list(42)");
+    assert!(matches!(r2.typecheck, TypecheckResult::Success),
+        "items failed: {:?}", r2.typecheck);
+
+    // Unit 3: define another function that uses the first.
+    let r3 = ctx.eval_fragment("fun make_double(n: u32): [u32]\n  ret make_list(n)\nend fun");
+    assert!(matches!(r3.typecheck, TypecheckResult::Success),
+        "make_double failed: {:?}", r3.typecheck);
+
+    // Verify values.
+    let ri = ctx.eval_expr("items");
+    assert_eq!(ri.output, "[42, 42]");
+
+    let rd = ctx.eval_expr("make_double(10)");
+    assert_eq!(rd.output, "[10, 10]");
+
+    ctx.destroy_all();
+}

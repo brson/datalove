@@ -12,6 +12,9 @@ pub mod lower;
 // Salsa-tracked IR lowering functions.
 pub mod tracked_lower;
 
+// Salsa-tracked script unit lowering functions.
+pub mod tracked_script_lower;
+
 // Ownership and liveness analysis.
 pub mod ownership_analysis;
 
