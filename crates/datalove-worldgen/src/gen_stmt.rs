@@ -254,7 +254,10 @@ fn gen_simple_statement<'db, R: Rng>(
     }
 }
 
-/// Generate a statement suitable for loop body (may include break/continue).
+/// Generate a statement suitable for loop body.
+///
+/// Does NOT generate `continue` statements because they would skip the
+/// final `break` that `gen_loop` adds to prevent infinite loops.
 fn gen_loop_body_statement<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
@@ -263,15 +266,15 @@ fn gen_loop_body_statement<'db, R: Rng>(
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
-    let choice = rng.gen_range(0..15);
+    let choice = rng.gen_range(0..14);
     match choice {
         0..=4 => gen_let(db, rng, config, ctx, var_counter, indent),
         5..=8 => gen_var(db, rng, config, ctx, var_counter, indent),
         9..=11 => gen_set(db, rng, config, ctx, indent)
             .unwrap_or_else(|| gen_let(db, rng, config, ctx, var_counter, indent)),
         12 => format!("{}break", indent),
-        13 => format!("{}continue", indent),
-        14 if !ctx.at_max_depth(config) => gen_if(db, rng, config, ctx, var_counter, indent),
+        // Removed: continue - would make final break unreachable.
+        13 if !ctx.at_max_depth(config) => gen_if(db, rng, config, ctx, var_counter, indent),
         _ => gen_let(db, rng, config, ctx, var_counter, indent),
     }
 }
