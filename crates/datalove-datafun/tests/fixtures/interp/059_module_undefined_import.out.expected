@@ -7,8 +7,7 @@ Analysis(
                 status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: "fn double(p0):\nblock0:\n    v0 = add p0, p0\n    drop p0\n    return v0\n",
+                status: "Skipped",
             ),
             output: "",
         ),

@@ -427,3 +427,16 @@ pub fn lower_module_graph_with_mode<'db>(
         ParallelMode::Parallel => lower_module_graph_parallel(db, parsed_graph, typecheck_result, ownership_analysis),
     }
 }
+
+/// Create an empty lowering result when skipping due to earlier errors.
+///
+/// This is a tracked function because `ModuleGraphLoweringResult` is a tracked struct
+/// that can only be created within tracked functions.
+#[salsa::tracked]
+pub fn empty_lowering_result<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> ModuleGraphLoweringResult<'db> {
+    let func_id_map = compute_func_id_map(db, parsed_graph);
+    ModuleGraphLoweringResult::new(db, BTreeMap::new(), func_id_map, false)
+}

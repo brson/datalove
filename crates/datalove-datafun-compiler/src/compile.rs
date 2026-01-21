@@ -18,7 +18,7 @@ use datalove_datafun_tycheck::{
 
 use crate::module_graph::parse_module_graph_with_mode;
 use crate::tracked_ownership_analysis::{analyze_module_graph_with_mode, ModuleGraphAnalysis};
-use crate::tracked_lower::{lower_module_graph_with_mode, ModuleGraphLoweringResult};
+use crate::tracked_lower::{empty_lowering_result, lower_module_graph_with_mode, ModuleGraphLoweringResult};
 
 /// Input for module compilation - the output of package resolution.
 pub struct ModuleCompilationInput {
@@ -82,7 +82,15 @@ pub fn compile_modules<'db>(
     );
     let typecheck_result = typecheck_module_graph_with_mode(db, parsed_graph, mode);
     let ownership_analysis = analyze_module_graph_with_mode(db, parsed_graph, typecheck_result, mode);
-    let lowering_result = lower_module_graph_with_mode(db, parsed_graph, typecheck_result, ownership_analysis, mode);
+
+    // Skip lowering if any analysis failed.
+    let has_errors = has_analysis_errors(db.as_salsa_db(), &typecheck_result, &ownership_analysis);
+
+    let lowering_result = if has_errors {
+        empty_lowering_result(db.as_salsa_db(), parsed_graph)
+    } else {
+        lower_module_graph_with_mode(db, parsed_graph, typecheck_result, ownership_analysis, mode)
+    };
 
     collect_results(db, input.graph, parsed_graph, typecheck_result, ownership_analysis, lowering_result)
 }
@@ -193,6 +201,16 @@ pub enum LoweringResult {
 // ============================================================================
 // Helper functions
 // ============================================================================
+
+/// Check if any module has typecheck or ownership errors.
+fn has_analysis_errors(
+    db: &dyn salsa::Database,
+    typecheck_result: &ModuleGraphTypecheckResult,
+    ownership_analysis: &ModuleGraphAnalysis,
+) -> bool {
+    typecheck_result.module_errors(db).values().any(|e| !e.is_empty())
+        || !ownership_analysis.success(db)
+}
 
 /// Format lowering result for display.
 ///
