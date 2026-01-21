@@ -45,6 +45,8 @@ enum Command {
     Docs(DocsCommand),
     /// Execute a worldfile containing modules and a script section.
     ScriptWorld(ScriptWorldCommand),
+    /// Generate a random worldfile.
+    Worldgen(WorldgenCommand),
 }
 
 #[derive(clap::Args)]
@@ -133,6 +135,12 @@ struct ScriptWorldCommand {
     no_sys: bool,
 }
 
+#[derive(clap::Args)]
+struct WorldgenCommand {
+    /// Seed for random generation. If not provided, a random seed is used.
+    seed: Option<u64>,
+}
+
 impl Cli {
     fn run(&self) -> AnyResult<()> {
         match &self.cmd {
@@ -146,6 +154,7 @@ impl Cli {
             Command::TypecheckStd(cmd) => cmd.run(&self.args),
             Command::Docs(cmd) => cmd.run(&self.args),
             Command::ScriptWorld(cmd) => cmd.run(&self.args),
+            Command::Worldgen(cmd) => cmd.run(&self.args),
         }
     }
 }
@@ -853,5 +862,24 @@ impl DocsCommand {
         }
         // Fall back to filename without extension.
         filename.trim_end_matches(".md").S()
+    }
+}
+
+impl WorldgenCommand {
+    fn run(&self, _args: &Args) -> AnyResult<()> {
+        use rand::Rng;
+        use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
+
+        let seed = self.seed.unwrap_or_else(|| {
+            let seed: u64 = rand::thread_rng().r#gen();
+            eprintln!("seed: {}", seed);
+            seed
+        });
+
+        let config = WorldGenConfig::default();
+        let worldfile = gen_worldfile_seeded(seed, config);
+        println!("{}", worldfile);
+
+        Ok(())
     }
 }
