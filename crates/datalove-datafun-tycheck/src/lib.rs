@@ -726,6 +726,10 @@ pub use api::{
     AllModuleExports,
     build_all_function_ast_maps,
     AllModuleFunctionAsts,
+    // Per-unit memoization types.
+    AccumulatedBindings,
+    ScriptUnitTypecheckOutput,
+    typecheck_script_unit,
 };
 
 // Re-export context types.

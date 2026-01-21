@@ -286,3 +286,76 @@ end fun
     ctx1.destroy_all();
     ctx2.destroy_all();
 }
+
+/// Verify per-unit memoization: prior units are cached when adding new units.
+///
+/// This test verifies the behavioral correctness of the per-unit memoization
+/// implementation. While we can't directly observe cache hits, we verify that:
+/// 1. Each unit typechecks successfully
+/// 2. Bindings from prior units are available in subsequent units
+/// 3. Values are computed correctly across unit boundaries
+#[test]
+fn test_per_unit_memoization_behavior() {
+    let db = make_db();
+    let mut pipeline = ModuleCompilationPipeline::new();
+    let compiled = pipeline.compile_fresh(&db);
+    let mut ctx = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+
+    // Unit 1: define x.
+    let r1 = ctx.eval_fragment("let x: u32 = 10");
+    assert!(matches!(r1.typecheck, TypecheckResult::Success),
+        "unit 1 failed: {:?}", r1.typecheck);
+
+    // Unit 2: define y using x (assignment, not arithmetic).
+    let r2 = ctx.eval_fragment("let y: u32 = x");
+    assert!(matches!(r2.typecheck, TypecheckResult::Success),
+        "unit 2 failed: {:?}", r2.typecheck);
+
+    // Unit 3: define z using y.
+    let r3 = ctx.eval_fragment("let z: u32 = y");
+    assert!(matches!(r3.typecheck, TypecheckResult::Success),
+        "unit 3 failed: {:?}", r3.typecheck);
+
+    // Verify values propagate correctly.
+    let rx = ctx.eval_expr("x");
+    assert_eq!(rx.output, "10");
+    let ry = ctx.eval_expr("y");
+    assert_eq!(ry.output, "10");
+    let rz = ctx.eval_expr("z");
+    assert_eq!(rz.output, "10");
+
+    ctx.destroy_all();
+}
+
+/// Test that functions defined in earlier units are available in later units.
+#[test]
+fn test_per_unit_function_propagation() {
+    let db = make_db();
+    let mut pipeline = ModuleCompilationPipeline::new();
+    let compiled = pipeline.compile_fresh(&db);
+    let mut ctx = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+
+    // Unit 1: define an identity function.
+    let r1 = ctx.eval_fragment("fun id(n: u32): u32\n  ret n\nend fun");
+    assert!(matches!(r1.typecheck, TypecheckResult::Success),
+        "function def failed: {:?}", r1.typecheck);
+
+    // Unit 2: use the function.
+    let r2 = ctx.eval_fragment("let a = id(42)");
+    assert!(matches!(r2.typecheck, TypecheckResult::Success),
+        "function use failed: {:?}", r2.typecheck);
+
+    // Unit 3: define another function that calls the first.
+    let r3 = ctx.eval_fragment("fun id2(n: u32): u32\n  ret id(n)\nend fun");
+    assert!(matches!(r3.typecheck, TypecheckResult::Success),
+        "nested function def failed: {:?}", r3.typecheck);
+
+    // Verify values.
+    let ra = ctx.eval_expr("a");
+    assert_eq!(ra.output, "42");
+
+    let ri2 = ctx.eval_expr("id2(99)");
+    assert_eq!(ri2.output, "99");
+
+    ctx.destroy_all();
+}

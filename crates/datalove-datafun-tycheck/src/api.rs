@@ -28,10 +28,7 @@ pub use crate::{
     ScriptUnitKind,
     ScriptUnitSpec,
     ScriptBatchSpec,
-    ScriptUnitInput,
-    ModuleInfo,
     ModuleSpec,
-    ScriptUnitBatch,
     UnitTypecheckResultTracked,
     ScriptUnitsTypecheckResultTracked,
     ParsedModuleGraph,
@@ -40,6 +37,33 @@ pub use crate::{
     ModuleGraphTypecheckResult,
     SingleModuleTypecheckResult,
 };
+
+/// Accumulated bindings passed to subsequent script units.
+///
+/// Plain data struct (not tracked) - compared by Salsa via Eq/Hash.
+/// Contains bindings from all prior units in the batch.
+#[derive(Clone, PartialEq, Eq, Hash, Default)]
+#[derive(salsa::Update)]
+pub struct AccumulatedBindings<'db> {
+    pub vars: Vec<(InternedText<'db>, Type<'db>)>,
+    pub fns: Vec<(InternedText<'db>, TypeFunction<'db>)>,
+    pub fn_asts: Vec<(InternedText<'db>, StmtFun<'db>, Option<ModuleId>)>,
+}
+
+/// Output from typecheck_script_unit.
+///
+/// Includes the typecheck result AND new bindings defined in this unit
+/// for accumulation by the caller.
+#[salsa::tracked]
+pub struct ScriptUnitTypecheckOutput<'db> {
+    pub result: UnitTypecheckResultTracked<'db>,
+    #[returns(ref)]
+    pub new_vars: Vec<(InternedText<'db>, Type<'db>)>,
+    #[returns(ref)]
+    pub new_fns: Vec<(InternedText<'db>, TypeFunction<'db>)>,
+    #[returns(ref)]
+    pub new_fn_asts: Vec<(InternedText<'db>, StmtFun<'db>, Option<ModuleId>)>,
+}
 
 /// Create a ScriptBatchSpec inside a tracked function.
 ///
@@ -56,151 +80,160 @@ pub fn create_batch_spec<'db>(
     ScriptBatchSpec::new(db, unit_specs, module_specs)
 }
 
+/// Typecheck a single script unit with accumulated context from prior units.
+///
+/// Memoized: if unit_spec, module_specs, and accumulated all match a previous call,
+/// returns the cached result. This enables per-unit caching when adding new units
+/// to a batch - prior units are cache hits.
+#[salsa::tracked]
+pub fn typecheck_script_unit<'db>(
+    db: &'db dyn crate::Db,
+    unit_spec: ScriptUnitSpec<'db>,
+    module_specs: Vec<ModuleSpec<'db>>,
+    accumulated: AccumulatedBindings<'db>,
+) -> ScriptUnitTypecheckOutput<'db> {
+    // Build module function info for import resolution.
+    let (module_functions, path_to_module_id) = build_script_module_functions(db, &module_specs);
+
+    let spans = unit_spec.spans.clone();
+    let mut ctx = TypeContext::new(db, spans);
+
+    // Script units have Result<()> return type for try operators.
+    let unit_tuple_ty = datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: Vec::new() });
+    let result_unit_ty = datalit::tycheck::Type::Result(
+        datalit::tycheck::TypeResult { inner_type: Box::new(unit_tuple_ty) }
+    );
+    ctx.expected_return_type = Some(Type::Datalit(result_unit_ty));
+
+    // Seed with accumulated bindings from prior units.
+    for (name, ty) in &accumulated.vars {
+        ctx.add_variable(*name, ty.clone());
+    }
+    for (name, func_ty) in &accumulated.fns {
+        ctx.add_function(*name, *func_ty);
+    }
+    for (name, func_ast, module_id) in &accumulated.fn_asts {
+        ctx.function_asts.insert(*name, (*func_ast, *module_id));
+    }
+
+    // Track new bindings defined in this unit.
+    let mut new_vars = Vec::new();
+    let mut new_fns = Vec::new();
+    let mut new_fn_asts = Vec::new();
+
+    // Typecheck this unit based on kind.
+    match &unit_spec.kind {
+        ScriptUnitKind::Fragment(script) => {
+            // Pass 0: collect type aliases.
+            collect_type_aliases(&mut ctx, &script.statements);
+
+            // Pass 1: collect function signatures from this unit.
+            for statement in &script.statements {
+                if let Statement::Fun(stmt) = statement {
+                    collect_function_signature(&mut ctx, stmt, None);
+                }
+            }
+
+            // Resolve imports using shared helper.
+            let (resolved_imports, import_errors) = resolve_script_imports(
+                db, script, &module_functions, &path_to_module_id
+            );
+
+            // Add resolved imports to context and track as new bindings.
+            for (item_name, func_ty, func_ast, source_module_id) in resolved_imports {
+                ctx.add_function(item_name, func_ty);
+                ctx.function_asts.insert(item_name, (func_ast, source_module_id));
+                new_fns.push((item_name, func_ty));
+                new_fn_asts.push((item_name, func_ast, source_module_id));
+            }
+
+            // Add import errors to context.
+            for error in import_errors {
+                ctx.add_error(error);
+            }
+
+            // Second pass: typecheck all statements.
+            for statement in &script.statements {
+                check_statement(&mut ctx, &statement);
+            }
+
+            // Extract new bindings for subsequent units.
+            for stmt in &script.statements {
+                match stmt {
+                    Statement::Let(let_stmt) => {
+                        let name = let_stmt.name;
+                        if let Some(ty) = ctx.variables.get(&name) {
+                            new_vars.push((name, ty.clone()));
+                        }
+                    }
+                    Statement::Var(var_stmt) => {
+                        let name = var_stmt.name;
+                        if let Some(ty) = ctx.variables.get(&name) {
+                            new_vars.push((name, ty.clone()));
+                        }
+                    }
+                    Statement::Fun(fun_stmt) => {
+                        let name = fun_stmt.name(db);
+                        if let Some(func_ty) = ctx.functions.get(&name) {
+                            new_fns.push((name, *func_ty));
+                            new_fn_asts.push((name, *fun_stmt, None));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        ScriptUnitKind::Expr(expr) => {
+            // Expression unit - just typecheck the expression.
+            if let Err(e) = ctx.synthesize_expr(*expr) {
+                ctx.add_error(e);
+            }
+        }
+    }
+
+    // Emit pending diagnostics with local spans.
+    ctx.emit_pending_diagnostics();
+
+    // Build result for this unit.
+    let errors = ctx.errors.into_iter()
+        .map(|e| TypeErrorEntry::new(db, e))
+        .collect();
+    let function_types: Vec<_> = ctx.functions.into_iter().collect();
+    let result = UnitTypecheckResultTracked::new(db, errors, ctx.expr_types, ctx.call_targets, function_types);
+
+    ScriptUnitTypecheckOutput::new(db, result, new_vars, new_fns, new_fn_asts)
+}
+
 /// Typecheck multiple script units together, with bindings shared across units.
 ///
 /// Units are processed in order. Bindings from earlier units (let/var/fn)
-/// are visible in subsequent units.
+/// are visible in subsequent units. Delegates to `typecheck_script_unit` for
+/// per-unit memoization - prior units are cached when new units are added.
 #[salsa::tracked]
 pub fn type_check_script_units<'db>(
     db: &'db dyn crate::Db,
     spec: ScriptBatchSpec<'db>,
 ) -> ScriptUnitsTypecheckResultTracked<'db> {
-    // Build tracked types from specs (already pre-parsed).
-    let mut units = Vec::new();
-    for unit_spec in spec.units(db) {
-        let source = unit_spec.source;
-        let kind = unit_spec.kind.C();
-        units.push(ScriptUnitInput::new(db, source, kind));
-    }
+    let module_specs = spec.modules(db).clone();
 
-    let mut modules = Vec::new();
-    for module_spec in spec.modules(db) {
-        modules.push(ModuleInfo::new(
-            db,
-            module_spec.path.C(),
-            module_spec.parsed.C(),
-            module_spec.source,
-            module_spec.module_id,
-        ));
-    }
-
-    let _batch = ScriptUnitBatch::new(db, units.C(), modules.C());
-
-    // Build module function info for import resolution using shared helper.
-    let (module_functions, path_to_module_id) = build_script_module_functions(db, spec.modules(db));
-
-    let mut accumulated_vars: HashMap<InternedText<'db>, Type<'db>> = HashMap::new();
-    let mut accumulated_fns: HashMap<InternedText<'db>, TypeFunction<'db>> = HashMap::new();
-    let mut accumulated_fn_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<ModuleId>)> = HashMap::new();
+    let mut accumulated = AccumulatedBindings::default();
     let mut results = Vec::new();
 
-    for (unit, unit_spec) in units.iter().zip(spec.units(db).iter()) {
-        let spans = unit_spec.spans.C();
-        let mut ctx = TypeContext::new(db, spans);
-
-        // Script units have Result<()> return type for try operators.
-        // This allows `!` (try-result) but not `?` (try-option).
-        let unit_tuple_ty = datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: Vec::new() });
-        let result_unit_ty = datalit::tycheck::Type::Result(
-            datalit::tycheck::TypeResult { inner_type: Box::new(unit_tuple_ty) }
+    for unit_spec in spec.units(db) {
+        // Call per-unit tracked function - memoized on (unit_spec, module_specs, accumulated).
+        let output = typecheck_script_unit(
+            db,
+            unit_spec.clone(),
+            module_specs.clone(),
+            accumulated.clone(),
         );
-        ctx.expected_return_type = Some(
-            Type::Datalit(result_unit_ty,
-        ));
 
-        // Seed with accumulated bindings from prior units.
-        for (name, ty) in &accumulated_vars {
-            ctx.add_variable(*name, ty.clone());
-        }
-        for (name, func_ty) in &accumulated_fns {
-            ctx.add_function(*name, *func_ty);
-        }
-        for (name, (func_ast, module_id)) in &accumulated_fn_asts {
-            ctx.function_asts.insert(*name, (*func_ast, *module_id));
-        }
+        results.push(output.result(db));
 
-        // Typecheck this unit based on kind.
-        match unit.kind(db) {
-            ScriptUnitKind::Fragment(script) => {
-                // Pass 0: collect type aliases.
-                collect_type_aliases(&mut ctx, &script.statements);
-
-                // Pass 1: collect function signatures from this unit.
-                for statement in &script.statements {
-                    if let Statement::Fun(stmt) = statement {
-                        collect_function_signature(&mut ctx, stmt, None);
-                    }
-                }
-
-                // Resolve imports using shared helper.
-                let (resolved_imports, import_errors) = resolve_script_imports(
-                    db, script, &module_functions, &path_to_module_id
-                );
-
-                // Add resolved imports to context and accumulated state.
-                for (item_name, func_ty, func_ast, source_module_id) in resolved_imports {
-                    ctx.add_function(item_name, func_ty);
-                    ctx.function_asts.insert(item_name, (func_ast, source_module_id));
-                    // Also add to accumulated so subsequent units can use it.
-                    accumulated_fns.insert(item_name, func_ty);
-                    accumulated_fn_asts.insert(item_name, (func_ast, source_module_id));
-                }
-
-                // Add import errors to context.
-                for error in import_errors {
-                    ctx.add_error(error);
-                }
-
-                // Second pass: typecheck all statements.
-                for statement in &script.statements {
-                    check_statement(&mut ctx, &statement);
-                }
-
-                // Extract new bindings for subsequent units.
-                for stmt in &script.statements {
-                    match stmt {
-                        Statement::Let(let_stmt) => {
-                            let name = let_stmt.name;
-                            if let Some(ty) = ctx.variables.get(&name) {
-                                accumulated_vars.insert(name, ty.clone());
-                            }
-                        }
-                        Statement::Var(var_stmt) => {
-                            let name = var_stmt.name;
-                            if let Some(ty) = ctx.variables.get(&name) {
-                                accumulated_vars.insert(name, ty.clone());
-                            }
-                        }
-                        Statement::Fun(fun_stmt) => {
-                            let name = fun_stmt.name(db);
-                            if let Some(func_ty) = ctx.functions.get(&name) {
-                                accumulated_fns.insert(name, *func_ty);
-                                accumulated_fn_asts.insert(name, (*fun_stmt, None));
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            ScriptUnitKind::Expr(expr) => {
-                // Expression unit - just typecheck the expression.
-                if let Err(e) = ctx.synthesize_expr(*expr) {
-                    ctx.add_error(e);
-                }
-            }
-        }
-
-        // Emit pending diagnostics with local spans.
-        ctx.emit_pending_diagnostics();
-
-        // Build result for this unit.
-        let errors = ctx.errors.into_iter()
-            .map(|e| TypeErrorEntry::new(db, e))
-            .collect();
-        // Extract function types for lowering (needed when type aliases are used in params).
-        let function_types: Vec<_> = ctx.functions.into_iter().collect();
-        let result = UnitTypecheckResultTracked::new(db, errors, ctx.expr_types, ctx.call_targets, function_types);
-        results.push(result);
+        // Merge new bindings for next unit.
+        accumulated.vars.extend(output.new_vars(db).iter().cloned());
+        accumulated.fns.extend(output.new_fns(db).iter().cloned());
+        accumulated.fn_asts.extend(output.new_fn_asts(db).iter().cloned());
     }
 
     ScriptUnitsTypecheckResultTracked::new(db, results)
