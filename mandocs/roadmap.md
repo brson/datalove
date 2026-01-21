@@ -10,7 +10,7 @@
 - [x] tensors and tables
 - table column projections
 - closures
-- clone ops
+- clone and coerce (@)
 - [x] logic ops
 - type aliases
 - generic functions for built-in generic types
@@ -41,6 +41,7 @@
 
 ## On deck
 
+- clone and coerce
 - updates feed
 - roadmap status page
 - clean up benchmarks
@@ -53,7 +54,6 @@
 - std.string - waiting for rtcalls
 - assert statements - needed for std_tests?
 - fully reactive scripts
-- clone and coerce
 - widening coercions
 - match
 - generics
