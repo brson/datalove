@@ -237,6 +237,47 @@ impl<'db> Default for GenContext<'db> {
     }
 }
 
+/// Check if a type is linear (has move semantics).
+///
+/// Copy types: bool, u8-u64, i8-i64, usize, isize, f32, f64
+/// Linear types: int, string, list, map, set, tensor, table, data, error, etc.
+pub fn is_linear_type(type_hint: &TypeHint<'_>) -> bool {
+    match type_hint {
+        // Copy types.
+        TypeHint::Bool
+        | TypeHint::U8
+        | TypeHint::U16
+        | TypeHint::U32
+        | TypeHint::U64
+        | TypeHint::I8
+        | TypeHint::I16
+        | TypeHint::I32
+        | TypeHint::I64
+        | TypeHint::Usize
+        | TypeHint::Isize
+        | TypeHint::F32
+        | TypeHint::F64 => false,
+
+        // Linear types.
+        TypeHint::Int
+        | TypeHint::String
+        | TypeHint::Data
+        | TypeHint::Error
+        | TypeHint::List(_)
+        | TypeHint::Map(_)
+        | TypeHint::Set(_)
+        | TypeHint::Tensor(_)
+        | TypeHint::Table(_)
+        | TypeHint::Option(_)
+        | TypeHint::Result(_)
+        | TypeHint::AnonTuple(_)
+        | TypeHint::AnonStruct(_)
+        | TypeHint::AnonEnum(_)
+        | TypeHint::Alias(_)
+        | TypeHint::ParseError(_) => true,
+    }
+}
+
 /// Check if two TypeHint values match (same type structure).
 pub fn types_match<'db>(
     db: &'db dyn salsa::Database,

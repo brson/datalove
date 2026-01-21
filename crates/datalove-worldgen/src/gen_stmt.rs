@@ -2,7 +2,7 @@
 
 use rand::Rng;
 use crate::config::WorldGenConfig;
-use crate::context::{GenContext, Variable};
+use crate::context::{GenContext, Variable, is_linear_type};
 use crate::gen_type::gen_type_hint;
 use crate::gen_expr::{gen_expr, gen_bool_expr};
 use crate::pretty::pretty_type_hint;
@@ -197,6 +197,17 @@ pub fn gen_loop<'db, R: Rng>(
     // Save variables and consumed state before entering loop body.
     let saved_variables = ctx.variables.clone();
     let saved_consumed = ctx.consumed_variables.clone();
+
+    // Mark all outer-scoped linear variables as consumed to prevent MoveInLoop errors.
+    // Linear types cannot be moved inside a loop since the loop could iterate multiple times.
+    let linear_vars: Vec<String> = ctx.variables
+        .iter()
+        .filter(|v| is_linear_type(&v.type_hint))
+        .map(|v| v.name.clone())
+        .collect();
+    for name in linear_vars {
+        ctx.consume_variable(&name);
+    }
 
     let body_stmt_count = rng.gen_range(1..=3);
     for i in 0..body_stmt_count {
