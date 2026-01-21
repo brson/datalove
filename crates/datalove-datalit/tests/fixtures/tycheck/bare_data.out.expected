@@ -1,22 +1,16 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Data": {
-          "value": {
-            "expr": {
-              "expr": {
-                "String": {
-                  "value": "\"some value\""
-                }
-              },
-              "heap": "Omitted"
-            },
-            "type_hint": null
-          }
+      "Data": {
+        "value": {
+          "expr": {
+            "String": {
+              "value": "\"some value\""
+            }
+          },
+          "type_hint": null
         }
-      },
-      "heap": "Omitted"
+      }
     },
     "type_hint": null
   },

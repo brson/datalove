@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Hex": {
-          "value": "-0x1"
-        }
-      },
-      "heap": "Omitted"
+      "Hex": {
+        "value": "-0x1"
+      }
     },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "I32"
-    }
+    "type_hint": "I32"
   },
   "diagnostics": [],
   "errors": [

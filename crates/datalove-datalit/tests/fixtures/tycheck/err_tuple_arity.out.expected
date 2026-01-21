@@ -1,62 +1,41 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonTuple": {
-          "elements": [
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "1"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+      "AnonTuple": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "2"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "2"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "3"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
-            }
-          ]
-        }
-      },
-      "heap": "Omitted"
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "3"
+              }
+            },
+            "type_hint": null
+          }
+        ]
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "AnonTuple": {
-          "fields": [
-            {
-              "heap": "Omitted",
-              "type_hint": "U32"
-            },
-            {
-              "heap": "Omitted",
-              "type_hint": "U32"
-            }
-          ]
-        }
+      "AnonTuple": {
+        "fields": [
+          "U32",
+          "U32"
+        ]
       }
     }
   },

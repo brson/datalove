@@ -1,91 +1,67 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Table": {
-          "header": [
-            "name",
-            "age"
-          ],
-          "rows": [
-            {
-              "elements": [
-                {
-                  "expr": {
-                    "expr": {
-                      "String": {
-                        "value": "\"Alice\""
-                      }
-                    },
-                    "heap": "Omitted"
-                  },
-                  "type_hint": null
+      "Table": {
+        "header": [
+          "name",
+          "age"
+        ],
+        "rows": [
+          {
+            "elements": [
+              {
+                "expr": {
+                  "String": {
+                    "value": "\"Alice\""
+                  }
                 },
-                {
-                  "expr": {
-                    "expr": {
-                      "Int": {
-                        "value": "25"
-                      }
-                    },
-                    "heap": "Omitted"
-                  },
-                  "type_hint": null
-                }
-              ]
-            },
-            {
-              "elements": [
-                {
-                  "expr": {
-                    "expr": {
-                      "String": {
-                        "value": "\"Bob\""
-                      }
-                    },
-                    "heap": "Omitted"
-                  },
-                  "type_hint": null
+                "type_hint": null
+              },
+              {
+                "expr": {
+                  "Int": {
+                    "value": "25"
+                  }
                 },
-                {
-                  "expr": {
-                    "expr": {
-                      "Int": {
-                        "value": "30"
-                      }
-                    },
-                    "heap": "Omitted"
-                  },
-                  "type_hint": null
-                }
-              ]
-            }
-          ]
-        }
-      },
-      "heap": "Omitted"
+                "type_hint": null
+              }
+            ]
+          },
+          {
+            "elements": [
+              {
+                "expr": {
+                  "String": {
+                    "value": "\"Bob\""
+                  }
+                },
+                "type_hint": null
+              },
+              {
+                "expr": {
+                  "Int": {
+                    "value": "30"
+                  }
+                },
+                "type_hint": null
+              }
+            ]
+          }
+        ]
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Table": {
-          "columns": [
-            {
-              "name": "name",
-              "type_hint": {
-                "heap": "Omitted",
-                "type_hint": "String"
-              }
-            },
-            {
-              "name": "age",
-              "type_hint": {
-                "heap": "Omitted",
-                "type_hint": "U32"
-              }
-            }
-          ]
-        }
+      "Table": {
+        "columns": [
+          {
+            "name": "name",
+            "type_hint": "String"
+          },
+          {
+            "name": "age",
+            "type_hint": "U32"
+          }
+        ]
       }
     }
   },

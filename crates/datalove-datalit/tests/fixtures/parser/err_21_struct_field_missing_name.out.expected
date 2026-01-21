@@ -1,27 +1,21 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonStruct": {
-          "fields": [
-            {
-              "name": "<error>",
-              "value": {
-                "expr": {
-                  "expr": {
-                    "ParseError": {
-                      "message": "expected field name in struct expression"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              }
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "<error>",
+            "value": {
+              "expr": {
+                "ParseError": {
+                  "message": "expected field name in struct expression"
+                }
+              },
+              "type_hint": null
             }
-          ]
-        }
-      },
-      "heap": "Omitted"
+          }
+        ]
+      }
     },
     "type_hint": null
   },

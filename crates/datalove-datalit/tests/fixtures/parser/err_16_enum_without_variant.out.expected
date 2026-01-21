@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "expected variant name after enum keyword"
-        }
-      },
-      "heap": "Omitted"
+      "ParseError": {
+        "message": "expected variant name after enum keyword"
+      }
     },
     "type_hint": null
   },

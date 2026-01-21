@@ -1,96 +1,60 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonTuple": {
-          "elements": [
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "0"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+      "AnonTuple": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "0"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "0"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "0"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "0"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "0"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "0"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "0"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Float": {
-                    "value": "0.0"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
-            }
-          ]
-        }
-      },
-      "heap": "Omitted"
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Float": {
+                "value": "0.0"
+              }
+            },
+            "type_hint": null
+          }
+        ]
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "AnonTuple": {
-          "fields": [
-            {
-              "heap": "Omitted",
-              "type_hint": "U32"
-            },
-            {
-              "heap": "Omitted",
-              "type_hint": "I32"
-            },
-            {
-              "heap": "Omitted",
-              "type_hint": "U64"
-            },
-            {
-              "heap": "Omitted",
-              "type_hint": "I64"
-            },
-            {
-              "heap": "Omitted",
-              "type_hint": "F32"
-            }
-          ]
-        }
+      "AnonTuple": {
+        "fields": [
+          "U32",
+          "I32",
+          "U64",
+          "I64",
+          "F32"
+        ]
       }
     }
   },

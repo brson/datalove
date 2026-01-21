@@ -1,22 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Set": {
-          "elements": []
-        }
-      },
-      "heap": "Omitted"
+      "Set": {
+        "elements": []
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Set": {
-          "element_type": {
-            "heap": "Omitted",
-            "type_hint": "U32"
-          }
-        }
+      "Set": {
+        "element_type": "U32"
       }
     }
   },

@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": []
-        }
-      },
-      "heap": "Omitted"
+      "Map": {
+        "entries": []
+      }
     },
     "type_hint": null
   },

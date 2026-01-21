@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "String": {
-          "value": "\"hello\""
-        }
-      },
-      "heap": "Omitted"
+      "String": {
+        "value": "\"hello\""
+      }
     },
     "type_hint": null
   },

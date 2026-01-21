@@ -16,7 +16,6 @@
                         "elements": [
                           {
                             "expr": {
-                              "heap": "Omitted",
                               "kind": "Int",
                               "type_hint": null,
                               "value": "1"
@@ -24,7 +23,6 @@
                           },
                           {
                             "expr": {
-                              "heap": "Omitted",
                               "kind": "Int",
                               "type_hint": null,
                               "value": "2"
@@ -35,7 +33,6 @@
                       }
                     }
                   ],
-                  "heap": "Omitted",
                   "kind": "List",
                   "type_hint": null
                 }
@@ -48,7 +45,6 @@
                         "elements": [
                           {
                             "expr": {
-                              "heap": "Omitted",
                               "kind": "Int",
                               "type_hint": null,
                               "value": "3"
@@ -56,7 +52,6 @@
                           },
                           {
                             "expr": {
-                              "heap": "Omitted",
                               "kind": "Int",
                               "type_hint": null,
                               "value": "4"
@@ -67,7 +62,6 @@
                       }
                     }
                   ],
-                  "heap": "Omitted",
                   "kind": "List",
                   "type_hint": null
                 }

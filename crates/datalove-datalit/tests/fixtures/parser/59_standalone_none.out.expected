@@ -1,18 +1,9 @@
 {
   "ast": {
-    "expr": {
-      "expr": "None",
-      "heap": "Omitted"
-    },
+    "expr": "None",
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Option": {
-          "inner_type": {
-            "heap": "Omitted",
-            "type_hint": "U32"
-          }
-        }
+      "Option": {
+        "inner_type": "U32"
       }
     }
   },

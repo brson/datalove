@@ -6,7 +6,7 @@ use datalove_datalit::ast_gen;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, FunctionSig, types_match};
 use crate::gen_type::{gen_bool_type, gen_u32_type};
-use crate::pretty::{pretty_expr_with_heap, pretty_type_hint_and_heap};
+use crate::pretty::{pretty_expr, pretty_type_hint};
 
 /// Check if a type supports bare arithmetic operators.
 ///
@@ -125,7 +125,7 @@ fn gen_arithmetic_expr<'db, R: Rng>(
     if is_float {
         // Float operands need type hints to avoid f32/f64 inference issues.
         // Syntax: (: f64 / 123.4) + (: f64 / 56.7)
-        let type_str = pretty_type_hint_and_heap(db, type_hint);
+        let type_str = pretty_type_hint(db, type_hint);
         format!("(: {} / {}) {} (: {} / {})", type_str, lhs, op, type_str, rhs)
     } else {
         // Bigints don't need type hints.
@@ -148,7 +148,7 @@ fn gen_unary_negation<'db, R: Rng>(
     // Without hints, the literal might be inferred as a different type.
     // For floats: -(: f64 / 123.4)
     // For ints: -(: int / 59)
-    let type_str = pretty_type_hint_and_heap(db, type_hint);
+    let type_str = pretty_type_hint(db, type_hint);
 
     format!("-(: {} / {})", type_str, operand)
 }
@@ -160,8 +160,6 @@ fn gen_literal<'db, R: Rng>(
     type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
 ) -> String {
-    use datalove_datalit::ast_serde::Heap;
-
     let expr = ast_gen::gen_expr_matching_type(
         db,
         rng,
@@ -170,8 +168,7 @@ fn gen_literal<'db, R: Rng>(
         0,
     );
 
-    // Heap is always Omitted now (heap sigils removed from language).
-    pretty_expr_with_heap(db, expr, Heap::Omitted)
+    pretty_expr(db, expr)
 }
 
 /// Generate a function call expression.

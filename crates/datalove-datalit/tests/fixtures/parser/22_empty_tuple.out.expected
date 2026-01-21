@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonTuple": {
-          "elements": []
-        }
-      },
-      "heap": "Omitted"
+      "AnonTuple": {
+        "elements": []
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "AnonTuple": {
-          "fields": []
-        }
+      "AnonTuple": {
+        "fields": []
       }
     }
   },

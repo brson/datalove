@@ -1,56 +1,38 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Set": {
-          "elements": [
-            {
-              "expr": {
-                "expr": {
-                  "String": {
-                    "value": "\"a\""
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+      "Set": {
+        "elements": [
+          {
+            "expr": {
+              "String": {
+                "value": "\"a\""
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "String": {
-                    "value": "\"b\""
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "String": {
+                "value": "\"b\""
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "String": {
-                    "value": "\"c\""
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
-            }
-          ]
-        }
-      },
-      "heap": "Omitted"
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "String": {
+                "value": "\"c\""
+              }
+            },
+            "type_hint": null
+          }
+        ]
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Set": {
-          "element_type": {
-            "heap": "Omitted",
-            "type_hint": "String"
-          }
-        }
+      "Set": {
+        "element_type": "String"
       }
     }
   },

@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Int": {
-          "value": "65536"
-        }
-      },
-      "heap": "Omitted"
+      "Int": {
+        "value": "65536"
+      }
     },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "U16"
-    }
+    "type_hint": "U16"
   },
   "diagnostics": [],
   "errors": [

@@ -1,55 +1,43 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonStruct": {
-          "fields": [
-            {
-              "name": "x",
-              "value": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "42"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              }
-            },
-            {
-              "name": "y",
-              "value": {
-                "expr": {
-                  "expr": {
-                    "Float": {
-                      "value": "3.14"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              }
-            },
-            {
-              "name": "z",
-              "value": {
-                "expr": {
-                  "expr": {
-                    "String": {
-                      "value": "\"test\""
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              }
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "x",
+            "value": {
+              "expr": {
+                "Int": {
+                  "value": "42"
+                }
+              },
+              "type_hint": null
             }
-          ]
-        }
-      },
-      "heap": "Omitted"
+          },
+          {
+            "name": "y",
+            "value": {
+              "expr": {
+                "Float": {
+                  "value": "3.14"
+                }
+              },
+              "type_hint": null
+            }
+          },
+          {
+            "name": "z",
+            "value": {
+              "expr": {
+                "String": {
+                  "value": "\"test\""
+                }
+              },
+              "type_hint": null
+            }
+          }
+        ]
+      }
     },
     "type_hint": null
   },

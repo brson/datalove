@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Int": {
-          "value": "127"
-        }
-      },
-      "heap": "Omitted"
+      "Int": {
+        "value": "127"
+      }
     },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "I8"
-    }
+    "type_hint": "I8"
   },
   "diagnostics": [],
   "errors": [],

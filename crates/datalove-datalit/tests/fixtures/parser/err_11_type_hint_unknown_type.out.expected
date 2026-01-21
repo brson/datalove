@@ -1,18 +1,12 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Int": {
-          "value": "42"
-        }
-      },
-      "heap": "Omitted"
+      "Int": {
+        "value": "42"
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Alias": "Foobar"
-      }
+      "Alias": "Foobar"
     }
   },
   "diagnostics": []

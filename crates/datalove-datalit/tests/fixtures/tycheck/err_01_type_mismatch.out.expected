@@ -1,13 +1,7 @@
 {
   "ast": {
-    "expr": {
-      "expr": "True",
-      "heap": "Omitted"
-    },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "U32"
-    }
+    "expr": "True",
+    "type_hint": "U32"
   },
   "diagnostics": [
     {

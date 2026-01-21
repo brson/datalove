@@ -5,7 +5,7 @@ use crate::config::WorldGenConfig;
 use crate::context::{GenContext, Variable};
 use crate::gen_type::gen_type_hint;
 use crate::gen_expr::{gen_expr, gen_bool_expr};
-use crate::pretty::pretty_type_hint_and_heap;
+use crate::pretty::pretty_type_hint;
 
 /// Generate a let statement.
 pub fn gen_let<'db, R: Rng>(
@@ -21,7 +21,7 @@ pub fn gen_let<'db, R: Rng>(
 
     let type_hint = gen_type_hint(db, rng, config);
     let value = gen_expr(db, rng, type_hint.clone(), config, ctx);
-    let type_str = pretty_type_hint_and_heap(db, type_hint.clone());
+    let type_str = pretty_type_hint(db, type_hint.clone());
 
     ctx.variables.push(Variable {
         name: name.clone(),
@@ -46,7 +46,7 @@ pub fn gen_var<'db, R: Rng>(
 
     let type_hint = gen_type_hint(db, rng, config);
     let value = gen_expr(db, rng, type_hint.clone(), config, ctx);
-    let type_str = pretty_type_hint_and_heap(db, type_hint.clone());
+    let type_str = pretty_type_hint(db, type_hint.clone());
 
     ctx.variables.push(Variable {
         name: name.clone(),

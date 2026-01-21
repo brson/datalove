@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Set": {
-          "elements": []
-        }
-      },
-      "heap": "Omitted"
+      "Set": {
+        "elements": []
+      }
     },
     "type_hint": null
   },

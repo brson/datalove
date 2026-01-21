@@ -1,13 +1,10 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonEnum": {
-          "payload": null,
-          "variant_name": "Ok"
-        }
-      },
-      "heap": "Omitted"
+      "AnonEnum": {
+        "payload": null,
+        "variant_name": "Ok"
+      }
     },
     "type_hint": null
   },

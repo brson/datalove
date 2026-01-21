@@ -76,10 +76,7 @@ pub fn check_expr<'db>(
             match expected.ty(db) {
                 Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
                     // Check payload against inner type.
-                    let expected_inner = TypeAndHeap::new(
-                        db,
-                        datalove_datalit::ast_serde::Heap::Omitted,
-                        Type::Datalit((*opt.inner_type).clone())
+                    let expected_inner = TypeAndHeap::new(Type::Datalit((*opt.inner_type).clone())
                     );
                     check_expr(ctx, some_expr.payload, &expected_inner)?;
                     ctx.store_expr_type(expr, &expected);
@@ -97,10 +94,7 @@ pub fn check_expr<'db>(
             match expected.ty(db) {
                 Type::Datalit(datalit::tycheck::Type::Result(res)) => {
                     // Check payload against inner type.
-                    let expected_inner = TypeAndHeap::new(
-                        db,
-                        datalove_datalit::ast_serde::Heap::Omitted,
-                        Type::Datalit((*res.inner_type).clone())
+                    let expected_inner = TypeAndHeap::new(Type::Datalit((*res.inner_type).clone())
                     );
                     check_expr(ctx, ok_expr.payload, &expected_inner)?;
                     ctx.store_expr_type(expr, &expected);
@@ -118,10 +112,7 @@ pub fn check_expr<'db>(
             match expected.ty(db) {
                 Type::Datalit(datalit::tycheck::Type::Result(_)) => {
                     // Check payload against Error type.
-                    let error_ty = TypeAndHeap::new(
-                        db,
-                        datalove_datalit::ast_serde::Heap::Omitted,
-                        Type::Datalit(datalit::tycheck::Type::Error)
+                    let error_ty = TypeAndHeap::new(Type::Datalit(datalit::tycheck::Type::Error)
                     );
                     check_expr(ctx, er_expr.payload, &error_ty)?;
                     ctx.store_expr_type(expr, &expected);
@@ -432,10 +423,7 @@ pub fn check_list_elements<'db>(
     };
 
     // Check each element against expected element type using bidirectional checking.
-    let expected_elem_ty = TypeAndHeap::new(
-        db,
-        datalove_datalit::ast_serde::Heap::Omitted,
-        Type::Datalit((**elem_type).clone()),
+    let expected_elem_ty = TypeAndHeap::new(Type::Datalit((**elem_type).clone()),
     );
     for elem in elements {
         check_expr(ctx, *elem, &expected_elem_ty)?;
@@ -462,10 +450,7 @@ pub fn check_set_elements<'db>(
     };
 
     // Check each element against expected element type using bidirectional checking.
-    let expected_elem_ty = TypeAndHeap::new(
-        db,
-        datalove_datalit::ast_serde::Heap::Omitted,
-        Type::Datalit((**elem_type).clone()),
+    let expected_elem_ty = TypeAndHeap::new(Type::Datalit((**elem_type).clone()),
     );
     for elem in elements {
         check_expr(ctx, *elem, &expected_elem_ty)?;
@@ -494,15 +479,9 @@ pub fn check_map_entries<'db>(
     };
 
     // Check each entry against expected types using bidirectional checking.
-    let expected_key_ty = TypeAndHeap::new(
-        db,
-        datalove_datalit::ast_serde::Heap::Omitted,
-        Type::Datalit((**key_type).clone()),
+    let expected_key_ty = TypeAndHeap::new(Type::Datalit((**key_type).clone()),
     );
-    let expected_value_ty = TypeAndHeap::new(
-        db,
-        datalove_datalit::ast_serde::Heap::Omitted,
-        Type::Datalit((**value_type).clone()),
+    let expected_value_ty = TypeAndHeap::new(Type::Datalit((**value_type).clone()),
     );
     for entry in entries {
         check_expr(ctx, entry.key, &expected_key_ty)?;
@@ -546,10 +525,7 @@ pub fn check_tensor_shape_and_elements<'db>(
     datalit::tycheck::check_tensor_element_count(shape, elements.len())?;
 
     // Check each element against expected element type.
-    let expected_elem = TypeAndHeap::new(
-        db,
-        datalove_datalit::ast_serde::Heap::Omitted,
-        Type::Datalit(*elem_type),
+    let expected_elem = TypeAndHeap::new(Type::Datalit(*elem_type),
     );
     for elem in elements {
         let elem_ty = ctx.synthesize_expr(*elem)?;
@@ -588,10 +564,7 @@ pub fn check_tuple_elements<'db>(
 
     // Check each element against expected field type using bidirectional checking.
     for (elem, expected_field) in elements.iter().zip(expected_fields.iter()) {
-        let expected_elem_ty = TypeAndHeap::new(
-            db,
-            datalove_datalit::ast_serde::Heap::Omitted,
-            Type::Datalit(expected_field.clone()),
+        let expected_elem_ty = TypeAndHeap::new(Type::Datalit(expected_field.clone()),
         );
         check_expr(ctx, *elem, &expected_elem_ty)?;
     }
@@ -633,10 +606,7 @@ pub fn check_struct_fields<'db>(
             return Err(TypeError::FieldOrderMismatch);
         }
 
-        let expected_ty = TypeAndHeap::new(
-            db,
-            datalove_datalit::ast_serde::Heap::Omitted,
-            Type::Datalit((*expected_field.ty).clone()),
+        let expected_ty = TypeAndHeap::new(Type::Datalit((*expected_field.ty).clone()),
         );
         let field_value_ty = ctx.synthesize_expr(field.value)?;
         check_element_type_and_heap(db, field.value, field_value_ty, &expected_ty)?;
@@ -685,10 +655,7 @@ pub fn check_enum_variant<'db>(
             Type::Datalit(dt) => dt,
             _ => return Ok(()), // Non-datalit types handled elsewhere.
         };
-        let expected_ty = TypeAndHeap::new(
-            db,
-            datalove_datalit::ast_serde::Heap::Omitted,
-            Type::Datalit((**expected_payload_ty).clone()),
+        let expected_ty = TypeAndHeap::new(Type::Datalit((**expected_payload_ty).clone()),
         );
         check_type_coercion(db, actual_datalit_ty, &expected_ty)?;
     }
@@ -731,10 +698,7 @@ pub fn check_table_rows<'db>(
         }
 
         for (elem, col) in row.elements.iter().zip(expected_columns.iter()) {
-            let expected_col_ty = TypeAndHeap::new(
-                db,
-                datalove_datalit::ast_serde::Heap::Omitted,
-                Type::Datalit((*col.ty).clone()),
+            let expected_col_ty = TypeAndHeap::new(Type::Datalit((*col.ty).clone()),
             );
             check_expr(ctx, *elem, &expected_col_ty)?;
         }

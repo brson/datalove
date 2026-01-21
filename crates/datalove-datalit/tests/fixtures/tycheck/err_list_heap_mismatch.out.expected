@@ -1,35 +1,26 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "List": {
-          "elements": [
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "1"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+      "List": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "ParseError": {
-                    "message": "unexpected token in Parser expression"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
-            }
-          ]
-        }
-      },
-      "heap": "Omitted"
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "ParseError": {
+                "message": "unexpected token in Parser expression"
+              }
+            },
+            "type_hint": null
+          }
+        ]
+      }
     },
     "type_hint": null
   },

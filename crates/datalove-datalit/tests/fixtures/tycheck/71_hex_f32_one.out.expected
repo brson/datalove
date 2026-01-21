@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Hex": {
-          "value": "0x3F800000"
-        }
-      },
-      "heap": "Omitted"
+      "Hex": {
+        "value": "0x3F800000"
+      }
     },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "F32"
-    }
+    "type_hint": "F32"
   },
   "diagnostics": [],
   "errors": [],

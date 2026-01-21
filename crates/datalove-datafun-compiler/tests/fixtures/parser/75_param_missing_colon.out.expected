@@ -9,10 +9,7 @@
           {
             "mode": "In",
             "name": "x",
-            "type_hint": {
-              "heap": "Omitted",
-              "type_hint": "I32"
-            }
+            "type_hint": "I32"
           }
         ],
         "return_type": null

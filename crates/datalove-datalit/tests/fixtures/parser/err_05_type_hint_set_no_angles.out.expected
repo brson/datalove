@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Set": {
-          "elements": []
-        }
-      },
-      "heap": "Omitted"
+      "Set": {
+        "elements": []
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "ParseError": {
-          "message": "expected <> after set keyword"
-        }
+      "ParseError": {
+        "message": "expected <> after set keyword"
       }
     }
   },

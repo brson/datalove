@@ -1,85 +1,64 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": [
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "1"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
+      "Map": {
+        "entries": [
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
               },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "10"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              }
+              "type_hint": null
             },
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "2"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
+            "value": {
+              "expr": {
+                "Int": {
+                  "value": "10"
+                }
               },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "20"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              }
-            },
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "3"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "30"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              }
+              "type_hint": null
             }
-          ]
-        }
-      },
-      "heap": "Omitted"
+          },
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "2"
+                }
+              },
+              "type_hint": null
+            },
+            "value": {
+              "expr": {
+                "Int": {
+                  "value": "20"
+                }
+              },
+              "type_hint": null
+            }
+          },
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "3"
+                }
+              },
+              "type_hint": null
+            },
+            "value": {
+              "expr": {
+                "Int": {
+                  "value": "30"
+                }
+              },
+              "type_hint": null
+            }
+          }
+        ]
+      }
     },
     "type_hint": null
   },

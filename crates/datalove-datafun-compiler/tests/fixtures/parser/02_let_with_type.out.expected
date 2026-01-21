@@ -4,13 +4,9 @@
       {
         "kind": "Let",
         "name": "x",
-        "type_hint": {
-          "heap": "Omitted",
-          "type_hint": "U32"
-        },
+        "type_hint": "U32",
         "value": {
           "expr": {
-            "heap": "Omitted",
             "kind": "Int",
             "type_hint": null,
             "value": "42"

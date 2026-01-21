@@ -16,7 +16,6 @@
                 "op": "Lt",
                 "rhs": {
                   "expr": {
-                    "heap": "Omitted",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "10"
@@ -29,7 +28,6 @@
                 "kind": "Ret",
                 "value": {
                   "expr": {
-                    "heap": "Omitted",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "3"
@@ -52,7 +50,6 @@
                     "op": "Lt",
                     "rhs": {
                       "expr": {
-                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "5"
@@ -65,7 +62,6 @@
                     "kind": "Ret",
                     "value": {
                       "expr": {
-                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "2"
@@ -79,7 +75,6 @@
                     "kind": "Ret",
                     "value": {
                       "expr": {
-                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "1"
@@ -97,16 +92,10 @@
           {
             "mode": "In",
             "name": "n",
-            "type_hint": {
-              "heap": "Omitted",
-              "type_hint": "U32"
-            }
+            "type_hint": "U32"
           }
         ],
-        "return_type": {
-          "heap": "Omitted",
-          "type_hint": "U32"
-        }
+        "return_type": "U32"
       }
     ]
   },

@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "unexpected minus sign"
-        }
-      },
-      "heap": "Omitted"
+      "ParseError": {
+        "message": "unexpected minus sign"
+      }
     },
     "type_hint": null
   },

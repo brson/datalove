@@ -1,22 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Int": {
-          "value": "42"
-        }
-      },
-      "heap": "Omitted"
+      "Int": {
+        "value": "42"
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Result": {
-          "inner_type": {
-            "heap": "Omitted",
-            "type_hint": "U32"
-          }
-        }
+      "Result": {
+        "inner_type": "U32"
       }
     }
   },

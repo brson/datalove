@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "expected {} after map keyword"
-        }
-      },
-      "heap": "Omitted"
+      "ParseError": {
+        "message": "expected {} after map keyword"
+      }
     },
     "type_hint": null
   },

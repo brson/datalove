@@ -9,7 +9,6 @@
             "type_hint": null,
             "value": {
               "expr": {
-                "heap": "Omitted",
                 "kind": "Int",
                 "type_hint": null,
                 "value": "0"
@@ -22,7 +21,6 @@
             "type_hint": null,
             "value": {
               "expr": {
-                "heap": "Omitted",
                 "kind": "Int",
                 "type_hint": null,
                 "value": "0"
@@ -47,7 +45,6 @@
                     "op": "Add",
                     "rhs": {
                       "expr": {
-                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "1"
@@ -69,7 +66,6 @@
                     "op": "Gt",
                     "rhs": {
                       "expr": {
-                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "5"
@@ -98,7 +94,6 @@
                     "op": "Eq",
                     "rhs": {
                       "expr": {
-                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "2"
@@ -127,7 +122,6 @@
                     "op": "Eq",
                     "rhs": {
                       "expr": {
-                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "4"
@@ -159,7 +153,6 @@
                     "op": "Add",
                     "rhs": {
                       "expr": {
-                        "heap": "Omitted",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "1"
@@ -184,10 +177,7 @@
         "kind": "Fun",
         "name": "skip_evens",
         "params": [],
-        "return_type": {
-          "heap": "Omitted",
-          "type_hint": "U32"
-        }
+        "return_type": "U32"
       }
     ]
   },

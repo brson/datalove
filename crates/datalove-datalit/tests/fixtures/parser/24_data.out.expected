@@ -1,27 +1,18 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Data": {
-          "value": {
-            "expr": {
-              "expr": {
-                "String": {
-                  "value": "\"payload\""
-                }
-              },
-              "heap": "Omitted"
-            },
-            "type_hint": null
-          }
+      "Data": {
+        "value": {
+          "expr": {
+            "String": {
+              "value": "\"payload\""
+            }
+          },
+          "type_hint": null
         }
-      },
-      "heap": "Omitted"
+      }
     },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "Data"
-    }
+    "type_hint": "Data"
   },
   "diagnostics": []
 }

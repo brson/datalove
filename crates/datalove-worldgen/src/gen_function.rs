@@ -5,7 +5,7 @@ use crate::config::WorldGenConfig;
 use crate::context::{GenContext, FunctionSig, Variable};
 use crate::gen_type::gen_type_hint;
 use crate::gen_stmt::{gen_body_statement, gen_ret};
-use crate::pretty::pretty_type_hint_and_heap;
+use crate::pretty::pretty_type_hint;
 
 /// Generate a function signature.
 pub fn gen_function_signature<'db, R: Rng>(
@@ -52,12 +52,12 @@ pub fn gen_function<'db, R: Rng>(
     let params_str = sig
         .params
         .iter()
-        .map(|(name, ty)| format!("{}: {}", name, pretty_type_hint_and_heap(db, ty.clone())))
+        .map(|(name, ty)| format!("{}: {}", name, pretty_type_hint(db, ty.clone())))
         .collect::<Vec<_>>()
         .join(", ");
 
     let sig_line = match &sig.return_type {
-        Some(ret_ty) => format!("fun {}({}): {}", sig.name, params_str, pretty_type_hint_and_heap(db, ret_ty.clone())),
+        Some(ret_ty) => format!("fun {}({}): {}", sig.name, params_str, pretty_type_hint(db, ret_ty.clone())),
         None => format!("fun {}({})", sig.name, params_str),
     };
     lines.push(sig_line);

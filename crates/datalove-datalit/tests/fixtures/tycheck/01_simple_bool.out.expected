@@ -1,13 +1,7 @@
 {
   "ast": {
-    "expr": {
-      "expr": "True",
-      "heap": "Omitted"
-    },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "Bool"
-    }
+    "expr": "True",
+    "type_hint": "Bool"
   },
   "diagnostics": [],
   "errors": [],

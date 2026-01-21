@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Hex": {
-          "value": "0x10000"
-        }
-      },
-      "heap": "Omitted"
+      "Hex": {
+        "value": "0x10000"
+      }
     },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "U16"
-    }
+    "type_hint": "U16"
   },
   "diagnostics": [
     {

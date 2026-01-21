@@ -5,24 +5,14 @@
         "kind": "Let",
         "name": "x",
         "type_hint": {
-          "heap": "Omitted",
-          "type_hint": {
-            "Map": {
-              "key_type": {
-                "heap": "Omitted",
-                "type_hint": "U32"
-              },
-              "value_type": {
-                "heap": "Omitted",
-                "type_hint": "String"
-              }
-            }
+          "Map": {
+            "key_type": "U32",
+            "value_type": "String"
           }
         },
         "value": {
           "expr": {
             "entries": [],
-            "heap": "Omitted",
             "kind": "Map",
             "type_hint": null
           }

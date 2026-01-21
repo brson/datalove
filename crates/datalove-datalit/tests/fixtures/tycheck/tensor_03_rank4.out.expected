@@ -1,206 +1,149 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Tensor": {
-          "elements": [
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "1"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+      "Tensor": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "2"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "2"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "3"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "3"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "4"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "4"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "5"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "5"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "6"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "6"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "7"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "7"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "8"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "8"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "9"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "9"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "10"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "10"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "11"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "11"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "12"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "12"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "13"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "13"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "14"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "14"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "15"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "15"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "16"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
-            }
-          ],
-          "shape": [
-            2,
-            2,
-            2,
-            2
-          ]
-        }
-      },
-      "heap": "Omitted"
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "16"
+              }
+            },
+            "type_hint": null
+          }
+        ],
+        "shape": [
+          2,
+          2,
+          2,
+          2
+        ]
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Tensor": {
-          "element_type": {
-            "heap": "Omitted",
-            "type_hint": "U32"
-          },
-          "rank": 4
-        }
+      "Tensor": {
+        "element_type": "U32",
+        "rank": 4
       }
     }
   },

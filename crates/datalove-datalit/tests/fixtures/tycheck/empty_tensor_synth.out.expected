@@ -1,15 +1,12 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Tensor": {
-          "elements": [],
-          "shape": [
-            0
-          ]
-        }
-      },
-      "heap": "Omitted"
+      "Tensor": {
+        "elements": [],
+        "shape": [
+          0
+        ]
+      }
     },
     "type_hint": null
   },

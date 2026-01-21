@@ -1,22 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "String": {
-          "value": "\"hello\""
-        }
-      },
-      "heap": "Omitted"
+      "String": {
+        "value": "\"hello\""
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Result": {
-          "inner_type": {
-            "heap": "Omitted",
-            "type_hint": "String"
-          }
-        }
+      "Result": {
+        "inner_type": "String"
       }
     }
   },

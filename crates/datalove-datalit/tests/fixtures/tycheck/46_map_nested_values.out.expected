@@ -1,124 +1,82 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": [
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "1"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
+      "Map": {
+        "entries": [
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
               },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "AnonTuple": {
-                      "elements": [
-                        {
-                          "expr": {
-                            "expr": {
-                              "String": {
-                                "value": "\"a\""
-                              }
-                            },
-                            "heap": "Omitted"
-                          },
-                          "type_hint": null
-                        },
-                        {
-                          "expr": {
-                            "expr": "True",
-                            "heap": "Omitted"
-                          },
-                          "type_hint": null
-                        }
-                      ]
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              }
+              "type_hint": null
             },
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "2"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "AnonTuple": {
-                      "elements": [
-                        {
-                          "expr": {
-                            "expr": {
-                              "String": {
-                                "value": "\"b\""
-                              }
-                            },
-                            "heap": "Omitted"
-                          },
-                          "type_hint": null
-                        },
-                        {
-                          "expr": {
-                            "expr": "False",
-                            "heap": "Omitted"
-                          },
-                          "type_hint": null
+            "value": {
+              "expr": {
+                "AnonTuple": {
+                  "elements": [
+                    {
+                      "expr": {
+                        "String": {
+                          "value": "\"a\""
                         }
-                      ]
+                      },
+                      "type_hint": null
+                    },
+                    {
+                      "expr": "True",
+                      "type_hint": null
                     }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              }
+                  ]
+                }
+              },
+              "type_hint": null
             }
-          ]
-        }
-      },
-      "heap": "Omitted"
+          },
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "2"
+                }
+              },
+              "type_hint": null
+            },
+            "value": {
+              "expr": {
+                "AnonTuple": {
+                  "elements": [
+                    {
+                      "expr": {
+                        "String": {
+                          "value": "\"b\""
+                        }
+                      },
+                      "type_hint": null
+                    },
+                    {
+                      "expr": "False",
+                      "type_hint": null
+                    }
+                  ]
+                }
+              },
+              "type_hint": null
+            }
+          }
+        ]
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Map": {
-          "key_type": {
-            "heap": "Omitted",
-            "type_hint": "U32"
-          },
-          "value_type": {
-            "heap": "Omitted",
-            "type_hint": {
-              "AnonTuple": {
-                "fields": [
-                  {
-                    "heap": "Omitted",
-                    "type_hint": "String"
-                  },
-                  {
-                    "heap": "Omitted",
-                    "type_hint": "Bool"
-                  }
-                ]
-              }
-            }
+      "Map": {
+        "key_type": "U32",
+        "value_type": {
+          "AnonTuple": {
+            "fields": [
+              "String",
+              "Bool"
+            ]
           }
         }
       }

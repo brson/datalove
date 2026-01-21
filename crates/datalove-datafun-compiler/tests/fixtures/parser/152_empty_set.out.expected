@@ -5,20 +5,13 @@
         "kind": "Let",
         "name": "x",
         "type_hint": {
-          "heap": "Omitted",
-          "type_hint": {
-            "Set": {
-              "element_type": {
-                "heap": "Omitted",
-                "type_hint": "U32"
-              }
-            }
+          "Set": {
+            "element_type": "U32"
           }
         },
         "value": {
           "expr": {
             "elements": [],
-            "heap": "Omitted",
             "kind": "Set",
             "type_hint": null
           }

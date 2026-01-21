@@ -11,10 +11,7 @@
         "kind": "Fun",
         "name": "get_value",
         "params": [],
-        "return_type": {
-          "heap": "Omitted",
-          "type_hint": "U32"
-        }
+        "return_type": "U32"
       }
     ]
   },

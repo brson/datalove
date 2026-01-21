@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Float": {
-          "value": "0.0"
-        }
-      },
-      "heap": "Omitted"
+      "Float": {
+        "value": "0.0"
+      }
     },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "F32"
-    }
+    "type_hint": "F32"
   },
   "diagnostics": [],
   "errors": [],

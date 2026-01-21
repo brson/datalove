@@ -1,38 +1,26 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Table": {
-          "header": [
-            "x",
-            "y"
-          ],
-          "rows": []
-        }
-      },
-      "heap": "Omitted"
+      "Table": {
+        "header": [
+          "x",
+          "y"
+        ],
+        "rows": []
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Table": {
-          "columns": [
-            {
-              "name": "x",
-              "type_hint": {
-                "heap": "Omitted",
-                "type_hint": "U32"
-              }
-            },
-            {
-              "name": "y",
-              "type_hint": {
-                "heap": "Omitted",
-                "type_hint": "U32"
-              }
-            }
-          ]
-        }
+      "Table": {
+        "columns": [
+          {
+            "name": "x",
+            "type_hint": "U32"
+          },
+          {
+            "name": "y",
+            "type_hint": "U32"
+          }
+        ]
       }
     }
   },

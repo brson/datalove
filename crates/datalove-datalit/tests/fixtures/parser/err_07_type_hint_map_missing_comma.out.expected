@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": []
-        }
-      },
-      "heap": "Omitted"
+      "Map": {
+        "entries": []
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "ParseError": {
-          "message": "expected comma between map key and value types"
-        }
+      "ParseError": {
+        "message": "expected comma between map key and value types"
       }
     }
   },

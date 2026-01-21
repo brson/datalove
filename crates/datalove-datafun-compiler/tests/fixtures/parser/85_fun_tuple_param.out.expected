@@ -10,28 +10,16 @@
             "mode": "In",
             "name": "t",
             "type_hint": {
-              "heap": "Omitted",
-              "type_hint": {
-                "AnonTuple": {
-                  "fields": [
-                    {
-                      "heap": "Omitted",
-                      "type_hint": "U32"
-                    },
-                    {
-                      "heap": "Omitted",
-                      "type_hint": "U32"
-                    }
-                  ]
-                }
+              "AnonTuple": {
+                "fields": [
+                  "U32",
+                  "U32"
+                ]
               }
             }
           }
         ],
-        "return_type": {
-          "heap": "Omitted",
-          "type_hint": "U32"
-        }
+        "return_type": "U32"
       }
     ]
   },

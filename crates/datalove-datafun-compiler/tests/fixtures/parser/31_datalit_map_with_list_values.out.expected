@@ -11,7 +11,6 @@
               {
                 "key": {
                   "expr": {
-                    "heap": "Omitted",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "1"
@@ -22,7 +21,6 @@
                     "elements": [
                       {
                         "expr": {
-                          "heap": "Omitted",
                           "kind": "Int",
                           "type_hint": null,
                           "value": "10"
@@ -30,14 +28,12 @@
                       },
                       {
                         "expr": {
-                          "heap": "Omitted",
                           "kind": "Int",
                           "type_hint": null,
                           "value": "20"
                         }
                       }
                     ],
-                    "heap": "Omitted",
                     "kind": "List",
                     "type_hint": null
                   }
@@ -46,7 +42,6 @@
               {
                 "key": {
                   "expr": {
-                    "heap": "Omitted",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "2"
@@ -57,7 +52,6 @@
                     "elements": [
                       {
                         "expr": {
-                          "heap": "Omitted",
                           "kind": "Int",
                           "type_hint": null,
                           "value": "30"
@@ -65,21 +59,18 @@
                       },
                       {
                         "expr": {
-                          "heap": "Omitted",
                           "kind": "Int",
                           "type_hint": null,
                           "value": "40"
                         }
                       }
                     ],
-                    "heap": "Omitted",
                     "kind": "List",
                     "type_hint": null
                   }
                 }
               }
             ],
-            "heap": "Omitted",
             "kind": "Map",
             "type_hint": null
           }

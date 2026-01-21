@@ -1,27 +1,21 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonStruct": {
-          "fields": [
-            {
-              "name": "x",
-              "value": {
-                "expr": {
-                  "expr": {
-                    "ParseError": {
-                      "message": "expected '=' after field name in struct expression"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              }
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "x",
+            "value": {
+              "expr": {
+                "ParseError": {
+                  "message": "expected '=' after field name in struct expression"
+                }
+              },
+              "type_hint": null
             }
-          ]
-        }
-      },
-      "heap": "Omitted"
+          }
+        ]
+      }
     },
     "type_hint": null
   },

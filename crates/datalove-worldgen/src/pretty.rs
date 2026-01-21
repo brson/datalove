@@ -1,10 +1,9 @@
 //! Pretty printing for type hints and expressions in worldfile generation.
 
 use datalove_datalit::ast::{Expr, ExprFull, TypeHint};
-use datalove_datalit::ast_serde::Heap;
 
 /// Pretty print a TypeHint to a string.
-pub fn pretty_type_hint_and_heap<'db>(
+pub fn pretty_type_hint<'db>(
     db: &'db dyn salsa::Database,
     th: TypeHint<'db>,
 ) -> String {
@@ -13,23 +12,12 @@ pub fn pretty_type_hint_and_heap<'db>(
     out
 }
 
-/// Pretty print a TypeHint to a string (alias for backwards compatibility).
-pub fn pretty_type_hint<'db>(
-    db: &'db dyn salsa::Database,
-    th: TypeHint<'db>,
-) -> String {
-    pretty_type_hint_and_heap(db, th)
-}
-
-/// Pretty print an expression with its heap annotation to a string.
-pub fn pretty_expr_with_heap<'db>(
+/// Pretty print an expression to a string.
+pub fn pretty_expr<'db>(
     db: &'db dyn salsa::Database,
     expr: Expr<'db>,
-    heap: Heap,
 ) -> String {
     let mut out = String::new();
-    // Heap sigils removed from language - ignore heap parameter.
-    let _ = heap;
     write_expr(db, &expr, &mut out);
     out
 }
@@ -384,7 +372,7 @@ mod tests {
         ];
 
         for (ty_hint, expected) in cases {
-            let output = pretty_type_hint_and_heap(db, ty_hint);
+            let output = pretty_type_hint(db, ty_hint);
             assert_eq!(output, expected, "Pretty print mismatch for {}", expected);
         }
     }
@@ -397,9 +385,9 @@ mod tests {
 
     #[salsa::tracked]
     fn test_pretty_expr_bool_inner<'db>(db: &'db dyn salsa::Database) {
-        assert_eq!(pretty_expr_with_heap(db, Expr::True, Heap::Omitted), "true");
-        assert_eq!(pretty_expr_with_heap(db, Expr::False, Heap::Omitted), "false");
-        assert_eq!(pretty_expr_with_heap(db, Expr::None, Heap::Omitted), "none");
+        assert_eq!(pretty_expr(db, Expr::True), "true");
+        assert_eq!(pretty_expr(db, Expr::False), "false");
+        assert_eq!(pretty_expr(db, Expr::None), "none");
     }
 
     #[test]
@@ -414,7 +402,7 @@ mod tests {
         let _ = db;
 
         let list = TypeHint::List(TypeHintList { element_type: Box::new(TypeHint::U32) });
-        assert_eq!(pretty_type_hint_and_heap(db, list), "[u32]");
+        assert_eq!(pretty_type_hint(db, list), "[u32]");
     }
 
     #[test]
@@ -429,7 +417,7 @@ mod tests {
         let _ = db;
 
         let opt = TypeHint::Option(TypeHintOption { inner_type: Box::new(TypeHint::String) });
-        assert_eq!(pretty_type_hint_and_heap(db, opt), "?string");
+        assert_eq!(pretty_type_hint(db, opt), "?string");
     }
 
     #[test]
@@ -444,7 +432,7 @@ mod tests {
         let _ = db;
 
         let res = TypeHint::Result(TypeHintResult { inner_type: Box::new(TypeHint::I32) });
-        assert_eq!(pretty_type_hint_and_heap(db, res), "!i32");
+        assert_eq!(pretty_type_hint(db, res), "!i32");
     }
 
     #[test]
@@ -462,7 +450,7 @@ mod tests {
             key_type: Box::new(TypeHint::String),
             value_type: Box::new(TypeHint::I32),
         });
-        assert_eq!(pretty_type_hint_and_heap(db, map), "map<string, i32>");
+        assert_eq!(pretty_type_hint(db, map), "map<string, i32>");
     }
 
     #[test]
@@ -477,7 +465,7 @@ mod tests {
         let _ = db;
 
         let set = TypeHint::Set(TypeHintSet { element_type: Box::new(TypeHint::U64) });
-        assert_eq!(pretty_type_hint_and_heap(db, set), "set<u64>");
+        assert_eq!(pretty_type_hint(db, set), "set<u64>");
     }
 
     #[test]
@@ -494,7 +482,7 @@ mod tests {
         let tuple = TypeHint::AnonTuple(TypeHintAnonTuple {
             fields: vec![TypeHint::U32, TypeHint::Bool],
         });
-        assert_eq!(pretty_type_hint_and_heap(db, tuple), "(u32, bool)");
+        assert_eq!(pretty_type_hint(db, tuple), "(u32, bool)");
     }
 
     #[test]
@@ -518,7 +506,7 @@ mod tests {
         };
 
         let struct_ty = TypeHint::AnonStruct(TypeHintAnonStruct { fields: vec![f1, f2] });
-        assert_eq!(pretty_type_hint_and_heap(db, struct_ty), "{x: i32, y: i32}");
+        assert_eq!(pretty_type_hint(db, struct_ty), "{x: i32, y: i32}");
     }
 
     #[test]
@@ -537,7 +525,7 @@ mod tests {
         ];
 
         for ty_hint in types {
-            let output = pretty_type_hint_and_heap(db, ty_hint);
+            let output = pretty_type_hint(db, ty_hint);
             assert!(!output.ends_with(' '), "Output has trailing space: '{}'", output);
             assert!(!output.ends_with('\t'), "Output has trailing tab: '{}'", output);
         }

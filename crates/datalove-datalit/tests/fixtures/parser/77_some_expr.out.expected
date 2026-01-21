@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "unexpected token in Parser expression"
-        }
-      },
-      "heap": "Omitted"
+      "ParseError": {
+        "message": "unexpected token in Parser expression"
+      }
     },
     "type_hint": null
   },

@@ -106,8 +106,6 @@ pub fn type_check_script_units<'db>(
             datalit::tycheck::TypeResult { inner_type: Box::new(unit_tuple_ty) }
         );
         ctx.expected_return_type = Some(TypeAndHeap::new(
-            db,
-            datalove_datalit::ast_serde::Heap::Omitted,
             Type::Datalit(result_unit_ty),
         ));
 

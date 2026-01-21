@@ -6,13 +6,9 @@
           {
             "kind": "Let",
             "name": "z",
-            "type_hint": {
-              "heap": "Omitted",
-              "type_hint": "U64"
-            },
+            "type_hint": "U64",
             "value": {
               "expr": {
-                "heap": "Omitted",
                 "kind": "Int",
                 "type_hint": null,
                 "value": "100"
@@ -30,24 +26,15 @@
           {
             "mode": "In",
             "name": "x",
-            "type_hint": {
-              "heap": "Omitted",
-              "type_hint": "U32"
-            }
+            "type_hint": "U32"
           },
           {
             "mode": "In",
             "name": "y",
-            "type_hint": {
-              "heap": "Omitted",
-              "type_hint": "String"
-            }
+            "type_hint": "String"
           }
         ],
-        "return_type": {
-          "heap": "Omitted",
-          "type_hint": "Bool"
-        }
+        "return_type": "Bool"
       }
     ]
   },

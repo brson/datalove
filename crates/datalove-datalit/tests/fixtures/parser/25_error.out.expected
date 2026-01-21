@@ -1,27 +1,18 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Error": {
-          "value": {
-            "expr": {
-              "expr": {
-                "String": {
-                  "value": "\"oops\""
-                }
-              },
-              "heap": "Omitted"
-            },
-            "type_hint": null
-          }
+      "Error": {
+        "value": {
+          "expr": {
+            "String": {
+              "value": "\"oops\""
+            }
+          },
+          "type_hint": null
         }
-      },
-      "heap": "Omitted"
+      }
     },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "Error"
-    }
+    "type_hint": "Error"
   },
   "diagnostics": []
 }

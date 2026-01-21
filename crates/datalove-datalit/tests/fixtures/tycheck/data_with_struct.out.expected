@@ -1,56 +1,41 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Data": {
-          "value": {
-            "expr": {
-              "expr": {
-                "AnonStruct": {
-                  "fields": [
-                    {
-                      "name": "x",
-                      "value": {
-                        "expr": {
-                          "expr": {
-                            "Int": {
-                              "value": "42"
-                            }
-                          },
-                          "heap": "Omitted"
-                        },
-                        "type_hint": null
+      "Data": {
+        "value": {
+          "expr": {
+            "AnonStruct": {
+              "fields": [
+                {
+                  "name": "x",
+                  "value": {
+                    "expr": {
+                      "Int": {
+                        "value": "42"
                       }
                     },
-                    {
-                      "name": "y",
-                      "value": {
-                        "expr": {
-                          "expr": {
-                            "String": {
-                              "value": "\"hello\""
-                            }
-                          },
-                          "heap": "Omitted"
-                        },
-                        "type_hint": null
+                    "type_hint": null
+                  }
+                },
+                {
+                  "name": "y",
+                  "value": {
+                    "expr": {
+                      "String": {
+                        "value": "\"hello\""
                       }
-                    }
-                  ]
+                    },
+                    "type_hint": null
+                  }
                 }
-              },
-              "heap": "Omitted"
-            },
-            "type_hint": null
-          }
+              ]
+            }
+          },
+          "type_hint": null
         }
-      },
-      "heap": "Omitted"
+      }
     },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "Data"
-    }
+    "type_hint": "Data"
   },
   "diagnostics": [],
   "errors": [],

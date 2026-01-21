@@ -1,23 +1,14 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "expected 3 elements per row but got 2"
-        }
-      },
-      "heap": "Omitted"
+      "ParseError": {
+        "message": "expected 3 elements per row but got 2"
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Tensor": {
-          "element_type": {
-            "heap": "Omitted",
-            "type_hint": "U32"
-          },
-          "rank": 2
-        }
+      "Tensor": {
+        "element_type": "U32",
+        "rank": 2
       }
     }
   },

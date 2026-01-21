@@ -1,23 +1,17 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonEnum": {
-          "payload": {
-            "expr": {
-              "expr": {
-                "Int": {
-                  "value": "42"
-                }
-              },
-              "heap": "Omitted"
-            },
-            "type_hint": null
+      "AnonEnum": {
+        "payload": {
+          "expr": {
+            "Int": {
+              "value": "42"
+            }
           },
-          "variant_name": "Bar"
-        }
-      },
-      "heap": "Omitted"
+          "type_hint": null
+        },
+        "variant_name": "Bar"
+      }
     },
     "type_hint": null
   },

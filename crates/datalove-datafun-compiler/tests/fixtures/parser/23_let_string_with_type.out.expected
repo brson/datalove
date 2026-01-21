@@ -4,13 +4,9 @@
       {
         "kind": "Let",
         "name": "msg",
-        "type_hint": {
-          "heap": "Omitted",
-          "type_hint": "String"
-        },
+        "type_hint": "String",
         "value": {
           "expr": {
-            "heap": "Omitted",
             "kind": "String",
             "type_hint": null,
             "value": "\"hello world\""

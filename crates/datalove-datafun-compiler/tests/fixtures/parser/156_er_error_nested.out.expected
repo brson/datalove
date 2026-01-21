@@ -7,16 +7,13 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "heap": "Omitted",
             "kind": "Er",
             "payload": {
               "expr": {
-                "heap": "Omitted",
                 "kind": "Error",
                 "type_hint": null,
                 "value": {
                   "expr": {
-                    "heap": "Omitted",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "42"

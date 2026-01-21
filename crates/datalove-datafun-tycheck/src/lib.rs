@@ -79,7 +79,8 @@ pub enum Type<'db> {
 }
 
 /// Wrapper type for backwards compatibility during heap removal migration.
-/// This used to contain both a Type and a Heap. Now heap is always Omitted.
+///
+/// This used to contain both a Type and a Heap. Now heap is always omitted.
 /// TODO: Remove this wrapper and use Type directly everywhere.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
@@ -88,24 +89,14 @@ pub struct TypeAndHeap<'db> {
 }
 
 impl<'db> TypeAndHeap<'db> {
-    /// Create a new TypeAndHeap. The heap argument is ignored (always Omitted).
-    pub fn new(_db: &'db dyn Db, _heap: datalove_datalit::ast_serde::Heap, ty: Type<'db>) -> Self {
-        TypeAndHeap { ty }
-    }
-
-    /// Create from just a Type (preferred constructor).
-    pub fn from_type(ty: Type<'db>) -> Self {
+    /// Create a new TypeAndHeap from a Type.
+    pub fn new(ty: Type<'db>) -> Self {
         TypeAndHeap { ty }
     }
 
     /// Get the inner Type.
     pub fn ty(&self, _db: &'db dyn Db) -> &Type<'db> {
         &self.ty
-    }
-
-    /// Get heap (always returns Omitted for compatibility).
-    pub fn heap(&self, _db: &'db dyn Db) -> datalove_datalit::ast_serde::Heap {
-        datalove_datalit::ast_serde::Heap::Omitted
     }
 }
 

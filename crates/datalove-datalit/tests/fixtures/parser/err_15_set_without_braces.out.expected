@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "expected {} after set keyword"
-        }
-      },
-      "heap": "Omitted"
+      "ParseError": {
+        "message": "expected {} after set keyword"
+      }
     },
     "type_hint": null
   },

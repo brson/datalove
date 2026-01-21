@@ -1,47 +1,29 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Ok": {
-          "payload": {
-            "expr": {
-              "expr": {
-                "Some": {
-                  "payload": {
-                    "expr": {
-                      "expr": {
-                        "Int": {
-                          "value": "42"
-                        }
-                      },
-                      "heap": "Omitted"
-                    },
-                    "type_hint": null
+      "Ok": {
+        "payload": {
+          "expr": {
+            "Some": {
+              "payload": {
+                "expr": {
+                  "Int": {
+                    "value": "42"
                   }
-                }
-              },
-              "heap": "Omitted"
-            },
-            "type_hint": null
-          }
-        }
-      },
-      "heap": "Omitted"
-    },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Result": {
-          "inner_type": {
-            "heap": "Omitted",
-            "type_hint": {
-              "Option": {
-                "inner_type": {
-                  "heap": "Omitted",
-                  "type_hint": "U32"
-                }
+                },
+                "type_hint": null
               }
             }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": {
+      "Result": {
+        "inner_type": {
+          "Option": {
+            "inner_type": "U32"
           }
         }
       }

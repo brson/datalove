@@ -1,13 +1,7 @@
 {
   "ast": {
-    "expr": {
-      "expr": "True",
-      "heap": "Omitted"
-    },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "F64"
-    }
+    "expr": "True",
+    "type_hint": "F64"
   },
   "diagnostics": [
     {

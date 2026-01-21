@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Int": {
-          "value": "99999999999999999999"
-        }
-      },
-      "heap": "Omitted"
+      "Int": {
+        "value": "99999999999999999999"
+      }
     },
     "type_hint": null
   },

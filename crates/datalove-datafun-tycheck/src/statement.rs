@@ -349,7 +349,7 @@ pub fn check_statement<'db>(
 
                 // Convert datalit Type to datafun TypeAndHeap.
                 let inner_type = Type::Datalit((*inner_ty).clone());
-                let binding_ty = TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, inner_type);
+                let binding_ty = TypeAndHeap::new(inner_type);
 
                 // Save all variables before entering then branch.
                 let saved_variables = ctx.variables.C();
@@ -374,10 +374,7 @@ pub fn check_statement<'db>(
                     if let Some(else_binding_name) = else_binding {
                         if let Type::Datalit(datalit::tycheck::Type::Result(_)) = condition_ty.ty(db) {
                             // Bind Error type.
-                            let error_ty = TypeAndHeap::new(
-                                db,
-                                datalove_datalit::ast_serde::Heap::Omitted,
-                                Type::Datalit(datalit::tycheck::Type::Error),
+                            let error_ty = TypeAndHeap::new(Type::Datalit(datalit::tycheck::Type::Error),
                             );
                             ctx.variables.insert(else_binding_name, error_ty);
                         } else {
@@ -401,10 +398,7 @@ pub fn check_statement<'db>(
                 }
             } else {
                 // No binding: check condition is bool type.
-                let bool_type = TypeAndHeap::new(
-                    db,
-                    datalove_datalit::ast_serde::Heap::Omitted,
-                    Type::Datalit(datalit::tycheck::Type::Bool),
+                let bool_type = TypeAndHeap::new(Type::Datalit(datalit::tycheck::Type::Bool),
                 );
 
                 if let Err(e) = check_expr(ctx, condition, &bool_type) {
@@ -445,10 +439,7 @@ pub fn check_statement<'db>(
 
             // Type check while condition (if present).
             if let Some(condition) = stmt.condition {
-                let bool_type = TypeAndHeap::new(
-                    db,
-                    datalove_datalit::ast_serde::Heap::Omitted,
-                    Type::Datalit(datalit::tycheck::Type::Bool),
+                let bool_type = TypeAndHeap::new(Type::Datalit(datalit::tycheck::Type::Bool),
                 );
                 if let Err(e) = check_expr(ctx, condition, &bool_type) {
                     ctx.add_error(e);
@@ -544,7 +535,7 @@ fn typecheck_set_target_proj<'db>(
                     }
                     let field_ty = &tuple.fields[idx_usize];
                     let ty = Type::Datalit(field_ty.clone());
-                    Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
+                    Ok(TypeAndHeap::new(ty))
                 }
                 _ => {
                     Err(TypeError::ProjectionOnNonAggregate {
@@ -561,7 +552,7 @@ fn typecheck_set_target_proj<'db>(
                     for field in &struct_ty.fields {
                         if field.name.text(db) == name_str {
                             let ty = Type::Datalit((*field.ty).clone());
-                            return Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty));
+                            return Ok(TypeAndHeap::new(ty));
                         }
                     }
                     Err(TypeError::FieldNotFound {

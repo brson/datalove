@@ -1,22 +1,16 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Error": {
-          "value": {
-            "expr": {
-              "expr": {
-                "String": {
-                  "value": "\"something went wrong\""
-                }
-              },
-              "heap": "Omitted"
-            },
-            "type_hint": null
-          }
+      "Error": {
+        "value": {
+          "expr": {
+            "String": {
+              "value": "\"something went wrong\""
+            }
+          },
+          "type_hint": null
         }
-      },
-      "heap": "Omitted"
+      }
     },
     "type_hint": null
   },

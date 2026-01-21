@@ -7,30 +7,21 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "heap": "Omitted",
             "kind": "Er",
             "payload": {
               "expr": {
-                "heap": "Omitted",
                 "kind": "Error",
                 "type_hint": null,
                 "value": {
                   "expr": {
-                    "heap": "Omitted",
                     "kind": "Float",
-                    "type_hint": {
-                      "heap": "Omitted",
-                      "type_hint": "F64"
-                    },
+                    "type_hint": "F64",
                     "value": "19.0"
                   }
                 }
               }
             },
-            "type_hint": {
-              "heap": "Omitted",
-              "type_hint": "U32"
-            }
+            "type_hint": "U32"
           }
         }
       }

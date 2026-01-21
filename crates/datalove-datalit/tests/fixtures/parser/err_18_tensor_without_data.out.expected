@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "expected data [...] after tensor shape"
-        }
-      },
-      "heap": "Omitted"
+      "ParseError": {
+        "message": "expected data [...] after tensor shape"
+      }
     },
     "type_hint": null
   },

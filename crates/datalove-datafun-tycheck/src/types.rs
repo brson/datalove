@@ -13,7 +13,6 @@
 //! 10. Heap unwrapping - unwrap wrapper types
 //! 11. Expression heap extraction - get heap from expressions
 
-use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
 use datalit::ast::TypeHint;
 use crate::{Type, TypeError, TypeAndHeap};
@@ -140,9 +139,7 @@ pub fn convert_type_hint<'db>(
 fn convert_type_hint_inner<'db>(
     db: &'db dyn crate::Db,
     type_hint: TypeHint<'db>,
-) -> Result<crate::TypeAndHeap<'db>, TypeError> {
-    let heap = datalove_datalit::ast_serde::Heap::Omitted;
-    let ty = match type_hint {
+) -> Result<crate::TypeAndHeap<'db>, TypeError> {    let ty = match type_hint {
         TypeHint::Bool => Type::Datalit(datalit::tycheck::Type::Bool),
         TypeHint::U8 => Type::Datalit(datalit::tycheck::Type::U8),
         TypeHint::I8 => Type::Datalit(datalit::tycheck::Type::I8),
@@ -326,7 +323,7 @@ fn convert_type_hint_inner<'db>(
         }
     };
 
-    Ok(TypeAndHeap::new(db, heap, ty))
+    Ok(TypeAndHeap::new(ty))
 }
 
 use std::collections::HashMap;
@@ -345,9 +342,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
     db: &'db dyn crate::Db,
     type_hint: TypeHint<'db>,
     aliases: &HashMap<InternedText<'db>, TypeAndHeap<'db>>,
-) -> Result<TypeAndHeap<'db>, TypeError> {
-    let heap = datalove_datalit::ast_serde::Heap::Omitted;
-    let ty = match type_hint {
+) -> Result<TypeAndHeap<'db>, TypeError> {    let ty = match type_hint {
         TypeHint::Bool => Type::Datalit(datalit::tycheck::Type::Bool),
         TypeHint::U8 => Type::Datalit(datalit::tycheck::Type::U8),
         TypeHint::I8 => Type::Datalit(datalit::tycheck::Type::I8),
@@ -536,7 +531,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
         }
     };
 
-    Ok(TypeAndHeap::new(db, heap, ty))
+    Ok(TypeAndHeap::new(ty))
 }
 
 // ============================================================================
@@ -562,13 +557,9 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
 // ============================================================================
 
 /// Create the unit type `()`.
-pub fn unit_type<'db>(db: &'db dyn crate::Db) -> TypeAndHeap<'db> {
+pub fn unit_type<'db>(_db: &'db dyn crate::Db) -> TypeAndHeap<'db> {
     let datalit_unit = datalit::tycheck::unit_type();
-    TypeAndHeap::new(
-        db,
-        datalove_datalit::ast_serde::Heap::Omitted,
-        Type::Datalit(datalit_unit)
-    )
+    TypeAndHeap::new(Type::Datalit(datalit_unit))
 }
 
 // ============================================================================
@@ -625,41 +616,13 @@ pub fn unwrap_wrapper_types<'db>(
 ) -> TypeAndHeap<'db> {
     match ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
-            TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, Type::Datalit((*opt.inner_type).clone()))
+            TypeAndHeap::new(Type::Datalit((*opt.inner_type).clone()))
         }
         Type::Datalit(datalit::tycheck::Type::Result(res)) => {
-            TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, Type::Datalit((*res.inner_type).clone()))
+            TypeAndHeap::new(Type::Datalit((*res.inner_type).clone()))
         }
         _ => ty.clone(),
     }
-}
-
-/// Get the heap from the innermost type (unwrapping Option/Result).
-/// Always returns Omitted since heaps have been removed.
-pub fn unwrap_wrapper_heap<'db>(
-    _db: &'db dyn crate::Db,
-    _ty: &TypeAndHeap<'db>,
-) -> datalove_datalit::ast_serde::Heap {
-    datalove_datalit::ast_serde::Heap::Omitted
-}
-
-/// Get the heap from a datalit TypeAndHeap (unwrapping Option/Result).
-/// Always returns Omitted since heaps have been removed.
-pub fn unwrap_wrapper_heap_datalit<'db>(
-    _db: &'db dyn crate::Db,
-    _ty: &crate::TypeAndHeap<'db>,
-) -> datalove_datalit::ast_serde::Heap {
-    datalove_datalit::ast_serde::Heap::Omitted
-}
-
-// ============================================================================
-// Expression Heap Extraction
-// ============================================================================
-
-/// Extract the heap from an expression.
-/// Always returns Omitted since heaps have been removed from expressions.
-pub fn get_expr_heap<'db>(_db: &'db dyn crate::Db, _expr: ExprFun<'db>) -> datalove_datalit::ast_serde::Heap {
-    datalove_datalit::ast_serde::Heap::Omitted
 }
 
 // ============================================================================
@@ -672,7 +635,7 @@ pub fn to_datalit_type_and_heap<'db>(
     ty: TypeAndHeap<'db>,
 ) -> Result<crate::TypeAndHeap<'db>, TypeError> {
     match ty.ty(db) {
-        Type::Datalit(dt) => Ok(crate::TypeAndHeap::new(db, ty.heap(db), Type::Datalit(dt.clone()))),
+        Type::Datalit(dt) => Ok(crate::TypeAndHeap::new(Type::Datalit(dt.clone()))),
         Type::Function(_) => Err(TypeError::CannotSynthesize),
     }
 }
