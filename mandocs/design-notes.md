@@ -5,6 +5,23 @@ Datalove on various language design topics.
 
 
 
+### 2026-01-20 - Comparative benchmarks
+
+The `benchvs` directory contains a benchmark
+suite that compares against other scripting languages:
+Python and Julia.
+
+It contains a few single-file scripts and a justfile,
+with three common numerical benchmarks in each language.
+
+It uses datalove via its CLI `script` command.
+We are concerned with script startup time and execution time.
+
+Run `cd benchvs && just run` to run and report.
+
+
+
+
 ### 2026-01-17 - `assert` statements
 
 todo

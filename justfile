@@ -128,3 +128,7 @@ doc:
 # Show module memoization test results table.
 memo-table:
     python3 scripts/memo-table.py
+
+benchvs:
+    cd benchvs && just run
+

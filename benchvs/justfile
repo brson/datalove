@@ -1,0 +1,78 @@
+default:
+    just --list
+
+# Build datalove CLI in release mode
+build:
+    cargo build -p datalove-cli --release
+
+# Path to datalove CLI
+datalove := "../target/release/datalove"
+julia := env_var("HOME") / ".juliaup/bin/julia"
+
+# Run all benchmarks and report
+run: build
+    @echo "=== Fibonacci (fib(40)) ==="
+    hyperfine --warmup 1 \
+        -n 'datalove-interp' '{{datalove}} script fib.dfs' \
+        -n 'datalove-jit' '{{datalove}} script --jit fib.dfs' \
+        -n 'python' 'uv run fib.py' \
+        -n 'julia' '{{julia}} fib.jl'
+    @echo ""
+    @echo "=== Sum (1 to 1,000,000) ==="
+    hyperfine --warmup 1 \
+        -n 'datalove-interp' '{{datalove}} script sum.dfs' \
+        -n 'datalove-jit' '{{datalove}} script --jit sum.dfs' \
+        -n 'python' 'uv run sum.py' \
+        -n 'julia' '{{julia}} sum.jl'
+    @echo ""
+    @echo "=== Prime count (up to 10,000) ==="
+    hyperfine --warmup 1 \
+        -n 'datalove-interp' '{{datalove}} script primes.dfs' \
+        -n 'datalove-jit' '{{datalove}} script --jit primes.dfs' \
+        -n 'python' 'uv run primes.py' \
+        -n 'julia' '{{julia}} primes.jl'
+
+# Run individual benchmarks
+fib: build
+    hyperfine --warmup 1 \
+        -n 'datalove-interp' '{{datalove}} script fib.dfs' \
+        -n 'datalove-jit' '{{datalove}} script --jit fib.dfs' \
+        -n 'python' 'uv run fib.py' \
+        -n 'julia' '{{julia}} fib.jl'
+
+sum: build
+    hyperfine --warmup 1 \
+        -n 'datalove-interp' '{{datalove}} script sum.dfs' \
+        -n 'datalove-jit' '{{datalove}} script --jit sum.dfs' \
+        -n 'python' 'uv run sum.py' \
+        -n 'julia' '{{julia}} sum.jl'
+
+primes: build
+    hyperfine --warmup 1 \
+        -n 'datalove-interp' '{{datalove}} script primes.dfs' \
+        -n 'datalove-jit' '{{datalove}} script --jit primes.dfs' \
+        -n 'python' 'uv run primes.py' \
+        -n 'julia' '{{julia}} primes.jl'
+
+# Verify all scripts produce correct output
+check: build
+    @echo "Checking fib (interp)..."
+    {{datalove}} script fib.dfs
+    @echo "Checking fib (jit)..."
+    {{datalove}} script --jit fib.dfs
+    uv run fib.py
+    {{julia}} fib.jl
+    @echo ""
+    @echo "Checking sum (interp)..."
+    {{datalove}} script sum.dfs
+    @echo "Checking sum (jit)..."
+    {{datalove}} script --jit sum.dfs
+    uv run sum.py
+    {{julia}} sum.jl
+    @echo ""
+    @echo "Checking primes (interp)..."
+    {{datalove}} script primes.dfs
+    @echo "Checking primes (jit)..."
+    {{datalove}} script --jit primes.dfs
+    uv run primes.py
+    {{julia}} primes.jl

@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+# Sum benchmark - sum integers from 1 to 1,000,000
+
+def sum_to(limit: int) -> int:
+    total = 0
+    for i in range(1, limit + 1):
+        total += i
+    return total
+
+result = sum_to(1_000_000)
+print(result)
