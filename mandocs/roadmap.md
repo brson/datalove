@@ -32,7 +32,6 @@
 ## In progress
 
 - worldfile generator
-- jit
 - human docs
 - script/pipeline compilation unification
 
