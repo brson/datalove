@@ -1,0 +1,31 @@
+----------
+scriptunit-fragment
+----------
+
+// Fibonacci-like pattern that exercises int slot reassignment in a loop.
+// This tests that:
+// 1. Old values in destination slots are properly destroyed
+// 2. Source values are zeroed after move to prevent double-free
+// Without proper handling, this causes memory corruption/double-free.
+
+fun fib(n: u32): !int
+    if n .< 2
+        ret ok (n + 0)
+    end if
+    var a: int = 0
+    var b: int = 1
+    var i: u32 = 2
+    loop while i <= n
+        let next = a + b
+        set a = b
+        set b = next
+        set i = i +! 1
+    end loop
+    ret ok b
+end fun
+
+----------
+scriptunit-expr
+----------
+
+fib(10)

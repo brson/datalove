@@ -64,6 +64,7 @@ use std::collections::HashMap;
 
 use cranelift_codegen::ir::{
     self as cl_ir,
+    types as cl_types,
     InstBuilder,
     MemFlags,
 };
@@ -383,6 +384,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let param_id = ParamId(i as u32);
             // Track param values for get_operand_value.
             self.param_values.insert(param_id, val);
+        }
+
+        // Zero-initialize all aggregate slots in the frame.
+        // This ensures that destroy_local is safe on uninitialized slots
+        // (they'll see null pointers and skip freeing).
+        if let Some(frame_slot) = self.frame_slot {
+            for (slot_idx, slot_ty) in self.func.slot_types.iter().enumerate() {
+                let repr = types::ir_type_to_cranelift(slot_ty);
+                if let CraneliftRepr::Aggregate(layout) = repr {
+                    let slot_offset = self.layout.slot_offset(slot_idx as u32);
+                    let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                    let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
+                    let zero = builder.ins().iconst(cl_types::I8, 0);
+                    builder.call_memset(self.isa.frontend_config(), addr, zero, size);
+                }
+            }
         }
 
         // Compile each block.
