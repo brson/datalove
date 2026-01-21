@@ -110,10 +110,8 @@
         "int",
         "int"
       ],
-      "heap": "",
       "kind": "AnonTuple"
     },
-    "heap": "",
     "kind": "List"
   }
 }

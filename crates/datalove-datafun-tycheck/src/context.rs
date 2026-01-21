@@ -316,7 +316,7 @@ impl<'db> TypeContext<'db> {
     }
 
     pub fn lookup_variable(&self, name: InternedText<'db>) -> Option<TypeAndHeap<'db>> {
-        self.variables.get(&name).copied()
+        self.variables.get(&name).cloned()
     }
 
     pub fn lookup_function(&self, name: InternedText<'db>) -> Option<TypeFunction<'db>> {
@@ -330,7 +330,7 @@ impl<'db> TypeContext<'db> {
 
     /// Look up a type alias by name.
     pub fn lookup_type_alias(&self, name: InternedText<'db>) -> Option<TypeAndHeap<'db>> {
-        self.type_aliases.get(&name).copied()
+        self.type_aliases.get(&name).cloned()
     }
 
     /// Look up the resolved function AST by name.
@@ -352,7 +352,7 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Store the type for an expression.
-    pub fn store_expr_type(&mut self, expr: ExprFun<'db>, ty: TypeAndHeap<'db>) {
+    pub fn store_expr_type(&mut self, expr: ExprFun<'db>, ty: &TypeAndHeap<'db>) {
         let id = expr.as_id();
         let index = id.index() as usize;
 
@@ -361,13 +361,13 @@ impl<'db> TypeContext<'db> {
             self.expr_types.resize(index + 1, None);
         }
 
-        self.expr_types[index] = Some(ty);
+        self.expr_types[index] = Some(ty.clone());
     }
 
     /// Synthesize the type of an expression.
     pub fn synthesize_expr(&mut self, expr: ExprFun<'db>) -> Result<TypeAndHeap<'db>, TypeError> {
         let ty = crate::synthesize::synthesize_expr(self, expr)?;
-        self.store_expr_type(expr, ty);
+        self.store_expr_type(expr, &ty);
         Ok(ty)
     }
 
@@ -428,7 +428,7 @@ impl<'db> ScriptTypeContext<'db> {
                     // Look up the type from the expression via Salsa ID.
                     let value_expr = let_stmt.value;
                     let expr_id = value_expr.as_id().index() as usize;
-                    if let Some(ty) = result.expr_types.get(expr_id).and_then(|t| *t) {
+                    if let Some(ty) = result.expr_types.get(expr_id).and_then(|t| t.clone()) {
                         self.variables.insert(name, ty);
                     }
                 }
@@ -436,7 +436,7 @@ impl<'db> ScriptTypeContext<'db> {
                     let name = var_stmt.name;
                     let value_expr = var_stmt.value;
                     let expr_id = value_expr.as_id().index() as usize;
-                    if let Some(ty) = result.expr_types.get(expr_id).and_then(|t| *t) {
+                    if let Some(ty) = result.expr_types.get(expr_id).and_then(|t| t.clone()) {
                         self.variables.insert(name, ty);
                     }
                 }
@@ -493,7 +493,7 @@ pub fn build_function_type_from_stmt<'db>(
     let mut param_types = Vec::new();
     let mut param_modes = Vec::new();
     for param in params {
-        let ty = crate::types::convert_type_hint(db, param.type_hint).ok()?;
+        let ty = crate::types::convert_type_hint(db, param.type_hint.clone()).ok()?;
         param_types.push(ty);
         param_modes.push(param.mode);
     }

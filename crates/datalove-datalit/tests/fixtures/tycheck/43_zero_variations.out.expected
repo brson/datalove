@@ -104,7 +104,6 @@
       "i64",
       "f32"
     ],
-    "heap": "",
     "kind": "AnonTuple"
   }
 }

@@ -478,7 +478,7 @@ impl StmtTypeAlias {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtTypeAlias<'db>) -> Self {
         StmtTypeAlias {
             name: ast.name.as_str(db).to_string(),
-            type_hint: datalove_datalit::ast_serde::TypeHintAndHeap::from_ast(db, ast.type_hint),
+            type_hint: datalove_datalit::ast_serde::TypeHintAndHeap::from_type_hint(db, ast.type_hint.clone()),
         }
     }
 }
@@ -495,7 +495,7 @@ impl StmtLet {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtLet<'db>) -> Self {
         StmtLet {
             name: ast.name.as_str(db).to_string(),
-            type_hint: ast.type_hint.map(|th| datalove_datalit::ast_serde::TypeHintAndHeap::from_ast(db, th)),
+            type_hint: ast.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHintAndHeap::from_type_hint(db, th)),
             value: ExprFun::from_ast(db, ast.value),
         }
     }
@@ -505,7 +505,7 @@ impl StmtVar {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtVar<'db>) -> Self {
         StmtVar {
             name: ast.name.as_str(db).to_string(),
-            type_hint: ast.type_hint.map(|th| datalove_datalit::ast_serde::TypeHintAndHeap::from_ast(db, th)),
+            type_hint: ast.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHintAndHeap::from_type_hint(db, th)),
             value: ExprFun::from_ast(db, ast.value),
         }
     }
@@ -556,7 +556,7 @@ impl StmtFun {
         StmtFun {
             name: ast.name(db).as_str(db).to_string(),
             params: ast.params(db).iter().map(|p| FunParam::from_ast(db, p)).collect(),
-            return_type: ast.return_type(db).map(|rt| datalove_datalit::ast_serde::TypeHintAndHeap::from_ast(db, rt)),
+            return_type: ast.return_type(db).map(|rt| datalove_datalit::ast_serde::TypeHintAndHeap::from_type_hint(db, rt)),
             body: ast.body(db).iter().map(|s| Statement::from_ast(db, s)).collect(),
         }
     }
@@ -567,7 +567,7 @@ impl FunParam {
         FunParam {
             name: ast.name.as_str(db).to_string(),
             mode: ParamMode::from_ast(ast.mode),
-            type_hint: datalove_datalit::ast_serde::TypeHintAndHeap::from_ast(db, ast.type_hint),
+            type_hint: datalove_datalit::ast_serde::TypeHintAndHeap::from_type_hint(db, ast.type_hint.clone()),
         }
     }
 }
@@ -604,7 +604,7 @@ impl StmtRequire {
             crate::ast::StmtRequire::Data(d) => {
                 StmtRequire::Data(StmtRequireData {
                     name: d.name.as_str(db).to_string(),
-                    type_hint: d.type_hint.map(|th| datalove_datalit::ast_serde::TypeHintAndHeap::from_ast(db, th)),
+                    type_hint: d.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHintAndHeap::from_type_hint(db, th)),
                 })
             }
         }
@@ -825,22 +825,18 @@ impl ExprFunParseError {
 
 // Conversion helpers for inline expression types.
 
-fn heap_from_ast(ast: datalove_datalit::ast::Heap) -> datalove_datalit::ast_serde::Heap {
-    datalove_datalit::ast_serde::Heap::from_ast(ast)
-}
-
 fn type_hint_from_ast<'db>(
     db: &'db dyn Db,
-    ast: Option<datalove_datalit::ast::TypeHintAndHeap<'db>>,
+    ast: Option<datalove_datalit::ast::TypeHint<'db>>,
 ) -> Option<datalove_datalit::ast_serde::TypeHintAndHeap> {
-    ast.map(|th| datalove_datalit::ast_serde::TypeHintAndHeap::from_ast(db, th))
+    ast.map(|th| datalove_datalit::ast_serde::TypeHintAndHeap::from_type_hint(db, th))
 }
 
 impl ExprLit {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprLit<'db>) -> Self {
         ExprLit {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
         }
     }
 }
@@ -848,8 +844,8 @@ impl ExprLit {
 impl ExprInt {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprInt<'db>) -> Self {
         ExprInt {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             value: ast.value.as_str(db).to_string(),
         }
     }
@@ -858,8 +854,8 @@ impl ExprInt {
 impl ExprFloat {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprFloat<'db>) -> Self {
         ExprFloat {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             value: ast.value.as_str(db).to_string(),
         }
     }
@@ -868,8 +864,8 @@ impl ExprFloat {
 impl ExprHex {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprHex<'db>) -> Self {
         ExprHex {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             value: ast.value.as_str(db).to_string(),
         }
     }
@@ -878,8 +874,8 @@ impl ExprHex {
 impl ExprString {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprString<'db>) -> Self {
         ExprString {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             value: ast.value.as_str(db).to_string(),
         }
     }
@@ -888,8 +884,8 @@ impl ExprString {
 impl ExprList {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprList<'db>) -> Self {
         ExprList {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, *e)).collect(),
         }
     }
@@ -898,8 +894,8 @@ impl ExprList {
 impl ExprSet {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprSet<'db>) -> Self {
         ExprSet {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, *e)).collect(),
         }
     }
@@ -908,8 +904,8 @@ impl ExprSet {
 impl ExprMap {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprMap<'db>) -> Self {
         ExprMap {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             entries: ast.entries.iter().map(|e| ExprMapEntry::from_ast(db, e)).collect(),
         }
     }
@@ -927,8 +923,8 @@ impl ExprMapEntry {
 impl ExprTensor {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprTensor<'db>) -> Self {
         ExprTensor {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             shape: ast.shape.clone(),
             elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, *e)).collect(),
         }
@@ -938,8 +934,8 @@ impl ExprTensor {
 impl ExprAnonTuple {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprAnonTuple<'db>) -> Self {
         ExprAnonTuple {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, *e)).collect(),
         }
     }
@@ -948,8 +944,8 @@ impl ExprAnonTuple {
 impl ExprAnonStruct {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprAnonStruct<'db>) -> Self {
         ExprAnonStruct {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             fields: ast.fields.iter().map(|f| ExprStructField::from_ast(db, f)).collect(),
         }
     }
@@ -967,8 +963,8 @@ impl ExprStructField {
 impl ExprAnonEnum {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprAnonEnum<'db>) -> Self {
         ExprAnonEnum {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             variant_name: ast.variant_name.as_str(db).to_string(),
             payload: ast.payload.map(|p| Box::new(ExprFun::from_ast(db, p))),
         }
@@ -978,8 +974,8 @@ impl ExprAnonEnum {
 impl ExprTable {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprTable<'db>) -> Self {
         ExprTable {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             header: ast.header.iter().map(|h| h.as_str(db).to_string()).collect(),
             rows: ast.rows.iter().map(|r| ExprTableRow::from_ast(db, r)).collect(),
         }
@@ -997,8 +993,8 @@ impl ExprTableRow {
 impl ExprSome {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprSome<'db>) -> Self {
         ExprSome {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             payload: Box::new(ExprFun::from_ast(db, ast.payload)),
         }
     }
@@ -1007,8 +1003,8 @@ impl ExprSome {
 impl ExprOk {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprOk<'db>) -> Self {
         ExprOk {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             payload: Box::new(ExprFun::from_ast(db, ast.payload)),
         }
     }
@@ -1017,8 +1013,8 @@ impl ExprOk {
 impl ExprEr {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprEr<'db>) -> Self {
         ExprEr {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             payload: Box::new(ExprFun::from_ast(db, ast.payload)),
         }
     }
@@ -1027,8 +1023,8 @@ impl ExprEr {
 impl ExprData {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprData<'db>) -> Self {
         ExprData {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             value: Box::new(ExprFun::from_ast(db, ast.value)),
         }
     }
@@ -1037,8 +1033,8 @@ impl ExprData {
 impl ExprError {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprError<'db>) -> Self {
         ExprError {
-            heap: heap_from_ast(ast.heap),
-            type_hint: type_hint_from_ast(db, ast.type_hint),
+            heap: datalove_datalit::ast_serde::Heap::Omitted,
+            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             value: Box::new(ExprFun::from_ast(db, ast.value)),
         }
     }

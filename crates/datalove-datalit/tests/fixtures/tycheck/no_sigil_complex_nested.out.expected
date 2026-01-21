@@ -143,12 +143,10 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "",
     "key_type": "string",
     "kind": "Map",
     "value_type": {
       "element_type": {
-        "heap": "",
         "inner_type": {
           "fields": [
             {
@@ -160,12 +158,10 @@
               "type": "string"
             }
           ],
-          "heap": "",
           "kind": "AnonStruct"
         },
         "kind": "Option"
       },
-      "heap": "",
       "kind": "List"
     }
   }

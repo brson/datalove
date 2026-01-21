@@ -77,7 +77,7 @@ fn require_option_return_type<'db>(
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
     // Scripts always have an expected return type, so this is always Some.
-    let expected_return = ctx.expected_return_type
+    let expected_return = ctx.expected_return_type.clone()
         .expect("try operator used outside function context");
     match expected_return.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Option(_)) => Ok(expected_return),
@@ -100,7 +100,7 @@ fn require_result_return_type<'db>(
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
     // Scripts always have an expected return type, so this is always Some.
-    let expected_return = ctx.expected_return_type
+    let expected_return = ctx.expected_return_type.clone()
         .expect("try operator used outside function context");
     match expected_return.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Result(_)) => Ok(expected_return),
@@ -152,17 +152,12 @@ pub fn synthesize_expr<'db>(
             for elem in elements {
                 let elem_ty = ctx.synthesize_expr(*elem)?;
 
-                // Extract datalit TypeAndHeap from datafun TypeAndHeap.
+                // Extract datalit type from datafun TypeAndHeap.
                 // Tuple elements must be datalit types. Function types cannot
                 // appear in expressions, so this match is exhaustive in practice.
                 match elem_ty.ty(db) {
                     Type::Datalit(datalit_ty) => {
-                        let datalit_elem_ty = datalit::tycheck::TypeAndHeap::new(
-                            db,
-                            elem_ty.heap(db),
-                            datalit_ty.C(),
-                        );
-                        datalit_element_types.push(datalit_elem_ty);
+                        datalit_element_types.push(datalit_ty.clone());
                     }
                     Type::Function(_) => {
                         unreachable!("function types cannot appear in tuple elements");
@@ -178,7 +173,7 @@ pub fn synthesize_expr<'db>(
             // Wrap in datafun type.
             // Use Heap::Omitted since tuple heap is determined by element heaps.
             let ty = Type::Datalit(datalit_tuple_ty);
-            Ok(TypeAndHeap::new(db, datalit::ast::Heap::Omitted, ty))
+            Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
         }
 
         ExprFunKind::TryOption(ref try_op) => {
@@ -200,141 +195,117 @@ pub fn synthesize_expr<'db>(
         // New inline variants - simple literals.
         // All these check for type hints first.
         ExprFunKind::True(lit) => {
-            if let Some(type_hint) = lit.type_hint {
+            if let Some(type_hint) = lit.type_hint.clone() {
                 return convert_type_hint(db, type_hint);
             }
-            let heap = lit.heap;
             let ty = Type::Datalit(datalit::tycheck::Type::Bool);
-            Ok(TypeAndHeap::new(db, heap, ty))
+            Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
         }
         ExprFunKind::False(lit) => {
-            if let Some(type_hint) = lit.type_hint {
+            if let Some(type_hint) = lit.type_hint.clone() {
                 return convert_type_hint(db, type_hint);
             }
-            let heap = lit.heap;
             let ty = Type::Datalit(datalit::tycheck::Type::Bool);
-            Ok(TypeAndHeap::new(db, heap, ty))
+            Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
         }
         ExprFunKind::None(lit) => {
             // None requires type hint to determine the inner type.
-            if let Some(type_hint) = lit.type_hint {
+            if let Some(type_hint) = lit.type_hint.clone() {
                 return convert_type_hint(db, type_hint);
             }
             Err(ctx.error_cannot_synthesize(expr, "cannot infer type for None value"))
         }
         ExprFunKind::Int(int_expr) => {
             // If type hint present, use it and validate the value fits.
-            if let Some(type_hint) = int_expr.type_hint {
+            if let Some(type_hint) = int_expr.type_hint.clone() {
                 let result_ty = convert_type_hint(db, type_hint)?;
                 // Validate integer value fits within the type.
                 let value_str = int_expr.value.as_str(db);
                 if let Type::Datalit(datalit_ty) = result_ty.ty(db) {
                     check_int_fits_wrapped_type(value_str, datalit_ty, db)?;
                 }
-                // Validate heap compatibility between type hint and expression.
-                let expected_heap = unwrap_wrapper_heap(db, result_ty);
-                let actual_heap = int_expr.heap;
-                if !heaps_compatible(expected_heap, actual_heap) {
-                    return Err(TypeError::HeapMismatch {
-                        expected_heap: heap_to_string(expected_heap),
-                        actual_heap: heap_to_string(actual_heap),
-                    });
-                }
                 return Ok(result_ty);
             }
-            let heap = int_expr.heap;
             let value_str = int_expr.value.as_str(db);
             // Parse as u32 by default.
             if value_str.parse::<u32>().is_ok() {
                 let ty = Type::Datalit(datalit::tycheck::Type::U32);
-                Ok(TypeAndHeap::new(db, heap, ty))
+                Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
             } else if value_str.parse::<i32>().is_ok() {
                 let ty = Type::Datalit(datalit::tycheck::Type::I32);
-                Ok(TypeAndHeap::new(db, heap, ty))
+                Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
             } else {
                 Err(ctx.error_cannot_synthesize(expr, "integer literal out of range"))
             }
         }
         ExprFunKind::Float(float_expr) => {
-            if let Some(type_hint) = float_expr.type_hint {
+            if let Some(type_hint) = float_expr.type_hint.clone() {
                 return convert_type_hint(db, type_hint);
             }
-            let heap = float_expr.heap;
             let ty = Type::Datalit(datalit::tycheck::Type::F32);
-            Ok(TypeAndHeap::new(db, heap, ty))
+            Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
         }
         ExprFunKind::Hex(hex_expr) => {
             // If type hint present, use it and validate the value fits.
-            if let Some(type_hint) = hex_expr.type_hint {
+            if let Some(type_hint) = hex_expr.type_hint.clone() {
                 let result_ty = convert_type_hint(db, type_hint)?;
                 // Validate hex value fits within the type.
                 let value_str = hex_expr.value.as_str(db);
                 if let Type::Datalit(datalit_ty) = result_ty.ty(db) {
                     check_hex_fits_wrapped_type(value_str, datalit_ty, db)?;
                 }
-                // Validate heap compatibility between type hint and expression.
-                let expected_heap = unwrap_wrapper_heap(db, result_ty);
-                let actual_heap = hex_expr.heap;
-                if !heaps_compatible(expected_heap, actual_heap) {
-                    return Err(TypeError::HeapMismatch {
-                        expected_heap: heap_to_string(expected_heap),
-                        actual_heap: heap_to_string(actual_heap),
-                    });
-                }
                 return Ok(result_ty);
             }
-            let heap = hex_expr.heap;
             let value_str = hex_expr.value.as_str(db);
             let hex_part = value_str.trim_start_matches('-').trim_start_matches("0x").trim_start_matches("0X");
             if u32::from_str_radix(hex_part, 16).is_ok() && !value_str.starts_with('-') {
                 let ty = Type::Datalit(datalit::tycheck::Type::U32);
-                Ok(TypeAndHeap::new(db, heap, ty))
+                Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
             } else {
                 Err(ctx.error_cannot_synthesize(expr, "hex literal out of range"))
             }
         }
         ExprFunKind::String(str_expr) => {
-            if let Some(type_hint) = str_expr.type_hint {
+            if let Some(type_hint) = str_expr.type_hint.clone() {
                 return convert_type_hint(db, type_hint);
             }
-            let heap = str_expr.heap;
             let ty = Type::Datalit(datalit::tycheck::Type::String);
-            Ok(TypeAndHeap::new(db, heap, ty))
+            Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
         }
 
         // Collection types.
         ExprFunKind::List(ref list_expr) => {
-            if let Some(type_hint) = list_expr.type_hint {
+            if let Some(type_hint) = list_expr.type_hint.clone() {
                 let expected_ty = convert_type_hint(db, type_hint)?;
-                // Check elements against expected type (catches heap mismatches).
-                check_list_elements(ctx, &list_expr.elements, expected_ty)?;
+                // Check elements against expected type.
+                check_list_elements(ctx, &list_expr.elements, &expected_ty)?;
                 return Ok(expected_ty);
             }
             synthesize_inline_list(ctx, expr, list_expr)
         }
         ExprFunKind::Set(ref set_expr) => {
-            if let Some(type_hint) = set_expr.type_hint {
+            if let Some(type_hint) = set_expr.type_hint.clone() {
                 let expected_ty = convert_type_hint(db, type_hint)?;
-                // Check elements against expected type (catches heap mismatches).
-                check_set_elements(ctx, &set_expr.elements, expected_ty)?;
+                // Check elements against expected type.
+                check_set_elements(ctx, &set_expr.elements, &expected_ty)?;
                 return Ok(expected_ty);
             }
             synthesize_inline_set(ctx, expr, set_expr)
         }
         ExprFunKind::Map(ref map_expr) => {
-            if let Some(type_hint) = map_expr.type_hint {
+            if let Some(type_hint) = map_expr.type_hint.clone() {
                 let expected_ty = convert_type_hint(db, type_hint)?;
-                // Check entries against expected type (catches heap mismatches).
-                check_map_entries(ctx, &map_expr.entries, expected_ty)?;
+                // Check entries against expected type.
+                check_map_entries(ctx, &map_expr.entries, &expected_ty)?;
                 return Ok(expected_ty);
             }
             synthesize_inline_map(ctx, expr, map_expr)
         }
         ExprFunKind::Tensor(ref tensor_expr) => {
-            if let Some(type_hint) = tensor_expr.type_hint {
+            if let Some(type_hint) = tensor_expr.type_hint.clone() {
                 let expected_ty = convert_type_hint(db, type_hint)?;
                 // Check rank and elements against expected type.
-                check_tensor_shape_and_elements(ctx, tensor_expr.C(), expected_ty)?;
+                check_tensor_shape_and_elements(ctx, tensor_expr.C(), &expected_ty)?;
                 return Ok(expected_ty);
             }
             synthesize_inline_tensor(ctx, expr, tensor_expr)
@@ -342,25 +313,25 @@ pub fn synthesize_expr<'db>(
 
         // Aggregate types.
         ExprFunKind::AnonTuple(ref tuple_expr) => {
-            if let Some(type_hint) = tuple_expr.type_hint {
+            if let Some(type_hint) = tuple_expr.type_hint.clone() {
                 let expected_ty = convert_type_hint(db, type_hint)?;
                 // Check elements against expected type (catches arity mismatches).
-                check_tuple_elements(ctx, &tuple_expr.elements, expected_ty)?;
+                check_tuple_elements(ctx, &tuple_expr.elements, &expected_ty)?;
                 return Ok(expected_ty);
             }
             synthesize_inline_anon_tuple(ctx, expr, tuple_expr)
         }
         ExprFunKind::AnonStruct(ref struct_expr) => {
-            if let Some(type_hint) = struct_expr.type_hint {
+            if let Some(type_hint) = struct_expr.type_hint.clone() {
                 let expected_ty = convert_type_hint(db, type_hint)?;
                 // Check fields against expected type (catches arity mismatches).
-                check_struct_fields(ctx, &struct_expr.fields, expected_ty)?;
+                check_struct_fields(ctx, &struct_expr.fields, &expected_ty)?;
                 return Ok(expected_ty);
             }
             synthesize_inline_anon_struct(ctx, expr, struct_expr)
         }
         ExprFunKind::AnonEnum(enum_expr) => {
-            if let Some(type_hint) = enum_expr.type_hint {
+            if let Some(type_hint) = enum_expr.type_hint.clone() {
                 let expected_ty = convert_type_hint(db, type_hint)?;
                 check_enum_variant(ctx, enum_expr.variant_name, enum_expr.payload, &expected_ty)?;
                 return Ok(expected_ty);
@@ -370,65 +341,69 @@ pub fn synthesize_expr<'db>(
 
         // Wrapper types.
         ExprFunKind::Some(some_expr) => {
-            if let Some(type_hint) = some_expr.type_hint {
+            if let Some(type_hint) = some_expr.type_hint.clone() {
                 return convert_type_hint(db, type_hint);
             }
             // Synthesize inner type and wrap in Option.
             let payload = some_expr.payload;
             let inner_ty = ctx.synthesize_expr(payload)?;
-            let heap = some_expr.heap;
-            let inner_datalit = to_datalit_type_and_heap(db, inner_ty)?;
+            let inner_datalit_ty = match inner_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(ctx.error_cannot_synthesize(expr, "function type in Some")),
+            };
             let option_ty = datalit::tycheck::Type::Option(
-                datalit::tycheck::TypeOption { inner_type: inner_datalit }
+                datalit::tycheck::TypeOption { inner_type: Box::new(inner_datalit_ty) }
             );
-            Ok(TypeAndHeap::new(db, heap, Type::Datalit(option_ty)))
+            Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, Type::Datalit(option_ty)))
         }
         ExprFunKind::Ok(ok_expr) => {
-            if let Some(type_hint) = ok_expr.type_hint {
+            if let Some(type_hint) = ok_expr.type_hint.clone() {
                 return convert_type_hint(db, type_hint);
             }
             // Synthesize inner type and wrap in Result.
             let payload = ok_expr.payload;
             let inner_ty = ctx.synthesize_expr(payload)?;
-            let heap = ok_expr.heap;
-            let inner_datalit = to_datalit_type_and_heap(db, inner_ty)?;
+            let inner_datalit_ty = match inner_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(ctx.error_cannot_synthesize(expr, "function type in Ok")),
+            };
             let result_ty = datalit::tycheck::Type::Result(
-                datalit::tycheck::TypeResult { inner_type: inner_datalit }
+                datalit::tycheck::TypeResult { inner_type: Box::new(inner_datalit_ty) }
             );
-            Ok(TypeAndHeap::new(db, heap, Type::Datalit(result_ty)))
+            Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, Type::Datalit(result_ty)))
         }
         ExprFunKind::Er(er_expr) => {
             // Er requires type hint to determine the Ok type of the Result.
-            if let Some(type_hint) = er_expr.type_hint {
+            if let Some(type_hint) = er_expr.type_hint.clone() {
                 // Check payload against Error type.
                 let error_ty = TypeAndHeap::new(
                     db,
-                    datalit::ast::Heap::Omitted,
+                    datalove_datalit::ast_serde::Heap::Omitted,
                     Type::Datalit(datalit::tycheck::Type::Error)
                 );
-                check_expr(ctx, er_expr.payload, error_ty)?;
+                check_expr(ctx, er_expr.payload, &error_ty)?;
                 let result = convert_type_hint(db, type_hint)?;
-                ctx.store_expr_type(expr, result);
+                ctx.store_expr_type(expr, &result);
                 return Ok(result);
             }
             Err(ctx.error_cannot_synthesize(expr, "cannot infer type for Er value"))
         }
         ExprFunKind::Data(ref data_expr) => {
-            if let Some(type_hint) = data_expr.type_hint {
+            if let Some(type_hint) = data_expr.type_hint.clone() {
                 // Synthesize inner value type (Data can wrap any type).
                 ctx.synthesize_expr(data_expr.value)?;
                 let result = convert_type_hint(db, type_hint)?;
-                ctx.store_expr_type(expr, result);
+                ctx.store_expr_type(expr, &result);
                 return Ok(result);
             }
             synthesize_inline_data(ctx, expr, data_expr)
         }
         ExprFunKind::Error(ref err_expr) => {
-            if let Some(type_hint) = err_expr.type_hint {
+            if let Some(type_hint) = err_expr.type_hint.clone() {
                 // Synthesize inner value type (Error can wrap any type).
                 ctx.synthesize_expr(err_expr.value)?;
                 let result = convert_type_hint(db, type_hint)?;
-                ctx.store_expr_type(expr, result);
+                ctx.store_expr_type(expr, &result);
                 return Ok(result);
             }
             synthesize_inline_err(ctx, expr, err_expr)
@@ -436,7 +411,7 @@ pub fn synthesize_expr<'db>(
 
         // Table expression.
         ExprFunKind::Table(ref table_expr) => {
-            if let Some(type_hint) = table_expr.type_hint {
+            if let Some(type_hint) = table_expr.type_hint.clone() {
                 let expected_ty = convert_type_hint(db, type_hint)?;
                 // Check rows against expected table type.
                 if let Type::Datalit(datalit::tycheck::Type::Table(table_ty)) = expected_ty.ty(db) {
@@ -524,7 +499,7 @@ fn synthesize_binop<'db>(
             } else if is_fixed_int_type(operand_ty) {
                 // Fixed ints widen to int.
                 let int_ty = Type::Datalit(datalit::tycheck::Type::Int);
-                TypeAndHeap::new(db, datalit::ast::Heap::Omitted, int_ty)
+                TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, int_ty)
             } else {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
@@ -601,13 +576,13 @@ fn synthesize_binop<'db>(
         // Comparison: bool.
         Lt | Gt | Le | Ge | Eq | Ne => {
             let bool_ty = Type::Datalit(datalit::tycheck::Type::Bool);
-            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, bool_ty)
+            TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, bool_ty)
         }
 
         // Boolean logic operators: bool -> bool.
         And | Or | Xor => {
             let bool_ty = Type::Datalit(datalit::tycheck::Type::Bool);
-            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, bool_ty)
+            TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, bool_ty)
         }
     };
 
@@ -697,7 +672,7 @@ fn synthesize_unaryop<'db>(
         // Boolean not: bool -> bool.
         UnaryOp::Not => {
             let bool_ty = Type::Datalit(datalit::tycheck::Type::Bool);
-            TypeAndHeap::new(db, datalit::ast::Heap::Omitted, bool_ty)
+            TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, bool_ty)
         }
     };
 
@@ -736,7 +711,7 @@ fn synthesize_function_call<'db>(
         // Set ref context for reference parameter modes.
         let old_ref_context = ctx.ref_context;
         ctx.ref_context = matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out);
-        let result = check_expr(ctx, *arg, *expected_param_ty);
+        let result = check_expr(ctx, *arg, expected_param_ty);
         ctx.ref_context = old_ref_context;
         result?;
     }
@@ -820,7 +795,7 @@ fn intrinsic_type_to_datafun<'db>(db: &'db dyn crate::Db, ty: datalove_datafun_i
         IntrinsicType::Bool => datalit::tycheck::Type::Bool,
     };
 
-    TypeAndHeap::new(db, datalit::ast::Heap::Omitted, Type::Datalit(datalit_ty))
+    TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, Type::Datalit(datalit_ty))
 }
 
 // ============================================================================
@@ -840,7 +815,7 @@ fn synthesize_try_option<'db>(
 
     // Operand must be Option<T>.
     let inner_ty = match operand_ty.ty(db) {
-        Type::Datalit(datalit::tycheck::Type::Option(opt)) => opt.inner_type,
+        Type::Datalit(datalit::tycheck::Type::Option(opt)) => opt.inner_type.clone(),
         _ => {
             return Err(ctx.error_try_type_mismatch(
                 expr,
@@ -855,9 +830,8 @@ fn synthesize_try_option<'db>(
     require_option_return_type(ctx, expr, "?")?;
 
     // Return the unwrapped type T.
-    let heap = inner_ty.heap(db);
-    let ty = Type::Datalit(inner_ty.ty(db).C());
-    Ok(TypeAndHeap::new(db, heap, ty))
+    let ty = Type::Datalit(*inner_ty);
+    Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
 }
 
 /// Synthesize type for try-result operator (!).
@@ -873,7 +847,7 @@ fn synthesize_try_result<'db>(
 
     // Operand must be Result<T>.
     let inner_ty = match operand_ty.ty(db) {
-        Type::Datalit(datalit::tycheck::Type::Result(res)) => res.inner_type,
+        Type::Datalit(datalit::tycheck::Type::Result(res)) => res.inner_type.clone(),
         _ => {
             return Err(ctx.error_try_type_mismatch(
                 expr,
@@ -888,9 +862,8 @@ fn synthesize_try_result<'db>(
     require_result_return_type(ctx, expr, "!")?;
 
     // Return the unwrapped type T.
-    let heap = inner_ty.heap(db);
-    let ty = Type::Datalit(inner_ty.ty(db).C());
-    Ok(TypeAndHeap::new(db, heap, ty))
+    let ty = Type::Datalit(*inner_ty);
+    Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
 }
 
 // ============================================================================
@@ -935,15 +908,14 @@ fn synthesize_field_proj<'db>(
 
                     // Check that field is a copy type or we're in ref context.
                     // Move-type field projections are allowed in ref context.
-                    if !is_copy_type(db, field_ty.ty(db)) && !ctx.ref_context {
+                    if !is_copy_type(db, field_ty) && !ctx.ref_context {
                         return Err(TypeError::NonCopyFieldProjection {
-                            field_ty: datalit::tycheck::type_to_string(db, field_ty.ty(db)),
+                            field_ty: datalit::tycheck::type_to_string(db, field_ty),
                         });
                     }
 
-                    let heap = field_ty.heap(db);
-                    let ty = Type::Datalit(field_ty.ty(db).C());
-                    Ok(TypeAndHeap::new(db, heap, ty))
+                    let ty = Type::Datalit(field_ty.clone());
+                    Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
                 }
                 _ => {
                     Err(TypeError::ProjectionOnNonAggregate {
@@ -961,15 +933,14 @@ fn synthesize_field_proj<'db>(
                         if field.name.text(db) == name_str {
                             // Check that field is a copy type or we're in ref context.
                             // Move-type field projections are allowed in ref context.
-                            if !is_copy_type(db, field.ty.ty(db)) && !ctx.ref_context {
+                            if !is_copy_type(db, &field.ty) && !ctx.ref_context {
                                 return Err(TypeError::NonCopyFieldProjection {
-                                    field_ty: datalit::tycheck::type_to_string(db, field.ty.ty(db)),
+                                    field_ty: datalit::tycheck::type_to_string(db, &field.ty),
                                 });
                             }
 
-                            let heap = field.ty.heap(db);
-                            let ty = Type::Datalit(field.ty.ty(db).C());
-                            return Ok(TypeAndHeap::new(db, heap, ty));
+                            let ty = Type::Datalit((*field.ty).clone());
+                            return Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty));
                         }
                     }
                     Err(TypeError::FieldNotFound {
@@ -998,26 +969,29 @@ fn synthesize_inline_list<'db>(
     list_expr: &ExprList<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
-    let heap = list_expr.heap;
+    let heap = datalove_datalit::ast_serde::Heap::Omitted;
     let elements = &list_expr.elements;
 
     if elements.is_empty() {
-        let ty = Type::Datalit(datalit::tycheck::empty_list_type(db, heap).ty(db).C());
+        let ty = Type::Datalit(datalit::tycheck::empty_list_type());
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
 
     // Synthesize type of first element.
     let first_ty = ctx.synthesize_expr(elements[0])?;
-    let first_datalit = to_datalit_type_and_heap(db, first_ty)?;
+    let first_datalit = match first_ty.ty(db) {
+        Type::Datalit(dt) => dt.clone(),
+        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+    };
 
-    // Check remaining elements for type and heap compatibility.
+    // Check remaining elements for type compatibility.
     for elem in &elements[1..] {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-        check_element_compatible(db, first_ty, elem_ty)?;
+        check_element_compatible(db, &first_ty, &elem_ty)?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::List(
-        datalit::tycheck::TypeList { element_type: first_datalit }
+        datalit::tycheck::TypeList { element_type: Box::new(first_datalit) }
     ));
     Ok(TypeAndHeap::new(db, heap, ty))
 }
@@ -1029,25 +1003,28 @@ fn synthesize_inline_set<'db>(
     set_expr: &ExprSet<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
-    let heap = set_expr.heap;
+    let heap = datalove_datalit::ast_serde::Heap::Omitted;
     let elements = &set_expr.elements;
 
     if elements.is_empty() {
-        let ty = Type::Datalit(datalit::tycheck::empty_set_type(db, heap).ty(db).C());
+        let ty = Type::Datalit(datalit::tycheck::empty_set_type());
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
 
     let first_ty = ctx.synthesize_expr(elements[0])?;
-    let first_datalit = to_datalit_type_and_heap(db, first_ty)?;
+    let first_datalit = match first_ty.ty(db) {
+        Type::Datalit(dt) => dt.clone(),
+        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+    };
 
-    // Check remaining elements for type and heap compatibility.
+    // Check remaining elements for type compatibility.
     for elem in &elements[1..] {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-        check_element_compatible(db, first_ty, elem_ty)?;
+        check_element_compatible(db, &first_ty, &elem_ty)?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Set(
-        datalit::tycheck::TypeSet { element_type: first_datalit }
+        datalit::tycheck::TypeSet { element_type: Box::new(first_datalit) }
     ));
     Ok(TypeAndHeap::new(db, heap, ty))
 }
@@ -1059,29 +1036,35 @@ fn synthesize_inline_map<'db>(
     map_expr: &ExprMap<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
-    let heap = map_expr.heap;
+    let heap = datalove_datalit::ast_serde::Heap::Omitted;
     let entries = &map_expr.entries;
 
     if entries.is_empty() {
-        let ty = Type::Datalit(datalit::tycheck::empty_map_type(db, heap).ty(db).C());
+        let ty = Type::Datalit(datalit::tycheck::empty_map_type());
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
 
     let first_key_ty = ctx.synthesize_expr(entries[0].key)?;
-    let first_key_datalit = to_datalit_type_and_heap(db, first_key_ty)?;
+    let first_key_datalit = match first_key_ty.ty(db) {
+        Type::Datalit(dt) => dt.clone(),
+        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+    };
     let first_value_ty = ctx.synthesize_expr(entries[0].value)?;
-    let first_value_datalit = to_datalit_type_and_heap(db, first_value_ty)?;
+    let first_value_datalit = match first_value_ty.ty(db) {
+        Type::Datalit(dt) => dt.clone(),
+        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+    };
 
-    // Check remaining entries for type and heap compatibility.
+    // Check remaining entries for type compatibility.
     for entry in &entries[1..] {
         let key_ty = ctx.synthesize_expr(entry.key)?;
         let value_ty = ctx.synthesize_expr(entry.value)?;
-        check_element_compatible(db, first_key_ty, key_ty)?;
-        check_element_compatible(db, first_value_ty, value_ty)?;
+        check_element_compatible(db, &first_key_ty, &key_ty)?;
+        check_element_compatible(db, &first_value_ty, &value_ty)?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Map(
-        datalit::tycheck::TypeMap { key_type: first_key_datalit, value_type: first_value_datalit }
+        datalit::tycheck::TypeMap { key_type: Box::new(first_key_datalit), value_type: Box::new(first_value_datalit) }
     ));
     Ok(TypeAndHeap::new(db, heap, ty))
 }
@@ -1093,7 +1076,7 @@ fn synthesize_inline_tensor<'db>(
     tensor_expr: &ExprTensor<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
-    let heap = tensor_expr.heap;
+    let heap = datalove_datalit::ast_serde::Heap::Omitted;
     let shape = &tensor_expr.shape;
     let elements = &tensor_expr.elements;
 
@@ -1101,21 +1084,24 @@ fn synthesize_inline_tensor<'db>(
     let rank = shape.len() as u32;
 
     if elements.is_empty() {
-        let ty = Type::Datalit(datalit::tycheck::empty_tensor_type(db, heap, rank).ty(db).C());
+        let ty = Type::Datalit(datalit::tycheck::empty_tensor_type(rank));
         return Ok(TypeAndHeap::new(db, heap, ty));
     }
 
     let first_ty = ctx.synthesize_expr(elements[0])?;
-    let first_datalit = to_datalit_type_and_heap(db, first_ty)?;
+    let first_datalit = match first_ty.ty(db) {
+        Type::Datalit(dt) => dt.clone(),
+        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+    };
 
-    // Check remaining elements for type and heap compatibility.
+    // Check remaining elements for type compatibility.
     for elem in &elements[1..] {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-        check_element_compatible(db, first_ty, elem_ty)?;
+        check_element_compatible(db, &first_ty, &elem_ty)?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Tensor(
-        datalit::tycheck::TypeTensor { element_type: first_datalit, rank }
+        datalit::tycheck::TypeTensor { element_type: Box::new(first_datalit), rank }
     ));
     Ok(TypeAndHeap::new(db, heap, ty))
 }
@@ -1127,13 +1113,16 @@ fn synthesize_inline_anon_tuple<'db>(
     tuple_expr: &ExprAnonTuple<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
-    let heap = tuple_expr.heap;
+    let heap = datalove_datalit::ast_serde::Heap::Omitted;
     let elements = &tuple_expr.elements;
 
     let mut elem_types = Vec::new();
     for elem in elements {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-        let elem_datalit = to_datalit_type_and_heap(db, elem_ty)?;
+        let elem_datalit = match elem_ty.ty(db) {
+            Type::Datalit(dt) => dt.clone(),
+            Type::Function(_) => return Err(TypeError::CannotSynthesize),
+        };
         elem_types.push(elem_datalit);
     }
 
@@ -1150,14 +1139,17 @@ fn synthesize_inline_anon_struct<'db>(
     struct_expr: &ExprAnonStruct<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
-    let heap = struct_expr.heap;
+    let heap = datalove_datalit::ast_serde::Heap::Omitted;
     let fields = &struct_expr.fields;
 
     let mut field_types = Vec::new();
     for field in fields {
         let field_ty = ctx.synthesize_expr(field.value)?;
-        let field_datalit = to_datalit_type_and_heap(db, field_ty)?;
-        field_types.push(datalit::tycheck::TypeNamedField { name: field.name, ty: field_datalit });
+        let field_datalit = match field_ty.ty(db) {
+            Type::Datalit(dt) => dt.clone(),
+            Type::Function(_) => return Err(TypeError::CannotSynthesize),
+        };
+        field_types.push(datalit::tycheck::TypeNamedField { name: field.name, ty: Box::new(field_datalit) });
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::AnonStruct(
@@ -1173,7 +1165,6 @@ fn synthesize_inline_data<'db>(
     data_expr: &ExprData<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
-    let heap = data_expr.heap;
     let value = data_expr.value;
 
     // Type-check the inner value.
@@ -1181,7 +1172,7 @@ fn synthesize_inline_data<'db>(
 
     // Data synthesizes to Type::Data (unit type).
     let ty = Type::Datalit(datalit::tycheck::Type::Data);
-    Ok(TypeAndHeap::new(db, heap, ty))
+    Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
 }
 
 /// Synthesize type for inline err expression.
@@ -1191,7 +1182,6 @@ fn synthesize_inline_err<'db>(
     err_expr: &ExprError<'db>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
     let db = ctx.db;
-    let heap = err_expr.heap;
     let value = err_expr.value;
 
     // Type-check the inner value.
@@ -1199,5 +1189,5 @@ fn synthesize_inline_err<'db>(
 
     // Error synthesizes to Type::Error (unit type).
     let ty = Type::Datalit(datalit::tycheck::Type::Error);
-    Ok(TypeAndHeap::new(db, heap, ty))
+    Ok(TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, ty))
 }

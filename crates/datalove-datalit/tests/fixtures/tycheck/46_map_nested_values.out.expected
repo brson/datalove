@@ -127,7 +127,6 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "",
     "key_type": "u32",
     "kind": "Map",
     "value_type": {
@@ -135,7 +134,6 @@
         "string",
         "bool"
       ],
-      "heap": "",
       "kind": "AnonTuple"
     }
   }

@@ -91,13 +91,6 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "kind": "IntOutOfRange"
             })
         }
-        TypeError::HeapMismatch { expected_heap, actual_heap } => {
-            json!({
-                "kind": "HeapMismatch",
-                "expected_heap": expected_heap,
-                "actual_heap": actual_heap
-            })
-        }
         TypeError::MissingField(name) => {
             json!({
                 "kind": "MissingField",
@@ -193,32 +186,22 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
     }
 }
 
-fn typeandheap_to_string(db: &dyn datalove_datafun::Db, tah: datalove_datafun_tycheck::TypeAndHeap) -> String {
+fn typeandheap_to_string(db: &dyn datalove_datafun::Db, tah: &datalove_datafun_tycheck::TypeAndHeap) -> String {
     use datalove_datafun_tycheck::Type;
-    use datalove_datalit::ast::Heap;
 
-    let heap_prefix = match tah.heap(db) {
-        Heap::Local => "@",
-        Heap::Global => "#",
-        Heap::Omitted => "",
-    };
-
+    // Heap is always omitted now, no prefix needed.
     let type_str = match tah.ty(db) {
         Type::Datalit(dt) => datalove_datalit::tycheck::type_to_string(db, dt),
         Type::Function(func) => {
             let params: Vec<_> = func.param_types(db).iter()
-                .map(|p| typeandheap_to_string(db, *p))
+                .map(|p| typeandheap_to_string(db, p))
                 .collect();
-            let ret = typeandheap_to_string(db, func.return_type(db));
+            let ret = typeandheap_to_string(db, &func.return_type(db));
             format!("({}) -> {}", params.join(", "), ret)
         }
     };
 
-    if matches!(tah.ty(db), Type::Function(_)) {
-        type_str
-    } else {
-        format!("{}{}", heap_prefix, type_str)
-    }
+    type_str
 }
 
 fn analyze_file(path: &Path) -> Result<String, String> {
@@ -279,10 +262,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         if let Some(exports) = module_exports.get(&module_id) {
             for (name, func_type) in exports.functions(&db) {
                 let param_types: Vec<_> = func_type.param_types(&db).iter().map(|p| {
-                    typeandheap_to_string(&db, *p)
+                    typeandheap_to_string(&db, p)
                 }).collect();
 
-                let return_type = typeandheap_to_string(&db, func_type.return_type(&db));
+                let return_type = typeandheap_to_string(&db, &func_type.return_type(&db));
 
                 functions.push(json!({
                     "name": name.as_str(&db),

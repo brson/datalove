@@ -1,6 +1,6 @@
-fun test(opt: ?@u32): @u32
+fun test(opt: ?u32): u32
   if opt |val|
-    let x: @u32 = val
+    let x: u32 = val
   end if
   ret x
 end fun

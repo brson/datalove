@@ -13,16 +13,13 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "",
     "key_type": {
       "fields": [],
-      "heap": "",
       "kind": "AnonTuple"
     },
     "kind": "Map",
     "value_type": {
       "fields": [],
-      "heap": "",
       "kind": "AnonTuple"
     }
   }

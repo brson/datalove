@@ -119,7 +119,6 @@
   "errors": [],
   "root_type": {
     "element_type": "i32",
-    "heap": "",
     "kind": "Tensor",
     "rank": 3
   }

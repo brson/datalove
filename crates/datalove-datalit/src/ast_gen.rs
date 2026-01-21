@@ -19,9 +19,6 @@ pub struct AstGenConfig {
     /// Whether to include type hints in generated ExprFull.
     pub include_type_hints: bool,
 
-    /// Distribution of heap annotations.
-    pub heap_distribution: HeapDistribution,
-
     /// Relative weights for different type constructors.
     pub type_weights: TypeWeights,
 
@@ -39,33 +36,9 @@ impl Default for AstGenConfig {
             min_collection_size: 0,
             max_collection_size: 5,
             include_type_hints: true,
-            heap_distribution: HeapDistribution::default(),
             type_weights: TypeWeights::default(),
             numeric_strategy: NumericStrategy::Mixed,
             tensor_config: TensorConfig::default(),
-        }
-    }
-}
-
-/// Distribution of heap annotations.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct HeapDistribution {
-    /// Weight for Local (@) heap.
-    pub local: u32,
-
-    /// Weight for Global (#) heap.
-    pub global: u32,
-
-    /// Weight for Omitted (inferred) heap.
-    pub omitted: u32,
-}
-
-impl Default for HeapDistribution {
-    fn default() -> Self {
-        HeapDistribution {
-            local: 1,
-            global: 1,
-            omitted: 3,
         }
     }
 }
@@ -212,22 +185,6 @@ impl Default for TensorConfig {
     }
 }
 
-/// Generate a random heap annotation based on the distribution.
-pub fn gen_heap<R: Rng>(rng: &mut R, config: &AstGenConfig) -> Heap {
-    let total = config.heap_distribution.local
-        + config.heap_distribution.global
-        + config.heap_distribution.omitted;
-    let choice = rng.gen_range(0..total);
-
-    if choice < config.heap_distribution.local {
-        Heap::Local
-    } else if choice < config.heap_distribution.local + config.heap_distribution.global {
-        Heap::Global
-    } else {
-        Heap::Omitted
-    }
-}
-
 /// Generate a random identifier (for type names).
 pub fn gen_identifier<R: Rng>(rng: &mut R) -> String {
     let prefixes = ["My", "Test", "Gen", "Data", "Value", "Item", "Element"];
@@ -341,29 +298,29 @@ pub fn gen_type_hint<'db, R: Rng>(
         12 => TypeHint::String,
         13 => {
             let element_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
-            TypeHint::List(TypeHintList { element_type })
+            TypeHint::List(TypeHintList { element_type: Box::new(element_type) })
         }
         14 => {
             let key_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
             let value_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
-            TypeHint::Map(TypeHintMap { key_type, value_type })
+            TypeHint::Map(TypeHintMap { key_type: Box::new(key_type), value_type: Box::new(value_type) })
         }
         15 => {
             let element_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
-            TypeHint::Set(TypeHintSet { element_type })
+            TypeHint::Set(TypeHintSet { element_type: Box::new(element_type) })
         }
         16 => {
             let inner_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
-            TypeHint::Option(TypeHintOption { inner_type })
+            TypeHint::Option(TypeHintOption { inner_type: Box::new(inner_type) })
         }
         17 => {
             let inner_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
-            TypeHint::Result(TypeHintResult { inner_type })
+            TypeHint::Result(TypeHintResult { inner_type: Box::new(inner_type) })
         }
         18 => {
             let element_type = gen_type_hint_and_heap(db, rng, config, depth + 1);
             let rank = rng.gen_range(1..=config.tensor_config.max_rank);
-            TypeHint::Tensor(TypeHintTensor { element_type, rank })
+            TypeHint::Tensor(TypeHintTensor { element_type: Box::new(element_type), rank })
         }
         19 => {
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
@@ -387,7 +344,7 @@ pub fn gen_type_hint<'db, R: Rng>(
                         }
                     };
                     let type_hint = gen_type_hint_and_heap(db, rng, config, depth + 1);
-                    TypeHintNamedField { name, type_hint }
+                    TypeHintNamedField { name, type_hint: Box::new(type_hint) }
                 })
                 .collect();
             TypeHint::AnonStruct(TypeHintAnonStruct { fields })
@@ -406,7 +363,7 @@ pub fn gen_type_hint<'db, R: Rng>(
                     };
                     let has_payload = rng.gen_bool(0.5);
                     let payload = if has_payload {
-                        Some(gen_type_hint_and_heap(db, rng, config, depth + 1))
+                        Some(Box::new(gen_type_hint_and_heap(db, rng, config, depth + 1)))
                     } else {
                         None
                     };
@@ -423,24 +380,21 @@ pub fn gen_type_hint<'db, R: Rng>(
     }
 }
 
-/// Generate a TypeHintAndHeap with random heap annotation.
+/// Generate a TypeHint.
 pub fn gen_type_hint_and_heap<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &AstGenConfig,
     depth: usize,
-) -> TypeHintAndHeap<'db> {
-    let heap = gen_heap(rng, config);
-    let type_hint = gen_type_hint(db, rng, config, depth);
-    TypeHintAndHeap::new(db, heap, type_hint)
+) -> TypeHint<'db> {
+    gen_type_hint(db, rng, config, depth)
 }
 
-/// Generate a TypeHint with a fixed heap for all nested types.
+/// Generate a TypeHint with nested types.
 fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &AstGenConfig,
-    heap: Heap,
     depth: usize,
 ) -> TypeHint<'db> {
     let weights = if depth >= config.max_depth {
@@ -520,35 +474,35 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
         11 => TypeHint::Int,
         12 => TypeHint::String,
         13 => {
-            let element_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-            TypeHint::List(TypeHintList { element_type })
+            let element_type = gen_type_hint_with_fixed_heap(db, rng, config, depth + 1);
+            TypeHint::List(TypeHintList { element_type: Box::new(element_type) })
         }
         14 => {
-            let key_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-            let value_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-            TypeHint::Map(TypeHintMap { key_type, value_type })
+            let key_type = gen_type_hint_with_fixed_heap(db, rng, config, depth + 1);
+            let value_type = gen_type_hint_with_fixed_heap(db, rng, config, depth + 1);
+            TypeHint::Map(TypeHintMap { key_type: Box::new(key_type), value_type: Box::new(value_type) })
         }
         15 => {
-            let element_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-            TypeHint::Set(TypeHintSet { element_type })
+            let element_type = gen_type_hint_with_fixed_heap(db, rng, config, depth + 1);
+            TypeHint::Set(TypeHintSet { element_type: Box::new(element_type) })
         }
         16 => {
-            let inner_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-            TypeHint::Option(TypeHintOption { inner_type })
+            let inner_type = gen_type_hint_with_fixed_heap(db, rng, config, depth + 1);
+            TypeHint::Option(TypeHintOption { inner_type: Box::new(inner_type) })
         }
         17 => {
-            let inner_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-            TypeHint::Result(TypeHintResult { inner_type })
+            let inner_type = gen_type_hint_with_fixed_heap(db, rng, config, depth + 1);
+            TypeHint::Result(TypeHintResult { inner_type: Box::new(inner_type) })
         }
         18 => {
-            let element_type = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
+            let element_type = gen_type_hint_with_fixed_heap(db, rng, config, depth + 1);
             let rank = rng.gen_range(1..=config.tensor_config.max_rank);
-            TypeHint::Tensor(TypeHintTensor { element_type, rank })
+            TypeHint::Tensor(TypeHintTensor { element_type: Box::new(element_type), rank })
         }
         19 => {
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let fields: Vec<_> = (0..count)
-                .map(|_| TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1)))
+                .map(|_| gen_type_hint_with_fixed_heap(db, rng, config, depth + 1))
                 .collect();
             TypeHint::AnonTuple(TypeHintAnonTuple { fields })
         }
@@ -566,8 +520,8 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
                             break InternedText::new(db, &candidate);
                         }
                     };
-                    let type_hint = TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1));
-                    TypeHintNamedField { name, type_hint }
+                    let type_hint = gen_type_hint_with_fixed_heap(db, rng, config, depth + 1);
+                    TypeHintNamedField { name, type_hint: Box::new(type_hint) }
                 })
                 .collect();
             TypeHint::AnonStruct(TypeHintAnonStruct { fields })
@@ -586,7 +540,7 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
                     };
                     let has_payload = rng.gen_bool(0.5);
                     let payload = if has_payload {
-                        Some(TypeHintAndHeap::new(db, heap, gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1)))
+                        Some(Box::new(gen_type_hint_with_fixed_heap(db, rng, config, depth + 1)))
                     } else {
                         None
                     };
@@ -604,53 +558,45 @@ fn gen_type_hint_with_fixed_heap<'db, R: Rng>(
 }
 
 /// Generate a value matching the given type hint.
-///
-/// Returns the expression and the heap that should be used for wrapping it.
-/// For most types this is just the input `heap`, but for Option/Result success
-/// values it may be the inner type's heap.
 pub fn gen_expr_matching_type<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     type_hint: TypeHint<'db>,
-    heap: Heap,
     config: &AstGenConfig,
     depth: usize,
-) -> (Expr<'db>, Heap) {
+) -> Expr<'db> {
     match type_hint {
         TypeHint::Bool => {
-            let expr = if rng.gen_bool(0.5) {
+            if rng.gen_bool(0.5) {
                 Expr::True
             } else {
                 Expr::False
-            };
-            (expr, heap)
+            }
         }
-        TypeHint::U8 => (gen_uint_expr(db, rng, config, 0u8, u8::MAX), heap),
-        TypeHint::I8 => (gen_int_expr(db, rng, config, i8::MIN, i8::MAX), heap),
-        TypeHint::U16 => (gen_uint_expr(db, rng, config, 0u16, u16::MAX), heap),
-        TypeHint::I16 => (gen_int_expr(db, rng, config, i16::MIN, i16::MAX), heap),
-        TypeHint::U32 => (gen_uint_expr(db, rng, config, 0u32, u32::MAX), heap),
-        TypeHint::I32 => (gen_int_expr(db, rng, config, i32::MIN, i32::MAX), heap),
-        TypeHint::U64 => (gen_uint_expr(db, rng, config, 0u64, u64::MAX), heap),
-        TypeHint::I64 => (gen_int_expr(db, rng, config, i64::MIN, i64::MAX), heap),
+        TypeHint::U8 => gen_uint_expr(db, rng, config, 0u8, u8::MAX),
+        TypeHint::I8 => gen_int_expr(db, rng, config, i8::MIN, i8::MAX),
+        TypeHint::U16 => gen_uint_expr(db, rng, config, 0u16, u16::MAX),
+        TypeHint::I16 => gen_int_expr(db, rng, config, i16::MIN, i16::MAX),
+        TypeHint::U32 => gen_uint_expr(db, rng, config, 0u32, u32::MAX),
+        TypeHint::I32 => gen_int_expr(db, rng, config, i32::MIN, i32::MAX),
+        TypeHint::U64 => gen_uint_expr(db, rng, config, 0u64, u64::MAX),
+        TypeHint::I64 => gen_int_expr(db, rng, config, i64::MIN, i64::MAX),
         // For usize/isize, generate 32-bit values (default configuration).
-        TypeHint::Usize => (gen_uint_expr(db, rng, config, 0u32, u32::MAX), heap),
-        TypeHint::Isize => (gen_int_expr(db, rng, config, i32::MIN, i32::MAX), heap),
-        TypeHint::F32 => (gen_f32_expr(db, rng, config), heap),
-        TypeHint::F64 => (gen_f64_expr(db, rng, config), heap),
-        TypeHint::Int => (gen_int_expr(db, rng, config, i64::MIN, i64::MAX), heap),
-        TypeHint::String => (gen_string_expr(db, rng), heap),
+        TypeHint::Usize => gen_uint_expr(db, rng, config, 0u32, u32::MAX),
+        TypeHint::Isize => gen_int_expr(db, rng, config, i32::MIN, i32::MAX),
+        TypeHint::F32 => gen_f32_expr(db, rng, config),
+        TypeHint::F64 => gen_f64_expr(db, rng, config),
+        TypeHint::Int => gen_int_expr(db, rng, config, i64::MIN, i64::MAX),
+        TypeHint::String => gen_string_expr(db, rng),
         TypeHint::AnonTuple(th) => {
             let elements: Vec<_> = th
                 .fields
                 .iter()
-                .map(|field| {
-                    let field_type = field.type_hint(db);
-                    let field_heap = field.heap(db);
-                    gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1)
+                .map(|field_type| {
+                    gen_expr_full_with_heap(db, rng, field_type.clone(), config, depth + 1)
                 })
                 .collect();
-            (Expr::AnonTuple(ExprAnonTuple { elements }), heap)
+            Expr::AnonTuple(ExprAnonTuple { elements })
         }
         TypeHint::AnonStruct(th) => {
             let fields: Vec<_> = th
@@ -658,109 +604,81 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 .iter()
                 .map(|field| {
                     let name = field.name;
-                    let field_type_and_heap = field.type_hint;
-                    let field_type = field_type_and_heap.type_hint(db);
-                    let field_heap = field_type_and_heap.heap(db);
-                    let value = gen_expr_full_with_heap(db, rng, field_type, field_heap, config, depth + 1);
+                    let value = gen_expr_full_with_heap(db, rng, *field.type_hint.clone(), config, depth + 1);
                     ExprStructField { name, value }
                 })
                 .collect();
-            (Expr::AnonStruct(ExprAnonStruct { fields }), heap)
+            Expr::AnonStruct(ExprAnonStruct { fields })
         }
         TypeHint::AnonEnum(th) => {
             let variants = &th.variants;
             if variants.is_empty() {
-                return (Expr::None, heap);
+                return Expr::None;
             }
             let variant = &variants[rng.gen_range(0..variants.len())];
             let variant_name = variant.name;
-            let payload = match variant.payload {
-                Some(payload_type_and_heap) => {
-                    let payload_type = payload_type_and_heap.type_hint(db);
-                    let payload_heap = payload_type_and_heap.heap(db);
-                    Some(gen_expr_full_with_heap(db, rng, payload_type, payload_heap, config, depth + 1))
+            let payload = match &variant.payload {
+                Some(payload_type) => {
+                    Some(gen_expr_full_with_heap(db, rng, *payload_type.clone(), config, depth + 1))
                 }
                 None => None,
             };
-            (Expr::AnonEnum(ExprAnonEnum { variant_name, payload }), heap)
+            Expr::AnonEnum(ExprAnonEnum { variant_name, payload })
         }
         TypeHint::List(th) => {
-            let element_type_and_heap = th.element_type;
-            let element_type = element_type_and_heap.type_hint(db);
-            let element_heap = element_type_and_heap.heap(db);
+            let element_type = *th.element_type.clone();
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let elements: Vec<_> = (0..count)
-                .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
+                .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), config, depth + 1))
                 .collect();
-            (Expr::List(ExprList { elements }), heap)
+            Expr::List(ExprList { elements })
         }
         TypeHint::Map(th) => {
-            let key_type_and_heap = th.key_type;
-            let key_type = key_type_and_heap.type_hint(db);
-            let key_heap = key_type_and_heap.heap(db);
-            let value_type_and_heap = th.value_type;
-            let value_type = value_type_and_heap.type_hint(db);
-            let value_heap = value_type_and_heap.heap(db);
+            let key_type = *th.key_type.clone();
+            let value_type = *th.value_type.clone();
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let entries: Vec<_> = (0..count)
                 .map(|_| {
-                    let key = gen_expr_full_with_heap(db, rng, key_type.clone(), key_heap, config, depth + 1);
-                    let value = gen_expr_full_with_heap(db, rng, value_type.clone(), value_heap, config, depth + 1);
+                    let key = gen_expr_full_with_heap(db, rng, key_type.clone(), config, depth + 1);
+                    let value = gen_expr_full_with_heap(db, rng, value_type.clone(), config, depth + 1);
                     ExprMapEntry { key, value }
                 })
                 .collect();
-            (Expr::Map(ExprMap { entries }), heap)
+            Expr::Map(ExprMap { entries })
         }
         TypeHint::Set(th) => {
-            let element_type_and_heap = th.element_type;
-            let element_type = element_type_and_heap.type_hint(db);
-            let element_heap = element_type_and_heap.heap(db);
+            let element_type = *th.element_type.clone();
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
             let elements: Vec<_> = (0..count)
-                .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
+                .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), config, depth + 1))
                 .collect();
-            (Expr::Set(ExprSet { elements }), heap)
+            Expr::Set(ExprSet { elements })
         }
         TypeHint::Option(th) => {
-            let inner_type_and_heap = th.inner_type;
-            let inner_type = inner_type_and_heap.type_hint(db);
-            let inner_heap = inner_type_and_heap.heap(db);
+            let inner_type = *th.inner_type.clone();
             if rng.gen_bool(0.5) {
-                // None uses the outer heap.
-                (Expr::None, heap)
+                Expr::None
             } else {
-                // Some case: wrap payload in Expr::Some.
-                let payload = gen_expr_full_with_heap(db, rng, inner_type, inner_heap, config, depth + 1);
-                (Expr::Some(ExprSome { payload }), heap)
+                let payload = gen_expr_full_with_heap(db, rng, inner_type, config, depth + 1);
+                Expr::Some(ExprSome { payload })
             }
         }
         TypeHint::Result(th) => {
-            let inner_type_and_heap = th.inner_type;
-            let inner_type = inner_type_and_heap.type_hint(db);
-            let inner_heap = inner_type_and_heap.heap(db);
+            let inner_type = *th.inner_type.clone();
             if rng.gen_bool(0.5) {
-                // Success case: wrap payload in Expr::Ok.
-                let payload = gen_expr_full_with_heap(db, rng, inner_type, inner_heap, config, depth + 1);
-                (Expr::Ok(ExprOk { payload }), heap)
+                let payload = gen_expr_full_with_heap(db, rng, inner_type, config, depth + 1);
+                Expr::Ok(ExprOk { payload })
             } else {
                 // Error case: generate Expr::Er with Expr::Error payload.
-                // Er payload must be an error expression (Expr::Error or Expr::Data).
-                // Generate arbitrary type for error payload.
-                let error_inner_type = gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1);
-                let error_inner_value = gen_expr_full_with_heap(db, rng, error_inner_type, heap, config, depth + 1);
+                let error_inner_type = gen_type_hint_with_fixed_heap(db, rng, config, depth + 1);
+                let error_inner_value = gen_expr_full_with_heap(db, rng, error_inner_type, config, depth + 1);
                 let error_expr = Expr::Error(ExprError { value: error_inner_value });
-                let er_payload = ExprFull::new(
-                    db,
-                    None,
-                    ExprAndHeap { heap, expr: error_expr },
-                );
-                (Expr::Er(ExprEr { payload: er_payload }), heap)
+                let er_payload = ExprFull::new(db, None, error_expr);
+                Expr::Er(ExprEr { payload: er_payload })
             }
         }
         TypeHint::Tensor(th) => {
-            let element_type_and_heap = th.element_type;
-            let element_type = element_type_and_heap.type_hint(db);
-            let element_heap = element_type_and_heap.heap(db);
+            let element_type = *th.element_type.clone();
             let rank = th.rank;
             // Generate shape ensuring total elements don't exceed max_collection_size.
             let mut shape: Vec<u32> = Vec::with_capacity(rank as usize);
@@ -783,28 +701,23 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             }
             // Generate exactly the number of elements dictated by the shape.
             let elements: Vec<_> = (0..total_elements)
-                .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), element_heap, config, depth + 1))
+                .map(|_| gen_expr_full_with_heap(db, rng, element_type.clone(), config, depth + 1))
                 .collect();
-            (Expr::Tensor(ExprTensor { shape, elements }), heap)
+            Expr::Tensor(ExprTensor { shape, elements })
         }
         TypeHint::Data => {
-            // Use fixed heap for inner type to ensure all heaps match.
-            let inner_type = gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1);
-            let value = gen_expr_full_with_heap(db, rng, inner_type, heap, config, depth + 1);
-            (Expr::Data(ExprData { value }), heap)
+            let inner_type = gen_type_hint_with_fixed_heap(db, rng, config, depth + 1);
+            let value = gen_expr_full_with_heap(db, rng, inner_type, config, depth + 1);
+            Expr::Data(ExprData { value })
         }
         TypeHint::Error => {
-            // Generate arbitrary payload for error expression.
-            let inner_type = gen_type_hint_with_fixed_heap(db, rng, config, heap, depth + 1);
-            let value = gen_expr_full_with_heap(db, rng, inner_type, heap, config, depth + 1);
-            (Expr::Error(ExprError { value }), heap)
+            let inner_type = gen_type_hint_with_fixed_heap(db, rng, config, depth + 1);
+            let value = gen_expr_full_with_heap(db, rng, inner_type, config, depth + 1);
+            Expr::Error(ExprError { value })
         }
-        TypeHint::ParseError(_) => (Expr::None, heap),
+        TypeHint::ParseError(_) => Expr::None,
         TypeHint::Table(_) => todo!("table expression generation not yet implemented"),
-        TypeHint::Alias(_) => {
-            // Type aliases cannot be generated directly - they must be resolved first.
-            (Expr::None, heap)
-        }
+        TypeHint::Alias(_) => Expr::None,
     }
 }
 
@@ -1123,17 +1036,15 @@ fn gen_string_expr<'db, R: Rng>(db: &'db dyn salsa::Database, rng: &mut R) -> Ex
     Expr::String(ExprString { value: InternedText::new(db, escaped.S()) })
 }
 
-/// Generate an ExprFull matching the given type hint with a specific heap.
+/// Generate an ExprFull matching the given type hint.
 fn gen_expr_full_with_heap<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     type_hint: TypeHint<'db>,
-    heap: Heap,
     config: &AstGenConfig,
     depth: usize,
 ) -> ExprFull<'db> {
-    let (expr, value_heap) = gen_expr_matching_type(db, rng, type_hint.clone(), heap, config, depth);
-    let expr_and_heap = ExprAndHeap { heap: value_heap, expr };
+    let expr = gen_expr_matching_type(db, rng, type_hint.clone(), config, depth);
 
     // Always include type hints for types that cannot be synthesized.
     // Option::None, Result values, and anonymous enums require type hints
@@ -1144,24 +1055,22 @@ fn gen_expr_full_with_heap<'db, R: Rng>(
     );
 
     let type_hint_opt = if config.include_type_hints || requires_hint {
-        Some(TypeHintAndHeap::new(db, heap, type_hint))
+        Some(type_hint)
     } else {
         None
     };
 
-    ExprFull::new(db, type_hint_opt, expr_and_heap)
+    ExprFull::new(db, type_hint_opt, expr)
 }
 
-/// Generate an ExprFull with a fixed heap for the entire expression tree.
+/// Generate an ExprFull for the entire expression tree.
 fn gen_expr_full_with_fixed_heap<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &AstGenConfig,
-    heap: Heap,
 ) -> ExprFull<'db> {
-    let type_hint = gen_type_hint_with_fixed_heap(db, rng, config, heap, 0);
-    // Use the existing gen_expr_full_with_heap but ensure we pass the fixed heap.
-    gen_expr_full_with_heap(db, rng, type_hint, heap, config, 0)
+    let type_hint = gen_type_hint_with_fixed_heap(db, rng, config, 0);
+    gen_expr_full_with_heap(db, rng, type_hint, config, 0)
 }
 
 /// Generate a tracked ExprFull with a seed for deterministic generation.
@@ -1181,11 +1090,6 @@ pub fn gen_expr_full_seeded<'db>(
     adjusted_config.type_weights.named_struct_type = 0;
     adjusted_config.type_weights.named_enum_type = 0;
 
-    // Use separate RNG for heap to avoid shifting the main random sequence.
-    let mut heap_rng = rand::rngs::StdRng::seed_from_u64(seed.wrapping_mul(0x9e3779b97f4a7c15));
-    let heap = gen_heap(&mut heap_rng, &adjusted_config);
-
-    // Main RNG for type and value generation preserves original sequence.
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    gen_expr_full_with_fixed_heap(db, &mut rng, &adjusted_config, heap)
+    gen_expr_full_with_fixed_heap(db, &mut rng, &adjusted_config)
 }

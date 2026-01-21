@@ -23,7 +23,6 @@ pub use api::{
 pub use types::{
     // Type representation.
     Type,
-    TypeAndHeap,
     TypeAnonTuple,
     TypeAnonStruct,
     TypeNamedField,
@@ -38,9 +37,6 @@ pub use types::{
     TypeTable,
     // Error type.
     TypeError,
-    // Heap utilities.
-    heaps_compatible,
-    heap_to_string,
     // Type predicates.
     is_numeric_type,
     is_float_type,
@@ -50,7 +46,6 @@ pub use types::{
     is_bool_type,
     // Type equivalence.
     types_equivalent,
-    types_and_heaps_equivalent,
     can_widen_to,
     // Element compatibility.
     check_element_compatible,

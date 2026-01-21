@@ -52,7 +52,6 @@
       "bool",
       "u32"
     ],
-    "heap": "",
     "kind": "AnonTuple"
   }
 }

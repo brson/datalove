@@ -33,7 +33,6 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "",
     "inner_type": "u32",
     "kind": "Option"
   }

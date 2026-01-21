@@ -56,7 +56,6 @@
       "u32",
       "u32"
     ],
-    "heap": "",
     "kind": "AnonTuple"
   }
 }

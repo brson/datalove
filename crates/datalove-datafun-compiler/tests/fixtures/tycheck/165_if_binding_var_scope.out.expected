@@ -6,8 +6,8 @@
         {
           "message": "not found in this scope",
           "span": [
-            79,
-            80
+            76,
+            77
           ],
           "text": "x"
         }
@@ -28,10 +28,10 @@
       "params": [
         {
           "name": "opt",
-          "type": "?@u32"
+          "type": "?u32"
         }
       ],
-      "return_type": "@u32"
+      "return_type": "u32"
     }
   ]
 }

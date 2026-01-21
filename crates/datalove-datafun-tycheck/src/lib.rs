@@ -78,17 +78,44 @@ pub enum Type<'db> {
     Function(TypeFunction<'db>),
 }
 
-#[salsa::tracked]
+/// Wrapper type for backwards compatibility during heap removal migration.
+/// This used to contain both a Type and a Heap. Now heap is always Omitted.
+/// TODO: Remove this wrapper and use Type directly everywhere.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct TypeAndHeap<'db> {
-    pub heap: datalove_datalit::ast::Heap,
-    #[returns(ref)]
-    pub ty: Type<'db>,
+    ty: Type<'db>,
+}
+
+impl<'db> TypeAndHeap<'db> {
+    /// Create a new TypeAndHeap. The heap argument is ignored (always Omitted).
+    pub fn new(_db: &'db dyn Db, _heap: datalove_datalit::ast_serde::Heap, ty: Type<'db>) -> Self {
+        TypeAndHeap { ty }
+    }
+
+    /// Create from just a Type (preferred constructor).
+    pub fn from_type(ty: Type<'db>) -> Self {
+        TypeAndHeap { ty }
+    }
+
+    /// Get the inner Type.
+    pub fn ty(&self, _db: &'db dyn Db) -> &Type<'db> {
+        &self.ty
+    }
+
+    /// Get heap (always returns Omitted for compatibility).
+    pub fn heap(&self, _db: &'db dyn Db) -> datalove_datalit::ast_serde::Heap {
+        datalove_datalit::ast_serde::Heap::Omitted
+    }
 }
 
 #[salsa::tracked]
 pub struct TypeFunction<'db> {
+    #[tracked]
+    #[returns(ref)]
     pub param_types: Vec<TypeAndHeap<'db>>,
     pub param_modes: Vec<ParamMode>,
+    #[tracked]
     pub return_type: TypeAndHeap<'db>,
 }
 
@@ -106,7 +133,6 @@ pub enum TypeError {
     TryTypeMismatch { operator: String, actual_type: String },
     TryReturnTypeMismatch { operator: String, return_type: String },
     IntOutOfRange,
-    HeapMismatch { expected_heap: String, actual_heap: String },
     MissingField(String),
     ExtraField(String),
     FieldOrderMismatch,
@@ -282,20 +308,20 @@ pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ty
 
         // Aggregates are copy if all fields are copy.
         DatalitType::AnonTuple(tuple) => {
-            tuple.fields.iter().all(|f| is_copy_type(db, f.ty(db)))
+            tuple.fields.iter().all(|f| is_copy_type(db, f))
         }
         DatalitType::AnonStruct(struct_ty) => {
-            struct_ty.fields.iter().all(|f| is_copy_type(db, f.ty.ty(db)))
+            struct_ty.fields.iter().all(|f| is_copy_type(db, &f.ty))
         }
         DatalitType::AnonEnum(enum_ty) => {
             enum_ty.variants.iter().all(|v| {
-                v.payload.as_ref().map_or(true, |p| is_copy_type(db, p.ty(db)))
+                v.payload.as_ref().map_or(true, |p| is_copy_type(db, p))
             })
         }
 
         // Option/Result are copy if inner type is copy.
-        DatalitType::Option(opt) => is_copy_type(db, opt.inner_type.ty(db)),
-        DatalitType::Result(res) => is_copy_type(db, res.inner_type.ty(db)),
+        DatalitType::Option(opt) => is_copy_type(db, &opt.inner_type),
+        DatalitType::Result(res) => is_copy_type(db, &res.inner_type),
 
         // Tables are not copy (they contain heap-allocated data).
         DatalitType::Table(_) => false,
@@ -307,9 +333,6 @@ impl From<datalove_datalit::tycheck::TypeError> for TypeError {
         match err {
             datalove_datalit::tycheck::TypeError::TypeMismatch { expected, actual } => {
                 TypeError::TypeMismatch { expected, actual }
-            }
-            datalove_datalit::tycheck::TypeError::HeapMismatch { expected_heap, actual_heap } => {
-                TypeError::HeapMismatch { expected_heap, actual_heap }
             }
             datalove_datalit::tycheck::TypeError::CannotSynthesize => TypeError::CannotSynthesize,
             datalove_datalit::tycheck::TypeError::MissingField(name) => TypeError::MissingField(name),

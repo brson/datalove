@@ -175,11 +175,6 @@ fn make_compatible_config() -> AstGenConfig {
         // are statements, not expressions. In expression context, `:` unambiguously
         // starts a type hint.
         include_type_hints: true,
-        heap_distribution: datalove_datalit::ast_gen::HeapDistribution {
-            local: 2,
-            global: 1,
-            omitted: 1,
-        },
         max_depth: 2,
         // Empty collections now synthesize to unit element type in both typecheckers.
         min_collection_size: 0,

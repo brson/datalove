@@ -10,21 +10,16 @@ use crate::parser_util::{TokenStream, TokenStreamExt};
 use super::state::Parser;
 
 impl<'db> Parser<'db> {
-    pub(super) fn parse_type_hint_and_heap(&mut self) -> ast::TypeHintAndHeap<'db> {
-        let type_hint = self.parse_type_hint();
-        ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, type_hint)
-    }
-
-    fn parse_type_hint(&mut self) -> ast::TypeHint<'db> {
-        // Heap sigil already consumed. Check for ? or ! prefix for Option/Result types.
+    pub(super) fn parse_type_hint(&mut self) -> ast::TypeHint<'db> {
+        // Check for ? or ! prefix for Option/Result types.
         if self.peek_sigil(Sigil::Question) {
             self.eat_sigil(Sigil::Question);
-            let inner_type = self.parse_type_hint_and_heap();
-            return ast::TypeHint::Option(ast::TypeHintOption { inner_type });
+            let inner_type = self.parse_type_hint();
+            return ast::TypeHint::Option(ast::TypeHintOption { inner_type: Box::new(inner_type) });
         } else if self.peek_sigil(Sigil::Exclamation) {
             self.eat_sigil(Sigil::Exclamation);
-            let inner_type = self.parse_type_hint_and_heap();
-            return ast::TypeHint::Result(ast::TypeHintResult { inner_type });
+            let inner_type = self.parse_type_hint();
+            return ast::TypeHint::Result(ast::TypeHintResult { inner_type: Box::new(inner_type) });
         }
 
         // Parse base type.
@@ -53,7 +48,7 @@ impl<'db> Parser<'db> {
                 if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
                     // Anonymous tuple with explicit keyword.
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
+                    let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple { fields })
                 } else {
@@ -88,7 +83,7 @@ impl<'db> Parser<'db> {
                 // Expect angle bracket with key and value types.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let key_type = sub_parser.parse_type_hint_and_heap();
+                    let key_type = sub_parser.parse_type_hint();
                     if !sub_parser.eat_sigil(Sigil::Comma) {
                         let ts = sub_parser.peek_text_span();
                         return self.emit_type_hint_error(ts,
@@ -97,9 +92,9 @@ impl<'db> Parser<'db> {
                             "expected ',' between key and value types"
                         );
                     }
-                    let value_type = sub_parser.parse_type_hint_and_heap();
+                    let value_type = sub_parser.parse_type_hint();
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::Map(ast::TypeHintMap { key_type, value_type })
+                    ast::TypeHint::Map(ast::TypeHintMap { key_type: Box::new(key_type), value_type: Box::new(value_type) })
                 } else {
                     self.emit_type_hint_error(ts,
                         "expected <> after map keyword",
@@ -114,9 +109,9 @@ impl<'db> Parser<'db> {
                 // Expect angle bracket with element type.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let element_type = sub_parser.parse_type_hint_and_heap();
+                    let element_type = sub_parser.parse_type_hint();
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::Set(ast::TypeHintSet { element_type })
+                    ast::TypeHint::Set(ast::TypeHintSet { element_type: Box::new(element_type) })
                 } else {
                     self.emit_type_hint_error(ts,
                         "expected <> after set keyword",
@@ -131,7 +126,7 @@ impl<'db> Parser<'db> {
                 // Expect angle bracket with <element_type, rank, optional_layout>.
                 if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let element_type = sub_parser.parse_type_hint_and_heap();
+                    let element_type = sub_parser.parse_type_hint();
                     if !sub_parser.eat_sigil(Sigil::Comma) {
                         let ts = sub_parser.peek_text_span();
                         return self.emit_type_hint_error(ts,
@@ -154,7 +149,7 @@ impl<'db> Parser<'db> {
                     };
 
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::Tensor(ast::TypeHintTensor { element_type, rank })
+                    ast::TypeHint::Tensor(ast::TypeHintTensor { element_type: Box::new(element_type), rank })
                 } else {
                     self.emit_type_hint_error(ts,
                         "expected <> after tensor keyword",
@@ -168,15 +163,15 @@ impl<'db> Parser<'db> {
                 if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
                     // Anonymous tuple.
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_and_heap());
+                    let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple { fields })
                 } else if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
                     // List type.
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let element_type = sub_parser.parse_type_hint_and_heap();
+                    let element_type = sub_parser.parse_type_hint();
                     sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::List(ast::TypeHintList { element_type })
+                    ast::TypeHint::List(ast::TypeHintList { element_type: Box::new(element_type) })
                 } else if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
                     // Anonymous struct.
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
@@ -235,8 +230,7 @@ impl<'db> Parser<'db> {
                 // Create a placeholder name for the error field.
                 use rmx::prelude::*;
                 let placeholder_name = InternedText::new(self.db, "<error>".S());
-                let type_hint = ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_hint);
-                return ast::TypeHintNamedField { name: placeholder_name, type_hint };
+                return ast::TypeHintNamedField { name: placeholder_name, type_hint: Box::new(error_hint) };
             }
         };
         if !self.eat_sigil(Sigil::Colon) {
@@ -246,11 +240,10 @@ impl<'db> Parser<'db> {
                 "D010",
                 "expected ':' after field name"
             );
-            let type_hint = ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_hint);
-            return ast::TypeHintNamedField { name, type_hint };
+            return ast::TypeHintNamedField { name, type_hint: Box::new(error_hint) };
         }
-        let type_hint = self.parse_type_hint_and_heap();
-        ast::TypeHintNamedField { name, type_hint }
+        let type_hint = self.parse_type_hint();
+        ast::TypeHintNamedField { name, type_hint: Box::new(type_hint) }
     }
 
     fn parse_type_hint_enum_variant(&mut self) -> ast::TypeHintEnumVariant<'db> {
@@ -278,7 +271,7 @@ impl<'db> Parser<'db> {
         let payload = if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
             // Parse a single type as payload.
             let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-            let payload_type = sub_parser.parse_type_hint_and_heap();
+            let payload_type = sub_parser.parse_type_hint();
 
             // Check for unparsed tokens - this indicates a syntax error.
             if sub_parser.peek().is_some() {
@@ -291,11 +284,11 @@ impl<'db> Parser<'db> {
                 let error_type = ast::TypeHint::ParseError(ast::TypeHintParseError { text: ts.text, span: ts.span, message });
                 return ast::TypeHintEnumVariant {
                     name,
-                    payload: Some(ast::TypeHintAndHeap::new(self.db, ast::Heap::Omitted, error_type)),
+                    payload: Some(Box::new(error_type)),
                 };
             }
 
-            Some(payload_type)
+            Some(Box::new(payload_type))
         } else {
             None
         };

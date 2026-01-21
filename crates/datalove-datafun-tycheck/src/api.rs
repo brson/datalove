@@ -101,23 +101,19 @@ pub fn type_check_script_units<'db>(
 
         // Script units have Result<()> return type for try operators.
         // This allows `!` (try-result) but not `?` (try-option).
-        let unit_tuple_ty = datalit::tycheck::TypeAndHeap::new(
-            db,
-            datalit::ast::Heap::Omitted,
-            datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: Vec::new() }),
-        );
+        let unit_tuple_ty = datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: Vec::new() });
         let result_unit_ty = datalit::tycheck::Type::Result(
-            datalit::tycheck::TypeResult { inner_type: unit_tuple_ty }
+            datalit::tycheck::TypeResult { inner_type: Box::new(unit_tuple_ty) }
         );
         ctx.expected_return_type = Some(TypeAndHeap::new(
             db,
-            datalit::ast::Heap::Omitted,
+            datalove_datalit::ast_serde::Heap::Omitted,
             Type::Datalit(result_unit_ty),
         ));
 
         // Seed with accumulated bindings from prior units.
         for (name, ty) in &accumulated_vars {
-            ctx.add_variable(*name, *ty);
+            ctx.add_variable(*name, ty.clone());
         }
         for (name, func_ty) in &accumulated_fns {
             ctx.add_function(*name, *func_ty);
@@ -169,13 +165,13 @@ pub fn type_check_script_units<'db>(
                         Statement::Let(let_stmt) => {
                             let name = let_stmt.name;
                             if let Some(ty) = ctx.variables.get(&name) {
-                                accumulated_vars.insert(name, *ty);
+                                accumulated_vars.insert(name, ty.clone());
                             }
                         }
                         Statement::Var(var_stmt) => {
                             let name = var_stmt.name;
                             if let Some(ty) = ctx.variables.get(&name) {
-                                accumulated_vars.insert(name, *ty);
+                                accumulated_vars.insert(name, ty.clone());
                             }
                         }
                         Statement::Fun(fun_stmt) => {
@@ -242,7 +238,7 @@ pub fn type_check_script_with_context<'db>(
 
     // Seed with prior bindings.
     for (name, ty) in &prior_ctx.variables {
-        ctx.add_variable(*name, *ty);
+        ctx.add_variable(*name, ty.clone());
     }
     for (name, func_ty) in &prior_ctx.functions {
         ctx.add_function(*name, *func_ty);
@@ -288,7 +284,7 @@ pub fn type_check_expr_with_context<'db>(
 
     // Seed with prior bindings.
     for (name, ty) in &prior_ctx.variables {
-        ctx.add_variable(*name, *ty);
+        ctx.add_variable(*name, ty.clone());
     }
     for (name, func_ty) in &prior_ctx.functions {
         ctx.add_function(*name, *func_ty);
@@ -597,7 +593,7 @@ pub fn typecheck_module_graph<'db>(
         }
         for (i, ty) in new_types.iter().enumerate() {
             if ty.is_some() {
-                combined_expr_types[i] = *ty;
+                combined_expr_types[i] = ty.clone();
             }
         }
 
@@ -955,8 +951,8 @@ fn collect_module_exports_impl<'db>(
             }
 
             // Resolve the type hint using already-collected aliases.
-            if let Ok(ty) = convert_type_hint_with_aliases(db, stmt.type_hint, &type_aliases_map) {
-                type_aliases_map.insert(name, ty);
+            if let Ok(ty) = convert_type_hint_with_aliases(db, stmt.type_hint.clone(), &type_aliases_map) {
+                type_aliases_map.insert(name, ty.clone());
                 type_aliases_vec.push((name, ty));
             }
         }
@@ -976,7 +972,7 @@ fn collect_module_exports_impl<'db>(
             let mut param_modes = Vec::new();
             let mut has_error = false;
             for param in params {
-                match convert_type_hint_with_aliases(db, param.type_hint, &type_aliases_map) {
+                match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
                     Ok(ty) => {
                         param_types.push(ty);
                         param_modes.push(param.mode);

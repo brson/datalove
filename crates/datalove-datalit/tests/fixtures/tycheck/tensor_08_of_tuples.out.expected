@@ -183,10 +183,8 @@
         "u32",
         "f32"
       ],
-      "heap": "",
       "kind": "AnonTuple"
     },
-    "heap": "",
     "kind": "Tensor",
     "rank": 2
   }

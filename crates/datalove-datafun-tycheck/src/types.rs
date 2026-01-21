@@ -15,8 +15,8 @@
 
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
-use datalit::ast::{TypeHint, TypeHintAndHeap};
-use crate::{Type, TypeAndHeap, TypeError};
+use datalit::ast::TypeHint;
+use crate::{Type, TypeError, TypeAndHeap};
 
 // ============================================================================
 // Re-exports
@@ -36,13 +36,6 @@ pub use datalit::tycheck::{
     TypeTensor,
     TypeTable,
 };
-
-// ============================================================================
-// Heap Utilities
-// ============================================================================
-
-pub use datalit::tycheck::heaps_compatible;
-pub use datalit::tycheck::heap_to_string;
 
 // ============================================================================
 // Type Predicates
@@ -139,18 +132,16 @@ pub fn is_primitive_name(name: &str) -> bool {
 /// Convert a type hint to a type.
 pub fn convert_type_hint<'db>(
     db: &'db dyn crate::Db,
-    type_hint_and_heap: TypeHintAndHeap<'db>,
-) -> Result<TypeAndHeap<'db>, TypeError> {
-    let heap = type_hint_and_heap.heap(db);
-    let type_hint = type_hint_and_heap.type_hint(db);
-    convert_type_hint_inner(db, heap, type_hint)
+    type_hint: TypeHint<'db>,
+) -> Result<crate::TypeAndHeap<'db>, TypeError> {
+    convert_type_hint_inner(db, type_hint)
 }
 
 fn convert_type_hint_inner<'db>(
     db: &'db dyn crate::Db,
-    heap: datalit::ast::Heap,
     type_hint: TypeHint<'db>,
-) -> Result<TypeAndHeap<'db>, TypeError> {
+) -> Result<crate::TypeAndHeap<'db>, TypeError> {
+    let heap = datalove_datalit::ast_serde::Heap::Omitted;
     let ty = match type_hint {
         TypeHint::Bool => Type::Datalit(datalit::tycheck::Type::Bool),
         TypeHint::U8 => Type::Datalit(datalit::tycheck::Type::U8),
@@ -173,10 +164,11 @@ fn convert_type_hint_inner<'db>(
         TypeHint::AnonTuple(t) => {
             let fields: Result<Vec<_>, TypeError> = t.fields.iter()
                 .map(|f| {
-                    let f_heap = f.heap(db);
-                    let f_hint = f.type_hint(db);
-                    let f_ty = convert_type_hint_inner(db, f_heap, f_hint)?;
-                    to_datalit_type_and_heap(db, f_ty)
+                    let f_ty = convert_type_hint_inner(db, f.clone())?;
+                    match f_ty.ty(db) {
+                        Type::Datalit(dt) => Ok(dt.clone()),
+                        Type::Function(_) => Err(TypeError::CannotSynthesize),
+                    }
                 })
                 .collect();
             Type::Datalit(datalit::tycheck::Type::AnonTuple(
@@ -188,12 +180,14 @@ fn convert_type_hint_inner<'db>(
             let fields: Result<Vec<_>, TypeError> = s.fields.iter()
                 .map(|f| {
                     let name = f.name;
-                    let f_heap = f.type_hint.heap(db);
-                    let f_hint = f.type_hint.type_hint(db);
-                    let f_ty = convert_type_hint_inner(db, f_heap, f_hint)?;
+                    let f_ty = convert_type_hint_inner(db, (*f.type_hint).clone())?;
+                    let dt = match f_ty.ty(db) {
+                        Type::Datalit(dt) => dt.clone(),
+                        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                    };
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
-                        ty: to_datalit_type_and_heap(db, f_ty)?,
+                        ty: Box::new(dt),
                     })
                 })
                 .collect();
@@ -206,11 +200,12 @@ fn convert_type_hint_inner<'db>(
             let variants: Result<Vec<_>, TypeError> = e.variants.iter()
                 .map(|v| {
                     let name = v.name;
-                    let payload = v.payload.map(|p| {
-                        let p_heap = p.heap(db);
-                        let p_hint = p.type_hint(db);
-                        let p_ty = convert_type_hint_inner(db, p_heap, p_hint)?;
-                        to_datalit_type_and_heap(db, p_ty)
+                    let payload = v.payload.as_ref().map(|p| {
+                        let p_ty = convert_type_hint_inner(db, (**p).clone())?;
+                        match p_ty.ty(db) {
+                            Type::Datalit(dt) => Ok(Box::new(dt.clone())),
+                            Type::Function(_) => Err(TypeError::CannotSynthesize),
+                        }
                     }).transpose()?;
                     Ok(datalit::tycheck::TypeEnumVariant { name, payload })
                 })
@@ -221,71 +216,85 @@ fn convert_type_hint_inner<'db>(
         }
 
         TypeHint::List(l) => {
-            let elem_heap = l.element_type.heap(db);
-            let elem_hint = l.element_type.type_hint(db);
-            let elem_ty = convert_type_hint_inner(db, elem_heap, elem_hint)?;
+            let elem_ty = convert_type_hint_inner(db, (*l.element_type).clone())?;
+            let dt = match elem_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
             Type::Datalit(datalit::tycheck::Type::List(
                 datalit::tycheck::TypeList {
-                    element_type: to_datalit_type_and_heap(db, elem_ty)?
+                    element_type: Box::new(dt)
                 }
             ))
         }
 
         TypeHint::Map(m) => {
-            let key_heap = m.key_type.heap(db);
-            let key_hint = m.key_type.type_hint(db);
-            let key_ty = convert_type_hint_inner(db, key_heap, key_hint)?;
-            let value_heap = m.value_type.heap(db);
-            let value_hint = m.value_type.type_hint(db);
-            let value_ty = convert_type_hint_inner(db, value_heap, value_hint)?;
+            let key_ty = convert_type_hint_inner(db, (*m.key_type).clone())?;
+            let key_dt = match key_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
+            let value_ty = convert_type_hint_inner(db, (*m.value_type).clone())?;
+            let value_dt = match value_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
             Type::Datalit(datalit::tycheck::Type::Map(
                 datalit::tycheck::TypeMap {
-                    key_type: to_datalit_type_and_heap(db, key_ty)?,
-                    value_type: to_datalit_type_and_heap(db, value_ty)?,
+                    key_type: Box::new(key_dt),
+                    value_type: Box::new(value_dt),
                 }
             ))
         }
 
         TypeHint::Set(s) => {
-            let elem_heap = s.element_type.heap(db);
-            let elem_hint = s.element_type.type_hint(db);
-            let elem_ty = convert_type_hint_inner(db, elem_heap, elem_hint)?;
+            let elem_ty = convert_type_hint_inner(db, (*s.element_type).clone())?;
+            let dt = match elem_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
             Type::Datalit(datalit::tycheck::Type::Set(
                 datalit::tycheck::TypeSet {
-                    element_type: to_datalit_type_and_heap(db, elem_ty)?
+                    element_type: Box::new(dt)
                 }
             ))
         }
 
         TypeHint::Option(o) => {
-            let inner_heap = o.inner_type.heap(db);
-            let inner_hint = o.inner_type.type_hint(db);
-            let inner_ty = convert_type_hint_inner(db, inner_heap, inner_hint)?;
+            let inner_ty = convert_type_hint_inner(db, (*o.inner_type).clone())?;
+            let dt = match inner_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
             Type::Datalit(datalit::tycheck::Type::Option(
                 datalit::tycheck::TypeOption {
-                    inner_type: to_datalit_type_and_heap(db, inner_ty)?
+                    inner_type: Box::new(dt)
                 }
             ))
         }
 
         TypeHint::Result(r) => {
-            let inner_heap = r.inner_type.heap(db);
-            let inner_hint = r.inner_type.type_hint(db);
-            let inner_ty = convert_type_hint_inner(db, inner_heap, inner_hint)?;
+            let inner_ty = convert_type_hint_inner(db, (*r.inner_type).clone())?;
+            let dt = match inner_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
             Type::Datalit(datalit::tycheck::Type::Result(
                 datalit::tycheck::TypeResult {
-                    inner_type: to_datalit_type_and_heap(db, inner_ty)?
+                    inner_type: Box::new(dt)
                 }
             ))
         }
 
         TypeHint::Tensor(t) => {
-            let elem_heap = t.element_type.heap(db);
-            let elem_hint = t.element_type.type_hint(db);
-            let elem_ty = convert_type_hint_inner(db, elem_heap, elem_hint)?;
+            let elem_ty = convert_type_hint_inner(db, (*t.element_type).clone())?;
+            let dt = match elem_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
             Type::Datalit(datalit::tycheck::Type::Tensor(
                 datalit::tycheck::TypeTensor {
-                    element_type: to_datalit_type_and_heap(db, elem_ty)?,
+                    element_type: Box::new(dt),
                     rank: t.rank,
                 }
             ))
@@ -300,12 +309,14 @@ fn convert_type_hint_inner<'db>(
             let columns: Result<Vec<_>, TypeError> = t.columns.iter()
                 .map(|c| {
                     let name = c.name;
-                    let c_heap = c.type_hint.heap(db);
-                    let c_hint = c.type_hint.type_hint(db);
-                    let c_ty = convert_type_hint_inner(db, c_heap, c_hint)?;
+                    let c_ty = convert_type_hint_inner(db, (*c.type_hint).clone())?;
+                    let dt = match c_ty.ty(db) {
+                        Type::Datalit(dt) => dt.clone(),
+                        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                    };
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
-                        ty: to_datalit_type_and_heap(db, c_ty)?,
+                        ty: Box::new(dt),
                     })
                 })
                 .collect();
@@ -324,20 +335,18 @@ use bct::text::InternedText;
 /// Convert a type hint to a type, resolving type aliases.
 pub fn convert_type_hint_with_aliases<'db>(
     db: &'db dyn crate::Db,
-    type_hint_and_heap: TypeHintAndHeap<'db>,
+    type_hint: TypeHint<'db>,
     aliases: &HashMap<InternedText<'db>, TypeAndHeap<'db>>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
-    let heap = type_hint_and_heap.heap(db);
-    let type_hint = type_hint_and_heap.type_hint(db);
-    convert_type_hint_with_aliases_inner(db, heap, type_hint, aliases)
+    convert_type_hint_with_aliases_inner(db, type_hint, aliases)
 }
 
 fn convert_type_hint_with_aliases_inner<'db>(
     db: &'db dyn crate::Db,
-    heap: datalit::ast::Heap,
     type_hint: TypeHint<'db>,
     aliases: &HashMap<InternedText<'db>, TypeAndHeap<'db>>,
 ) -> Result<TypeAndHeap<'db>, TypeError> {
+    let heap = datalove_datalit::ast_serde::Heap::Omitted;
     let ty = match type_hint {
         TypeHint::Bool => Type::Datalit(datalit::tycheck::Type::Bool),
         TypeHint::U8 => Type::Datalit(datalit::tycheck::Type::U8),
@@ -360,10 +369,11 @@ fn convert_type_hint_with_aliases_inner<'db>(
         TypeHint::AnonTuple(t) => {
             let fields: Result<Vec<_>, TypeError> = t.fields.iter()
                 .map(|f| {
-                    let f_heap = f.heap(db);
-                    let f_hint = f.type_hint(db);
-                    let f_ty = convert_type_hint_with_aliases_inner(db, f_heap, f_hint, aliases)?;
-                    to_datalit_type_and_heap(db, f_ty)
+                    let f_ty = convert_type_hint_with_aliases_inner(db, f.clone(), aliases)?;
+                    match f_ty.ty(db) {
+                        Type::Datalit(dt) => Ok(dt.clone()),
+                        Type::Function(_) => Err(TypeError::CannotSynthesize),
+                    }
                 })
                 .collect();
             Type::Datalit(datalit::tycheck::Type::AnonTuple(
@@ -375,12 +385,14 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let fields: Result<Vec<_>, TypeError> = s.fields.iter()
                 .map(|f| {
                     let name = f.name;
-                    let f_heap = f.type_hint.heap(db);
-                    let f_hint = f.type_hint.type_hint(db);
-                    let f_ty = convert_type_hint_with_aliases_inner(db, f_heap, f_hint, aliases)?;
+                    let f_ty = convert_type_hint_with_aliases_inner(db, (*f.type_hint).clone(), aliases)?;
+                    let dt = match f_ty.ty(db) {
+                        Type::Datalit(dt) => dt.clone(),
+                        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                    };
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
-                        ty: to_datalit_type_and_heap(db, f_ty)?,
+                        ty: Box::new(dt),
                     })
                 })
                 .collect();
@@ -393,11 +405,12 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let variants: Result<Vec<_>, TypeError> = e.variants.iter()
                 .map(|v| {
                     let name = v.name;
-                    let payload = v.payload.map(|p| {
-                        let p_heap = p.heap(db);
-                        let p_hint = p.type_hint(db);
-                        let p_ty = convert_type_hint_with_aliases_inner(db, p_heap, p_hint, aliases)?;
-                        to_datalit_type_and_heap(db, p_ty)
+                    let payload = v.payload.as_ref().map(|p| {
+                        let p_ty = convert_type_hint_with_aliases_inner(db, (**p).clone(), aliases)?;
+                        match p_ty.ty(db) {
+                            Type::Datalit(dt) => Ok(Box::new(dt.clone())),
+                            Type::Function(_) => Err(TypeError::CannotSynthesize),
+                        }
                     }).transpose()?;
                     Ok(datalit::tycheck::TypeEnumVariant { name, payload })
                 })
@@ -408,71 +421,85 @@ fn convert_type_hint_with_aliases_inner<'db>(
         }
 
         TypeHint::List(l) => {
-            let elem_heap = l.element_type.heap(db);
-            let elem_hint = l.element_type.type_hint(db);
-            let elem_ty = convert_type_hint_with_aliases_inner(db, elem_heap, elem_hint, aliases)?;
+            let elem_ty = convert_type_hint_with_aliases_inner(db, (*l.element_type).clone(), aliases)?;
+            let dt = match elem_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
             Type::Datalit(datalit::tycheck::Type::List(
                 datalit::tycheck::TypeList {
-                    element_type: to_datalit_type_and_heap(db, elem_ty)?
+                    element_type: Box::new(dt)
                 }
             ))
         }
 
         TypeHint::Map(m) => {
-            let key_heap = m.key_type.heap(db);
-            let key_hint = m.key_type.type_hint(db);
-            let key_ty = convert_type_hint_with_aliases_inner(db, key_heap, key_hint, aliases)?;
-            let value_heap = m.value_type.heap(db);
-            let value_hint = m.value_type.type_hint(db);
-            let value_ty = convert_type_hint_with_aliases_inner(db, value_heap, value_hint, aliases)?;
+            let key_ty = convert_type_hint_with_aliases_inner(db, (*m.key_type).clone(), aliases)?;
+            let key_dt = match key_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
+            let value_ty = convert_type_hint_with_aliases_inner(db, (*m.value_type).clone(), aliases)?;
+            let value_dt = match value_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
             Type::Datalit(datalit::tycheck::Type::Map(
                 datalit::tycheck::TypeMap {
-                    key_type: to_datalit_type_and_heap(db, key_ty)?,
-                    value_type: to_datalit_type_and_heap(db, value_ty)?,
+                    key_type: Box::new(key_dt),
+                    value_type: Box::new(value_dt),
                 }
             ))
         }
 
         TypeHint::Set(s) => {
-            let elem_heap = s.element_type.heap(db);
-            let elem_hint = s.element_type.type_hint(db);
-            let elem_ty = convert_type_hint_with_aliases_inner(db, elem_heap, elem_hint, aliases)?;
+            let elem_ty = convert_type_hint_with_aliases_inner(db, (*s.element_type).clone(), aliases)?;
+            let dt = match elem_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
             Type::Datalit(datalit::tycheck::Type::Set(
                 datalit::tycheck::TypeSet {
-                    element_type: to_datalit_type_and_heap(db, elem_ty)?
+                    element_type: Box::new(dt)
                 }
             ))
         }
 
         TypeHint::Option(o) => {
-            let inner_heap = o.inner_type.heap(db);
-            let inner_hint = o.inner_type.type_hint(db);
-            let inner_ty = convert_type_hint_with_aliases_inner(db, inner_heap, inner_hint, aliases)?;
+            let inner_ty = convert_type_hint_with_aliases_inner(db, (*o.inner_type).clone(), aliases)?;
+            let dt = match inner_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
             Type::Datalit(datalit::tycheck::Type::Option(
                 datalit::tycheck::TypeOption {
-                    inner_type: to_datalit_type_and_heap(db, inner_ty)?
+                    inner_type: Box::new(dt)
                 }
             ))
         }
 
         TypeHint::Result(r) => {
-            let inner_heap = r.inner_type.heap(db);
-            let inner_hint = r.inner_type.type_hint(db);
-            let inner_ty = convert_type_hint_with_aliases_inner(db, inner_heap, inner_hint, aliases)?;
+            let inner_ty = convert_type_hint_with_aliases_inner(db, (*r.inner_type).clone(), aliases)?;
+            let dt = match inner_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
             Type::Datalit(datalit::tycheck::Type::Result(
                 datalit::tycheck::TypeResult {
-                    inner_type: to_datalit_type_and_heap(db, inner_ty)?
+                    inner_type: Box::new(dt)
                 }
             ))
         }
 
         TypeHint::Tensor(t) => {
-            let elem_heap = t.element_type.heap(db);
-            let elem_hint = t.element_type.type_hint(db);
-            let elem_ty = convert_type_hint_with_aliases_inner(db, elem_heap, elem_hint, aliases)?;
+            let elem_ty = convert_type_hint_with_aliases_inner(db, (*t.element_type).clone(), aliases)?;
+            let dt = match elem_ty.ty(db) {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            };
             Type::Datalit(datalit::tycheck::Type::Tensor(
                 datalit::tycheck::TypeTensor {
-                    element_type: to_datalit_type_and_heap(db, elem_ty)?,
+                    element_type: Box::new(dt),
                     rank: t.rank,
                 }
             ))
@@ -483,7 +510,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
         TypeHint::Alias(name) => {
             // Look up the alias in the map.
             if let Some(resolved_ty) = aliases.get(&name) {
-                return Ok(*resolved_ty);
+                return Ok(resolved_ty.clone());
             }
             return Err(TypeError::UnresolvedTypeAlias(name.as_str(db).to_string()));
         }
@@ -492,12 +519,14 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let columns: Result<Vec<_>, TypeError> = t.columns.iter()
                 .map(|c| {
                     let name = c.name;
-                    let c_heap = c.type_hint.heap(db);
-                    let c_hint = c.type_hint.type_hint(db);
-                    let c_ty = convert_type_hint_with_aliases_inner(db, c_heap, c_hint, aliases)?;
+                    let c_ty = convert_type_hint_with_aliases_inner(db, (*c.type_hint).clone(), aliases)?;
+                    let dt = match c_ty.ty(db) {
+                        Type::Datalit(dt) => dt.clone(),
+                        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                    };
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
-                        ty: to_datalit_type_and_heap(db, c_ty)?,
+                        ty: Box::new(dt),
                     })
                 })
                 .collect();
@@ -534,11 +563,11 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
 
 /// Create the unit type `()`.
 pub fn unit_type<'db>(db: &'db dyn crate::Db) -> TypeAndHeap<'db> {
-    let datalit_unit = datalit::tycheck::unit_type(db, datalit::ast::Heap::Omitted);
+    let datalit_unit = datalit::tycheck::unit_type();
     TypeAndHeap::new(
         db,
-        datalit::ast::Heap::Omitted,
-        Type::Datalit(datalit_unit.ty(db).clone())
+        datalove_datalit::ast_serde::Heap::Omitted,
+        Type::Datalit(datalit_unit)
     )
 }
 
@@ -549,19 +578,13 @@ pub fn unit_type<'db>(db: &'db dyn crate::Db) -> TypeAndHeap<'db> {
 /// Check that an element type is compatible with the expected element type.
 pub fn check_element_compatible<'db>(
     db: &'db dyn crate::Db,
-    expected: TypeAndHeap<'db>,
-    actual: TypeAndHeap<'db>,
+    expected: &TypeAndHeap<'db>,
+    actual: &TypeAndHeap<'db>,
 ) -> Result<(), TypeError> {
     if !types_equivalent(db, expected.ty(db), actual.ty(db)) {
         return Err(TypeError::TypeMismatch {
             expected: type_to_string(db, expected.ty(db)),
             actual: type_to_string(db, actual.ty(db)),
-        });
-    }
-    if !heaps_compatible(expected.heap(db), actual.heap(db)) {
-        return Err(TypeError::HeapMismatch {
-            expected_heap: heap_to_string(expected.heap(db)),
-            actual_heap: heap_to_string(actual.heap(db)),
         });
     }
     Ok(())
@@ -575,9 +598,9 @@ pub fn check_element_compatible<'db>(
 pub fn check_int_fits_wrapped_type<'db>(
     value_str: &str,
     ty: &datalit::tycheck::Type<'db>,
-    db: &'db dyn crate::Db,
+    _db: &'db dyn crate::Db,
 ) -> Result<(), TypeError> {
-    datalit::tycheck::check_int_fits_wrapped_type(value_str, ty, db)
+    datalit::tycheck::check_int_fits_wrapped_type(value_str, ty)
         .map_err(TypeError::from)
 }
 
@@ -585,9 +608,9 @@ pub fn check_int_fits_wrapped_type<'db>(
 pub fn check_hex_fits_wrapped_type<'db>(
     value_str: &str,
     ty: &datalit::tycheck::Type<'db>,
-    db: &'db dyn crate::Db,
+    _db: &'db dyn crate::Db,
 ) -> Result<(), TypeError> {
-    datalit::tycheck::check_hex_fits_wrapped_type(value_str, ty, db)
+    datalit::tycheck::check_hex_fits_wrapped_type(value_str, ty)
         .map_err(TypeError::from)
 }
 
@@ -598,43 +621,35 @@ pub fn check_hex_fits_wrapped_type<'db>(
 /// Unwrap Option/Result wrappers to get the innermost type.
 pub fn unwrap_wrapper_types<'db>(
     db: &'db dyn crate::Db,
-    ty: TypeAndHeap<'db>,
+    ty: &TypeAndHeap<'db>,
 ) -> TypeAndHeap<'db> {
     match ty.ty(db) {
         Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
-            let inner = opt.inner_type;
-            TypeAndHeap::new(db, inner.heap(db), Type::Datalit(inner.ty(db).clone()))
+            TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, Type::Datalit((*opt.inner_type).clone()))
         }
         Type::Datalit(datalit::tycheck::Type::Result(res)) => {
-            let inner = res.inner_type;
-            TypeAndHeap::new(db, inner.heap(db), Type::Datalit(inner.ty(db).clone()))
+            TypeAndHeap::new(db, datalove_datalit::ast_serde::Heap::Omitted, Type::Datalit((*res.inner_type).clone()))
         }
-        _ => ty,
+        _ => ty.clone(),
     }
 }
 
 /// Get the heap from the innermost type (unwrapping Option/Result).
+/// Always returns Omitted since heaps have been removed.
 pub fn unwrap_wrapper_heap<'db>(
-    db: &'db dyn crate::Db,
-    ty: TypeAndHeap<'db>,
-) -> datalit::ast::Heap {
-    match ty.ty(db) {
-        Type::Datalit(datalit::tycheck::Type::Option(opt)) => opt.inner_type.heap(db),
-        Type::Datalit(datalit::tycheck::Type::Result(res)) => res.inner_type.heap(db),
-        _ => ty.heap(db),
-    }
+    _db: &'db dyn crate::Db,
+    _ty: &TypeAndHeap<'db>,
+) -> datalove_datalit::ast_serde::Heap {
+    datalove_datalit::ast_serde::Heap::Omitted
 }
 
 /// Get the heap from a datalit TypeAndHeap (unwrapping Option/Result).
+/// Always returns Omitted since heaps have been removed.
 pub fn unwrap_wrapper_heap_datalit<'db>(
-    db: &'db dyn crate::Db,
-    ty: datalit::tycheck::TypeAndHeap<'db>,
-) -> datalit::ast::Heap {
-    match ty.ty(db) {
-        datalit::tycheck::Type::Option(opt) => opt.inner_type.heap(db),
-        datalit::tycheck::Type::Result(res) => res.inner_type.heap(db),
-        _ => ty.heap(db),
-    }
+    _db: &'db dyn crate::Db,
+    _ty: &crate::TypeAndHeap<'db>,
+) -> datalove_datalit::ast_serde::Heap {
+    datalove_datalit::ast_serde::Heap::Omitted
 }
 
 // ============================================================================
@@ -642,40 +657,9 @@ pub fn unwrap_wrapper_heap_datalit<'db>(
 // ============================================================================
 
 /// Extract the heap from an expression.
-pub fn get_expr_heap<'db>(db: &'db dyn crate::Db, expr: ExprFun<'db>) -> datalit::ast::Heap {
-    match expr.expr(db) {
-        ExprFunKind::True(lit) => lit.heap,
-        ExprFunKind::False(lit) => lit.heap,
-        ExprFunKind::None(lit) => lit.heap,
-        ExprFunKind::Int(int_expr) => int_expr.heap,
-        ExprFunKind::Float(float_expr) => float_expr.heap,
-        ExprFunKind::Hex(hex_expr) => hex_expr.heap,
-        ExprFunKind::String(str_expr) => str_expr.heap,
-        ExprFunKind::List(list_expr) => list_expr.heap,
-        ExprFunKind::Set(set_expr) => set_expr.heap,
-        ExprFunKind::Map(map_expr) => map_expr.heap,
-        ExprFunKind::Tensor(tensor_expr) => tensor_expr.heap,
-        ExprFunKind::AnonTuple(tuple_expr) => tuple_expr.heap,
-        ExprFunKind::AnonStruct(struct_expr) => struct_expr.heap,
-        ExprFunKind::AnonEnum(enum_expr) => enum_expr.heap,
-        ExprFunKind::Some(some_expr) => some_expr.heap,
-        ExprFunKind::Ok(ok_expr) => ok_expr.heap,
-        ExprFunKind::Er(er_expr) => er_expr.heap,
-        ExprFunKind::Data(data_expr) => data_expr.heap,
-        ExprFunKind::Error(err_expr) => err_expr.heap,
-        ExprFunKind::Table(table_expr) => table_expr.heap,
-        // Non-literal expressions use Omitted heap.
-        ExprFunKind::Name(_)
-        | ExprFunKind::BinOp(_)
-        | ExprFunKind::UnaryOp(_)
-        | ExprFunKind::FunctionCall(_)
-        | ExprFunKind::IntrinsicCall(_)
-        | ExprFunKind::Tuple(_)
-        | ExprFunKind::TryOption(_)
-        | ExprFunKind::TryResult(_)
-        | ExprFunKind::FieldProj(_)
-        | ExprFunKind::ParseError(_) => datalit::ast::Heap::Omitted,
-    }
+/// Always returns Omitted since heaps have been removed from expressions.
+pub fn get_expr_heap<'db>(_db: &'db dyn crate::Db, _expr: ExprFun<'db>) -> datalove_datalit::ast_serde::Heap {
+    datalove_datalit::ast_serde::Heap::Omitted
 }
 
 // ============================================================================
@@ -686,9 +670,9 @@ pub fn get_expr_heap<'db>(db: &'db dyn crate::Db, expr: ExprFun<'db>) -> datalit
 pub fn to_datalit_type_and_heap<'db>(
     db: &'db dyn crate::Db,
     ty: TypeAndHeap<'db>,
-) -> Result<datalit::tycheck::TypeAndHeap<'db>, TypeError> {
+) -> Result<crate::TypeAndHeap<'db>, TypeError> {
     match ty.ty(db) {
-        Type::Datalit(dt) => Ok(datalit::tycheck::TypeAndHeap::new(db, ty.heap(db), dt.clone())),
+        Type::Datalit(dt) => Ok(crate::TypeAndHeap::new(db, ty.heap(db), Type::Datalit(dt.clone()))),
         Type::Function(_) => Err(TypeError::CannotSynthesize),
     }
 }

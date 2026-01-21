@@ -33,8 +33,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 12345int\n    v1 = call m0.f0(v0)\n    debuglog v1\n    v2 = const \"hello\"\n    v3 = call m0.f1(v2)\n    debuglog v3\n    unit_end\nexports:\n    r1 = v1\n    r2 = v3\n",
             ),
             ir_match: true,
-            interp_output: "@12345\n@false\n@\"hello\"\n@42\n",
-            aot_output: "@12345\n@false\n@\"hello\"\n@42\n",
+            interp_output: "12345\nfalse\n\"hello\"\n42\n",
+            aot_output: "12345\nfalse\n\"hello\"\n42\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

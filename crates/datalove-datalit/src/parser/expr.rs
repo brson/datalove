@@ -22,7 +22,7 @@ impl<'db> Parser<'db> {
         // Check for `: type / expr` pattern.
         let expr_full = if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
-            let type_hint = self.parse_type_hint_and_heap();
+            let type_hint = self.parse_type_hint();
             if !self.eat_sigil(Sigil::SlashForward) {
                 let ts = self.peek_text_span();
                 let error_expr = self.emit_expr_error(ts,
@@ -30,15 +30,14 @@ impl<'db> Parser<'db> {
                     "D012",
                     "expected '/' separator between type hint and expression"
                 );
-                let expr = ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_expr };
-                ast::ExprFull::new(self.db, Some(type_hint), expr)
+                ast::ExprFull::new(self.db, Some(type_hint), error_expr)
             } else {
-                let expr = self.parse_expr_and_heap();
+                let expr = self.parse_expr();
                 ast::ExprFull::new(self.db, Some(type_hint), expr)
             }
         } else {
             // No type hint, just parse expression.
-            let expr = self.parse_expr_and_heap();
+            let expr = self.parse_expr();
             ast::ExprFull::new(self.db, None, expr)
         };
 
@@ -51,11 +50,6 @@ impl<'db> Parser<'db> {
         ));
 
         expr_full
-    }
-
-    fn parse_expr_and_heap(&mut self) -> ast::ExprAndHeap<'db> {
-        let expr = self.parse_expr();
-        ast::ExprAndHeap { heap: ast::Heap::Omitted, expr }
     }
 
     fn parse_expr(&mut self) -> ast::Expr<'db> {
@@ -299,11 +293,7 @@ impl<'db> Parser<'db> {
                                 "D017",
                                 "expected '=' after key"
                             );
-                            let error_value = ast::ExprFull::new(
-                                p.db,
-                                None,
-                                ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_expr }
-                            );
+                            let error_value = ast::ExprFull::new(p.db, None, error_expr);
                             return ast::ExprMapEntry { key, value: error_value };
                         }
                         let value = p.parse_expr_full();
@@ -475,11 +465,7 @@ impl<'db> Parser<'db> {
                     "expected field name"
                 );
                 let placeholder_name = InternedText::new(self.db, "<error>".S());
-                let error_value = ast::ExprFull::new(
-                    self.db,
-                    None,
-                    ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_expr }
-                );
+                let error_value = ast::ExprFull::new(self.db, None, error_expr);
                 return ast::ExprStructField { name: placeholder_name, value: error_value };
             }
         };
@@ -490,11 +476,7 @@ impl<'db> Parser<'db> {
                 "D018",
                 "expected '=' after field name"
             );
-            let error_value = ast::ExprFull::new(
-                self.db,
-                None,
-                ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_expr }
-            );
+            let error_value = ast::ExprFull::new(self.db, None, error_expr);
             return ast::ExprStructField { name, value: error_value };
         }
         let value = self.parse_expr_full();

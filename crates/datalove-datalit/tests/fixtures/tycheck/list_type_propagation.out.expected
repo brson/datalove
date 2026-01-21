@@ -47,7 +47,6 @@
   "errors": [],
   "root_type": {
     "element_type": "int",
-    "heap": "",
     "kind": "List"
   }
 }

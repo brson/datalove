@@ -58,7 +58,6 @@
   "errors": [],
   "root_type": {
     "element_type": "string",
-    "heap": "",
     "kind": "Set"
   }
 }

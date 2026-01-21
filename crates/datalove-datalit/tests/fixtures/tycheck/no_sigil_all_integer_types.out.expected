@@ -152,7 +152,6 @@
       "u64",
       "i64"
     ],
-    "heap": "",
     "kind": "AnonTuple"
   }
 }

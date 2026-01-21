@@ -56,7 +56,6 @@
       "int",
       "int"
     ],
-    "heap": "",
     "kind": "AnonTuple"
   }
 }

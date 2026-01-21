@@ -2,45 +2,35 @@ use rmx::prelude::*;
 use std::path::Path;
 use rmx::serde_json::json;
 
-fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::TypeAndHeap) -> rmx::serde_json::Value {
+fn type_to_json(db: &datalove_datalit::Database, ty: &datalove_datalit::tycheck::Type) -> rmx::serde_json::Value {
     use datalove_datalit::tycheck::Type;
 
-    let heap = ty.heap(db);
-    let heap_str = match heap {
-        datalove_datalit::ast::Heap::Local => "@",
-        datalove_datalit::ast::Heap::Global => "#",
-        datalove_datalit::ast::Heap::Omitted => "",
-    };
-
-    let ty_inner = ty.ty(db);
-
-    match ty_inner {
-        Type::Bool => json!(format!("{}bool", heap_str)),
-        Type::U8 => json!(format!("{}u8", heap_str)),
-        Type::I8 => json!(format!("{}i8", heap_str)),
-        Type::U16 => json!(format!("{}u16", heap_str)),
-        Type::I16 => json!(format!("{}i16", heap_str)),
-        Type::U32 => json!(format!("{}u32", heap_str)),
-        Type::I32 => json!(format!("{}i32", heap_str)),
-        Type::U64 => json!(format!("{}u64", heap_str)),
-        Type::I64 => json!(format!("{}i64", heap_str)),
-        Type::Usize => json!(format!("{}usize", heap_str)),
-        Type::Isize => json!(format!("{}isize", heap_str)),
-        Type::F32 => json!(format!("{}f32", heap_str)),
-        Type::F64 => json!(format!("{}f64", heap_str)),
-        Type::Int => json!(format!("{}int", heap_str)),
-        Type::String => json!(format!("{}string", heap_str)),
-        Type::Data => json!(format!("{}data", heap_str)),
-        Type::Error => json!(format!("{}error", heap_str)),
+    match ty {
+        Type::Bool => json!("bool"),
+        Type::U8 => json!("u8"),
+        Type::I8 => json!("i8"),
+        Type::U16 => json!("u16"),
+        Type::I16 => json!("i16"),
+        Type::U32 => json!("u32"),
+        Type::I32 => json!("i32"),
+        Type::U64 => json!("u64"),
+        Type::I64 => json!("i64"),
+        Type::Usize => json!("usize"),
+        Type::Isize => json!("isize"),
+        Type::F32 => json!("f32"),
+        Type::F64 => json!("f64"),
+        Type::Int => json!("int"),
+        Type::String => json!("string"),
+        Type::Data => json!("data"),
+        Type::Error => json!("error"),
 
         Type::AnonTuple(t) => {
             let fields: Vec<_> = t.fields
                 .iter()
-                .map(|f| type_to_json(db, *f))
+                .map(|f| type_to_json(db, f))
                 .collect();
             json!({
                 "kind": "AnonTuple",
-                "heap": heap_str,
                 "fields": fields
             })
         }
@@ -51,13 +41,12 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
                 .map(|f| {
                     json!({
                         "name": f.name.as_str(db),
-                        "type": type_to_json(db, f.ty)
+                        "type": type_to_json(db, &*f.ty)
                     })
                 })
                 .collect();
             json!({
                 "kind": "AnonStruct",
-                "heap": heap_str,
                 "fields": fields
             })
         }
@@ -66,7 +55,7 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
             let variants: Vec<_> = e.variants
                 .iter()
                 .map(|v| {
-                    let payload = v.payload.clone().map(|p| type_to_json(db, p));
+                    let payload = v.payload.as_ref().map(|p| type_to_json(db, &**p));
                     json!({
                         "name": v.name.as_str(db),
                         "payload": payload
@@ -75,7 +64,6 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
                 .collect();
             json!({
                 "kind": "AnonEnum",
-                "heap": heap_str,
                 "variants": variants
             })
         }
@@ -83,49 +71,43 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
         Type::List(l) => {
             json!({
                 "kind": "List",
-                "heap": heap_str,
-                "element_type": type_to_json(db, l.element_type)
+                "element_type": type_to_json(db, &*l.element_type)
             })
         }
 
         Type::Map(m) => {
             json!({
                 "kind": "Map",
-                "heap": heap_str,
-                "key_type": type_to_json(db, m.key_type),
-                "value_type": type_to_json(db, m.value_type)
+                "key_type": type_to_json(db, &*m.key_type),
+                "value_type": type_to_json(db, &*m.value_type)
             })
         }
 
         Type::Set(s) => {
             json!({
                 "kind": "Set",
-                "heap": heap_str,
-                "element_type": type_to_json(db, s.element_type)
+                "element_type": type_to_json(db, &*s.element_type)
             })
         }
 
         Type::Option(o) => {
             json!({
                 "kind": "Option",
-                "heap": heap_str,
-                "inner_type": type_to_json(db, o.inner_type)
+                "inner_type": type_to_json(db, &*o.inner_type)
             })
         }
 
         Type::Result(r) => {
             json!({
                 "kind": "Result",
-                "heap": heap_str,
-                "inner_type": type_to_json(db, r.inner_type)
+                "inner_type": type_to_json(db, &*r.inner_type)
             })
         }
 
         Type::Tensor(t) => {
             json!({
                 "kind": "Tensor",
-                "heap": heap_str,
-                "element_type": type_to_json(db, t.element_type),
+                "element_type": type_to_json(db, &*t.element_type),
                 "rank": t.rank
             })
         }
@@ -134,12 +116,11 @@ fn type_to_json(db: &datalove_datalit::Database, ty: datalove_datalit::tycheck::
             let columns: Vec<_> = t.columns.iter().map(|f| {
                 json!({
                     "name": f.name.as_str(db),
-                    "type": type_to_json(db, f.ty)
+                    "type": type_to_json(db, &*f.ty)
                 })
             }).collect();
             json!({
                 "kind": "Table",
-                "heap": heap_str,
                 "columns": columns
             })
         }
@@ -155,13 +136,6 @@ fn error_to_json(error: &datalove_datalit::tycheck::TypeError) -> rmx::serde_jso
                 "kind": "TypeMismatch",
                 "expected": expected,
                 "actual": actual
-            })
-        }
-        TypeError::HeapMismatch { expected_heap, actual_heap } => {
-            json!({
-                "kind": "HeapMismatch",
-                "expected_heap": expected_heap,
-                "actual_heap": actual_heap
             })
         }
         TypeError::CannotSynthesize => {
@@ -242,8 +216,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let serde_ast = datalove_datalit::ast_serde::ExprFull::from_ast(&db, ast);
 
     // Convert root type to JSON-serializable format.
-    let root_type_json = if let Some(root_type) = typechecked.root_type(&db) {
-        Some(type_to_json(&db, root_type))
+    let root_type_json = if let Some(root_type) = typechecked.root_type(&db).clone() {
+        Some(type_to_json(&db, &root_type))
     } else {
         None
     };

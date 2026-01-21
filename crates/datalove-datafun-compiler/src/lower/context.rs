@@ -265,7 +265,7 @@ impl<'db> LowerCtx<'db> {
     pub fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
         let expr_id = expr.as_id();
         let index = expr_id.index() as usize;
-        match self.expr_types.get(index).copied().flatten() {
+        match self.expr_types.get(index).cloned().flatten() {
             Some(ty) => IrType::from_tycheck(self.db, &ty),
             None => panic!(
                 "Expression must have type from typechecker. Expression ID {} but expr_types.len() = {}",

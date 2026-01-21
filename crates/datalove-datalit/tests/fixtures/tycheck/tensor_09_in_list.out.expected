@@ -154,11 +154,9 @@
   "root_type": {
     "element_type": {
       "element_type": "u32",
-      "heap": "",
       "kind": "Tensor",
       "rank": 2
     },
-    "heap": "",
     "kind": "List"
   }
 }

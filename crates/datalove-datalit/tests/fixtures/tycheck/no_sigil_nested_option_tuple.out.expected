@@ -69,13 +69,11 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "",
     "inner_type": {
       "fields": [
         "u32",
         "string"
       ],
-      "heap": "",
       "kind": "AnonTuple"
     },
     "kind": "Option"

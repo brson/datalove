@@ -22,7 +22,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = call unit0.f0(v0)\n    unit_end v1\n",
             ),
-            output: "ok @55",
+            output: "ok 55",
         ),
     ],
 )

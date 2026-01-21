@@ -40,43 +40,43 @@ pub fn datafun_expr_to_datalit_serde<'db>(
     // Get heap and type_hint from the expression kind.
     let (heap, type_hint, expr_serde) = match kind {
         ast::ExprFunKind::True(e) => (
-            e.heap,
+            datalit::ast_serde::Heap::Omitted,
             e.type_hint,
             datalit::ast_serde::Expr::True,
         ),
         ast::ExprFunKind::False(e) => (
-            e.heap,
+            datalit::ast_serde::Heap::Omitted,
             e.type_hint,
             datalit::ast_serde::Expr::False,
         ),
         ast::ExprFunKind::None(e) => (
-            e.heap,
+            datalit::ast_serde::Heap::Omitted,
             e.type_hint,
             datalit::ast_serde::Expr::None,
         ),
         ast::ExprFunKind::Int(e) => (
-            e.heap,
+            datalit::ast_serde::Heap::Omitted,
             e.type_hint,
             datalit::ast_serde::Expr::Int(datalit::ast_serde::ExprInt {
                 value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::Float(e) => (
-            e.heap,
+            datalit::ast_serde::Heap::Omitted,
             e.type_hint,
             datalit::ast_serde::Expr::Float(datalit::ast_serde::ExprFloat {
                 value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::Hex(e) => (
-            e.heap,
+            datalit::ast_serde::Heap::Omitted,
             e.type_hint,
             datalit::ast_serde::Expr::Hex(datalit::ast_serde::ExprHex {
                 value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::String(e) => (
-            e.heap,
+            datalit::ast_serde::Heap::Omitted,
             e.type_hint,
             datalit::ast_serde::Expr::String(datalit::ast_serde::ExprString {
                 value: e.value.as_str(db).S(),
@@ -87,7 +87,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::List(datalit::ast_serde::ExprList { elements }),
             )
@@ -97,7 +97,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::Set(datalit::ast_serde::ExprSet { elements }),
             )
@@ -111,7 +111,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 })
                 .collect::<Result<Vec<_>, ConversionError>>()?;
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::Map(datalit::ast_serde::ExprMap { entries }),
             )
@@ -121,7 +121,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::Tensor(datalit::ast_serde::ExprTensor {
                     shape: e.shape.C(),
@@ -134,7 +134,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::AnonTuple(datalit::ast_serde::ExprAnonTuple { elements }),
             )
@@ -150,7 +150,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 })
                 .collect::<Result<Vec<_>, ConversionError>>()?;
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::AnonStruct(datalit::ast_serde::ExprAnonStruct { fields }),
             )
@@ -161,7 +161,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 .transpose()?
                 .map(Box::new);
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::AnonEnum(datalit::ast_serde::ExprAnonEnum {
                     variant_name: e.variant_name.as_str(db).S(),
@@ -172,7 +172,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Some(e) => {
             let payload = datafun_expr_to_datalit_serde(db, e.payload)?;
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::Some(datalit::ast_serde::ExprSome {
                     payload: Box::new(payload),
@@ -182,7 +182,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Ok(e) => {
             let payload = datafun_expr_to_datalit_serde(db, e.payload)?;
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::Ok(datalit::ast_serde::ExprOk {
                     payload: Box::new(payload),
@@ -192,7 +192,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Er(e) => {
             let payload = datafun_expr_to_datalit_serde(db, e.payload)?;
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::Er(datalit::ast_serde::ExprEr {
                     payload: Box::new(payload),
@@ -202,7 +202,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Data(e) => {
             let value = datafun_expr_to_datalit_serde(db, e.value)?;
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::Data(datalit::ast_serde::ExprData {
                     value: Box::new(value),
@@ -212,7 +212,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Error(e) => {
             let value = datafun_expr_to_datalit_serde(db, e.value)?;
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::Error(datalit::ast_serde::ExprError {
                     value: Box::new(value),
@@ -232,14 +232,14 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 })
                 .collect::<Result<Vec<_>, ConversionError>>()?;
             (
-                e.heap,
+                datalit::ast_serde::Heap::Omitted,
                 e.type_hint,
                 datalit::ast_serde::Expr::Table(datalit::ast_serde::ExprTable { header, rows }),
             )
         }
         ast::ExprFunKind::ParseError(e) => {
             (
-                datalit::ast::Heap::Omitted,
+                datalit::ast_serde::Heap::Omitted,
                 None,
                 datalit::ast_serde::Expr::ParseError(datalit::ast_serde::ExprParseError {
                     message: e.message.as_str(db).to_string(),
@@ -253,7 +253,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                datalit::ast::Heap::Omitted,
+                datalit::ast_serde::Heap::Omitted,
                 None,
                 datalit::ast_serde::Expr::AnonTuple(datalit::ast_serde::ExprAnonTuple { elements }),
             )
@@ -270,7 +270,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                             let value_str = int_expr.value.as_str(db);
                             let neg_value = format!("-{}", value_str);
                             (
-                                int_expr.heap,
+                                datalit::ast_serde::Heap::Omitted,
                                 int_expr.type_hint,
                                 datalit::ast_serde::Expr::Int(datalit::ast_serde::ExprInt {
                                     value: neg_value,
@@ -312,11 +312,11 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         }
     };
 
-    // Convert type hint using datalit's from_ast.
-    let type_hint_serde = type_hint.map(|th| datalit::ast_serde::TypeHintAndHeap::from_ast(db, th));
+    // Convert type hint to serde format.
+    let type_hint_serde = type_hint.map(|th| datalit::ast_serde::TypeHintAndHeap::from_type_hint(db, th));
 
-    // Convert heap using datalit's from_ast.
-    let heap_serde = datalit::ast_serde::Heap::from_ast(heap);
+    // Heap is already in serde format (always Omitted now).
+    let heap_serde = heap;
 
     Ok(datalit::ast_serde::ExprFull {
         type_hint: type_hint_serde,
@@ -389,7 +389,7 @@ pub fn datalit_typecheck_to_serde<'db>(
     db: &'db dyn salsa::Database,
     result: datalit::tycheck::TypecheckResult<'db>,
 ) -> TypecheckResultSerde {
-    let root_type = result.root_type(db).map(|t| datalit_type_to_serde(db, t));
+    let root_type = result.root_type(db).clone().map(|t| datalit_type_to_serde(db, t));
     let errors = result.errors(db).iter()
         .map(|e| datalit_error_to_serde(&e.error(db)))
         .collect();
@@ -420,11 +420,11 @@ pub fn datafun_unit_typecheck_to_serde<'db>(
 
 fn datalit_type_to_serde<'db>(
     db: &'db dyn salsa::Database,
-    ty: datalit::tycheck::TypeAndHeap<'db>,
+    ty: datalit::tycheck::Type<'db>,
 ) -> TypeAndHeapSerde {
     TypeAndHeapSerde {
-        heap: heap_to_serde(ty.heap(db)),
-        ty: datalit_type_inner_to_serde(db, ty.ty(db)),
+        heap: HeapSerde::Omitted, // Heap is always Omitted now
+        ty: datalit_type_inner_to_serde(db, &ty),
     }
 }
 
@@ -438,11 +438,11 @@ fn datafun_type_to_serde<'db>(
     }
 }
 
-fn heap_to_serde(heap: datalit::ast::Heap) -> HeapSerde {
+fn heap_to_serde(heap: datalit::ast_serde::Heap) -> HeapSerde {
     match heap {
-        datalit::ast::Heap::Local => HeapSerde::Local,
-        datalit::ast::Heap::Global => HeapSerde::Global,
-        datalit::ast::Heap::Omitted => HeapSerde::Omitted,
+        datalit::ast_serde::Heap::Local => HeapSerde::Local,
+        datalit::ast_serde::Heap::Global => HeapSerde::Global,
+        datalit::ast_serde::Heap::Omitted => HeapSerde::Omitted,
     }
 }
 
@@ -468,36 +468,36 @@ fn datalit_type_inner_to_serde<'db>(
         Type::Int => TypeSerde::Int,
         Type::String => TypeSerde::String,
         Type::AnonTuple(t) => TypeSerde::AnonTuple {
-            fields: t.fields.iter().map(|f| datalit_type_to_serde(db, *f)).collect(),
+            fields: t.fields.iter().map(|f| datalit_type_to_serde(db, f.clone())).collect(),
         },
         Type::AnonStruct(t) => TypeSerde::AnonStruct {
             fields: t.fields.iter()
-                .map(|f| (f.name.as_str(db).to_string(), datalit_type_to_serde(db, f.ty)))
+                .map(|f| (f.name.as_str(db).to_string(), datalit_type_to_serde(db, (*f.ty).clone())))
                 .collect(),
         },
         Type::AnonEnum(t) => TypeSerde::AnonEnum {
             variants: t.variants.iter()
-                .map(|v| (v.name.as_str(db).to_string(), v.payload.clone().map(|p| datalit_type_to_serde(db, p))))
+                .map(|v| (v.name.as_str(db).to_string(), v.payload.clone().map(|p| datalit_type_to_serde(db, *p))))
                 .collect(),
         },
         Type::List(t) => TypeSerde::List {
-            element: Box::new(datalit_type_to_serde(db, t.element_type)),
+            element: Box::new(datalit_type_to_serde(db, (*t.element_type).clone())),
         },
         Type::Map(t) => TypeSerde::Map {
-            key: Box::new(datalit_type_to_serde(db, t.key_type)),
-            value: Box::new(datalit_type_to_serde(db, t.value_type)),
+            key: Box::new(datalit_type_to_serde(db, (*t.key_type).clone())),
+            value: Box::new(datalit_type_to_serde(db, (*t.value_type).clone())),
         },
         Type::Set(t) => TypeSerde::Set {
-            element: Box::new(datalit_type_to_serde(db, t.element_type)),
+            element: Box::new(datalit_type_to_serde(db, (*t.element_type).clone())),
         },
         Type::Option(t) => TypeSerde::Option {
-            inner: Box::new(datalit_type_to_serde(db, t.inner_type)),
+            inner: Box::new(datalit_type_to_serde(db, (*t.inner_type).clone())),
         },
         Type::Result(t) => TypeSerde::Result {
-            inner: Box::new(datalit_type_to_serde(db, t.inner_type)),
+            inner: Box::new(datalit_type_to_serde(db, (*t.inner_type).clone())),
         },
         Type::Tensor(t) => TypeSerde::Tensor {
-            element: Box::new(datalit_type_to_serde(db, t.element_type)),
+            element: Box::new(datalit_type_to_serde(db, (*t.element_type).clone())),
             rank: t.rank,
         },
         Type::Data => TypeSerde::Data,

@@ -81,11 +81,9 @@
   "errors": [],
   "root_type": {
     "element_type": {
-      "heap": "",
       "inner_type": "u32",
       "kind": "Option"
     },
-    "heap": "",
     "kind": "List"
   }
 }
