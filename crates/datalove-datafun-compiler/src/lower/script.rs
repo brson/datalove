@@ -10,7 +10,8 @@ use datalove_datafun_ir::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
     ExportBinding, BlockId, IrModuleId, FuncId,
 };
-use crate::ownership_analysis::{ScriptFunctionAnalyses, analyze_script_statements, format_analysis_errors};
+use crate::ownership_analysis::ScriptFunctionAnalyses;
+use crate::tracked_script_ownership::ScriptAnalysisData;
 use crate::ir_ext::IrTypeExt;
 use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
 use super::expr::{lower_expression, lower_expression_for_ref};
@@ -51,10 +52,9 @@ fn is_self_assignment_script<'db>(
 /// Script units are sequences of statements (fragment) or a single expression (expr).
 /// They can reference values from previous units and export bindings to subsequent units.
 ///
-/// For fragments, caller must first call `analyze_script_functions` to get `func_analyses`.
-/// For expressions, pass an empty map since there are no function definitions.
-///
-/// When `for_aot` is true, emits Drop instructions for script-level bindings at unit end.
+/// For fragments, caller must first call `analyze_script_fragment_tracked` to get
+/// ownership analysis (`script_analysis`), then `analyze_script_functions` for `func_analyses`.
+/// For expressions, pass None for `script_analysis` and an empty map for `func_analyses`.
 pub fn lower_script_unit<'db>(
     db: &'db dyn salsa::Database,
     tycheck_result: TypecheckResult<'db>,
@@ -63,7 +63,7 @@ pub fn lower_script_unit<'db>(
     script_ctx: ScriptLowerContext,
     kind: ScriptUnitKind<'db>,
     func_analyses: ScriptFunctionAnalyses<'db>,
-    for_aot: bool,
+    script_analysis: Option<ScriptAnalysisData>,
 ) -> Result<IrScriptUnit, LowerError> {
     let expr_types = tycheck_result.expr_types(db);
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
@@ -80,19 +80,12 @@ pub fn lower_script_unit<'db>(
 
     let result = match kind {
         ScriptUnitKind::Fragment(stmts) => {
-            // Analyze script statements for drop schedule.
-            let script_analysis = analyze_script_statements(db, expr_types, call_targets, &stmts, for_aot);
-
-            // Check for drop analysis errors (use-after-move, move-in-loop, etc.)
-            if !script_analysis.errors.is_empty() {
-                return Err(LowerError::DropAnalysisError(
-                    format_analysis_errors(&script_analysis.errors)
-                ));
-            }
-
-            ctx.drop_schedule = script_analysis.schedule;
-            ctx.binding_info = script_analysis.bindings;
-            ctx.unit_end_drops = script_analysis.unit_end;
+            // Use pre-computed script analysis from ownership analysis phase.
+            let analysis = script_analysis
+                .expect("script_analysis required for Fragment units");
+            ctx.drop_schedule = analysis.schedule;
+            ctx.binding_info = analysis.bindings;
+            ctx.unit_end_drops = analysis.unit_end;
 
             // Lower all statements with index tracking.
             for (idx, stmt) in stmts.iter().enumerate() {
@@ -141,9 +134,8 @@ pub fn lower_script_unit<'db>(
 /// Like `lower_script_unit` but takes expr_types directly instead of TypecheckResult.
 /// Used when typechecking with context (non-salsa version).
 ///
-/// Caller must first call `analyze_script_functions` to get `func_analyses`.
-///
-/// When `for_aot` is true, emits Drop instructions for script-level bindings at unit end.
+/// Caller must first call `analyze_script_fragment_tracked` to get ownership analysis,
+/// then call `analyze_script_functions` to get `func_analyses`.
 ///
 /// If `func_param_types` is provided, use those resolved param types for function parameters
 /// instead of deriving from AST type hints. This is needed for type alias support.
@@ -155,21 +147,12 @@ pub fn lower_script_fragment_raw<'db>(
     script_ctx: ScriptLowerContext,
     stmts: Vec<Statement<'db>>,
     func_analyses: ScriptFunctionAnalyses<'db>,
-    for_aot: bool,
+    script_analysis: ScriptAnalysisData,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
-    // Analyze script statements for drop schedule.
-    let script_analysis = analyze_script_statements(db, expr_types, call_targets, &stmts, for_aot);
-
-    // Check for drop analysis errors (use-after-move, move-in-loop, etc.)
-    if !script_analysis.errors.is_empty() {
-        return Err(LowerError::DropAnalysisError(
-            format_analysis_errors(&script_analysis.errors)
-        ));
-    }
-
+    // Use pre-computed script analysis from ownership analysis phase.
     ctx.drop_schedule = script_analysis.schedule;
     ctx.binding_info = script_analysis.bindings;
     ctx.unit_end_drops = script_analysis.unit_end;

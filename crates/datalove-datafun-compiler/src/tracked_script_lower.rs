@@ -13,9 +13,9 @@ use datalove_datafun_tycheck::{
 };
 
 use crate::module_graph::ModuleId;
-use crate::ownership_analysis;
 use crate::lower;
 use crate::ir_ext::IrTypeExt;
+use crate::tracked_script_ownership::ScriptUnitOwnershipResult;
 
 /// Accumulated bindings passed to subsequent script units for lowering.
 ///
@@ -129,8 +129,10 @@ pub struct ScriptUnitLowerOutput<'db> {
 
 /// Lower a single script fragment unit with accumulated context from prior units.
 ///
-/// Memoized: if typecheck_result, module_specs, accumulated, statements, and for_aot
+/// Memoized: if typecheck_result, module_specs, accumulated, statements, and ownership_result
 /// all match a previous call, returns the cached result.
+///
+/// Caller must first call `analyze_script_fragment_tracked` to get the ownership_result.
 #[salsa::tracked]
 pub fn lower_script_fragment_tracked<'db>(
     db: &'db dyn salsa::Database,
@@ -138,8 +140,21 @@ pub fn lower_script_fragment_tracked<'db>(
     module_specs: Vec<ModuleSpec<'db>>,
     accumulated: AccumulatedLowerBindings,
     statements: Vec<Statement<'db>>,
-    for_aot: bool,
+    ownership_result: ScriptUnitOwnershipResult<'db>,
 ) -> ScriptUnitLowerOutput<'db> {
+    // Check for ownership analysis errors first.
+    let ownership_errors = ownership_result.errors(db);
+    if !ownership_errors.is_empty() {
+        return ScriptUnitLowerOutput::new(
+            db,
+            None,
+            Some(ownership_errors.join("\n")),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+    }
+
     let expr_types = typecheck_result.expr_types(db);
     let call_targets = typecheck_result.call_targets(db);
 
@@ -156,27 +171,12 @@ pub fn lower_script_fragment_tracked<'db>(
         func_param_types.insert(name.text(db).S(), param_types);
     }
 
-    // Analyze functions in this unit for ownership.
-    let func_analyses = match ownership_analysis::analyze_script_functions(
-        db, expr_types, call_targets, &statements, Some(&func_param_types)
-    ) {
-        Ok(analyses) => analyses,
-        Err(errors) => {
-            let error_msgs: Vec<String> = errors.into_iter()
-                .map(|(func_name, errs)| {
-                    format!("{}: {}", func_name, ownership_analysis::format_analysis_errors(&errs))
-                })
-                .collect();
-            return ScriptUnitLowerOutput::new(
-                db,
-                None,
-                Some(error_msgs.join("\n")),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-            );
-        }
-    };
+    // Get function analyses from ownership result.
+    let func_analyses = ownership_result.to_function_analyses_map(db, &statements);
+
+    // Get script analysis from ownership result.
+    let script_analysis = ownership_result.script_analysis(db).clone()
+        .expect("script_analysis required for fragment units");
 
     // Convert accumulated bindings to ScriptLowerContext.
     let script_ctx = accumulated.to_script_lower_context();
@@ -190,7 +190,7 @@ pub fn lower_script_fragment_tracked<'db>(
         script_ctx,
         statements,
         func_analyses,
-        for_aot,
+        script_analysis,
         Some(&func_param_types),
     ) {
         Ok(ir_unit) => {
@@ -207,8 +207,11 @@ pub fn lower_script_fragment_tracked<'db>(
 
 /// Lower a single script expression unit with accumulated context from prior units.
 ///
-/// Memoized: if typecheck_result, module_specs, accumulated, expr, and for_aot
+/// Memoized: if typecheck_result, module_specs, accumulated, expr, and ownership_result
 /// all match a previous call, returns the cached result.
+///
+/// Caller must first call `analyze_script_expr_tracked` to get the ownership_result
+/// (which will be minimal for expressions).
 #[salsa::tracked]
 pub fn lower_script_expr_tracked<'db>(
     db: &'db dyn salsa::Database,
@@ -216,8 +219,21 @@ pub fn lower_script_expr_tracked<'db>(
     module_specs: Vec<ModuleSpec<'db>>,
     accumulated: AccumulatedLowerBindings,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
-    for_aot: bool,
+    ownership_result: ScriptUnitOwnershipResult<'db>,
 ) -> ScriptUnitLowerOutput<'db> {
+    // Check for ownership analysis errors first (should be empty for expressions).
+    let ownership_errors = ownership_result.errors(db);
+    if !ownership_errors.is_empty() {
+        return ScriptUnitLowerOutput::new(
+            db,
+            None,
+            Some(ownership_errors.join("\n")),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+    }
+
     let expr_types = typecheck_result.expr_types(db);
     let call_targets = typecheck_result.call_targets(db);
 
@@ -228,6 +244,7 @@ pub fn lower_script_expr_tracked<'db>(
     let script_ctx = accumulated.to_script_lower_context();
 
     // Lower the expression.
+    // Expression units don't have statements, so for_aot doesn't affect them.
     match lower::lower_script_expr(
         db,
         expr_types,
@@ -235,7 +252,7 @@ pub fn lower_script_expr_tracked<'db>(
         &func_id_map,
         script_ctx,
         expr,
-        for_aot,
+        false, // for_aot has no effect on expressions
     ) {
         Ok(ir_unit) => {
             let exports = ir_unit.exports.clone();

@@ -18,6 +18,9 @@ pub mod tracked_script_lower;
 // Ownership and liveness analysis.
 pub mod ownership_analysis;
 
+// Salsa-tracked script unit ownership analysis functions.
+pub mod tracked_script_ownership;
+
 // Salsa-tracked ownership analysis functions.
 pub mod tracked_ownership_analysis;
 

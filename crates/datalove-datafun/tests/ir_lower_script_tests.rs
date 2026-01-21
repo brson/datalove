@@ -10,6 +10,7 @@ use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_compiler::lower::{self, ScriptLowerContext};
 use datalove_datafun_compiler::ownership_analysis;
+use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
 use datalove_datafun_compiler::ir_ext::IrTypeExt;
 use datalove_datafun_ir::IrType;
 use bct::input::Source;
@@ -73,10 +74,28 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     }
                 };
 
-                // Script tests don't use modules, so use empty func_id_map.
+                // Run script-level ownership analysis.
                 // Use for_aot=false since these tests verify REPL behavior with persistent bindings.
+                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, expr_types, call_targets, &stmts, false);
+
+                // Check for script analysis errors.
+                if !script_analysis_raw.errors.is_empty() {
+                    let error_msgs = ownership_analysis::format_analysis_errors(&script_analysis_raw.errors);
+                    output.push_str(&format!("Drop analysis error: {}\n\n", error_msgs));
+                    unit_index += 1;
+                    continue;
+                }
+
+                // Convert to ScriptAnalysisData for lowering.
+                let script_analysis = ScriptAnalysisData {
+                    schedule: script_analysis_raw.schedule,
+                    bindings: script_analysis_raw.bindings,
+                    unit_end: script_analysis_raw.unit_end,
+                };
+
+                // Script tests don't use modules, so use empty func_id_map.
                 let func_id_map = HashMap::new();
-                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, false, Some(&func_param_types)) {
+                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types)) {
                     Ok(ir_unit) => {
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

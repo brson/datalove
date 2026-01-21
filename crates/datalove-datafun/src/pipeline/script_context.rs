@@ -8,6 +8,9 @@ use datalove_datafun_compiler::lower;
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, lower_script_fragment_tracked, lower_script_expr_tracked,
 };
+use datalove_datafun_compiler::tracked_script_ownership::{
+    analyze_script_fragment_tracked, analyze_script_expr_tracked,
+};
 use datalove_datafun_tycheck::{
     type_check_script_units, create_batch_spec,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
@@ -212,14 +215,32 @@ impl<'db> ScriptCompilationContext<'db> {
 
         let stmts = parsed.statements.to_vec();
 
-        // Call the tracked lowering function.
+        // 1. Ownership analysis (tracked, memoized separately).
+        let ownership_result = analyze_script_fragment_tracked(
+            self.db,
+            tycheck_result,
+            stmts.clone(),
+            for_aot,
+        );
+
+        // 2. Check for ownership errors.
+        if !ownership_result.errors(self.db).is_empty() {
+            let error_msg = ownership_result.errors(self.db).join("\n");
+            return ScriptCompilationResult {
+                typecheck: TypecheckResult::Success,
+                lowering: LoweringResult::Error { message: error_msg },
+                ir_unit: None,
+            };
+        }
+
+        // 3. Lowering with ownership result.
         let lower_output = lower_script_fragment_tracked(
             self.db,
             tycheck_result,
             self.module_specs.clone(),
             self.accumulated_lower_bindings.clone(),
             stmts,
-            for_aot,
+            ownership_result,
         );
 
         // Check for lowering errors.
@@ -255,7 +276,7 @@ impl<'db> ScriptCompilationContext<'db> {
     }
 
     /// Internal: compile an expression through all phases without executing.
-    fn compile_expr_inner(&mut self, source: &str, for_aot: bool) -> ScriptCompilationResult {
+    fn compile_expr_inner(&mut self, source: &str, _for_aot: bool) -> ScriptCompilationResult {
         let src = bct::input::Source::new(self.db, source.S());
         self.last_source = Some(src);
         let expr = datalove_datafun_parser::parse_expr(self.db, src);
@@ -300,14 +321,32 @@ impl<'db> ScriptCompilationContext<'db> {
             };
         }
 
-        // Call the tracked lowering function.
+        // 1. Ownership analysis (tracked, memoized separately).
+        // Expression units have minimal ownership requirements.
+        let ownership_result = analyze_script_expr_tracked(
+            self.db,
+            tycheck_result,
+            expr,
+        );
+
+        // 2. Check for ownership errors (should be empty for expressions).
+        if !ownership_result.errors(self.db).is_empty() {
+            let error_msg = ownership_result.errors(self.db).join("\n");
+            return ScriptCompilationResult {
+                typecheck: TypecheckResult::Success,
+                lowering: LoweringResult::Error { message: error_msg },
+                ir_unit: None,
+            };
+        }
+
+        // 3. Lowering with ownership result.
         let lower_output = lower_script_expr_tracked(
             self.db,
             tycheck_result,
             self.module_specs.clone(),
             self.accumulated_lower_bindings.clone(),
             expr,
-            for_aot,
+            ownership_result,
         );
 
         // Check for lowering errors.
