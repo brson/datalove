@@ -26,7 +26,7 @@ use datalove_datafun_ir::FunctionRegistry;
 use datafun::pipeline::ModuleCompilationPipeline;
 
 /// Number of worldfiles to generate and test per run.
-const ITERATION_COUNT: u64 = 5;
+const ITERATION_COUNT: u64 = 20;
 
 /// Result of running a worldfile.
 #[derive(Debug, Clone)]
