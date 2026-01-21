@@ -1,0 +1,193 @@
+//! AOT compilation: compile scripts to native executables via Cranelift.
+
+use rmx::prelude::*;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::OnceLock;
+
+use datalove_datafun_aot_cranelift::AotCompiler;
+use datalove_datafun_ir::{IrScriptUnit, FunctionRegistry, IrFunction};
+
+/// Linking error.
+#[derive(Debug)]
+pub enum LinkError {
+    TempDir(std::io::Error),
+    WriteObject(std::io::Error),
+    RuntimeNotFound { debug_path: PathBuf, release_path: PathBuf },
+    LinkerExec(std::io::Error),
+    LinkerFailed(String),
+}
+
+impl std::fmt::Display for LinkError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LinkError::TempDir(e) => write!(f, "failed to create temp directory: {}", e),
+            LinkError::WriteObject(e) => write!(f, "failed to write object file: {}", e),
+            LinkError::RuntimeNotFound { debug_path, release_path } => {
+                write!(f, "runtime library not found at {} or {}", debug_path.display(), release_path.display())
+            }
+            LinkError::LinkerExec(e) => write!(f, "failed to execute linker: {}", e),
+            LinkError::LinkerFailed(msg) => write!(f, "linker failed: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for LinkError {}
+
+/// Execution error.
+#[derive(Debug)]
+pub enum ExecError {
+    Exec(std::io::Error),
+    ExitCode { code: i32, stderr: String },
+}
+
+impl std::fmt::Display for ExecError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExecError::Exec(e) => write!(f, "failed to execute: {}", e),
+            ExecError::ExitCode { code, stderr } => write!(f, "exit code {}: {}", code, stderr),
+        }
+    }
+}
+
+impl std::error::Error for ExecError {}
+
+/// Output from executing an AOT-compiled binary.
+pub struct ExecOutput {
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+static RUNTIME_LIB_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Ensure the runtime library is built and return its directory.
+pub fn ensure_runtime_lib() -> &'static Path {
+    RUNTIME_LIB_DIR.get_or_init(|| {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .unwrap_or_else(|_| ".".to_string());
+        let manifest_path = PathBuf::from(manifest_dir);
+        let workspace_root = manifest_path.join("../..").canonicalize()
+            .expect("failed to find workspace root");
+        let lib_dir = workspace_root.join("target/debug");
+
+        // Build quietly to avoid polluting test output.
+        // Use index-64 feature if this crate was compiled with it.
+        #[cfg(feature = "index-64")]
+        let args = ["build", "-p", "datalove-rt", "--features", "index-64", "--quiet"];
+        #[cfg(not(feature = "index-64"))]
+        let args = ["build", "-p", "datalove-rt", "--quiet"];
+
+        let output = Command::new("cargo")
+            .args(args)
+            .current_dir(&workspace_root)
+            .output()
+            .expect("failed to run cargo build");
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            panic!("Failed to build datalove-rt: {}", stderr);
+        }
+
+        lib_dir
+    })
+}
+
+/// Compile a script unit to object bytes.
+pub fn compile_script_to_object(unit: &IrScriptUnit) -> AnyResult<Vec<u8>> {
+    let mut compiler = AotCompiler::new_for_host()
+        .map_err(|e| anyhow!("failed to create AOT compiler: {}", e))?;
+    let product = compiler.compile_script_unit(unit)
+        .map_err(|e| anyhow!("AOT compilation failed: {}", e))?;
+    let obj_bytes = product.emit()
+        .map_err(|e| anyhow!("failed to emit object: {}", e))?;
+    Ok(obj_bytes)
+}
+
+/// Compile a script unit with module functions to object bytes.
+pub fn compile_script_to_object_with_world<'a>(
+    unit: &IrScriptUnit,
+    world_funcs: impl Iterator<Item = &'a IrFunction>,
+    registry: &FunctionRegistry,
+) -> AnyResult<Vec<u8>> {
+    let mut compiler = AotCompiler::new_for_host()
+        .map_err(|e| anyhow!("failed to create AOT compiler: {}", e))?;
+    let product = compiler.compile_script_unit_with_world_types(unit, world_funcs, registry)
+        .map_err(|e| anyhow!("AOT compilation failed: {}", e))?;
+    let obj_bytes = product.emit()
+        .map_err(|e| anyhow!("failed to emit object: {}", e))?;
+    Ok(obj_bytes)
+}
+
+/// Link object bytes to an executable in a temp directory.
+pub fn link_object_to_temp_executable(
+    obj_bytes: &[u8],
+) -> Result<(PathBuf, rmx::tempfile::TempDir), LinkError> {
+    let dir = rmx::tempfile::tempdir().map_err(LinkError::TempDir)?;
+    let exe_path = dir.path().join("script");
+    link_object_to_path(obj_bytes, &exe_path)?;
+    Ok((exe_path, dir))
+}
+
+/// Link object bytes to an executable at the specified path.
+pub fn link_object_to_path(obj_bytes: &[u8], output_path: &Path) -> Result<(), LinkError> {
+    let dir = rmx::tempfile::tempdir().map_err(LinkError::TempDir)?;
+    let obj_path = dir.path().join("script.o");
+    std::fs::write(&obj_path, obj_bytes).map_err(LinkError::WriteObject)?;
+
+    let lib_dir = ensure_runtime_lib();
+    let lib_path = lib_dir.join("libdatalove_rt.a");
+
+    let output = Command::new("cc")
+        .args([
+            obj_path.to_str().unwrap(),
+            lib_path.to_str().unwrap(),
+            "-ldl", "-lpthread", "-lm",
+            "-o", output_path.to_str().unwrap(),
+        ])
+        .output()
+        .map_err(LinkError::LinkerExec)?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(LinkError::LinkerFailed(stderr));
+    }
+
+    Ok(())
+}
+
+/// Run an AOT-compiled executable.
+pub fn run_executable(exe_path: &Path) -> Result<ExecOutput, ExecError> {
+    let output = Command::new(exe_path)
+        .output()
+        .map_err(ExecError::Exec)?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let exit_code = output.status.code().unwrap_or(-1);
+
+    if !output.status.success() {
+        return Err(ExecError::ExitCode { code: exit_code, stderr });
+    }
+
+    Ok(ExecOutput { exit_code, stdout, stderr })
+}
+
+/// Compile, link, and run a script unit.
+pub fn compile_link_run(unit: &IrScriptUnit) -> AnyResult<ExecOutput> {
+    let obj_bytes = compile_script_to_object(unit)?;
+    let (exe_path, _dir) = link_object_to_temp_executable(&obj_bytes)
+        .map_err(|e| anyhow!("{}", e))?;
+    run_executable(&exe_path).map_err(|e| anyhow!("{}", e))
+}
+
+/// Compile, link, and run a script unit with module functions.
+pub fn compile_link_run_with_world<'a>(
+    unit: &IrScriptUnit,
+    world_funcs: impl Iterator<Item = &'a IrFunction>,
+    registry: &FunctionRegistry,
+) -> AnyResult<ExecOutput> {
+    let obj_bytes = compile_script_to_object_with_world(unit, world_funcs, registry)?;
+    let (exe_path, _dir) = link_object_to_temp_executable(&obj_bytes)
+        .map_err(|e| anyhow!("{}", e))?;
+    run_executable(&exe_path).map_err(|e| anyhow!("{}", e))
+}
