@@ -25,6 +25,4 @@ pub enum InterpError {
     ExternalUnitNotFound(u32),
     /// Module function not found.
     ModuleFunctionNotFound { module: IrModuleId, func: FuncId },
-    /// Invalid argument for out parameter (must be slot or value dest).
-    InvalidOutParamArg,
 }

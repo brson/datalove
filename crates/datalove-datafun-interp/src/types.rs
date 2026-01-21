@@ -5,17 +5,12 @@
 use datalove_rtdt as rtdt;
 use datalove_rtdt::TyDescRef;
 
-use crate::error::InterpError;
 use crate::value::{Destination, Value};
 use crate::IrInterpreter;
 
 impl IrInterpreter {
     /// Pack fields into a tuple at destination.
-    pub(crate) fn execute_pack_tuple(
-        &mut self,
-        fields: &[Value],
-        dest: Destination,
-    ) -> Result<(), InterpError> {
+    pub(crate) fn execute_pack_tuple(&mut self, fields: &[Value], dest: Destination) {
         unsafe {
             let tuple_info = (*dest.tydesc).type_info.tuple;
             for (i, field) in fields.iter().enumerate() {
@@ -25,15 +20,10 @@ impl IrInterpreter {
                 std::ptr::copy_nonoverlapping(field.ptr, field_dest, size);
             }
         }
-        Ok(())
     }
 
     /// Pack fields into a struct at destination.
-    pub(crate) fn execute_pack_struct(
-        &mut self,
-        fields: &[Value],
-        dest: Destination,
-    ) -> Result<(), InterpError> {
+    pub(crate) fn execute_pack_struct(&mut self, fields: &[Value], dest: Destination) {
         unsafe {
             let struct_info = (*dest.tydesc).type_info.struct_;
             for (i, field) in fields.iter().enumerate() {
@@ -43,15 +33,10 @@ impl IrInterpreter {
                 std::ptr::copy_nonoverlapping(field.ptr, field_dest, size);
             }
         }
-        Ok(())
     }
 
     /// Wrap a value in Some.
-    pub(crate) fn execute_wrap_some(
-        &self,
-        inner: &Value,
-        dest: Destination,
-    ) -> Result<(), InterpError> {
+    pub(crate) fn execute_wrap_some(&self, inner: &Value, dest: Destination) {
         unsafe {
             let option_info = (*dest.tydesc).type_info.option;
             let layout = rtdt::layout::compute_option_layout(TyDescRef::from_ptr(dest.tydesc));
@@ -65,16 +50,14 @@ impl IrInterpreter {
                 inner_size,
             );
         }
-        Ok(())
     }
 
     /// Create a None value.
-    pub(crate) fn execute_wrap_none(&self, dest: Destination) -> Result<(), InterpError> {
+    pub(crate) fn execute_wrap_none(&self, dest: Destination) {
         unsafe {
             // Tag is at offset 0. Set to None (0).
             *(dest.ptr as *mut u8) = rtdt::OptionTag::None as u8;
         }
-        Ok(())
     }
 
     /// Create an enum variant value.
@@ -83,7 +66,7 @@ impl IrInterpreter {
         variant_index: u32,
         payload: Option<&Value>,
         dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         unsafe {
             let enum_info = (*dest.tydesc).type_info.enum_;
 
@@ -102,7 +85,6 @@ impl IrInterpreter {
                 );
             }
         }
-        Ok(())
     }
 
     /// Unwrap an Option, producing (inner_value, is_some).
@@ -111,7 +93,7 @@ impl IrInterpreter {
         src: &Value,
         dest: Destination,
         is_some_dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         unsafe {
             let option_info = (*src.tydesc).type_info.option;
             let layout = rtdt::layout::compute_option_layout(TyDescRef::from_ptr(src.tydesc));
@@ -128,15 +110,10 @@ impl IrInterpreter {
                 );
             }
         }
-        Ok(())
     }
 
     /// Wrap a value in Ok.
-    pub(crate) fn execute_wrap_ok(
-        &self,
-        inner: &Value,
-        dest: Destination,
-    ) -> Result<(), InterpError> {
+    pub(crate) fn execute_wrap_ok(&self, inner: &Value, dest: Destination) {
         unsafe {
             let result_info = (*dest.tydesc).type_info.result;
             let layout = rtdt::layout::compute_result_layout(TyDescRef::from_ptr(dest.tydesc));
@@ -150,15 +127,10 @@ impl IrInterpreter {
                 inner_size,
             );
         }
-        Ok(())
     }
 
     /// Wrap a value in Err.
-    pub(crate) fn execute_wrap_err(
-        &self,
-        inner: &Value,
-        dest: Destination,
-    ) -> Result<(), InterpError> {
+    pub(crate) fn execute_wrap_err(&self, inner: &Value, dest: Destination) {
         unsafe {
             let layout = rtdt::layout::compute_result_layout(TyDescRef::from_ptr(dest.tydesc));
             // Tag is at offset 0. Set to Err.
@@ -171,7 +143,6 @@ impl IrInterpreter {
                 inner_size,
             );
         }
-        Ok(())
     }
 
     /// Unwrap a Result, producing (ok_value, err_value, is_ok).
@@ -184,7 +155,7 @@ impl IrInterpreter {
         ok_dest: Destination,
         err_dest: Destination,
         is_ok_dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         unsafe {
             let result_info = (*src.tydesc).type_info.result;
             let layout = rtdt::layout::compute_result_layout(TyDescRef::from_ptr(src.tydesc));
@@ -209,15 +180,12 @@ impl IrInterpreter {
                 );
             }
         }
-        Ok(())
     }
 
     /// Create Error from any value (consumes inner - linear semantics).
-    pub(crate) fn execute_error_from(
-        &self,
-        inner: &Value,
-        dest: Destination,
-    ) -> Result<(), InterpError> {
+    ///
+    /// Panics on allocation failure (OOM).
+    pub(crate) fn execute_error_from(&self, inner: &Value, dest: Destination) {
         let rt_handle = self.runtime.handle();
         let inner_size = unsafe { (*inner.tydesc).size as usize };
 
@@ -225,11 +193,7 @@ impl IrInterpreter {
         let moved_ptr = unsafe {
             datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner.tydesc, 1)
         };
-        if moved_ptr.is_null() {
-            return Err(InterpError::RuntimeError(
-                "Failed to allocate Error inner storage".to_string(),
-            ));
-        }
+        assert!(!moved_ptr.is_null(), "OOM: failed to allocate Error inner storage");
 
         // Move inner value to heap storage (bitwise copy).
         unsafe {
@@ -242,16 +206,12 @@ impl IrInterpreter {
             let data = rtdt::Data::from_pointers(inner.tydesc, moved_ptr);
             std::ptr::write(dest.ptr as *mut rtdt::Error, std::mem::transmute(data));
         }
-
-        Ok(())
     }
 
     /// Create Data from any value (consumes inner - linear semantics).
-    pub(crate) fn execute_data_from(
-        &self,
-        inner: &Value,
-        dest: Destination,
-    ) -> Result<(), InterpError> {
+    ///
+    /// Panics on allocation failure (OOM).
+    pub(crate) fn execute_data_from(&self, inner: &Value, dest: Destination) {
         let rt_handle = self.runtime.handle();
         let inner_size = unsafe { (*inner.tydesc).size as usize };
 
@@ -259,11 +219,7 @@ impl IrInterpreter {
         let moved_ptr = unsafe {
             datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner.tydesc, 1)
         };
-        if moved_ptr.is_null() {
-            return Err(InterpError::RuntimeError(
-                "Failed to allocate Data inner storage".to_string(),
-            ));
-        }
+        assert!(!moved_ptr.is_null(), "OOM: failed to allocate Data inner storage");
 
         // Move inner value to heap storage (bitwise copy).
         unsafe {
@@ -275,7 +231,5 @@ impl IrInterpreter {
             let data = rtdt::Data::from_pointers(inner.tydesc, moved_ptr);
             std::ptr::write(dest.ptr as *mut rtdt::Data, data);
         }
-
-        Ok(())
     }
 }
