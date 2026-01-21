@@ -193,10 +193,10 @@ pub fn gen_loop<'db, R: Rng>(
 
     let body_stmt_count = rng.gen_range(1..=3);
     for i in 0..body_stmt_count {
-        // For bare loops, always end with break to prevent infinite loop.
-        // For while loops, last statement might be a break.
+        // Always end with break to prevent infinite loops.
+        // Even `loop while` conditions can be always-true (e.g., `not false`).
         let is_last = i == body_stmt_count - 1;
-        if is_last && (is_bare_loop || rng.gen_bool(0.5)) {
+        if is_last {
             result.push_str(&format!("{}break\n", inner_indent));
         } else {
             let stmt = gen_loop_body_statement(db, rng, config, ctx, var_counter, &inner_indent);
