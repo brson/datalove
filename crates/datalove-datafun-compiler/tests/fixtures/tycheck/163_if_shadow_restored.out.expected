@@ -1,0 +1,12 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "test",
+      "params": [],
+      "return_type": "@u32"
+    }
+  ]
+}

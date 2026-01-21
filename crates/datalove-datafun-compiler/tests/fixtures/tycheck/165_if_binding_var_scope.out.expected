@@ -1,0 +1,37 @@
+{
+  "diagnostics": [
+    {
+      "code": "F001",
+      "labels": [
+        {
+          "message": "not found in this scope",
+          "span": [
+            79,
+            80
+          ],
+          "text": "x"
+        }
+      ],
+      "message": "cannot find value `x` in this scope"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "UnresolvedName",
+      "name": "x"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "test",
+      "params": [
+        {
+          "name": "opt",
+          "type": "?@u32"
+        }
+      ],
+      "return_type": "@u32"
+    }
+  ]
+}

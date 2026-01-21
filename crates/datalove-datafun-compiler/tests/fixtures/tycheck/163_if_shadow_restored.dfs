@@ -1,0 +1,7 @@
+fun test(): @u32
+  let x: @u32 = @1
+  if true
+    let x: @i32 = @2
+  end if
+  ret x
+end fun

@@ -1,0 +1,8 @@
+fun test(): @u32
+  let x: @u32 = @1
+  loop
+    let x: @i32 = @2
+    break
+  end loop
+  ret x
+end fun
