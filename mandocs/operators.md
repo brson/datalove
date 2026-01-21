@@ -47,6 +47,14 @@ the standard way wrt float zeros and NaNs.
 
 
 
+## 2026/01/21 - Postifix operator `@` - lossless clone or coerce
+
+A single operator for making expression types "fit" their destination.
+In the spirit of balancing correctness with scripting ergonomics.
+
+
+
+
 ## 2026/01/17 - Postifix operator `$` - clone
 
 Creates a deep copy of a linear value. The original remains valid after cloning.
