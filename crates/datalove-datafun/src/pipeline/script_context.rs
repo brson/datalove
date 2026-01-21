@@ -22,6 +22,68 @@ use super::result::{
     ScriptUnitResult, ScriptLowerResult, ScriptCompilationResult,
 };
 
+// Extension impl for CompiledModules to create script contexts.
+impl<'db> CompiledModules<'db> {
+    /// Create a script execution context.
+    ///
+    /// Returns `None` if module compilation failed (has errors).
+    /// Can be called multiple times to create independent contexts sharing the
+    /// same module compilation. The optional `call_dispatcher` enables JIT or
+    /// custom call dispatch.
+    pub fn script_context(
+        &self,
+        db: &'db dyn salsa::Database,
+        debug_mode: datalove_rt::c::DebugOutputMode,
+        call_dispatcher: Option<Box<dyn CallDispatcher>>,
+    ) -> Option<ScriptCompilationContext<'db>> {
+        // Don't create script context if module compilation failed.
+        if self.has_errors() {
+            return None;
+        }
+
+        let script_ctx = lower::ScriptLowerContext::new();
+        let mut module_specs = Vec::new();
+
+        // Build a map of spans for quick lookup.
+        let spans_map: std::collections::HashMap<_, _> = self.shared.parsed_graph.spans(db).iter()
+            .map(|(id, spans)| (*id, spans.clone()))
+            .collect();
+
+        for (salsa_module_id, parsed) in self.shared.parsed_graph.statements_only(db) {
+            let module_path = salsa_module_id.path(db).clone();
+            let module_source = self.shared.module_graph.iter_modules(db)
+                .find(|m| m.id(db) == *salsa_module_id)
+                .map(|m| m.source(db))
+                .expect("module should exist in graph");
+            let spans = spans_map.get(salsa_module_id).cloned()
+                .expect("spans should exist for module");
+
+            module_specs.push(ModuleSpec::new(
+                module_path.clone(),
+                module_source,
+                spans,
+                parsed.clone(),
+                *salsa_module_id,
+            ));
+        }
+
+        // Create a new ScriptEnvironment that shares the module registry.
+        let env = ScriptEnvironment::with_module_registry(Arc::clone(&self.shared.module_registry));
+
+        Some(ScriptCompilationContext {
+            db,
+            script_ctx,
+            env,
+            accumulated_unit_specs: Vec::new(),
+            module_specs,
+            interp: datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher),
+            func_id_map: self.shared.func_id_map.clone(),
+            last_source: None,
+            last_batch_spec: None,
+        })
+    }
+}
+
 /// Script execution context with persistent bindings.
 ///
 /// Compiles and executes script fragments (`eval_fragment`) and expressions
@@ -484,67 +546,5 @@ impl<'db> ScriptCompilationContext<'db> {
     /// Destroy all allocated runtime values.
     pub fn destroy_all(&mut self) {
         self.env.destroy_all(self.interp.runtime_handle());
-    }
-}
-
-// Extension impl for CompiledModules to create script contexts.
-impl<'db> CompiledModules<'db> {
-    /// Create a script execution context.
-    ///
-    /// Returns `None` if module compilation failed (has errors).
-    /// Can be called multiple times to create independent contexts sharing the
-    /// same module compilation. The optional `call_dispatcher` enables JIT or
-    /// custom call dispatch.
-    pub fn script_context(
-        &self,
-        db: &'db dyn salsa::Database,
-        debug_mode: datalove_rt::c::DebugOutputMode,
-        call_dispatcher: Option<Box<dyn CallDispatcher>>,
-    ) -> Option<ScriptCompilationContext<'db>> {
-        // Don't create script context if module compilation failed.
-        if self.has_errors() {
-            return None;
-        }
-
-        let script_ctx = lower::ScriptLowerContext::new();
-        let mut module_specs = Vec::new();
-
-        // Build a map of spans for quick lookup.
-        let spans_map: std::collections::HashMap<_, _> = self.shared.parsed_graph.spans(db).iter()
-            .map(|(id, spans)| (*id, spans.clone()))
-            .collect();
-
-        for (salsa_module_id, parsed) in self.shared.parsed_graph.statements_only(db) {
-            let module_path = salsa_module_id.path(db).clone();
-            let module_source = self.shared.module_graph.iter_modules(db)
-                .find(|m| m.id(db) == *salsa_module_id)
-                .map(|m| m.source(db))
-                .expect("module should exist in graph");
-            let spans = spans_map.get(salsa_module_id).cloned()
-                .expect("spans should exist for module");
-
-            module_specs.push(ModuleSpec::new(
-                module_path.clone(),
-                module_source,
-                spans,
-                parsed.clone(),
-                *salsa_module_id,
-            ));
-        }
-
-        // Create a new ScriptEnvironment that shares the module registry.
-        let env = ScriptEnvironment::with_module_registry(Arc::clone(&self.shared.module_registry));
-
-        Some(ScriptCompilationContext {
-            db,
-            script_ctx,
-            env,
-            accumulated_unit_specs: Vec::new(),
-            module_specs,
-            interp: datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher),
-            func_id_map: self.shared.func_id_map.clone(),
-            last_source: None,
-            last_batch_spec: None,
-        })
     }
 }
