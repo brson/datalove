@@ -87,10 +87,15 @@ pub fn gen_debuglog<'db, R: Rng>(
     ctx: &GenContext<'db>,
     indent: &str,
 ) -> Option<String> {
-    if ctx.variables.is_empty() {
+    // Filter out consumed variables (debuglog borrows, so can use loop-protected).
+    let available: Vec<_> = ctx.variables
+        .iter()
+        .filter(|v| !ctx.is_consumed(&v.name))
+        .collect();
+    if available.is_empty() {
         return None;
     }
-    let var = &ctx.variables[rng.gen_range(0..ctx.variables.len())];
+    let var = available[rng.gen_range(0..available.len())];
     Some(format!("{}debuglog {}", indent, var.name))
 }
 
