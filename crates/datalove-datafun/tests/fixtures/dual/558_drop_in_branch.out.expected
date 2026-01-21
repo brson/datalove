@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const true\n    v1 = call f0(v0)\n    debuglog v1\n    v2 = const false\n    v3 = call f0(v2)\n    debuglog v3\n    unit_end\n\nfn test_branch(p0):\nblock0:\n    v0 = const \"test string\"\n    v1 = copy p0\n    branch v1, block1, block2\nblock1:\n    v2 = const 1u32\n    drop v0\n    return v2\nblock2:\n    v3 = const 0u32\n    drop v0\n    drop v0\n    return v3\nexports:\n    test_branch = f0\n",
             ),
             ir_match: true,
-            interp_output: "@1\n@0\n",
-            aot_output: "@1\n@0\n",
+            interp_output: "1\n0\n",
+            aot_output: "1\n0\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

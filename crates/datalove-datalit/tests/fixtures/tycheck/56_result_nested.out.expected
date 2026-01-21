@@ -1,47 +1,29 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Ok": {
-          "payload": {
-            "expr": {
-              "expr": {
-                "Ok": {
-                  "payload": {
-                    "expr": {
-                      "expr": {
-                        "Int": {
-                          "value": "42"
-                        }
-                      },
-                      "heap": "Local"
-                    },
-                    "type_hint": null
+      "Ok": {
+        "payload": {
+          "expr": {
+            "Ok": {
+              "payload": {
+                "expr": {
+                  "Int": {
+                    "value": "42"
                   }
-                }
-              },
-              "heap": "Omitted"
-            },
-            "type_hint": null
-          }
-        }
-      },
-      "heap": "Omitted"
-    },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "Result": {
-          "inner_type": {
-            "heap": "Local",
-            "type_hint": {
-              "Result": {
-                "inner_type": {
-                  "heap": "Local",
-                  "type_hint": "U32"
-                }
+                },
+                "type_hint": null
               }
             }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": {
+      "Result": {
+        "inner_type": {
+          "Result": {
+            "inner_type": "U32"
           }
         }
       }
@@ -50,10 +32,8 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "@",
     "inner_type": {
-      "heap": "@",
-      "inner_type": "@u32",
+      "inner_type": "u32",
       "kind": "Result"
     },
     "kind": "Result"

@@ -17,7 +17,7 @@ scriptunit-fragment
 require module local/test/main
 import main.bad_function
 
-let val: int = :int/@100
+let val: int = :int/100
 let result = bad_function(val)
 let output = result
 

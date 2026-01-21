@@ -266,16 +266,19 @@ pub fn lex_chunk<'db>(
                 }
             }
 
-            self.eat_error_from(self.peek().X())
+            let ch = self.peek().X();
+            self.eat_char(ch);
+            self.eat_error_from(ch)
         }
 
         fn eat_error(&mut self) -> Token<'db> {
-            self.eat_error_from(self.peek().X())
+            let ch = self.peek().X();
+            self.eat_char(ch);
+            self.eat_error_from(ch)
         }
 
         fn eat_error_from(&mut self, start_ch: char) -> Token<'db> {
-            assert_eq!(self.peek_token(), Some(NextToken::Whitespace));
-
+            // The first error character has already been consumed by the caller.
             let token_start = Self::token_start(start_ch);
             let start = self.range.start.checked_sub(1).X();
             while let Some(ch) = self.peek() {

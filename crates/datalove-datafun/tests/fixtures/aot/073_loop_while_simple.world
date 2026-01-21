@@ -3,10 +3,10 @@ scriptunit-fragment
 ----------
 
 // Simple while loop - count up until condition false
-var i = :int/@0
-var sum = :int/@0
-loop while i .< :int/@5
+var i = :int/0
+var sum = :int/0
+loop while i .< :int/5
     set sum = sum + i
-    set i = i + :int/@1
+    set i = i + :int/1
 end loop
 debuglog sum

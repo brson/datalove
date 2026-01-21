@@ -3,97 +3,80 @@ use std::path::Path;
 use rmx::serde_json::json;
 use salsa::plumbing::AsId;
 
-fn type_hint_to_string(db: &dyn salsa::Database, type_hint: datalove_datalit::ast::TypeHintAndHeap) -> String {
-    use datalove_datalit::ast::{TypeHint, Heap};
+fn type_hint_to_string(db: &dyn salsa::Database, type_hint: &datalove_datalit::ast::TypeHint) -> String {
+    use datalove_datalit::ast::TypeHint;
 
-    let heap_prefix = match type_hint.heap(db) {
-        Heap::Local => "@",
-        Heap::Global => "#",
-        Heap::Omitted => "",
-    };
-
-    let base_type = match type_hint.type_hint(db) {
-        TypeHint::Bool => "bool",
-        TypeHint::U8 => "u8",
-        TypeHint::I8 => "i8",
-        TypeHint::U16 => "u16",
-        TypeHint::I16 => "i16",
-        TypeHint::U32 => "u32",
-        TypeHint::I32 => "i32",
-        TypeHint::U64 => "u64",
-        TypeHint::I64 => "i64",
-        TypeHint::Usize => "usize",
-        TypeHint::Isize => "isize",
-        TypeHint::F32 => "f32",
-        TypeHint::F64 => "f64",
-        TypeHint::String => "string",
-        TypeHint::Int => "int",
+    // Format type for display.
+    match type_hint {
+        TypeHint::Bool => "bool".to_string(),
+        TypeHint::U8 => "u8".to_string(),
+        TypeHint::I8 => "i8".to_string(),
+        TypeHint::U16 => "u16".to_string(),
+        TypeHint::I16 => "i16".to_string(),
+        TypeHint::U32 => "u32".to_string(),
+        TypeHint::I32 => "i32".to_string(),
+        TypeHint::U64 => "u64".to_string(),
+        TypeHint::I64 => "i64".to_string(),
+        TypeHint::Usize => "usize".to_string(),
+        TypeHint::Isize => "isize".to_string(),
+        TypeHint::F32 => "f32".to_string(),
+        TypeHint::F64 => "f64".to_string(),
+        TypeHint::String => "string".to_string(),
+        TypeHint::Int => "int".to_string(),
         TypeHint::Result(inner) => {
-            let inner_str = type_hint_to_string(db, inner.inner_type);
-            return format!("!{}", inner_str);
+            let inner_str = type_hint_to_string(db, &inner.inner_type);
+            format!("!{}", inner_str)
         }
         TypeHint::Option(inner) => {
-            let inner_str = type_hint_to_string(db, inner.inner_type);
-            return format!("?{}", inner_str);
+            let inner_str = type_hint_to_string(db, &inner.inner_type);
+            format!("?{}", inner_str)
         }
         TypeHint::List(inner) => {
-            let inner_str = type_hint_to_string(db, inner.element_type);
-            return format!("[{}]", inner_str);
+            let inner_str = type_hint_to_string(db, &inner.element_type);
+            format!("[{}]", inner_str)
         }
         TypeHint::Map(inner) => {
-            let key_str = type_hint_to_string(db, inner.key_type);
-            let val_str = type_hint_to_string(db, inner.value_type);
-            return format!("{{{}: {}}}", key_str, val_str);
+            let key_str = type_hint_to_string(db, &inner.key_type);
+            let val_str = type_hint_to_string(db, &inner.value_type);
+            format!("{{{}: {}}}", key_str, val_str)
         }
         TypeHint::Set(inner) => {
-            let inner_str = type_hint_to_string(db, inner.element_type);
-            return format!("{{{}}}", inner_str);
+            let inner_str = type_hint_to_string(db, &inner.element_type);
+            format!("{{{}}}", inner_str)
         }
         TypeHint::AnonTuple(tuple) => {
             let fields: Vec<_> = tuple.fields.iter()
-                .map(|f| type_hint_to_string(db, *f))
+                .map(|f| type_hint_to_string(db, f))
                 .collect();
-            return format!("{}({})", heap_prefix, fields.join(", "));
+            format!("({})", fields.join(", "))
         }
         TypeHint::AnonStruct(s) => {
             let fields: Vec<_> = s.fields.iter()
-                .map(|f| format!("{}: {}", f.name.as_str(db), type_hint_to_string(db, f.type_hint)))
+                .map(|f| format!("{}: {}", f.name.as_str(db), type_hint_to_string(db, &f.type_hint)))
                 .collect();
-            return format!("{}{{{}}}", heap_prefix, fields.join(", "));
+            format!("{{{}}}", fields.join(", "))
         }
         TypeHint::AnonEnum(e) => {
             let variants: Vec<_> = e.variants.iter()
                 .map(|v| {
-                    match v.payload {
+                    match &v.payload {
                         Some(p) => format!("{}({})", v.name.as_str(db), type_hint_to_string(db, p)),
                         None => v.name.as_str(db).to_string(),
                     }
                 })
                 .collect();
-            return format!("{}enum {{{}}}", heap_prefix, variants.join(", "));
+            format!("enum {{{}}}", variants.join(", "))
         }
         TypeHint::Tensor(t) => {
-            let elem_str = type_hint_to_string(db, t.element_type);
-            return format!("{}tensor<{}, {}>", heap_prefix, elem_str, t.rank);
+            let elem_str = type_hint_to_string(db, &t.element_type);
+            format!("tensor<{}, {}>", elem_str, t.rank)
         }
-        TypeHint::Data => {
-            return format!("{}data", heap_prefix);
-        }
-        TypeHint::Error => {
-            return format!("{}error", heap_prefix);
-        }
-        TypeHint::ParseError(_) => {
-            return "?".to_string();
-        }
-        TypeHint::Table(_) => {
-            return format!("{}table", heap_prefix);
-        }
-        TypeHint::Alias(name) => {
-            return format!("{}{}", heap_prefix, name.as_str(db));
-        }
-    };
-
-    format!("{}{}", heap_prefix, base_type)
+        TypeHint::Data => "data".to_string(),
+        TypeHint::Error => "error".to_string(),
+        TypeHint::ParseError(_) => "?".to_string(),
+        TypeHint::Table(_) => "table".to_string(),
+        TypeHint::Alias(name) => name.as_str(db).to_string(),
+    }
 }
 
 fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json::Value {
@@ -164,13 +147,6 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
         TypeError::IntOutOfRange => {
             json!({
                 "kind": "IntOutOfRange"
-            })
-        }
-        TypeError::HeapMismatch { expected_heap, actual_heap } => {
-            json!({
-                "kind": "HeapMismatch",
-                "expected_heap": expected_heap,
-                "actual_heap": actual_heap
             })
         }
         TypeError::MissingField(name) => {
@@ -324,11 +300,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let value_expr = let_stmt.value;
                 let expr_id = value_expr.as_id().index() as usize;
                 if let Some(Some(ty)) = expr_types.get(expr_id) {
-                    let ty_val = ty.ty(&db);
                     judgements.push(json!({
                         "kind": "variable",
                         "name": name.as_str(&db),
-                        "type": datalove_datafun_tycheck::type_to_string(&db, &ty_val)
+                        "type": datalove_datafun_tycheck::type_to_string(&db, ty)
                     }));
                 }
             }
@@ -340,11 +315,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let param_types: Vec<_> = params.iter().map(|p| {
                     json!({
                         "name": p.name.as_str(&db),
-                        "type": type_hint_to_string(&db, p.type_hint)
+                        "type": type_hint_to_string(&db, &p.type_hint)
                     })
                 }).collect();
 
-                let ret_ty_str = if let Some(rt) = return_type {
+                let ret_ty_str = if let Some(ref rt) = return_type {
                     type_hint_to_string(&db, rt)
                 } else {
                     "?".to_string()

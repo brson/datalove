@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let t = @(@42, @"hello", @true)
+let t = (42, "hello", true)
 debuglog t

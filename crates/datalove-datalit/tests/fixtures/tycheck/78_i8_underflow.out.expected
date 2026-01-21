@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Int": {
-          "value": "-129"
-        }
-      },
-      "heap": "Local"
+      "Int": {
+        "value": "-129"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "I8"
-    }
+    "type_hint": "I8"
   },
   "diagnostics": [],
   "errors": [

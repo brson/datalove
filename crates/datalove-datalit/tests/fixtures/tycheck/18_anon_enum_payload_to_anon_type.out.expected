@@ -1,61 +1,45 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonEnum": {
-          "payload": {
-            "expr": {
-              "expr": {
-                "Int": {
-                  "value": "42"
-                }
-              },
-              "heap": "Local"
-            },
-            "type_hint": null
+      "AnonEnum": {
+        "payload": {
+          "expr": {
+            "Int": {
+              "value": "42"
+            }
           },
-          "variant_name": "Ok"
-        }
-      },
-      "heap": "Local"
+          "type_hint": null
+        },
+        "variant_name": "Ok"
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "AnonEnum": {
-          "variants": [
-            {
-              "name": "Ok",
-              "payload": {
-                "heap": "Local",
-                "type_hint": "U32"
-              }
-            },
-            {
-              "name": "Err",
-              "payload": {
-                "heap": "Local",
-                "type_hint": "String"
-              }
-            }
-          ]
-        }
+      "AnonEnum": {
+        "variants": [
+          {
+            "name": "Ok",
+            "payload": "U32"
+          },
+          {
+            "name": "Err",
+            "payload": "String"
+          }
+        ]
       }
     }
   },
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "@",
     "kind": "AnonEnum",
     "variants": [
       {
         "name": "Ok",
-        "payload": "@u32"
+        "payload": "u32"
       },
       {
         "name": "Err",
-        "payload": "@string"
+        "payload": "string"
       }
     ]
   }

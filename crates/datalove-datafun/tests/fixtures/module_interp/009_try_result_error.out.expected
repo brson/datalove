@@ -2,7 +2,7 @@ ModulesAnalysis(
     typecheck: TypecheckResult(
         status: "Error",
         errors: [
-            "line 16, col 16: error[F011]: type inference blocked by syntax error",
+            "line 16, col 16: error[F001]: cannot find value `1u32` in this scope",
         ],
     ),
     lowering: LoweringResult(

@@ -2,13 +2,13 @@
 scriptunit-fragment
 ----------
 
-var x = @10
+var x = 10
 
 ----------
 scriptunit-fragment
 ----------
 
-set x = @20
+set x = 20
 
 ----------
 scriptunit-expr

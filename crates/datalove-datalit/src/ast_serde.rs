@@ -8,21 +8,8 @@ use rmx::serde as serde;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprFull {
-    pub type_hint: Option<TypeHintAndHeap>,
-    pub expr: ExprAndHeap,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum Heap {
-    Local,
-    Global,
-    Omitted,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct TypeHintAndHeap {
-    pub heap: Heap,
-    pub type_hint: TypeHint,
+    pub type_hint: Option<TypeHint>,
+    pub expr: Expr,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -60,7 +47,7 @@ pub enum TypeHint {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeHintAnonTuple {
-    pub fields: Vec<TypeHintAndHeap>,
+    pub fields: Vec<TypeHint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -71,7 +58,7 @@ pub struct TypeHintAnonStruct {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeHintNamedField {
     pub name: String,
-    pub type_hint: TypeHintAndHeap,
+    pub type_hint: TypeHint,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -82,50 +69,44 @@ pub struct TypeHintAnonEnum {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeHintEnumVariant {
     pub name: String,
-    pub payload: Option<Box<TypeHintAndHeap>>,
+    pub payload: Option<Box<TypeHint>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeHintList {
-    pub element_type: Box<TypeHintAndHeap>,
+    pub element_type: Box<TypeHint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeHintMap {
-    pub key_type: Box<TypeHintAndHeap>,
-    pub value_type: Box<TypeHintAndHeap>,
+    pub key_type: Box<TypeHint>,
+    pub value_type: Box<TypeHint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeHintSet {
-    pub element_type: Box<TypeHintAndHeap>,
+    pub element_type: Box<TypeHint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeHintOption {
-    pub inner_type: Box<TypeHintAndHeap>,
+    pub inner_type: Box<TypeHint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeHintResult {
-    pub inner_type: Box<TypeHintAndHeap>,
+    pub inner_type: Box<TypeHint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeHintTensor {
-    pub element_type: Box<TypeHintAndHeap>,
+    pub element_type: Box<TypeHint>,
     pub rank: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeHintTable {
     pub columns: Vec<TypeHintNamedField>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ExprAndHeap {
-    pub heap: Heap,
-    pub expr: Expr,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -272,27 +253,8 @@ pub struct ExprParseError {
 impl ExprFull {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprFull<'db>) -> Self {
         ExprFull {
-            type_hint: ast.type_hint(db).map(|th| TypeHintAndHeap::from_ast(db, th)),
-            expr: ExprAndHeap::from_ast(db, ast.expr(db).clone()),
-        }
-    }
-}
-
-impl Heap {
-    pub fn from_ast(ast: crate::ast::Heap) -> Self {
-        match ast {
-            crate::ast::Heap::Local => Heap::Local,
-            crate::ast::Heap::Global => Heap::Global,
-            crate::ast::Heap::Omitted => Heap::Omitted,
-        }
-    }
-}
-
-impl TypeHintAndHeap {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintAndHeap<'db>) -> Self {
-        TypeHintAndHeap {
-            heap: Heap::from_ast(ast.heap(db)),
-            type_hint: TypeHint::from_ast(db, ast.type_hint(db)),
+            type_hint: ast.type_hint(db).map(|th| TypeHint::from_ast(db, th)),
+            expr: Expr::from_ast(db, ast.expr(db).clone()),
         }
     }
 }
@@ -336,7 +298,7 @@ impl TypeHint {
 impl TypeHintAnonTuple {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintAnonTuple<'db>) -> Self {
         TypeHintAnonTuple {
-            fields: ast.fields.iter().map(|f| TypeHintAndHeap::from_ast(db, *f)).collect(),
+            fields: ast.fields.iter().map(|f| TypeHint::from_ast(db, f.clone())).collect(),
         }
     }
 }
@@ -353,7 +315,7 @@ impl TypeHintNamedField {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintNamedField<'db>) -> Self {
         TypeHintNamedField {
             name: ast.name.text(db).S(),
-            type_hint: TypeHintAndHeap::from_ast(db, ast.type_hint),
+            type_hint: TypeHint::from_ast(db, *ast.type_hint.clone()),
         }
     }
 }
@@ -370,7 +332,7 @@ impl TypeHintEnumVariant {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintEnumVariant<'db>) -> Self {
         TypeHintEnumVariant {
             name: ast.name.text(db).S(),
-            payload: ast.payload.map(|p| Box::new(TypeHintAndHeap::from_ast(db, p))),
+            payload: ast.payload.clone().map(|p| Box::new(TypeHint::from_ast(db, *p))),
         }
     }
 }
@@ -378,7 +340,7 @@ impl TypeHintEnumVariant {
 impl TypeHintList {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintList<'db>) -> Self {
         TypeHintList {
-            element_type: Box::new(TypeHintAndHeap::from_ast(db, ast.element_type)),
+            element_type: Box::new(TypeHint::from_ast(db, *ast.element_type.clone())),
         }
     }
 }
@@ -386,8 +348,8 @@ impl TypeHintList {
 impl TypeHintMap {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintMap<'db>) -> Self {
         TypeHintMap {
-            key_type: Box::new(TypeHintAndHeap::from_ast(db, ast.key_type)),
-            value_type: Box::new(TypeHintAndHeap::from_ast(db, ast.value_type)),
+            key_type: Box::new(TypeHint::from_ast(db, *ast.key_type.clone())),
+            value_type: Box::new(TypeHint::from_ast(db, *ast.value_type.clone())),
         }
     }
 }
@@ -395,7 +357,7 @@ impl TypeHintMap {
 impl TypeHintSet {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintSet<'db>) -> Self {
         TypeHintSet {
-            element_type: Box::new(TypeHintAndHeap::from_ast(db, ast.element_type)),
+            element_type: Box::new(TypeHint::from_ast(db, *ast.element_type.clone())),
         }
     }
 }
@@ -403,7 +365,7 @@ impl TypeHintSet {
 impl TypeHintOption {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintOption<'db>) -> Self {
         TypeHintOption {
-            inner_type: Box::new(TypeHintAndHeap::from_ast(db, ast.inner_type)),
+            inner_type: Box::new(TypeHint::from_ast(db, *ast.inner_type.clone())),
         }
     }
 }
@@ -411,7 +373,7 @@ impl TypeHintOption {
 impl TypeHintResult {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintResult<'db>) -> Self {
         TypeHintResult {
-            inner_type: Box::new(TypeHintAndHeap::from_ast(db, ast.inner_type)),
+            inner_type: Box::new(TypeHint::from_ast(db, *ast.inner_type.clone())),
         }
     }
 }
@@ -419,7 +381,7 @@ impl TypeHintResult {
 impl TypeHintTensor {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::TypeHintTensor<'db>) -> Self {
         TypeHintTensor {
-            element_type: Box::new(TypeHintAndHeap::from_ast(db, ast.element_type)),
+            element_type: Box::new(TypeHint::from_ast(db, *ast.element_type.clone())),
             rank: ast.rank,
         }
     }
@@ -433,14 +395,6 @@ impl TypeHintTable {
     }
 }
 
-impl ExprAndHeap {
-    pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAndHeap<'db>) -> Self {
-        ExprAndHeap {
-            heap: Heap::from_ast(ast.heap),
-            expr: Expr::from_ast(db, ast.expr.clone()),
-        }
-    }
-}
 
 impl Expr {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::Expr<'db>) -> Self {

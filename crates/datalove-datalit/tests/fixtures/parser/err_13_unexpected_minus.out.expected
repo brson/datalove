@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "unexpected minus sign"
-        }
-      },
-      "heap": "Local"
+      "ParseError": {
+        "message": "unexpected minus sign"
+      }
     },
     "type_hint": null
   },
@@ -17,8 +14,8 @@
         {
           "message": "unexpected '-' not followed by number",
           "span": [
-            2,
-            5
+            1,
+            4
           ],
           "text": "foo"
         }

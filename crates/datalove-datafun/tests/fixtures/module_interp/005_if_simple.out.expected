@@ -6,5 +6,5 @@ ModulesAnalysis(
         status: "Success",
         ir: "fn main():\nblock0:\n    v0 = const true\n    branch v0, block1, block2\nblock1:\n    v1 = const 1u32\n    return v1\nblock2:\n    v2 = const 0u32\n    return v2\n",
     ),
-    output: "@1",
+    output: "1",
 )

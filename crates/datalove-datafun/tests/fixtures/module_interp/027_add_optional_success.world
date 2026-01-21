@@ -8,5 +8,5 @@ fun test_add(a: u32, b: u32): ?u32
 end fun
 
 fun main(): ?u32
-    ret test_add(@5, @3)
+    ret test_add(5, 3)
 end fun

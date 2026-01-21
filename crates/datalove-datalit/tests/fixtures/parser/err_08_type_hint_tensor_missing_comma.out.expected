@@ -1,45 +1,33 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Tensor": {
-          "elements": [
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "1"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
+      "Tensor": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "2"
-                  }
-                },
-                "heap": "Omitted"
-              },
-              "type_hint": null
-            }
-          ],
-          "shape": [
-            2
-          ]
-        }
-      },
-      "heap": "Local"
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "2"
+              }
+            },
+            "type_hint": null
+          }
+        ],
+        "shape": [
+          2
+        ]
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "ParseError": {
-          "message": "expected comma between tensor element type and rank"
-        }
+      "ParseError": {
+        "message": "expected comma between tensor element type and rank"
       }
     }
   },
@@ -50,8 +38,8 @@
         {
           "message": "expected ',' after element type",
           "span": [
-            16,
-            17
+            14,
+            15
           ],
           "text": "2"
         }

@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let x = : @f64 / @0x3FF0000000000000
+let x = : f64 / 0x3FF0000000000000
 debuglog x

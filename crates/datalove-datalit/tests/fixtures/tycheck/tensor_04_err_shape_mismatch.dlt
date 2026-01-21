@@ -1,1 +1,1 @@
-: tensor<u32, 2> / @tensor [2, 3] [1 2 3, 4 5]
+: tensor<u32, 2> / tensor [2, 3] [1 2 3, 4 5]

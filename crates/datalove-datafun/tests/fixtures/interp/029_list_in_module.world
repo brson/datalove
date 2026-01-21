@@ -2,8 +2,8 @@
 module local/test/listmod
 ----------
 
-fun make_list(): [@u32]
-    ret @[@10, @20, @30]
+fun make_list(): [u32]
+    ret [10, 20, 30]
 end fun
 
 ----------

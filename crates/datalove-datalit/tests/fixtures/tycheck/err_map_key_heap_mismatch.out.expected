@@ -1,85 +1,68 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": [
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "1"
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
+      "Map": {
+        "entries": [
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
               },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "String": {
-                      "value": "\"a\""
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
-              }
+              "type_hint": null
             },
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "2"
-                    }
-                  },
-                  "heap": "Global"
-                },
-                "type_hint": null
+            "value": {
+              "expr": {
+                "String": {
+                  "value": "\"a\""
+                }
               },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "String": {
-                      "value": "\"b\""
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
-              }
+              "type_hint": null
             }
-          ]
-        }
-      },
-      "heap": "Local"
+          },
+          {
+            "key": {
+              "expr": {
+                "ParseError": {
+                  "message": "unexpected token in Parser expression"
+                }
+              },
+              "type_hint": null
+            },
+            "value": {
+              "expr": {
+                "ParseError": {
+                  "message": "expected '=' between map key and value"
+                }
+              },
+              "type_hint": null
+            }
+          }
+        ]
+      }
     },
     "type_hint": null
   },
   "diagnostics": [
     {
-      "code": "T035",
+      "code": "T017",
       "labels": [
         {
-          "message": "expected @, found #",
+          "message": "parse error occurred here",
           "span": [
-            18,
-            19
+            15,
+            16
           ],
           "text": "#"
         }
       ],
-      "message": "heap allocation mismatch in map keys"
+      "message": "cannot type-check expression with parse errors"
     }
   ],
   "errors": [
     {
-      "actual_heap": "#",
-      "expected_heap": "@",
-      "kind": "HeapMismatch"
+      "kind": "CannotSynthesize"
     }
   ],
   "root_type": null

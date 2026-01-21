@@ -42,7 +42,6 @@
                 "op": "Mul",
                 "rhs": {
                   "expr": {
-                    "heap": "Local",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "2"
@@ -58,18 +57,12 @@
           {
             "mode": "In",
             "name": "a",
-            "type_hint": {
-              "heap": "Local",
-              "type_hint": "U32"
-            }
+            "type_hint": "U32"
           },
           {
             "mode": "In",
             "name": "b",
-            "type_hint": {
-              "heap": "Local",
-              "type_hint": "U32"
-            }
+            "type_hint": "U32"
           }
         ],
         "return_type": null

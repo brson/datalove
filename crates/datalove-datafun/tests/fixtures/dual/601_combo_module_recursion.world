@@ -4,10 +4,10 @@ module local/test/fib
 
 // Fibonacci using int arithmetic.
 fun fib(n: int): int
-    if n <= @1
+    if n <= 1
         ret n
     end if
-    ret fib(n - @1) + fib(n - @2)
+    ret fib(n - 1) + fib(n - 2)
 end fun
 
 ----------
@@ -17,7 +17,7 @@ scriptunit-fragment
 require module local/test/fib
 import fib.fib
 
-debuglog fib(@0)
-debuglog fib(@1)
-debuglog fib(@5)
-debuglog fib(@10)
+debuglog fib(0)
+debuglog fib(1)
+debuglog fib(5)
+debuglog fib(10)

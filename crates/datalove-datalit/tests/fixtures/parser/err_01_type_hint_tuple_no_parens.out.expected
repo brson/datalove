@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonTuple": {
-          "elements": []
-        }
-      },
-      "heap": "Local"
+      "AnonTuple": {
+        "elements": []
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "ParseError": {
-          "message": "expected () after tuple keyword"
-        }
+      "ParseError": {
+        "message": "expected () after tuple keyword"
       }
     }
   },
@@ -24,8 +18,8 @@
         {
           "message": "expected '(' after 'tuple'",
           "span": [
-            3,
-            8
+            2,
+            7
           ],
           "text": "tuple"
         }

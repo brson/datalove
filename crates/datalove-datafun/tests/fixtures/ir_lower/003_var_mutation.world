@@ -3,8 +3,8 @@ module local/test/main
 ----------
 
 fun main(): int
-    var sum: @i64 = @0
-    sum = sum + @1
-    sum = sum + @2
+    var sum: i64 = 0
+    sum = sum + 1
+    sum = sum + 2
     ret sum
 end fun

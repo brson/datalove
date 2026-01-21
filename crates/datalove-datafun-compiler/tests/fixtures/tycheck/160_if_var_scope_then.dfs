@@ -1,6 +1,6 @@
-fun test(): @u32
+fun test(): u32
   if true
-    let x: @u32 = @1
+    let x: u32 = 1
   end if
   ret x
 end fun

@@ -1,9 +1,9 @@
 [
   {
-    "input": "let u8_overflow: @u8 = @256",
+    "input": "let u8_overflow: u8 = 256",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u8_overflow: @u8 = @256"
+        "ScriptStatement": "let u8_overflow: u8 = 256"
       }
     },
     "eval": {
@@ -12,22 +12,22 @@
     "environment": []
   },
   {
-    "input": "let u8_negative: @u8 = @-1",
+    "input": "let u8_negative: u8 = -1",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u8_negative: @u8 = @-1"
+        "ScriptStatement": "let u8_negative: u8 = -1"
       }
     },
     "eval": {
-      "Error": "invalid literal: -1"
+      "Error": "InvalidOperandType { op: \"-\", ty: \"u32\" }"
     },
     "environment": []
   },
   {
-    "input": "let i8_overflow: @i8 = @128",
+    "input": "let i8_overflow: i8 = 128",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i8_overflow: @i8 = @128"
+        "ScriptStatement": "let i8_overflow: i8 = 128"
       }
     },
     "eval": {
@@ -36,22 +36,22 @@
     "environment": []
   },
   {
-    "input": "let i8_underflow: @i8 = @-129",
+    "input": "let i8_underflow: i8 = -129",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i8_underflow: @i8 = @-129"
+        "ScriptStatement": "let i8_underflow: i8 = -129"
       }
     },
     "eval": {
-      "Error": "invalid literal: -129"
+      "Error": "invalid literal: 129"
     },
     "environment": []
   },
   {
-    "input": "let u16_overflow: @u16 = @65536",
+    "input": "let u16_overflow: u16 = 65536",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u16_overflow: @u16 = @65536"
+        "ScriptStatement": "let u16_overflow: u16 = 65536"
       }
     },
     "eval": {
@@ -60,22 +60,22 @@
     "environment": []
   },
   {
-    "input": "let u16_negative: @u16 = @-1",
+    "input": "let u16_negative: u16 = -1",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u16_negative: @u16 = @-1"
+        "ScriptStatement": "let u16_negative: u16 = -1"
       }
     },
     "eval": {
-      "Error": "invalid literal: -1"
+      "Error": "InvalidOperandType { op: \"-\", ty: \"u32\" }"
     },
     "environment": []
   },
   {
-    "input": "let i16_overflow: @i16 = @32768",
+    "input": "let i16_overflow: i16 = 32768",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i16_overflow: @i16 = @32768"
+        "ScriptStatement": "let i16_overflow: i16 = 32768"
       }
     },
     "eval": {
@@ -84,22 +84,22 @@
     "environment": []
   },
   {
-    "input": "let i16_underflow: @i16 = @-32769",
+    "input": "let i16_underflow: i16 = -32769",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i16_underflow: @i16 = @-32769"
+        "ScriptStatement": "let i16_underflow: i16 = -32769"
       }
     },
     "eval": {
-      "Error": "invalid literal: -32769"
+      "Error": "invalid literal: 32769"
     },
     "environment": []
   },
   {
-    "input": "let u32_overflow: @u32 = @4294967296",
+    "input": "let u32_overflow: u32 = 4294967296",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u32_overflow: @u32 = @4294967296"
+        "ScriptStatement": "let u32_overflow: u32 = 4294967296"
       }
     },
     "eval": {
@@ -108,22 +108,22 @@
     "environment": []
   },
   {
-    "input": "let u32_negative: @u32 = @-1",
+    "input": "let u32_negative: u32 = -1",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u32_negative: @u32 = @-1"
+        "ScriptStatement": "let u32_negative: u32 = -1"
       }
     },
     "eval": {
-      "Error": "invalid literal: -1"
+      "Error": "InvalidOperandType { op: \"-\", ty: \"u32\" }"
     },
     "environment": []
   },
   {
-    "input": "let i32_overflow: @i32 = @2147483648",
+    "input": "let i32_overflow: i32 = 2147483648",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i32_overflow: @i32 = @2147483648"
+        "ScriptStatement": "let i32_overflow: i32 = 2147483648"
       }
     },
     "eval": {
@@ -132,22 +132,22 @@
     "environment": []
   },
   {
-    "input": "let i32_underflow: @i32 = @-2147483649",
+    "input": "let i32_underflow: i32 = -2147483649",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i32_underflow: @i32 = @-2147483649"
+        "ScriptStatement": "let i32_underflow: i32 = -2147483649"
       }
     },
     "eval": {
-      "Error": "invalid literal: -2147483649"
+      "Error": "invalid literal: 2147483649"
     },
     "environment": []
   },
   {
-    "input": "let u64_overflow: @u64 = @18446744073709551616",
+    "input": "let u64_overflow: u64 = 18446744073709551616",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u64_overflow: @u64 = @18446744073709551616"
+        "ScriptStatement": "let u64_overflow: u64 = 18446744073709551616"
       }
     },
     "eval": {
@@ -156,22 +156,22 @@
     "environment": []
   },
   {
-    "input": "let u64_negative: @u64 = @-1",
+    "input": "let u64_negative: u64 = -1",
     "parse": {
       "Command": {
-        "ScriptStatement": "let u64_negative: @u64 = @-1"
+        "ScriptStatement": "let u64_negative: u64 = -1"
       }
     },
     "eval": {
-      "Error": "invalid literal: -1"
+      "Error": "InvalidOperandType { op: \"-\", ty: \"u32\" }"
     },
     "environment": []
   },
   {
-    "input": "let i64_overflow: @i64 = @9223372036854775808",
+    "input": "let i64_overflow: i64 = 9223372036854775808",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i64_overflow: @i64 = @9223372036854775808"
+        "ScriptStatement": "let i64_overflow: i64 = 9223372036854775808"
       }
     },
     "eval": {
@@ -180,14 +180,14 @@
     "environment": []
   },
   {
-    "input": "let i64_underflow: @i64 = @-9223372036854775809",
+    "input": "let i64_underflow: i64 = -9223372036854775809",
     "parse": {
       "Command": {
-        "ScriptStatement": "let i64_underflow: @i64 = @-9223372036854775809"
+        "ScriptStatement": "let i64_underflow: i64 = -9223372036854775809"
       }
     },
     "eval": {
-      "Error": "invalid literal: -9223372036854775809"
+      "Error": "invalid literal: 9223372036854775809"
     },
     "environment": []
   }

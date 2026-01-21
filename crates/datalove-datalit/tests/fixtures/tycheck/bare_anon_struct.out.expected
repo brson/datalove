@@ -1,55 +1,43 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonStruct": {
-          "fields": [
-            {
-              "name": "x",
-              "value": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "42"
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
-              }
-            },
-            {
-              "name": "y",
-              "value": {
-                "expr": {
-                  "expr": {
-                    "Float": {
-                      "value": "3.14"
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
-              }
-            },
-            {
-              "name": "z",
-              "value": {
-                "expr": {
-                  "expr": {
-                    "String": {
-                      "value": "\"test\""
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
-              }
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "x",
+            "value": {
+              "expr": {
+                "Int": {
+                  "value": "42"
+                }
+              },
+              "type_hint": null
             }
-          ]
-        }
-      },
-      "heap": "Local"
+          },
+          {
+            "name": "y",
+            "value": {
+              "expr": {
+                "Float": {
+                  "value": "3.14"
+                }
+              },
+              "type_hint": null
+            }
+          },
+          {
+            "name": "z",
+            "value": {
+              "expr": {
+                "String": {
+                  "value": "\"test\""
+                }
+              },
+              "type_hint": null
+            }
+          }
+        ]
+      }
     },
     "type_hint": null
   },
@@ -59,18 +47,17 @@
     "fields": [
       {
         "name": "x",
-        "type": "@u32"
+        "type": "u32"
       },
       {
         "name": "y",
-        "type": "@f32"
+        "type": "f32"
       },
       {
         "name": "z",
-        "type": "@string"
+        "type": "string"
       }
     ],
-    "heap": "@",
     "kind": "AnonStruct"
   }
 }

@@ -2,10 +2,10 @@
 scriptunit-fragment
 ----------
 
-let a = @1
+let a = 1
 
 ----------
 scriptunit-fragment
 ----------
 
-let b = @2
+let b = 2

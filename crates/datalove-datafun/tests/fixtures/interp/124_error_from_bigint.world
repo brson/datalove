@@ -4,4 +4,4 @@ scriptunit-expr
 
 // Create Error from a large bigint expression.
 // The + forces Int type promotion even for small numbers.
-@error (@100 + @200)
+error (100 + 200)

@@ -70,7 +70,7 @@ pub enum Statement<'db> {
 #[derive(salsa::Update)]
 pub struct StmtLet<'db> {
     pub name: InternedText<'db>,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: ExprFun<'db>,
 }
 
@@ -79,7 +79,7 @@ pub struct StmtLet<'db> {
 #[derive(salsa::Update)]
 pub struct StmtVar<'db> {
     pub name: InternedText<'db>,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: ExprFun<'db>,
 }
 
@@ -122,7 +122,7 @@ pub struct StmtFun<'db> {
     #[returns(ref)]
     pub params: Vec<FunParam<'db>>,
     #[tracked]
-    pub return_type: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub return_type: Option<datalit::ast::TypeHint<'db>>,
     #[tracked]
     #[returns(ref)]
     pub body: Vec<Statement<'db>>,
@@ -135,7 +135,7 @@ pub struct StmtFun<'db> {
 pub struct FunParam<'db> {
     pub name: InternedText<'db>,
     pub mode: ParamMode,
-    pub type_hint: datalit::ast::TypeHintAndHeap<'db>,
+    pub type_hint: datalit::ast::TypeHint<'db>,
 }
 
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
@@ -175,7 +175,7 @@ pub struct StmtRequireModule<'db> {
 #[derive(salsa::Update)]
 pub struct StmtRequireData<'db> {
     pub name: InternedText<'db>,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -235,7 +235,7 @@ pub struct StmtDebugLog<'db> {
 #[derive(salsa::Update)]
 pub struct StmtTypeAlias<'db> {
     pub name: InternedText<'db>,
-    pub type_hint: datalit::ast::TypeHintAndHeap<'db>,
+    pub type_hint: datalit::ast::TypeHint<'db>,
     pub local_index: u32,
 }
 
@@ -430,63 +430,55 @@ pub enum FieldSelector<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprLit<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprInt<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprFloat<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprHex<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprString<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprList<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub elements: Vec<ExprFun<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprSet<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub elements: Vec<ExprFun<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprMap<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub entries: Vec<ExprMapEntry<'db>>,
 }
 
@@ -500,8 +492,7 @@ pub struct ExprMapEntry<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprTensor<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub shape: Vec<u32>,
     pub elements: Vec<ExprFun<'db>>,
 }
@@ -509,16 +500,14 @@ pub struct ExprTensor<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprAnonTuple<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub elements: Vec<ExprFun<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprAnonStruct<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub fields: Vec<ExprStructField<'db>>,
 }
 
@@ -532,8 +521,7 @@ pub struct ExprStructField<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprAnonEnum<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub variant_name: InternedText<'db>,
     pub payload: Option<ExprFun<'db>>,
 }
@@ -541,48 +529,42 @@ pub struct ExprAnonEnum<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprSome<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub payload: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprOk<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub payload: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprEr<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub payload: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprData<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprError<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprTable<'db> {
-    pub heap: datalit::ast::Heap,
-    pub type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub header: Vec<InternedText<'db>>,
     pub rows: Vec<ExprTableRow<'db>>,
 }

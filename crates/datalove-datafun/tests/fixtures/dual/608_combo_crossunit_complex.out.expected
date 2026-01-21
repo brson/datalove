@@ -33,8 +33,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 4u32\n    v1 = const true\n    v2 = call f0(v0, v1)\n    debuglog v2\n    drop v2\n    v3 = const 5u32\n    v4 = const false\n    v5 = call f0(v3, v4)\n    debuglog v5\n    drop v5\n    v6 = const 10u32\n    v7 = const true\n    v8 = call f0(v6, v7)\n    debuglog v8\n    drop v8\n    unit_end\n\nfn process(p0, p1):\nblock0:\n    v0 = copy p1\n    branch v0, block1, block2\nblock1:\n    v1 = call m0.f1(p0)\n    return v1\nblock2:\n    goto block3\nblock3:\n    v2 = call m0.f0(p0)\n    return v2\nexports:\n    process = f0\n",
             ),
             ir_match: true,
-            interp_output: "ok @6\nok @6\nok @12\n",
-            aot_output: "ok @6\nok @6\nok @12\n",
+            interp_output: "ok 6\nok 6\nok 12\n",
+            aot_output: "ok 6\nok 6\nok 12\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

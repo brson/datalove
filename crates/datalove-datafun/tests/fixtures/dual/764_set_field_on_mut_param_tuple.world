@@ -3,12 +3,12 @@ scriptunit-fragment
 ----------
 
 // Test setting a field on a mut tuple parameter.
-fun set_first(mut t: (@u32, @u32)): @bool
-    set t.0 = @42
-    ret @true
+fun set_first(mut t: (u32, u32)): bool
+    set t.0 = 42
+    ret true
 end fun
 
-var pair: (@u32, @u32) = (@100, @200)
+var pair: (u32, u32) = (100, 200)
 let _ok = set_first(pair)
 debuglog pair.0
 debuglog pair.1

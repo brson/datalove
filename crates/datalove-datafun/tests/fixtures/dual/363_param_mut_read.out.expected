@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 32int\n    store s0, v0\n    v1 = call f0(s0)\n    debuglog s0\n    drop s0\n    unit_end\n\nfn add_ten(p0):\nblock0:\n    v0 = const 10int\n    v1 = add p0, v0\n    store p0, v1\n    v2 = const true\n    drop v0\n    return v2\nexports:\n    add_ten = f0\n    n = s0\n    _ok = v1\n",
             ),
             ir_match: true,
-            interp_output: "@42\n",
-            aot_output: "@42\n",
+            interp_output: "42\n",
+            aot_output: "42\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

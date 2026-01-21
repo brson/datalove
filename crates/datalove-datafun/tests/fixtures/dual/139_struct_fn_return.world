@@ -3,10 +3,10 @@ scriptunit-fragment
 ----------
 
 // Function returning struct.
-fun make_pair(a: @u32, b: @u32): @{first: @u32, second: @u32}
-    ret @{first = a, second = b}
+fun make_pair(a: u32, b: u32): {first: u32, second: u32}
+    ret {first = a, second = b}
 end fun
 
-let pair = make_pair(@5, @10)
+let pair = make_pair(5, 10)
 debuglog pair.first
 debuglog pair.second

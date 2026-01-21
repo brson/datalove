@@ -3,6 +3,6 @@ scriptunit-fragment
 ----------
 
 // Struct with list field.
-let container = @{name = @"items", values = @[@1, @2, @3, @4, @5]}
+let container = {name = "items", values = [1, 2, 3, 4, 5]}
 debuglog container.name
 debuglog container.values

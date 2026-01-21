@@ -22,7 +22,7 @@ impl<'db> Parser<'db> {
         // Check for `: type / expr` pattern.
         let expr_full = if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
-            let type_hint = self.parse_type_hint_and_heap();
+            let type_hint = self.parse_type_hint();
             if !self.eat_sigil(Sigil::SlashForward) {
                 let ts = self.peek_text_span();
                 let error_expr = self.emit_expr_error(ts,
@@ -30,15 +30,14 @@ impl<'db> Parser<'db> {
                     "D012",
                     "expected '/' separator between type hint and expression"
                 );
-                let expr = ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_expr };
-                ast::ExprFull::new(self.db, Some(type_hint), expr)
+                ast::ExprFull::new(self.db, Some(type_hint), error_expr)
             } else {
-                let expr = self.parse_expr_and_heap();
+                let expr = self.parse_expr();
                 ast::ExprFull::new(self.db, Some(type_hint), expr)
             }
         } else {
             // No type hint, just parse expression.
-            let expr = self.parse_expr_and_heap();
+            let expr = self.parse_expr();
             ast::ExprFull::new(self.db, None, expr)
         };
 
@@ -53,94 +52,8 @@ impl<'db> Parser<'db> {
         expr_full
     }
 
-    fn parse_expr_and_heap(&mut self) -> ast::ExprAndHeap<'db> {
-        // Heap sigils: @ for local, # for global.
-        let heap = if self.peek_sigil(Sigil::At) {
-            self.eat_sigil(Sigil::At);
-            ast::Heap::Local
-        } else if self.peek_sigil(Sigil::Hash) {
-            self.eat_sigil(Sigil::Hash);
-            ast::Heap::Global
-        } else {
-            // No heap sigil - check if it's a bare literal (allowed for inference).
-            // Check for negative numbers first (minus sign followed by digits).
-            if self.peek_sigil(Sigil::Minus) {
-                ast::Heap::Omitted
-            } else {
-                match self.peek() {
-                    Some(TreeToken::Token(token)) => {
-                    match token.kind(self.db) {
-                        TokenKind::String => {
-                            // Bare string literal - use Omitted heap.
-                            ast::Heap::Omitted
-                        }
-                        TokenKind::Word => {
-                            if let Some(word) = token.word_str(self.db) {
-                                if parser_util::is_numeric_literal(word) {
-                                    // Bare number literal (decimal or hex) - use Omitted heap.
-                                    ast::Heap::Omitted
-                                } else if matches!(word, "data" | "error" | "tensor" | "tuple" | "enum" | "map" | "set" | "true" | "false" | "none" | "some" | "ok" | "er") {
-                                    // Keywords are allowed without heap sigils.
-                                    ast::Heap::Omitted
-                                } else {
-                                    // Not a number or keyword - this is an error.
-                                    let ts = self.peek_text_span();
-                                    let error_node = self.emit_expr_error(ts,
-                                        "expected heap sigil @ or # before expression",
-                                        "D009",
-                                        "expected '@' or '#' before expression"
-                                    );
-                                    return ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_node };
-                                }
-                            } else {
-                                // No word string - error.
-                                let ts = self.peek_text_span();
-                                let error_node = self.emit_expr_error(ts,
-                                    "expected heap sigil @ or # before expression",
-                                    "D010",
-                                    "expected '@' or '#' before expression"
-                                );
-                                return ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_node };
-                            }
-                        }
-                        _ => {
-                            // Unknown token kind - error.
-                            let ts = self.peek_text_span();
-                            let error_node = self.emit_expr_error(ts,
-                                "expected heap sigil @ or # before expression",
-                                "D011",
-                                "expected '@' or '#' before expression"
-                            );
-                            return ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_node };
-                        }
-                    }
-                }
-                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) |
-                Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) |
-                Some(TreeToken::Branch { sigil: Sigil::BraceOpen, .. }) |
-                Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
-                    // Bare branch (anonymous tuple, list, struct, or table) - use Omitted heap.
-                    ast::Heap::Omitted
-                }
-                _ => {
-                    // Not a token or branch - error.
-                    let ts = self.peek_text_span();
-                    let error_node = self.emit_expr_error(ts,
-                        "expected heap sigil @ or # before expression",
-                        "D012",
-                        "expected '@' or '#' before expression"
-                    );
-                    return ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_node };
-                }
-                }
-            }
-        };
-        let expr = self.parse_expr();
-        ast::ExprAndHeap { heap, expr }
-    }
-
     fn parse_expr(&mut self) -> ast::Expr<'db> {
-        // Heap sigil already consumed. Now parse keywords, literals, and structures.
+        // Parse keywords, literals, and structures.
         // Check for negative number literals first (- followed by digits).
         if self.peek_sigil(Sigil::Minus) {
             // Peek ahead to see if this is a negative number.
@@ -380,11 +293,7 @@ impl<'db> Parser<'db> {
                                 "D017",
                                 "expected '=' after key"
                             );
-                            let error_value = ast::ExprFull::new(
-                                p.db,
-                                None,
-                                ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_expr }
-                            );
+                            let error_value = ast::ExprFull::new(p.db, None, error_expr);
                             return ast::ExprMapEntry { key, value: error_value };
                         }
                         let value = p.parse_expr_full();
@@ -476,6 +385,7 @@ impl<'db> Parser<'db> {
                     }
                     _ => {
                         let ts = self.peek_text_span();
+                        self.next(); // Consume unexpected token to prevent infinite loop.
                         self.emit_expr_error(ts,
                             "unexpected token in Parser expression",
                             "D020",
@@ -533,6 +443,7 @@ impl<'db> Parser<'db> {
             }
             _ => {
                 let ts = self.peek_text_span();
+                self.next(); // Consume unexpected token to prevent infinite loop.
                 self.emit_expr_error(ts,
                     "unexpected tree node in Parser expression",
                     "D018",
@@ -554,11 +465,7 @@ impl<'db> Parser<'db> {
                     "expected field name"
                 );
                 let placeholder_name = InternedText::new(self.db, "<error>".S());
-                let error_value = ast::ExprFull::new(
-                    self.db,
-                    None,
-                    ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_expr }
-                );
+                let error_value = ast::ExprFull::new(self.db, None, error_expr);
                 return ast::ExprStructField { name: placeholder_name, value: error_value };
             }
         };
@@ -569,11 +476,7 @@ impl<'db> Parser<'db> {
                 "D018",
                 "expected '=' after field name"
             );
-            let error_value = ast::ExprFull::new(
-                self.db,
-                None,
-                ast::ExprAndHeap { heap: ast::Heap::Omitted, expr: error_expr }
-            );
+            let error_value = ast::ExprFull::new(self.db, None, error_expr);
             return ast::ExprStructField { name, value: error_value };
         }
         let value = self.parse_expr_full();

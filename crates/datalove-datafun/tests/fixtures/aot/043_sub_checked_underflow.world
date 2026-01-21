@@ -15,4 +15,4 @@ fun checked_sub(a: u32, b: u32): ?u32
 end fun
 
 // 3 - 10 underflows u32, returns None -> default 999.
-debuglog unwrap_or_default(checked_sub(@3, @10), @999)
+debuglog unwrap_or_default(checked_sub(3, 10), 999)

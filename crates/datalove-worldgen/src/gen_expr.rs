@@ -1,12 +1,12 @@
 //! Expression generation using datalit's type-directed generation.
 
 use rand::Rng;
-use datalove_datalit::ast::{TypeHint, TypeHintAndHeap};
+use datalove_datalit::ast::TypeHint;
 use datalove_datalit::ast_gen;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, FunctionSig, types_match};
 use crate::gen_type::{gen_bool_type, gen_u32_type};
-use crate::pretty::{pretty_expr_with_heap, pretty_type_hint_and_heap};
+use crate::pretty::{pretty_expr, pretty_type_hint};
 
 /// Check if a type supports bare arithmetic operators.
 ///
@@ -20,36 +20,33 @@ fn supports_bare_arithmetic(type_hint: TypeHint<'_>) -> bool {
 ///
 /// Only floats and bigints support bare unary `-`.
 /// Fixed ints do NOT support unary negation (use `-?` or `-!` instead).
-fn supports_unary_negation(type_hint: TypeHint<'_>) -> bool {
+fn supports_unary_negation(type_hint: &TypeHint<'_>) -> bool {
     matches!(type_hint, TypeHint::F32 | TypeHint::F64 | TypeHint::Int)
 }
 
 /// Generate an expression matching the given type.
 ///
 /// May be a literal, variable reference, function call, or arithmetic expression.
-/// For global heap types, when a variable is used it gets marked as consumed
-/// because ownership is transferred (moved).
+/// When a variable is used it gets marked as consumed because ownership
+/// is transferred (moved).
 pub fn gen_expr<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
-    type_hint: TypeHintAndHeap<'db>,
+    type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
 ) -> String {
-    use datalove_datalit::ast::Heap;
-
-    let is_global = type_hint.heap(db) == Heap::Global;
-
     // Check if we can use a variable.
-    let has_matching_vars = !ctx.variables_of_type(db, type_hint).is_empty();
+    let has_matching_vars = !ctx.variables_of_type(db, type_hint.clone()).is_empty();
     let can_use_var = has_matching_vars && rng.gen_bool(0.4);
 
     // Check if we can call a function.
     // Clone the matching functions to avoid borrow issues.
+    let type_hint_for_filter = type_hint.clone();
     let matching_fns: Vec<FunctionSig<'db>> = ctx.callable_functions()
         .filter(|f| {
-            if let Some(ret_type) = f.return_type {
-                types_match(db, ret_type, type_hint)
+            if let Some(ret_type) = &f.return_type {
+                types_match(db, ret_type.clone(), type_hint_for_filter.clone())
             } else {
                 false
             }
@@ -60,19 +57,17 @@ pub fn gen_expr<'db, R: Rng>(
         && config.check_probability(rng, config.function_call_probability);
 
     // Check if we can generate an arithmetic expression.
-    let can_arith = supports_bare_arithmetic(type_hint.type_hint(db))
+    let can_arith = supports_bare_arithmetic(type_hint.clone())
         && config.check_probability(rng, config.arithmetic_probability);
 
     if can_use_var && !can_call_fn && !can_arith {
         // Use a variable.
-        let matching_vars = ctx.variables_of_type(db, type_hint);
+        let matching_vars = ctx.variables_of_type(db, type_hint.clone());
         if matching_vars.is_empty() {
             return gen_literal(db, rng, type_hint, config);
         }
         let var_name = matching_vars[rng.gen_range(0..matching_vars.len())].name.clone();
-        if is_global {
-            ctx.consume_variable(&var_name);
-        }
+        ctx.consume_variable(&var_name);
         var_name
     } else if can_call_fn && !can_use_var && !can_arith {
         // Call a function.
@@ -90,14 +85,12 @@ pub fn gen_expr<'db, R: Rng>(
 
         match options[rng.gen_range(0..options.len())] {
             0 => {
-                let matching_vars = ctx.variables_of_type(db, type_hint);
+                let matching_vars = ctx.variables_of_type(db, type_hint.clone());
                 if matching_vars.is_empty() {
                     return gen_literal(db, rng, type_hint, config);
                 }
                 let var_name = matching_vars[rng.gen_range(0..matching_vars.len())].name.clone();
-                if is_global {
-                    ctx.consume_variable(&var_name);
-                }
+                ctx.consume_variable(&var_name);
                 var_name
             }
             1 => {
@@ -121,14 +114,13 @@ pub fn gen_expr<'db, R: Rng>(
 fn gen_arithmetic_expr<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
-    type_hint: TypeHintAndHeap<'db>,
+    type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
 ) -> String {
-    let inner_type = type_hint.type_hint(db);
-    let is_float = matches!(inner_type, TypeHint::F32 | TypeHint::F64);
+    let is_float = matches!(type_hint, TypeHint::F32 | TypeHint::F64);
 
     // 20% chance to generate unary negation instead of binary op.
-    if supports_unary_negation(inner_type) && rng.gen_bool(0.2) {
+    if supports_unary_negation(&type_hint) && rng.gen_bool(0.2) {
         return gen_unary_negation(db, rng, type_hint, config);
     }
 
@@ -141,13 +133,13 @@ fn gen_arithmetic_expr<'db, R: Rng>(
     let op = ops[rng.gen_range(0..ops.len())];
 
     // Generate literal operands.
-    let lhs = gen_literal(db, rng, type_hint, config);
-    let rhs = gen_literal(db, rng, type_hint, config);
+    let lhs = gen_literal(db, rng, type_hint.clone(), config);
+    let rhs = gen_literal(db, rng, type_hint.clone(), config);
 
     if is_float {
         // Float operands need type hints to avoid f32/f64 inference issues.
-        // Syntax: (: @f64 / @123.4) + (: @f64 / @56.7)
-        let type_str = pretty_type_hint_and_heap(db, type_hint);
+        // Syntax: (: f64 / 123.4) + (: f64 / 56.7)
+        let type_str = pretty_type_hint(db, type_hint);
         format!("(: {} / {}) {} (: {} / {})", type_str, lhs, op, type_str, rhs)
     } else {
         // Bigints don't need type hints.
@@ -161,22 +153,16 @@ fn gen_arithmetic_expr<'db, R: Rng>(
 fn gen_unary_negation<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
-    type_hint: TypeHintAndHeap<'db>,
+    type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
 ) -> String {
-    let inner_type = type_hint.type_hint(db);
-
-    let operand = gen_literal(db, rng, type_hint, config);
+    let operand = gen_literal(db, rng, type_hint.clone(), config);
 
     // Both floats and ints need type hints for unary negation.
     // Without hints, the literal might be inferred as a different type.
-    // For floats: -(: @f64 / @123.4)
-    // For ints: -(: int / 59) - note: int doesn't use heap sigil
-    let type_str = if matches!(inner_type, TypeHint::Int) {
-        "int".to_string()
-    } else {
-        pretty_type_hint_and_heap(db, type_hint)
-    };
+    // For floats: -(: f64 / 123.4)
+    // For ints: -(: int / 59)
+    let type_str = pretty_type_hint(db, type_hint);
 
     format!("-(: {} / {})", type_str, operand)
 }
@@ -185,30 +171,18 @@ fn gen_unary_negation<'db, R: Rng>(
 fn gen_literal<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
-    type_hint: TypeHintAndHeap<'db>,
+    type_hint: TypeHint<'db>,
     config: &WorldGenConfig,
 ) -> String {
-    use datalove_datalit::ast::Heap;
-
-    let type_hint_inner = type_hint.type_hint(db);
-    let heap = type_hint.heap(db);
-
-    // Int (bigint) literals don't use heap sigils - they're always plain numbers.
-    // Using @123 or #123 for int would be parsed as fixed int, not bigint.
-    let is_int = matches!(type_hint_inner, TypeHint::Int);
-
-    let (expr, expr_heap) = ast_gen::gen_expr_matching_type(
+    let expr = ast_gen::gen_expr_matching_type(
         db,
         rng,
-        type_hint_inner,
-        heap,
+        type_hint,
         &config.type_config,
         0,
     );
 
-    let effective_heap = if is_int { Heap::Omitted } else { expr_heap };
-
-    pretty_expr_with_heap(db, expr, effective_heap)
+    pretty_expr(db, expr)
 }
 
 /// Generate a function call expression.
@@ -222,7 +196,7 @@ fn gen_function_call<'db, R: Rng>(
     let args: Vec<String> = func
         .params
         .iter()
-        .map(|(_, param_type)| gen_expr(db, rng, *param_type, config, ctx))
+        .map(|(_, param_type)| gen_expr(db, rng, param_type.clone(), config, ctx))
         .collect();
 
     format!("{}({})", func.name, args.join(", "))
@@ -261,7 +235,7 @@ fn gen_simple_bool_expr<'db, R: Rng>(
     ctx: &mut GenContext<'db>,
 ) -> String {
     let bool_type = gen_bool_type(db);
-    let bool_vars = ctx.variables_of_type(db, bool_type);
+    let bool_vars = ctx.variables_of_type(db, bool_type.clone());
     let has_bool_var = !bool_vars.is_empty();
 
     let choice = rng.gen_range(0..10);
@@ -271,8 +245,8 @@ fn gen_simple_bool_expr<'db, R: Rng>(
             if rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() }
         }
         5..=6 if has_bool_var => {
-            // Variable reference. Bool is local heap, no consume needed.
-            let bool_vars = ctx.variables_of_type(db, bool_type);
+            // Variable reference.
+            let bool_vars = ctx.variables_of_type(db, bool_type.clone());
             if bool_vars.is_empty() {
                 if rng.gen_bool(0.5) { "true".to_string() } else { "false".to_string() }
             } else {
@@ -283,7 +257,7 @@ fn gen_simple_bool_expr<'db, R: Rng>(
         7..=9 => {
             // Comparison expression.
             let ty = gen_u32_type(db);
-            let lhs = gen_expr(db, rng, ty, config, ctx);
+            let lhs = gen_expr(db, rng, ty.clone(), config, ctx);
             let rhs = gen_expr(db, rng, ty, config, ctx);
             let ops = [".<", ".>", "<=", ">=", "==", "!="];
             let op = ops[rng.gen_range(0..ops.len())];
@@ -336,7 +310,7 @@ pub fn gen_bool_expr<'db, R: Rng>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use datalove_datalit::ast::{Heap, TypeHint, TypeHintAndHeap};
+    use datalove_datalit::ast::TypeHint;
     use datalove_datalit::Database;
     use crate::context::Variable;
     use rand::SeedableRng;
@@ -353,14 +327,11 @@ mod tests {
         let mut ctx = GenContext::new();
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
-        let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
+        let ty = TypeHint::U32;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
 
-        // Should produce a u32 literal with @ prefix.
-        assert!(expr.starts_with("@"), "u32 expression should start with @: {}", expr);
-        // Should be parseable as a number (after stripping @).
-        let num_str = &expr[1..];
-        assert!(num_str.parse::<u32>().is_ok(), "Should be valid u32: {}", expr);
+        // Should produce a u32 literal (no sigil).
+        assert!(expr.parse::<u32>().is_ok(), "Should be valid u32: {}", expr);
     }
 
     #[test]
@@ -375,13 +346,13 @@ mod tests {
         let mut ctx = GenContext::new();
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
-        let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::Bool);
+        let ty = TypeHint::Bool;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
 
-        // Should produce @true or @false.
+        // Should produce true or false.
         assert!(
-            expr == "@true" || expr == "@false",
-            "bool expression should be @true or @false: {}",
+            expr == "true" || expr == "false",
+            "bool expression should be true or false: {}",
             expr
         );
     }
@@ -398,11 +369,11 @@ mod tests {
         let mut ctx = GenContext::new();
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
-        let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::String);
+        let ty = TypeHint::String;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
 
-        // Should produce @"..." string.
-        assert!(expr.starts_with("@\""), "string should start with @\": {}", expr);
+        // Should produce "..." string.
+        assert!(expr.starts_with("\""), "string should start with \": {}", expr);
         assert!(expr.ends_with("\""), "string should end with \": {}", expr);
     }
 
@@ -415,12 +386,12 @@ mod tests {
     #[salsa::tracked]
     fn test_gen_expr_uses_variable_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
-        let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
+        let ty = TypeHint::U32;
 
         let mut ctx = GenContext::new();
         ctx.variables.push(Variable {
             name: "my_var".to_string(),
-            type_hint: ty,
+            type_hint: ty.clone(),
             is_mutable: false,
         });
 
@@ -428,7 +399,7 @@ mod tests {
         let mut used_var = false;
         for seed in 0..100 {
             let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-            let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
+            let expr = gen_expr(db, &mut rng, ty.clone(), &config, &mut ctx);
             if expr == "my_var" {
                 used_var = true;
                 break;
@@ -449,14 +420,14 @@ mod tests {
         let mut config = WorldGenConfig::default();
         config.function_call_probability = 100; // Always call if available.
 
-        let ret_ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
-        let param_ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::Bool);
+        let ret_ty = TypeHint::U32;
+        let param_ty = TypeHint::Bool;
 
         let mut ctx = GenContext::new();
         ctx.functions.push(FunctionSig {
             name: "get_value".to_string(),
             params: vec![("flag".to_string(), param_ty)],
-            return_type: Some(ret_ty),
+            return_type: Some(ret_ty.clone()),
         });
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
@@ -594,35 +565,29 @@ mod tests {
             TypeHint::String,
         ];
 
-        for ty_hint in types {
-            let ty = TypeHintAndHeap::new(db, Heap::Local, ty_hint);
+        for ty in types {
             let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
-            // Expressions should start with @ for local heap, or (: for typed arithmetic.
-            assert!(
-                expr.starts_with("@") || expr.starts_with("(: @"),
-                "Expression should start with @ or (: @: {}",
-                expr
-            );
+            // Expressions should not be empty.
+            assert!(!expr.is_empty(), "Expression should not be empty");
         }
     }
 
     #[test]
-    fn test_gen_expr_global_heap() {
+    fn test_gen_expr_u32() {
         let db = Database::default();
-        test_gen_expr_global_heap_inner(&db);
+        test_gen_expr_u32_inner(&db);
     }
 
     #[salsa::tracked]
-    fn test_gen_expr_global_heap_inner<'db>(db: &'db dyn salsa::Database) {
+    fn test_gen_expr_u32_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
-        let ty = TypeHintAndHeap::new(db, Heap::Global, TypeHint::U32);
+        let ty = TypeHint::U32;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
 
-        // Should produce #... for global heap.
-        assert!(expr.starts_with("#"), "Global heap should use #: {}", expr);
+        assert!(expr.parse::<u32>().is_ok(), "Should be valid u32: {}", expr);
     }
 
     #[test]
@@ -636,13 +601,13 @@ mod tests {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
 
-        let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
+        let ty = TypeHint::U32;
 
         // Same seed should produce same expression.
         let mut rng1 = rand::rngs::StdRng::seed_from_u64(42);
         let mut rng2 = rand::rngs::StdRng::seed_from_u64(42);
 
-        let expr1 = gen_expr(db, &mut rng1, ty, &config, &mut ctx);
+        let expr1 = gen_expr(db, &mut rng1, ty.clone(), &config, &mut ctx);
         let expr2 = gen_expr(db, &mut rng2, ty, &config, &mut ctx);
 
         assert_eq!(expr1, expr2, "Same seed should produce same expression");

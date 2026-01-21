@@ -1,1 +1,1 @@
-: @!@u32 / ok @"wrong type"
+: !u32 / ok "wrong type"

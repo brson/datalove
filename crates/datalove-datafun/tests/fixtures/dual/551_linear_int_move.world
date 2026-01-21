@@ -6,8 +6,8 @@ scriptunit-fragment
 fun consume_int(x: int): u32
     // Int is consumed here.
     let _sink = x
-    ret @42
+    ret 42
 end fun
 
-let x: int = @12345
+let x: int = 12345
 debuglog consume_int(x)

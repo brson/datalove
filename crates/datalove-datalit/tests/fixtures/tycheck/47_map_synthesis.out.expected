@@ -1,70 +1,54 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": [
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "1"
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
+      "Map": {
+        "entries": [
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
               },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "String": {
-                      "value": "\"hello\""
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
-              }
+              "type_hint": null
             },
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "2"
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
+            "value": {
+              "expr": {
+                "String": {
+                  "value": "\"hello\""
+                }
               },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "String": {
-                      "value": "\"world\""
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
-              }
+              "type_hint": null
             }
-          ]
-        }
-      },
-      "heap": "Local"
+          },
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "2"
+                }
+              },
+              "type_hint": null
+            },
+            "value": {
+              "expr": {
+                "String": {
+                  "value": "\"world\""
+                }
+              },
+              "type_hint": null
+            }
+          }
+        ]
+      }
     },
     "type_hint": null
   },
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "@",
-    "key_type": "@u32",
+    "key_type": "u32",
     "kind": "Map",
-    "value_type": "@string"
+    "value_type": "string"
   }
 }

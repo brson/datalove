@@ -1,16 +1,16 @@
 fun is_some(self: ?u32): bool
   if self |value|
-    ret @true
+    ret true
   else
-    ret @false
+    ret false
   end if
 end fun
 
 fun is_none(self: ?u32): bool
   if self |value|
-    ret @false
+    ret false
   else
-    ret @true
+    ret true
   end if
 end fun
 
@@ -33,7 +33,7 @@ end fun
 fun xor_option(self: ?u32, other: ?u32): ?u32
   if self |self_value|
     if other |other_value|
-      ret @none
+      ret none
     else
       ret self
     end if
@@ -41,7 +41,7 @@ fun xor_option(self: ?u32, other: ?u32): ?u32
     if other |other_value|
       ret other
     else
-      ret @none
+      ret none
     end if
   end if
 end fun
@@ -50,7 +50,7 @@ fun and_option(self: ?u32, other: ?u32): ?u32
   if self |value|
     ret other
   else
-    ret @none
+    ret none
   end if
 end fun
 

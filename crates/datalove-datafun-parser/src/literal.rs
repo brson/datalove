@@ -28,7 +28,7 @@ impl<'db> Parser<'db> {
         // Check for `: type / expr` pattern.
         if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
-            let type_hint = self.parse_type_hint_and_heap();
+            let type_hint = self.parse_type_hint();
             // Expect `/` after type hint.
             if !self.eat_sigil(Sigil::SlashForward) {
                 let ts = self.peek_text_span();
@@ -38,40 +38,19 @@ impl<'db> Parser<'db> {
                     "expected '/'"
                 );
             }
-            let (_heap, expr_kind) = self.parse_lit_expr_and_heap(Some(type_hint));
+            let expr_kind = self.parse_lit_expr(Some(type_hint));
             // The type_hint is already captured in the expr_kind.
             return self.create_expr(expr_kind, ts);
         }
 
-        let (_heap, expr_kind) = self.parse_lit_expr_and_heap(None);
+        let expr_kind = self.parse_lit_expr(None);
         self.create_expr(expr_kind, ts)
-    }
-
-    /// Parse heap sigil and expression.
-    fn parse_lit_expr_and_heap(
-        &mut self,
-        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
-    ) -> (datalit::ast::Heap, ast::ExprFunKind<'db>) {
-        // Heap sigils: @ for local, # for global.
-        let heap = if self.peek_sigil(Sigil::At) {
-            self.eat_sigil(Sigil::At);
-            datalit::ast::Heap::Local
-        } else if self.peek_sigil(Sigil::Hash) {
-            self.eat_sigil(Sigil::Hash);
-            datalit::ast::Heap::Global
-        } else {
-            datalit::ast::Heap::Omitted
-        };
-
-        let expr_kind = self.parse_lit_expr(heap, type_hint);
-        (heap, expr_kind)
     }
 
     /// Parse a literal expression (keywords and literals).
     pub(super) fn parse_lit_expr(
         &mut self,
-        heap: datalit::ast::Heap,
-        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+        type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         // Check for negative number.
         if self.peek_sigil(Sigil::Minus) {
@@ -91,7 +70,7 @@ impl<'db> Parser<'db> {
                                         let decimal_name = self.eat_name().X();
                                         let float_str = format!("-{}.{}", word, decimal_name.as_str(self.db));
                                         let value = InternedText::new(self.db, float_str.S());
-                                        return ast::ExprFunKind::Float(ast::ExprFloat { heap, type_hint, value });
+                                        return ast::ExprFunKind::Float(ast::ExprFloat { type_hint, value });
                                     }
                                 }
                             }
@@ -106,11 +85,11 @@ impl<'db> Parser<'db> {
                         if is_hex {
                             let hex_str = format!("-{}", word);
                             let value = InternedText::new(self.db, hex_str.S());
-                            return ast::ExprFunKind::Hex(ast::ExprHex { heap, type_hint, value });
+                            return ast::ExprFunKind::Hex(ast::ExprHex { type_hint, value });
                         } else {
                             let int_str = format!("-{}", word);
                             let value = InternedText::new(self.db, int_str.S());
-                            return ast::ExprFunKind::Int(ast::ExprInt { heap, type_hint, value });
+                            return ast::ExprFunKind::Int(ast::ExprInt { type_hint, value });
                         }
                     }
                 }
@@ -128,54 +107,54 @@ impl<'db> Parser<'db> {
         match self.peek_word() {
             Some("true") => {
                 self.eat_word("true");
-                return ast::ExprFunKind::True(ast::ExprLit { heap, type_hint });
+                return ast::ExprFunKind::True(ast::ExprLit { type_hint });
             }
             Some("false") => {
                 self.eat_word("false");
-                return ast::ExprFunKind::False(ast::ExprLit { heap, type_hint });
+                return ast::ExprFunKind::False(ast::ExprLit { type_hint });
             }
             Some("none") => {
                 self.eat_word("none");
-                return ast::ExprFunKind::None(ast::ExprLit { heap, type_hint });
+                return ast::ExprFunKind::None(ast::ExprLit { type_hint });
             }
             Some("some") => {
                 self.eat_word("some");
                 let payload = self.parse_expr_primary();
-                return ast::ExprFunKind::Some(ast::ExprSome { heap, type_hint, payload });
+                return ast::ExprFunKind::Some(ast::ExprSome { type_hint, payload });
             }
             Some("ok") => {
                 self.eat_word("ok");
                 let payload = self.parse_expr_primary();
-                return ast::ExprFunKind::Ok(ast::ExprOk { heap, type_hint, payload });
+                return ast::ExprFunKind::Ok(ast::ExprOk { type_hint, payload });
             }
             Some("er") => {
                 self.eat_word("er");
                 let payload = self.parse_expr_primary();
-                return ast::ExprFunKind::Er(ast::ExprEr { heap, type_hint, payload });
+                return ast::ExprFunKind::Er(ast::ExprEr { type_hint, payload });
             }
             Some("data") => {
                 self.eat_word("data");
                 // Parse any datafun expression (superset of datalit).
                 let value = self.parse_expr_primary();
-                return ast::ExprFunKind::Data(ast::ExprData { heap, type_hint, value });
+                return ast::ExprFunKind::Data(ast::ExprData { type_hint, value });
             }
             Some("error") => {
                 self.eat_word("error");
                 // Parse any datafun expression (superset of datalit).
                 let value = self.parse_expr_primary();
-                return ast::ExprFunKind::Error(ast::ExprError { heap, type_hint, value });
+                return ast::ExprFunKind::Error(ast::ExprError { type_hint, value });
             }
             Some("tensor") => {
-                return self.parse_lit_tensor(heap, type_hint);
+                return self.parse_lit_tensor(type_hint);
             }
             Some("enum") => {
-                return self.parse_lit_anon_enum(heap, type_hint);
+                return self.parse_lit_anon_enum(type_hint);
             }
             Some("map") => {
-                return self.parse_lit_map(heap, type_hint);
+                return self.parse_lit_map(type_hint);
             }
             Some("set") => {
-                return self.parse_lit_set(heap, type_hint);
+                return self.parse_lit_set(type_hint);
             }
             _ => {}
         }
@@ -199,7 +178,7 @@ impl<'db> Parser<'db> {
                                             let decimal_name = self.eat_name().X();
                                             let float_str = format!("{}.{}", word, decimal_name.as_str(self.db));
                                             let value = InternedText::new(self.db, float_str.S());
-                                            return ast::ExprFunKind::Float(ast::ExprFloat { heap, type_hint, value });
+                                            return ast::ExprFunKind::Float(ast::ExprFloat { type_hint, value });
                                         }
                                     }
                                 }
@@ -215,9 +194,9 @@ impl<'db> Parser<'db> {
                             }
                             let value = InternedText::new(self.db, word.S());
                             if is_hex {
-                                return ast::ExprFunKind::Hex(ast::ExprHex { heap, type_hint, value });
+                                return ast::ExprFunKind::Hex(ast::ExprHex { type_hint, value });
                             } else {
-                                return ast::ExprFunKind::Int(ast::ExprInt { heap, type_hint, value });
+                                return ast::ExprFunKind::Int(ast::ExprInt { type_hint, value });
                             }
                         } else {
                             // Unexpected identifier.
@@ -235,7 +214,7 @@ impl<'db> Parser<'db> {
                         let text_str = token.text(self.db).as_str(self.db).S();
                         self.next();
                         let value = InternedText::new(self.db, text_str);
-                        return ast::ExprFunKind::String(ast::ExprString { heap, type_hint, value });
+                        return ast::ExprFunKind::String(ast::ExprString { type_hint, value });
                     }
                     _ => {
                         let ts = self.peek_text_span();
@@ -249,15 +228,15 @@ impl<'db> Parser<'db> {
             }
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
                 // Anonymous tuple.
-                return self.parse_lit_anon_tuple(heap, type_hint);
+                return self.parse_lit_anon_tuple(type_hint);
             }
             Some(TreeToken::Branch { sigil: Sigil::BraceOpen, .. }) => {
                 // Anonymous struct.
-                return self.parse_lit_anon_struct(heap, type_hint);
+                return self.parse_lit_anon_struct(type_hint);
             }
             Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) => {
                 // List.
-                return self.parse_lit_list(heap, type_hint);
+                return self.parse_lit_list(type_hint);
             }
             Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
                 // Table.
@@ -265,7 +244,7 @@ impl<'db> Parser<'db> {
                     Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, inner, .. }) => inner,
                     _ => unreachable!(),
                 };
-                return self.parse_lit_table(heap, type_hint, inner);
+                return self.parse_lit_table(type_hint, inner);
             }
             _ => {
                 let ts = self.peek_text_span();
@@ -296,8 +275,7 @@ impl<'db> Parser<'db> {
     /// Parse anonymous tuple: (expr, expr, ...)
     fn parse_lit_anon_tuple(
         &mut self,
-        heap: datalit::ast::Heap,
-        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+        type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
@@ -311,14 +289,13 @@ impl<'db> Parser<'db> {
         };
 
         let elements = self.parse_comma_separated_exprs(inner);
-        ast::ExprFunKind::AnonTuple(ast::ExprAnonTuple { heap, type_hint, elements })
+        ast::ExprFunKind::AnonTuple(ast::ExprAnonTuple { type_hint, elements })
     }
 
     /// Parse anonymous struct: { name = expr, ... }
     fn parse_lit_anon_struct(
         &mut self,
-        heap: datalit::ast::Heap,
-        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+        type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
@@ -332,14 +309,13 @@ impl<'db> Parser<'db> {
         };
 
         let fields = self.parse_comma_separated_struct_fields(inner);
-        ast::ExprFunKind::AnonStruct(ast::ExprAnonStruct { heap, type_hint, fields })
+        ast::ExprFunKind::AnonStruct(ast::ExprAnonStruct { type_hint, fields })
     }
 
     /// Parse list: [expr, expr, ...]
     fn parse_lit_list(
         &mut self,
-        heap: datalit::ast::Heap,
-        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+        type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner,
@@ -353,14 +329,13 @@ impl<'db> Parser<'db> {
         };
 
         let elements = self.parse_comma_separated_exprs(inner);
-        ast::ExprFunKind::List(ast::ExprList { heap, type_hint, elements })
+        ast::ExprFunKind::List(ast::ExprList { type_hint, elements })
     }
 
     /// Parse set: set { expr, expr, ... }
     fn parse_lit_set(
         &mut self,
-        heap: datalit::ast::Heap,
-        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+        type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         self.eat_word("set");
         let inner = match self.next() {
@@ -375,14 +350,13 @@ impl<'db> Parser<'db> {
         };
 
         let elements = self.parse_comma_separated_exprs(inner);
-        ast::ExprFunKind::Set(ast::ExprSet { heap, type_hint, elements })
+        ast::ExprFunKind::Set(ast::ExprSet { type_hint, elements })
     }
 
     /// Parse map: map { key = value, ... }
     fn parse_lit_map(
         &mut self,
-        heap: datalit::ast::Heap,
-        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+        type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         self.eat_word("map");
         let inner = match self.next() {
@@ -397,14 +371,13 @@ impl<'db> Parser<'db> {
         };
 
         let entries = self.parse_comma_separated_map_entries(inner);
-        ast::ExprFunKind::Map(ast::ExprMap { heap, type_hint, entries })
+        ast::ExprFunKind::Map(ast::ExprMap { type_hint, entries })
     }
 
     /// Parse anonymous enum: enum Variant or enum Variant(payload)
     fn parse_lit_anon_enum(
         &mut self,
-        heap: datalit::ast::Heap,
-        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+        type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         self.eat_word("enum");
         let variant_name = match self.eat_name() {
@@ -426,7 +399,7 @@ impl<'db> Parser<'db> {
         };
         let payload = self.parse_optional_enum_payload();
         ast::ExprFunKind::AnonEnum(ast::ExprAnonEnum {
-            heap, type_hint, variant_name, payload
+            type_hint, variant_name, payload
         })
     }
 
@@ -454,8 +427,7 @@ impl<'db> Parser<'db> {
     /// Parse tensor: tensor [shape] [data]
     fn parse_lit_tensor(
         &mut self,
-        heap: datalit::ast::Heap,
-        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+        type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         self.eat_word("tensor");
 
@@ -504,14 +476,13 @@ impl<'db> Parser<'db> {
             }
         };
 
-        ast::ExprFunKind::Tensor(ast::ExprTensor { heap, type_hint, shape, elements })
+        ast::ExprFunKind::Tensor(ast::ExprTensor { type_hint, shape, elements })
     }
 
     /// Parse table: {| header; row1; row2 |}
     fn parse_lit_table(
         &mut self,
-        heap: datalit::ast::Heap,
-        type_hint: Option<datalit::ast::TypeHintAndHeap<'db>>,
+        type_hint: Option<datalit::ast::TypeHint<'db>>,
         iter: BracerIter<'db>,
     ) -> ast::ExprFunKind<'db> {
         // Collect all tokens including whitespace.
@@ -523,7 +494,6 @@ impl<'db> Parser<'db> {
         if rows.is_empty() {
             // Empty table: {||}.
             return ast::ExprFunKind::Table(ast::ExprTable {
-                heap,
                 type_hint,
                 header: vec![],
                 rows: vec![],
@@ -550,7 +520,7 @@ impl<'db> Parser<'db> {
             data_rows.push(ast::ExprTableRow { elements });
         }
 
-        ast::ExprFunKind::Table(ast::ExprTable { heap, type_hint, header, rows: data_rows })
+        ast::ExprFunKind::Table(ast::ExprTable { type_hint, header, rows: data_rows })
     }
 
     /// Split tokens by row delimiters (newline or semicolon).

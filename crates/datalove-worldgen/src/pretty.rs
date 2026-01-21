@@ -1,29 +1,23 @@
 //! Pretty printing for type hints and expressions in worldfile generation.
 
-use datalove_datalit::ast::{Expr, ExprFull, Heap, TypeHint, TypeHintAndHeap};
+use datalove_datalit::ast::{Expr, ExprFull, TypeHint};
 
-/// Pretty print a TypeHintAndHeap to a string.
-pub fn pretty_type_hint_and_heap<'db>(
+/// Pretty print a TypeHint to a string.
+pub fn pretty_type_hint<'db>(
     db: &'db dyn salsa::Database,
-    th: TypeHintAndHeap<'db>,
+    th: TypeHint<'db>,
 ) -> String {
     let mut out = String::new();
-    write_type_hint_and_heap(db, th, &mut out);
+    write_type_hint(db, &th, &mut out);
     out
 }
 
-/// Pretty print an expression with its heap annotation to a string.
-pub fn pretty_expr_with_heap<'db>(
+/// Pretty print an expression to a string.
+pub fn pretty_expr<'db>(
     db: &'db dyn salsa::Database,
     expr: Expr<'db>,
-    heap: Heap,
 ) -> String {
     let mut out = String::new();
-    match heap {
-        Heap::Local => out.push('@'),
-        Heap::Global => out.push('#'),
-        Heap::Omitted => {}
-    }
     write_expr(db, &expr, &mut out);
     out
 }
@@ -214,34 +208,15 @@ fn write_expr_full<'db>(
 ) {
     if let Some(th) = expr.type_hint(db) {
         out.push_str(": ");
-        write_type_hint_and_heap(db, th, out);
+        write_type_hint(db, &th, out);
         out.push_str(" / ");
     }
-    let expr_and_heap = expr.expr(db);
-    match expr_and_heap.heap {
-        Heap::Local => out.push('@'),
-        Heap::Global => out.push('#'),
-        Heap::Omitted => {}
-    }
-    write_expr(db, &expr_and_heap.expr, out);
-}
-
-fn write_type_hint_and_heap<'db>(
-    db: &'db dyn salsa::Database,
-    th: TypeHintAndHeap<'db>,
-    out: &mut String,
-) {
-    match th.heap(db) {
-        Heap::Local => out.push('@'),
-        Heap::Global => out.push('#'),
-        Heap::Omitted => {}
-    }
-    write_type_hint(db, th.type_hint(db), out);
+    write_expr(db, &expr.expr(db), out);
 }
 
 fn write_type_hint<'db>(
     db: &'db dyn salsa::Database,
-    th: TypeHint<'db>,
+    th: &TypeHint<'db>,
     out: &mut String,
 ) {
     match th {
@@ -269,7 +244,7 @@ fn write_type_hint<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                write_type_hint_and_heap(db, *field, out);
+                write_type_hint(db, field, out);
             }
             out.push(')');
         }
@@ -282,7 +257,7 @@ fn write_type_hint<'db>(
                 }
                 out.push_str(field.name.as_str(db));
                 out.push_str(": ");
-                write_type_hint_and_heap(db, field.type_hint, out);
+                write_type_hint(db, &field.type_hint, out);
             }
             out.push('}');
         }
@@ -294,9 +269,9 @@ fn write_type_hint<'db>(
                     out.push_str(", ");
                 }
                 out.push_str(variant.name.as_str(db));
-                if let Some(payload) = variant.payload {
+                if let Some(payload) = &variant.payload {
                     out.push('(');
-                    write_type_hint_and_heap(db, payload, out);
+                    write_type_hint(db, payload, out);
                     out.push(')');
                 }
             }
@@ -305,37 +280,37 @@ fn write_type_hint<'db>(
 
         TypeHint::List(l) => {
             out.push('[');
-            write_type_hint_and_heap(db, l.element_type, out);
+            write_type_hint(db, &l.element_type, out);
             out.push(']');
         }
 
         TypeHint::Map(m) => {
             out.push_str("map<");
-            write_type_hint_and_heap(db, m.key_type, out);
+            write_type_hint(db, &m.key_type, out);
             out.push_str(", ");
-            write_type_hint_and_heap(db, m.value_type, out);
+            write_type_hint(db, &m.value_type, out);
             out.push('>');
         }
 
         TypeHint::Set(s) => {
             out.push_str("set<");
-            write_type_hint_and_heap(db, s.element_type, out);
+            write_type_hint(db, &s.element_type, out);
             out.push('>');
         }
 
         TypeHint::Option(o) => {
             out.push('?');
-            write_type_hint_and_heap(db, o.inner_type, out);
+            write_type_hint(db, &o.inner_type, out);
         }
 
         TypeHint::Result(r) => {
             out.push('!');
-            write_type_hint_and_heap(db, r.inner_type, out);
+            write_type_hint(db, &r.inner_type, out);
         }
 
         TypeHint::Tensor(t) => {
             out.push_str("tensor<");
-            write_type_hint_and_heap(db, t.element_type, out);
+            write_type_hint(db, &t.element_type, out);
             out.push_str(", ");
             out.push_str(&t.rank.to_string());
             out.push('>');
@@ -349,7 +324,7 @@ fn write_type_hint<'db>(
                 }
                 out.push_str(col.name.as_str(db));
                 out.push_str(": ");
-                write_type_hint_and_heap(db, col.type_hint, out);
+                write_type_hint(db, &col.type_hint, out);
             }
             out.push_str(" |}");
         }
@@ -379,49 +354,27 @@ mod tests {
 
     #[salsa::tracked]
     fn test_pretty_primitive_types_inner<'db>(db: &'db dyn salsa::Database) {
-        // Test local heap primitives.
+        let _ = db;
         let cases = [
-            (TypeHint::Bool, "@bool"),
-            (TypeHint::U8, "@u8"),
-            (TypeHint::I8, "@i8"),
-            (TypeHint::U16, "@u16"),
-            (TypeHint::I16, "@i16"),
-            (TypeHint::U32, "@u32"),
-            (TypeHint::I32, "@i32"),
-            (TypeHint::U64, "@u64"),
-            (TypeHint::I64, "@i64"),
-            (TypeHint::F32, "@f32"),
-            (TypeHint::F64, "@f64"),
-            (TypeHint::Int, "@int"),
-            (TypeHint::String, "@string"),
+            (TypeHint::Bool, "bool"),
+            (TypeHint::U8, "u8"),
+            (TypeHint::I8, "i8"),
+            (TypeHint::U16, "u16"),
+            (TypeHint::I16, "i16"),
+            (TypeHint::U32, "u32"),
+            (TypeHint::I32, "i32"),
+            (TypeHint::U64, "u64"),
+            (TypeHint::I64, "i64"),
+            (TypeHint::F32, "f32"),
+            (TypeHint::F64, "f64"),
+            (TypeHint::Int, "int"),
+            (TypeHint::String, "string"),
         ];
 
         for (ty_hint, expected) in cases {
-            let ty = TypeHintAndHeap::new(db, Heap::Local, ty_hint);
-            let output = pretty_type_hint_and_heap(db, ty);
+            let output = pretty_type_hint(db, ty_hint);
             assert_eq!(output, expected, "Pretty print mismatch for {}", expected);
         }
-    }
-
-    #[test]
-    fn test_pretty_heap_annotations() {
-        let db = Database::default();
-        test_pretty_heap_annotations_inner(&db);
-    }
-
-    #[salsa::tracked]
-    fn test_pretty_heap_annotations_inner<'db>(db: &'db dyn salsa::Database) {
-        // Local heap.
-        let local = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
-        assert_eq!(pretty_type_hint_and_heap(db, local), "@u32");
-
-        // Global heap.
-        let global = TypeHintAndHeap::new(db, Heap::Global, TypeHint::U32);
-        assert_eq!(pretty_type_hint_and_heap(db, global), "#u32");
-
-        // Omitted heap.
-        let omitted = TypeHintAndHeap::new(db, Heap::Omitted, TypeHint::U32);
-        assert_eq!(pretty_type_hint_and_heap(db, omitted), "u32");
     }
 
     #[test]
@@ -432,21 +385,9 @@ mod tests {
 
     #[salsa::tracked]
     fn test_pretty_expr_bool_inner<'db>(db: &'db dyn salsa::Database) {
-        assert_eq!(pretty_expr_with_heap(db, Expr::True, Heap::Local), "@true");
-        assert_eq!(pretty_expr_with_heap(db, Expr::False, Heap::Local), "@false");
-        assert_eq!(pretty_expr_with_heap(db, Expr::True, Heap::Global), "#true");
-        assert_eq!(pretty_expr_with_heap(db, Expr::True, Heap::Omitted), "true");
-    }
-
-    #[test]
-    fn test_pretty_expr_none() {
-        let db = Database::default();
-        test_pretty_expr_none_inner(&db);
-    }
-
-    #[salsa::tracked]
-    fn test_pretty_expr_none_inner<'db>(db: &'db dyn salsa::Database) {
-        assert_eq!(pretty_expr_with_heap(db, Expr::None, Heap::Local), "@none");
+        assert_eq!(pretty_expr(db, Expr::True), "true");
+        assert_eq!(pretty_expr(db, Expr::False), "false");
+        assert_eq!(pretty_expr(db, Expr::None), "none");
     }
 
     #[test]
@@ -458,12 +399,10 @@ mod tests {
     #[salsa::tracked]
     fn test_pretty_type_list_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::TypeHintList;
+        let _ = db;
 
-        let elem = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
-        let list = TypeHint::List(TypeHintList { element_type: elem });
-        let list_ty = TypeHintAndHeap::new(db, Heap::Local, list);
-
-        assert_eq!(pretty_type_hint_and_heap(db, list_ty), "@[@u32]");
+        let list = TypeHint::List(TypeHintList { element_type: Box::new(TypeHint::U32) });
+        assert_eq!(pretty_type_hint(db, list), "[u32]");
     }
 
     #[test]
@@ -475,12 +414,10 @@ mod tests {
     #[salsa::tracked]
     fn test_pretty_type_option_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::TypeHintOption;
+        let _ = db;
 
-        let inner = TypeHintAndHeap::new(db, Heap::Local, TypeHint::String);
-        let opt = TypeHint::Option(TypeHintOption { inner_type: inner });
-        let opt_ty = TypeHintAndHeap::new(db, Heap::Local, opt);
-
-        assert_eq!(pretty_type_hint_and_heap(db, opt_ty), "@?@string");
+        let opt = TypeHint::Option(TypeHintOption { inner_type: Box::new(TypeHint::String) });
+        assert_eq!(pretty_type_hint(db, opt), "?string");
     }
 
     #[test]
@@ -492,12 +429,10 @@ mod tests {
     #[salsa::tracked]
     fn test_pretty_type_result_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::TypeHintResult;
+        let _ = db;
 
-        let inner = TypeHintAndHeap::new(db, Heap::Local, TypeHint::I32);
-        let res = TypeHint::Result(TypeHintResult { inner_type: inner });
-        let res_ty = TypeHintAndHeap::new(db, Heap::Local, res);
-
-        assert_eq!(pretty_type_hint_and_heap(db, res_ty), "@!@i32");
+        let res = TypeHint::Result(TypeHintResult { inner_type: Box::new(TypeHint::I32) });
+        assert_eq!(pretty_type_hint(db, res), "!i32");
     }
 
     #[test]
@@ -509,13 +444,13 @@ mod tests {
     #[salsa::tracked]
     fn test_pretty_type_map_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::TypeHintMap;
+        let _ = db;
 
-        let key = TypeHintAndHeap::new(db, Heap::Local, TypeHint::String);
-        let value = TypeHintAndHeap::new(db, Heap::Local, TypeHint::I32);
-        let map = TypeHint::Map(TypeHintMap { key_type: key, value_type: value });
-        let map_ty = TypeHintAndHeap::new(db, Heap::Local, map);
-
-        assert_eq!(pretty_type_hint_and_heap(db, map_ty), "@map<@string, @i32>");
+        let map = TypeHint::Map(TypeHintMap {
+            key_type: Box::new(TypeHint::String),
+            value_type: Box::new(TypeHint::I32),
+        });
+        assert_eq!(pretty_type_hint(db, map), "map<string, i32>");
     }
 
     #[test]
@@ -527,12 +462,10 @@ mod tests {
     #[salsa::tracked]
     fn test_pretty_type_set_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::TypeHintSet;
+        let _ = db;
 
-        let elem = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U64);
-        let set = TypeHint::Set(TypeHintSet { element_type: elem });
-        let set_ty = TypeHintAndHeap::new(db, Heap::Local, set);
-
-        assert_eq!(pretty_type_hint_and_heap(db, set_ty), "@set<@u64>");
+        let set = TypeHint::Set(TypeHintSet { element_type: Box::new(TypeHint::U64) });
+        assert_eq!(pretty_type_hint(db, set), "set<u64>");
     }
 
     #[test]
@@ -544,13 +477,12 @@ mod tests {
     #[salsa::tracked]
     fn test_pretty_type_tuple_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::TypeHintAnonTuple;
+        let _ = db;
 
-        let f1 = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
-        let f2 = TypeHintAndHeap::new(db, Heap::Local, TypeHint::Bool);
-        let tuple = TypeHint::AnonTuple(TypeHintAnonTuple { fields: vec![f1, f2] });
-        let tuple_ty = TypeHintAndHeap::new(db, Heap::Local, tuple);
-
-        assert_eq!(pretty_type_hint_and_heap(db, tuple_ty), "@(@u32, @bool)");
+        let tuple = TypeHint::AnonTuple(TypeHintAnonTuple {
+            fields: vec![TypeHint::U32, TypeHint::Bool],
+        });
+        assert_eq!(pretty_type_hint(db, tuple), "(u32, bool)");
     }
 
     #[test]
@@ -564,21 +496,17 @@ mod tests {
         use datalove_datalit::ast::{TypeHintAnonStruct, TypeHintNamedField};
         use bct::text::InternedText;
 
-        let f1_ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::I32);
         let f1 = TypeHintNamedField {
             name: InternedText::new(db, "x".to_string()),
-            type_hint: f1_ty,
+            type_hint: Box::new(TypeHint::I32),
         };
-        let f2_ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::I32);
         let f2 = TypeHintNamedField {
             name: InternedText::new(db, "y".to_string()),
-            type_hint: f2_ty,
+            type_hint: Box::new(TypeHint::I32),
         };
 
         let struct_ty = TypeHint::AnonStruct(TypeHintAnonStruct { fields: vec![f1, f2] });
-        let full_ty = TypeHintAndHeap::new(db, Heap::Local, struct_ty);
-
-        assert_eq!(pretty_type_hint_and_heap(db, full_ty), "@{x: @i32, y: @i32}");
+        assert_eq!(pretty_type_hint(db, struct_ty), "{x: i32, y: i32}");
     }
 
     #[test]
@@ -589,7 +517,7 @@ mod tests {
 
     #[salsa::tracked]
     fn test_pretty_output_no_trailing_whitespace_inner<'db>(db: &'db dyn salsa::Database) {
-        // Verify no trailing whitespace in output.
+        let _ = db;
         let types = [
             TypeHint::Bool,
             TypeHint::U32,
@@ -597,8 +525,7 @@ mod tests {
         ];
 
         for ty_hint in types {
-            let ty = TypeHintAndHeap::new(db, Heap::Local, ty_hint);
-            let output = pretty_type_hint_and_heap(db, ty);
+            let output = pretty_type_hint(db, ty_hint);
             assert!(!output.ends_with(' '), "Output has trailing space: '{}'", output);
             assert!(!output.ends_with('\t'), "Output has trailing tab: '{}'", output);
         }

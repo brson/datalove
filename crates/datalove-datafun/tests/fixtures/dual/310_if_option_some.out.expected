@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = some v0\n    v2, v3 = unwrap_option v1\n    branch v3, block1, block2\nblock1:\n    debuglog v2\n    goto block3\nblock2:\n    goto block3\nblock3:\n    unit_end\nexports:\n    opt = v1\n",
             ),
             ir_match: true,
-            interp_output: "@42\n",
-            aot_output: "@42\n",
+            interp_output: "42\n",
+            aot_output: "42\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

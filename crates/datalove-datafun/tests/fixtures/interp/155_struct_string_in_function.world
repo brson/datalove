@@ -3,8 +3,8 @@ scriptunit-fragment
 ----------
 
 // Struct with string fields in function - tests move semantics in function context.
-fun make_person(): @{name: @string, age: @u32}
-    ret @{name = @"Bob", age = @42}
+fun make_person(): {name: string, age: u32}
+    ret {name = "Bob", age = 42}
 end fun
 
 ----------

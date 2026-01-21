@@ -1,83 +1,56 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonStruct": {
-          "fields": [
-            {
-              "name": "field1",
-              "value": {
-                "expr": {
-                  "expr": "True",
-                  "heap": "Local"
-                },
-                "type_hint": null
-              }
-            },
-            {
-              "name": "field2",
-              "value": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "42"
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
-              }
-            },
-            {
-              "name": "field3",
-              "value": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "2"
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": {
-                  "heap": "Local",
-                  "type_hint": "U32"
-                }
-              }
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "field1",
+            "value": {
+              "expr": "True",
+              "type_hint": null
             }
-          ]
-        }
-      },
-      "heap": "Local"
+          },
+          {
+            "name": "field2",
+            "value": {
+              "expr": {
+                "Int": {
+                  "value": "42"
+                }
+              },
+              "type_hint": null
+            }
+          },
+          {
+            "name": "field3",
+            "value": {
+              "expr": {
+                "Int": {
+                  "value": "2"
+                }
+              },
+              "type_hint": "U32"
+            }
+          }
+        ]
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "AnonStruct": {
-          "fields": [
-            {
-              "name": "field1",
-              "type_hint": {
-                "heap": "Local",
-                "type_hint": "Bool"
-              }
-            },
-            {
-              "name": "field2",
-              "type_hint": {
-                "heap": "Local",
-                "type_hint": "U32"
-              }
-            },
-            {
-              "name": "field3",
-              "type_hint": {
-                "heap": "Local",
-                "type_hint": "U32"
-              }
-            }
-          ]
-        }
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "field1",
+            "type_hint": "Bool"
+          },
+          {
+            "name": "field2",
+            "type_hint": "U32"
+          },
+          {
+            "name": "field3",
+            "type_hint": "U32"
+          }
+        ]
       }
     }
   },

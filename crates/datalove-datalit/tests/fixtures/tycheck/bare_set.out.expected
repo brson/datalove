@@ -1,35 +1,25 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Set": {
-          "elements": [
-            {
-              "expr": {
-                "expr": "True",
-                "heap": "Local"
-              },
-              "type_hint": null
-            },
-            {
-              "expr": {
-                "expr": "False",
-                "heap": "Local"
-              },
-              "type_hint": null
-            }
-          ]
-        }
-      },
-      "heap": "Local"
+      "Set": {
+        "elements": [
+          {
+            "expr": "True",
+            "type_hint": null
+          },
+          {
+            "expr": "False",
+            "type_hint": null
+          }
+        ]
+      }
     },
     "type_hint": null
   },
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "element_type": "@bool",
-    "heap": "@",
+    "element_type": "bool",
     "kind": "Set"
   }
 }

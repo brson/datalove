@@ -1,4 +1,4 @@
-fun process(a: @u32, b: @u32)
+fun process(a: u32, b: u32)
   let x = a + b
-  let y = x * @2
+  let y = x * 2
 end fun

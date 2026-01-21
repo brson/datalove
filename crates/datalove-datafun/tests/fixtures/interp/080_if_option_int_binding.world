@@ -3,8 +3,8 @@ scriptunit-fragment
 ----------
 
 // Test if-binding with Int (non-copy type).
-let opt: ?int = some :int/@12345678901234567890
-var result: int = :int/@0
+let opt: ?int = some :int/12345678901234567890
+var result: int = :int/0
 if opt |val|
     set result = val
 end if

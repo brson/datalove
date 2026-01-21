@@ -1,29 +1,23 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonEnum": {
-          "payload": null,
-          "variant_name": "Foo"
-        }
-      },
-      "heap": "Local"
+      "AnonEnum": {
+        "payload": null,
+        "variant_name": "Foo"
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "AnonEnum": {
-          "variants": [
-            {
-              "name": "<error>",
-              "payload": null
-            },
-            {
-              "name": "Foo",
-              "payload": null
-            }
-          ]
-        }
+      "AnonEnum": {
+        "variants": [
+          {
+            "name": "<error>",
+            "payload": null
+          },
+          {
+            "name": "Foo",
+            "payload": null
+          }
+        ]
       }
     }
   },
@@ -34,8 +28,8 @@
         {
           "message": "expected variant name",
           "span": [
-            10,
-            11
+            9,
+            10
           ],
           "text": ","
         }

@@ -1,1 +1,1 @@
-: @set<@string> / @set {@"apple", @"banana"}
+: set<string> / set {"apple", "banana"}

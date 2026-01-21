@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "TypeMismatch { expected: \"(int, int)\", actual: \"(@u32, @u32)\" }",
+                    "TypeMismatch { expected: \"(int, int)\", actual: \"(u32, u32)\" }",
                     "UnresolvedName(\"t\")",
                 ],
             ),

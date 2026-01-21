@@ -7,4 +7,4 @@ fun test_mul(a: u32, b: u32): ?u32
     ret some (a *? b)
 end fun
 
-let output = test_mul(@4294967295, @2)
+let output = test_mul(4294967295, 2)

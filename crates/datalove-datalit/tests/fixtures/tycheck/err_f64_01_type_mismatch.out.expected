@@ -1,13 +1,7 @@
 {
   "ast": {
-    "expr": {
-      "expr": "True",
-      "heap": "Local"
-    },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "F64"
-    }
+    "expr": "True",
+    "type_hint": "F64"
   },
   "diagnostics": [
     {

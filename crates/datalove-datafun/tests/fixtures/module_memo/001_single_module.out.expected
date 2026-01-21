@@ -3,7 +3,7 @@
     {
       "action": "add",
       "module": "local/test/a",
-      "source_hash": "ed73ad6c23077c83",
+      "source_hash": "5e80027f00ed5a0d",
       "results": {
         "local/test/a": {
           "is_direct": true,

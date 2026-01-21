@@ -11,10 +11,7 @@
         "kind": "Fun",
         "name": "get_value",
         "params": [],
-        "return_type": {
-          "heap": "Omitted",
-          "type_hint": "U32"
-        }
+        "return_type": "U32"
       }
     ]
   },
@@ -26,9 +23,9 @@
           "message": "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', or 'type'",
           "span": [
             25,
-            26
+            27
           ],
-          "text": "@"
+          "text": "42"
         }
       ],
       "message": "unexpected statement"

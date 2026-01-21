@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let x: u8 = @255
+let x: u8 = 255
 debuglog x

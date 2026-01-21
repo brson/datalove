@@ -15,4 +15,4 @@ fun unwrap(opt: ?i32, default: i32): i32
 end fun
 
 // -(-2147483648) overflows i32, should return None -> default 999.
-debuglog unwrap(neg_opt(@-2147483648), @999)
+debuglog unwrap(neg_opt(-2147483648), 999)

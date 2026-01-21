@@ -2,4 +2,4 @@
 scriptunit-expr
 ----------
 
-: @f32 / @0x40490FDB
+: f32 / 0x40490FDB

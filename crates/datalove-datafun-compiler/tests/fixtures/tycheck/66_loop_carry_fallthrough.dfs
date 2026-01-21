@@ -1,6 +1,6 @@
 // Error: loop with carry has fallthrough path
-loop carry (i: @u32 = @0)
-    if i .> @10
+loop carry (i: u32 = 0)
+    if i .> 10
         break
     end if
     // falls through without continue - ERROR

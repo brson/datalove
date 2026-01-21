@@ -4,7 +4,7 @@ scriptunit-fragment
 
 // Function in fragment that returns error.
 fun get_error(): error
-    ret @error @42
+    ret error 42
 end fun
 
 ----------

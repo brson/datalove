@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "String": {
-          "value": "\"hello world\""
-        }
-      },
-      "heap": "Local"
+      "String": {
+        "value": "\"hello world\""
+      }
     },
     "type_hint": null
   },

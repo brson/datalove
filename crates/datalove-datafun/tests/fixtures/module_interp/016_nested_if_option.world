@@ -4,8 +4,8 @@ module local/test/main
 
 // Test nested if-bindings.
 fun main(): u32
-    let opt1: ?u32 = some @1
-    let opt2: ?u32 = some @2
+    let opt1: ?u32 = some 1
+    let opt2: ?u32 = some 2
     if opt1 |a|
         if opt2 |b|
             ret a +! b
@@ -13,6 +13,6 @@ fun main(): u32
             ret a
         end if
     else
-        ret @0
+        ret 0
     end if
 end fun

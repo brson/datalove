@@ -1,7 +1,7 @@
-fun add(a: @u32, b: @u32): @u32
+fun add(a: u32, b: u32): u32
     ret a +@ b
 end fun
 
-fun test(): @u32
-    ret add(@1)
+fun test(): u32
+    ret add(1)
 end fun

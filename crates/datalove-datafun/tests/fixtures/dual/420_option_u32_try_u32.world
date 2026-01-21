@@ -2,10 +2,10 @@
 scriptunit-fragment
 ----------
 
-// Try ?@u32 returning ?@u32 - this should work.
-fun test(): ?@u32
-    let a: ?@u32 = some @10
-    let x: @u32 = a?
+// Try ?u32 returning ?u32 - this should work.
+fun test(): ?u32
+    let a: ?u32 = some 10
+    let x: u32 = a?
     ret some x
 end fun
 

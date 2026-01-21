@@ -3,9 +3,9 @@
 use rand::Rng;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, FunctionSig, Variable};
-use crate::gen_type::gen_type_hint_with_heap;
+use crate::gen_type::gen_type_hint;
 use crate::gen_stmt::{gen_body_statement, gen_ret};
-use crate::pretty::pretty_type_hint_and_heap;
+use crate::pretty::pretty_type_hint;
 
 /// Generate a function signature.
 pub fn gen_function_signature<'db, R: Rng>(
@@ -19,14 +19,14 @@ pub fn gen_function_signature<'db, R: Rng>(
     let params: Vec<_> = (0..param_count)
         .map(|i| {
             let param_name = format!("p{}", i);
-            let param_type = gen_type_hint_with_heap(db, rng, config);
+            let param_type = gen_type_hint(db, rng, config);
             (param_name, param_type)
         })
         .collect();
 
     // Maybe generate a return type (80% of functions have returns).
     let return_type = if rng.gen_bool(0.8) {
-        Some(gen_type_hint_with_heap(db, rng, config))
+        Some(gen_type_hint(db, rng, config))
     } else {
         None
     };
@@ -52,19 +52,19 @@ pub fn gen_function<'db, R: Rng>(
     let params_str = sig
         .params
         .iter()
-        .map(|(name, ty)| format!("{}: {}", name, pretty_type_hint_and_heap(db, *ty)))
+        .map(|(name, ty)| format!("{}: {}", name, pretty_type_hint(db, ty.clone())))
         .collect::<Vec<_>>()
         .join(", ");
 
-    let sig_line = match sig.return_type {
-        Some(ret_ty) => format!("fun {}({}): {}", sig.name, params_str, pretty_type_hint_and_heap(db, ret_ty)),
+    let sig_line = match &sig.return_type {
+        Some(ret_ty) => format!("fun {}({}): {}", sig.name, params_str, pretty_type_hint(db, ret_ty.clone())),
         None => format!("fun {}({})", sig.name, params_str),
     };
     lines.push(sig_line);
 
     // Create function context with parameters.
     let mut ctx = GenContext::new();
-    ctx.return_type = sig.return_type;
+    ctx.return_type = sig.return_type.clone();
     ctx.type_aliases = module_ctx.type_aliases.clone();
     ctx.functions = module_ctx.functions.clone();
     ctx.imported_functions = module_ctx.imported_functions.clone();
@@ -75,7 +75,7 @@ pub fn gen_function<'db, R: Rng>(
     for (name, ty) in &sig.params {
         ctx.variables.push(Variable {
             name: name.clone(),
-            type_hint: *ty,
+            type_hint: ty.clone(),
             is_mutable: false,
         });
     }

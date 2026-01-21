@@ -1,1 +1,1 @@
-@(some @1, some @0, some @7, @none, @false, @true, @true, @false, @true, @true, @false, @true, @none, some @0, some @1, some @1, some @2, some @2, some @3, some @7, some @8, some @31)
+(some 1, some 0, some 7, none, false, true, true, false, true, true, false, true, none, some 0, some 1, some 1, some 2, some 2, some 3, some 7, some 8, some 31)

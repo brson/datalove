@@ -4,11 +4,11 @@ module local/test/main
 
 // Test passing Ref-mode param to In-mode param (Copy type).
 // For Copy types, the callee makes a copy, so this should work.
-fun inner(x: @u32): @bool
-    ret x == @100
+fun inner(x: u32): bool
+    ret x == 100
 end fun
 
-fun outer(ref y: @u32): @bool
+fun outer(ref y: u32): bool
     ret inner(y)
 end fun
 
@@ -23,4 +23,4 @@ import main.outer
 scriptunit-expr
 ----------
 
-outer(@100)
+outer(100)

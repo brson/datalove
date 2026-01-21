@@ -6,13 +6,13 @@
         {
           "message": "type mismatch",
           "span": [
-            36,
+            35,
             37
           ],
-          "text": "@"
+          "text": "42"
         }
       ],
-      "message": "mismatched types: expected `@!@u32`, found `u32`"
+      "message": "mismatched types: expected `!u32`, found `u32`"
     },
     {
       "code": "F049",
@@ -20,8 +20,8 @@
         {
           "message": "try operator here",
           "span": [
-            90,
-            91
+            87,
+            88
           ],
           "text": "!"
         }
@@ -35,7 +35,7 @@
   "errors": [
     {
       "actual": "u32",
-      "expected": "@!@u32",
+      "expected": "!u32",
       "kind": "TypeMismatch"
     },
     {
@@ -49,13 +49,13 @@
       "kind": "function",
       "name": "returns_result",
       "params": [],
-      "return_type": "!@u32"
+      "return_type": "!u32"
     },
     {
       "kind": "function",
       "name": "test",
       "params": [],
-      "return_type": "@u32"
+      "return_type": "u32"
     }
   ]
 }

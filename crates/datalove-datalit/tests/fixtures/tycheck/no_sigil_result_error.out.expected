@@ -1,39 +1,26 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Error": {
-          "value": {
-            "expr": {
-              "expr": {
-                "String": {
-                  "value": "\"failed\""
-                }
-              },
-              "heap": "Local"
-            },
-            "type_hint": null
-          }
+      "Error": {
+        "value": {
+          "expr": {
+            "String": {
+              "value": "\"failed\""
+            }
+          },
+          "type_hint": null
         }
-      },
-      "heap": "Local"
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Result": {
-          "inner_type": {
-            "heap": "Omitted",
-            "type_hint": "U32"
-          }
-        }
+      "Result": {
+        "inner_type": "U32"
       }
     }
   },
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "",
     "inner_type": "u32",
     "kind": "Result"
   }

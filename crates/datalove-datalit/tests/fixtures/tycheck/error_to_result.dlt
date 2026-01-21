@@ -1,1 +1,1 @@
-: @!@u32 / @error "operation failed"
+: !u32 / error "operation failed"

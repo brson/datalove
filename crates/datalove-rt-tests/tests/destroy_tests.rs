@@ -23,7 +23,7 @@ fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_
 #[test]
 fn test_destroy_int_small() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @int / @42")?;
+    let typechecked = compile_str(&db, ": int / 42")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -76,7 +76,7 @@ fn test_destroy_int_small() -> AnyResult<()> {
 #[ignore] // can't parse
 fn test_destroy_int_large() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @int / @1234567890123456789012345678901234567890")?;
+    let typechecked = compile_str(&db, ": int / 1234567890123456789012345678901234567890")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -128,7 +128,7 @@ fn test_destroy_int_large() -> AnyResult<()> {
 #[test]
 fn test_destroy_list_empty() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @[@u32] / @[]")?;
+    let typechecked = compile_str(&db, ": [u32] / []")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -181,7 +181,7 @@ fn test_destroy_list_empty() -> AnyResult<()> {
 #[test]
 fn test_destroy_list_primitives() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, "@[@1, @2, @3, @4, @5]")?;
+    let typechecked = compile_str(&db, "[1, 2, 3, 4, 5]")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -234,7 +234,7 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
 #[test]
 fn test_destroy_list_strings() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#"@[@"hello", @"world", @"test"]"#)?;
+    let typechecked = compile_str(&db, r#"["hello", "world", "test"]"#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -287,7 +287,7 @@ fn test_destroy_list_strings() -> AnyResult<()> {
 #[test]
 fn test_destroy_list_nested() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#"@[@[@"a", @"b"], @[@"c", @"d"]]"#)?;
+    let typechecked = compile_str(&db, r#"[["a", "b"], ["c", "d"]]"#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -340,7 +340,7 @@ fn test_destroy_list_nested() -> AnyResult<()> {
 #[test]
 fn test_destroy_enum_no_payload() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @enum { Ok, Error } / @enum Ok")?;
+    let typechecked = compile_str(&db, ": enum { Ok, Error } / enum Ok")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -389,7 +389,7 @@ fn test_destroy_enum_no_payload() -> AnyResult<()> {
 #[test]
 fn test_destroy_enum_with_primitive_payload() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@42)")?;
+    let typechecked = compile_str(&db, ": enum { Ok(u32), Err(string) } / enum Ok(42)")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -438,7 +438,7 @@ fn test_destroy_enum_with_primitive_payload() -> AnyResult<()> {
 #[test]
 fn test_destroy_enum_with_string_payload() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#": @enum { Ok(@u32), Err(@string) } / @enum Err(@"error message")"#)?;
+    let typechecked = compile_str(&db, r#": enum { Ok(u32), Err(string) } / enum Err("error message")"#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -487,7 +487,7 @@ fn test_destroy_enum_with_string_payload() -> AnyResult<()> {
 #[test]
 fn test_destroy_enum_with_nested_payload() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#": @enum { Text(@string), Items(@[@string]) } / @enum Items(@[@"a", @"b", @"c"])"#)?;
+    let typechecked = compile_str(&db, r#": enum { Text(string), Items([string]) } / enum Items(["a", "b", "c"])"#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -536,7 +536,7 @@ fn test_destroy_enum_with_nested_payload() -> AnyResult<()> {
 #[test]
 fn test_destroy_set_empty() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @set <@u32> / @set {}")?;
+    let typechecked = compile_str(&db, ": set <u32> / set {}")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -590,7 +590,7 @@ fn test_destroy_set_empty() -> AnyResult<()> {
 fn test_destroy_set_primitives() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile_str(&db,
-        ": @set <@u32> / @set { @1, @2, @3, @4, @5 }"
+        ": set <u32> / set { 1, 2, 3, 4, 5 }"
     )?;
 
     let rt1 = Runtime::new();
@@ -645,7 +645,7 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
 fn test_destroy_set_strings() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile_str(&db,
-        r#": @set <@string> / @set { @"apple", @"banana", @"cherry" }"#
+        r#": set <string> / set { "apple", "banana", "cherry" }"#
     )?;
 
     let rt1 = Runtime::new();
@@ -700,7 +700,7 @@ fn test_destroy_set_strings() -> AnyResult<()> {
 fn test_destroy_set_tuples() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile_str(&db,
-        r#": @set <@(@u32, @string)> / @set { @(1, "one"), @(2, "two"), @(3, "three") }"#
+        r#": set <(u32, string)> / set { (1, "one"), (2, "two"), (3, "three") }"#
     )?;
 
     let rt1 = Runtime::new();
@@ -756,7 +756,7 @@ fn test_destroy_set_large() -> AnyResult<()> {
     let db = Database::default();
     // Create a set with 11 elements (maximum for single leaf node).
     let typechecked = compile_str(&db,
-        ": @set <@u32> / @set { @1, @2, @3, @4, @5, @6, @7, @8, @9, @10, @11 }"
+        ": set <u32> / set { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }"
     )?;
 
     let rt1 = Runtime::new();
@@ -810,7 +810,7 @@ fn test_destroy_set_large() -> AnyResult<()> {
 #[test]
 fn test_destroy_option_none() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @?@u32 / @none")?;
+    let typechecked = compile_str(&db, ": ?u32 / none")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -859,7 +859,7 @@ fn test_destroy_option_none() -> AnyResult<()> {
 #[test]
 fn test_destroy_option_some_string() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#": @?@string / some @"test string""#)?;
+    let typechecked = compile_str(&db, r#": ?string / some "test string""#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -908,7 +908,7 @@ fn test_destroy_option_some_string() -> AnyResult<()> {
 #[test]
 fn test_destroy_result_ok_string() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#": @!@string / ok @"success""#)?;
+    let typechecked = compile_str(&db, r#": !string / ok "success""#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -959,7 +959,7 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
 #[test]
 fn test_destroy_map_empty() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": @map<@u32, @u32> / @map{}")?;
+    let typechecked = compile_str(&db, ": map<u32, u32> / map{}")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1008,7 +1008,7 @@ fn test_destroy_map_empty() -> AnyResult<()> {
 #[test]
 fn test_destroy_map_primitives() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, "@map{@10 = @100, @20 = @200, @30 = @300}")?;
+    let typechecked = compile_str(&db, "map{10 = 100, 20 = 200, 30 = 300}")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1057,7 +1057,7 @@ fn test_destroy_map_primitives() -> AnyResult<()> {
 #[test]
 fn test_destroy_map_strings() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#"@map{@"key1" = @"val1", @"key2" = @"val2"}"#)?;
+    let typechecked = compile_str(&db, r#"map{"key1" = "val1", "key2" = "val2"}"#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1106,7 +1106,7 @@ fn test_destroy_map_strings() -> AnyResult<()> {
 #[test]
 fn test_destroy_map_tuples() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, "@map{@(@1, @2) = @(@3, @4), @(@5, @6) = @(@7, @8)}")?;
+    let typechecked = compile_str(&db, "map{(1, 2) = (3, 4), (5, 6) = (7, 8)}")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1155,7 +1155,7 @@ fn test_destroy_map_tuples() -> AnyResult<()> {
 #[test]
 fn test_destroy_map_nested() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#"@map{@"outer" = @[@"inner1", @"inner2"]}"#)?;
+    let typechecked = compile_str(&db, r#"map{"outer" = ["inner1", "inner2"]}"#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1204,12 +1204,12 @@ fn test_destroy_map_nested() -> AnyResult<()> {
 #[test]
 fn test_destroy_map_large() -> AnyResult<()> {
     let db = Database::default();
-    let mut map_literal = String::from("@map{");
+    let mut map_literal = String::from("map{");
     for i in 0..10 {
         if i > 0 {
             map_literal.push_str(", ");
         }
-        map_literal.push_str(&format!("@{} = @{}", i, i * 10));
+        map_literal.push_str(&format!("{} = {}", i, i * 10));
     }
     map_literal.push('}');
 
@@ -1488,7 +1488,7 @@ fn test_destroy_empty_table() -> AnyResult<()> {
 #[test]
 fn test_destroy_table_with_rows() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": {| x: u32, y: u32 |} / {| x, y; @1, @2; @3, @4 |}")?;
+    let typechecked = compile_str(&db, ": {| x: u32, y: u32 |} / {| x, y; 1, 2; 3, 4 |}")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1546,7 +1546,7 @@ fn test_destroy_table_with_rows() -> AnyResult<()> {
 #[test]
 fn test_destroy_table_with_strings() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#": {| name: string |} / {| name; @"Alice"; @"Bob"; @"Charlie" |}"#)?;
+    let typechecked = compile_str(&db, r#": {| name: string |} / {| name; "Alice"; "Bob"; "Charlie" |}"#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);

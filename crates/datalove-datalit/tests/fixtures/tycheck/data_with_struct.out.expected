@@ -1,58 +1,43 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Data": {
-          "value": {
-            "expr": {
-              "expr": {
-                "AnonStruct": {
-                  "fields": [
-                    {
-                      "name": "x",
-                      "value": {
-                        "expr": {
-                          "expr": {
-                            "Int": {
-                              "value": "42"
-                            }
-                          },
-                          "heap": "Local"
-                        },
-                        "type_hint": null
+      "Data": {
+        "value": {
+          "expr": {
+            "AnonStruct": {
+              "fields": [
+                {
+                  "name": "x",
+                  "value": {
+                    "expr": {
+                      "Int": {
+                        "value": "42"
                       }
                     },
-                    {
-                      "name": "y",
-                      "value": {
-                        "expr": {
-                          "expr": {
-                            "String": {
-                              "value": "\"hello\""
-                            }
-                          },
-                          "heap": "Local"
-                        },
-                        "type_hint": null
+                    "type_hint": null
+                  }
+                },
+                {
+                  "name": "y",
+                  "value": {
+                    "expr": {
+                      "String": {
+                        "value": "\"hello\""
                       }
-                    }
-                  ]
+                    },
+                    "type_hint": null
+                  }
                 }
-              },
-              "heap": "Local"
-            },
-            "type_hint": null
-          }
+              ]
+            }
+          },
+          "type_hint": null
         }
-      },
-      "heap": "Local"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "Data"
-    }
+    "type_hint": "Data"
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@data"
+  "root_type": "data"
 }

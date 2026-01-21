@@ -2,8 +2,8 @@
 scriptunit-fragment
 ----------
 
-let neg = @0 - @5
-let pos = @10 - @0
+let neg = 0 - 5
+let pos = 10 - 0
 
 ----------
 scriptunit-expr

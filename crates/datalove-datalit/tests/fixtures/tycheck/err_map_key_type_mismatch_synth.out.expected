@@ -1,61 +1,46 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": [
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "1"
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
+      "Map": {
+        "entries": [
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
               },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "String": {
-                      "value": "\"a\""
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
-              }
+              "type_hint": null
             },
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "String": {
-                      "value": "\"two\""
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
+            "value": {
+              "expr": {
+                "String": {
+                  "value": "\"a\""
+                }
               },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "String": {
-                      "value": "\"b\""
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
-              }
+              "type_hint": null
             }
-          ]
-        }
-      },
-      "heap": "Local"
+          },
+          {
+            "key": {
+              "expr": {
+                "String": {
+                  "value": "\"two\""
+                }
+              },
+              "type_hint": null
+            },
+            "value": {
+              "expr": {
+                "String": {
+                  "value": "\"b\""
+                }
+              },
+              "type_hint": null
+            }
+          }
+        ]
+      }
     },
     "type_hint": null
   },
@@ -66,10 +51,10 @@
         {
           "message": "expected `u32`, found `string`",
           "span": [
-            18,
-            19
+            15,
+            20
           ],
-          "text": "@"
+          "text": "\"two\""
         }
       ],
       "message": "mismatched key types in map"

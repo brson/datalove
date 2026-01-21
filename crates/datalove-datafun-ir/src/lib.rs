@@ -197,8 +197,8 @@ impl std::fmt::Display for IrType {
 
 impl IrType {
     /// Convert from AST type hint to IR type.
-    pub fn from_type_hint<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ast::TypeHintAndHeap<'db>) -> Self {
-        Self::from_type_hint_inner(db, &ty.type_hint(db))
+    pub fn from_type_hint<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ast::TypeHint<'db>) -> Self {
+        Self::from_type_hint_inner(db, ty)
     }
 
     /// Convert from AST TypeHint to IR type.
@@ -246,7 +246,7 @@ impl IrType {
                     .iter()
                     .map(|v| {
                         let name = v.name.text(db).to_string();
-                        let payload = v.payload.map(|p| Self::from_type_hint(db, &p));
+                        let payload = v.payload.as_ref().map(|p| Self::from_type_hint(db, &**p));
                         (name, payload)
                     })
                     .collect();
@@ -302,11 +302,6 @@ impl IrType {
         }
     }
 
-    /// Convert from datalit TypeAndHeap to IR type.
-    fn from_datalit_tyandheap<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::tycheck::TypeAndHeap<'db>) -> Self {
-        Self::from_datalit(db, ty.ty(db))
-    }
-
     /// Convert from datalit typechecker type to IR type.
     pub fn from_datalit<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::tycheck::Type<'db>) -> Self {
         use datalove_datalit::tycheck::Type as DlType;
@@ -332,7 +327,7 @@ impl IrType {
             DlType::AnonTuple(tuple) => {
                 let fields: Vec<_> = tuple.fields
                     .iter()
-                    .map(|f| Self::from_datalit_tyandheap(db, f))
+                    .map(|f| Self::from_datalit(db, f))
                     .collect();
                 if fields.is_empty() {
                     IrType::Unit
@@ -343,7 +338,7 @@ impl IrType {
             DlType::AnonStruct(struct_) => {
                 let fields: Vec<_> = struct_.fields
                     .iter()
-                    .map(|f| (f.name.text(db).to_string(), Self::from_datalit_tyandheap(db, &f.ty)))
+                    .map(|f| (f.name.text(db).to_string(), Self::from_datalit(db, &*f.ty)))
                     .collect();
                 IrType::Struct(fields)
             }
@@ -352,7 +347,7 @@ impl IrType {
                     .iter()
                     .map(|v| {
                         let name = v.name.text(db).to_string();
-                        let payload = v.payload.clone().map(|p| Self::from_datalit_tyandheap(db, &p));
+                        let payload = v.payload.clone().map(|p| Self::from_datalit(db, &*p));
                         (name, payload)
                     })
                     .collect();
@@ -361,28 +356,28 @@ impl IrType {
                 IrType::Enum(variants)
             }
             DlType::List(list) => {
-                let elem = Self::from_datalit_tyandheap(db, &list.element_type);
+                let elem = Self::from_datalit(db, &*list.element_type);
                 IrType::List(Box::new(elem))
             }
             DlType::Set(set) => {
-                let elem = Self::from_datalit_tyandheap(db, &set.element_type);
+                let elem = Self::from_datalit(db, &*set.element_type);
                 IrType::Set(Box::new(elem))
             }
             DlType::Map(map) => {
-                let key = Self::from_datalit_tyandheap(db, &map.key_type);
-                let val = Self::from_datalit_tyandheap(db, &map.value_type);
+                let key = Self::from_datalit(db, &*map.key_type);
+                let val = Self::from_datalit(db, &*map.value_type);
                 IrType::Map(Box::new(key), Box::new(val))
             }
             DlType::Option(opt) => {
-                let inner = Self::from_datalit_tyandheap(db, &opt.inner_type);
+                let inner = Self::from_datalit(db, &*opt.inner_type);
                 IrType::Option(Box::new(inner))
             }
             DlType::Result(res) => {
-                let ok = Self::from_datalit_tyandheap(db, &res.inner_type);
+                let ok = Self::from_datalit(db, &*res.inner_type);
                 IrType::Result(Box::new(ok))
             }
             DlType::Tensor(t) => {
-                let elem = Self::from_datalit_tyandheap(db, &t.element_type);
+                let elem = Self::from_datalit(db, &*t.element_type);
                 IrType::Tensor(Box::new(elem), t.rank)
             }
             DlType::Table(table) => {
@@ -390,7 +385,7 @@ impl IrType {
                     .iter()
                     .map(|c| {
                         let name = c.name.text(db).to_string();
-                        let ty = Self::from_datalit_tyandheap(db, &c.ty);
+                        let ty = Self::from_datalit(db, &*c.ty);
                         (name, Box::new(ty))
                     })
                     .collect();

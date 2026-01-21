@@ -1,5 +1,5 @@
-fun check(n: @u32)
-  if n .< @10
-    let small = @1
+fun check(n: u32)
+  if n .< 10
+    let small = 1
   end if
 end fun

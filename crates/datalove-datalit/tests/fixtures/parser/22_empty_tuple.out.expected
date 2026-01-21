@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonTuple": {
-          "elements": []
-        }
-      },
-      "heap": "Local"
+      "AnonTuple": {
+        "elements": []
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "AnonTuple": {
-          "fields": []
-        }
+      "AnonTuple": {
+        "fields": []
       }
     }
   },

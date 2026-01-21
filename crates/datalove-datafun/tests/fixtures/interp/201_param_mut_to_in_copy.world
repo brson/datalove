@@ -4,16 +4,16 @@ module local/test/main
 
 // Test passing Mut-mode param to In-mode param (Copy type).
 // For Copy types, the callee makes a copy, so this should work.
-fun inner(x: @u32): @bool
-    ret x == @100
+fun inner(x: u32): bool
+    ret x == 100
 end fun
 
-fun outer(mut y: @u32): @bool
+fun outer(mut y: u32): bool
     ret inner(y)
 end fun
 
-fun test(): @bool
-    var n: @u32 = @100
+fun test(): bool
+    var n: u32 = 100
     ret outer(n)
 end fun
 

@@ -7,18 +7,18 @@
           "message": "type mismatch",
           "span": [
             102,
-            103
+            107
           ],
-          "text": "@"
+          "text": "error"
         }
       ],
-      "message": "mismatched types: expected `@!string`, found `error`"
+      "message": "mismatched types: expected `!string`, found `error`"
     }
   ],
   "errors": [
     {
       "actual": "error",
-      "expected": "@!string",
+      "expected": "!string",
       "kind": "TypeMismatch"
     }
   ],

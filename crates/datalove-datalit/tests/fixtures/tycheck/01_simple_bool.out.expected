@@ -1,15 +1,9 @@
 {
   "ast": {
-    "expr": {
-      "expr": "True",
-      "heap": "Local"
-    },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "Bool"
-    }
+    "expr": "True",
+    "type_hint": "Bool"
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@bool"
+  "root_type": "bool"
 }

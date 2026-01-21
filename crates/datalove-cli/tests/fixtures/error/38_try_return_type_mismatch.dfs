@@ -1,4 +1,4 @@
 fun try_result_wrong_return(): u32
-    let x: !@u32 = ok(42)
+    let x: !u32 = ok(42)
     ret x!
 end fun

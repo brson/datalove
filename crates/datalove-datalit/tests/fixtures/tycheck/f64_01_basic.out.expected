@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Float": {
-          "value": "3.14"
-        }
-      },
-      "heap": "Local"
+      "Float": {
+        "value": "3.14"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "F64"
-    }
+    "type_hint": "F64"
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@f64"
+  "root_type": "f64"
 }

@@ -1,1 +1,1 @@
-: @enum Result { Ok(@(@u32, @string)), Err(@string) } / @enum Ok(@(@42, @"success"))
+: enum Result { Ok((u32, string)), Err(string) } / enum Ok((42, "success"))

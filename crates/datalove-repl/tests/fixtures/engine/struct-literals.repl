@@ -1,11 +1,11 @@
-let point = @{x = @10, y = @20}
+let point = {x = 10, y = 20}
 ---
 point
 ---
-let person = @{name = @"Alice", age = @30}
+let person = {name = "Alice", age = 30}
 ---
 person
 ---
-let multifield = @{a = @1, b = @2, c = @3, d = @4}
+let multifield = {a = 1, b = 2, c = 3, d = 4}
 ---
 multifield

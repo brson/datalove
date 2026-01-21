@@ -10,7 +10,6 @@
             "elements": [
               {
                 "expr": {
-                  "heap": "Omitted",
                   "kind": "Int",
                   "type_hint": null,
                   "value": "1"
@@ -18,7 +17,6 @@
               },
               {
                 "expr": {
-                  "heap": "Omitted",
                   "kind": "Int",
                   "type_hint": null,
                   "value": "2"
@@ -26,16 +24,13 @@
               },
               {
                 "expr": {
-                  "heap": "Omitted",
                   "kind": "Int",
                   "type_hint": null,
                   "value": "3"
                 }
               }
             ],
-            "heap": "Local",
-            "kind": "AnonTuple",
-            "type_hint": null
+            "kind": "Tuple"
           }
         }
       }

@@ -20,4 +20,4 @@ scriptunit-expr
 ----------
 
 // Can't call bad_add due to module error.
-bad_add(@5)
+bad_add(5)

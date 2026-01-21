@@ -1,1 +1,1 @@
-: map<u32, [string]> / @map{@1 = @[@"a", @"b"]}
+: map<u32, [string]> / map{1 = ["a", "b"]}

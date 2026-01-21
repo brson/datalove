@@ -2,4 +2,4 @@ require module sys/std/bool
 
 import bool.xor
 
-let output = (xor(@true, @true), xor(@true, @false), xor(@false, @true), xor(@false, @false))
+let output = (xor(true, true), xor(true, false), xor(false, true), xor(false, false))

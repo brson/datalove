@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 4294967295u32\n    v1 = const 1u32\n    v2 = call f0(v0, v1)\n    debuglog v2\n    drop v2\n    unit_end\n\nfn add_checked(p0, p1):\nblock0:\n    v0, v1 = add.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = const \"arithmetic overflow\"\n    v3 = error_from v2\n    v4 = err v3\n    return v4\nblock2:\n    v5 = ok v0\n    return v5\nexports:\n    add_checked = f0\n",
             ),
             ir_match: true,
-            interp_output: "@error @\"arithmetic overflow\"\n",
-            aot_output: "@error @\"arithmetic overflow\"\n",
+            interp_output: "error \"arithmetic overflow\"\n",
+            aot_output: "error \"arithmetic overflow\"\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

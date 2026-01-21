@@ -3,9 +3,9 @@ scriptunit-fragment
 ----------
 
 // Test nested if-bindings.
-let outer: ?int = some :int/@10
-let inner: ?int = some :int/@20
-var result: int = :int/@0
+let outer: ?int = some :int/10
+let inner: ?int = some :int/20
+var result: int = :int/0
 if outer |a|
     if inner |b|
         set result = a + b

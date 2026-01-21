@@ -1,9 +1,9 @@
 [
   {
-    "input": "fun double(x: @u32): @u32\n  ret x + x\nend fun",
+    "input": "fun double(x: u32): u32\n  ret x + x\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun double(x: @u32): @u32\n  ret x + x\nend fun"
+        "ScriptStatement": "fun double(x: u32): u32\n  ret x + x\nend fun"
       }
     },
     "eval": {
@@ -12,10 +12,10 @@
     "environment": []
   },
   {
-    "input": "double(@21)",
+    "input": "double(21)",
     "parse": {
       "Command": {
-        "Expression": "double(@21)"
+        "Expression": "double(21)"
       }
     },
     "eval": {
@@ -24,10 +24,10 @@
     "environment": []
   },
   {
-    "input": "fun add(a: @u32, b: @u32): @u32\n  ret a + b\nend fun",
+    "input": "fun add(a: u32, b: u32): u32\n  ret a + b\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun add(a: @u32, b: @u32): @u32\n  ret a + b\nend fun"
+        "ScriptStatement": "fun add(a: u32, b: u32): u32\n  ret a + b\nend fun"
       }
     },
     "eval": {
@@ -36,10 +36,10 @@
     "environment": []
   },
   {
-    "input": "add(@10, @20)",
+    "input": "add(10, 20)",
     "parse": {
       "Command": {
-        "Expression": "add(@10, @20)"
+        "Expression": "add(10, 20)"
       }
     },
     "eval": {
@@ -48,10 +48,10 @@
     "environment": []
   },
   {
-    "input": "fun get_five(): @u32\n  ret @5\nend fun",
+    "input": "fun get_five(): u32\n  ret 5\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun get_five(): @u32\n  ret @5\nend fun"
+        "ScriptStatement": "fun get_five(): u32\n  ret 5\nend fun"
       }
     },
     "eval": {
@@ -78,7 +78,7 @@
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "u32",
-        "value": "@5"
+        "value": "5"
       }
     },
     "environment": [

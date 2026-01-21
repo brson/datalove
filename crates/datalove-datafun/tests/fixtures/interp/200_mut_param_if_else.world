@@ -4,24 +4,24 @@ module local/test/main
 
 // Test mut param in if/else branches.
 // Can read mut param in condition and modify in branches.
-fun conditional_set(mut x: @u32, cond: @bool): @bool
+fun conditional_set(mut x: u32, cond: bool): bool
     if cond
-        set x = @42
+        set x = 42
     else
-        set x = @99
+        set x = 99
     end if
-    ret @true
+    ret true
 end fun
 
-fun test_true(): @u32
-    var n: @u32 = @0
-    let _ok: @bool = conditional_set(n, @true)
+fun test_true(): u32
+    var n: u32 = 0
+    let _ok: bool = conditional_set(n, true)
     ret n
 end fun
 
-fun test_false(): @u32
-    var n: @u32 = @0
-    let _ok: @bool = conditional_set(n, @false)
+fun test_false(): u32
+    var n: u32 = 0
+    let _ok: bool = conditional_set(n, false)
     ret n
 end fun
 

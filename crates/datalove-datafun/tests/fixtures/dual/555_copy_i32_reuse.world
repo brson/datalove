@@ -7,7 +7,7 @@ fun use_i32(x: i32): i32
     ret x
 end fun
 
-let x: i32 = @-42
+let x: i32 = -42
 debuglog use_i32(x)
 debuglog use_i32(x)
 debuglog x

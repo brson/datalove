@@ -1,11 +1,11 @@
-fun nested_loops(): @u32
-  let total = @0
+fun nested_loops(): u32
+  let total = 0
   loop
     loop
-      let total = total + @1
+      let total = total + 1
       break
     end loop
-    if total >= @3
+    if total >= 3
       break
     end if
   end loop

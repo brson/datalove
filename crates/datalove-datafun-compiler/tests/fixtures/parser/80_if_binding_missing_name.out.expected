@@ -4,7 +4,6 @@
       {
         "condition": {
           "expr": {
-            "heap": "Omitted",
             "kind": "True",
             "type_hint": null
           }

@@ -61,7 +61,7 @@ end fun
 fun is_power_of_two(self: usize): bool
   let zero = (: usize / 0)
   if self == zero
-    ret @false
+    ret false
   else
     ret count_ones(self) == 1
   end if
@@ -71,7 +71,7 @@ end fun
 fun ilog2(self: usize): ?u32
   let zero = (: usize / 0)
   if self == zero
-    ret @none
+    ret none
   else
     ret some icall sub_wrapping_u32(icall sub_wrapping_u32(bits(), 1), leading_zeros(self))
   end if
@@ -138,7 +138,7 @@ fun neg_checked(self: usize): ?usize
   if self == zero
     ret some zero
   else
-    ret @none
+    ret none
   end if
 end fun
 
@@ -161,7 +161,7 @@ end fun
 fun rem_checked(self: usize, other: usize): ?usize
   let zero = (: usize / 0)
   if other == zero
-    ret @none
+    ret none
   else
     ret some icall rem_usize(self, other)
   end if
@@ -222,7 +222,7 @@ end fun
 // Returns none if shift >= bits().
 fun shift_left(self: usize, n: u32): ?usize
   if n >= bits()
-    ret @none
+    ret none
   else
     ret some icall shl_usize(self, n)
   end if
@@ -231,7 +231,7 @@ end fun
 // Returns none if shift >= bits().
 fun shift_right(self: usize, n: u32): ?usize
   if n >= bits()
-    ret @none
+    ret none
   else
     ret some icall shr_usize(self, n)
   end if

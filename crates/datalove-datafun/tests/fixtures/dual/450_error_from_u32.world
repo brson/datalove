@@ -3,5 +3,5 @@ scriptunit-fragment
 ----------
 
 // Create Error from u32.
-let e: error = @error @42
+let e: error = error 42
 debuglog e

@@ -4,14 +4,14 @@ module local/test/main
 
 // Test passing In-mode param to Mut-mode param.
 // Should work - In owns the value, can grant mutable access.
-fun inner(mut x: @u32): @bool
-    set x = @42
-    ret @true
+fun inner(mut x: u32): bool
+    set x = 42
+    ret true
 end fun
 
-fun outer(y: @u32): @bool
+fun outer(y: u32): bool
     // y is owned (In mode), pass to mut
-    var temp: @u32 = y
+    var temp: u32 = y
     ret inner(temp)
 end fun
 
@@ -26,5 +26,5 @@ import main.outer
 scriptunit-expr
 ----------
 
-outer(@100)
+outer(100)
 

@@ -6,10 +6,10 @@
         {
           "message": "type mismatch",
           "span": [
-            38,
-            44
+            36,
+            41
           ],
-          "text": "a + @0"
+          "text": "a + 0"
         }
       ],
       "message": "mismatched types: expected `bool`, found `int`"
@@ -29,11 +29,11 @@
       "params": [
         {
           "name": "a",
-          "type": "@u32"
+          "type": "u32"
         },
         {
           "name": "b",
-          "type": "@u32"
+          "type": "u32"
         }
       ],
       "return_type": "bool"

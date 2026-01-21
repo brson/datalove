@@ -1,42 +1,30 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonTuple": {
-          "elements": [
-            {
-              "expr": {
-                "expr": "True",
-                "heap": "Local"
-              },
-              "type_hint": null
+      "AnonTuple": {
+        "elements": [
+          {
+            "expr": "True",
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "42"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "42"
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Float": {
+                "value": "3.14"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Float": {
-                    "value": "3.14"
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": null
-            }
-          ]
-        }
-      },
-      "heap": "Local"
+            "type_hint": null
+          }
+        ]
+      }
     },
     "type_hint": null
   },
@@ -44,11 +32,10 @@
   "errors": [],
   "root_type": {
     "fields": [
-      "@bool",
-      "@u32",
-      "@f32"
+      "bool",
+      "u32",
+      "f32"
     ],
-    "heap": "@",
     "kind": "AnonTuple"
   }
 }

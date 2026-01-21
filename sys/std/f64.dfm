@@ -40,12 +40,12 @@ end fun
 
 fun is_finite(self: f64): bool
   if is_nan(self)
-    ret @false
+    ret false
   else
     if is_infinite(self)
-      ret @false
+      ret false
     else
-      ret @true
+      ret true
     end if
   end if
 end fun
@@ -53,23 +53,23 @@ end fun
 fun is_normal(self: f64): bool
   if is_finite(self)
     if is_zero(self)
-      ret @false
+      ret false
     else
       if is_subnormal(self)
-        ret @false
+        ret false
       else
-        ret @true
+        ret true
       end if
     end if
   else
-    ret @false
+    ret false
   end if
 end fun
 
 fun is_subnormal(self: f64): bool
   if is_finite(self)
     if is_zero(self)
-      ret @false
+      ret false
     else
       let bits = icall f64_to_bits(self)
       let exponent_mask = (: u64 / 0x7FF0000000000000)
@@ -78,7 +78,7 @@ fun is_subnormal(self: f64): bool
       ret exponent == zero
     end if
   else
-    ret @false
+    ret false
   end if
 end fun
 

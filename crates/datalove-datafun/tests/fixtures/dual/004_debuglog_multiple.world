@@ -2,6 +2,6 @@
 scriptunit-fragment
 ----------
 
-debuglog @1
-debuglog @2
-debuglog @3
+debuglog 1
+debuglog 2
+debuglog 3

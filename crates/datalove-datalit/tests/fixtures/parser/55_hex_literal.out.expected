@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Hex": {
-          "value": "0xABABABAB"
-        }
-      },
-      "heap": "Local"
+      "Hex": {
+        "value": "0xABABABAB"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "F32"
-    }
+    "type_hint": "F32"
   },
   "diagnostics": []
 }

@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "List": {
-          "elements": []
-        }
-      },
-      "heap": "Local"
+      "List": {
+        "elements": []
+      }
     },
     "type_hint": null
   },
@@ -15,10 +12,8 @@
   "root_type": {
     "element_type": {
       "fields": [],
-      "heap": "@",
       "kind": "AnonTuple"
     },
-    "heap": "@",
     "kind": "List"
   }
 }

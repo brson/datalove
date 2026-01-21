@@ -3,4 +3,4 @@ scriptunit-expr
 ----------
 
 // Create Error from a tuple of bigints.
-@error (@1, @2)
+error (1, 2)

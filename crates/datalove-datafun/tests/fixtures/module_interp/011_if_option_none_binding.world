@@ -10,6 +10,6 @@ fun main(): u32
     if test() |val|
         ret val
     else
-        ret @999
+        ret 999
     end if
 end fun

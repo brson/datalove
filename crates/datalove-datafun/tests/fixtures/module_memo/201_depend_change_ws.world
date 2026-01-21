@@ -1,8 +1,8 @@
 ----------
 module local/test/b
 ----------
-fun get_value(): @i32
-  ret @1
+fun get_value(): i32
+  ret 1
 end fun
 
 ----------
@@ -11,13 +11,13 @@ module local/test/a
 require module local/test/b
 import b.get_value
 
-fun foo(): @i32
+fun foo(): i32
   ret get_value()
 end fun
 
 ----------
 module-change-ws local/test/b
 ----------
-fun get_value():  @i32
-  ret  @1
+fun get_value():  i32
+  ret  1
 end fun

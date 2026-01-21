@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Int": {
-          "value": "4294967295"
-        }
-      },
-      "heap": "Local"
+      "Int": {
+        "value": "4294967295"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "U32"
-    }
+    "type_hint": "U32"
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@u32"
+  "root_type": "u32"
 }

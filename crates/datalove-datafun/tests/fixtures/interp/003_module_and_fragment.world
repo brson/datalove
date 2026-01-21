@@ -10,4 +10,4 @@ end fun
 scriptunit-fragment
 ----------
 
-let y = @10
+let y = 10

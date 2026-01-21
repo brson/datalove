@@ -1,2 +1,2 @@
-fun get_x(s: {x: @u32, y: @u32}): @u32
+fun get_x(s: {x: u32, y: u32}): u32
 end fun

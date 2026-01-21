@@ -10,7 +10,6 @@
             "elements": [
               {
                 "expr": {
-                  "heap": "Local",
                   "kind": "Int",
                   "type_hint": null,
                   "value": "42"
@@ -18,7 +17,6 @@
               },
               {
                 "expr": {
-                  "heap": "Local",
                   "kind": "Int",
                   "type_hint": null,
                   "value": "99"

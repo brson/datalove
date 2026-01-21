@@ -3,11 +3,11 @@ module local/test/ops
 ----------
 
 fun inc(x: u32): !u32
-    ret ok (x +! @1)
+    ret ok (x +! 1)
 end fun
 
 fun dec(x: u32): !u32
-    ret ok (x -! @1)
+    ret ok (x -! 1)
 end fun
 
 fun square(x: u32): !u32
@@ -23,6 +23,6 @@ import ops.inc
 import ops.dec
 import ops.square
 
-debuglog inc(@5)
-debuglog dec(@5)
-debuglog square(@5)
+debuglog inc(5)
+debuglog dec(5)
+debuglog square(5)

@@ -1,4 +1,4 @@
-let a = @42
-let b = @3.14
-let c = @true
+let a = 42
+let b = 3.14
+let c = true
 let output = (a, b, c)

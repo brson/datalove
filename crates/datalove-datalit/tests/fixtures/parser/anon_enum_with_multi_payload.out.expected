@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "expected '/' after type hint"
-        }
-      },
-      "heap": "Omitted"
+      "ParseError": {
+        "message": "expected '/' after type hint"
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "ParseError": {
-          "message": "expected {} after enum keyword"
-        }
+      "ParseError": {
+        "message": "expected {} after enum keyword"
       }
     }
   },
@@ -24,8 +18,8 @@
         {
           "message": "expected '{' after 'enum'",
           "span": [
-            3,
-            7
+            2,
+            6
           ],
           "text": "enum"
         }
@@ -38,8 +32,8 @@
         {
           "message": "expected '/' separator between type hint and expression",
           "span": [
-            8,
-            14
+            7,
+            13
           ],
           "text": "Result"
         }

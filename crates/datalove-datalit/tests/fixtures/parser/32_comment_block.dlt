@@ -1,1 +1,1 @@
-/* block comment */ @"hello"
+/* block comment */ "hello"

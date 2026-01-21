@@ -79,17 +79,13 @@ pub enum Type<'db> {
 }
 
 #[salsa::tracked]
-pub struct TypeAndHeap<'db> {
-    pub heap: datalove_datalit::ast::Heap,
-    #[returns(ref)]
-    pub ty: Type<'db>,
-}
-
-#[salsa::tracked]
 pub struct TypeFunction<'db> {
-    pub param_types: Vec<TypeAndHeap<'db>>,
+    #[tracked]
+    #[returns(ref)]
+    pub param_types: Vec<Type<'db>>,
     pub param_modes: Vec<ParamMode>,
-    pub return_type: TypeAndHeap<'db>,
+    #[tracked]
+    pub return_type: Type<'db>,
 }
 
 /// Type error representation.
@@ -106,7 +102,6 @@ pub enum TypeError {
     TryTypeMismatch { operator: String, actual_type: String },
     TryReturnTypeMismatch { operator: String, return_type: String },
     IntOutOfRange,
-    HeapMismatch { expected_heap: String, actual_heap: String },
     MissingField(String),
     ExtraField(String),
     FieldOrderMismatch,
@@ -282,20 +277,20 @@ pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ty
 
         // Aggregates are copy if all fields are copy.
         DatalitType::AnonTuple(tuple) => {
-            tuple.fields.iter().all(|f| is_copy_type(db, f.ty(db)))
+            tuple.fields.iter().all(|f| is_copy_type(db, f))
         }
         DatalitType::AnonStruct(struct_ty) => {
-            struct_ty.fields.iter().all(|f| is_copy_type(db, f.ty.ty(db)))
+            struct_ty.fields.iter().all(|f| is_copy_type(db, &f.ty))
         }
         DatalitType::AnonEnum(enum_ty) => {
             enum_ty.variants.iter().all(|v| {
-                v.payload.as_ref().map_or(true, |p| is_copy_type(db, p.ty(db)))
+                v.payload.as_ref().map_or(true, |p| is_copy_type(db, p))
             })
         }
 
         // Option/Result are copy if inner type is copy.
-        DatalitType::Option(opt) => is_copy_type(db, opt.inner_type.ty(db)),
-        DatalitType::Result(res) => is_copy_type(db, res.inner_type.ty(db)),
+        DatalitType::Option(opt) => is_copy_type(db, &opt.inner_type),
+        DatalitType::Result(res) => is_copy_type(db, &res.inner_type),
 
         // Tables are not copy (they contain heap-allocated data).
         DatalitType::Table(_) => false,
@@ -307,9 +302,6 @@ impl From<datalove_datalit::tycheck::TypeError> for TypeError {
         match err {
             datalove_datalit::tycheck::TypeError::TypeMismatch { expected, actual } => {
                 TypeError::TypeMismatch { expected, actual }
-            }
-            datalove_datalit::tycheck::TypeError::HeapMismatch { expected_heap, actual_heap } => {
-                TypeError::HeapMismatch { expected_heap, actual_heap }
             }
             datalove_datalit::tycheck::TypeError::CannotSynthesize => TypeError::CannotSynthesize,
             datalove_datalit::tycheck::TypeError::MissingField(name) => TypeError::MissingField(name),
@@ -353,7 +345,7 @@ pub struct TypecheckResult<'db> {
 
     /// Expression types, indexed by ExprFun ID.
     #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub expr_types: Vec<Option<Type<'db>>>,
 
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     #[returns(ref)]
@@ -374,7 +366,7 @@ pub struct ExprTypecheckResult<'db> {
     pub errors: Vec<TypeErrorEntry<'db>>,
     /// Expression types, indexed by ExprFun ID.
     #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub expr_types: Vec<Option<Type<'db>>>,
 }
 
 /// Kind of script unit for batch typechecking (with parsed content).
@@ -472,7 +464,7 @@ pub struct UnitTypecheckResultTracked<'db> {
     pub errors: Vec<TypeErrorEntry<'db>>,
     /// Expression types, indexed by ExprFun ID.
     #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub expr_types: Vec<Option<Type<'db>>>,
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     #[returns(ref)]
     pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
@@ -550,7 +542,7 @@ pub struct SingleModuleTypecheckResult<'db> {
 
     /// Exported type aliases.
     #[returns(ref)]
-    pub exported_type_aliases: Vec<(InternedText<'db>, TypeAndHeap<'db>)>,
+    pub exported_type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
 
     /// Imported functions: (local_name, source_module_id, source_name).
     #[returns(ref)]
@@ -558,7 +550,7 @@ pub struct SingleModuleTypecheckResult<'db> {
 
     /// Expression types for this module.
     #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub expr_types: Vec<Option<Type<'db>>>,
 
     /// Resolved call targets for this module.
     #[returns(ref)]
@@ -577,7 +569,7 @@ pub struct ModuleExports<'db> {
 
     /// Type aliases as a vector of (name, type) pairs.
     #[returns(ref)]
-    pub type_aliases: Vec<(InternedText<'db>, TypeAndHeap<'db>)>,
+    pub type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
 }
 
 /// Imported functions for a module.
@@ -614,7 +606,7 @@ pub struct ModuleGraphTypecheckResult<'db> {
     /// Indexed by ExprFun salsa ID, contains types for all expressions
     /// across all modules in the graph.
     #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub expr_types: Vec<Option<Type<'db>>>,
 
     /// Resolved call targets from all modules, combined.
     ///

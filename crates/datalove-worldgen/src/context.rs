@@ -1,14 +1,14 @@
 //! Generation context for tracking scope during worldfile generation.
 
 use std::collections::HashSet;
-use datalove_datalit::ast::{Heap, TypeHintAndHeap};
+use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
 
 /// A variable in scope.
 #[derive(Clone)]
 pub struct Variable<'db> {
     pub name: String,
-    pub type_hint: TypeHintAndHeap<'db>,
+    pub type_hint: TypeHint<'db>,
     pub is_mutable: bool,
 }
 
@@ -16,15 +16,15 @@ pub struct Variable<'db> {
 #[derive(Clone)]
 pub struct FunctionSig<'db> {
     pub name: String,
-    pub params: Vec<(String, TypeHintAndHeap<'db>)>,
-    pub return_type: Option<TypeHintAndHeap<'db>>,
+    pub params: Vec<(String, TypeHint<'db>)>,
+    pub return_type: Option<TypeHint<'db>>,
 }
 
 /// A type alias.
 #[derive(Clone)]
 pub struct TypeAlias<'db> {
     pub name: String,
-    pub type_hint: TypeHintAndHeap<'db>,
+    pub type_hint: TypeHint<'db>,
 }
 
 /// A module in the worldfile.
@@ -65,7 +65,7 @@ pub struct GenContext<'db> {
     pub imported_functions: Vec<FunctionSig<'db>>,
 
     /// Expected return type for current function.
-    pub return_type: Option<TypeHintAndHeap<'db>>,
+    pub return_type: Option<TypeHint<'db>>,
 
     /// Current loop nesting depth.
     pub loop_depth: usize,
@@ -186,22 +186,21 @@ fn extract_function_index(name: &str) -> Option<usize> {
 impl<'db> GenContext<'db> {
     /// Find variables of a specific type that are not consumed.
     ///
-    /// For global heap types, consumed variables are filtered out because
-    /// they've already been moved and can't be used again.
+    /// Consumed variables are filtered out because they've already been
+    /// moved and can't be used again.
     pub fn variables_of_type(
         &self,
         db: &'db dyn salsa::Database,
-        type_hint: TypeHintAndHeap<'db>,
+        type_hint: TypeHint<'db>,
     ) -> Vec<&Variable<'db>> {
-        let is_global = type_hint.heap(db) == Heap::Global;
         self.variables
             .iter()
             .filter(|v| {
-                if !types_match(db, v.type_hint, type_hint) {
+                if !types_match(db, v.type_hint.clone(), type_hint.clone()) {
                     return false;
                 }
-                // Filter out consumed variables for global heap types.
-                if is_global && self.is_consumed(&v.name) {
+                // Filter out consumed variables.
+                if self.is_consumed(&v.name) {
                     return false;
                 }
                 true
@@ -210,15 +209,15 @@ impl<'db> GenContext<'db> {
     }
 
     /// Find mutable variables that are not consumed.
-    pub fn mutable_variables(&self, db: &'db dyn salsa::Database) -> Vec<&Variable<'db>> {
+    pub fn mutable_variables(&self) -> Vec<&Variable<'db>> {
         self.variables
             .iter()
             .filter(|v| {
                 if !v.is_mutable {
                     return false;
                 }
-                // Filter out consumed variables for global heap types.
-                if v.type_hint.heap(db) == Heap::Global && self.is_consumed(&v.name) {
+                // Filter out consumed variables.
+                if self.is_consumed(&v.name) {
                     return false;
                 }
                 true
@@ -238,24 +237,13 @@ impl<'db> Default for GenContext<'db> {
     }
 }
 
-/// Check if two TypeHintAndHeap values match (same heap and type structure).
+/// Check if two TypeHint values match (same type structure).
 pub fn types_match<'db>(
     db: &'db dyn salsa::Database,
-    a: TypeHintAndHeap<'db>,
-    b: TypeHintAndHeap<'db>,
+    a: TypeHint<'db>,
+    b: TypeHint<'db>,
 ) -> bool {
-    // Salsa tracked structs have identity semantics, so we compare the underlying values.
-    a.heap(db) == b.heap(db) && type_hints_equal(db, a.type_hint(db), b.type_hint(db))
-}
-
-/// Compare two TypeHint values for structural equality.
-fn type_hints_equal<'db>(
-    db: &'db dyn salsa::Database,
-    a: datalove_datalit::ast::TypeHint<'db>,
-    b: datalove_datalit::ast::TypeHint<'db>,
-) -> bool {
-    use datalove_datalit::ast::TypeHint;
-    match (a, b) {
+    match (&a, &b) {
         (TypeHint::Bool, TypeHint::Bool) => true,
         (TypeHint::U8, TypeHint::U8) => true,
         (TypeHint::I8, TypeHint::I8) => true,
@@ -274,36 +262,36 @@ fn type_hints_equal<'db>(
         (TypeHint::Data, TypeHint::Data) => true,
         (TypeHint::Error, TypeHint::Error) => true,
         (TypeHint::List(la), TypeHint::List(lb)) => {
-            types_match(db, la.element_type, lb.element_type)
+            types_match(db, (*la.element_type).clone(), (*lb.element_type).clone())
         }
         (TypeHint::Option(oa), TypeHint::Option(ob)) => {
-            types_match(db, oa.inner_type, ob.inner_type)
+            types_match(db, (*oa.inner_type).clone(), (*ob.inner_type).clone())
         }
         (TypeHint::Result(ra), TypeHint::Result(rb)) => {
-            types_match(db, ra.inner_type, rb.inner_type)
+            types_match(db, (*ra.inner_type).clone(), (*rb.inner_type).clone())
         }
         (TypeHint::Map(ma), TypeHint::Map(mb)) => {
-            types_match(db, ma.key_type, mb.key_type)
-                && types_match(db, ma.value_type, mb.value_type)
+            types_match(db, (*ma.key_type).clone(), (*mb.key_type).clone())
+                && types_match(db, (*ma.value_type).clone(), (*mb.value_type).clone())
         }
         (TypeHint::Set(sa), TypeHint::Set(sb)) => {
-            types_match(db, sa.element_type, sb.element_type)
+            types_match(db, (*sa.element_type).clone(), (*sb.element_type).clone())
         }
         (TypeHint::AnonTuple(ta), TypeHint::AnonTuple(tb)) => {
             ta.fields.len() == tb.fields.len()
                 && ta.fields.iter().zip(tb.fields.iter())
-                    .all(|(a, b)| types_match(db, *a, *b))
+                    .all(|(a, b)| types_match(db, a.clone(), b.clone()))
         }
         (TypeHint::AnonStruct(sa), TypeHint::AnonStruct(sb)) => {
             sa.fields.len() == sb.fields.len()
                 && sa.fields.iter().zip(sb.fields.iter())
                     .all(|(fa, fb)| {
                         fa.name.as_str(db) == fb.name.as_str(db)
-                            && types_match(db, fa.type_hint, fb.type_hint)
+                            && types_match(db, (*fa.type_hint).clone(), (*fb.type_hint).clone())
                     })
         }
         (TypeHint::Tensor(ta), TypeHint::Tensor(tb)) => {
-            ta.rank == tb.rank && types_match(db, ta.element_type, tb.element_type)
+            ta.rank == tb.rank && types_match(db, (*ta.element_type).clone(), (*tb.element_type).clone())
         }
         (TypeHint::Alias(na), TypeHint::Alias(nb)) => {
             na.as_str(db) == nb.as_str(db)
@@ -315,7 +303,6 @@ fn type_hints_equal<'db>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use datalove_datalit::ast::{Heap, TypeHint, TypeHintAndHeap};
     use datalove_datalit::Database;
 
     #[test]
@@ -326,9 +313,7 @@ mod tests {
 
     #[salsa::tracked]
     fn test_types_match_same_inner<'db>(db: &'db dyn salsa::Database) {
-        let ty1 = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
-        let ty2 = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
-        assert!(types_match(db, ty1, ty2), "Same types should match");
+        assert!(types_match(db, TypeHint::U32, TypeHint::U32), "Same types should match");
     }
 
     #[test]
@@ -339,22 +324,7 @@ mod tests {
 
     #[salsa::tracked]
     fn test_types_match_different_type_inner<'db>(db: &'db dyn salsa::Database) {
-        let ty1 = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
-        let ty2 = TypeHintAndHeap::new(db, Heap::Local, TypeHint::I32);
-        assert!(!types_match(db, ty1, ty2), "Different types should not match");
-    }
-
-    #[test]
-    fn test_types_match_different_heap() {
-        let db = Database::default();
-        test_types_match_different_heap_inner(&db);
-    }
-
-    #[salsa::tracked]
-    fn test_types_match_different_heap_inner<'db>(db: &'db dyn salsa::Database) {
-        let ty1 = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
-        let ty2 = TypeHintAndHeap::new(db, Heap::Global, TypeHint::U32);
-        assert!(!types_match(db, ty1, ty2), "Different heaps should not match");
+        assert!(!types_match(db, TypeHint::U32, TypeHint::I32), "Different types should not match");
     }
 
     #[test]
@@ -365,40 +335,36 @@ mod tests {
 
     #[salsa::tracked]
     fn test_variables_of_type_inner<'db>(db: &'db dyn salsa::Database) {
-        let ty_u32 = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
-        let ty_i32 = TypeHintAndHeap::new(db, Heap::Local, TypeHint::I32);
-        let ty_bool = TypeHintAndHeap::new(db, Heap::Local, TypeHint::Bool);
-
         let mut ctx = GenContext::new();
         ctx.variables.push(Variable {
             name: "x".to_string(),
-            type_hint: ty_u32,
+            type_hint: TypeHint::U32,
             is_mutable: false,
         });
         ctx.variables.push(Variable {
             name: "y".to_string(),
-            type_hint: ty_i32,
+            type_hint: TypeHint::I32,
             is_mutable: false,
         });
         ctx.variables.push(Variable {
             name: "z".to_string(),
-            type_hint: ty_u32,
+            type_hint: TypeHint::U32,
             is_mutable: true,
         });
 
         // Should find both u32 variables.
-        let u32_vars = ctx.variables_of_type(db, ty_u32);
+        let u32_vars = ctx.variables_of_type(db, TypeHint::U32);
         assert_eq!(u32_vars.len(), 2);
         assert!(u32_vars.iter().any(|v| v.name == "x"));
         assert!(u32_vars.iter().any(|v| v.name == "z"));
 
         // Should find one i32 variable.
-        let i32_vars = ctx.variables_of_type(db, ty_i32);
+        let i32_vars = ctx.variables_of_type(db, TypeHint::I32);
         assert_eq!(i32_vars.len(), 1);
         assert_eq!(i32_vars[0].name, "y");
 
         // Should find no bool variables.
-        let bool_vars = ctx.variables_of_type(db, ty_bool);
+        let bool_vars = ctx.variables_of_type(db, TypeHint::Bool);
         assert!(bool_vars.is_empty());
     }
 
@@ -410,26 +376,25 @@ mod tests {
 
     #[salsa::tracked]
     fn test_mutable_variables_inner<'db>(db: &'db dyn salsa::Database) {
-        let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
-
+        let _ = db;
         let mut ctx = GenContext::new();
         ctx.variables.push(Variable {
             name: "immut".to_string(),
-            type_hint: ty,
+            type_hint: TypeHint::U32,
             is_mutable: false,
         });
         ctx.variables.push(Variable {
             name: "mut1".to_string(),
-            type_hint: ty,
+            type_hint: TypeHint::U32,
             is_mutable: true,
         });
         ctx.variables.push(Variable {
             name: "mut2".to_string(),
-            type_hint: ty,
+            type_hint: TypeHint::U32,
             is_mutable: true,
         });
 
-        let muts = ctx.mutable_variables(db);
+        let muts = ctx.mutable_variables();
         assert_eq!(muts.len(), 2);
         assert!(muts.iter().any(|v| v.name == "mut1"));
         assert!(muts.iter().any(|v| v.name == "mut2"));
@@ -443,22 +408,21 @@ mod tests {
 
     #[salsa::tracked]
     fn test_callable_functions_shadowing_inner<'db>(db: &'db dyn salsa::Database) {
-        let ty = TypeHintAndHeap::new(db, Heap::Local, TypeHint::U32);
-
+        let _ = db;
         let mut ctx = GenContext::new();
 
         // Local function named "compute".
         ctx.functions.push(FunctionSig {
             name: "compute".to_string(),
             params: vec![],
-            return_type: Some(ty),
+            return_type: Some(TypeHint::U32),
         });
 
         // Imported function also named "compute" (should be shadowed).
         ctx.imported_functions.push(FunctionSig {
             name: "compute".to_string(),
-            params: vec![("x".to_string(), ty)],
-            return_type: Some(ty),
+            params: vec![("x".to_string(), TypeHint::U32)],
+            return_type: Some(TypeHint::U32),
         });
 
         // Another imported function with different name.

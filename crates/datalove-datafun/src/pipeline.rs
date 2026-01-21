@@ -1415,20 +1415,20 @@ mod tests {
 
         // Create first script context.
         let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
-        let result1 = ctx1.eval_fragment("let x = @10");
+        let result1 = ctx1.eval_fragment("let x = 10");
         assert!(matches!(result1.typecheck, TypecheckResult::Success), "ctx1 fragment should typecheck");
 
         // Create second script context from the same compiled modules.
         let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
-        let result2 = ctx2.eval_fragment("let y = @20");
+        let result2 = ctx2.eval_fragment("let y = 20");
         assert!(matches!(result2.typecheck, TypecheckResult::Success), "ctx2 fragment should typecheck");
 
         // Each context should have independent state.
         let expr1 = ctx1.eval_expr("x");
-        assert_eq!(expr1.output, "@10");
+        assert_eq!(expr1.output, "10");
 
         let expr2 = ctx2.eval_expr("y");
-        assert_eq!(expr2.output, "@20");
+        assert_eq!(expr2.output, "20");
 
         // ctx1 should not see y, ctx2 should not see x.
         let bad1 = ctx1.eval_expr("y");
@@ -1454,15 +1454,15 @@ mod tests {
         let mut ctx_b = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
 
         // Define simple identity functions in each context.
-        let r1 = ctx_a.eval_fragment("fun id_a(n: @u32): @u32\n  ret n\nend fun");
+        let r1 = ctx_a.eval_fragment("fun id_a(n: u32): u32\n  ret n\nend fun");
         assert!(matches!(r1.typecheck, TypecheckResult::Success), "ctx_a fn def failed: {:?}", r1.typecheck);
 
-        let r2 = ctx_b.eval_fragment("fun id_b(n: @u32): @u32\n  ret n\nend fun");
+        let r2 = ctx_b.eval_fragment("fun id_b(n: u32): u32\n  ret n\nend fun");
         assert!(matches!(r2.typecheck, TypecheckResult::Success), "ctx_b fn def failed: {:?}", r2.typecheck);
 
         // Interleave: A defines values, B defines values.
-        let _ = ctx_a.eval_fragment("let a1: @u32 = @5");
-        let _ = ctx_b.eval_fragment("let b1: @u32 = @10");
+        let _ = ctx_a.eval_fragment("let a1: u32 = 5");
+        let _ = ctx_b.eval_fragment("let b1: u32 = 10");
 
         // A uses its function, B uses its function.
         let _ = ctx_a.eval_fragment("let a2 = id_a(a1)");
@@ -1470,16 +1470,16 @@ mod tests {
 
         // Verify values.
         let result_a = ctx_a.eval_expr("a2");
-        assert_eq!(result_a.output, "@5");
+        assert_eq!(result_a.output, "5");
 
         let result_b = ctx_b.eval_expr("b2");
-        assert_eq!(result_b.output, "@10");
+        assert_eq!(result_b.output, "10");
 
         // Each context's function is isolated.
-        let bad_a = ctx_a.eval_expr("id_b(@1)");
+        let bad_a = ctx_a.eval_expr("id_b(1)");
         assert!(matches!(bad_a.typecheck, TypecheckResult::Error { .. }), "ctx_a should not see id_b");
 
-        let bad_b = ctx_b.eval_expr("id_a(@1)");
+        let bad_b = ctx_b.eval_expr("id_a(1)");
         assert!(matches!(bad_b.typecheck, TypecheckResult::Error { .. }), "ctx_b should not see id_a");
 
         ctx_a.destroy_all();
@@ -1539,14 +1539,14 @@ end fun
 
                     // Define local variable and compute.
                     let val = (i + 1) * 10;
-                    let _ = ctx.eval_fragment(&format!("let n: int = @{}", val));
+                    let _ = ctx.eval_fragment(&format!("let n: int = {}", val));
                     let _ = ctx.eval_fragment("let result = square(n)");
 
                     let result = ctx.eval_expr("result");
                     ctx.destroy_all();
 
                     let expected = val * val;
-                    assert_eq!(result.output, format!("@{}", expected),
+                    assert_eq!(result.output, format!("{}", expected),
                         "thread {} expected {} but got {}", i, expected, result.output);
                     results.lock().unwrap().push((i, expected));
                 });
@@ -1568,7 +1568,7 @@ end fun
 
         // First compilation: add a module with a simple identity function.
         pipeline.add_module(&db, "local", "pkg", "v1", r#"
-fun value(x: @u32): @u32
+fun value(x: u32): u32
   ret x
 end fun
 "#);
@@ -1581,8 +1581,8 @@ end fun
             let mut ctx = compiled1.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
             let r = ctx.eval_fragment("require module local/pkg/v1\nimport v1.value");
             assert!(matches!(r.typecheck, TypecheckResult::Success), "import failed: {:?}", r.typecheck);
-            let result = ctx.eval_expr("value(@100)");
-            assert_eq!(result.output, "@100");
+            let result = ctx.eval_expr("value(100)");
+            assert_eq!(result.output, "100");
             ctx.destroy_all();
         }
 
@@ -1591,8 +1591,8 @@ end fun
             let mut ctx2 = compiled1.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
             let r = ctx2.eval_fragment("require module local/pkg/v1\nimport v1.value");
             assert!(matches!(r.typecheck, TypecheckResult::Success), "second import failed: {:?}", r.typecheck);
-            let result = ctx2.eval_expr("value(@200)");
-            assert_eq!(result.output, "@200");
+            let result = ctx2.eval_expr("value(200)");
+            assert_eq!(result.output, "200");
             ctx2.destroy_all();
         }
     }
@@ -1610,20 +1610,20 @@ end fun
         let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
 
         // Define functions with the same name returning different values.
-        let r1_def = ctx1.eval_fragment("fun local_fn(x: @u32): @u32\n  ret @10\nend fun");
+        let r1_def = ctx1.eval_fragment("fun local_fn(x: u32): u32\n  ret 10\nend fun");
         assert!(matches!(r1_def.typecheck, TypecheckResult::Success), "ctx1 fn def failed: {:?}", r1_def.typecheck);
 
-        let r2_def = ctx2.eval_fragment("fun local_fn(x: @u32): @u32\n  ret @20\nend fun");
+        let r2_def = ctx2.eval_fragment("fun local_fn(x: u32): u32\n  ret 20\nend fun");
         assert!(matches!(r2_def.typecheck, TypecheckResult::Success), "ctx2 fn def failed: {:?}", r2_def.typecheck);
 
         // Local functions are isolated to their context.
-        let r1_local = ctx1.eval_expr("local_fn(@5)");
+        let r1_local = ctx1.eval_expr("local_fn(5)");
         assert!(matches!(r1_local.typecheck, TypecheckResult::Success), "ctx1 fn call failed: {:?}", r1_local.typecheck);
-        assert_eq!(r1_local.output, "@10");
+        assert_eq!(r1_local.output, "10");
 
-        let r2_local = ctx2.eval_expr("local_fn(@5)");
+        let r2_local = ctx2.eval_expr("local_fn(5)");
         assert!(matches!(r2_local.typecheck, TypecheckResult::Success), "ctx2 fn call failed: {:?}", r2_local.typecheck);
-        assert_eq!(r2_local.output, "@20");
+        assert_eq!(r2_local.output, "20");
 
         ctx1.destroy_all();
         ctx2.destroy_all();
@@ -1641,10 +1641,10 @@ end fun
         // Create many contexts.
         for i in 0..20u32 {
             let mut ctx = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
-            let r = ctx.eval_fragment("fun id(x: @u32): @u32\n  ret x\nend fun");
+            let r = ctx.eval_fragment("fun id(x: u32): u32\n  ret x\nend fun");
             assert!(matches!(r.typecheck, TypecheckResult::Success), "fn def failed: {:?}", r.typecheck);
-            let result = ctx.eval_expr(&format!("id(@{})", i));
-            assert_eq!(result.output, format!("@{}", i));
+            let result = ctx.eval_expr(&format!("id({})", i));
+            assert_eq!(result.output, format!("{}", i));
             ctx.destroy_all();
         }
     }
@@ -1656,7 +1656,7 @@ end fun
         let mut pipeline = ModuleCompilationPipeline::new();
 
         pipeline.add_module(&db, "local", "pkg", "math", r#"
-fun id(x: @u32): @u32
+fun id(x: u32): u32
   ret x
 end fun
 "#);
@@ -1674,11 +1674,11 @@ end fun
         let r2 = ctx2.eval_fragment("require module local/pkg/math\nimport math.id");
         assert!(matches!(r2.typecheck, TypecheckResult::Success), "ctx2 import failed: {:?}", r2.typecheck);
 
-        let r1 = ctx1.eval_expr("id(@10)");
-        assert_eq!(r1.output, "@10");
+        let r1 = ctx1.eval_expr("id(10)");
+        assert_eq!(r1.output, "10");
 
-        let r2 = ctx2.eval_expr("id(@20)");
-        assert_eq!(r2.output, "@20");
+        let r2 = ctx2.eval_expr("id(20)");
+        assert_eq!(r2.output, "20");
 
         ctx1.destroy_all();
         ctx2.destroy_all();

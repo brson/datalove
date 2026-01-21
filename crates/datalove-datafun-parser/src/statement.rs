@@ -85,7 +85,7 @@ impl<'db> Parser<'db> {
         // Check for type hint: `: type`
         let type_hint = if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
-            Some(self.parse_type_hint_and_heap())
+            Some(self.parse_type_hint())
         } else {
             None
         };
@@ -128,7 +128,7 @@ impl<'db> Parser<'db> {
         // Check for type hint: `: type`
         let type_hint = if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
-            Some(self.parse_type_hint_and_heap())
+            Some(self.parse_type_hint())
         } else {
             None
         };
@@ -278,7 +278,7 @@ impl<'db> Parser<'db> {
         // Check for return type: `: type`
         let return_type = if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
-            Some(self.parse_type_hint_and_heap())
+            Some(self.parse_type_hint())
         } else {
             None
         };
@@ -387,7 +387,7 @@ impl<'db> Parser<'db> {
                 .emit_parse();
         }
 
-        let type_hint = self.parse_type_hint_and_heap();
+        let type_hint = self.parse_type_hint();
 
         ast::FunParam { name, mode, type_hint }
     }
@@ -499,7 +499,7 @@ impl<'db> Parser<'db> {
                 // Optional type hint: `: type`
                 let type_hint = if self.peek_sigil(Sigil::Colon) {
                     self.eat_sigil(Sigil::Colon);
-                    Some(self.parse_type_hint_and_heap())
+                    Some(self.parse_type_hint())
                 } else {
                     None
                 };
@@ -798,7 +798,7 @@ impl<'db> Parser<'db> {
         }
 
         // Parse the type hint.
-        let type_hint = self.parse_type_hint_and_heap();
+        let type_hint = self.parse_type_hint();
 
         ast::Statement::TypeAlias(ast::StmtTypeAlias {
             name,
@@ -808,7 +808,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Delegate to datalit parser for type hints.
-    pub(super) fn parse_type_hint_and_heap(&mut self) -> datalit::ast::TypeHintAndHeap<'db> {
+    pub(super) fn parse_type_hint(&mut self) -> datalit::ast::TypeHint<'db> {
         use bct::lexer::TokenKind;
 
         // Collect tokens for the type hint, stopping at delimiters that mark the end of a type.
@@ -842,7 +842,7 @@ impl<'db> Parser<'db> {
         let collected_len = collected.len();
 
         // Delegate to datalit parser.
-        let (type_hint, consumed) = datalit::parser::parse_type_hint_and_heap_from_tokens(
+        let (type_hint, consumed) = datalit::parser::parse_type_hint_from_tokens(
             self.db,
             collected,
             self.source_text(),
@@ -852,10 +852,10 @@ impl<'db> Parser<'db> {
         // But only emit a new error if the type hint isn't already a ParseError
         // (to avoid duplicate errors).
         if consumed < collected_len {
-            if !matches!(type_hint.type_hint(self.db), datalit::ast::TypeHint::ParseError(_)) {
+            if !matches!(type_hint, datalit::ast::TypeHint::ParseError(_)) {
                 use bct::text::{InternedText, TextSpan};
                 use bct::diagnostic::DiagnosticBuilder;
-use datalove_diagnostic::DiagnosticBuilderExt;
+                use datalove_diagnostic::DiagnosticBuilderExt;
 
                 // Get text/span info for the error.
                 let text = self.source_text();
@@ -871,11 +871,7 @@ use datalove_diagnostic::DiagnosticBuilderExt;
                     span: (0..1).into(),
                     message,
                 };
-                return datalit::ast::TypeHintAndHeap::new(
-                    self.db,
-                    datalit::ast::Heap::Omitted,
-                    datalit::ast::TypeHint::ParseError(error),
-                );
+                return datalit::ast::TypeHint::ParseError(error);
             }
         }
 

@@ -2,14 +2,14 @@
 module local/gen/test
 ----------
 
-fun test_int(p: #int): #bool
+fun test_int(p: int): bool
   debuglog p
-  ret #false
+  ret false
 end fun
 
-fun test_string(s: @string): @u32
+fun test_string(s: string): u32
   debuglog s
-  ret @42
+  ret 42
 end fun
 
 ----------
@@ -20,8 +20,8 @@ require module local/gen/test
 import test.test_int
 import test.test_string
 
-let r1: #bool = test_int(12345)
+let r1: bool = test_int(12345)
 debuglog r1
 
-let r2: @u32 = test_string("hello")
+let r2: u32 = test_string("hello")
 debuglog r2

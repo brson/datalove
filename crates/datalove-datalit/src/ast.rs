@@ -25,26 +25,12 @@ pub struct ParseResult<'db> {
 
 #[salsa::tracked]
 pub struct ExprFull<'db> {
-    pub type_hint: Option<TypeHintAndHeap<'db>>,
+    pub type_hint: Option<TypeHint<'db>>,
     #[returns(ref)]
-    pub expr: ExprAndHeap<'db>,
+    pub expr: Expr<'db>,
 }
 
-#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub enum Heap {
-    Local,
-    Global,
-    Omitted,
-}
-
-#[salsa::tracked]
-pub struct TypeHintAndHeap<'db> {
-    pub heap: Heap,
-    pub type_hint: TypeHint<'db>,
-}
-
-#[derive(Clone, Hash)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub enum TypeHint<'db> {
     Bool,
@@ -81,7 +67,7 @@ pub enum TypeHint<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct TypeHintAnonTuple<'db> {
-    pub fields: Vec<TypeHintAndHeap<'db>>,
+    pub fields: Vec<TypeHint<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -94,7 +80,7 @@ pub struct TypeHintAnonStruct<'db> {
 #[derive(salsa::Update)]
 pub struct TypeHintNamedField<'db> {
     pub name: InternedText<'db>,
-    pub type_hint: TypeHintAndHeap<'db>,
+    pub type_hint: Box<TypeHint<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -107,44 +93,44 @@ pub struct TypeHintAnonEnum<'db> {
 #[derive(salsa::Update)]
 pub struct TypeHintEnumVariant<'db> {
     pub name: InternedText<'db>,
-    pub payload: Option<TypeHintAndHeap<'db>>,
+    pub payload: Option<Box<TypeHint<'db>>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct TypeHintList<'db> {
-    pub element_type: TypeHintAndHeap<'db>,
+    pub element_type: Box<TypeHint<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct TypeHintMap<'db> {
-    pub key_type: TypeHintAndHeap<'db>,
-    pub value_type: TypeHintAndHeap<'db>,
+    pub key_type: Box<TypeHint<'db>>,
+    pub value_type: Box<TypeHint<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct TypeHintSet<'db> {
-    pub element_type: TypeHintAndHeap<'db>,
+    pub element_type: Box<TypeHint<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct TypeHintOption<'db> {
-    pub inner_type: TypeHintAndHeap<'db>,
+    pub inner_type: Box<TypeHint<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct TypeHintResult<'db> {
-    pub inner_type: TypeHintAndHeap<'db>,
+    pub inner_type: Box<TypeHint<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct TypeHintTensor<'db> {
-    pub element_type: TypeHintAndHeap<'db>,
+    pub element_type: Box<TypeHint<'db>>,
     pub rank: u32,
 }
 
@@ -152,13 +138,6 @@ pub struct TypeHintTensor<'db> {
 #[derive(salsa::Update)]
 pub struct TypeHintTable<'db> {
     pub columns: Vec<TypeHintNamedField<'db>>,
-}
-
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub struct ExprAndHeap<'db> {
-    pub heap: Heap,
-    pub expr: Expr<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

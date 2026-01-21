@@ -13,4 +13,4 @@ fun checked_mul(a: u32, b: u32): ?u32
     ret some (a *? b)
 end fun
 
-debuglog unwrap_or_default(checked_mul(@1000000, @10000), @999)
+debuglog unwrap_or_default(checked_mul(1000000, 10000), 999)

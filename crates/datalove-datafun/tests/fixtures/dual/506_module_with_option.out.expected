@@ -33,8 +33,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    v1 = const 5u32\n    v2 = call m0.f0(v0, v1)\n    v3 = const 999u32\n    v4 = call f0(v2, v3)\n    debuglog v4\n    v5 = const 100u32\n    v6 = const 0u32\n    v7 = call m0.f0(v5, v6)\n    v8 = const 999u32\n    v9 = call f0(v7, v8)\n    debuglog v9\n    unit_end\n\nfn unwrap(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nexports:\n    unwrap = f0\n",
             ),
             ir_match: true,
-            interp_output: "@20\n@999\n",
-            aot_output: "@20\n@999\n",
+            interp_output: "20\n999\n",
+            aot_output: "20\n999\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

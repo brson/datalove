@@ -43,16 +43,16 @@ fn parse_bracer<'db>(
     ast::ParseResult::new(db, expr, parser.take_expr_spans())
 }
 
-/// Parse a type hint and heap from a vector of tokens.
+/// Parse a type hint from a vector of tokens.
 ///
 /// Returns the parsed type hint and the number of tokens consumed.
-pub fn parse_type_hint_and_heap_from_tokens<'db>(
+pub fn parse_type_hint_from_tokens<'db>(
     db: &'db dyn crate::Db,
     tokens: Vec<TreeToken<'db>>,
     source_text: bct::text::Text<'db>,
-) -> (ast::TypeHintAndHeap<'db>, usize) {
+) -> (ast::TypeHint<'db>, usize) {
     let mut parser = Parser::new(db, tokens, source_text);
-    let type_hint = parser.parse_type_hint_and_heap();
+    let type_hint = parser.parse_type_hint();
     let consumed = parser.pos();
     (type_hint, consumed)
 }

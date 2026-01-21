@@ -1,5 +1,5 @@
-fun a(): @u8
-  ret @8
+fun a(): u8
+  ret 8
 end fun
 
-let output: @u8 = a()
+let output: u8 = a()

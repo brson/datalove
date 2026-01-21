@@ -2,7 +2,7 @@
 scriptunit-fragment
 ----------
 
-var x: int = @42
+var x: int = 42
 debuglog x
-set x = @100
+set x = 100
 debuglog x

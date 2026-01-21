@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": []
-        }
-      },
-      "heap": "Local"
+      "Map": {
+        "entries": []
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "ParseError": {
-          "message": "expected <> after map keyword"
-        }
+      "ParseError": {
+        "message": "expected <> after map keyword"
       }
     }
   },
@@ -24,8 +18,8 @@
         {
           "message": "expected '<' after 'map'",
           "span": [
-            3,
-            6
+            2,
+            5
           ],
           "text": "map"
         }

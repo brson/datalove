@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Int": {
-          "value": "1234567890123456789"
-        }
-      },
-      "heap": "Local"
+      "Int": {
+        "value": "1234567890123456789"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "Int"
-    }
+    "type_hint": "Int"
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@int"
+  "root_type": "int"
 }

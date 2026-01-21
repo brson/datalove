@@ -1,15 +1,12 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Tensor": {
-          "elements": [],
-          "shape": [
-            0
-          ]
-        }
-      },
-      "heap": "Local"
+      "Tensor": {
+        "elements": [],
+        "shape": [
+          0
+        ]
+      }
     },
     "type_hint": null
   },
@@ -18,10 +15,8 @@
   "root_type": {
     "element_type": {
       "fields": [],
-      "heap": "@",
       "kind": "AnonTuple"
     },
-    "heap": "@",
     "kind": "Tensor",
     "rank": 1
   }

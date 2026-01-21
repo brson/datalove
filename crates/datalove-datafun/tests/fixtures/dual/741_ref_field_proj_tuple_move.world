@@ -4,8 +4,8 @@ scriptunit-fragment
 
 // Test passing tuple field to ref param with move type.
 fun takes_ref(ref x: int): int
-    ret x + :int/@0
+    ret x + :int/0
 end fun
 
-let t: (int, int) = (:int/@100, :int/@200)
+let t: (int, int) = (:int/100, :int/200)
 debuglog takes_ref(t.0)

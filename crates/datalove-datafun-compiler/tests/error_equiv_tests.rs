@@ -42,25 +42,25 @@ fn get_datalit_errors<'db>(
 /// Check if datalit type hint contains parse error.
 fn has_datalit_type_hint_parse_error<'db>(
     db: &'db datalove_datafun_compiler::Database,
-    th: datalove_datalit::ast::TypeHintAndHeap<'db>,
+    th: &datalove_datalit::ast::TypeHint<'db>,
 ) -> bool {
     use datalove_datalit::ast::TypeHint;
-    match th.type_hint(db) {
+    match th {
         TypeHint::ParseError(_) => true,
-        TypeHint::List(l) => has_datalit_type_hint_parse_error(db, l.element_type),
-        TypeHint::Set(s) => has_datalit_type_hint_parse_error(db, s.element_type),
+        TypeHint::List(l) => has_datalit_type_hint_parse_error(db, &l.element_type),
+        TypeHint::Set(s) => has_datalit_type_hint_parse_error(db, &s.element_type),
         TypeHint::Map(m) => {
-            has_datalit_type_hint_parse_error(db, m.key_type) ||
-            has_datalit_type_hint_parse_error(db, m.value_type)
+            has_datalit_type_hint_parse_error(db, &m.key_type) ||
+            has_datalit_type_hint_parse_error(db, &m.value_type)
         }
-        TypeHint::Option(o) => has_datalit_type_hint_parse_error(db, o.inner_type),
-        TypeHint::Result(r) => has_datalit_type_hint_parse_error(db, r.inner_type),
-        TypeHint::AnonTuple(t) => t.fields.iter().any(|f| has_datalit_type_hint_parse_error(db, *f)),
-        TypeHint::AnonStruct(s) => s.fields.iter().any(|f| has_datalit_type_hint_parse_error(db, f.type_hint)),
+        TypeHint::Option(o) => has_datalit_type_hint_parse_error(db, &o.inner_type),
+        TypeHint::Result(r) => has_datalit_type_hint_parse_error(db, &r.inner_type),
+        TypeHint::AnonTuple(t) => t.fields.iter().any(|f| has_datalit_type_hint_parse_error(db, f)),
+        TypeHint::AnonStruct(s) => s.fields.iter().any(|f| has_datalit_type_hint_parse_error(db, &f.type_hint)),
         TypeHint::AnonEnum(e) => e.variants.iter().any(|v| {
-            v.payload.map(|p| has_datalit_type_hint_parse_error(db, p)).unwrap_or(false)
+            v.payload.as_ref().map(|p| has_datalit_type_hint_parse_error(db, p)).unwrap_or(false)
         }),
-        TypeHint::Tensor(t) => has_datalit_type_hint_parse_error(db, t.element_type),
+        TypeHint::Tensor(t) => has_datalit_type_hint_parse_error(db, &t.element_type),
         _ => false,
     }
 }
@@ -74,12 +74,12 @@ fn has_parse_error<'db>(
 
     // Check type hint first.
     if let Some(th) = expr.type_hint(db) {
-        if has_datalit_type_hint_parse_error(db, th) {
+        if has_datalit_type_hint_parse_error(db, &th) {
             return true;
         }
     }
 
-    match &expr.expr(db).expr {
+    match expr.expr(db) {
         Expr::ParseError(_) => true,
         Expr::List(l) => l.elements.iter().any(|e| has_parse_error(db, *e)),
         Expr::Set(s) => s.elements.iter().any(|e| has_parse_error(db, *e)),
@@ -145,48 +145,48 @@ fn has_datafun_parse_error<'db>(
     use datalove_datafun_ast::ast::ExprFunKind;
 
     // Helper to check type hint for parse error.
-    let check_type_hint = |th: Option<datalove_datalit::ast::TypeHintAndHeap<'db>>| -> bool {
+    let check_type_hint = |th: Option<&datalove_datalit::ast::TypeHint<'db>>| -> bool {
         th.map(|th| has_type_hint_parse_error(db, th)).unwrap_or(false)
     };
 
     match expr.expr(db) {
         ExprFunKind::ParseError(_) => true,
         ExprFunKind::List(ref l) => {
-            check_type_hint(l.type_hint) ||
+            check_type_hint(l.type_hint.as_ref()) ||
             l.elements.iter().any(|e| has_datafun_parse_error(db, *e))
         }
         ExprFunKind::Set(ref s) => {
-            check_type_hint(s.type_hint) ||
+            check_type_hint(s.type_hint.as_ref()) ||
             s.elements.iter().any(|e| has_datafun_parse_error(db, *e))
         }
         ExprFunKind::Map(ref m) => {
-            check_type_hint(m.type_hint) ||
+            check_type_hint(m.type_hint.as_ref()) ||
             m.entries.iter().any(|e| {
                 has_datafun_parse_error(db, e.key) || has_datafun_parse_error(db, e.value)
             })
         }
         ExprFunKind::AnonTuple(ref t) => {
-            check_type_hint(t.type_hint) ||
+            check_type_hint(t.type_hint.as_ref()) ||
             t.elements.iter().any(|e| has_datafun_parse_error(db, *e))
         }
         ExprFunKind::AnonStruct(ref s) => {
-            check_type_hint(s.type_hint) ||
+            check_type_hint(s.type_hint.as_ref()) ||
             s.fields.iter().any(|f| has_datafun_parse_error(db, f.value))
         }
         ExprFunKind::AnonEnum(ref e) => {
-            check_type_hint(e.type_hint) ||
+            check_type_hint(e.type_hint.as_ref()) ||
             e.payload.map(|p| has_datafun_parse_error(db, p)).unwrap_or(false)
         }
         ExprFunKind::Data(ref d) => {
-            check_type_hint(d.type_hint) ||
+            check_type_hint(d.type_hint.as_ref()) ||
             has_datafun_parse_error(db, d.value)
         }
         ExprFunKind::Error(ref e) => {
-            check_type_hint(e.type_hint) ||
+            check_type_hint(e.type_hint.as_ref()) ||
             has_datafun_parse_error(db, e.value)
         }
         ExprFunKind::Tensor(ref t) => {
-            check_type_hint(t.type_hint) ||
+            check_type_hint(t.type_hint.as_ref()) ||
             t.elements.iter().any(|e| has_datafun_parse_error(db, *e))
         }
         ExprFunKind::Tuple(ref t) => t.elements.iter().any(|e| has_datafun_parse_error(db, *e)),
@@ -194,23 +194,23 @@ fn has_datafun_parse_error<'db>(
         ExprFunKind::BinOp(ref b) => {
             has_datafun_parse_error(db, b.lhs) || has_datafun_parse_error(db, b.rhs)
         }
-        ExprFunKind::True(ref l) => check_type_hint(l.type_hint),
-        ExprFunKind::False(ref l) => check_type_hint(l.type_hint),
-        ExprFunKind::None(ref l) => check_type_hint(l.type_hint),
-        ExprFunKind::Int(ref i) => check_type_hint(i.type_hint),
-        ExprFunKind::Float(ref f) => check_type_hint(f.type_hint),
-        ExprFunKind::Hex(ref h) => check_type_hint(h.type_hint),
-        ExprFunKind::String(ref s) => check_type_hint(s.type_hint),
+        ExprFunKind::True(ref l) => check_type_hint(l.type_hint.as_ref()),
+        ExprFunKind::False(ref l) => check_type_hint(l.type_hint.as_ref()),
+        ExprFunKind::None(ref l) => check_type_hint(l.type_hint.as_ref()),
+        ExprFunKind::Int(ref i) => check_type_hint(i.type_hint.as_ref()),
+        ExprFunKind::Float(ref f) => check_type_hint(f.type_hint.as_ref()),
+        ExprFunKind::Hex(ref h) => check_type_hint(h.type_hint.as_ref()),
+        ExprFunKind::String(ref s) => check_type_hint(s.type_hint.as_ref()),
         ExprFunKind::Some(ref s) => {
-            check_type_hint(s.type_hint) ||
+            check_type_hint(s.type_hint.as_ref()) ||
             has_datafun_parse_error(db, s.payload)
         }
         ExprFunKind::Ok(ref o) => {
-            check_type_hint(o.type_hint) ||
+            check_type_hint(o.type_hint.as_ref()) ||
             has_datafun_parse_error(db, o.payload)
         }
         ExprFunKind::Er(ref e) => {
-            check_type_hint(e.type_hint) ||
+            check_type_hint(e.type_hint.as_ref()) ||
             has_datafun_parse_error(db, e.payload)
         }
         _ => false,
@@ -220,25 +220,25 @@ fn has_datafun_parse_error<'db>(
 /// Check if type hint contains parse error.
 fn has_type_hint_parse_error<'db>(
     db: &'db datalove_datafun_compiler::Database,
-    th: datalove_datalit::ast::TypeHintAndHeap<'db>,
+    th: &datalove_datalit::ast::TypeHint<'db>,
 ) -> bool {
     use datalove_datalit::ast::TypeHint;
-    match th.type_hint(db) {
+    match th {
         TypeHint::ParseError(_) => true,
-        TypeHint::List(l) => has_type_hint_parse_error(db, l.element_type),
-        TypeHint::Set(s) => has_type_hint_parse_error(db, s.element_type),
+        TypeHint::List(l) => has_type_hint_parse_error(db, &l.element_type),
+        TypeHint::Set(s) => has_type_hint_parse_error(db, &s.element_type),
         TypeHint::Map(m) => {
-            has_type_hint_parse_error(db, m.key_type) ||
-            has_type_hint_parse_error(db, m.value_type)
+            has_type_hint_parse_error(db, &m.key_type) ||
+            has_type_hint_parse_error(db, &m.value_type)
         }
-        TypeHint::Option(o) => has_type_hint_parse_error(db, o.inner_type),
-        TypeHint::Result(r) => has_type_hint_parse_error(db, r.inner_type),
-        TypeHint::AnonTuple(t) => t.fields.iter().any(|f| has_type_hint_parse_error(db, *f)),
-        TypeHint::AnonStruct(s) => s.fields.iter().any(|f| has_type_hint_parse_error(db, f.type_hint)),
+        TypeHint::Option(o) => has_type_hint_parse_error(db, &o.inner_type),
+        TypeHint::Result(r) => has_type_hint_parse_error(db, &r.inner_type),
+        TypeHint::AnonTuple(t) => t.fields.iter().any(|f| has_type_hint_parse_error(db, f)),
+        TypeHint::AnonStruct(s) => s.fields.iter().any(|f| has_type_hint_parse_error(db, &f.type_hint)),
         TypeHint::AnonEnum(e) => e.variants.iter().any(|v| {
-            v.payload.map(|p| has_type_hint_parse_error(db, p)).unwrap_or(false)
+            v.payload.as_ref().map(|p| has_type_hint_parse_error(db, p)).unwrap_or(false)
         }),
-        TypeHint::Tensor(t) => has_type_hint_parse_error(db, t.element_type),
+        TypeHint::Tensor(t) => has_type_hint_parse_error(db, &t.element_type),
         _ => false,
     }
 }
@@ -297,11 +297,6 @@ fn make_mutation_config() -> AstGenConfig {
 
     AstGenConfig {
         include_type_hints: true,
-        heap_distribution: datalove_datalit::ast_gen::HeapDistribution {
-            local: 2,
-            global: 1,
-            omitted: 1,
-        },
         max_depth: 2,
         min_collection_size: 1,
         max_collection_size: 3,
@@ -488,7 +483,6 @@ fn test_error_equiv_discovery() {
     println!();
     println!("=== Fixed Discrepancies ===");
     println!("- OutOfRangeInt: 100% (fixed in Phase 1)");
-    println!("- HeapMismatch: 100% (fixed in Phase 1.5)");
     println!("- WrongElementType: 100% (fixed in Phase 1.6)");
     println!("- ArityMismatch: 100% (fixed in Phase 1.7)");
     println!();
@@ -560,38 +554,6 @@ fn test_error_equiv_wrong_element_type_detailed() {
             eprintln!("... and {} more failures", failures.len() - 10);
         }
         panic!("{} WrongElementType tests failed", failures.len());
-    }
-}
-
-/// Detailed test for HeapMismatch mutations.
-/// Temporarily ignored due to differences in Option/Result coercion handling.
-#[test]
-#[ignore = "needs investigation after coercion removal"]
-fn test_error_equiv_heap_mismatch_detailed() {
-    let db = datalove_datafun_compiler::Database::default();
-    let config = make_mutation_config();
-
-    let mut failures = vec![];
-
-    for seed in 0..200 {
-        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
-        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
-
-        if let Some(result) = Mutation::HeapMismatch.apply(&db, expr, &mut rng) {
-            if let Err(e) = test_error_equiv(&db, &result) {
-                failures.push((seed, e));
-            }
-        }
-    }
-
-    if !failures.is_empty() {
-        for (seed, err) in &failures[..failures.len().min(10)] {
-            eprintln!("Seed {}: {}\n", seed, err);
-        }
-        if failures.len() > 10 {
-            eprintln!("... and {} more failures", failures.len() - 10);
-        }
-        panic!("{} HeapMismatch tests failed", failures.len());
     }
 }
 
@@ -813,7 +775,6 @@ fn test_error_equiv_source_mutations_detailed() {
     let config = make_mutation_config();
 
     let source_mutations = [
-        Mutation::DeleteHeapSigil,
         Mutation::DeleteOpeningBracket,
         Mutation::TruncateSource,
         Mutation::DeleteComma,
@@ -834,9 +795,9 @@ fn test_error_equiv_source_mutations_detailed() {
                 // Skip edge cases where `er` keyword + malformed input creates
                 // different parse results. In datafun, `er` accepts any expression
                 // as payload (including bare variable names), while datalit requires
-                // heap-prefixed expressions. When mutations break `error` into `er`,
+                // typed expressions. When mutations break `error` into `er`,
                 // the remaining text parses as a variable in datafun but errors in datalit.
-                if result.source.contains("#er}") || result.source.contains("@er}") {
+                if result.source.contains("er}") {
                     continue;
                 }
 
@@ -857,43 +818,6 @@ fn test_error_equiv_source_mutations_detailed() {
             eprintln!("... and {} more failures", total_failures.len() - 10);
         }
         panic!("{} source mutation tests failed", total_failures.len());
-    }
-}
-
-/// Debug test for HeapMismatch - shows raw errors from both systems.
-#[test]
-#[ignore] // Run with --ignored to investigate
-fn test_debug_heap_mismatch() {
-    let config = make_mutation_config();
-
-    for seed in 0..50 {
-        let config_clone = config.clone();
-        let result = std::thread::spawn(move || {
-            let db = datalove_datafun_compiler::Database::default();
-            let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
-            let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
-
-            if let Some(result) = Mutation::HeapMismatch.apply(&db, expr, &mut rng) {
-                let (datalit_errs, datalit_parse) = get_datalit_errors(&db, &result.source);
-                let (datafun_errs, datafun_parse) = get_datafun_errors(&db, &result.source);
-                Some((result.source, datalit_errs, datalit_parse, datafun_errs, datafun_parse))
-            } else {
-                None
-            }
-        }).join();
-
-        match result {
-            Ok(Some((source, datalit_errs, datalit_parse, datafun_errs, datafun_parse))) => {
-                eprintln!("Seed {}: source = {}", seed, source);
-                eprintln!("  Datalit: {:?} (parse_err={})", datalit_errs, datalit_parse);
-                eprintln!("  Datafun: {:?} (parse_err={})", datafun_errs, datafun_parse);
-                eprintln!();
-            }
-            Ok(None) => {}
-            Err(e) => {
-                eprintln!("Seed {}: PANIC - {:?}", seed, e);
-            }
-        }
     }
 }
 
@@ -974,8 +898,8 @@ fn test_debug_specific_bracket_cases() {
     eprintln!("Datalit has_parse_error: {}", has_parse_error(&db, datalit_parsed));
 
     // Check the type hint
-    if let Some(th) = datalit_parsed.type_hint(&db) {
-        eprintln!("Datalit type hint heap: {:?}", th.heap(&db));
+    if let Some(_th) = datalit_parsed.type_hint(&db) {
+        eprintln!("Datalit type hint: present");
     }
 
     // Parse with datafun

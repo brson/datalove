@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Hex": {
-          "value": "-0xFF"
-        }
-      },
-      "heap": "Local"
+      "Hex": {
+        "value": "-0xFF"
+      }
     },
     "type_hint": null
   },

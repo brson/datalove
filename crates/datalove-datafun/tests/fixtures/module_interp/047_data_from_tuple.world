@@ -4,7 +4,7 @@ module local/test/main
 
 // Return data containing tuple from module function.
 fun make_data(): data
-    ret @data (@1, @2, @3)
+    ret data (1, 2, 3)
 end fun
 
 fun main(): data

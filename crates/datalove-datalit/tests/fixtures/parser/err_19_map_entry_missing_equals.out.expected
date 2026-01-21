@@ -1,37 +1,28 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": [
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "Int": {
-                      "value": "1"
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
+      "Map": {
+        "entries": [
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
               },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "ParseError": {
-                      "message": "expected '=' between map key and value"
-                    }
-                  },
-                  "heap": "Omitted"
-                },
-                "type_hint": null
-              }
+              "type_hint": null
+            },
+            "value": {
+              "expr": {
+                "ParseError": {
+                  "message": "expected '=' between map key and value"
+                }
+              },
+              "type_hint": null
             }
-          ]
-        }
-      },
-      "heap": "Local"
+          }
+        ]
+      }
     },
     "type_hint": null
   },
@@ -42,10 +33,10 @@
         {
           "message": "expected '=' after key",
           "span": [
-            10,
-            11
+            8,
+            9
           ],
-          "text": "@"
+          "text": "2"
         }
       ],
       "message": "expected '=' between map key and value"

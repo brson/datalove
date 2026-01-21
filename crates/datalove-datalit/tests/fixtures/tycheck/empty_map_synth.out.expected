@@ -1,28 +1,22 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": []
-        }
-      },
-      "heap": "Local"
+      "Map": {
+        "entries": []
+      }
     },
     "type_hint": null
   },
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "@",
     "key_type": {
       "fields": [],
-      "heap": "@",
       "kind": "AnonTuple"
     },
     "kind": "Map",
     "value_type": {
       "fields": [],
-      "heap": "@",
       "kind": "AnonTuple"
     }
   }

@@ -3,11 +3,11 @@ scriptunit-fragment
 ----------
 
 // Function transforming struct - swapping fields.
-fun swap_coords(p: {x: @u32, y: @u32}): @{x: @u32, y: @u32}
-    ret @{x = p.y, y = p.x}
+fun swap_coords(p: {x: u32, y: u32}): {x: u32, y: u32}
+    ret {x = p.y, y = p.x}
 end fun
 
-let original = @{x = @1, y = @2}
+let original = {x = 1, y = 2}
 let swapped = swap_coords(original)
 debuglog swapped.x
 debuglog swapped.y

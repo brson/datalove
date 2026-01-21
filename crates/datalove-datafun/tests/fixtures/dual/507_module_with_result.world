@@ -13,5 +13,5 @@ scriptunit-fragment
 require module local/test/resmath
 import resmath.checked_add
 
-debuglog checked_add(@10, @20)
-debuglog checked_add(@4294967295, @1)
+debuglog checked_add(10, 20)
+debuglog checked_add(4294967295, 1)

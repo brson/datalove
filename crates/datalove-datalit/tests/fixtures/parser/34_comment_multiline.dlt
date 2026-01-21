@@ -1,2 +1,2 @@
 // line comment
-/* block */ @true // inline
+/* block */ true // inline

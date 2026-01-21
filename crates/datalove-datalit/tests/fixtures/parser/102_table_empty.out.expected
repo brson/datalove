@@ -1,13 +1,10 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Table": {
-          "header": [],
-          "rows": []
-        }
-      },
-      "heap": "Omitted"
+      "Table": {
+        "header": [],
+        "rows": []
+      }
     },
     "type_hint": null
   },

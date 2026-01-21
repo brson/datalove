@@ -9,7 +9,7 @@ fun unwrap_or_default(opt: ?u32, default: u32): u32
 end fun
 
 fun get_some(): ?u32
-    ret some @42
+    ret some 42
 end fun
 
-debuglog unwrap_or_default(get_some(), @0)
+debuglog unwrap_or_default(get_some(), 0)

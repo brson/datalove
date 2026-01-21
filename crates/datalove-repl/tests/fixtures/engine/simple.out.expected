@@ -10,14 +10,14 @@
       "SuccessLet": {
         "name": "a",
         "ty": "u32",
-        "value": "@100"
+        "value": "100"
       }
     },
     "environment": [
       {
         "name": "a",
         "ty": "u32",
-        "value": "@100"
+        "value": "100"
       }
     ]
   },
@@ -32,19 +32,19 @@
       "SuccessLet": {
         "name": "b",
         "ty": "u32",
-        "value": "@200"
+        "value": "200"
       }
     },
     "environment": [
       {
         "name": "a",
         "ty": "u32",
-        "value": "@100"
+        "value": "100"
       },
       {
         "name": "b",
         "ty": "u32",
-        "value": "@200"
+        "value": "200"
       }
     ]
   },
@@ -59,19 +59,19 @@
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "int",
-        "value": "@300"
+        "value": "300"
       }
     },
     "environment": [
       {
         "name": "a",
         "ty": "u32",
-        "value": "@100"
+        "value": "100"
       },
       {
         "name": "b",
         "ty": "u32",
-        "value": "@200"
+        "value": "200"
       }
     ]
   }

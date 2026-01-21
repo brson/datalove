@@ -2,7 +2,7 @@
 scriptunit-fragment
 ----------
 
-let x = @42
+let x = 42
 
 ----------
 scriptunit-expr

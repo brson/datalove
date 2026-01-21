@@ -1,2 +1,2 @@
-// Type annotation [int] should propagate to make @1, @2 typed as int
-let l: [@int] = @[@1, @2]
+// Type annotation [int] should propagate to make 1, 2 typed as int
+let l: [int] = [1, 2]

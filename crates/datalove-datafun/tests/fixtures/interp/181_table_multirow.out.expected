@@ -10,7 +10,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = pack Tuple3 {v0, v1, v2}\n    v4 = const 4u32\n    v5 = const 5u32\n    v6 = const 6u32\n    v7 = pack Tuple3 {v4, v5, v6}\n    v8 = const 7u32\n    v9 = const 8u32\n    v10 = const 9u32\n    v11 = pack Tuple3 {v8, v9, v10}\n    v12 = table [v3, v7, v11]\n    unit_end v12\n",
             ),
-            output: "@{| x, y, z; @1, @2, @3; @4, @5, @6; @7, @8, @9 |}",
+            output: "{| x, y, z; 1, 2, 3; 4, 5, 6; 7, 8, 9 |}",
         ),
     ],
 )

@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 1000000u32\n    v1 = const 2000000u32\n    v2 = const 3000000u32\n    v3 = pack Struct0 {v0, v1, v2}\n    v4 = getfieldref v3.0\n    debuglog v4\n    v5 = getfieldref v3.1\n    debuglog v5\n    v6 = getfieldref v3.2\n    debuglog v6\n    unit_end\nexports:\n    point = v3\n",
             ),
             ir_match: true,
-            interp_output: "@1000000\n@2000000\n@3000000\n",
-            aot_output: "@1000000\n@2000000\n@3000000\n",
+            interp_output: "1000000\n2000000\n3000000\n",
+            aot_output: "1000000\n2000000\n3000000\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

@@ -1,1 +1,1 @@
-: @!@u32 / @er @"error message"
+: !u32 / <parse-error: unexpected token in Parser expression>

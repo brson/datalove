@@ -6,5 +6,5 @@ ModulesAnalysis(
         status: "Success",
         ir: "fn test():\nblock0:\n    v0 = const 42u32\n    v1 = some v0\n    return v1\n\nfn main():\nblock0:\n    v0 = call m0.f0()\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    v3 = const 999u32\n    return v3\n",
     ),
-    output: "@42",
+    output: "42",
 )

@@ -1,7 +1,7 @@
-fun double(x: @u32): @u32
+fun double(x: u32): u32
     ret x +@ x
 end fun
 
-fun test(): @u32
-    ret double(@1, @2, @3)
+fun test(): u32
+    ret double(1, 2, 3)
 end fun

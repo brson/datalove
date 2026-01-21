@@ -1,1 +1,1 @@
-: #{x: u32, y: string} / #{x = @1, y = @"test"}
+: #{x: u32, y: string} / #{x = 1, y = "test"}

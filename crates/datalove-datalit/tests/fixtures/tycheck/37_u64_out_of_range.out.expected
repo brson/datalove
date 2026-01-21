@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Int": {
-          "value": "18446744073709551616"
-        }
-      },
-      "heap": "Local"
+      "Int": {
+        "value": "18446744073709551616"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "U64"
-    }
+    "type_hint": "U64"
   },
   "diagnostics": [],
   "errors": [

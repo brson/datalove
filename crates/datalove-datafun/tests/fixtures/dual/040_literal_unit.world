@@ -2,4 +2,4 @@
 scriptunit-fragment
 ----------
 
-debuglog @()
+debuglog ()

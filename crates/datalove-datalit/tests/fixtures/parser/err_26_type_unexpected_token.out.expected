@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "expected '/' after type hint"
-        }
-      },
-      "heap": "Omitted"
+      "ParseError": {
+        "message": "expected '/' after type hint"
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "ParseError": {
-          "message": "unexpected token in type hint"
-        }
+      "ParseError": {
+        "message": "unexpected token in type hint"
       }
     }
   },
@@ -24,8 +18,8 @@
         {
           "message": "unexpected token in type hint",
           "span": [
-            3,
-            4
+            2,
+            3
           ],
           "text": "."
         }
@@ -38,8 +32,8 @@
         {
           "message": "expected '/' separator between type hint and expression",
           "span": [
-            3,
-            4
+            2,
+            3
           ],
           "text": "."
         }

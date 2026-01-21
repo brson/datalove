@@ -24,4 +24,4 @@ scriptunit-fragment
 require module local/test/derived
 import derived.quadruple
 
-debuglog quadruple(@10)
+debuglog quadruple(10)

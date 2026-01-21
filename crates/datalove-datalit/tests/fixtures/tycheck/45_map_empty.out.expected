@@ -1,35 +1,22 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": []
-        }
-      },
-      "heap": "Local"
+      "Map": {
+        "entries": []
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "Map": {
-          "key_type": {
-            "heap": "Local",
-            "type_hint": "U32"
-          },
-          "value_type": {
-            "heap": "Local",
-            "type_hint": "String"
-          }
-        }
+      "Map": {
+        "key_type": "U32",
+        "value_type": "String"
       }
     }
   },
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "@",
-    "key_type": "@u32",
+    "key_type": "u32",
     "kind": "Map",
-    "value_type": "@string"
+    "value_type": "string"
   }
 }

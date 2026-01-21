@@ -15,9 +15,9 @@
           "message": "expected '='",
           "span": [
             6,
-            7
+            8
           ],
-          "text": "@"
+          "text": "42"
         }
       ],
       "message": "expected '=' after var binding"

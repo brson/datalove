@@ -20,7 +20,6 @@ pub use bct::module_graph::ModuleId;
 pub use crate::{
     PendingDiagnostic,
     Type,
-    TypeAndHeap,
     TypeFunction,
     TypeError,
     TypeErrorEntry,
@@ -90,7 +89,7 @@ pub fn type_check_script_units<'db>(
     // Build module function info for import resolution using shared helper.
     let (module_functions, path_to_module_id) = build_script_module_functions(db, spec.modules(db));
 
-    let mut accumulated_vars: HashMap<InternedText<'db>, TypeAndHeap<'db>> = HashMap::new();
+    let mut accumulated_vars: HashMap<InternedText<'db>, Type<'db>> = HashMap::new();
     let mut accumulated_fns: HashMap<InternedText<'db>, TypeFunction<'db>> = HashMap::new();
     let mut accumulated_fn_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<ModuleId>)> = HashMap::new();
     let mut results = Vec::new();
@@ -101,23 +100,17 @@ pub fn type_check_script_units<'db>(
 
         // Script units have Result<()> return type for try operators.
         // This allows `!` (try-result) but not `?` (try-option).
-        let unit_tuple_ty = datalit::tycheck::TypeAndHeap::new(
-            db,
-            datalit::ast::Heap::Omitted,
-            datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: Vec::new() }),
-        );
+        let unit_tuple_ty = datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: Vec::new() });
         let result_unit_ty = datalit::tycheck::Type::Result(
-            datalit::tycheck::TypeResult { inner_type: unit_tuple_ty }
+            datalit::tycheck::TypeResult { inner_type: Box::new(unit_tuple_ty) }
         );
-        ctx.expected_return_type = Some(TypeAndHeap::new(
-            db,
-            datalit::ast::Heap::Omitted,
-            Type::Datalit(result_unit_ty),
+        ctx.expected_return_type = Some(
+            Type::Datalit(result_unit_ty,
         ));
 
         // Seed with accumulated bindings from prior units.
         for (name, ty) in &accumulated_vars {
-            ctx.add_variable(*name, *ty);
+            ctx.add_variable(*name, ty.clone());
         }
         for (name, func_ty) in &accumulated_fns {
             ctx.add_function(*name, *func_ty);
@@ -169,13 +162,13 @@ pub fn type_check_script_units<'db>(
                         Statement::Let(let_stmt) => {
                             let name = let_stmt.name;
                             if let Some(ty) = ctx.variables.get(&name) {
-                                accumulated_vars.insert(name, *ty);
+                                accumulated_vars.insert(name, ty.clone());
                             }
                         }
                         Statement::Var(var_stmt) => {
                             let name = var_stmt.name;
                             if let Some(ty) = ctx.variables.get(&name) {
-                                accumulated_vars.insert(name, *ty);
+                                accumulated_vars.insert(name, ty.clone());
                             }
                         }
                         Statement::Fun(fun_stmt) => {
@@ -242,7 +235,7 @@ pub fn type_check_script_with_context<'db>(
 
     // Seed with prior bindings.
     for (name, ty) in &prior_ctx.variables {
-        ctx.add_variable(*name, *ty);
+        ctx.add_variable(*name, ty.clone());
     }
     for (name, func_ty) in &prior_ctx.functions {
         ctx.add_function(*name, *func_ty);
@@ -288,7 +281,7 @@ pub fn type_check_expr_with_context<'db>(
 
     // Seed with prior bindings.
     for (name, ty) in &prior_ctx.variables {
-        ctx.add_variable(*name, *ty);
+        ctx.add_variable(*name, ty.clone());
     }
     for (name, func_ty) in &prior_ctx.functions {
         ctx.add_function(*name, *func_ty);
@@ -555,7 +548,7 @@ pub fn typecheck_module_graph<'db>(
     let mut module_exports_map: BTreeMap<ModuleId, ModuleExports<'db>> = BTreeMap::new();
     let mut module_imports_map: BTreeMap<ModuleId, ModuleImports<'db>> = BTreeMap::new();
     let mut module_results_map: BTreeMap<ModuleId, SingleModuleTypecheckResult<'db>> = BTreeMap::new();
-    let mut combined_expr_types: Vec<Option<TypeAndHeap<'db>>> = Vec::new();
+    let mut combined_expr_types: Vec<Option<Type<'db>>> = Vec::new();
     let mut combined_call_targets: Vec<Option<ResolvedCallTarget<'db>>> = Vec::new();
 
     for module in prep.graph.iter_modules(db) {
@@ -597,7 +590,7 @@ pub fn typecheck_module_graph<'db>(
         }
         for (i, ty) in new_types.iter().enumerate() {
             if ty.is_some() {
-                combined_expr_types[i] = *ty;
+                combined_expr_types[i] = ty.clone();
             }
         }
 
@@ -927,7 +920,7 @@ fn resolve_module_imports_internal<'db>(
 /// Collected exports from a module.
 struct CollectedExports<'db> {
     functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
-    type_aliases: Vec<(InternedText<'db>, TypeAndHeap<'db>)>,
+    type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
 }
 
 /// Implementation of export collection (non-tracked).
@@ -938,7 +931,7 @@ fn collect_module_exports_impl<'db>(
     use crate::types::is_primitive_name;
 
     // Pass 0: collect type aliases first.
-    let mut type_aliases_map: HashMap<InternedText<'db>, TypeAndHeap<'db>> = HashMap::new();
+    let mut type_aliases_map: HashMap<InternedText<'db>, Type<'db>> = HashMap::new();
     let mut type_aliases_vec = Vec::new();
 
     for statement in &parsed.statements {
@@ -955,8 +948,8 @@ fn collect_module_exports_impl<'db>(
             }
 
             // Resolve the type hint using already-collected aliases.
-            if let Ok(ty) = convert_type_hint_with_aliases(db, stmt.type_hint, &type_aliases_map) {
-                type_aliases_map.insert(name, ty);
+            if let Ok(ty) = convert_type_hint_with_aliases(db, stmt.type_hint.clone(), &type_aliases_map) {
+                type_aliases_map.insert(name, ty.clone());
                 type_aliases_vec.push((name, ty));
             }
         }
@@ -976,7 +969,7 @@ fn collect_module_exports_impl<'db>(
             let mut param_modes = Vec::new();
             let mut has_error = false;
             for param in params {
-                match convert_type_hint_with_aliases(db, param.type_hint, &type_aliases_map) {
+                match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
                     Ok(ty) => {
                         param_types.push(ty);
                         param_modes.push(param.mode);

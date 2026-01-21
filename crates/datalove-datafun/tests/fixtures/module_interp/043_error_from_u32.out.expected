@@ -6,5 +6,5 @@ ModulesAnalysis(
         status: "Success",
         ir: "fn make_error():\nblock0:\n    v0 = const 42u32\n    v1 = error_from v0\n    return v1\n\nfn main():\nblock0:\n    v0 = call m0.f0()\n    return v0\n",
     ),
-    output: "@error @42",
+    output: "error 42",
 )

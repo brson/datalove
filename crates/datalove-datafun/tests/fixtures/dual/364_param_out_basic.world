@@ -3,11 +3,11 @@ scriptunit-fragment
 ----------
 
 // Test out param basic.
-fun init_42(out x: @u32): @bool
-    set x = @42
-    ret @true
+fun init_42(out x: u32): bool
+    set x = 42
+    ret true
 end fun
 
-var n: @u32 = @0
+var n: u32 = 0
 let _ok = init_42(n)
 debuglog n

@@ -7,6 +7,6 @@ fun double(ref x: int): int
     ret x + x
 end fun
 
-let val: int = @21
+let val: int = 21
 debuglog double(val)
 debuglog val

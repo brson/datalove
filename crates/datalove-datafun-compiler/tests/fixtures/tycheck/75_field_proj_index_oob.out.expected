@@ -11,7 +11,7 @@
     {
       "kind": "variable",
       "name": "t",
-      "type": "(@u32, @u32)"
+      "type": "(u32, u32)"
     }
   ]
 }

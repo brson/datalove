@@ -1,9 +1,9 @@
 [
   {
-    "input": "fun factorial(n: @u32): @u32\n  if n <= @1\n    ret @1\n  else\n    ret n * factorial(n - @1)\n  end if\nend fun",
+    "input": "fun factorial(n: u32): u32\n  if n <= 1\n    ret 1\n  else\n    ret n * factorial(n - 1)\n  end if\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun factorial(n: @u32): @u32\n  if n <= @1\n    ret @1\n  else\n    ret n * factorial(n - @1)\n  end if\nend fun"
+        "ScriptStatement": "fun factorial(n: u32): u32\n  if n <= 1\n    ret 1\n  else\n    ret n * factorial(n - 1)\n  end if\nend fun"
       }
     },
     "eval": {
@@ -12,10 +12,10 @@
     "environment": []
   },
   {
-    "input": "factorial(@5)",
+    "input": "factorial(5)",
     "parse": {
       "Command": {
-        "Expression": "factorial(@5)"
+        "Expression": "factorial(5)"
       }
     },
     "eval": {
@@ -24,10 +24,10 @@
     "environment": []
   },
   {
-    "input": "factorial(@0)",
+    "input": "factorial(0)",
     "parse": {
       "Command": {
-        "Expression": "factorial(@0)"
+        "Expression": "factorial(0)"
       }
     },
     "eval": {
@@ -36,10 +36,10 @@
     "environment": []
   },
   {
-    "input": "factorial(@1)",
+    "input": "factorial(1)",
     "parse": {
       "Command": {
-        "Expression": "factorial(@1)"
+        "Expression": "factorial(1)"
       }
     },
     "eval": {
@@ -48,10 +48,10 @@
     "environment": []
   },
   {
-    "input": "factorial(@10)",
+    "input": "factorial(10)",
     "parse": {
       "Command": {
-        "Expression": "factorial(@10)"
+        "Expression": "factorial(10)"
       }
     },
     "eval": {

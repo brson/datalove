@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let xs: [@u32] = @[]
+let xs: [u32] = []
 debuglog xs

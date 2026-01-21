@@ -3,7 +3,7 @@
     {
       "action": "add",
       "module": "local/test/a",
-      "source_hash": "527eb9f5165b60da",
+      "source_hash": "1a7d0eca8a6a16ae",
       "results": {
         "local/test/a": {
           "is_direct": true,
@@ -28,7 +28,7 @@
     {
       "action": "add",
       "module": "local/test/a",
-      "source_hash": "7e360aaf264f8ae2",
+      "source_hash": "04b0bf25184891b6",
       "results": {
         "local/test/a": {
           "is_direct": true,
@@ -53,7 +53,7 @@
     {
       "action": "add",
       "module": "local/test/a",
-      "source_hash": "844a8f2f41261d20",
+      "source_hash": "006988ab6a0c75ba",
       "results": {
         "local/test/a": {
           "is_direct": true,
@@ -78,7 +78,7 @@
     {
       "action": "add",
       "module": "local/test/a",
-      "source_hash": "c2f01de52b994f77",
+      "source_hash": "6563f47b6db403fa",
       "results": {
         "local/test/a": {
           "is_direct": true,

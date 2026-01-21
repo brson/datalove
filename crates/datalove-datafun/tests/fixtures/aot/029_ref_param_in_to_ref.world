@@ -5,7 +5,7 @@ scriptunit-fragment
 // Test passing In-mode param to Ref-mode param.
 // Outer function takes ownership (In mode), then passes a reference to inner.
 fun inner(ref x: int): int
-    ret x + :int/@10
+    ret x + :int/10
 end fun
 
 fun outer(y: int): int
@@ -13,5 +13,5 @@ fun outer(y: int): int
     ret inner(y)
 end fun
 
-debuglog outer(@42)
-debuglog outer(@100)
+debuglog outer(42)
+debuglog outer(100)

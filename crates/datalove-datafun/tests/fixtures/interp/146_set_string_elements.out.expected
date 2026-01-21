@@ -22,7 +22,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = move unit0.v3\n    unit_end v0\n",
             ),
-            output: "@set {@\"alice\", @\"bob\", @\"charlie\"}",
+            output: "set {\"alice\", \"bob\", \"charlie\"}",
         ),
     ],
 )

@@ -1,36 +1,29 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonEnum": {
-          "payload": null,
-          "variant_name": "Ok"
-        }
-      },
-      "heap": "Local"
+      "AnonEnum": {
+        "payload": null,
+        "variant_name": "Ok"
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "AnonEnum": {
-          "variants": [
-            {
-              "name": "Ok",
-              "payload": null
-            },
-            {
-              "name": "Error",
-              "payload": null
-            }
-          ]
-        }
+      "AnonEnum": {
+        "variants": [
+          {
+            "name": "Ok",
+            "payload": null
+          },
+          {
+            "name": "Error",
+            "payload": null
+          }
+        ]
       }
     }
   },
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "@",
     "kind": "AnonEnum",
     "variants": [
       {

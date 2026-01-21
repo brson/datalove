@@ -1,56 +1,38 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "List": {
-          "elements": [
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "1"
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": null
+      "List": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "2"
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "2"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "3"
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": null
-            }
-          ]
-        }
-      },
-      "heap": "Omitted"
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "3"
+              }
+            },
+            "type_hint": null
+          }
+        ]
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "List": {
-          "element_type": {
-            "heap": "Omitted",
-            "type_hint": "U32"
-          }
-        }
+      "List": {
+        "element_type": "U32"
       }
     }
   },
@@ -58,7 +40,6 @@
   "errors": [],
   "root_type": {
     "element_type": "u32",
-    "heap": "",
     "kind": "List"
   }
 }

@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const true\n    debuglog v0\n    v1 = const false\n    debuglog v1\n    unit_end\n",
             ),
             ir_match: true,
-            interp_output: "@true\n@false\n",
-            aot_output: "@true\n@false\n",
+            interp_output: "true\nfalse\n",
+            aot_output: "true\nfalse\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

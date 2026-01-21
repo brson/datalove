@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let e = : @enum { None, Some(@u32) } / @enum Some(@42)
+let e = : enum { None, Some(u32) } / enum Some(42)
 debuglog e

@@ -6,5 +6,5 @@ ModulesAnalysis(
         status: "Success",
         ir: "fn test_add(p0, p1):\nblock0:\n    v0, v1 = add.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = const \"arithmetic overflow\"\n    v3 = error_from v2\n    v4 = err v3\n    return v4\nblock2:\n    v5 = ok v0\n    return v5\n\nfn main():\nblock0:\n    v0 = const 4294967295u32\n    v1 = const 1u32\n    v2 = call m0.f0(v0, v1)\n    return v2\n",
     ),
-    output: "@error @\"arithmetic overflow\"",
+    output: "error \"arithmetic overflow\"",
 )

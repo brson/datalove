@@ -1,3 +1,3 @@
 fun bad_void()
-    ret @42
+    ret 42
 end fun

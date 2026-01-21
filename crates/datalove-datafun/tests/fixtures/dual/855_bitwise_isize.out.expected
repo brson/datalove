@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 255isize\n    v1 = const 15isize\n    v2 = const 0isize\n    v3 = const -1isize\n    v4 = intrinsic IsizeToUsize(v0)\n    v5 = intrinsic BitnotUsize(v4)\n    v6 = intrinsic UsizeToIsize(v5)\n    debuglog v6\n    v7 = intrinsic IsizeToUsize(v1)\n    v8 = intrinsic BitandUsize(v4, v7)\n    v9 = intrinsic UsizeToIsize(v8)\n    debuglog v9\n    v10 = intrinsic BitorUsize(v4, v7)\n    v11 = intrinsic UsizeToIsize(v10)\n    debuglog v11\n    v12 = intrinsic BitxorUsize(v4, v7)\n    v13 = intrinsic UsizeToIsize(v12)\n    debuglog v13\n    v14 = intrinsic BitxorUsize(v4, v4)\n    v15 = intrinsic UsizeToIsize(v14)\n    debuglog v15\n    unit_end\nexports:\n    a = v0\n    b = v1\n    zero = v2\n    neg_one = v3\n    a_u = v4\n    b_u = v7\n",
             ),
             ir_match: true,
-            interp_output: "@-256\n@15\n@255\n@240\n@0\n",
-            aot_output: "@-256\n@15\n@255\n@240\n@0\n",
+            interp_output: "-256\n15\n255\n240\n0\n",
+            aot_output: "-256\n15\n255\n240\n0\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

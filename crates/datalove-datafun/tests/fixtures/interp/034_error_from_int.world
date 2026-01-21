@@ -3,4 +3,4 @@ scriptunit-expr
 ----------
 
 // Create Error from an integer.
-@error @42
+error 42

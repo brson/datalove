@@ -3,11 +3,11 @@ scriptunit-fragment
 ----------
 
 // Test passing struct field to out param with move type.
-fun write_42(out x: int): @bool
-    set x = :int/@42
-    ret @true
+fun write_42(out x: int): bool
+    set x = :int/42
+    ret true
 end fun
 
-var s: {a: int, b: int} = {a = :int/@100, b = :int/@200}
+var s: {a: int, b: int} = {a = :int/100, b = :int/200}
 let _ok = write_42(s.a)
 debuglog s.a

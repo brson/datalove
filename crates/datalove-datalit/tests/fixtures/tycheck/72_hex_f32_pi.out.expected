@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Hex": {
-          "value": "0x40490FDB"
-        }
-      },
-      "heap": "Local"
+      "Hex": {
+        "value": "0x40490FDB"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "F32"
-    }
+    "type_hint": "F32"
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@f32"
+  "root_type": "f32"
 }

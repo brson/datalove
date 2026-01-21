@@ -1,1 +1,1 @@
-debuglog(@42)
+debuglog(42)

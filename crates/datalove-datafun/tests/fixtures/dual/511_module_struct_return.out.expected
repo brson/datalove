@@ -33,8 +33,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = call m0.f0(v0, v1)\n    v3 = getfieldref v2.0\n    debuglog v3\n    v4 = getfieldref v2.1\n    debuglog v4\n    unit_end\nexports:\n    p = v2\n",
             ),
             ir_match: true,
-            interp_output: "@10\n@20\n",
-            aot_output: "@10\n@20\n",
+            interp_output: "10\n20\n",
+            aot_output: "10\n20\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

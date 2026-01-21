@@ -1,27 +1,18 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Data": {
-          "value": {
-            "expr": {
-              "expr": {
-                "Int": {
-                  "value": "42"
-                }
-              },
-              "heap": "Local"
-            },
-            "type_hint": null
-          }
+      "Data": {
+        "value": {
+          "expr": {
+            "Int": {
+              "value": "42"
+            }
+          },
+          "type_hint": null
         }
-      },
-      "heap": "Local"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "Data"
-    }
+    "type_hint": "Data"
   },
   "diagnostics": []
 }

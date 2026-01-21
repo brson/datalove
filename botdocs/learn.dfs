@@ -13,8 +13,8 @@
 // =========================================================================
 
 // Boolean.
-let b1: bool = @true
-let b2: bool = @false
+let b1: bool = true
+let b2: bool = false
 
 // Unsigned integers: u8, u16, u32, u64.
 let small: u8 = 255
@@ -33,7 +33,7 @@ let pi: f32 = 3.14159
 let greeting: string = "hello, datalove"
 
 // Heap annotations: @ = local heap, # = global heap. Usually omitted.
-let explicit_local: @u32 = @42
+let explicit_local: @u32 = 42
 let explicit_global: #u32 = #42
 let inferred: u32 = 42        // heap inferred
 
@@ -81,7 +81,7 @@ let empty_set: @set<u32> = @set {}
 // =========================================================================
 
 // Tuples.
-let pair: (u32, bool) = (42, @true)
+let pair: (u32, bool) = (42, true)
 let triple: (u32, u32, u32) = (1, 2, 3)
 let unit: () = ()
 
@@ -97,14 +97,14 @@ let maybe: @enum { None, Some(u32) } = @enum Some(42)
 // 5. OPTION AND RESULT TYPES
 // =========================================================================
 
-// Option type: ?T holds a value or @none.
+// Option type: ?T holds a value or none.
 let found: ?u32 = some 42
-let missing: ?u32 = @none
+let missing: ?u32 = none
 
-// Result type: !T holds a value or @error.
-// ok wraps value, er wraps error. @error constructs the error value.
+// Result type: !T holds a value or error.
+// ok wraps value, er wraps error. error constructs the error value.
 let success: !u32 = ok 42
-let failure: !u32 = er @error "something went wrong"
+let failure: !u32 = er error "something went wrong"
 
 
 // =========================================================================
@@ -145,7 +145,7 @@ end fun
 // Functions returning options.
 fun safe_divide(a: u32, b: u32): ?u32
   if b == 0
-    ret @none
+    ret none
   else
     ret some (a /? b)
   end if
@@ -195,13 +195,13 @@ let product: int = 3 * 4 // Result is int
 
 // Checked arithmetic (!): stays in fixed-width type, errors on overflow.
 fun checked_example(a: u32, b: u32): !u32
-  let result = a +! b  // Early-returns @error on overflow
+  let result = a +! b  // Early-returns error on overflow
   ret ok result
 end fun
 
-// Optional arithmetic (?): stays in fixed-width type, @none on overflow.
+// Optional arithmetic (?): stays in fixed-width type, none on overflow.
 fun optional_example(a: u32, b: u32): ?u32
-  let result = a +? b  // Early-returns @none on overflow
+  let result = a +? b  // Early-returns none on overflow
   ret some result
 end fun
 
@@ -219,10 +219,10 @@ let equal = 2 == 2
 let not_equal = 1 != 2
 
 // Logical: and or xor not
-let both = @true and @false     // @false
-let either = @true or @false    // @true
-let exclusive = @true xor @true // @false
-let negated = not @true         // @false
+let both = true and false     // false
+let either = true or false    // true
+let exclusive = true xor true // false
+let negated = not true         // false
 
 
 // =========================================================================
@@ -293,16 +293,16 @@ end fun
 // 11. TRY OPERATORS
 // =========================================================================
 
-// Postfix ? early-returns @none on none.
+// Postfix ? early-returns none on none.
 fun chain_options(a: ?u32, b: ?u32): ?u32
-  let x = a?  // If a is @none, function returns @none
+  let x = a?  // If a is none, function returns none
   let y = b?
   ret some (x +? y)
 end fun
 
-// Postfix ! early-returns @error on error.
+// Postfix ! early-returns error on error.
 fun chain_results(a: !u32, b: !u32): !u32
-  let x = a!  // If a is @error, function returns that error
+  let x = a!  // If a is error, function returns that error
   let y = b!
   ret ok (x +! y)
 end fun

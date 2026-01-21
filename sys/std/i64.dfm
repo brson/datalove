@@ -47,7 +47,7 @@ end fun
 // Checked absolute value. Returns none for MIN.
 fun abs_checked(self: i64): ?i64
   if self == min_value()
-    ret @none
+    ret none
   else
     ret some abs(self)
   end if
@@ -132,7 +132,7 @@ end fun
 
 fun neg_checked(self: i64): ?i64
   if self == min_value()
-    ret @none
+    ret none
   else
     ret some icall neg_wrapping_i64(self)
   end if
@@ -159,7 +159,7 @@ end fun
 fun rem_checked(self: i64, other: i64): ?i64
   let zero = (: i64 / 0)
   if other == zero
-    ret @none
+    ret none
   else
     if self == min_value()
       if other == (: i64 / -1)
@@ -255,7 +255,7 @@ end fun
 // Checked left shift. Returns none if n >= 64.
 fun shift_left(self: i64, n: u64): ?i64
   if n >= (: u64 / 64)
-    ret @none
+    ret none
   else
     let u = icall i64_to_u64(self)
     let result = icall shl_u64(u, n)
@@ -266,7 +266,7 @@ end fun
 // Checked arithmetic right shift. Returns none if n >= 64.
 fun shift_right(self: i64, n: u64): ?i64
   if n >= (: u64 / 64)
-    ret @none
+    ret none
   else
     ret some icall sshr_i64(self, n)
   end if

@@ -1,22 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Int": {
-          "value": "42"
-        }
-      },
-      "heap": "Local"
+      "Int": {
+        "value": "42"
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "Option": {
-          "inner_type": {
-            "heap": "Local",
-            "type_hint": "U32"
-          }
-        }
+      "Option": {
+        "inner_type": "U32"
       }
     }
   },

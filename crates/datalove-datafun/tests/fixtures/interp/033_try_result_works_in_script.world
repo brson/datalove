@@ -3,5 +3,5 @@ scriptunit-fragment
 ----------
 
 // Try-result (!) should work in scripts because scripts return Result.
-let input: !u32 = ok @42
+let input: !u32 = ok 42
 let x: u32 = input!

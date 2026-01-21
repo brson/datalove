@@ -1,3 +1,3 @@
-fun test(): @u32
-    ret foo(@42)
+fun test(): u32
+    ret foo(42)
 end fun

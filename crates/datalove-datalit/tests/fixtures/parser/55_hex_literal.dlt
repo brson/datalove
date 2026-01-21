@@ -1,1 +1,1 @@
-: @f32 / @0xABABABAB
+: f32 / 0xABABABAB

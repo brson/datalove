@@ -20,7 +20,7 @@ AotAnalysis(
                 status: "Success",
                 exit_code: 0,
             )),
-            output: "@set {@10, @20, @30}\n",
+            output: "set {10, 20, 30}\n",
         ),
     ],
 )

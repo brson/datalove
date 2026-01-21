@@ -6,7 +6,7 @@
       "kind": "function",
       "name": "foo",
       "params": [],
-      "return_type": "@u32"
+      "return_type": "u32"
     }
   ]
 }

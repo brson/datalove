@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "expected 2 elements per row but got 1"
-        }
-      },
-      "heap": "Local"
+      "ParseError": {
+        "message": "expected 2 elements per row but got 1"
+      }
     },
     "type_hint": null
   },
@@ -18,9 +15,9 @@
           "message": "parse error occurred here",
           "span": [
             0,
-            1
+            6
           ],
-          "text": "@"
+          "text": "tensor"
         }
       ],
       "message": "cannot type-check expression with parse errors"

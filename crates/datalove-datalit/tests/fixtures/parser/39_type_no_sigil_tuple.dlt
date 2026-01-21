@@ -1,1 +1,1 @@
-: (bool, u32) / @(@true, @1)
+: (bool, u32) / (true, 1)

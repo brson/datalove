@@ -28,4 +28,4 @@ import derived.quad
 scriptunit-expr
 ----------
 
-quad(@3)
+quad(3)

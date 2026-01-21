@@ -3,12 +3,12 @@ scriptunit-fragment
 ----------
 
 // If-let with Result - ok case.
-fun test(): @u32
-    let res: !@u32 = ok @42
+fun test(): u32
+    let res: !u32 = ok 42
     if res |val|
         ret val
     else |err|
-        ret @999
+        ret 999
     end if
 end fun
 

@@ -26,7 +26,7 @@ end fun
 // intrinsic needed: string_get_byte(ref string, usize) -> ?u8
 fun get_byte(ref self: string, index: usize): ?u8
   // TODO: icall string_get_byte(self, index)
-  ret @none
+  ret none
 end fun
 
 // --- Character Access ---
@@ -42,14 +42,14 @@ end fun
 // intrinsic needed: string_char_at(ref string, usize) -> ?u32
 fun get_char(ref self: string, index: usize): ?u32
   // TODO: icall string_char_at(self, index)
-  ret @none
+  ret none
 end fun
 
 // Returns the byte index of the n-th character, or none if out of bounds.
 // intrinsic needed: string_char_to_byte_index(ref string, usize) -> ?usize
 fun find_char(ref self: string, char_index: usize): ?usize
   // TODO: icall string_char_to_byte_index(self, char_index)
-  ret @none
+  ret none
 end fun
 
 // --- Slicing ---
@@ -58,21 +58,21 @@ end fun
 // intrinsic needed: string_slice(ref string, usize, usize) -> ?string
 fun slice(ref self: string, start: usize, end_idx: usize): ?string
   // TODO: icall string_slice(self, start, end_idx)
-  ret @none
+  ret none
 end fun
 
 // Returns a substring from start to end of string.
 // intrinsic needed: string_slice_from(ref string, usize) -> ?string
 fun slice_from(ref self: string, start: usize): ?string
   // TODO: icall string_slice_from(self, start)
-  ret @none
+  ret none
 end fun
 
 // Returns a substring from beginning to end index.
 // intrinsic needed: string_slice_to(ref string, usize) -> ?string
 fun slice_to(ref self: string, end_idx: usize): ?string
   // TODO: icall string_slice_to(self, end_idx)
-  ret @none
+  ret none
 end fun
 
 // --- Searching ---
@@ -81,35 +81,35 @@ end fun
 // intrinsic needed: string_contains(ref string, ref string) -> bool
 fun contains(ref self: string, ref pattern: string): bool
   // TODO: icall string_contains(self, pattern)
-  ret @false
+  ret false
 end fun
 
 // Returns true if the string starts with the given prefix.
 // intrinsic needed: string_starts_with(ref string, ref string) -> bool
 fun starts_with(ref self: string, ref prefix: string): bool
   // TODO: icall string_starts_with(self, prefix)
-  ret @false
+  ret false
 end fun
 
 // Returns true if the string ends with the given suffix.
 // intrinsic needed: string_ends_with(ref string, ref string) -> bool
 fun ends_with(ref self: string, ref suffix: string): bool
   // TODO: icall string_ends_with(self, suffix)
-  ret @false
+  ret false
 end fun
 
 // Returns the byte index of the first occurrence of pattern, or none.
 // intrinsic needed: string_find(ref string, ref string) -> ?usize
 fun find(ref self: string, ref pattern: string): ?usize
   // TODO: icall string_find(self, pattern)
-  ret @none
+  ret none
 end fun
 
 // Returns the byte index of the last occurrence of pattern, or none.
 // intrinsic needed: string_rfind(ref string, ref string) -> ?usize
 fun rfind(ref self: string, ref pattern: string): ?usize
   // TODO: icall string_rfind(self, pattern)
-  ret @none
+  ret none
 end fun
 
 // --- Comparison ---
@@ -118,7 +118,7 @@ end fun
 // intrinsic needed: string_eq(ref string, ref string) -> bool
 fun eq(ref self: string, ref other: string): bool
   // TODO: icall string_eq(self, other)
-  ret @false
+  ret false
 end fun
 
 // Compares two strings lexicographically. Returns -1, 0, or 1.
@@ -132,7 +132,7 @@ end fun
 // intrinsic needed: string_eq_ignore_ascii_case(ref string, ref string) -> bool
 fun eq_ignore_ascii_case(ref self: string, ref other: string): bool
   // TODO: icall string_eq_ignore_ascii_case(self, other)
-  ret @false
+  ret false
 end fun
 
 // --- Case Conversion ---
@@ -192,14 +192,14 @@ end fun
 // intrinsic needed: string_strip_prefix(ref string, ref string) -> ?string
 fun strip_prefix(ref self: string, ref prefix: string): ?string
   // TODO: icall string_strip_prefix(self, prefix)
-  ret @none
+  ret none
 end fun
 
 // Removes the suffix if present, returns the rest or none.
 // intrinsic needed: string_strip_suffix(ref string, ref string) -> ?string
 fun strip_suffix(ref self: string, ref suffix: string): ?string
   // TODO: icall string_strip_suffix(self, suffix)
-  ret @none
+  ret none
 end fun
 
 // --- In-place Mutation ---
@@ -220,7 +220,7 @@ end fun
 // intrinsic needed: string_pop(mut string) -> ?u32
 fun pop(mut self: string): ?u32
   // TODO: icall string_pop(self)
-  ret @none
+  ret none
 end fun
 
 // Truncates the string to the given byte length.
@@ -254,7 +254,7 @@ end fun
 // intrinsic needed: string_remove(mut string, usize) -> ?u32
 fun remove(mut self: string, index: usize): ?u32
   // TODO: icall string_remove(self, index)
-  ret @none
+  ret none
 end fun
 
 // --- Construction ---
@@ -291,33 +291,33 @@ end fun
 // intrinsic needed: string_split_once(ref string, ref string) -> ?(string, string)
 fun split_once(ref self: string, ref delimiter: string): ?(string, string)
   // TODO: icall string_split_once(self, delimiter)
-  ret @none
+  ret none
 end fun
 
 // Splits on the last occurrence, returns (before, after) or none if not found.
 // intrinsic needed: string_rsplit_once(ref string, ref string) -> ?(string, string)
 fun rsplit_once(ref self: string, ref delimiter: string): ?(string, string)
   // TODO: icall string_rsplit_once(self, delimiter)
-  ret @none
+  ret none
 end fun
 
 // Splits into a list of strings by delimiter.
-// intrinsic needed: string_split(ref string, ref string) -> [@string]
-fun split(ref self: string, ref delimiter: string): [@string]
+// intrinsic needed: string_split(ref string, ref string) -> [string]
+fun split(ref self: string, ref delimiter: string): [string]
   // TODO: icall string_split(self, delimiter)
   ret []
 end fun
 
 // Splits into lines.
-// intrinsic needed: string_lines(ref string) -> [@string]
-fun lines(ref self: string): [@string]
+// intrinsic needed: string_lines(ref string) -> [string]
+fun lines(ref self: string): [string]
   // TODO: icall string_lines(self)
   ret []
 end fun
 
 // Splits by whitespace.
-// intrinsic needed: string_split_whitespace(ref string) -> [@string]
-fun split_whitespace(ref self: string): [@string]
+// intrinsic needed: string_split_whitespace(ref string) -> [string]
+fun split_whitespace(ref self: string): [string]
   // TODO: icall string_split_whitespace(self)
   ret []
 end fun
@@ -344,13 +344,13 @@ end fun
 // intrinsic needed: string_is_ascii(ref string) -> bool
 fun is_ascii(ref self: string): bool
   // TODO: icall string_is_ascii(self)
-  ret @true
+  ret true
 end fun
 
 // Returns true if all bytes are ASCII alphabetic. Returns false if empty.
 fun is_ascii_alphabetic(ref self: string): bool
   if is_empty(self)
-    ret @false
+    ret false
   end if
   var i: usize = (: usize / 0)
   let byte_len = len(self)
@@ -360,18 +360,18 @@ fun is_ascii_alphabetic(ref self: string): bool
       let is_upper = b >= (: u8 / 65) and b <= (: u8 / 90)
       let is_lower = b >= (: u8 / 97) and b <= (: u8 / 122)
       if not (is_upper or is_lower)
-        ret @false
+        ret false
       end if
     end if
     set i = icall add_wrapping_usize(i, one)
   end loop
-  ret @true
+  ret true
 end fun
 
 // Returns true if all bytes are ASCII digits. Returns false if empty.
 fun is_ascii_digit(ref self: string): bool
   if is_empty(self)
-    ret @false
+    ret false
   end if
   var i: usize = (: usize / 0)
   let byte_len = len(self)
@@ -379,18 +379,18 @@ fun is_ascii_digit(ref self: string): bool
   loop while i .< byte_len
     if get_byte(self, i) |b|
       if b .< (: u8 / 48) or b .> (: u8 / 57)
-        ret @false
+        ret false
       end if
     end if
     set i = icall add_wrapping_usize(i, one)
   end loop
-  ret @true
+  ret true
 end fun
 
 // Returns true if all bytes are ASCII alphanumeric. Returns false if empty.
 fun is_ascii_alphanumeric(ref self: string): bool
   if is_empty(self)
-    ret @false
+    ret false
   end if
   var i: usize = (: usize / 0)
   let byte_len = len(self)
@@ -401,18 +401,18 @@ fun is_ascii_alphanumeric(ref self: string): bool
       let is_lower = b >= (: u8 / 97) and b <= (: u8 / 122)
       let is_digit = b >= (: u8 / 48) and b <= (: u8 / 57)
       if not (is_upper or is_lower or is_digit)
-        ret @false
+        ret false
       end if
     end if
     set i = icall add_wrapping_usize(i, one)
   end loop
-  ret @true
+  ret true
 end fun
 
 // Returns true if all bytes are ASCII whitespace. Returns false if empty.
 fun is_ascii_whitespace(ref self: string): bool
   if is_empty(self)
-    ret @false
+    ret false
   end if
   var i: usize = (: usize / 0)
   let byte_len = len(self)
@@ -427,12 +427,12 @@ fun is_ascii_whitespace(ref self: string): bool
       let is_ff = b == (: u8 / 12)
       let is_vt = b == (: u8 / 11)
       if not (is_space or is_tab or is_newline or is_cr or is_ff or is_vt)
-        ret @false
+        ret false
       end if
     end if
     set i = icall add_wrapping_usize(i, one)
   end loop
-  ret @true
+  ret true
 end fun
 
 // --- Parsing ---
@@ -441,39 +441,39 @@ end fun
 // intrinsic needed: string_parse_int(ref string) -> ?int
 fun parse_int(ref self: string): ?int
   // TODO: icall string_parse_int(self)
-  ret @none
+  ret none
 end fun
 
 // Parses the string as u32.
 // intrinsic needed: string_parse_u32(ref string) -> ?u32
 fun parse_u32(ref self: string): ?u32
   // TODO: icall string_parse_u32(self)
-  ret @none
+  ret none
 end fun
 
 // Parses the string as i32.
 // intrinsic needed: string_parse_i32(ref string) -> ?i32
 fun parse_i32(ref self: string): ?i32
   // TODO: icall string_parse_i32(self)
-  ret @none
+  ret none
 end fun
 
 // Parses the string as f32.
 // intrinsic needed: string_parse_f32(ref string) -> ?f32
 fun parse_f32(ref self: string): ?f32
   // TODO: icall string_parse_f32(self)
-  ret @none
+  ret none
 end fun
 
 // Parses the string as bool ("true" or "false").
 fun parse_bool(ref self: string): ?bool
   if eq(self, "true")
-    ret some @true
+    ret some true
   else
     if eq(self, "false")
-      ret some @false
+      ret some false
     else
-      ret @none
+      ret none
     end if
   end if
 end fun
@@ -513,8 +513,8 @@ end fun
 // --- Joining ---
 
 // Joins a list of strings with a separator.
-// intrinsic needed: string_join(ref [@string], ref string) -> string
-fun join(ref parts: [@string], ref separator: string): string
+// intrinsic needed: string_join(ref [string], ref string) -> string
+fun join(ref parts: [string], ref separator: string): string
   // TODO: icall string_join(parts, separator)
   ret ""
 end fun

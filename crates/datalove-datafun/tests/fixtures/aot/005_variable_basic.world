@@ -2,6 +2,6 @@
 scriptunit-fragment
 ----------
 
-var x: u32 = @10
-set x = @15
+var x: u32 = 10
+set x = 15
 debuglog x

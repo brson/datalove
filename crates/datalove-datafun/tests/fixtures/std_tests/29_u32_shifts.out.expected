@@ -1,1 +1,1 @@
-@(some @16, some @4, some @1, some @1, @none, @none, @16, @4, @2, @1)
+(some 16, some 4, some 1, some 1, none, none, 16, 4, 2, 1)

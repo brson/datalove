@@ -1,1 +1,1 @@
-: !@u32 / @error @"something went wrong"
+: !u32 / error "something went wrong"

@@ -10,4 +10,4 @@ fun quadruple(n: int): int
     ret double(double(n))
 end fun
 
-debuglog quadruple(:int/@5)
+debuglog quadruple(:int/5)

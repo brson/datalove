@@ -2,4 +2,4 @@
 scriptunit-expr
 ----------
 
-: @u64 / @0xDEADBEEF
+: u64 / 0xDEADBEEF

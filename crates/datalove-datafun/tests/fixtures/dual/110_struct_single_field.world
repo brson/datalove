@@ -2,4 +2,4 @@
 scriptunit-fragment
 ----------
 
-debuglog @{name = @"Alice"}
+debuglog {name = "Alice"}

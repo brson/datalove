@@ -46,7 +46,7 @@ fn generate_module_source(module_idx: usize, num_functions: usize) -> String {
 
     // Generate a struct type alias for ownership testing.
     source.push_str(&format!(
-        "type Data{}: @{{x: int, y: int}}\n\n",
+        "type Data{}: {{x: int, y: int}}\n\n",
         module_idx
     ));
 
@@ -104,7 +104,7 @@ fn generate_module_source(module_idx: usize, num_functions: usize) -> String {
             3 => {
                 // Function with result type, nested conditionals, mutable state.
                 source.push_str(&format!(
-                    "fun func_{}_{}(a: int, b: int, cond: @bool): !int\n",
+                    "fun func_{}_{}(a: int, b: int, cond: bool): !int\n",
                     module_idx, func_idx
                 ));
                 source.push_str("  var result: int = a$\n");

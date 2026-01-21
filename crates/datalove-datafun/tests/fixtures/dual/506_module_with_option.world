@@ -20,5 +20,5 @@ fun unwrap(opt: ?u32, default: u32): u32
     ret default
 end fun
 
-debuglog unwrap(safe_div(@100, @5), @999)
-debuglog unwrap(safe_div(@100, @0), @999)
+debuglog unwrap(safe_div(100, 5), 999)
+debuglog unwrap(safe_div(100, 0), 999)

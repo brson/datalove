@@ -6,10 +6,10 @@
         {
           "message": "operands must have the same type",
           "span": [
-            105,
-            112
+            102,
+            108
           ],
-          "text": "n >= @2"
+          "text": "n >= 2"
         }
       ],
       "message": "mismatched types: expected `int`, found `u32`"
@@ -27,7 +27,7 @@
       "kind": "function",
       "name": "nested_break",
       "params": [],
-      "return_type": "@u32"
+      "return_type": "u32"
     }
   ]
 }

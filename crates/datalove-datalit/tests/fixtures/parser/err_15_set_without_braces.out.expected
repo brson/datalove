@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "expected {} after set keyword"
-        }
-      },
-      "heap": "Local"
+      "ParseError": {
+        "message": "expected {} after set keyword"
+      }
     },
     "type_hint": null
   },
@@ -17,8 +14,8 @@
         {
           "message": "expected '{' after 'set'",
           "span": [
-            1,
-            4
+            0,
+            3
           ],
           "text": "set"
         }

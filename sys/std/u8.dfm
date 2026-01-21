@@ -58,7 +58,7 @@ end fun
 
 fun is_power_of_two(self: u8): bool
   if self == (: u8 / 0)
-    ret @false
+    ret false
   else
     ret count_ones(self) == (: u8 / 1)
   end if
@@ -67,7 +67,7 @@ end fun
 // Integer log base 2. Returns none if self is zero.
 fun ilog2(self: u8): ?u8
   if self == (: u8 / 0)
-    ret @none
+    ret none
   else
     ret some sub_saturating((: u8 / 7), leading_zeros(self))
   end if
@@ -87,7 +87,7 @@ fun next_power_of_two(self: u8): ?u8
       if ilog2(self) |log|
         let next_exp = add_saturating(log, (: u8 / 1))
         if next_exp >= (: u8 / 8)
-          ret @none
+          ret none
         else
           ret shift_left((: u8 / 1), next_exp)
         end if
@@ -109,7 +109,7 @@ fun pow_checked(self: u8, exp: u8): ?u8
       if mul_checked(result, base) |next_result|
         set result = next_result
       else
-        ret @none
+        ret none
       end if
     end if
     set e = shift_right_wrapping(e, (: u8 / 1))
@@ -117,7 +117,7 @@ fun pow_checked(self: u8, exp: u8): ?u8
       if mul_checked(base, base) |next_base|
         set base = next_base
       else
-        ret @none
+        ret none
       end if
     end if
   end loop
@@ -129,13 +129,13 @@ fun pow_saturating(self: u8, exp: u8): u8
   var result: u8 = (: u8 / 1)
   var base: u8 = self
   var e: u8 = exp
-  var overflow: bool = @false
+  var overflow: bool = false
   loop while e .> (: u8 / 0)
     if bitand(e, (: u8 / 1)) == (: u8 / 1)
       if mul_checked(result, base) |next_result|
         set result = next_result
       else
-        set overflow = @true
+        set overflow = true
       end if
     end if
     set e = shift_right_wrapping(e, (: u8 / 1))
@@ -143,7 +143,7 @@ fun pow_saturating(self: u8, exp: u8): u8
       if mul_checked(base, base) |next_base|
         set base = next_base
       else
-        set overflow = @true
+        set overflow = true
       end if
     end if
   end loop
@@ -189,7 +189,7 @@ fun neg_checked(self: u8): ?u8
   if self == (: u8 / 0)
     ret some (: u8 / 0)
   else
-    ret @none
+    ret none
   end if
 end fun
 
@@ -211,7 +211,7 @@ end fun
 
 fun rem_checked(self: u8, other: u8): ?u8
   if other == (: u8 / 0)
-    ret @none
+    ret none
   else
     ret some icall rem_u8(self, other)
   end if
@@ -342,7 +342,7 @@ end fun
 // Returns none if shift >= 8.
 fun shift_left(self: u8, n: u8): ?u8
   if n >= (: u8 / 8)
-    ret @none
+    ret none
   else
     ret some icall shl_u8(self, n)
   end if
@@ -351,7 +351,7 @@ end fun
 // Returns none if shift >= 8.
 fun shift_right(self: u8, n: u8): ?u8
   if n >= (: u8 / 8)
-    ret @none
+    ret none
   else
     ret some icall shr_u8(self, n)
   end if

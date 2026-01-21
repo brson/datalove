@@ -15,4 +15,4 @@ fun checked_add(a: u32, b: u32): ?u32
 end fun
 
 // 5 + 3 = 8, no overflow.
-debuglog unwrap_or_default(checked_add(@5, @3), @999)
+debuglog unwrap_or_default(checked_add(5, 3), 999)

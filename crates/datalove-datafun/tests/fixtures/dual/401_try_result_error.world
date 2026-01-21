@@ -3,8 +3,8 @@ scriptunit-fragment
 ----------
 
 // Try operator with Error result - propagates error via early return.
-fun get_value(): !@u32
-    let input: !@u32 = er @error @1
+fun get_value(): !u32
+    let input: !u32 = er error 1
     ret ok input!
 end fun
 

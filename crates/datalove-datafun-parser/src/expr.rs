@@ -9,7 +9,6 @@ use bct::{
 };
 
 use datalove_datafun_ast::ast;
-use datalove_datalit as datalit;
 use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use super::state::Parser;
 
@@ -265,12 +264,8 @@ impl<'db> Parser<'db> {
             }
         }
 
-        // Check if it starts with a heap sigil (@ or #) or type hint (`:`) - use new inline variants.
-        // Note: `: type / expr` syntax starts without a heap sigil.
-        if self.peek_sigil(Sigil::At)
-            || self.peek_sigil(Sigil::Hash)
-            || self.peek_colon_type_hint()
-        {
+        // Check if it starts with a type hint (`:`) - use new inline variants.
+        if self.peek_colon_type_hint() {
             return self.parse_lit_expr_full();
         }
 
@@ -287,14 +282,14 @@ impl<'db> Parser<'db> {
                                 "true" | "false" | "none" => {
                                     // Capture span before parsing for diagnostic reporting.
                                     let ts = self.peek_text_span();
-                                    let expr_kind = self.parse_lit_expr(datalit::ast::Heap::Omitted, None);
+                                    let expr_kind = self.parse_lit_expr(None);
                                     self.create_expr(expr_kind, ts)
                                 }
                                 // Collection keywords - only treat as keywords if followed by `{`.
                                 "map" | "set" if self.peek_second_sigil(Sigil::BraceOpen) => {
                                     // Capture span before parsing for diagnostic reporting.
                                     let ts = self.peek_text_span();
-                                    let expr_kind = self.parse_lit_expr(datalit::ast::Heap::Omitted, None);
+                                    let expr_kind = self.parse_lit_expr(None);
                                     self.create_expr(expr_kind, ts)
                                 }
                                 // some/ok/er are always keywords - they require a payload expression.
@@ -303,11 +298,10 @@ impl<'db> Parser<'db> {
                                     let ts = self.peek_text_span();
                                     self.next(); // consume the keyword
                                     let payload = self.parse_expr_primary();
-                                    let heap = datalit::ast::Heap::Omitted;
                                     let expr_kind = match word {
-                                        "some" => ast::ExprFunKind::Some(ast::ExprSome { heap, type_hint: None, payload }),
-                                        "ok" => ast::ExprFunKind::Ok(ast::ExprOk { heap, type_hint: None, payload }),
-                                        "er" => ast::ExprFunKind::Er(ast::ExprEr { heap, type_hint: None, payload }),
+                                        "some" => ast::ExprFunKind::Some(ast::ExprSome { type_hint: None, payload }),
+                                        "ok" => ast::ExprFunKind::Ok(ast::ExprOk { type_hint: None, payload }),
+                                        "er" => ast::ExprFunKind::Er(ast::ExprEr { type_hint: None, payload }),
                                         _ => unreachable!(),
                                     };
                                     self.create_expr(expr_kind, ts)
@@ -317,12 +311,17 @@ impl<'db> Parser<'db> {
                                     let ts = self.peek_text_span();
                                     self.next(); // consume the keyword
                                     let value = self.parse_expr_primary();
-                                    let heap = datalit::ast::Heap::Omitted;
                                     let expr_kind = match word {
-                                        "data" => ast::ExprFunKind::Data(ast::ExprData { heap, type_hint: None, value }),
-                                        "error" => ast::ExprFunKind::Error(ast::ExprError { heap, type_hint: None, value }),
+                                        "data" => ast::ExprFunKind::Data(ast::ExprData { type_hint: None, value }),
+                                        "error" => ast::ExprFunKind::Error(ast::ExprError { type_hint: None, value }),
                                         _ => unreachable!(),
                                     };
+                                    self.create_expr(expr_kind, ts)
+                                }
+                                // tensor is a keyword followed by shape and data brackets.
+                                "tensor" if self.peek_second_sigil(Sigil::BracketOpen) => {
+                                    let ts = self.peek_text_span();
+                                    let expr_kind = self.parse_lit_expr(None);
                                     self.create_expr(expr_kind, ts)
                                 }
                                 // Intrinsic call: icall name(args)
@@ -378,7 +377,7 @@ impl<'db> Parser<'db> {
                                 num if Self::is_numeric_literal(num) => {
                                     // Capture span before parsing for diagnostic reporting.
                                     let ts = self.peek_text_span();
-                                    let expr_kind = self.parse_lit_expr(datalit::ast::Heap::Omitted, None);
+                                    let expr_kind = self.parse_lit_expr(None);
                                     self.create_expr(expr_kind, ts)
                                 }
                                 _ => {
@@ -442,7 +441,6 @@ impl<'db> Parser<'db> {
                             self.current_fn_name(),
                             self.next_expr_index(),
                             ast::ExprFunKind::String(ast::ExprString {
-                                heap: datalit::ast::Heap::Omitted,
                                 type_hint: None,
                                 value
                             })
@@ -466,7 +464,7 @@ impl<'db> Parser<'db> {
                 } else {
                     // Capture span before parsing for diagnostic reporting.
                     let ts = self.peek_text_span();
-                    let expr_kind = self.parse_lit_expr(datalit::ast::Heap::Omitted, None);
+                    let expr_kind = self.parse_lit_expr(None);
                     self.create_expr(expr_kind, ts)
                 }
             }

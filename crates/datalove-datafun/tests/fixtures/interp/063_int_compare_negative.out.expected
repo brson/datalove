@@ -22,7 +22,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = lt unit0.v4, unit0.v9\n    unit_end v0\n",
             ),
-            output: "@true",
+            output: "true",
         ),
     ],
 )

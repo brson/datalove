@@ -1,1 +1,1 @@
-let x = : @u32 / er error : @f64 / 19.0
+let x = : u32 / er error : f64 / 19.0

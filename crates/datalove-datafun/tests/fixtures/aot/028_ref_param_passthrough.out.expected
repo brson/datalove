@@ -20,7 +20,7 @@ AotAnalysis(
                 status: "Success",
                 exit_code: 0,
             )),
-            output: "@101\n@101\n",
+            output: "101\n101\n",
         ),
     ],
 )

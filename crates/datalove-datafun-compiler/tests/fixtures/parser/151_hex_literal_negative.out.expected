@@ -4,17 +4,13 @@
       {
         "kind": "Let",
         "name": "x",
-        "type_hint": {
-          "heap": "Omitted",
-          "type_hint": "I32"
-        },
+        "type_hint": "I32",
         "value": {
           "expr": {
             "kind": "UnaryOp",
             "op": "Neg",
             "operand": {
               "expr": {
-                "heap": "Omitted",
                 "kind": "Hex",
                 "type_hint": null,
                 "value": "0x10"

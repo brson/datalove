@@ -1,18 +1,9 @@
 {
   "ast": {
-    "expr": {
-      "expr": "None",
-      "heap": "Local"
-    },
+    "expr": "None",
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "Option": {
-          "inner_type": {
-            "heap": "Local",
-            "type_hint": "U32"
-          }
-        }
+      "Option": {
+        "inner_type": "U32"
       }
     }
   },

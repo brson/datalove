@@ -251,7 +251,7 @@ pub struct FunctionAnalysis {
 /// Context for ownership and liveness analysis.
 struct AnalysisCtx<'db> {
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     /// Resolved call targets for looking up callee parameter modes.
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     /// Next binding ID to allocate.
@@ -296,7 +296,7 @@ enum ScopeKind {
 impl<'db> AnalysisCtx<'db> {
     fn new(
         db: &'db dyn salsa::Database,
-        expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+        expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
         call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     ) -> Self {
         Self {
@@ -549,7 +549,7 @@ impl<'db> AnalysisCtx<'db> {
     fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
         let expr_id = expr.as_id();
         let index = expr_id.index() as usize;
-        match self.expr_types.get(index).copied().flatten() {
+        match self.expr_types.get(index).cloned().flatten() {
             Some(ty) => IrType::from_tycheck(self.db, &ty),
             None => IrType::Unit,
         }
@@ -812,7 +812,7 @@ impl<'db> AnalysisCtx<'db> {
 pub fn analyze_function<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
-    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     resolved_param_types: Option<&[IrType]>,
 ) -> FunctionAnalysis {
@@ -856,7 +856,7 @@ pub fn analyze_function<'db>(
 /// This is needed when type aliases are used in function parameters.
 pub fn analyze_script_functions<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     stmts: &[Statement<'db>],
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
@@ -912,7 +912,7 @@ pub struct ScriptAnalysis {
 /// - Returns final drops in `unit_end` field for emission before UnitEnd
 pub fn analyze_script_statements<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     stmts: &[Statement<'db>],
     for_aot: bool,
@@ -1330,7 +1330,7 @@ mod tests {
     fn test_simple_function() {
         let ref db = crate::Database::default();
         let source = r#"
-fun test(): @u32
+fun test(): u32
     let x = @42
     ret x
 end fun
@@ -1350,7 +1350,7 @@ end fun
         // This test just verifies the analysis runs without panicking.
         let ref db = crate::Database::default();
         let source = r#"
-fun test(cond: @bool): @u32
+fun test(cond: bool): u32
     let x = [@1, @2]
     if cond
         let _sink = x
@@ -1373,7 +1373,7 @@ end fun
         // Verify that ref params have param_mode = Some(Ref).
         let ref db = crate::Database::default();
         let source = r#"
-fun test(ref x: @u32): @u32
+fun test(ref x: u32): u32
     ret x
 end fun
         "#;
@@ -1394,7 +1394,7 @@ end fun
         // Verify that regular in params have param_mode = Some(In).
         let ref db = crate::Database::default();
         let source = r#"
-fun test(x: @u32): @u32
+fun test(x: u32): u32
     ret x
 end fun
         "#;
@@ -1440,7 +1440,7 @@ end fun
         // Verify mixed parameter modes are tracked correctly.
         let ref db = crate::Database::default();
         let source = r#"
-fun test(a: @u32, ref b: @u32, c: @u32): @u32
+fun test(a: u32, ref b: u32, c: u32): u32
     ret a
 end fun
         "#;

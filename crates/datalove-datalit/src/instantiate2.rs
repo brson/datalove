@@ -51,14 +51,14 @@ pub fn instantiate_value<'db, 't>(
     tydesc_table: &'t mut TyDescTable<'db>,
     typechecked: TypecheckResult<'db>,
 ) -> AnyResult<InstantiatedValue<'t>> {
-    let root_type = typechecked.root_type(db)
+    let root_type = typechecked.root_type(db).clone()
         .ok_or_else(|| anyhow!("No root type"))?;
     let root_expr = typechecked.root_expr(db);
     let resolved = typechecked.resolved(db);
 
-    let value_ptr = instantiate_expr(db, rt, root_expr, root_type.ty(db), tydesc_table, resolved)?;
+    let value_ptr = instantiate_expr(db, rt, root_expr, &root_type, tydesc_table, resolved)?;
 
-    let tydesc = tydesc_table.get_or_create_ref(root_type.ty(db));
+    let tydesc = tydesc_table.get_or_create_ref(&root_type);
 
     Ok(InstantiatedValue {
         ptr: value_ptr,
@@ -102,8 +102,7 @@ fn instantiate_expr_into<'db>(
     resolved: ResolvedExpr<'db>,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null(), "dest_ptr must be non-null");
-    let expr_and_heap = expr.expr(db);
-    let expr_inner = &expr_and_heap.expr;
+    let expr_inner = expr.expr(db);
 
     match (expr_inner, ty) {
         (Expr::True, Type::Bool) => instantiate_bool(rt, true, dest_ptr),
@@ -163,32 +162,32 @@ fn instantiate_expr_into<'db>(
 
         (Expr::List(list_expr), Type::List(list_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_list(db, rt, &list_expr.elements, list_ty.element_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_list(db, rt, &list_expr.elements, *list_ty.element_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::None, Type::Option(opt)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_option(db, rt, false, None, opt.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_option(db, rt, false, None, *opt.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Some(some_expr), Type::Option(opt)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_option(db, rt, true, Some(some_expr.payload), opt.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_option(db, rt, true, Some(some_expr.payload), *opt.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Error(err_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_result(db, rt, false, None, Some(err_expr.value), res.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_result(db, rt, false, None, Some(err_expr.value), *res.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Er(er_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_result(db, rt, false, None, Some(er_expr.payload), res.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_result(db, rt, false, None, Some(er_expr.payload), *res.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Ok(ok_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_result(db, rt, true, Some(ok_expr.payload), None, res.inner_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_result(db, rt, true, Some(ok_expr.payload), None, *res.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Data(data_expr), Type::Data) => {
@@ -203,17 +202,17 @@ fn instantiate_expr_into<'db>(
 
         (Expr::Map(map_expr), Type::Map(map_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_map(db, rt, map_expr.clone(), map_ty.key_type, map_ty.value_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_map(db, rt, map_expr.clone(), *map_ty.key_type.clone(), *map_ty.value_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Set(set_expr), Type::Set(set_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_set(db, rt, set_expr.clone(), set_ty.element_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_set(db, rt, set_expr.clone(), *set_ty.element_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Tensor(tensor_expr), Type::Tensor(tensor_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_tensor(db, rt, &tensor_expr.shape, &tensor_expr.elements, tensor_ty.element_type, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_tensor(db, rt, &tensor_expr.shape, &tensor_expr.elements, *tensor_ty.element_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Table(table_expr), Type::Table(table_ty)) => {
@@ -643,7 +642,7 @@ fn instantiate_tuple<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
     elements: &[ExprFull<'db>],
-    field_types: &[TypeAndHeap<'db>],
+    field_types: &[Type<'db>],
     tydesc_table: &mut TyDescTable<'db>,
     tuple_tydesc: *const rtdt::TyDesc,
     dest_ptr: *mut u8,
@@ -655,11 +654,11 @@ fn instantiate_tuple<'db>(
     for (i, (elem, field_ty)) in elements.iter().zip(field_types.iter()).enumerate() {
         let field_offset = layout.field_offsets[i];
         let field_dest = unsafe { dest_ptr.add(field_offset as usize) };
-        if let Err(e) = instantiate_expr_into(db, rt, *elem, field_ty.ty(db), tydesc_table, field_dest, resolved) {
+        if let Err(e) = instantiate_expr_into(db, rt, *elem, field_ty, tydesc_table, field_dest, resolved) {
             // Destroy successfully instantiated fields.
             for j in 0..i {
                 let prev_field_ty = &field_types[j];
-                let prev_field_tydesc = tydesc_table.get_or_create(prev_field_ty.ty(db));
+                let prev_field_tydesc = tydesc_table.get_or_create(&*prev_field_ty);
                 let prev_field_offset = layout.field_offsets[j];
                 let prev_field_dest = unsafe { dest_ptr.add(prev_field_offset as usize) };
                 unsafe {
@@ -693,7 +692,7 @@ fn instantiate_struct<'db>(
         // Linear search for small structs.
         for (i, type_field) in type_fields.iter().enumerate() {
             let field_name = type_field.name.as_str(db);
-            let field_ty = type_field.ty;
+            let field_ty = &type_field.ty;
 
             let field_expr = expr_fields
                 .iter()
@@ -703,11 +702,11 @@ fn instantiate_struct<'db>(
 
             let field_offset = layout.field_offsets[i];
             let field_dest = unsafe { dest_ptr.add(field_offset as usize) };
-            if let Err(e) = instantiate_expr_into(db, rt, field_expr, field_ty.ty(db), tydesc_table, field_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, field_expr, &**field_ty, tydesc_table, field_dest, resolved) {
                 // Destroy successfully instantiated fields.
                 for j in 0..i {
-                    let prev_field_ty = type_fields[j].ty;
-                    let prev_field_tydesc = tydesc_table.get_or_create(prev_field_ty.ty(db));
+                    let prev_field_ty = &type_fields[j].ty;
+                    let prev_field_tydesc = tydesc_table.get_or_create(&**prev_field_ty);
                     let prev_field_offset = layout.field_offsets[j];
                     let prev_field_dest = unsafe { dest_ptr.add(prev_field_offset as usize) };
                     unsafe {
@@ -727,18 +726,18 @@ fn instantiate_struct<'db>(
 
         for (i, type_field) in type_fields.iter().enumerate() {
             let field_name = type_field.name.as_str(db);
-            let field_ty = type_field.ty;
+            let field_ty = &type_field.ty;
 
             let field_expr = field_map.get(field_name)
                 .ok_or_else(|| anyhow!("Missing field: {}", field_name))?;
 
             let field_offset = layout.field_offsets[i];
             let field_dest = unsafe { dest_ptr.add(field_offset as usize) };
-            if let Err(e) = instantiate_expr_into(db, rt, *field_expr, field_ty.ty(db), tydesc_table, field_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, *field_expr, &**field_ty, tydesc_table, field_dest, resolved) {
                 // Destroy successfully instantiated fields.
                 for j in 0..i {
-                    let prev_field_ty = type_fields[j].ty;
-                    let prev_field_tydesc = tydesc_table.get_or_create(prev_field_ty.ty(db));
+                    let prev_field_ty = &type_fields[j].ty;
+                    let prev_field_tydesc = tydesc_table.get_or_create(&**prev_field_ty);
                     let prev_field_offset = layout.field_offsets[j];
                     let prev_field_dest = unsafe { dest_ptr.add(prev_field_offset as usize) };
                     unsafe {
@@ -781,7 +780,7 @@ fn instantiate_enum<'db>(
     if let (Some(payload_expr), Some(payload_ty)) = (payload_expr, variant_ty.payload.clone()) {
         let payload_offset = layout.variant_offsets[variant_index];
         let payload_dest = unsafe { dest_ptr.add(payload_offset as usize) };
-        instantiate_expr_into(db, rt, payload_expr, payload_ty.ty(db), tydesc_table, payload_dest, resolved)?;
+        instantiate_expr_into(db, rt, payload_expr, &*payload_ty, tydesc_table, payload_dest, resolved)?;
     }
 
     Ok(dest_ptr as *const u8)
@@ -791,15 +790,15 @@ fn instantiate_list<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
     elements: &[ExprFull<'db>],
-    element_type: TypeAndHeap<'db>,
+    element_type: Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     _list_tydesc: *const rtdt::TyDesc,
     dest_ptr: *mut u8,
     resolved: ResolvedExpr<'db>,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let element_ty = element_type.ty(db);
-    let element_tydesc = tydesc_table.get_or_create(element_ty);
+    let element_ty = element_type;
+    let element_tydesc = tydesc_table.get_or_create(&element_ty);
     let element_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(element_tydesc) };
     let element_size = element_tydesc_ref.size();
 
@@ -811,7 +810,7 @@ fn instantiate_list<'db>(
             // Try to instantiate all elements. If any fail, clean up and return error.
             for (i, elem) in elements.iter().enumerate() {
                 let elem_dest = array_ptr.add(i * element_size as usize);
-                if let Err(e) = instantiate_expr_into(db, rt, *elem, element_ty, tydesc_table, elem_dest, resolved) {
+                if let Err(e) = instantiate_expr_into(db, rt, *elem, &element_ty, tydesc_table, elem_dest, resolved) {
                     // Destroy successfully instantiated elements.
                     for j in 0..i {
                         let elem_to_destroy = array_ptr.add(j * element_size as usize);
@@ -863,7 +862,7 @@ fn instantiate_table<'db>(
     // Build a row tuple type descriptor from column types.
     let column_tydescs: Vec<*const rtdt::TyDesc> = columns
         .iter()
-        .map(|col| tydesc_table.get_or_create(col.ty.ty(db)))
+        .map(|col| tydesc_table.get_or_create(&*col.ty))
         .collect();
     let row_tuple_tydesc = tydesc_table.get_or_create_tuple(&column_tydescs);
     let row_tuple_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(row_tuple_tydesc) };
@@ -901,7 +900,7 @@ fn instantiate_table<'db>(
         for (col_idx, (elem, col)) in row.elements.iter().zip(columns.iter()).enumerate() {
             let field_offset = row_layout.field_offsets[col_idx];
             let cell_dest = unsafe { row_buffer.add(field_offset as usize) };
-            if let Err(e) = instantiate_expr_into(db, rt, *elem, col.ty.ty(db), tydesc_table, cell_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, *elem, &*col.ty, tydesc_table, cell_dest, resolved) {
                 // Destroy already instantiated cells in this row.
                 for cleanup_col in 0..col_idx {
                     let cleanup_offset = row_layout.field_offsets[cleanup_col];
@@ -965,7 +964,7 @@ fn instantiate_option<'db>(
     rt: datalove_rt::c::LocalRtHandle,
     is_some: bool,
     payload_expr: Option<ExprFull<'db>>,
-    inner_type: TypeAndHeap<'db>,
+    inner_type: Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     option_tydesc: *const rtdt::TyDesc,
     dest_ptr: *mut u8,
@@ -979,7 +978,7 @@ fn instantiate_option<'db>(
 
         let payload = payload_expr.ok_or_else(|| anyhow!("Some variant missing payload"))?;
         let payload_dest = unsafe { dest_ptr.add(layout.payload_offset as usize) };
-        instantiate_expr_into(db, rt, payload, inner_type.ty(db), tydesc_table, payload_dest, resolved)?;
+        instantiate_expr_into(db, rt, payload, &inner_type, tydesc_table, payload_dest, resolved)?;
     } else {
         unsafe { *dest_ptr = rtdt::OptionTag::None as u8 };
     }
@@ -993,7 +992,7 @@ fn instantiate_result<'db>(
     is_ok: bool,
     ok_payload_expr: Option<ExprFull<'db>>,
     err_payload_expr: Option<ExprFull<'db>>,
-    ok_type: TypeAndHeap<'db>,
+    ok_type: Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     result_tydesc: *const rtdt::TyDesc,
     dest_ptr: *mut u8,
@@ -1007,7 +1006,7 @@ fn instantiate_result<'db>(
 
         let payload = ok_payload_expr.ok_or_else(|| anyhow!("Ok variant missing payload"))?;
         let payload_dest = unsafe { dest_ptr.add(layout.payload_offset as usize) };
-        instantiate_expr_into(db, rt, payload, ok_type.ty(db), tydesc_table, payload_dest, resolved)?;
+        instantiate_expr_into(db, rt, payload, &ok_type, tydesc_table, payload_dest, resolved)?;
     } else {
         unsafe { *dest_ptr = rtdt::ResultTag::Err as u8 };
 
@@ -1021,11 +1020,11 @@ fn instantiate_result<'db>(
             return Err(anyhow!("Type errors in result error payload ({} errors)", typechecked.errors(db).len()));
         }
 
-        let inner_type = typechecked.root_type(db)
+        let inner_type = typechecked.root_type(db).clone()
             .ok_or_else(|| anyhow!("Cannot determine type of error value"))?;
 
-        let inner_tydesc = tydesc_table.get_or_create(inner_type.ty(db));
-        let inner_value = instantiate_expr(db, rt, err_payload, inner_type.ty(db), tydesc_table, resolved)?;
+        let inner_tydesc = tydesc_table.get_or_create(&inner_type);
+        let inner_value = instantiate_expr(db, rt, err_payload, &inner_type, tydesc_table, resolved)?;
 
         let error_ptr = payload_dest as *mut rtdt::Error;
 
@@ -1058,11 +1057,11 @@ fn instantiate_data<'db>(
         return Err(anyhow!("Type errors in data value ({} errors)", typechecked.errors(db).len()));
     }
 
-    let inner_type = typechecked.root_type(db)
+    let inner_type = typechecked.root_type(db).clone()
         .ok_or_else(|| anyhow!("Cannot determine type of data value"))?;
 
-    let inner_tydesc = tydesc_table.get_or_create(inner_type.ty(db));
-    let inner_value = instantiate_expr(db, rt, inner_expr, inner_type.ty(db), tydesc_table, resolved)?;
+    let inner_tydesc = tydesc_table.get_or_create(&inner_type);
+    let inner_value = instantiate_expr(db, rt, inner_expr, &inner_type, tydesc_table, resolved)?;
 
     let data_ptr = dest_ptr as *mut rtdt::Data;
 
@@ -1093,11 +1092,11 @@ fn instantiate_error<'db>(
         return Err(anyhow!("Type errors in error value ({} errors)", typechecked.errors(db).len()));
     }
 
-    let inner_type = typechecked.root_type(db)
+    let inner_type = typechecked.root_type(db).clone()
         .ok_or_else(|| anyhow!("Cannot determine type of error value"))?;
 
-    let inner_tydesc = tydesc_table.get_or_create(inner_type.ty(db));
-    let inner_value = instantiate_expr(db, rt, inner_expr, inner_type.ty(db), tydesc_table, resolved)?;
+    let inner_tydesc = tydesc_table.get_or_create(&inner_type);
+    let inner_value = instantiate_expr(db, rt, inner_expr, &inner_type, tydesc_table, resolved)?;
 
     let error_ptr = dest_ptr as *mut rtdt::Error;
 
@@ -1120,8 +1119,8 @@ fn instantiate_map<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
     map_expr: ExprMap<'db>,
-    key_type: TypeAndHeap<'db>,
-    value_type: TypeAndHeap<'db>,
+    key_type: Type<'db>,
+    value_type: Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     _map_tydesc: *const rtdt::TyDesc,
     dest_ptr: *mut u8,
@@ -1142,8 +1141,8 @@ fn instantiate_map<'db>(
     // Get sorted indices (cached by Salsa).
     let sorted_indices = crate::canon::sorted_map_indices(db, &map_expr);
 
-    let key_tydesc = tydesc_table.get_or_create(key_type.ty(db));
-    let value_tydesc = tydesc_table.get_or_create(value_type.ty(db));
+    let key_tydesc = tydesc_table.get_or_create(&key_type);
+    let value_tydesc = tydesc_table.get_or_create(&value_type);
     let key_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(key_tydesc) };
     let value_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(value_tydesc) };
     let key_size = key_tydesc_ref.size() as usize;
@@ -1180,7 +1179,7 @@ fn instantiate_map<'db>(
             let value_dest = values_buffer.add(i * value_size);
 
             // Try to instantiate key.
-            if let Err(e) = instantiate_expr_into(db, rt, key_expr, key_type.ty(db), tydesc_table, key_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, key_expr, &key_type, tydesc_table, key_dest, resolved) {
                 // Cleanup: destroy already-instantiated entries.
                 for j in 0..instantiated_count {
                     let key_to_destroy = keys_buffer.add(j * key_size);
@@ -1195,7 +1194,7 @@ fn instantiate_map<'db>(
             }
 
             // Try to instantiate value.
-            if let Err(e) = instantiate_expr_into(db, rt, value_expr, value_type.ty(db), tydesc_table, value_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, value_expr, &value_type, tydesc_table, value_dest, resolved) {
                 // Destroy the key we just instantiated.
                 datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_dest, key_tydesc);
                 // Cleanup: destroy already-instantiated entries.
@@ -1245,7 +1244,7 @@ fn instantiate_set<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
     set_expr: ExprSet<'db>,
-    element_type: TypeAndHeap<'db>,
+    element_type: Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     _set_tydesc: *const rtdt::TyDesc,
     dest_ptr: *mut u8,
@@ -1266,7 +1265,7 @@ fn instantiate_set<'db>(
     // Get sorted indices (cached by Salsa).
     let sorted_indices = crate::canon::sorted_set_indices(db, &set_expr);
 
-    let element_tydesc = tydesc_table.get_or_create(element_type.ty(db));
+    let element_tydesc = tydesc_table.get_or_create(&element_type);
     let element_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(element_tydesc) };
     let element_size = element_tydesc_ref.size() as usize;
     let element_align = element_tydesc_ref.align() as u32;
@@ -1286,7 +1285,7 @@ fn instantiate_set<'db>(
         for (i, &orig_idx) in sorted_indices.iter().enumerate() {
             let elem = elements[orig_idx];
             let elem_dest = buffer.add(i * element_size);
-            if let Err(e) = instantiate_expr_into(db, rt, elem, element_type.ty(db), tydesc_table, elem_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, elem, &element_type, tydesc_table, elem_dest, resolved) {
                 // Cleanup: destroy already-instantiated elements.
                 for j in 0..instantiated_count {
                     let elem_to_destroy = buffer.add(j * element_size);
@@ -1324,15 +1323,15 @@ fn instantiate_tensor<'db>(
     rt: datalove_rt::c::LocalRtHandle,
     shape: &[u32],
     elements: &[ExprFull<'db>],
-    element_type: TypeAndHeap<'db>,
+    element_type: Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     _tensor_tydesc: *const rtdt::TyDesc,
     dest_ptr: *mut u8,
     resolved: ResolvedExpr<'db>,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let element_ty = element_type.ty(db);
-    let element_tydesc = tydesc_table.get_or_create(element_ty);
+    let element_ty = element_type;
+    let element_tydesc = tydesc_table.get_or_create(&element_ty);
     let element_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(element_tydesc) };
     let element_size = element_tydesc_ref.size();
 
@@ -1347,7 +1346,7 @@ fn instantiate_tensor<'db>(
             // Try to instantiate all elements. If any fail, clean up and return error.
             for (i, elem) in elements.iter().enumerate() {
                 let elem_dest = array_ptr.add(i * element_size as usize);
-                if let Err(e) = instantiate_expr_into(db, rt, *elem, element_ty, tydesc_table, elem_dest, resolved) {
+                if let Err(e) = instantiate_expr_into(db, rt, *elem, &element_ty, tydesc_table, elem_dest, resolved) {
                     // Destroy successfully instantiated elements.
                     for j in 0..i {
                         let elem_to_destroy = array_ptr.add(j * element_size as usize);
@@ -1475,7 +1474,7 @@ mod tests {
     #[test]
     fn test_instantiate_bool_true() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "@true")?;
+        let typechecked = compile_str(&db, "true")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1495,7 +1494,7 @@ mod tests {
     #[test]
     fn test_instantiate_bool_false() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "@false")?;
+        let typechecked = compile_str(&db, "false")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1515,7 +1514,7 @@ mod tests {
     #[test]
     fn test_instantiate_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "@42")?;
+        let typechecked = compile_str(&db, "42")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1535,7 +1534,7 @@ mod tests {
     #[test]
     fn test_instantiate_f32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "@3.14")?;
+        let typechecked = compile_str(&db, "3.14")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1555,7 +1554,7 @@ mod tests {
     #[test]
     fn test_instantiate_string() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, r#"@"hello""#)?;
+        let typechecked = compile_str(&db, r#""hello""#)?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1579,7 +1578,7 @@ mod tests {
     #[test]
     fn test_instantiate_empty_string() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, r#"@"""#)?;
+        let typechecked = compile_str(&db, r#""""#)?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1602,7 +1601,7 @@ mod tests {
     #[test]
     fn test_instantiate_tuple_simple() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "@(@true, @42)")?;
+        let typechecked = compile_str(&db, "(true, 42)")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1630,7 +1629,7 @@ mod tests {
     #[test]
     fn test_instantiate_int_small() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @int / @42")?;
+        let typechecked = compile_str(&db, ": int / 42")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1654,7 +1653,7 @@ mod tests {
     #[test]
     fn test_instantiate_int_zero() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @int / @0")?;
+        let typechecked = compile_str(&db, ": int / 0")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1678,7 +1677,7 @@ mod tests {
     #[test]
     fn test_instantiate_anon_struct() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "@{x = @1, y = @2}")?;
+        let typechecked = compile_str(&db, "{x = 1, y = 2}")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1713,7 +1712,7 @@ mod tests {
     #[test]
     fn test_instantiate_enum_no_payload() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @enum { Ok, Error } / @enum Ok")?;
+        let typechecked = compile_str(&db, ": enum { Ok, Error } / enum Ok")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1737,7 +1736,7 @@ mod tests {
     #[test]
     fn test_instantiate_enum_with_scalar_payload() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@42)")?;
+        let typechecked = compile_str(&db, ": enum { Ok(u32), Err(string) } / enum Ok(42)")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1766,7 +1765,7 @@ mod tests {
     #[test]
     fn test_instantiate_list_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "@[@1, @2, @3, @4, @5]")?;
+        let typechecked = compile_str(&db, "[1, 2, 3, 4, 5]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1795,7 +1794,7 @@ mod tests {
     #[test]
     fn test_instantiate_empty_list() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @[@u32] / @[]")?;
+        let typechecked = compile_str(&db, ": [u32] / []")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1818,7 +1817,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@u32 / @none")?;
+        let typechecked = compile_str(&db, ": ?u32 / none")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1839,7 +1838,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_some_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@u32 / some @42")?;
+        let typechecked = compile_str(&db, ": ?u32 / some 42")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1864,7 +1863,7 @@ mod tests {
     #[test]
     fn test_instantiate_list_string() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, r#"@[@"hello", @"world"]"#)?;
+        let typechecked = compile_str(&db, r#"["hello", "world"]"#)?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1898,7 +1897,7 @@ mod tests {
     #[test]
     fn test_instantiate_nested_option_some_some() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@?@u32 / some some @42")?;
+        let typechecked = compile_str(&db, ": ??u32 / some some 42")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1932,7 +1931,7 @@ mod tests {
     #[test]
     fn test_instantiate_int_large() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @int / @1234567890123456789")?;
+        let typechecked = compile_str(&db, ": int / 1234567890123456789")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1961,7 +1960,7 @@ mod tests {
     #[test]
     fn test_instantiate_enum_with_tuple_payload() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @enum { Ok(@(@u32, @u32)), Err(@string) } / @enum Ok(@(@10, @20))")?;
+        let typechecked = compile_str(&db, ": enum { Ok((u32, u32)), Err(string) } / enum Ok((10, 20))")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2003,7 +2002,7 @@ mod tests {
     #[test]
     fn test_instantiate_enum_with_struct_payload() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @enum { Data(@{x: @u32, y: @u32}), None } / @enum Data(@{x = @5, y = @15})")?;
+        let typechecked = compile_str(&db, ": enum { Data({x: u32, y: u32}), None } / enum Data({x = 5, y = 15})")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2045,7 +2044,7 @@ mod tests {
     #[test]
     fn test_instantiate_list_of_tuples() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "@[@(@1, @2), @(@3, @4), @(@5, @6)]")?;
+        let typechecked = compile_str(&db, "[(1, 2), (3, 4), (5, 6)]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2086,7 +2085,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_tuple_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@(@u32, @u32) / @none")?;
+        let typechecked = compile_str(&db, ": ?(u32, u32) / none")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2112,7 +2111,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_tuple_some() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@(@u32, @u32) / some @(@10, @20)")?;
+        let typechecked = compile_str(&db, ": ?(u32, u32) / some (10, 20)")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2146,7 +2145,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_struct_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@{x: @u32, y: @u32} / @none")?;
+        let typechecked = compile_str(&db, ": ?{x: u32, y: u32} / none")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2172,7 +2171,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_struct_some() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@{x: @u32, y: @u32} / some @{x = @100, y = @200}")?;
+        let typechecked = compile_str(&db, ": ?{x: u32, y: u32} / some {x = 100, y = 200}")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2206,7 +2205,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_list_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@[@u32] / @none")?;
+        let typechecked = compile_str(&db, ": ?[u32] / none")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2230,7 +2229,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_list_some_empty() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@[@u32] / some @[]")?;
+        let typechecked = compile_str(&db, ": ?[u32] / some []")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2259,7 +2258,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_list_some_nonempty() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@[@u32] / some @[@1, @2, @3]")?;
+        let typechecked = compile_str(&db, ": ?[u32] / some [1, 2, 3]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2290,7 +2289,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_string_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@string / @none")?;
+        let typechecked = compile_str(&db, ": ?string / none")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2314,7 +2313,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_enum_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@enum { Ok, Error } / @none")?;
+        let typechecked = compile_str(&db, ": ?enum { Ok, Error } / none")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2340,7 +2339,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_enum_some() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@enum { Ok, Error(@string) } / some @enum Error(@\"failed\")")?;
+        let typechecked = compile_str(&db, ": ?enum { Ok, Error(string) } / some enum Error(\"failed\")")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2378,7 +2377,7 @@ mod tests {
     #[test]
     fn test_instantiate_nested_option_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@?@u32 / @none")?;
+        let typechecked = compile_str(&db, ": ??u32 / none")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2405,7 +2404,7 @@ mod tests {
     #[test]
     fn test_instantiate_nested_option_some_none() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@?@u32 / @none")?;
+        let typechecked = compile_str(&db, ": ??u32 / none")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2426,7 +2425,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_option_of_tuple() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @?@?@(@u32, @bool) / some some @(@5, @true)")?;
+        let typechecked = compile_str(&db, ": ??(u32, bool) / some some (5, true)")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2469,7 +2468,7 @@ mod tests {
     #[test]
     fn test_instantiate_result_ok_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @!@u32 / ok @42")?;
+        let typechecked = compile_str(&db, ": !u32 / ok 42")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2494,7 +2493,7 @@ mod tests {
     #[test]
     fn test_instantiate_result_err() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": @!@u32 / @error @\"oops\"")?;
+        let typechecked = compile_str(&db, ": !u32 / error \"oops\"")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2528,7 +2527,7 @@ mod tests {
     #[test]
     fn test_instantiate_error() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "@error @42")?;
+        let typechecked = compile_str(&db, "error 42")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2555,7 +2554,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_2d_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": tensor<u32, 2> / @tensor [2, 3] [1 2 3, 4 5 6]")?;
+        let typechecked = compile_str(&db, ": tensor<u32, 2> / tensor [2, 3] [1 2 3, 4 5 6]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2591,7 +2590,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_1d_f32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": tensor<f32, 1> / @tensor [5] [1.0, 2.0, 3.0, 4.0, 5.0]")?;
+        let typechecked = compile_str(&db, ": tensor<f32, 1> / tensor [5] [1.0, 2.0, 3.0, 4.0, 5.0]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2627,7 +2626,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_rank4() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": tensor<u32, 4> / @tensor [2, 2, 2, 2] [1 2, 3 4, 5 6, 7 8, 9 10, 11 12, 13 14, 15 16]")?;
+        let typechecked = compile_str(&db, ": tensor<u32, 4> / tensor [2, 2, 2, 2] [1 2, 3 4, 5 6, 7 8, 9 10, 11 12, 13 14, 15 16]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2663,7 +2662,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_3d_i32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": tensor<i32, 3> / @tensor [2, 2, 2] [1 2, 3 4, 5 6, 7 8]")?;
+        let typechecked = compile_str(&db, ": tensor<i32, 3> / tensor [2, 2, 2] [1 2, 3 4, 5 6, 7 8]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2699,7 +2698,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_of_tuples() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": tensor<(u32, f32), 2> / @tensor [2, 2] [(1, 1.0) (2, 2.0), (3, 3.0) (4, 4.0)]")?;
+        let typechecked = compile_str(&db, ": tensor<(u32, f32), 2> / tensor [2, 2] [(1, 1.0) (2, 2.0), (3, 3.0) (4, 4.0)]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2733,7 +2732,7 @@ mod tests {
     #[test]
     fn test_instantiate_list_of_tensors() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": [tensor<u32, 2>] / @[@tensor [2, 2] [1 2, 3 4], @tensor [2, 2] [5 6, 7 8]]")?;
+        let typechecked = compile_str(&db, ": [tensor<u32, 2>] / [tensor [2, 2] [1 2, 3 4], tensor [2, 2] [5 6, 7 8]]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2757,7 +2756,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_tensor() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": ?tensor<u32, 2> / some @tensor [2, 2] [1 2, 3 4]")?;
+        let typechecked = compile_str(&db, ": ?tensor<u32, 2> / some tensor [2, 2] [1 2, 3 4]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2785,7 +2784,7 @@ mod tests {
     #[test]
     fn test_instantiate_table_basic() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": {| id: u32, val: u32 |} / {| id, val; @1, @10; @2, @20 |}")?;
+        let typechecked = compile_str(&db, ": {| id: u32, val: u32 |} / {| id, val; 1, 10; 2, 20 |}")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2836,7 +2835,7 @@ mod tests {
     #[test]
     fn test_instantiate_table_with_string() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, r#": {| name: string, age: u32 |} / {| name, age; @"Alice", @30; @"Bob", @25 |}"#)?;
+        let typechecked = compile_str(&db, r#": {| name: string, age: u32 |} / {| name, age; "Alice", 30; "Bob", 25 |}"#)?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);

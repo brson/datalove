@@ -98,7 +98,7 @@ fn expr_type_hint_missing_slash() {
 /// `map { k = v }` expects `=`.
 #[test]
 fn expr_map_entry_missing_equals() {
-    let json = parse("@map { @1 @2 }");
+    let json = parse("map { @1 @2 }");
     assert_parse_error(&json, "map entry missing equals");
 }
 
@@ -106,7 +106,7 @@ fn expr_map_entry_missing_equals() {
 /// Struct field expects `name = value`.
 #[test]
 fn expr_struct_field_missing_equals() {
-    let json = parse("@{ x @42 }");
+    let json = parse("{ x @42 }");
     assert_parse_error(&json, "struct field missing equals");
 }
 
@@ -122,7 +122,7 @@ fn expr_tuple_missing_name() {
 /// `enum` expects a variant name.
 #[test]
 fn expr_enum_missing_variant_name() {
-    let json = parse("@enum");
+    let json = parse("enum");
     assert_parse_error(&json, "enum without variant name");
 }
 
@@ -130,6 +130,6 @@ fn expr_enum_missing_variant_name() {
 /// Struct field expects a name before `=`.
 #[test]
 fn expr_struct_field_missing_name() {
-    let json = parse("@{ = @42 }");
+    let json = parse("{ = @42 }");
     assert_parse_error(&json, "struct field missing name");
 }

@@ -15,4 +15,4 @@ fun checked_div(a: u32, b: u32): ?u32
 end fun
 
 // 42 / 0 is division by zero, returns None -> default 999.
-debuglog unwrap_or_default(checked_div(@42, @0), @999)
+debuglog unwrap_or_default(checked_div(42, 0), 999)

@@ -4,7 +4,7 @@ module local/test/base
 
 // Using int type to avoid fixed-width integer widening issues.
 fun add_one(x: int): int
-    ret x + :int/@1
+    ret x + :int/1
 end fun
 
 ----------
@@ -29,4 +29,4 @@ import math.add_two
 scriptunit-expr
 ----------
 
-add_two(:int/@5)
+add_two(:int/5)

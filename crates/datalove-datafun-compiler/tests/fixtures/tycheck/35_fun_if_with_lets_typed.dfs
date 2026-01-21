@@ -1,9 +1,9 @@
-fun process(n: @int): @int
-  if n .> : @int / @0
-    let doubled = n * : @int / @2
+fun process(n: int): int
+  if n .> : int / 0
+    let doubled = n * : int / 2
     ret doubled
   else
-    let zero = : @int / @0
+    let zero = : int / 0
     ret zero
   end if
 end fun

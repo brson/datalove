@@ -7,7 +7,6 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "heap": "Local",
             "kind": "String",
             "type_hint": null,
             "value": "\"hello\""

@@ -47,7 +47,7 @@ end fun
 // Checked absolute value. Returns none for MIN.
 fun abs_checked(self: i8): ?i8
   if self == min_value()
-    ret @none
+    ret none
   else
     ret some abs(self)
   end if
@@ -132,7 +132,7 @@ end fun
 
 fun neg_checked(self: i8): ?i8
   if self == min_value()
-    ret @none
+    ret none
   else
     ret some icall neg_wrapping_i8(self)
   end if
@@ -159,7 +159,7 @@ end fun
 fun rem_checked(self: i8, other: i8): ?i8
   let zero = (: i8 / 0)
   if other == zero
-    ret @none
+    ret none
   else
     if self == min_value()
       if other == (: i8 / -1)
@@ -255,7 +255,7 @@ end fun
 // Checked left shift. Returns none if n >= 8.
 fun shift_left(self: i8, n: u8): ?i8
   if n >= (: u8 / 8)
-    ret @none
+    ret none
   else
     let u = icall i8_to_u8(self)
     let result = icall shl_u8(u, n)
@@ -266,7 +266,7 @@ end fun
 // Checked arithmetic right shift. Returns none if n >= 8.
 fun shift_right(self: i8, n: u8): ?i8
   if n >= (: u8 / 8)
-    ret @none
+    ret none
   else
     ret some icall sshr_i8(self, n)
   end if

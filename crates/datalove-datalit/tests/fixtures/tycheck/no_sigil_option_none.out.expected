@@ -1,25 +1,15 @@
 {
   "ast": {
-    "expr": {
-      "expr": "None",
-      "heap": "Local"
-    },
+    "expr": "None",
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "Option": {
-          "inner_type": {
-            "heap": "Omitted",
-            "type_hint": "U32"
-          }
-        }
+      "Option": {
+        "inner_type": "U32"
       }
     }
   },
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "heap": "",
     "inner_type": "u32",
     "kind": "Option"
   }

@@ -3,11 +3,11 @@ scriptunit-fragment
 ----------
 
 // Test that list is moved when passed to function.
-fun consume_list(lst: [@u32]): u32
+fun consume_list(lst: [u32]): u32
     // List is consumed here.
     let _sink = lst
-    ret @42
+    ret 42
 end fun
 
-let lst: [@u32] = [@1, @2, @3]
+let lst: [u32] = [1, 2, 3]
 debuglog consume_list(lst)

@@ -1,27 +1,27 @@
 ----------
 module local/test/a
 ----------
-fun foo(): @i32
-  ret @1
+fun foo(): i32
+  ret 1
 end fun
 
 ----------
 module local/test/a
 ----------
-fun foo(): @i32
-  ret @2
+fun foo(): i32
+  ret 2
 end fun
 
 ----------
 module local/test/a
 ----------
-fun foo(): @i32
-  ret @3
+fun foo(): i32
+  ret 3
 end fun
 
 ----------
 module local/test/a
 ----------
-fun foo(): @i32
-  ret @4
+fun foo(): i32
+  ret 4
 end fun

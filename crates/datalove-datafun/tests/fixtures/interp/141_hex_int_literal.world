@@ -2,4 +2,4 @@
 scriptunit-expr
 ----------
 
-: @int / @0xFFFFFFFFFFFFFFFF
+: int / 0xFFFFFFFFFFFFFFFF

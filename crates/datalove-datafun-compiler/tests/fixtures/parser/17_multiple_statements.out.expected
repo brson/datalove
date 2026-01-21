@@ -14,7 +14,6 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "heap": "Local",
             "kind": "Int",
             "type_hint": null,
             "value": "42"
@@ -37,7 +36,6 @@
             "op": "AddChecked",
             "rhs": {
               "expr": {
-                "heap": "Local",
                 "kind": "Int",
                 "type_hint": null,
                 "value": "1"

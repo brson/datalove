@@ -58,7 +58,7 @@ end fun
 
 fun is_power_of_two(self: u32): bool
   if self == 0
-    ret @false
+    ret false
   else
     ret count_ones(self) == 1
   end if
@@ -67,7 +67,7 @@ end fun
 // Integer log base 2. Returns none if self is zero.
 fun ilog2(self: u32): ?u32
   if self == 0
-    ret @none
+    ret none
   else
     ret some sub_saturating(31, leading_zeros(self))
   end if
@@ -87,7 +87,7 @@ fun next_power_of_two(self: u32): ?u32
       if ilog2(self) |log|
         let next_exp = add_saturating(log, 1)
         if next_exp >= 32
-          ret @none
+          ret none
         else
           ret shift_left(1, next_exp)
         end if
@@ -109,7 +109,7 @@ fun pow_checked(self: u32, exp: u32): ?u32
       if mul_checked(result, base) |next_result|
         set result = next_result
       else
-        ret @none
+        ret none
       end if
     end if
     set e = shift_right_wrapping(e, 1)
@@ -117,7 +117,7 @@ fun pow_checked(self: u32, exp: u32): ?u32
       if mul_checked(base, base) |next_base|
         set base = next_base
       else
-        ret @none
+        ret none
       end if
     end if
   end loop
@@ -129,13 +129,13 @@ fun pow_saturating(self: u32, exp: u32): u32
   var result: u32 = 1
   var base: u32 = self
   var e: u32 = exp
-  var overflow: bool = @false
+  var overflow: bool = false
   loop while e .> 0
     if bitand(e, 1) == 1
       if mul_checked(result, base) |next_result|
         set result = next_result
       else
-        set overflow = @true
+        set overflow = true
       end if
     end if
     set e = shift_right_wrapping(e, 1)
@@ -143,7 +143,7 @@ fun pow_saturating(self: u32, exp: u32): u32
       if mul_checked(base, base) |next_base|
         set base = next_base
       else
-        set overflow = @true
+        set overflow = true
       end if
     end if
   end loop
@@ -231,7 +231,7 @@ fun neg_checked(self: u32): ?u32
   if self == 0
     ret some 0
   else
-    ret @none
+    ret none
   end if
 end fun
 
@@ -253,7 +253,7 @@ end fun
 
 fun rem_checked(self: u32, other: u32): ?u32
   if other == 0
-    ret @none
+    ret none
   else
     ret some icall rem_u32(self, other)
   end if
@@ -384,7 +384,7 @@ end fun
 // Returns none if shift >= 32.
 fun shift_left(self: u32, n: u32): ?u32
   if n >= 32
-    ret @none
+    ret none
   else
     ret some icall shl_u32(self, n)
   end if
@@ -393,7 +393,7 @@ end fun
 // Returns none if shift >= 32.
 fun shift_right(self: u32, n: u32): ?u32
   if n >= 32
-    ret @none
+    ret none
   else
     ret some icall shr_u32(self, n)
   end if

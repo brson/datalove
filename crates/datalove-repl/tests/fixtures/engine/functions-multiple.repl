@@ -1,31 +1,31 @@
-fun inc(x: @u32): @u32
-  ret x + @1
+fun inc(x: u32): u32
+  ret x + 1
 end fun
 ---
-fun double(x: @u32): @u32
+fun double(x: u32): u32
   ret x + x
 end fun
 ---
-inc(@5)
+inc(5)
 ---
-double(@5)
+double(5)
 ---
-double(inc(@5))
+double(inc(5))
 ---
-inc(double(@5))
+inc(double(5))
 ---
-fun multiply(a: @u32, b: @u32): @u32
+fun multiply(a: u32, b: u32): u32
   ret a * b
 end fun
 ---
-fun add(a: @u32, b: @u32): @u32
+fun add(a: u32, b: u32): u32
   ret a + b
 end fun
 ---
-fun compute(x: @u32, y: @u32): @u32
+fun compute(x: u32, y: u32): u32
   let a = add(x, y)
-  let b = multiply(a, @2)
+  let b = multiply(a, 2)
   ret b
 end fun
 ---
-compute(@3, @4)
+compute(3, 4)

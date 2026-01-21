@@ -10,7 +10,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = lt v0, v1\n    unit_end v2\n",
             ),
-            output: "@true",
+            output: "true",
         ),
     ],
 )

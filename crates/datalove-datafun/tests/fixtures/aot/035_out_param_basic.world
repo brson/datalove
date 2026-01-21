@@ -3,13 +3,13 @@ scriptunit-fragment
 ----------
 
 // Test basic out param: callee initializes value.
-fun init_value(out x: @u32): @bool
-    set x = @42
-    ret @true
+fun init_value(out x: u32): bool
+    set x = 42
+    ret true
 end fun
 
-fun test(): @u32
-    var n: @u32 = @5
+fun test(): u32
+    var n: u32 = 5
     let _ok = init_value(n)
     ret n
 end fun

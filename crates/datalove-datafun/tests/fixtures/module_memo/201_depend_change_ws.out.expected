@@ -3,7 +3,7 @@
     {
       "action": "add",
       "module": "local/test/b",
-      "source_hash": "46cac3f5acbcf6cb",
+      "source_hash": "e3439e47ab1317ab",
       "results": {
         "local/test/b": {
           "is_direct": true,
@@ -28,7 +28,7 @@
     {
       "action": "add",
       "module": "local/test/a",
-      "source_hash": "08582e618213dd7c",
+      "source_hash": "d81da0b9b1be1387",
       "results": {
         "local/test/a": {
           "is_direct": true,
@@ -71,7 +71,7 @@
     {
       "action": "module-change-ws",
       "module": "local/test/b",
-      "source_hash": "37eca9e6797f5862",
+      "source_hash": "c159ef3750846bdd",
       "results": {
         "local/test/a": {
           "is_direct": false,

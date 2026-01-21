@@ -47,7 +47,7 @@ end fun
 // Checked absolute value. Returns none for MIN.
 fun abs_checked(self: i32): ?i32
   if self == min_value()
-    ret @none
+    ret none
   else
     ret some abs(self)
   end if
@@ -132,7 +132,7 @@ end fun
 
 fun neg_checked(self: i32): ?i32
   if self == min_value()
-    ret @none
+    ret none
   else
     ret some icall neg_wrapping_i32(self)
   end if
@@ -159,7 +159,7 @@ end fun
 fun rem_checked(self: i32, other: i32): ?i32
   let zero = (: i32 / 0)
   if other == zero
-    ret @none
+    ret none
   else
     if self == min_value()
       if other == (: i32 / -1)
@@ -255,7 +255,7 @@ end fun
 // Checked left shift. Returns none if n >= 32.
 fun shift_left(self: i32, n: u32): ?i32
   if n >= 32
-    ret @none
+    ret none
   else
     let u = icall i32_to_u32(self)
     let result = icall shl_u32(u, n)
@@ -266,7 +266,7 @@ end fun
 // Checked arithmetic right shift. Returns none if n >= 32.
 fun shift_right(self: i32, n: u32): ?i32
   if n >= 32
-    ret @none
+    ret none
   else
     ret some icall sshr_i32(self, n)
   end if

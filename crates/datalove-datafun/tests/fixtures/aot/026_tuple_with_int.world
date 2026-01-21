@@ -4,7 +4,7 @@ scriptunit-fragment
 
 // Test tuple with bigint field (aggregate).
 
-let label: string = @"label"
-let num: int = @123456789012345678901234567890
-let pair: (string, int) = @(label, num)
+let label: string = "label"
+let num: int = 123456789012345678901234567890
+let pair: (string, int) = (label, num)
 debuglog pair

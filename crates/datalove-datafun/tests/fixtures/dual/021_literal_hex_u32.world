@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let x: u32 = @0xFF
+let x: u32 = 0xFF
 debuglog x

@@ -3,9 +3,9 @@ require module sys/std/option
 import option.is_some
 import option.is_none
 
-let some_val1: @?u32 = some @42
-let some_val2: @?u32 = some @42
-let none_val1: @?u32 = @none
-let none_val2: @?u32 = @none
+let some_val1: ?u32 = some 42
+let some_val2: ?u32 = some 42
+let none_val1: ?u32 = none
+let none_val2: ?u32 = none
 
 let output = (is_some(some_val1), is_some(none_val1), is_none(some_val2), is_none(none_val2))

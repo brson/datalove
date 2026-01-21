@@ -1,7 +1,7 @@
-fun returns_option(): ?@u32
-    ret @42
+fun returns_option(): ?u32
+    ret 42
 end fun
 
-fun test(): @u32
+fun test(): u32
     ret returns_option()?
 end fun

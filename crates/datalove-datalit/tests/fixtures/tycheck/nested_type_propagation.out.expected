@@ -1,102 +1,69 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "List": {
-          "elements": [
-            {
-              "expr": {
-                "expr": {
-                  "AnonTuple": {
-                    "elements": [
-                      {
-                        "expr": {
-                          "expr": {
-                            "Int": {
-                              "value": "1"
-                            }
-                          },
-                          "heap": "Local"
-                        },
-                        "type_hint": null
-                      },
-                      {
-                        "expr": {
-                          "expr": {
-                            "Int": {
-                              "value": "2"
-                            }
-                          },
-                          "heap": "Local"
-                        },
-                        "type_hint": null
-                      }
-                    ]
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": null
-            },
-            {
-              "expr": {
-                "expr": {
-                  "AnonTuple": {
-                    "elements": [
-                      {
-                        "expr": {
-                          "expr": {
-                            "Int": {
-                              "value": "3"
-                            }
-                          },
-                          "heap": "Local"
-                        },
-                        "type_hint": null
-                      },
-                      {
-                        "expr": {
-                          "expr": {
-                            "Int": {
-                              "value": "4"
-                            }
-                          },
-                          "heap": "Local"
-                        },
-                        "type_hint": null
-                      }
-                    ]
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": null
-            }
-          ]
-        }
-      },
-      "heap": "Local"
-    },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "List": {
-          "element_type": {
-            "heap": "Local",
-            "type_hint": {
+      "List": {
+        "elements": [
+          {
+            "expr": {
               "AnonTuple": {
-                "fields": [
+                "elements": [
                   {
-                    "heap": "Local",
-                    "type_hint": "Int"
+                    "expr": {
+                      "Int": {
+                        "value": "1"
+                      }
+                    },
+                    "type_hint": null
                   },
                   {
-                    "heap": "Local",
-                    "type_hint": "Int"
+                    "expr": {
+                      "Int": {
+                        "value": "2"
+                      }
+                    },
+                    "type_hint": null
                   }
                 ]
               }
-            }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "AnonTuple": {
+                "elements": [
+                  {
+                    "expr": {
+                      "Int": {
+                        "value": "3"
+                      }
+                    },
+                    "type_hint": null
+                  },
+                  {
+                    "expr": {
+                      "Int": {
+                        "value": "4"
+                      }
+                    },
+                    "type_hint": null
+                  }
+                ]
+              }
+            },
+            "type_hint": null
+          }
+        ]
+      }
+    },
+    "type_hint": {
+      "List": {
+        "element_type": {
+          "AnonTuple": {
+            "fields": [
+              "Int",
+              "Int"
+            ]
           }
         }
       }
@@ -107,13 +74,11 @@
   "root_type": {
     "element_type": {
       "fields": [
-        "@int",
-        "@int"
+        "int",
+        "int"
       ],
-      "heap": "@",
       "kind": "AnonTuple"
     },
-    "heap": "@",
     "kind": "List"
   }
 }

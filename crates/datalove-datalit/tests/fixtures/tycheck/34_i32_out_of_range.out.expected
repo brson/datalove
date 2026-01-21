@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Int": {
-          "value": "2147483648"
-        }
-      },
-      "heap": "Local"
+      "Int": {
+        "value": "2147483648"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "I32"
-    }
+    "type_hint": "I32"
   },
   "diagnostics": [],
   "errors": [

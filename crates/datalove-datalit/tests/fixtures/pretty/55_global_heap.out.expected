@@ -1,1 +1,1 @@
-: #u32 / #42
+: <parse-error: unexpected token in type hint> / <parse-error: expected '/' after type hint>

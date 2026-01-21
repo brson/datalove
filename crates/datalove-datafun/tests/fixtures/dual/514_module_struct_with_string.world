@@ -3,7 +3,7 @@ module local/test/structops
 ----------
 
 // Module function taking struct with Copy fields.
-fun get_id(s: {score: @u32, id: @u32}): @u32
+fun get_id(s: {score: u32, id: u32}): u32
     ret s.id
 end fun
 
@@ -14,5 +14,5 @@ scriptunit-fragment
 require module local/test/structops
 import structops.get_id
 
-let user = @{score = @100, id = @42}
+let user = {score = 100, id = 42}
 debuglog get_id(user)

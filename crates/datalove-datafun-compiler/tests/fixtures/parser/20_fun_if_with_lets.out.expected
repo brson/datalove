@@ -16,7 +16,6 @@
                 "op": "Gt",
                 "rhs": {
                   "expr": {
-                    "heap": "Local",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "0"
@@ -31,7 +30,6 @@
                 "type_hint": null,
                 "value": {
                   "expr": {
-                    "heap": "Local",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "0"
@@ -66,7 +64,6 @@
                     "op": "Mul",
                     "rhs": {
                       "expr": {
-                        "heap": "Local",
                         "kind": "Int",
                         "type_hint": null,
                         "value": "2"
@@ -93,16 +90,10 @@
           {
             "mode": "In",
             "name": "n",
-            "type_hint": {
-              "heap": "Local",
-              "type_hint": "U32"
-            }
+            "type_hint": "U32"
           }
         ],
-        "return_type": {
-          "heap": "Local",
-          "type_hint": "U32"
-        }
+        "return_type": "U32"
       }
     ]
   },

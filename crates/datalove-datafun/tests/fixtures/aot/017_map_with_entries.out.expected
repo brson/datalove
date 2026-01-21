@@ -20,7 +20,7 @@ AotAnalysis(
                 status: "Success",
                 exit_code: 0,
             )),
-            output: "@map {@1 = @100, @2 = @200}\n",
+            output: "map {1 = 100, 2 = 200}\n",
         ),
     ],
 )

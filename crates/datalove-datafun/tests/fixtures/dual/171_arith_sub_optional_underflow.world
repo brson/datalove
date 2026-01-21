@@ -15,4 +15,4 @@ fun unwrap(opt: ?u32, default: u32): u32
 end fun
 
 // 10 - 20 underflows for u32, should return None -> default 999.
-debuglog unwrap(sub_opt(@10, @20), @999)
+debuglog unwrap(sub_opt(10, 20), 999)

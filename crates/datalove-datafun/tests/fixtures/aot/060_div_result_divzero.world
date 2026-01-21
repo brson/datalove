@@ -16,4 +16,4 @@ fun unwrap_or_default(r: !u32, default: u32): u32
 end fun
 
 // 42 / 0 is division by zero, returns Err -> default 999.
-debuglog unwrap_or_default(checked_div(@42, @0), @999)
+debuglog unwrap_or_default(checked_div(42, 0), 999)

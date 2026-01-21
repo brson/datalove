@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "ParseError": {
-          "message": "expected {} after map keyword"
-        }
-      },
-      "heap": "Local"
+      "ParseError": {
+        "message": "expected {} after map keyword"
+      }
     },
     "type_hint": null
   },
@@ -17,8 +14,8 @@
         {
           "message": "expected '{' after 'map'",
           "span": [
-            1,
-            4
+            0,
+            3
           ],
           "text": "map"
         }

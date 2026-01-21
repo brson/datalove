@@ -15,7 +15,7 @@ use crate::ast::*;
 /// enums, named types) will panic - to be addressed when new interpreter
 /// is implemented.
 fn cmp_expr<'db>(db: &'db dyn salsa::Database, a: ExprFull<'db>, b: ExprFull<'db>) -> Ordering {
-    cmp_expr_inner(db, &a.expr(db).expr, &b.expr(db).expr)
+    cmp_expr_inner(db, a.expr(db), b.expr(db))
 }
 
 fn cmp_expr_inner<'db>(db: &'db dyn salsa::Database, a: &Expr<'db>, b: &Expr<'db>) -> Ordering {

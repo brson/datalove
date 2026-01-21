@@ -91,9 +91,9 @@ unsafe fn pretty_bool(
     unsafe {
         let b = &*(value_ref as *const rtdt::Bool);
         if b.0 != 0 {
-            push_str(rt, string_mut, string_tydesc, b"@true")
+            push_str(rt, string_mut, string_tydesc, b"true")
         } else {
-            push_str(rt, string_mut, string_tydesc, b"@false")
+            push_str(rt, string_mut, string_tydesc, b"false")
         }
     }
 }
@@ -106,7 +106,6 @@ unsafe fn pretty_u8(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U8);
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -120,7 +119,6 @@ unsafe fn pretty_i8(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I8);
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -134,7 +132,6 @@ unsafe fn pretty_u16(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U16);
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -148,7 +145,6 @@ unsafe fn pretty_i16(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I16);
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -162,7 +158,6 @@ unsafe fn pretty_u32(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U32);
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -176,7 +171,6 @@ unsafe fn pretty_i32(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I32);
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -190,7 +184,6 @@ unsafe fn pretty_u64(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::U64);
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -204,7 +197,6 @@ unsafe fn pretty_i64(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::I64);
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -218,7 +210,6 @@ unsafe fn pretty_usize(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::Usize);
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -232,7 +223,6 @@ unsafe fn pretty_isize(
 ) -> Result<(), ()> {
     unsafe {
         let n = &*(value_ref as *const rtdt::Isize);
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -246,7 +236,6 @@ unsafe fn pretty_f32(
 ) -> Result<(), ()> {
     unsafe {
         let f = &*(value_ref as *const rtdt::F32);
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = if f.0.is_nan() {
             "nan".to_string()
         } else if f.0.is_infinite() {
@@ -270,7 +259,6 @@ unsafe fn pretty_f64(
 ) -> Result<(), ()> {
     unsafe {
         let f = &*(value_ref as *const rtdt::F64);
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = if f.0.is_nan() {
             "nan".to_string()
         } else if f.0.is_infinite() {
@@ -294,7 +282,6 @@ unsafe fn pretty_int(
 ) -> Result<(), ()> {
     unsafe {
         let int_ptr = value_ref as *const rtdt::Int;
-        push_str(rt, string_mut, string_tydesc, b"@")?;
         let s = super::int_math::int_to_string_impl(int_ptr);
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -308,7 +295,7 @@ unsafe fn pretty_string(
 ) -> Result<(), ()> {
     unsafe {
         let s = &*(value_ref as *const rtdt::String);
-        push_str(rt, string_mut, string_tydesc, b"@\"")?;
+        push_str(rt, string_mut, string_tydesc, b"\"")?;
         if !s.data.is_null() && s.size > rtdt::Usize::ZERO {
             let bytes = std::slice::from_raw_parts(s.data, s.size.as_usize());
             for &byte in bytes {
@@ -334,7 +321,7 @@ unsafe fn pretty_tuple(
     string_tydesc: *const rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
-        push_str(rt, string_mut, string_tydesc, b"@(")?;
+        push_str(rt, string_mut, string_tydesc, b"(")?;
 
         for (i, field) in tydesc.iter_tuple_fields().enumerate() {
             if i > 0 {
@@ -357,7 +344,7 @@ unsafe fn pretty_struct(
     string_tydesc: *const rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
-        push_str(rt, string_mut, string_tydesc, b"@{")?;
+        push_str(rt, string_mut, string_tydesc, b"{")?;
 
         for (i, field) in tydesc.iter_struct_fields().enumerate() {
             if i > 0 {
@@ -394,7 +381,7 @@ unsafe fn pretty_enum(
         }
 
         if let core::option::Option::Some(variant) = enum_info.variant(discriminant as usize) {
-            push_str(rt, string_mut, string_tydesc, b"@enum ")?;
+            push_str(rt, string_mut, string_tydesc, b"enum ")?;
             push_str(rt, string_mut, string_tydesc, variant.name().as_bytes())?;
 
             if let core::option::Option::Some(payload_ty) = variant.payload() {
@@ -420,7 +407,7 @@ unsafe fn pretty_list(
         let list = &*(value_ref as *const rtdt::List);
         let elem_ty = tydesc.list_element_ty();
 
-        push_str(rt, string_mut, string_tydesc, b"@[")?;
+        push_str(rt, string_mut, string_tydesc, b"[")?;
 
         if !list.data.is_null() && list.size > rtdt::Usize::ZERO {
             for i in 0..list.size.0 {
@@ -449,7 +436,7 @@ unsafe fn pretty_map(
         let key_ty = tydesc.map_key_ty();
         let value_ty = tydesc.map_value_ty();
 
-        push_str(rt, string_mut, string_tydesc, b"@map {")?;
+        push_str(rt, string_mut, string_tydesc, b"map {")?;
 
         if !map.root.is_null() && map.len > rtdt::Usize::ZERO {
             let key_size = key_ty.size() as usize;
@@ -501,7 +488,7 @@ unsafe fn pretty_set(
         let set = &*(value_ref as *const rtdt::Set);
         let elem_ty = tydesc.set_element_ty();
 
-        push_str(rt, string_mut, string_tydesc, b"@set {")?;
+        push_str(rt, string_mut, string_tydesc, b"set {")?;
 
         if !set.root.is_null() && set.len > rtdt::Usize::ZERO {
             let elem_size = elem_ty.size() as usize;
@@ -547,7 +534,7 @@ unsafe fn pretty_option(
         let option = &*(value_ref as *const rtdt::Option);
         match option.tag {
             rtdt::OptionTag::None => {
-                push_str(rt, string_mut, string_tydesc, b"@none")
+                push_str(rt, string_mut, string_tydesc, b"none")
             }
             rtdt::OptionTag::Some => {
                 push_str(rt, string_mut, string_tydesc, b"some ")?;
@@ -597,7 +584,7 @@ unsafe fn pretty_data(
 ) -> Result<(), ()> {
     unsafe {
         let data = &*(value_ref as *const rtdt::Data);
-        push_str(rt, string_mut, string_tydesc, b"@data ")?;
+        push_str(rt, string_mut, string_tydesc, b"data ")?;
 
         let tydesc_ptr = data.tydesc();
         if tydesc_ptr.is_null() {
@@ -619,7 +606,7 @@ unsafe fn pretty_error(
 ) -> Result<(), ()> {
     unsafe {
         let error = &*(value_ref as *const rtdt::Error);
-        push_str(rt, string_mut, string_tydesc, b"@error ")?;
+        push_str(rt, string_mut, string_tydesc, b"error ")?;
 
         let tydesc_ptr = error.tydesc();
         if tydesc_ptr.is_null() {
@@ -646,7 +633,7 @@ unsafe fn pretty_tensor(
         let rank = tydesc.tensor_rank() as usize;
         let elem_size = elem_ty.size() as usize;
 
-        push_str(rt, string_mut, string_tydesc, b"@tensor [")?;
+        push_str(rt, string_mut, string_tydesc, b"tensor [")?;
 
         // Print shape.
         if rank > 0 && !tensor.shape.is_null() {
@@ -721,9 +708,9 @@ unsafe fn pretty_table(
         let table = &*(value_ref as *const rtdt::Table);
         let column_tydescs = crate::impls::table::collect_column_tydescs(tydesc);
 
-        // Format: @{| col1, col2; val1, val2; val3, val4 |}
+        // Format: {| col1, col2; val1, val2; val3, val4 |}
         // Header row with column names, then data rows separated by ";".
-        push_str(rt, string_mut, string_tydesc, b"@{| ")?;
+        push_str(rt, string_mut, string_tydesc, b"{| ")?;
 
         // Print column names as header.
         for (i, col) in tydesc.table_column_tydescs().enumerate() {
@@ -850,7 +837,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert_eq!(get_string_contents(&output_string), "@true");
+            assert_eq!(get_string_contents(&output_string), "true");
 
             crate::impls::string::string_destroy_local(
                 rt_handle,
@@ -888,7 +875,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert_eq!(get_string_contents(&output_string), "@42");
+            assert_eq!(get_string_contents(&output_string), "42");
 
             crate::impls::string::string_destroy_local(
                 rt_handle,
@@ -926,7 +913,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert_eq!(get_string_contents(&output_string), "@3.14");
+            assert_eq!(get_string_contents(&output_string), "3.14");
 
             crate::impls::string::string_destroy_local(
                 rt_handle,
@@ -974,7 +961,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert_eq!(get_string_contents(&output_string), "@\"hello\"");
+            assert_eq!(get_string_contents(&output_string), "\"hello\"");
 
             crate::impls::string::string_destroy_local(
                 rt_handle,
@@ -1027,7 +1014,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert_eq!(get_string_contents(&output_string), "@\"hello\\nworld\"");
+            assert_eq!(get_string_contents(&output_string), "\"hello\\nworld\"");
 
             crate::impls::string::string_destroy_local(
                 rt_handle,

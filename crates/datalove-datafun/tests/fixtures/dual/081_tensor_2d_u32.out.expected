@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = const 4u32\n    v4 = const 5u32\n    v5 = const 6u32\n    v6 = tensor [2, 3] [v0, v1, v2, v3, v4, v5]\n    debuglog v6\n    drop v6\n    unit_end\nexports:\n    t = v6\n",
             ),
             ir_match: true,
-            interp_output: "@tensor [2, 3] [@1 @2 @3, @4 @5 @6]\n",
-            aot_output: "@tensor [2, 3] [@1 @2 @3, @4 @5 @6]\n",
+            interp_output: "tensor [2, 3] [1 2 3, 4 5 6]\n",
+            aot_output: "tensor [2, 3] [1 2 3, 4 5 6]\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

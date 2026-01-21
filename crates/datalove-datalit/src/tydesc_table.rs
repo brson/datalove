@@ -378,23 +378,23 @@ impl<'db> TyDescTable<'db> {
             Type::AnonTuple(t) => self.create_tuple_tydesc(&t.fields),
             Type::AnonStruct(s) => self.create_struct_tydesc(&s.fields),
             Type::AnonEnum(e) => self.create_enum_tydesc(&e.variants),
-            Type::List(l) => self.create_list_tydesc(l.element_type),
-            Type::Map(m) => self.create_map_tydesc(m.key_type, m.value_type),
-            Type::Set(s) => self.create_set_tydesc(s.element_type),
-            Type::Option(o) => self.create_option_tydesc(o.inner_type),
-            Type::Result(r) => self.create_result_tydesc(r.inner_type),
-            Type::Tensor(t) => self.create_tensor_tydesc(t.element_type, t.rank),
+            Type::List(l) => self.create_list_tydesc(*l.element_type.clone()),
+            Type::Map(m) => self.create_map_tydesc(*m.key_type.clone(), *m.value_type.clone()),
+            Type::Set(s) => self.create_set_tydesc(*s.element_type.clone()),
+            Type::Option(o) => self.create_option_tydesc(*o.inner_type.clone()),
+            Type::Result(r) => self.create_result_tydesc(*r.inner_type.clone()),
+            Type::Tensor(t) => self.create_tensor_tydesc(*t.element_type.clone(), t.rank),
             Type::Table(t) => self.create_table_tydesc(&t.columns),
         }
     }
 
     /// Create TyDesc for tuple (anon or named).
-    fn create_tuple_tydesc(&mut self, fields: &[TypeAndHeap<'db>]) -> Box<rtdt::TyDesc> {
+    fn create_tuple_tydesc(&mut self, fields: &[Type<'db>]) -> Box<rtdt::TyDesc> {
         // Recursively create TyDescs for field types.
         let mut field_tydescs = Vec::new();
         for field in fields {
-            let field_ty = field.ty(self.db);
-            let field_tydesc = self.get_or_create(field_ty);
+            let field_ty = field;
+            let field_tydesc = self.get_or_create(&*field_ty);
             field_tydescs.push(field_tydesc);
         }
 
@@ -454,8 +454,8 @@ impl<'db> TyDescTable<'db> {
         // Recursively create TyDescs for field types.
         let mut field_tydescs = Vec::new();
         for field in fields {
-            let field_ty = field.ty;
-            let field_tydesc = self.get_or_create(field_ty.ty(self.db));
+            let field_ty = &field.ty;
+            let field_tydesc = self.get_or_create(&**field_ty);
             field_tydescs.push(field_tydesc);
         }
 
@@ -522,8 +522,8 @@ impl<'db> TyDescTable<'db> {
         let mut variant_info = Vec::new();
         for variant in variants {
             let variant_name = variant.name.as_str(self.db);
-            let payload_tydesc = if let Some(payload_ty) = variant.payload {
-                self.get_or_create(payload_ty.ty(self.db))
+            let payload_tydesc = if let Some(payload_ty) = &variant.payload {
+                self.get_or_create(&**payload_ty)
             } else {
                 std::ptr::null()
             };
@@ -575,9 +575,9 @@ impl<'db> TyDescTable<'db> {
     }
 
     /// Create TyDesc for list.
-    fn create_list_tydesc(&mut self, element_type: TypeAndHeap<'db>) -> Box<rtdt::TyDesc> {
+    fn create_list_tydesc(&mut self, element_type: Type<'db>) -> Box<rtdt::TyDesc> {
         // Recursively create TyDesc for element type.
-        let element_tydesc = self.get_or_create(element_type.ty(self.db));
+        let element_tydesc = self.get_or_create(&element_type);
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::List,
@@ -591,9 +591,9 @@ impl<'db> TyDescTable<'db> {
         })
     }
 
-    fn create_tensor_tydesc(&mut self, element_type: TypeAndHeap<'db>, rank: u32) -> Box<rtdt::TyDesc> {
+    fn create_tensor_tydesc(&mut self, element_type: Type<'db>, rank: u32) -> Box<rtdt::TyDesc> {
         // Recursively create TyDesc for element type.
-        let element_tydesc = self.get_or_create(element_type.ty(self.db));
+        let element_tydesc = self.get_or_create(&element_type);
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Tensor,
@@ -654,9 +654,9 @@ impl<'db> TyDescTable<'db> {
     }
 
     /// Create TyDesc for option.
-    fn create_option_tydesc(&mut self, inner_type: TypeAndHeap<'db>) -> Box<rtdt::TyDesc> {
+    fn create_option_tydesc(&mut self, inner_type: Type<'db>) -> Box<rtdt::TyDesc> {
         // Recursively create TyDesc for inner type.
-        let inner_tydesc = self.get_or_create(inner_type.ty(self.db));
+        let inner_tydesc = self.get_or_create(&inner_type);
 
         // Create temporary TyDesc to compute layout.
         let temp_tydesc = rtdt::TyDesc {
@@ -685,12 +685,12 @@ impl<'db> TyDescTable<'db> {
     /// Create TyDesc for map.
     fn create_map_tydesc(
         &mut self,
-        key_type: TypeAndHeap<'db>,
-        value_type: TypeAndHeap<'db>,
+        key_type: Type<'db>,
+        value_type: Type<'db>,
     ) -> Box<rtdt::TyDesc> {
         // Recursively create TyDescs for key and value types.
-        let key_tydesc = self.get_or_create(key_type.ty(self.db));
-        let value_tydesc = self.get_or_create(value_type.ty(self.db));
+        let key_tydesc = self.get_or_create(&key_type);
+        let value_tydesc = self.get_or_create(&value_type);
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Map,
@@ -706,9 +706,9 @@ impl<'db> TyDescTable<'db> {
     }
 
     /// Create TyDesc for set.
-    fn create_set_tydesc(&mut self, element_type: TypeAndHeap<'db>) -> Box<rtdt::TyDesc> {
+    fn create_set_tydesc(&mut self, element_type: Type<'db>) -> Box<rtdt::TyDesc> {
         // Recursively create TyDesc for element type.
-        let element_tydesc = self.get_or_create(element_type.ty(self.db));
+        let element_tydesc = self.get_or_create(&element_type);
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Set,
@@ -727,7 +727,7 @@ impl<'db> TyDescTable<'db> {
         // Create column info with names and tydescs.
         let mut col_info = Vec::new();
         for column in columns {
-            let column_tydesc = self.get_or_create(column.ty.ty(self.db));
+            let column_tydesc = self.get_or_create(&*column.ty);
             let name_str = column.name.as_str(self.db);
             col_info.push(rtdt::TyInfoTableColumn {
                 name: name_str.as_ptr(),
@@ -884,9 +884,9 @@ impl<'db> TyDescTable<'db> {
     }
 
     /// Create TyDesc for result.
-    fn create_result_tydesc(&mut self, inner_type: TypeAndHeap<'db>) -> Box<rtdt::TyDesc> {
+    fn create_result_tydesc(&mut self, inner_type: Type<'db>) -> Box<rtdt::TyDesc> {
         // Recursively create TyDesc for inner type.
-        let inner_tydesc = self.get_or_create(inner_type.ty(self.db));
+        let inner_tydesc = self.get_or_create(&inner_type);
 
         // Create temporary TyDesc to compute layout.
         let temp_tydesc = rtdt::TyDesc {
@@ -1052,11 +1052,11 @@ mod tests {
     #[test]
     fn test_create_tuple_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@(@true, @42)")?;
-        let root_type = typechecked.root_type(&db).unwrap();
+        let typechecked = compile(&db, "(true, 42)")?;
+        let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(root_type.ty(&db));
+        let tydesc = table.get_or_create(&root_type);
 
         unsafe {
             let td = rtdt::TyDescRef::from_ptr(tydesc);
@@ -1080,11 +1080,11 @@ mod tests {
     #[test]
     fn test_create_struct_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@{x = @1, y = @2}")?;
-        let root_type = typechecked.root_type(&db).unwrap();
+        let typechecked = compile(&db, "{x = 1, y = 2}")?;
+        let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(root_type.ty(&db));
+        let tydesc = table.get_or_create(&root_type);
 
         unsafe {
             let td = rtdt::TyDescRef::from_ptr(tydesc);
@@ -1110,11 +1110,11 @@ mod tests {
     #[test]
     fn test_create_enum_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @enum { Ok, Error } / @enum Ok")?;
-        let root_type = typechecked.root_type(&db).unwrap();
+        let typechecked = compile(&db, ": enum { Ok, Error } / enum Ok")?;
+        let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(root_type.ty(&db));
+        let tydesc = table.get_or_create(&root_type);
 
         unsafe {
             let td = rtdt::TyDescRef::from_ptr(tydesc);
@@ -1138,11 +1138,11 @@ mod tests {
     #[test]
     fn test_create_enum_with_payload_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @enum { Ok(@u32), Err(@string) } / @enum Ok(@42)")?;
-        let root_type = typechecked.root_type(&db).unwrap();
+        let typechecked = compile(&db, ": enum { Ok(u32), Err(string) } / enum Ok(42)")?;
+        let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(root_type.ty(&db));
+        let tydesc = table.get_or_create(&root_type);
 
         unsafe {
             let td = rtdt::TyDescRef::from_ptr(tydesc);
@@ -1168,11 +1168,11 @@ mod tests {
     #[test]
     fn test_create_list_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@[@1, @2, @3]")?;
-        let root_type = typechecked.root_type(&db).unwrap();
+        let typechecked = compile(&db, "[1, 2, 3]")?;
+        let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(root_type.ty(&db));
+        let tydesc = table.get_or_create(&root_type);
 
         unsafe {
             let td = rtdt::TyDescRef::from_ptr(tydesc);
@@ -1190,11 +1190,11 @@ mod tests {
     #[test]
     fn test_create_map_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @map <@u32, @string> / @map { @1 = @\"one\", @2 = @\"two\" }")?;
-        let root_type = typechecked.root_type(&db).unwrap();
+        let typechecked = compile(&db, ": map <u32, string> / map { 1 = \"one\", 2 = \"two\" }")?;
+        let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(root_type.ty(&db));
+        let tydesc = table.get_or_create(&root_type);
 
         unsafe {
             let td = rtdt::TyDescRef::from_ptr(tydesc);
@@ -1215,11 +1215,11 @@ mod tests {
     #[test]
     fn test_create_set_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @set <@u32> / @set { @1, @2, @3 }")?;
-        let root_type = typechecked.root_type(&db).unwrap();
+        let typechecked = compile(&db, ": set <u32> / set { 1, 2, 3 }")?;
+        let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(root_type.ty(&db));
+        let tydesc = table.get_or_create(&root_type);
 
         unsafe {
             let td = rtdt::TyDescRef::from_ptr(tydesc);
@@ -1237,11 +1237,11 @@ mod tests {
     #[test]
     fn test_create_option_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@u32 / some @42")?;
-        let root_type = typechecked.root_type(&db).unwrap();
+        let typechecked = compile(&db, ": ?u32 / some 42")?;
+        let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(root_type.ty(&db));
+        let tydesc = table.get_or_create(&root_type);
 
         unsafe {
             let td = rtdt::TyDescRef::from_ptr(tydesc);
@@ -1259,11 +1259,11 @@ mod tests {
     #[test]
     fn test_create_result_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @!@u32 / ok @42")?;
-        let root_type = typechecked.root_type(&db).unwrap();
+        let typechecked = compile(&db, ": !u32 / ok 42")?;
+        let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(root_type.ty(&db));
+        let tydesc = table.get_or_create(&root_type);
 
         unsafe {
             let td = rtdt::TyDescRef::from_ptr(tydesc);
@@ -1301,11 +1301,11 @@ mod tests {
     #[test]
     fn test_nested_tuple_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "@(@(@1, @2), @(@3, @4))")?;
-        let root_type = typechecked.root_type(&db).unwrap();
+        let typechecked = compile(&db, "((1, 2), (3, 4))")?;
+        let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(root_type.ty(&db));
+        let tydesc = table.get_or_create(&root_type);
 
         unsafe {
             let td = rtdt::TyDescRef::from_ptr(tydesc);
@@ -1331,11 +1331,11 @@ mod tests {
     #[test]
     fn test_option_of_list_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @?@[@u32] / some @[@1, @2]")?;
-        let root_type = typechecked.root_type(&db).unwrap();
+        let typechecked = compile(&db, ": ?[u32] / some [1, 2]")?;
+        let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(root_type.ty(&db));
+        let tydesc = table.get_or_create(&root_type);
 
         unsafe {
             let td = rtdt::TyDescRef::from_ptr(tydesc);
@@ -1354,11 +1354,11 @@ mod tests {
     #[test]
     fn test_list_of_option_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": @[@?@u32] / @[some @42, @none]")?;
-        let root_type = typechecked.root_type(&db).unwrap();
+        let typechecked = compile(&db, ": [?u32] / [some 42, none]")?;
+        let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(root_type.ty(&db));
+        let tydesc = table.get_or_create(&root_type);
 
         unsafe {
             let td = rtdt::TyDescRef::from_ptr(tydesc);

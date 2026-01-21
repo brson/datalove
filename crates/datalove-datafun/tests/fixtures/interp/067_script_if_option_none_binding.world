@@ -3,7 +3,7 @@ scriptunit-fragment
 ----------
 
 let opt: ?u32 = none
-var result: u32 = @999
+var result: u32 = 999
 if opt |val|
     set result = val
 end if

@@ -1,1 +1,1 @@
-: @error / @error @"error message"
+: error / error "error message"

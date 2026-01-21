@@ -1,70 +1,48 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "List": {
-          "elements": [
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "1"
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": null
+      "List": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "2"
-                  }
-                },
-                "heap": "Global"
-              },
-              "type_hint": null
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "ParseError": {
+                "message": "unexpected token in Parser expression"
+              }
             },
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "3"
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": null
-            }
-          ]
-        }
-      },
-      "heap": "Local"
+            "type_hint": null
+          }
+        ]
+      }
     },
     "type_hint": null
   },
   "diagnostics": [
     {
-      "code": "T033",
+      "code": "T017",
       "labels": [
         {
-          "message": "expected @, found #",
+          "message": "parse error occurred here",
           "span": [
-            6,
-            7
+            4,
+            5
           ],
           "text": "#"
         }
       ],
-      "message": "heap allocation mismatch in list"
+      "message": "cannot type-check expression with parse errors"
     }
   ],
   "errors": [
     {
-      "actual_heap": "#",
-      "expected_heap": "@",
-      "kind": "HeapMismatch"
+      "kind": "CannotSynthesize"
     }
   ],
   "root_type": null

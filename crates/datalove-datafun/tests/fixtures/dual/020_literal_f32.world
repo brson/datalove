@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let x = : @f32 / @0x40490FDB
+let x = : f32 / 0x40490FDB
 debuglog x

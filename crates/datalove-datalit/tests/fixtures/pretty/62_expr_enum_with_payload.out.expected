@@ -1,1 +1,1 @@
-@enum Some(@42)
+enum Some(42)

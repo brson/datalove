@@ -3,8 +3,8 @@ scriptunit-fragment
 ----------
 
 // List with strings inside a function - tests move semantics in function context.
-fun make_list(): [@string]
-    ret @[@"a", @"b", @"c"]
+fun make_list(): [string]
+    ret ["a", "b", "c"]
 end fun
 
 ----------

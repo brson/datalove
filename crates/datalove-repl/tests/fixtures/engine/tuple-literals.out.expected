@@ -1,23 +1,23 @@
 [
   {
-    "input": "let pair = @(@42, @\"hello\")",
+    "input": "let pair = (42, \"hello\")",
     "parse": {
       "Command": {
-        "ScriptStatement": "let pair = @(@42, @\"hello\")"
+        "ScriptStatement": "let pair = (42, \"hello\")"
       }
     },
     "eval": {
       "SuccessLet": {
         "name": "pair",
         "ty": "(u32, string)",
-        "value": "@(@42, @\"hello\")"
+        "value": "(42, \"hello\")"
       }
     },
     "environment": [
       {
         "name": "pair",
         "ty": "(u32, string)",
-        "value": "@(@42, @\"hello\")"
+        "value": "(42, \"hello\")"
       }
     ]
   },
@@ -32,7 +32,7 @@
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "(u32, string)",
-        "value": "@(@42, @\"hello\")"
+        "value": "(42, \"hello\")"
       }
     },
     "environment": [
@@ -44,17 +44,17 @@
     ]
   },
   {
-    "input": "let triple = @(@1, @2, @3)",
+    "input": "let triple = (1, 2, 3)",
     "parse": {
       "Command": {
-        "ScriptStatement": "let triple = @(@1, @2, @3)"
+        "ScriptStatement": "let triple = (1, 2, 3)"
       }
     },
     "eval": {
       "SuccessLet": {
         "name": "triple",
         "ty": "(u32, u32, u32)",
-        "value": "@(@1, @2, @3)"
+        "value": "(1, 2, 3)"
       }
     },
     "environment": [
@@ -66,7 +66,7 @@
       {
         "name": "triple",
         "ty": "(u32, u32, u32)",
-        "value": "@(@1, @2, @3)"
+        "value": "(1, 2, 3)"
       }
     ]
   },
@@ -81,7 +81,7 @@
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "(u32, u32, u32)",
-        "value": "@(@1, @2, @3)"
+        "value": "(1, 2, 3)"
       }
     },
     "environment": [
@@ -93,29 +93,29 @@
       {
         "name": "triple",
         "ty": "(u32, u32, u32)",
-        "value": "@(@1, @2, @3)"
+        "value": "(1, 2, 3)"
       }
     ]
   },
   {
-    "input": "let mixed = @(@100, @\"test\", @true)",
+    "input": "let mixed = (100, \"test\", true)",
     "parse": {
       "Command": {
-        "ScriptStatement": "let mixed = @(@100, @\"test\", @true)"
+        "ScriptStatement": "let mixed = (100, \"test\", true)"
       }
     },
     "eval": {
       "SuccessLet": {
         "name": "mixed",
         "ty": "(u32, string, bool)",
-        "value": "@(@100, @\"test\", @true)"
+        "value": "(100, \"test\", true)"
       }
     },
     "environment": [
       {
         "name": "mixed",
         "ty": "(u32, string, bool)",
-        "value": "@(@100, @\"test\", @true)"
+        "value": "(100, \"test\", true)"
       },
       {
         "name": "pair",
@@ -125,7 +125,7 @@
       {
         "name": "triple",
         "ty": "(u32, u32, u32)",
-        "value": "@(@1, @2, @3)"
+        "value": "(1, 2, 3)"
       }
     ]
   },
@@ -140,7 +140,7 @@
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "(u32, string, bool)",
-        "value": "@(@100, @\"test\", @true)"
+        "value": "(100, \"test\", true)"
       }
     },
     "environment": [
@@ -157,7 +157,7 @@
       {
         "name": "triple",
         "ty": "(u32, u32, u32)",
-        "value": "@(@1, @2, @3)"
+        "value": "(1, 2, 3)"
       }
     ]
   }

@@ -1,20 +1,14 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonEnum": {
-          "payload": null,
-          "variant_name": "Foo"
-        }
-      },
-      "heap": "Local"
+      "AnonEnum": {
+        "payload": null,
+        "variant_name": "Foo"
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "ParseError": {
-          "message": "expected {} after enum keyword"
-        }
+      "ParseError": {
+        "message": "expected {} after enum keyword"
       }
     }
   },
@@ -25,8 +19,8 @@
         {
           "message": "expected '{' after 'enum'",
           "span": [
-            3,
-            7
+            2,
+            6
           ],
           "text": "enum"
         }

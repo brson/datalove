@@ -2,8 +2,8 @@
 scriptunit-fragment
 ----------
 
-var x = @10
-set x = @20
+var x = 10
+set x = 20
 
 ----------
 scriptunit-expr

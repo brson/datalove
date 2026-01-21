@@ -34,7 +34,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    v1 = call m0.f1(v0)\n    unit_end v1\n",
             ),
-            output: "@true",
+            output: "true",
         ),
     ],
 )

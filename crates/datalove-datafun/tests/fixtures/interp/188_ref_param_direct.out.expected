@@ -34,7 +34,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = copy unit0.v0\n    unit_end v0\n",
             ),
-            output: "@true",
+            output: "true",
         ),
     ],
 )

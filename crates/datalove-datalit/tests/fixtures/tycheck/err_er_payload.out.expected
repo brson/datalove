@@ -1,56 +1,20 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Er": {
-          "payload": {
-            "expr": {
-              "expr": {
-                "Int": {
-                  "value": "42"
-                }
-              },
-              "heap": "Local"
-            },
-            "type_hint": null
-          }
-        }
-      },
-      "heap": "Local"
+      "ParseError": {
+        "message": "unexpected token in Parser expression"
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "Result": {
-          "inner_type": {
-            "heap": "Local",
-            "type_hint": "U32"
-          }
-        }
+      "Result": {
+        "inner_type": "U32"
       }
     }
   },
-  "diagnostics": [
-    {
-      "code": "T040",
-      "labels": [
-        {
-          "message": "expected error expression",
-          "span": [
-            15,
-            16
-          ],
-          "text": "@"
-        }
-      ],
-      "message": "er payload must be an error expression"
-    }
-  ],
+  "diagnostics": [],
   "errors": [
     {
-      "actual": "non-error",
-      "expected": "error",
-      "kind": "TypeMismatch"
+      "kind": "CannotSynthesize"
     }
   ],
   "root_type": null

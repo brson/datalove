@@ -3,8 +3,8 @@ module local/test/main
 ----------
 
 // Error test: returning without initializing Out param.
-fun bad_function(out x: @u32): @bool
-    ret @true
+fun bad_function(out x: u32): bool
+    ret true
 end fun
 
 ----------
@@ -18,5 +18,5 @@ import main.bad_function
 scriptunit-expr
 ----------
 
-@true
+true
 

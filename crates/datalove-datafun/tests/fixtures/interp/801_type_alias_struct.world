@@ -3,9 +3,9 @@ scriptunit-fragment
 ----------
 
 // Type alias for a struct type with u32 fields.
-type Point: @{x: u32, y: u32}
+type Point: {x: u32, y: u32}
 
-let p: Point = @{x = @10, y = @20}
+let p: Point = {x = 10, y = 20}
 
 ----------
 scriptunit-expr

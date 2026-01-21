@@ -1,11 +1,11 @@
 {
   "diagnostics": [],
-  "errors": [],
-  "judgements": [
+  "errors": [
     {
-      "kind": "variable",
-      "name": "n",
-      "type": "[(@int, @int)]"
+      "actual": "(u32, u32)",
+      "expected": "(int, int)",
+      "kind": "TypeMismatch"
     }
-  ]
+  ],
+  "judgements": []
 }

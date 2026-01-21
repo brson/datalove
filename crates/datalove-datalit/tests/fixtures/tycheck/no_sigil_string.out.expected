@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "String": {
-          "value": "\"hello\""
-        }
-      },
-      "heap": "Local"
+      "String": {
+        "value": "\"hello\""
+      }
     },
-    "type_hint": {
-      "heap": "Omitted",
-      "type_hint": "String"
-    }
+    "type_hint": "String"
   },
   "diagnostics": [],
   "errors": [],

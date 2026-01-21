@@ -3,11 +3,11 @@ module local/test/main
 ----------
 
 // Two functions with bool ref param (Copy type, should be safe).
-fun inner(ref x: bool): @bool
+fun inner(ref x: bool): bool
     ret x
 end fun
 
-fun outer(ref y: bool): @bool
+fun outer(ref y: bool): bool
     ret inner(y)
 end fun
 

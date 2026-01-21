@@ -22,7 +22,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = copy unit0.s0\n    v1 = copy unit0.v0\n    v2 = pack Tuple2 {v0, v1}\n    unit_end v2\n",
             ),
-            output: "@(@42, @100)",
+            output: "(42, 100)",
         ),
     ],
 )

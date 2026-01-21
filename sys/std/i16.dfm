@@ -47,7 +47,7 @@ end fun
 // Checked absolute value. Returns none for MIN.
 fun abs_checked(self: i16): ?i16
   if self == min_value()
-    ret @none
+    ret none
   else
     ret some abs(self)
   end if
@@ -132,7 +132,7 @@ end fun
 
 fun neg_checked(self: i16): ?i16
   if self == min_value()
-    ret @none
+    ret none
   else
     ret some icall neg_wrapping_i16(self)
   end if
@@ -159,7 +159,7 @@ end fun
 fun rem_checked(self: i16, other: i16): ?i16
   let zero = (: i16 / 0)
   if other == zero
-    ret @none
+    ret none
   else
     if self == min_value()
       if other == (: i16 / -1)
@@ -255,7 +255,7 @@ end fun
 // Checked left shift. Returns none if n >= 16.
 fun shift_left(self: i16, n: u16): ?i16
   if n >= (: u16 / 16)
-    ret @none
+    ret none
   else
     let u = icall i16_to_u16(self)
     let result = icall shl_u16(u, n)
@@ -266,7 +266,7 @@ end fun
 // Checked arithmetic right shift. Returns none if n >= 16.
 fun shift_right(self: i16, n: u16): ?i16
   if n >= (: u16 / 16)
-    ret @none
+    ret none
   else
     ret some icall sshr_i16(self, n)
   end if

@@ -1,9 +1,9 @@
-fun fib(n: @int): @int
-  if n <= : @int / @1
-    ret : @int / @1
+fun fib(n: int): int
+  if n <= : int / 1
+    ret : int / 1
   else
-    let a = fib(n - : @int / @1)
-    let b = fib(n - : @int / @2)
+    let a = fib(n - : int / 1)
+    let b = fib(n - : int / 2)
     ret a + b
   end if
 end fun

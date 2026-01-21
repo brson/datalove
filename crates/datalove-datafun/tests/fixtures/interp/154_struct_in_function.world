@@ -3,8 +3,8 @@ scriptunit-fragment
 ----------
 
 // Struct returned from a function.
-fun make_point(): @{x: @u32, y: @u32}
-    ret @{x = @100, y = @200}
+fun make_point(): {x: u32, y: u32}
+    ret {x = 100, y = 200}
 end fun
 
 ----------

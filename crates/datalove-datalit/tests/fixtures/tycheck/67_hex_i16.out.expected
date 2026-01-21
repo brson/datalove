@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Hex": {
-          "value": "0x7FFF"
-        }
-      },
-      "heap": "Local"
+      "Hex": {
+        "value": "0x7FFF"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "I16"
-    }
+    "type_hint": "I16"
   },
   "diagnostics": [
     {

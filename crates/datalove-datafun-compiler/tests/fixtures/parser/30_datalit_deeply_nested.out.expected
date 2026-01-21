@@ -16,7 +16,6 @@
                         "elements": [
                           {
                             "expr": {
-                              "heap": "Local",
                               "kind": "Int",
                               "type_hint": null,
                               "value": "1"
@@ -24,20 +23,16 @@
                           },
                           {
                             "expr": {
-                              "heap": "Local",
                               "kind": "Int",
                               "type_hint": null,
                               "value": "2"
                             }
                           }
                         ],
-                        "heap": "Local",
-                        "kind": "AnonTuple",
-                        "type_hint": null
+                        "kind": "Tuple"
                       }
                     }
                   ],
-                  "heap": "Local",
                   "kind": "List",
                   "type_hint": null
                 }
@@ -50,7 +45,6 @@
                         "elements": [
                           {
                             "expr": {
-                              "heap": "Local",
                               "kind": "Int",
                               "type_hint": null,
                               "value": "3"
@@ -58,28 +52,22 @@
                           },
                           {
                             "expr": {
-                              "heap": "Local",
                               "kind": "Int",
                               "type_hint": null,
                               "value": "4"
                             }
                           }
                         ],
-                        "heap": "Local",
-                        "kind": "AnonTuple",
-                        "type_hint": null
+                        "kind": "Tuple"
                       }
                     }
                   ],
-                  "heap": "Local",
                   "kind": "List",
                   "type_hint": null
                 }
               }
             ],
-            "heap": "Local",
-            "kind": "AnonTuple",
-            "type_hint": null
+            "kind": "Tuple"
           }
         }
       }

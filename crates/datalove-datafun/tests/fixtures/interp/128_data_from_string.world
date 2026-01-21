@@ -3,4 +3,4 @@ scriptunit-expr
 ----------
 
 // Create Data from a string.
-@data "hello world"
+data "hello world"

@@ -7,4 +7,4 @@ fun test_add(a: u32, b: u32): !u32
     ret ok (a +! b)
 end fun
 
-let output = test_add(@4294967295, @1)
+let output = test_add(4294967295, 1)

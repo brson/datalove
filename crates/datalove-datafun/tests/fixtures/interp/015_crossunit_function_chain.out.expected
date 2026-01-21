@@ -34,7 +34,7 @@ Analysis(
                 status: "Success",
                 ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = call unit1.f0(v0)\n    v2 = const 100int\n    v3 = call unit0.f0(v2)\n    v4 = add v1, v3\n    drop v0\n    drop v1\n    drop v2\n    drop v3\n    unit_end v4\n",
             ),
-            output: "@113",
+            output: "113",
         ),
     ],
 )

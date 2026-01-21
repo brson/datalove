@@ -14,8 +14,8 @@ DualAnalysis(
                 ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 10u32\n    v1 = some v0\n    v2 = none\n    v3, v4 = unwrap_option v1\n    branch v4, block2, block1\nblock1:\n    v5 = none\n    return v5\nblock2:\n    v6, v7 = unwrap_option v2\n    branch v7, block4, block3\nblock3:\n    v8 = none\n    return v8\nblock4:\n    v9 = some v6\n    return v9\nexports:\n    test = f0\n",
             ),
             ir_match: true,
-            interp_output: "@none\n",
-            aot_output: "@none\n",
+            interp_output: "none\n",
+            aot_output: "none\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

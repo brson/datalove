@@ -1,6 +1,47 @@
 {
-  "diagnostics": [],
-  "errors": [],
+  "diagnostics": [
+    {
+      "code": "F001",
+      "labels": [
+        {
+          "message": "not found in this scope",
+          "span": [
+            179,
+            184
+          ],
+          "text": "point"
+        }
+      ],
+      "message": "cannot find value `point` in this scope"
+    },
+    {
+      "code": "F001",
+      "labels": [
+        {
+          "message": "not found in this scope",
+          "span": [
+            201,
+            206
+          ],
+          "text": "point"
+        }
+      ],
+      "message": "cannot find value `point` in this scope"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    },
+    {
+      "kind": "UnresolvedName",
+      "name": "point"
+    },
+    {
+      "kind": "UnresolvedName",
+      "name": "point"
+    }
+  ],
   "judgements": [
     {
       "kind": "function",
@@ -8,10 +49,10 @@
       "params": [
         {
           "name": "s",
-          "type": "{x: @u32, y: @u32}"
+          "type": "{x: u32, y: u32}"
         }
       ],
-      "return_type": "@u32"
+      "return_type": "u32"
     },
     {
       "kind": "function",
@@ -19,25 +60,10 @@
       "params": [
         {
           "name": "s",
-          "type": "{x: @u32, y: @u32}"
+          "type": "{x: u32, y: u32}"
         }
       ],
-      "return_type": "@u32"
-    },
-    {
-      "kind": "variable",
-      "name": "point",
-      "type": "{x: @u32, y: @u32}"
-    },
-    {
-      "kind": "variable",
-      "name": "px",
-      "type": "u32"
-    },
-    {
-      "kind": "variable",
-      "name": "py",
-      "type": "u32"
+      "return_type": "u32"
     }
   ]
 }

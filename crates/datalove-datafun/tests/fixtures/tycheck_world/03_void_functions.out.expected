@@ -7,7 +7,7 @@
         {
           "name": "debug_value",
           "params": [
-            "@u32"
+            "u32"
           ],
           "return_type": "()"
         }
@@ -19,7 +19,7 @@
         {
           "name": "print_number",
           "params": [
-            "@u32"
+            "u32"
           ],
           "return_type": "()"
         }

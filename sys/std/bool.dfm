@@ -1,9 +1,9 @@
 // Logical negation.
 fun not(self: bool): bool
   if self
-    ret @false
+    ret false
   else
-    ret @true
+    ret true
   end if
 end fun
 
@@ -12,14 +12,14 @@ fun and(self: bool, other: bool): bool
   if self
     ret other
   else
-    ret @false
+    ret false
   end if
 end fun
 
 // Logical OR.
 fun or(self: bool, other: bool): bool
   if self
-    ret @true
+    ret true
   else
     ret other
   end if
@@ -29,15 +29,15 @@ end fun
 fun xor(self: bool, other: bool): bool
   if self
     if other
-      ret @false
+      ret false
     else
-      ret @true
+      ret true
     end if
   else
     if other
-      ret @true
+      ret true
     else
-      ret @false
+      ret false
     end if
   end if
 end fun
@@ -47,7 +47,7 @@ fun implies(self: bool, other: bool): bool
   if self
     ret other
   else
-    ret @true
+    ret true
   end if
 end fun
 
@@ -56,6 +56,6 @@ fun then_some(self: bool, value: u32): ?u32
   if self
     ret some value
   else
-    ret @none
+    ret none
   end if
 end fun

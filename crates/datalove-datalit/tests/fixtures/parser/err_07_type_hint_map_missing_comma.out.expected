@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": []
-        }
-      },
-      "heap": "Local"
+      "Map": {
+        "entries": []
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "ParseError": {
-          "message": "expected comma between map key and value types"
-        }
+      "ParseError": {
+        "message": "expected comma between map key and value types"
       }
     }
   },
@@ -24,10 +18,10 @@
         {
           "message": "expected ',' between key and value types",
           "span": [
-            13,
-            14
+            11,
+            17
           ],
-          "text": "@"
+          "text": "string"
         }
       ],
       "message": "expected comma between map key and value types"

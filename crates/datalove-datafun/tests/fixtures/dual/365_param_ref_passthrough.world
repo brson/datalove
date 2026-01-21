@@ -11,6 +11,6 @@ fun outer(ref x: int): int
     ret inner(x)
 end fun
 
-let val: int = @11
+let val: int = 11
 debuglog outer(val)
 debuglog val

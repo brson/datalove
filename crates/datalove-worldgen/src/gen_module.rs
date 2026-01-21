@@ -117,7 +117,7 @@ pub fn gen_module<'db, R: Rng>(
 
     // Generate type alias statements.
     for alias in &info.type_aliases {
-        lines.push(format_type_alias(db, &alias.name, alias.type_hint));
+        lines.push(format_type_alias(db, &alias.name, alias.type_hint.clone()));
     }
     if !info.type_aliases.is_empty() {
         lines.push(String::new());

@@ -15,4 +15,4 @@ fun checked_mul(a: u32, b: u32): ?u32
 end fun
 
 // 100000 * 100000 = 10^10 overflows u32, returns None -> default 999.
-debuglog unwrap_or_default(checked_mul(@100000, @100000), @999)
+debuglog unwrap_or_default(checked_mul(100000, 100000), 999)

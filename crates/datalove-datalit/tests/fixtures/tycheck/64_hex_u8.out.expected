@@ -1,19 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Hex": {
-          "value": "0xFF"
-        }
-      },
-      "heap": "Local"
+      "Hex": {
+        "value": "0xFF"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "U8"
-    }
+    "type_hint": "U8"
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@u8"
+  "root_type": "u8"
 }

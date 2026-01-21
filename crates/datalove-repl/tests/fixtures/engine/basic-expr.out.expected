@@ -10,14 +10,14 @@
       "SuccessLet": {
         "name": "x",
         "ty": "u32",
-        "value": "@42"
+        "value": "42"
       }
     },
     "environment": [
       {
         "name": "x",
         "ty": "u32",
-        "value": "@42"
+        "value": "42"
       }
     ]
   },
@@ -32,14 +32,14 @@
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "u32",
-        "value": "@42"
+        "value": "42"
       }
     },
     "environment": [
       {
         "name": "x",
         "ty": "u32",
-        "value": "@42"
+        "value": "42"
       }
     ]
   }

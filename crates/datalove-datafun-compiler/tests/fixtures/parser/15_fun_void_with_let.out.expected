@@ -19,7 +19,6 @@
                 "op": "Add",
                 "rhs": {
                   "expr": {
-                    "heap": "Local",
                     "kind": "Int",
                     "type_hint": null,
                     "value": "1"
@@ -35,10 +34,7 @@
           {
             "mode": "In",
             "name": "x",
-            "type_hint": {
-              "heap": "Local",
-              "type_hint": "U32"
-            }
+            "type_hint": "U32"
           }
         ],
         "return_type": null

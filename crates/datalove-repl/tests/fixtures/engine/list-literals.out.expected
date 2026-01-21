@@ -1,23 +1,23 @@
 [
   {
-    "input": "let nums = @[@1, @2, @3]",
+    "input": "let nums = [1, 2, 3]",
     "parse": {
       "Command": {
-        "ScriptStatement": "let nums = @[@1, @2, @3]"
+        "ScriptStatement": "let nums = [1, 2, 3]"
       }
     },
     "eval": {
       "SuccessLet": {
         "name": "nums",
         "ty": "list<u32>",
-        "value": "@[@1, @2, @3]"
+        "value": "[1, 2, 3]"
       }
     },
     "environment": [
       {
         "name": "nums",
         "ty": "list<u32>",
-        "value": "@[@1, @2, @3]"
+        "value": "[1, 2, 3]"
       }
     ]
   },
@@ -32,7 +32,7 @@
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "list<u32>",
-        "value": "@[@1, @2, @3]"
+        "value": "[1, 2, 3]"
       }
     },
     "environment": [
@@ -44,17 +44,17 @@
     ]
   },
   {
-    "input": "let words = @[@\"hello\", @\"world\"]",
+    "input": "let words = [\"hello\", \"world\"]",
     "parse": {
       "Command": {
-        "ScriptStatement": "let words = @[@\"hello\", @\"world\"]"
+        "ScriptStatement": "let words = [\"hello\", \"world\"]"
       }
     },
     "eval": {
       "SuccessLet": {
         "name": "words",
         "ty": "list<string>",
-        "value": "@[@\"hello\", @\"world\"]"
+        "value": "[\"hello\", \"world\"]"
       }
     },
     "environment": [
@@ -66,7 +66,7 @@
       {
         "name": "words",
         "ty": "list<string>",
-        "value": "@[@\"hello\", @\"world\"]"
+        "value": "[\"hello\", \"world\"]"
       }
     ]
   },
@@ -81,7 +81,7 @@
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "list<string>",
-        "value": "@[@\"hello\", @\"world\"]"
+        "value": "[\"hello\", \"world\"]"
       }
     },
     "environment": [
@@ -98,24 +98,24 @@
     ]
   },
   {
-    "input": "let bigger = @[@10, @20, @30, @40, @50]",
+    "input": "let bigger = [10, 20, 30, 40, 50]",
     "parse": {
       "Command": {
-        "ScriptStatement": "let bigger = @[@10, @20, @30, @40, @50]"
+        "ScriptStatement": "let bigger = [10, 20, 30, 40, 50]"
       }
     },
     "eval": {
       "SuccessLet": {
         "name": "bigger",
         "ty": "list<u32>",
-        "value": "@[@10, @20, @30, @40, @50]"
+        "value": "[10, 20, 30, 40, 50]"
       }
     },
     "environment": [
       {
         "name": "bigger",
         "ty": "list<u32>",
-        "value": "@[@10, @20, @30, @40, @50]"
+        "value": "[10, 20, 30, 40, 50]"
       },
       {
         "name": "nums",
@@ -140,7 +140,7 @@
       "SuccessExpr": {
         "expr_kind": "expr",
         "ty": "list<u32>",
-        "value": "@[@10, @20, @30, @40, @50]"
+        "value": "[10, 20, 30, 40, 50]"
       }
     },
     "environment": [

@@ -1,37 +1,22 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "List": {
-          "elements": [
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "100"
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": {
-                "heap": "Local",
-                "type_hint": "U32"
+      "List": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "100"
               }
-            }
-          ]
-        }
-      },
-      "heap": "Omitted"
+            },
+            "type_hint": "U32"
+          }
+        ]
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "List": {
-          "element_type": {
-            "heap": "Local",
-            "type_hint": "I32"
-          }
-        }
+      "List": {
+        "element_type": "I32"
       }
     }
   },
@@ -42,8 +27,8 @@
         {
           "message": "expected `i32`, found `u32`",
           "span": [
-            12,
-            13
+            11,
+            12
           ],
           "text": ":"
         }

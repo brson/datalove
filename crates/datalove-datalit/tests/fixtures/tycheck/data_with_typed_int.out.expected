@@ -1,32 +1,20 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Data": {
-          "value": {
-            "expr": {
-              "expr": {
-                "Int": {
-                  "value": "1"
-                }
-              },
-              "heap": "Omitted"
-            },
-            "type_hint": {
-              "heap": "Local",
-              "type_hint": "Int"
+      "Data": {
+        "value": {
+          "expr": {
+            "Int": {
+              "value": "1"
             }
-          }
+          },
+          "type_hint": "Int"
         }
-      },
-      "heap": "Local"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "Data"
-    }
+    "type_hint": "Data"
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "@data"
+  "root_type": "data"
 }

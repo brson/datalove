@@ -7,7 +7,6 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "heap": "Local",
             "kind": "Int",
             "type_hint": null,
             "value": "42"
@@ -20,7 +19,6 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "heap": "Local",
             "kind": "Int",
             "type_hint": null,
             "value": "99"

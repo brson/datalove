@@ -1,9 +1,6 @@
 {
   "ast": {
-    "expr": {
-      "expr": "True",
-      "heap": "Local"
-    },
+    "expr": "True",
     "type_hint": null
   },
   "diagnostics": []

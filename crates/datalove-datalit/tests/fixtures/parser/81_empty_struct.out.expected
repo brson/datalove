@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "AnonStruct": {
-          "fields": []
-        }
-      },
-      "heap": "Local"
+      "AnonStruct": {
+        "fields": []
+      }
     },
     "type_hint": null
   },

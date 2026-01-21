@@ -3,7 +3,7 @@ module local/test/main
 ----------
 
 // Error test: reading Out param before it has been written.
-fun bad_function(out x: @u32): @u32
+fun bad_function(out x: u32): u32
     ret x
 end fun
 
@@ -18,5 +18,5 @@ import main.bad_function
 scriptunit-expr
 ----------
 
-@0
+0
 

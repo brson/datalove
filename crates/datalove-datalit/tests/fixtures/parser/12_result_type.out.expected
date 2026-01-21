@@ -1,22 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "String": {
-          "value": "\"hello\""
-        }
-      },
-      "heap": "Local"
+      "String": {
+        "value": "\"hello\""
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "Result": {
-          "inner_type": {
-            "heap": "Local",
-            "type_hint": "String"
-          }
-        }
+      "Result": {
+        "inner_type": "String"
       }
     }
   },

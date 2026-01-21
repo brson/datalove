@@ -1,12 +1,9 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Float": {
-          "value": "-3.14"
-        }
-      },
-      "heap": "Local"
+      "Float": {
+        "value": "-3.14"
+      }
     },
     "type_hint": null
   },

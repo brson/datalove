@@ -1,1 +1,1 @@
-: @enum Status { Ok, Error } / @enum NotFound
+: enum Status { Ok, Error } / enum NotFound

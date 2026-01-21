@@ -3,9 +3,9 @@
 use rand::Rng;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, Variable};
-use crate::gen_type::gen_type_hint_with_heap;
+use crate::gen_type::gen_type_hint;
 use crate::gen_expr::{gen_expr, gen_bool_expr};
-use crate::pretty::pretty_type_hint_and_heap;
+use crate::pretty::pretty_type_hint;
 
 /// Generate a let statement.
 pub fn gen_let<'db, R: Rng>(
@@ -19,9 +19,9 @@ pub fn gen_let<'db, R: Rng>(
     let name = format!("v{}", *var_counter);
     *var_counter += 1;
 
-    let type_hint = gen_type_hint_with_heap(db, rng, config);
-    let value = gen_expr(db, rng, type_hint, config, ctx);
-    let type_str = pretty_type_hint_and_heap(db, type_hint);
+    let type_hint = gen_type_hint(db, rng, config);
+    let value = gen_expr(db, rng, type_hint.clone(), config, ctx);
+    let type_str = pretty_type_hint(db, type_hint.clone());
 
     ctx.variables.push(Variable {
         name: name.clone(),
@@ -44,9 +44,9 @@ pub fn gen_var<'db, R: Rng>(
     let name = format!("v{}", *var_counter);
     *var_counter += 1;
 
-    let type_hint = gen_type_hint_with_heap(db, rng, config);
-    let value = gen_expr(db, rng, type_hint, config, ctx);
-    let type_str = pretty_type_hint_and_heap(db, type_hint);
+    let type_hint = gen_type_hint(db, rng, config);
+    let value = gen_expr(db, rng, type_hint.clone(), config, ctx);
+    let type_str = pretty_type_hint(db, type_hint.clone());
 
     ctx.variables.push(Variable {
         name: name.clone(),
@@ -65,14 +65,14 @@ pub fn gen_set<'db, R: Rng>(
     ctx: &mut GenContext<'db>,
     indent: &str,
 ) -> Option<String> {
-    let mutable_vars = ctx.mutable_variables(db);
+    let mutable_vars = ctx.mutable_variables();
     if mutable_vars.is_empty() {
         return None;
     }
 
     let var_idx = rng.gen_range(0..mutable_vars.len());
     let var_name = mutable_vars[var_idx].name.clone();
-    let var_type = mutable_vars[var_idx].type_hint;
+    let var_type = mutable_vars[var_idx].type_hint.clone();
     let value = gen_expr(db, rng, var_type, config, ctx);
 
     Some(format!("{}set {} = {}", indent, var_name, value))
@@ -102,9 +102,9 @@ pub fn gen_ret<'db, R: Rng>(
     ctx: &mut GenContext<'db>,
     indent: &str,
 ) -> String {
-    match ctx.return_type {
+    match &ctx.return_type {
         Some(return_type) => {
-            let value = gen_expr(db, rng, return_type, config, ctx);
+            let value = gen_expr(db, rng, return_type.clone(), config, ctx);
             format!("{}ret {}", indent, value)
         }
         None => format!("{}ret", indent),

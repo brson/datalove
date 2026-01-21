@@ -3,18 +3,18 @@
 // True if result is Ok.
 fun is_ok(self: !u32): bool
   if self |value|
-    ret @true
+    ret true
   else |error|
-    ret @false
+    ret false
   end if
 end fun
 
 // True if result is Err.
 fun is_err(self: !u32): bool
   if self |value|
-    ret @false
+    ret false
   else |error|
-    ret @true
+    ret true
   end if
 end fun
 
@@ -45,6 +45,6 @@ fun to_option(self: !u32): ?u32
   if self |value|
     ret some value
   else |error|
-    ret @none
+    ret none
   end if
 end fun

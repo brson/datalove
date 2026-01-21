@@ -8,5 +8,5 @@ fun test_sub(a: u32, b: u32): !u32
 end fun
 
 fun main(): !u32
-    ret test_sub(@3, @10)
+    ret test_sub(3, 10)
 end fun

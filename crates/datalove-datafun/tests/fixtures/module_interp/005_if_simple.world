@@ -4,8 +4,8 @@ module local/test/main
 
 fun main(): u32
     if true
-        ret @1
+        ret 1
     else
-        ret @0
+        ret 0
     end if
 end fun

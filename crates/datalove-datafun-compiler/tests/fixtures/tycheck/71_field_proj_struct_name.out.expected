@@ -1,21 +1,46 @@
 {
-  "diagnostics": [],
-  "errors": [],
-  "judgements": [
+  "diagnostics": [
     {
-      "kind": "variable",
-      "name": "s",
-      "type": "{id: @u32, age: @u32}"
+      "code": "F001",
+      "labels": [
+        {
+          "message": "not found in this scope",
+          "span": [
+            37,
+            38
+          ],
+          "text": "s"
+        }
+      ],
+      "message": "cannot find value `s` in this scope"
     },
     {
-      "kind": "variable",
-      "name": "i",
-      "type": "u32"
-    },
-    {
-      "kind": "variable",
-      "name": "a",
-      "type": "u32"
+      "code": "F001",
+      "labels": [
+        {
+          "message": "not found in this scope",
+          "span": [
+            50,
+            51
+          ],
+          "text": "s"
+        }
+      ],
+      "message": "cannot find value `s` in this scope"
     }
-  ]
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    },
+    {
+      "kind": "UnresolvedName",
+      "name": "s"
+    },
+    {
+      "kind": "UnresolvedName",
+      "name": "s"
+    }
+  ],
+  "judgements": []
 }

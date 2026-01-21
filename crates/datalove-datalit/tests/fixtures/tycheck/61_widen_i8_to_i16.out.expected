@@ -1,45 +1,29 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "List": {
-          "elements": [
-            {
-              "expr": {
-                "expr": {
-                  "Int": {
-                    "value": "-10"
-                  }
-                },
-                "heap": "Local"
-              },
-              "type_hint": {
-                "heap": "Local",
-                "type_hint": "I8"
+      "List": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "-10"
               }
-            }
-          ]
-        }
-      },
-      "heap": "Omitted"
+            },
+            "type_hint": "I8"
+          }
+        ]
+      }
     },
     "type_hint": {
-      "heap": "Omitted",
-      "type_hint": {
-        "List": {
-          "element_type": {
-            "heap": "Local",
-            "type_hint": "I16"
-          }
-        }
+      "List": {
+        "element_type": "I16"
       }
     }
   },
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "element_type": "@i16",
-    "heap": "",
+    "element_type": "i16",
     "kind": "List"
   }
 }

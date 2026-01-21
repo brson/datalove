@@ -1,51 +1,33 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Map": {
-          "entries": [
-            {
-              "key": {
-                "expr": {
-                  "expr": {
-                    "String": {
-                      "value": "\"bad\""
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
+      "Map": {
+        "entries": [
+          {
+            "key": {
+              "expr": {
+                "String": {
+                  "value": "\"bad\""
+                }
               },
-              "value": {
-                "expr": {
-                  "expr": {
-                    "String": {
-                      "value": "\"value\""
-                    }
-                  },
-                  "heap": "Local"
-                },
-                "type_hint": null
-              }
+              "type_hint": null
+            },
+            "value": {
+              "expr": {
+                "String": {
+                  "value": "\"value\""
+                }
+              },
+              "type_hint": null
             }
-          ]
-        }
-      },
-      "heap": "Local"
+          }
+        ]
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "Map": {
-          "key_type": {
-            "heap": "Local",
-            "type_hint": "U32"
-          },
-          "value_type": {
-            "heap": "Local",
-            "type_hint": "String"
-          }
-        }
+      "Map": {
+        "key_type": "U32",
+        "value_type": "String"
       }
     }
   },
@@ -56,10 +38,10 @@
         {
           "message": "expected `u32`, found `string`",
           "span": [
-            32,
+            28,
             33
           ],
-          "text": "@"
+          "text": "\"bad\""
         }
       ],
       "message": "mismatched types"

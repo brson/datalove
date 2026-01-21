@@ -7,7 +7,7 @@ use crate::resolve::ResolvedExpr;
 use super::context::TypeContext;
 use super::check::check;
 use super::synthesize::synthesize;
-use super::types::{TypeAndHeap, TypeError};
+use super::types::{Type, TypeError};
 
 /// Type error entry with location info.
 #[salsa::tracked]
@@ -22,7 +22,8 @@ pub struct TypecheckResult<'db> {
     pub root_expr: ExprFull<'db>,
 
     /// The root expression type (if successfully synthesized).
-    pub root_type: Option<TypeAndHeap<'db>>,
+    #[returns(ref)]
+    pub root_type: Option<Type<'db>>,
 
     /// Type errors encountered.
     pub errors: Vec<TypeErrorEntry<'db>>,
@@ -51,13 +52,13 @@ pub fn type_check_with_expected<'db>(
     db: &'db dyn crate::Db,
     expr: ExprFull<'db>,
     resolved: ResolvedExpr<'db>,
-    expected: Option<TypeAndHeap<'db>>,
+    expected: Option<Type<'db>>,
 ) -> TypecheckResult<'db> {
     let mut ctx = TypeContext::new(db, resolved);
 
     let root_type = if let Some(expected_ty) = expected {
         // Use checking mode when expected type is provided.
-        match check(&mut ctx, expr, expected_ty) {
+        match check(&mut ctx, expr, &expected_ty) {
             Ok(()) => Some(expected_ty),
             Err(e) => {
                 ctx.add_error(e);

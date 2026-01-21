@@ -3,16 +3,16 @@ module local/test/main
 ----------
 
 // Chain: main -> outer -> inner (outer takes ref, passes to inner's ref).
-fun inner(ref x: int): @bool
-    ret @true
+fun inner(ref x: int): bool
+    ret true
 end fun
 
-fun outer(ref y: int): @bool
+fun outer(ref y: int): bool
     ret inner(y)
 end fun
 
-fun main(): @bool
-    let val: int = :int/@100
+fun main(): bool
+    let val: int = :int/100
     ret outer(val)
 end fun
 

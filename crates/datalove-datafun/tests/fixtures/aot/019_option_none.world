@@ -12,4 +12,4 @@ fun get_none(): ?u32
     ret none
 end fun
 
-debuglog unwrap_or_default(get_none(), @99)
+debuglog unwrap_or_default(get_none(), 99)

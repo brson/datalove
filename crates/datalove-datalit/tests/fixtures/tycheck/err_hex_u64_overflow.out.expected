@@ -1,17 +1,11 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Hex": {
-          "value": "0x10000000000000000"
-        }
-      },
-      "heap": "Local"
+      "Hex": {
+        "value": "0x10000000000000000"
+      }
     },
-    "type_hint": {
-      "heap": "Local",
-      "type_hint": "U64"
-    }
+    "type_hint": "U64"
   },
   "diagnostics": [
     {

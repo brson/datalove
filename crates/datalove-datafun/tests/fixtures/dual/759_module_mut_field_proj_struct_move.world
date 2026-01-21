@@ -3,9 +3,9 @@ module local/test/mutops_struct_move
 ----------
 
 // Module function taking mut param with move type.
-fun set_to_42(mut x: int): @bool
-    set x = :int/@42
-    ret @true
+fun set_to_42(mut x: int): bool
+    set x = :int/42
+    ret true
 end fun
 
 ----------
@@ -16,6 +16,6 @@ scriptunit-fragment
 require module local/test/mutops_struct_move
 import mutops_struct_move.set_to_42
 
-var s: {a: int, b: int} = {a = :int/@100, b = :int/@200}
+var s: {a: int, b: int} = {a = :int/100, b = :int/200}
 let _ok = set_to_42(s.a)
 debuglog s.a

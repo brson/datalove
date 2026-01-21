@@ -1,22 +1,13 @@
 {
   "ast": {
     "expr": {
-      "expr": {
-        "Set": {
-          "elements": []
-        }
-      },
-      "heap": "Local"
+      "Set": {
+        "elements": []
+      }
     },
     "type_hint": {
-      "heap": "Local",
-      "type_hint": {
-        "Set": {
-          "element_type": {
-            "heap": "Local",
-            "type_hint": "U32"
-          }
-        }
+      "Set": {
+        "element_type": "U32"
       }
     }
   },
