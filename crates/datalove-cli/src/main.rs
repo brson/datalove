@@ -37,6 +37,8 @@ enum Command {
     Repl(ReplCommand),
     /// Execute a datafun script.
     Script(ScriptCommand),
+    /// Dump the IR for a datafun script.
+    ScriptIr(ScriptIrCommand),
     /// AOT compile a datafun script to native code.
     AotCompile(AotCompileCommand),
     /// Typecheck the sys/std library and report errors.
@@ -101,6 +103,15 @@ struct ScriptCommand {
 }
 
 #[derive(clap::Args)]
+struct ScriptIrCommand {
+    /// Path to the script file (.dfs) to dump IR for.
+    file_path: PathBuf,
+    /// Run without loading the sys library.
+    #[arg(long)]
+    no_sys: bool,
+}
+
+#[derive(clap::Args)]
 struct AotCompileCommand {
     /// Path to the script file (.dfs) to compile.
     file_path: PathBuf,
@@ -150,6 +161,7 @@ impl Cli {
             Command::LitOp(cmd) => cmd.run(&self.args),
             Command::Repl(cmd) => cmd.run(&self.args),
             Command::Script(cmd) => cmd.run(&self.args),
+            Command::ScriptIr(cmd) => cmd.run(&self.args),
             Command::AotCompile(cmd) => cmd.run(&self.args),
             Command::TypecheckStd(cmd) => cmd.run(&self.args),
             Command::Docs(cmd) => cmd.run(&self.args),
@@ -451,6 +463,65 @@ impl ScriptCommand {
         // Cleanup.
         ctx.destroy_all();
 
+        Ok(())
+    }
+}
+
+impl ScriptIrCommand {
+    fn run(&self, _args: &Args) -> AnyResult<()> {
+        use datalove_datafun as datafun;
+        use datafun::pipeline::ModuleCompilationPipeline;
+
+        let db = datafun::Database::default();
+
+        // Load sys library unless --no-sys.
+        let mut pipeline = ModuleCompilationPipeline::new();
+        if !self.no_sys {
+            rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
+        }
+
+        // Compile modules (typecheck, drop analysis, lower to IR).
+        let compiled = pipeline.compile_fresh(&db);
+
+        // Check for errors.
+        if compiled.has_errors() {
+            let errors = compiled.all_errors();
+            bail!("Compilation failed with {} error(s):\n{}", errors.len(), errors.join("\n"));
+        }
+
+        // Create script compilation context.
+        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None);
+
+        // Read the script file.
+        let script_source = rmx::std::fs::read_to_string(&self.file_path)
+            .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
+
+        // Lower to IR for AOT (emits drops for script-level bindings).
+        let lower_result = ctx.lower_fragment_for_aot(&script_source);
+
+        // Check for errors and render diagnostics.
+        let cwd = rmx::std::env::current_dir().unwrap_or_default();
+        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &lower_result.typecheck {
+            let parse_diags = ctx.get_parse_diagnostics();
+            render::render_parse_diagnostics(ctx.db(), &parse_diags, &self.file_path, &cwd);
+            bail!("Parse error");
+        }
+        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &lower_result.typecheck {
+            let type_diags = ctx.get_type_diagnostics();
+            render::render_type_diagnostics(ctx.db(), &type_diags, &self.file_path, &cwd);
+            bail!("Type error");
+        }
+        if let datafun::pipeline::LoweringResult::Error { message } = &lower_result.lowering {
+            bail!("Lowering error: {}", message);
+        }
+
+        // Get the IR unit and print it.
+        let ir_unit = lower_result.ir_unit
+            .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
+
+        println!("{}", ir_unit);
+
+        ctx.destroy_all();
         Ok(())
     }
 }
