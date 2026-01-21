@@ -97,7 +97,7 @@ pub fn gen_function<'db, R: Rng>(
     };
 
     if include_ret {
-        let ret_stmt = gen_ret(db, rng, config, &ctx, "  ");
+        let ret_stmt = gen_ret(db, rng, config, &mut ctx, "  ");
         lines.push(ret_stmt);
     }
 

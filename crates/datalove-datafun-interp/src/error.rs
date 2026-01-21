@@ -1,24 +1,16 @@
 //! Interpreter errors.
 
-use datalove_datafun_ir::{ValueId, SlotId, ParamId, BlockId, FuncId, IrModuleId};
+use datalove_datafun_ir::{ValueId, SlotId, ParamId, FuncId, IrModuleId};
 
 /// Interpreter error.
 #[derive(Debug)]
 pub enum InterpError {
-    /// Type information missing for value.
-    MissingType(ValueId),
-    /// Type information missing for slot.
-    MissingSlotType(SlotId),
-    /// Parameter not found.
-    MissingParam(ParamId),
-    /// Value not initialized.
+    /// Value not initialized (may occur during Drop).
     UninitializedValue(ValueId),
-    /// Slot not initialized.
+    /// Slot not initialized (may occur during Drop).
     UninitializedSlot(SlotId),
-    /// Parameter not initialized.
+    /// Parameter not initialized (may occur during Drop).
     UninitializedParam(ParamId),
-    /// Block not found.
-    BlockNotFound(BlockId),
     /// Function not found.
     FunctionNotFound(FuncId),
     /// Arithmetic overflow.
@@ -33,6 +25,4 @@ pub enum InterpError {
     ExternalUnitNotFound(u32),
     /// Module function not found.
     ModuleFunctionNotFound { module: IrModuleId, func: FuncId },
-    /// Invalid argument for out parameter (must be slot or value dest).
-    InvalidOutParamArg,
 }

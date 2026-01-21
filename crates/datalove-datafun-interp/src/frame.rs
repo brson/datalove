@@ -81,23 +81,22 @@ impl Frame {
     }
 
     /// Get destination for a value.
-    pub fn value_dest(&mut self, id: ValueId) -> Result<Destination, InterpError> {
+    ///
+    /// Panics if the value ID is out of bounds.
+    pub fn value_dest(&mut self, id: ValueId) -> Destination {
         let idx = id.0 as usize;
-        if idx >= self.layout.value_offsets.len() {
-            return Err(InterpError::MissingType(id));
-        }
         let offset = self.layout.value_offsets[idx] as usize;
         let tydesc = self.layout.value_tydescs[idx];
         let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
-        Ok(Destination { ptr, tydesc })
+        Destination { ptr, tydesc }
     }
 
     /// Get value (for reading).
+    ///
+    /// Panics if value ID is out of bounds (compiler bug).
+    /// Returns error if value is uninitialized (may happen during Drop).
     pub fn value(&self, id: ValueId) -> Result<Value, InterpError> {
         let idx = id.0 as usize;
-        if idx >= self.layout.value_offsets.len() {
-            return Err(InterpError::MissingType(id));
-        }
         if !self.value_initialized[idx] {
             return Err(InterpError::UninitializedValue(id));
         }
@@ -129,23 +128,22 @@ impl Frame {
     }
 
     /// Get destination for a slot.
-    pub fn slot_dest(&mut self, id: SlotId) -> Result<Destination, InterpError> {
+    ///
+    /// Panics if slot ID is out of bounds (compiler bug).
+    pub fn slot_dest(&mut self, id: SlotId) -> Destination {
         let idx = id.0 as usize;
-        if idx >= self.layout.slot_offsets.len() {
-            return Err(InterpError::MissingSlotType(id));
-        }
         let offset = self.layout.slot_offsets[idx] as usize;
         let tydesc = self.layout.slot_tydescs[idx];
         let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
-        Ok(Destination { ptr, tydesc })
+        Destination { ptr, tydesc }
     }
 
     /// Get slot value (for reading).
+    ///
+    /// Panics if slot ID is out of bounds (compiler bug).
+    /// Returns error if slot is uninitialized (may happen during Drop).
     pub fn slot(&self, id: SlotId) -> Result<Value, InterpError> {
         let idx = id.0 as usize;
-        if idx >= self.layout.slot_offsets.len() {
-            return Err(InterpError::MissingSlotType(id));
-        }
         if !self.slot_initialized[idx] {
             return Err(InterpError::UninitializedSlot(id));
         }
@@ -200,17 +198,12 @@ impl Frame {
 
     /// Read param (dereferences pointer to caller's data).
     ///
-    /// Returns error for Out params that haven't been written yet.
+    /// Panics if param ID is out of bounds (compiler bug).
+    /// Returns error if param is uninitialized (may happen during Drop).
     pub fn param(&self, id: ParamId) -> Result<Value, InterpError> {
         let idx = id.0 as usize;
-        if idx >= self.param_ptrs.len() {
-            return Err(InterpError::MissingParam(id));
-        }
         let ptr = self.param_ptrs[idx];
-        if ptr.is_null() {
-            return Err(InterpError::UninitializedParam(id));
-        }
-        if !self.param_initialized[idx] {
+        if ptr.is_null() || !self.param_initialized[idx] {
             return Err(InterpError::UninitializedParam(id));
         }
         let tydesc = self.param_tydescs[idx];
@@ -218,17 +211,14 @@ impl Frame {
     }
 
     /// Get mutable destination for Mut/Out params.
-    pub fn param_dest(&self, id: ParamId) -> Result<Destination, InterpError> {
+    ///
+    /// Panics if param ID is out of bounds or param not set up (compiler bug).
+    pub fn param_dest(&self, id: ParamId) -> Destination {
         let idx = id.0 as usize;
-        if idx >= self.param_ptrs.len() {
-            return Err(InterpError::MissingParam(id));
-        }
         let ptr = self.param_ptrs[idx];
-        if ptr.is_null() {
-            return Err(InterpError::UninitializedParam(id));
-        }
+        assert!(!ptr.is_null(), "param_dest called on null param {:?}", id);
         let tydesc = self.param_tydescs[idx];
-        Ok(Destination { ptr, tydesc })
+        Destination { ptr, tydesc }
     }
 
     /// Mark param as dropped (for In params after consuming).
@@ -358,7 +348,7 @@ impl FrameStore {
             }
         }
 
-        let dest = frame.slot_dest(slot)?;
+        let dest = frame.slot_dest(slot);
         unsafe {
             std::ptr::copy_nonoverlapping(value.ptr, dest.ptr, (*value.tydesc).size as usize);
         }

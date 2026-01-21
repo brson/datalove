@@ -47,9 +47,9 @@ pub fn gen_script<'db, R: Rng>(
         // Use debuglog to output the value.
         lines.push(format!("debuglog {}", var.name));
     } else if !ctx.imported_functions.is_empty() {
-        let func = &ctx.imported_functions[rng.gen_range(0..ctx.imported_functions.len())];
-        if let Some(ret_ty) = &func.return_type {
-            let call = gen_expr(db, rng, ret_ty.clone(), config, &ctx);
+        let func = ctx.imported_functions[rng.gen_range(0..ctx.imported_functions.len())].clone();
+        if let Some(ret_ty) = func.return_type {
+            let call = gen_expr(db, rng, ret_ty, config, &mut ctx);
             lines.push(String::new());
             lines.push(format!("debuglog {}", call));
         }

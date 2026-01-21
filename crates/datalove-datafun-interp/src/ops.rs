@@ -118,13 +118,10 @@ impl IrInterpreter {
 
     /// Widen a fixed-width integer value to an Int in a stack-allocated buffer.
     ///
-    /// Returns the widened Int representation. The caller is responsible for
-    /// destroying the Int (freeing its limbs) after use.
-    pub(crate) unsafe fn widen_to_int(
-        &self,
-        src: &Value,
-        int_buf: &mut rtdt::Int,
-    ) -> Result<(), InterpError> {
+    /// The caller is responsible for destroying the Int (freeing its limbs) after use.
+    ///
+    /// Panics if src is not a fixed-width integer type (compiler bug).
+    pub(crate) unsafe fn widen_to_int(&self, src: &Value, int_buf: &mut rtdt::Int) {
         unsafe {
             let type_tag = (*src.tydesc).type_tag;
 
@@ -194,12 +191,7 @@ impl IrInterpreter {
                         }
                     }
                 }
-                _ => {
-                    return Err(InterpError::TypeMismatch(format!(
-                        "Cannot widen type {:?} to Int",
-                        type_tag
-                    )))
-                }
+                _ => panic!("widen_to_int: cannot widen type {:?} to Int", type_tag),
             };
 
             let rt_handle = self.runtime.handle();
@@ -228,8 +220,6 @@ impl IrInterpreter {
                 int_buf.capacity = rtdt::Usize(2);
             }
         }
-
-        Ok(())
     }
 
     /// Destroy a temporary Int's limb allocation.
@@ -350,8 +340,8 @@ impl IrInterpreter {
                 let mut lhs_int = std::mem::MaybeUninit::<rtdt::Int>::uninit();
                 let mut rhs_int = std::mem::MaybeUninit::<rtdt::Int>::uninit();
 
-                self.widen_to_int(lhs, lhs_int.assume_init_mut())?;
-                self.widen_to_int(rhs, rhs_int.assume_init_mut())?;
+                self.widen_to_int(lhs, lhs_int.assume_init_mut());
+                self.widen_to_int(rhs, rhs_int.assume_init_mut());
 
                 let lhs_int = lhs_int.assume_init();
                 let rhs_int = rhs_int.assume_init();
