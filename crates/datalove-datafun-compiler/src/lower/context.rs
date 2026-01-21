@@ -707,4 +707,46 @@ impl<'db> LowerCtx<'db> {
             }
         }
     }
+
+    /// Renumber blocks to be sequential starting from 0.
+    ///
+    /// After lowering, blocks may have gaps in their IDs due to dead code
+    /// elimination. This renumbers them so `blocks[i].id.0 == i`, enabling
+    /// O(1) block lookup in the interpreter.
+    pub fn renumber_blocks(&mut self) {
+        if self.blocks.is_empty() {
+            return;
+        }
+
+        // Build mapping from old ID to new ID (position in vec).
+        let mut id_map: HashMap<u32, u32> = HashMap::new();
+        for (new_id, block) in self.blocks.iter().enumerate() {
+            id_map.insert(block.id.0, new_id as u32);
+        }
+
+        // Update block IDs and terminator references.
+        for (new_id, block) in self.blocks.iter_mut().enumerate() {
+            block.id = BlockId(new_id as u32);
+
+            // Update terminator targets.
+            match &mut block.terminator {
+                Terminator::Goto { target, .. } => {
+                    if let Some(&new_target) = id_map.get(&target.0) {
+                        *target = BlockId(new_target);
+                    }
+                }
+                Terminator::Branch { then_block, else_block, .. } => {
+                    if let Some(&new_then) = id_map.get(&then_block.0) {
+                        *then_block = BlockId(new_then);
+                    }
+                    if let Some(&new_else) = id_map.get(&else_block.0) {
+                        *else_block = BlockId(new_else);
+                    }
+                }
+                Terminator::Return { .. }
+                | Terminator::UnitEnd { .. }
+                | Terminator::UnitEarlyReturn { .. } => {}
+            }
+        }
+    }
 }

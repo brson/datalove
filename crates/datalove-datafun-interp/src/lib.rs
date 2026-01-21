@@ -371,9 +371,8 @@ impl IrInterpreter {
         let mut current_block = BlockId(0);
 
         loop {
-            let block = blocks.iter()
-                .find(|b| b.id == current_block)
-                .ok_or(InterpError::BlockNotFound(current_block))?;
+            // Direct indexing: blocks are renumbered during lowering so blocks[i].id.0 == i.
+            let block = &blocks[current_block.0 as usize];
 
             // Execute instructions.
             for instr in &block.instructions {

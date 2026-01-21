@@ -92,8 +92,11 @@ pub fn lower_script_unit<'db>(
         result: result.map(Operand::Value),
     });
 
+    // Renumber blocks for O(1) lookup in interpreter.
+    ctx.renumber_blocks();
+
     Ok(IrScriptUnit {
-        blocks: ctx.blocks,
+        blocks: std::mem::take(&mut ctx.blocks),
         value_count: ctx.next_value,
         slot_count: ctx.next_slot,
         value_types: std::mem::take(&mut ctx.value_types),
@@ -156,8 +159,11 @@ pub fn lower_script_fragment_raw<'db>(
     // Fragment units have no result value.
     ctx.finish_block(Terminator::UnitEnd { result: None });
 
+    // Renumber blocks for O(1) lookup in interpreter.
+    ctx.renumber_blocks();
+
     Ok(IrScriptUnit {
-        blocks: ctx.blocks,
+        blocks: std::mem::take(&mut ctx.blocks),
         value_count: ctx.next_value,
         slot_count: ctx.next_slot,
         value_types: std::mem::take(&mut ctx.value_types),
@@ -195,8 +201,11 @@ pub fn lower_script_expr<'db>(
         result: Some(Operand::Value(value_id)),
     });
 
+    // Renumber blocks for O(1) lookup in interpreter.
+    ctx.renumber_blocks();
+
     Ok(IrScriptUnit {
-        blocks: ctx.blocks,
+        blocks: std::mem::take(&mut ctx.blocks),
         value_count: ctx.next_value,
         slot_count: ctx.next_slot,
         value_types: std::mem::take(&mut ctx.value_types),

@@ -112,6 +112,9 @@ pub fn lower_function_body<'db>(
         ctx.finish_block(Terminator::Return { value: None });
     }
 
+    // Renumber blocks for O(1) lookup in interpreter.
+    ctx.renumber_blocks();
+
     // Get return type from context (set from function signature) before restoring.
     let return_type = ctx.return_type.clone().unwrap_or(IrType::Unit);
 
