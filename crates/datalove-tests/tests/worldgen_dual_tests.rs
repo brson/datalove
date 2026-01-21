@@ -493,9 +493,13 @@ fn main() {
 
     for i in 0..ITERATION_COUNT {
         let seed = base_seed.wrapping_add(i);
+        // Print seed before running so we can see which seed hangs.
         print!("Testing seed {}... ", seed);
+        std::io::Write::flush(&mut std::io::stdout()).ok();
 
-        match test_worldfile(base_seed, i) {
+        let result = test_worldfile(base_seed, i);
+
+        match result {
             Ok(()) => {
                 println!("\x1b[32mPASS\x1b[0m");
                 pass_count += 1;
