@@ -18,6 +18,34 @@ use super::func::lower_function_body;
 use super::stmt::collect_field_path;
 use super::LowerError;
 
+/// Check if a set statement is a self-assignment (set v0 = v0) for script context.
+///
+/// Self-assignment is a no-op and must be detected early because the lowering
+/// sequence (SlotLoad -> Drop -> SlotStore) would incorrectly destroy the value
+/// before copying it.
+fn is_self_assignment_script<'db>(
+    ctx: &LowerCtx<'db>,
+    target_name: &str,
+    value_expr: ExprFun<'db>,
+) -> bool {
+    // Check if the value expression is just a name reference.
+    if let ExprFunKind::Name(name) = value_expr.expr(ctx.db) {
+        let value_name = name.text(ctx.db);
+        // Check if it's the same name as the target.
+        if value_name == target_name {
+            // Check if target is bound to a slot (mutable variable).
+            if let Some(Operand::Slot(_)) = ctx.lookup_var(target_name) {
+                return true;
+            }
+            // Also check for external slot.
+            if let Some(Operand::ExternalSlot { .. }) = ctx.lookup_var(target_name) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Lower a script unit.
 ///
 /// Script units are sequences of statements (fragment) or a single expression (expr).
@@ -267,6 +295,15 @@ fn lower_statement_for_script<'db>(
             match &set_stmt.target {
                 ast::SetTarget::Name(n) => {
                     let name = n.text(ctx.db).to_string();
+
+                    // Check for self-assignment (set v0 = v0). This is a no-op but would
+                    // cause incorrect behavior because SlotLoad returns a pointer to the
+                    // slot's memory, and Drop would destroy that memory before SlotStore
+                    // copies from it.
+                    if is_self_assignment_script(ctx, &name, set_stmt.value) {
+                        return Ok(());
+                    }
+
                     let value_id = lower_expression(ctx, set_stmt.value)?;
                     if let Some(operand) = ctx.lookup_var(&name) {
                         match operand {

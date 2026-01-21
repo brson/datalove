@@ -4,11 +4,35 @@
 //! and control flow constructs.
 
 use bct::text::InternedText;
-use datalove_datafun_ast::ast::{self, Statement, ExprFun};
+use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode};
 use super::context::LowerCtx;
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::LowerError;
+
+/// Check if a set statement is a self-assignment (set v0 = v0).
+///
+/// Self-assignment is a no-op and must be detected early because the lowering
+/// sequence (SlotLoad -> Drop -> SlotStore) would incorrectly destroy the value
+/// before copying it.
+fn is_self_assignment<'db>(
+    ctx: &LowerCtx<'db>,
+    target_name: &str,
+    value_expr: ExprFun<'db>,
+) -> bool {
+    // Check if the value expression is just a name reference.
+    if let ExprFunKind::Name(name) = value_expr.expr(ctx.db) {
+        let value_name = name.text(ctx.db);
+        // Check if it's the same name as the target.
+        if value_name == target_name {
+            // Check if target is bound to a slot (mutable variable).
+            if let Some(Operand::Slot(_)) = ctx.lookup_var(target_name) {
+                return true;
+            }
+        }
+    }
+    false
+}
 
 /// Lower a statement (without index tracking, for compatibility).
 pub fn lower_statement<'db>(
@@ -529,6 +553,15 @@ fn lower_set<'db>(
     match &set_stmt.target {
         ast::SetTarget::Name(name) => {
             let name_str = name.text(ctx.db).to_string();
+
+            // Check for self-assignment (set v0 = v0). This is a no-op but would
+            // cause incorrect behavior because SlotLoad returns a pointer to the
+            // slot's memory, and Drop would destroy that memory before SlotStore
+            // copies from it.
+            if is_self_assignment(ctx, &name_str, set_stmt.value) {
+                return Ok(());
+            }
+
             let value_id = lower_expression(ctx, set_stmt.value)?;
             match ctx.lookup_var(&name_str) {
                 Some(Operand::Slot(slot)) => {

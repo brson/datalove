@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+var x: string = "hello"
+set x = x
+debuglog x
