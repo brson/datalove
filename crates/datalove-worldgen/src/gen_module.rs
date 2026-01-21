@@ -124,7 +124,10 @@ pub fn gen_module<'db, R: Rng>(
     }
 
     // Generate function definitions.
-    for sig in &info.functions {
+    // Set max_callable_function_index to prevent mutual recursion:
+    // when generating fn2's body, only fn0 and fn1 can be called (not fn2 or fn3+).
+    for (idx, sig) in info.functions.iter().enumerate() {
+        ctx.max_callable_function_index = Some(idx);
         let func_def = gen_function(db, rng, sig, config, &ctx);
         lines.push(func_def);
         lines.push(String::new());

@@ -74,6 +74,11 @@ pub struct GenContext<'db> {
 
     /// Name of the current function being generated (to prevent self-recursion).
     pub current_function_name: Option<String>,
+
+    /// Maximum index of local functions that can be called (to prevent mutual recursion).
+    /// When set, only functions with index < this value can be called.
+    /// Functions are named fn0, fn1, fn2, etc.
+    pub max_callable_function_index: Option<usize>,
 }
 
 impl<'db> GenContext<'db> {
@@ -87,6 +92,7 @@ impl<'db> GenContext<'db> {
             loop_depth: 0,
             control_flow_depth: 0,
             current_function_name: None,
+            max_callable_function_index: None,
         }
     }
 
@@ -95,13 +101,34 @@ impl<'db> GenContext<'db> {
     /// Local functions shadow imported functions with the same name.
     /// Later imports shadow earlier imports with the same name.
     /// The current function (if set) is excluded to prevent self-recursion.
+    /// Local functions with index >= max_callable_function_index are excluded to prevent
+    /// mutual recursion (only call functions whose bodies have already been generated).
     pub fn callable_functions(&self) -> impl Iterator<Item = &FunctionSig<'db>> {
         // Get current function name to exclude.
         let current_fn = self.current_function_name.as_deref();
+        let max_index = self.max_callable_function_index;
 
-        // Collect local function names for shadowing check.
+        // Filter local functions by index to prevent mutual recursion.
+        // Functions are named fn0, fn1, fn2, etc.
+        let callable_local: Vec<_> = self.functions.iter()
+            .filter(move |f| {
+                // Exclude current function (self-recursion).
+                if current_fn == Some(f.name.as_str()) {
+                    return false;
+                }
+                // If max_callable_function_index is set, only allow functions with lower index.
+                if let Some(max_idx) = max_index {
+                    if let Some(idx) = extract_function_index(&f.name) {
+                        return idx < max_idx;
+                    }
+                }
+                true
+            })
+            .collect();
+
+        // Collect callable local function names for shadowing check.
         let local_names: std::collections::HashSet<_> =
-            self.functions.iter().map(|f| f.name.as_str()).collect();
+            callable_local.iter().map(|f| f.name.as_str()).collect();
 
         // For imported functions, later imports shadow earlier ones.
         // Keep track of which names we've seen (iterating in reverse).
@@ -110,6 +137,10 @@ impl<'db> GenContext<'db> {
             .iter()
             .rev()
             .filter(|f| {
+                // Exclude current function.
+                if current_fn == Some(f.name.as_str()) {
+                    return false;
+                }
                 if local_names.contains(f.name.as_str()) {
                     false // Shadowed by local
                 } else if seen_import_names.contains(f.name.as_str()) {
@@ -121,16 +152,22 @@ impl<'db> GenContext<'db> {
             })
             .collect();
 
-        // Return local functions + non-shadowed imports (reversed back to original order).
-        // Exclude the current function to prevent self-recursion.
-        self.functions.iter()
-            .filter(move |f| current_fn != Some(f.name.as_str()))
-            .chain(
-                non_shadowed_imports.into_iter().rev()
-                    .filter(move |f| current_fn != Some(f.name.as_str()))
-            )
+        // Return callable local functions + non-shadowed imports.
+        callable_local.into_iter()
+            .chain(non_shadowed_imports.into_iter().rev())
     }
+}
 
+/// Extract the numeric index from a function name like "fn0", "fn1", etc.
+fn extract_function_index(name: &str) -> Option<usize> {
+    if name.starts_with("fn") {
+        name[2..].parse().ok()
+    } else {
+        None
+    }
+}
+
+impl<'db> GenContext<'db> {
     /// Find variables of a specific type.
     pub fn variables_of_type(
         &self,
