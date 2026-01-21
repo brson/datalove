@@ -6,7 +6,6 @@
 
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
-use serde::{Serialize, Deserialize};
 
 use bct::module_graph::{ModuleGraph, ModuleId};
 use datalove_datafun_tycheck::{
@@ -132,60 +131,5 @@ fn collect_results<'db>(
         ownership_analysis,
         typecheck_errors,
         ownership_errors,
-    }
-}
-
-// ============================================================================
-// Result types (serializable, no interpreter deps)
-// ============================================================================
-
-/// Typecheck result summary (serializable).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "status")]
-pub enum TypecheckResult {
-    Success,
-    ParseError { errors: Vec<String> },
-    Error { errors: Vec<String> },
-    Skipped,
-}
-
-/// Lowering result summary (serializable).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "status")]
-pub enum LoweringResult {
-    Success { ir: String },
-    Error { message: String },
-    Skipped,
-}
-
-// ============================================================================
-// Helper functions
-// ============================================================================
-
-/// Format lowering result for display.
-///
-/// Takes IR dumps and errors (both ownership analysis and lowering errors).
-pub fn format_lowering_result(
-    ir_dumps: &[String],
-    ownership_errors: &[String],
-    lowering_errors: &[String],
-    has_typecheck_errors: bool,
-) -> LoweringResult {
-    if has_typecheck_errors {
-        return LoweringResult::Skipped;
-    }
-
-    // Combine all errors.
-    let all_errors: Vec<_> = ownership_errors.iter()
-        .chain(lowering_errors.iter())
-        .cloned()
-        .collect();
-
-    if !all_errors.is_empty() {
-        LoweringResult::Error { message: all_errors.join("\n") }
-    } else if ir_dumps.is_empty() {
-        LoweringResult::Skipped
-    } else {
-        LoweringResult::Success { ir: ir_dumps.join("\n") }
     }
 }

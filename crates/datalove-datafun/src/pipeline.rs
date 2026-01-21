@@ -76,9 +76,6 @@ use datalove_rt::rust::AlignedBuffer;
 
 use crate::incremental::{IncrementalModuleWorld, extract_dependencies};
 
-// Re-export result types from compiler for backwards compatibility.
-pub use datalove_datafun_compiler::compile::{TypecheckResult, LoweringResult};
-
 // ============================================================================
 // Module compilation pipeline
 // ============================================================================
@@ -1170,6 +1167,50 @@ impl<'db> ScriptCompilationContext<'db> {
 // Script result types
 // ============================================================================
 
+/// Typecheck result summary (serializable).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "status")]
+pub enum TypecheckResult {
+    Success,
+    ParseError { errors: Vec<String> },
+    Error { errors: Vec<String> },
+    Skipped,
+}
+
+/// Lowering result summary (serializable).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "status")]
+pub enum LoweringResult {
+    Success { ir: String },
+    Error { message: String },
+    Skipped,
+}
+
+/// Format lowering result for display.
+pub fn format_lowering_result(
+    ir_dumps: &[String],
+    ownership_errors: &[String],
+    lowering_errors: &[String],
+    has_typecheck_errors: bool,
+) -> LoweringResult {
+    if has_typecheck_errors {
+        return LoweringResult::Skipped;
+    }
+
+    let all_errors: Vec<_> = ownership_errors.iter()
+        .chain(lowering_errors.iter())
+        .cloned()
+        .collect();
+
+    if !all_errors.is_empty() {
+        LoweringResult::Error { message: all_errors.join("\n") }
+    } else if ir_dumps.is_empty() {
+        LoweringResult::Skipped
+    } else {
+        LoweringResult::Success { ir: ir_dumps.join("\n") }
+    }
+}
+
 /// Result of `eval_fragment` or `eval_expr`.
 pub struct ScriptUnitResult {
     pub typecheck: TypecheckResult,
@@ -1187,9 +1228,6 @@ pub struct ScriptLowerResult {
     /// The lowered IR unit, if successful.
     pub ir_unit: Option<IrScriptUnit>,
 }
-
-// Re-export helper functions from compiler.
-pub use datalove_datafun_compiler::compile::format_lowering_result;
 
 // ============================================================================
 // AOT compilation
