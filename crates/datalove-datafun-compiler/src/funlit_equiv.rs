@@ -436,10 +436,10 @@ fn datalit_type_to_serde<'db>(
 
 fn datafun_type_to_serde<'db>(
     db: &'db dyn salsa::Database,
-    ty: &datalove_datafun_tycheck::TypeAndHeap<'db>,
+    ty: &datalove_datafun_tycheck::Type<'db>,
 ) -> TypeSerde {
     use datalove_datafun_tycheck::Type;
-    match ty.ty(db) {
+    match ty {
         Type::Datalit(inner) => datalit_type_to_serde(db, inner.clone()),
         Type::Function(_) => panic!("Unexpected Function type in funlit_equiv"),
     }

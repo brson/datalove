@@ -14,7 +14,7 @@ use datalove_datalit as datalit;
 use crate::context::TypeContext;
 use crate::types::*;
 
-pub use crate::{Type, TypeAndHeap, TypeError};
+pub use crate::{Type, TypeError};
 
 // ============================================================================
 // Element Checking Helper
@@ -26,17 +26,17 @@ pub use crate::{Type, TypeAndHeap, TypeError};
 fn check_element_type_and_heap<'db>(
     db: &'db dyn crate::Db,
     _elem_expr: ExprFun<'db>,
-    elem_ty: TypeAndHeap<'db>,
-    expected_type: &crate::TypeAndHeap<'db>,
+    elem_ty: Type<'db>,
+    expected_type: &crate::Type<'db>,
 ) -> Result<(), TypeError> {
     // Extract actual datalit type.
-    let actual_datalit_ty = match elem_ty.ty(db) {
+    let actual_datalit_ty = match elem_ty {
         Type::Datalit(dt) => dt,
         _ => return Ok(()), // Non-datalit types handled elsewhere.
     };
 
     // Check type compatibility with coercion.
-    check_type_coercion(db, actual_datalit_ty, expected_type)?;
+    check_type_coercion(db, &actual_datalit_ty, expected_type)?;
 
     Ok(())
 }
@@ -50,7 +50,7 @@ fn check_element_type_and_heap<'db>(
 pub fn check_expr<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    expected: &TypeAndHeap<'db>,
+    expected: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
     let expr_kind = expr.expr(db);
@@ -58,14 +58,14 @@ pub fn check_expr<'db>(
     match expr_kind {
         // Handle None literals specially - they can check against any Option type.
         ExprFunKind::None(_lit) => {
-            match expected.ty(db) {
+            match expected {
                 Type::Datalit(datalit::tycheck::Type::Option(_)) => {
                     // None checks against any Option<T>.
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
                 _ => {
-                    let expected_str = type_to_string(db, expected.ty(db));
+                    let expected_str = type_to_string(db, expected);
                     Err(ctx.error_type_mismatch(expr, &expected_str, "None", "None requires Option type"))
                 }
             }
@@ -73,17 +73,16 @@ pub fn check_expr<'db>(
 
         // Handle Some expressions - check against Option type.
         ExprFunKind::Some(some_expr) => {
-            match expected.ty(db) {
+            match expected {
                 Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
                     // Check payload against inner type.
-                    let expected_inner = TypeAndHeap::new(Type::Datalit((*opt.inner_type).clone())
-                    );
+                    let expected_inner = Type::Datalit(*opt.inner_type.clone());
                     check_expr(ctx, some_expr.payload, &expected_inner)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
                 _ => {
-                    let expected_str = type_to_string(db, expected.ty(db));
+                    let expected_str = type_to_string(db, expected);
                     Err(ctx.error_type_mismatch(expr, &expected_str, "some", "some requires Option type"))
                 }
             }
@@ -91,17 +90,16 @@ pub fn check_expr<'db>(
 
         // Handle Ok expressions - check against Result type.
         ExprFunKind::Ok(ok_expr) => {
-            match expected.ty(db) {
+            match expected {
                 Type::Datalit(datalit::tycheck::Type::Result(res)) => {
                     // Check payload against inner type.
-                    let expected_inner = TypeAndHeap::new(Type::Datalit((*res.inner_type).clone())
-                    );
+                    let expected_inner = Type::Datalit(*res.inner_type.clone());
                     check_expr(ctx, ok_expr.payload, &expected_inner)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
                 _ => {
-                    let expected_str = type_to_string(db, expected.ty(db));
+                    let expected_str = type_to_string(db, expected);
                     Err(ctx.error_type_mismatch(expr, &expected_str, "ok", "ok requires Result type"))
                 }
             }
@@ -109,17 +107,17 @@ pub fn check_expr<'db>(
 
         // Handle Er expressions - check against Result type.
         ExprFunKind::Er(er_expr) => {
-            match expected.ty(db) {
+            match expected {
                 Type::Datalit(datalit::tycheck::Type::Result(_)) => {
                     // Check payload against Error type.
-                    let error_ty = TypeAndHeap::new(Type::Datalit(datalit::tycheck::Type::Error)
+                    let error_ty = Type::Datalit(datalit::tycheck::Type::Error
                     );
                     check_expr(ctx, er_expr.payload, &error_ty)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
                 _ => {
-                    let expected_str = type_to_string(db, expected.ty(db));
+                    let expected_str = type_to_string(db, expected);
                     Err(ctx.error_type_mismatch(expr, &expected_str, "er", "er requires Result type"))
                 }
             }
@@ -127,7 +125,7 @@ pub fn check_expr<'db>(
 
         // Handle anonymous enum expressions - check against expected enum type.
         ExprFunKind::AnonEnum(enum_expr) => {
-            match expected.ty(db) {
+            match expected {
                 Type::Datalit(datalit::tycheck::Type::AnonEnum(_)) => {
                     // Check the variant and payload against expected enum type.
                     check_enum_variant(ctx, enum_expr.variant_name, enum_expr.payload, &expected)?;
@@ -147,7 +145,7 @@ pub fn check_expr<'db>(
                     }
                 }
                 _ => {
-                    let expected_str = type_to_string(db, expected.ty(db));
+                    let expected_str = type_to_string(db, expected);
                     Err(ctx.error_type_mismatch(expr, &expected_str, "enum", "expected enum type"))
                 }
             }
@@ -155,7 +153,7 @@ pub fn check_expr<'db>(
 
         // Handle table expressions - check rows against expected column types.
         ExprFunKind::Table(table_expr) => {
-            match expected.ty(db) {
+            match expected {
                 Type::Datalit(datalit::tycheck::Type::Table(table_ty)) => {
                     // Check rows against expected column types.
                     check_table_rows(ctx, &table_expr.header, &table_expr.rows, table_ty)?;
@@ -169,8 +167,8 @@ pub fn check_expr<'db>(
                 }
                 _ => {
                     let synthesized = ctx.synthesize_expr(expr)?;
-                    let expected_str = type_to_string(db, expected.ty(db));
-                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -178,7 +176,7 @@ pub fn check_expr<'db>(
 
         // Handle list expressions - check elements against expected element type.
         ExprFunKind::List(list_expr) => {
-            match expected.ty(db) {
+            match expected {
                 Type::Datalit(datalit::tycheck::Type::List(_)) => {
                     // Check elements against expected element type (with coercion).
                     check_list_elements(ctx, &list_expr.elements, &expected)?;
@@ -192,8 +190,8 @@ pub fn check_expr<'db>(
                 }
                 _ => {
                     let synthesized = ctx.synthesize_expr(expr)?;
-                    let expected_str = type_to_string(db, expected.ty(db));
-                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -201,7 +199,7 @@ pub fn check_expr<'db>(
 
         // Handle set expressions - check elements against expected element type.
         ExprFunKind::Set(set_expr) => {
-            match expected.ty(db) {
+            match expected {
                 Type::Datalit(datalit::tycheck::Type::Set(_)) => {
                     // Check elements against expected element type (with coercion).
                     check_set_elements(ctx, &set_expr.elements, &expected)?;
@@ -215,8 +213,8 @@ pub fn check_expr<'db>(
                 }
                 _ => {
                     let synthesized = ctx.synthesize_expr(expr)?;
-                    let expected_str = type_to_string(db, expected.ty(db));
-                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -224,7 +222,7 @@ pub fn check_expr<'db>(
 
         // Handle map expressions - check entries against expected key/value types.
         ExprFunKind::Map(map_expr) => {
-            match expected.ty(db) {
+            match expected {
                 Type::Datalit(datalit::tycheck::Type::Map(_)) => {
                     // Check entries against expected key/value types (with coercion).
                     check_map_entries(ctx, &map_expr.entries, &expected)?;
@@ -238,8 +236,8 @@ pub fn check_expr<'db>(
                 }
                 _ => {
                     let synthesized = ctx.synthesize_expr(expr)?;
-                    let expected_str = type_to_string(db, expected.ty(db));
-                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -247,7 +245,7 @@ pub fn check_expr<'db>(
 
         // Handle tuple expressions - check elements against expected field types.
         ExprFunKind::AnonTuple(tuple_expr) => {
-            match expected.ty(db) {
+            match expected {
                 Type::Datalit(datalit::tycheck::Type::AnonTuple(_)) => {
                     // Check elements against expected field types.
                     check_tuple_elements(ctx, &tuple_expr.elements, &expected)?;
@@ -261,8 +259,8 @@ pub fn check_expr<'db>(
                 }
                 _ => {
                     let synthesized = ctx.synthesize_expr(expr)?;
-                    let expected_str = type_to_string(db, expected.ty(db));
-                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -270,10 +268,10 @@ pub fn check_expr<'db>(
 
         // Handle integer literals specially - they can coerce to expected integer types.
         ExprFunKind::Int(_int_expr) => {
-            match expected.ty(db) {
+            match expected {
                 Type::Datalit(expected_datalit_ty) => {
                     // Check if expected type is a numeric type.
-                    if is_numeric_type(expected.ty(db)) {
+                    if is_numeric_type(expected) {
                         ctx.store_expr_type(expr, &expected);
                         return Ok(());
                     }
@@ -284,18 +282,18 @@ pub fn check_expr<'db>(
                     }
                     // Otherwise, synthesize and compare.
                     let synthesized = ctx.synthesize_expr(expr)?;
-                    if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
+                    if types_equivalent(db, &synthesized, expected) {
                         Ok(())
                     } else {
-                        let expected_str = type_to_string(db, expected.ty(db));
-                        let actual_str = type_to_string(db, synthesized.ty(db));
+                        let expected_str = type_to_string(db, expected);
+                        let actual_str = type_to_string(db, &synthesized);
                         Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                     }
                 }
                 _ => {
                     let synthesized = ctx.synthesize_expr(expr)?;
-                    let expected_str = type_to_string(db, expected.ty(db));
-                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -303,10 +301,10 @@ pub fn check_expr<'db>(
 
         // Handle float literals specially - they can coerce to expected float types.
         ExprFunKind::Float(_float_expr) => {
-            match expected.ty(db) {
+            match expected {
                 Type::Datalit(expected_datalit_ty) => {
                     // Check if expected type is a float type.
-                    if is_float_type(expected.ty(db)) {
+                    if is_float_type(expected) {
                         ctx.store_expr_type(expr, &expected);
                         return Ok(());
                     }
@@ -317,18 +315,18 @@ pub fn check_expr<'db>(
                     }
                     // Otherwise, synthesize and compare.
                     let synthesized = ctx.synthesize_expr(expr)?;
-                    if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
+                    if types_equivalent(db, &synthesized, expected) {
                         Ok(())
                     } else {
-                        let expected_str = type_to_string(db, expected.ty(db));
-                        let actual_str = type_to_string(db, synthesized.ty(db));
+                        let expected_str = type_to_string(db, expected);
+                        let actual_str = type_to_string(db, &synthesized);
                         Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                     }
                 }
                 _ => {
                     let synthesized = ctx.synthesize_expr(expr)?;
-                    let expected_str = type_to_string(db, expected.ty(db));
-                    let actual_str = type_to_string(db, synthesized.ty(db));
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -337,7 +335,7 @@ pub fn check_expr<'db>(
         // Handle unary negation on signed fixed integers.
         // When expected type is a signed fixed int (i8, i16, i32, i64), check operand against it.
         ExprFunKind::UnaryOp(unary) if unary.op == UnaryOp::Neg => {
-            if is_signed_fixed_int_type(expected.ty(db)) {
+            if is_signed_fixed_int_type(expected) {
                 // Check operand against expected type.
                 check_expr(ctx, unary.operand, expected)?;
                 ctx.store_expr_type(expr, &expected);
@@ -345,11 +343,11 @@ pub fn check_expr<'db>(
             }
             // Otherwise fall through to default synthesis behavior.
             let synthesized = ctx.synthesize_expr(expr)?;
-            if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
+            if types_equivalent(db, &synthesized, expected) {
                 return Ok(());
             }
-            let expected_str = type_to_string(db, expected.ty(db));
-            let actual_str = type_to_string(db, synthesized.ty(db));
+            let expected_str = type_to_string(db, expected);
+            let actual_str = type_to_string(db, &synthesized);
             Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
         }
 
@@ -358,26 +356,26 @@ pub fn check_expr<'db>(
             let synthesized = ctx.synthesize_expr(expr)?;
 
             // Check for exact type match first.
-            if types_equivalent(db, synthesized.ty(db), expected.ty(db)) {
+            if types_equivalent(db, &synthesized, expected) {
                 return Ok(());
             }
 
             // If exact match fails, try numeric widening.
-            if let (Type::Datalit(synth_ty), Type::Datalit(expect_ty)) = (synthesized.ty(db), expected.ty(db)) {
+            if let (Type::Datalit(synth_ty), Type::Datalit(expect_ty)) = (&synthesized, expected) {
                 if datalit::tycheck::can_widen_to(synth_ty, expect_ty) {
                     return Ok(());
                 }
             }
 
             // If widening fails, check for automatic coercion to Data.
-            if let Type::Datalit(datalit::tycheck::Type::Data) = expected.ty(db) {
+            if let Type::Datalit(datalit::tycheck::Type::Data) = expected {
                 // Any type can coerce to data.
                 return Ok(());
             }
 
             // No match or coercion possible.
-            let expected_str = type_to_string(db, expected.ty(db));
-            let actual_str = type_to_string(db, synthesized.ty(db));
+            let expected_str = type_to_string(db, expected);
+            let actual_str = type_to_string(db, &synthesized);
             Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
         }
     }
@@ -389,9 +387,9 @@ pub fn check_expr<'db>(
 fn check_type_coercion<'db>(
     db: &'db dyn crate::Db,
     actual: &datalit::tycheck::Type<'db>,
-    expected: &crate::TypeAndHeap<'db>,
+    expected: &crate::Type<'db>,
 ) -> Result<(), TypeError> {
-    match expected.ty(db) {
+    match expected {
         Type::Datalit(expected_dt) => {
             datalit::tycheck::check_type_coercion(db, actual, expected_dt).map_err(TypeError::from)
         }
@@ -407,7 +405,7 @@ fn check_type_coercion<'db>(
 pub fn check_list_elements<'db>(
     ctx: &mut TypeContext<'db>,
     elements: &[ExprFun<'db>],
-    expected_ty: &TypeAndHeap<'db>,
+    expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
 
@@ -415,16 +413,12 @@ pub fn check_list_elements<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract the element type from the list type.
-    let elem_type = match inner_ty.ty(db) {
+    let expected_elem_ty = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::List(list_ty)) => {
-            &list_ty.element_type
+            Type::Datalit((*list_ty.element_type).clone())
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
-
-    // Check each element against expected element type using bidirectional checking.
-    let expected_elem_ty = TypeAndHeap::new(Type::Datalit((**elem_type).clone()),
-    );
     for elem in elements {
         check_expr(ctx, *elem, &expected_elem_ty)?;
     }
@@ -436,7 +430,7 @@ pub fn check_list_elements<'db>(
 pub fn check_set_elements<'db>(
     ctx: &mut TypeContext<'db>,
     elements: &[ExprFun<'db>],
-    expected_ty: &TypeAndHeap<'db>,
+    expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
 
@@ -444,14 +438,12 @@ pub fn check_set_elements<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract the element type from the set type.
-    let elem_type = match inner_ty.ty(db) {
-        Type::Datalit(datalit::tycheck::Type::Set(set_ty)) => &set_ty.element_type,
+    let expected_elem_ty = match inner_ty {
+        Type::Datalit(datalit::tycheck::Type::Set(set_ty)) => {
+            Type::Datalit((*set_ty.element_type).clone())
+        }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
-
-    // Check each element against expected element type using bidirectional checking.
-    let expected_elem_ty = TypeAndHeap::new(Type::Datalit((**elem_type).clone()),
-    );
     for elem in elements {
         check_expr(ctx, *elem, &expected_elem_ty)?;
     }
@@ -463,7 +455,7 @@ pub fn check_set_elements<'db>(
 pub fn check_map_entries<'db>(
     ctx: &mut TypeContext<'db>,
     entries: &[ExprMapEntry<'db>],
-    expected_ty: &TypeAndHeap<'db>,
+    expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
 
@@ -471,18 +463,15 @@ pub fn check_map_entries<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract the key and value types from the map type.
-    let (key_type, value_type) = match inner_ty.ty(db) {
+    let (expected_key_ty, expected_value_ty) = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::Map(map_ty)) => {
-            (&map_ty.key_type, &map_ty.value_type)
+            (
+                Type::Datalit((*map_ty.key_type).clone()),
+                Type::Datalit((*map_ty.value_type).clone()),
+            )
         }
         _ => return Ok(()), // Type mismatch will be caught elsewhere.
     };
-
-    // Check each entry against expected types using bidirectional checking.
-    let expected_key_ty = TypeAndHeap::new(Type::Datalit((**key_type).clone()),
-    );
-    let expected_value_ty = TypeAndHeap::new(Type::Datalit((**value_type).clone()),
-    );
     for entry in entries {
         check_expr(ctx, entry.key, &expected_key_ty)?;
         check_expr(ctx, entry.value, &expected_value_ty)?;
@@ -495,7 +484,7 @@ pub fn check_map_entries<'db>(
 pub fn check_tensor_shape_and_elements<'db>(
     ctx: &mut TypeContext<'db>,
     tensor_expr: ExprTensor<'db>,
-    expected_ty: &TypeAndHeap<'db>,
+    expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
     let elements = &tensor_expr.elements;
@@ -505,7 +494,7 @@ pub fn check_tensor_shape_and_elements<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract tensor type info.
-    let (elem_type, expected_rank) = match inner_ty.ty(db) {
+    let (elem_type, expected_rank) = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::Tensor(tensor_ty)) => {
             (tensor_ty.element_type.clone(), tensor_ty.rank)
         }
@@ -525,7 +514,7 @@ pub fn check_tensor_shape_and_elements<'db>(
     datalit::tycheck::check_tensor_element_count(shape, elements.len())?;
 
     // Check each element against expected element type.
-    let expected_elem = TypeAndHeap::new(Type::Datalit(*elem_type),
+    let expected_elem = Type::Datalit(*elem_type,
     );
     for elem in elements {
         let elem_ty = ctx.synthesize_expr(*elem)?;
@@ -539,7 +528,7 @@ pub fn check_tensor_shape_and_elements<'db>(
 pub fn check_tuple_elements<'db>(
     ctx: &mut TypeContext<'db>,
     elements: &[ExprFun<'db>],
-    expected_ty: &TypeAndHeap<'db>,
+    expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
 
@@ -547,7 +536,7 @@ pub fn check_tuple_elements<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract the field types from the tuple type.
-    let expected_fields = match inner_ty.ty(db) {
+    let expected_fields = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::AnonTuple(tuple_ty)) => {
             tuple_ty.fields.C()
         }
@@ -564,7 +553,7 @@ pub fn check_tuple_elements<'db>(
 
     // Check each element against expected field type using bidirectional checking.
     for (elem, expected_field) in elements.iter().zip(expected_fields.iter()) {
-        let expected_elem_ty = TypeAndHeap::new(Type::Datalit(expected_field.clone()),
+        let expected_elem_ty = Type::Datalit(expected_field.clone(),
         );
         check_expr(ctx, *elem, &expected_elem_ty)?;
     }
@@ -576,7 +565,7 @@ pub fn check_tuple_elements<'db>(
 pub fn check_struct_fields<'db>(
     ctx: &mut TypeContext<'db>,
     fields: &[ExprStructField<'db>],
-    expected_ty: &TypeAndHeap<'db>,
+    expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
 
@@ -584,7 +573,7 @@ pub fn check_struct_fields<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract the field types from the struct type.
-    let expected_fields = match inner_ty.ty(db) {
+    let expected_fields = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::AnonStruct(struct_ty)) => {
             struct_ty.fields.C()
         }
@@ -606,8 +595,7 @@ pub fn check_struct_fields<'db>(
             return Err(TypeError::FieldOrderMismatch);
         }
 
-        let expected_ty = TypeAndHeap::new(Type::Datalit((*expected_field.ty).clone()),
-        );
+        let expected_ty = Type::Datalit(*expected_field.ty.clone());
         let field_value_ty = ctx.synthesize_expr(field.value)?;
         check_element_type_and_heap(db, field.value, field_value_ty, &expected_ty)?;
     }
@@ -620,7 +608,7 @@ pub fn check_enum_variant<'db>(
     ctx: &mut TypeContext<'db>,
     variant_name: bct::text::InternedText<'db>,
     payload: Option<ExprFun<'db>>,
-    expected_ty: &TypeAndHeap<'db>,
+    expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
 
@@ -628,7 +616,7 @@ pub fn check_enum_variant<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract the variants from the enum type.
-    let expected_variants = match inner_ty.ty(db) {
+    let expected_variants = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::AnonEnum(enum_ty)) => {
             enum_ty.variants.C()
         }
@@ -651,13 +639,12 @@ pub fn check_enum_variant<'db>(
     if let (Some(payload_expr), Some(expected_payload_ty)) = (payload, expected_variant.payload.as_ref()) {
         // Synthesize payload type and check against expected.
         let payload_ty = ctx.synthesize_expr(payload_expr)?;
-        let actual_datalit_ty = match payload_ty.ty(db) {
+        let actual_datalit_ty = match payload_ty {
             Type::Datalit(dt) => dt,
             _ => return Ok(()), // Non-datalit types handled elsewhere.
         };
-        let expected_ty = TypeAndHeap::new(Type::Datalit((**expected_payload_ty).clone()),
-        );
-        check_type_coercion(db, actual_datalit_ty, &expected_ty)?;
+        let expected_ty = Type::Datalit((**expected_payload_ty).clone());
+        check_type_coercion(db, &actual_datalit_ty, &expected_ty)?;
     }
 
     Ok(())
@@ -698,8 +685,7 @@ pub fn check_table_rows<'db>(
         }
 
         for (elem, col) in row.elements.iter().zip(expected_columns.iter()) {
-            let expected_col_ty = TypeAndHeap::new(Type::Datalit((*col.ty).clone()),
-            );
+            let expected_col_ty = Type::Datalit(*col.ty.clone());
             check_expr(ctx, *elem, &expected_col_ty)?;
         }
     }

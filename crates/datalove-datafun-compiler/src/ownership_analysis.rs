@@ -251,7 +251,7 @@ pub struct FunctionAnalysis {
 /// Context for ownership and liveness analysis.
 struct AnalysisCtx<'db> {
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     /// Resolved call targets for looking up callee parameter modes.
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     /// Next binding ID to allocate.
@@ -296,7 +296,7 @@ enum ScopeKind {
 impl<'db> AnalysisCtx<'db> {
     fn new(
         db: &'db dyn salsa::Database,
-        expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+        expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
         call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     ) -> Self {
         Self {
@@ -812,7 +812,7 @@ impl<'db> AnalysisCtx<'db> {
 pub fn analyze_function<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
-    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     resolved_param_types: Option<&[IrType]>,
 ) -> FunctionAnalysis {
@@ -856,7 +856,7 @@ pub fn analyze_function<'db>(
 /// This is needed when type aliases are used in function parameters.
 pub fn analyze_script_functions<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     stmts: &[Statement<'db>],
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
@@ -912,7 +912,7 @@ pub struct ScriptAnalysis {
 /// - Returns final drops in `unit_end` field for emission before UnitEnd
 pub fn analyze_script_statements<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     stmts: &[Statement<'db>],
     for_aot: bool,

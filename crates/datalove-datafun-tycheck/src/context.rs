@@ -16,7 +16,7 @@ pub use bct::module_graph::ModuleId;
 
 pub use crate::{
     PendingDiagnostic,
-    TypeAndHeap,
+    Type,
     TypeFunction,
     TypeError,
     ResolvedCallTarget,
@@ -30,22 +30,22 @@ pub struct TypeContext<'db> {
     /// Current module being typechecked (for pending diagnostics).
     pub(crate) current_module_id: Option<ModuleId>,
     /// Variable bindings (name -> type).
-    pub(crate) variables: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
+    pub(crate) variables: HashMap<InternedText<'db>, Type<'db>>,
     /// Function signatures (name -> function type).
     pub(crate) functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
     /// Function ASTs for resolving call targets (name -> (AST, module_id)).
     pub(crate) function_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<ModuleId>)>,
     /// Type aliases (name -> resolved type).
-    pub(crate) type_aliases: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
+    pub(crate) type_aliases: HashMap<InternedText<'db>, Type<'db>>,
     /// Expected return type for current function (if inside a function).
-    pub(crate) expected_return_type: Option<TypeAndHeap<'db>>,
+    pub(crate) expected_return_type: Option<Type<'db>>,
     /// Whether current function has no declared return type (void function).
     pub(crate) is_void_function: bool,
     pub(crate) errors: Vec<TypeError>,
     /// Pending diagnostics for post-hoc span enrichment.
     pub(crate) pending_diagnostics: Vec<PendingDiagnostic<'db>>,
     /// Expression types, indexed by ExprFun ID.
-    pub(crate) expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub(crate) expr_types: Vec<Option<Type<'db>>>,
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     pub(crate) call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
     /// Stack of loop depth (for validating break/continue are inside a loop).
@@ -282,7 +282,7 @@ impl<'db> TypeContext<'db> {
         TypeError::UndefinedVariable
     }
 
-    pub fn add_variable(&mut self, name: InternedText<'db>, ty: TypeAndHeap<'db>) {
+    pub fn add_variable(&mut self, name: InternedText<'db>, ty: Type<'db>) {
         self.variables.insert(name, ty);
     }
 
@@ -315,7 +315,7 @@ impl<'db> TypeContext<'db> {
         self.function_asts.insert(name, (func_ast, Some(source_module_id)));
     }
 
-    pub fn lookup_variable(&self, name: InternedText<'db>) -> Option<TypeAndHeap<'db>> {
+    pub fn lookup_variable(&self, name: InternedText<'db>) -> Option<Type<'db>> {
         self.variables.get(&name).cloned()
     }
 
@@ -324,12 +324,12 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Add a type alias to the context.
-    pub fn add_type_alias(&mut self, name: InternedText<'db>, ty: TypeAndHeap<'db>) {
+    pub fn add_type_alias(&mut self, name: InternedText<'db>, ty: Type<'db>) {
         self.type_aliases.insert(name, ty);
     }
 
     /// Look up a type alias by name.
-    pub fn lookup_type_alias(&self, name: InternedText<'db>) -> Option<TypeAndHeap<'db>> {
+    pub fn lookup_type_alias(&self, name: InternedText<'db>) -> Option<Type<'db>> {
         self.type_aliases.get(&name).cloned()
     }
 
@@ -352,7 +352,7 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Store the type for an expression.
-    pub fn store_expr_type(&mut self, expr: ExprFun<'db>, ty: &TypeAndHeap<'db>) {
+    pub fn store_expr_type(&mut self, expr: ExprFun<'db>, ty: &Type<'db>) {
         let id = expr.as_id();
         let index = id.index() as usize;
 
@@ -365,7 +365,7 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Synthesize the type of an expression.
-    pub fn synthesize_expr(&mut self, expr: ExprFun<'db>) -> Result<TypeAndHeap<'db>, TypeError> {
+    pub fn synthesize_expr(&mut self, expr: ExprFun<'db>) -> Result<Type<'db>, TypeError> {
         let ty = crate::synthesize::synthesize_expr(self, expr)?;
         self.store_expr_type(expr, &ty);
         Ok(ty)
@@ -399,7 +399,7 @@ impl<'db> TypeContext<'db> {
 #[derive(Clone, Default)]
 pub struct ScriptTypeContext<'db> {
     /// Variable bindings from previous units: name -> type.
-    pub variables: HashMap<InternedText<'db>, TypeAndHeap<'db>>,
+    pub variables: HashMap<InternedText<'db>, Type<'db>>,
     /// Function signatures from previous units: name -> signature.
     pub functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
 }
@@ -468,7 +468,7 @@ pub struct ScriptTypecheckResultRaw<'db> {
     /// Type errors encountered.
     pub errors: Vec<TypeError>,
     /// Expression types, indexed by ExprFun ID.
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub expr_types: Vec<Option<Type<'db>>>,
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
 }
@@ -478,7 +478,7 @@ pub struct ExprTypecheckResultRaw<'db> {
     /// Type errors encountered.
     pub errors: Vec<TypeError>,
     /// Expression types, indexed by ExprFun ID.
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub expr_types: Vec<Option<Type<'db>>>,
 }
 
 /// Build a TypeFunction from a function statement.

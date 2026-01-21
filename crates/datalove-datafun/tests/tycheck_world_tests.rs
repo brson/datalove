@@ -186,22 +186,19 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
     }
 }
 
-fn typeandheap_to_string(db: &dyn datalove_datafun::Db, tah: &datalove_datafun_tycheck::TypeAndHeap) -> String {
+fn type_to_string(db: &dyn datalove_datafun::Db, ty: &datalove_datafun_tycheck::Type) -> String {
     use datalove_datafun_tycheck::Type;
 
-    // Heap is always omitted now, no prefix needed.
-    let type_str = match tah.ty(db) {
+    match ty {
         Type::Datalit(dt) => datalove_datalit::tycheck::type_to_string(db, dt),
         Type::Function(func) => {
             let params: Vec<_> = func.param_types(db).iter()
-                .map(|p| typeandheap_to_string(db, p))
+                .map(|p| type_to_string(db, p))
                 .collect();
-            let ret = typeandheap_to_string(db, &func.return_type(db));
+            let ret = type_to_string(db, &func.return_type(db));
             format!("({}) -> {}", params.join(", "), ret)
         }
-    };
-
-    type_str
+    }
 }
 
 fn analyze_file(path: &Path) -> Result<String, String> {
@@ -262,10 +259,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         if let Some(exports) = module_exports.get(&module_id) {
             for (name, func_type) in exports.functions(&db) {
                 let param_types: Vec<_> = func_type.param_types(&db).iter().map(|p| {
-                    typeandheap_to_string(&db, p)
+                    type_to_string(&db, p)
                 }).collect();
 
-                let return_type = typeandheap_to_string(&db, &func_type.return_type(&db));
+                let return_type = type_to_string(&db, &func_type.return_type(&db));
 
                 functions.push(json!({
                     "name": name.as_str(&db),

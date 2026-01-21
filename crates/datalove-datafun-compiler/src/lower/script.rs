@@ -121,7 +121,7 @@ pub fn lower_script_unit<'db>(
 /// instead of deriving from AST type hints. This is needed for type alias support.
 pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
@@ -184,7 +184,7 @@ pub fn lower_script_fragment_raw<'db>(
 #[allow(unused_variables)]
 pub fn lower_script_expr<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,

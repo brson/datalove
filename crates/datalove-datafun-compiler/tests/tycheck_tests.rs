@@ -300,11 +300,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let value_expr = let_stmt.value;
                 let expr_id = value_expr.as_id().index() as usize;
                 if let Some(Some(ty)) = expr_types.get(expr_id) {
-                    let ty_val = ty.ty(&db);
                     judgements.push(json!({
                         "kind": "variable",
                         "name": name.as_str(&db),
-                        "type": datalove_datafun_tycheck::type_to_string(&db, &ty_val)
+                        "type": datalove_datafun_tycheck::type_to_string(&db, ty)
                     }));
                 }
             }

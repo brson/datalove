@@ -15,7 +15,7 @@
 
 use datalove_datalit as datalit;
 use datalit::ast::TypeHint;
-use crate::{Type, TypeError, TypeAndHeap};
+use crate::{Type, TypeError};
 
 // ============================================================================
 // Re-exports
@@ -104,8 +104,8 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
         (Type::Function(f1), Type::Function(f2)) => {
             f1.param_types(db).len() == f2.param_types(db).len()
                 && f1.param_types(db).iter().zip(f2.param_types(db).iter())
-                    .all(|(a, b)| types_equivalent(db, a.ty(db), b.ty(db)))
-                && types_equivalent(db, f1.return_type(db).ty(db), f2.return_type(db).ty(db))
+                    .all(|(a, b)| types_equivalent(db, a, b))
+                && types_equivalent(db, &f1.return_type(db), &f2.return_type(db))
         }
         _ => false,
     }
@@ -132,14 +132,14 @@ pub fn is_primitive_name(name: &str) -> bool {
 pub fn convert_type_hint<'db>(
     db: &'db dyn crate::Db,
     type_hint: TypeHint<'db>,
-) -> Result<crate::TypeAndHeap<'db>, TypeError> {
+) -> Result<crate::Type<'db>, TypeError> {
     convert_type_hint_inner(db, type_hint)
 }
 
 fn convert_type_hint_inner<'db>(
     db: &'db dyn crate::Db,
     type_hint: TypeHint<'db>,
-) -> Result<crate::TypeAndHeap<'db>, TypeError> {    let ty = match type_hint {
+) -> Result<crate::Type<'db>, TypeError> {    let ty = match type_hint {
         TypeHint::Bool => Type::Datalit(datalit::tycheck::Type::Bool),
         TypeHint::U8 => Type::Datalit(datalit::tycheck::Type::U8),
         TypeHint::I8 => Type::Datalit(datalit::tycheck::Type::I8),
@@ -162,7 +162,7 @@ fn convert_type_hint_inner<'db>(
             let fields: Result<Vec<_>, TypeError> = t.fields.iter()
                 .map(|f| {
                     let f_ty = convert_type_hint_inner(db, f.clone())?;
-                    match f_ty.ty(db) {
+                    match f_ty {
                         Type::Datalit(dt) => Ok(dt.clone()),
                         Type::Function(_) => Err(TypeError::CannotSynthesize),
                     }
@@ -178,7 +178,7 @@ fn convert_type_hint_inner<'db>(
                 .map(|f| {
                     let name = f.name;
                     let f_ty = convert_type_hint_inner(db, (*f.type_hint).clone())?;
-                    let dt = match f_ty.ty(db) {
+                    let dt = match f_ty {
                         Type::Datalit(dt) => dt.clone(),
                         Type::Function(_) => return Err(TypeError::CannotSynthesize),
                     };
@@ -199,7 +199,7 @@ fn convert_type_hint_inner<'db>(
                     let name = v.name;
                     let payload = v.payload.as_ref().map(|p| {
                         let p_ty = convert_type_hint_inner(db, (**p).clone())?;
-                        match p_ty.ty(db) {
+                        match p_ty {
                             Type::Datalit(dt) => Ok(Box::new(dt.clone())),
                             Type::Function(_) => Err(TypeError::CannotSynthesize),
                         }
@@ -214,7 +214,7 @@ fn convert_type_hint_inner<'db>(
 
         TypeHint::List(l) => {
             let elem_ty = convert_type_hint_inner(db, (*l.element_type).clone())?;
-            let dt = match elem_ty.ty(db) {
+            let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
@@ -227,12 +227,12 @@ fn convert_type_hint_inner<'db>(
 
         TypeHint::Map(m) => {
             let key_ty = convert_type_hint_inner(db, (*m.key_type).clone())?;
-            let key_dt = match key_ty.ty(db) {
+            let key_dt = match key_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
             let value_ty = convert_type_hint_inner(db, (*m.value_type).clone())?;
-            let value_dt = match value_ty.ty(db) {
+            let value_dt = match value_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
@@ -246,7 +246,7 @@ fn convert_type_hint_inner<'db>(
 
         TypeHint::Set(s) => {
             let elem_ty = convert_type_hint_inner(db, (*s.element_type).clone())?;
-            let dt = match elem_ty.ty(db) {
+            let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
@@ -259,7 +259,7 @@ fn convert_type_hint_inner<'db>(
 
         TypeHint::Option(o) => {
             let inner_ty = convert_type_hint_inner(db, (*o.inner_type).clone())?;
-            let dt = match inner_ty.ty(db) {
+            let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
@@ -272,7 +272,7 @@ fn convert_type_hint_inner<'db>(
 
         TypeHint::Result(r) => {
             let inner_ty = convert_type_hint_inner(db, (*r.inner_type).clone())?;
-            let dt = match inner_ty.ty(db) {
+            let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
@@ -285,7 +285,7 @@ fn convert_type_hint_inner<'db>(
 
         TypeHint::Tensor(t) => {
             let elem_ty = convert_type_hint_inner(db, (*t.element_type).clone())?;
-            let dt = match elem_ty.ty(db) {
+            let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
@@ -307,7 +307,7 @@ fn convert_type_hint_inner<'db>(
                 .map(|c| {
                     let name = c.name;
                     let c_ty = convert_type_hint_inner(db, (*c.type_hint).clone())?;
-                    let dt = match c_ty.ty(db) {
+                    let dt = match c_ty {
                         Type::Datalit(dt) => dt.clone(),
                         Type::Function(_) => return Err(TypeError::CannotSynthesize),
                     };
@@ -323,7 +323,7 @@ fn convert_type_hint_inner<'db>(
         }
     };
 
-    Ok(TypeAndHeap::new(ty))
+    Ok(ty)
 }
 
 use std::collections::HashMap;
@@ -333,16 +333,16 @@ use bct::text::InternedText;
 pub fn convert_type_hint_with_aliases<'db>(
     db: &'db dyn crate::Db,
     type_hint: TypeHint<'db>,
-    aliases: &HashMap<InternedText<'db>, TypeAndHeap<'db>>,
-) -> Result<TypeAndHeap<'db>, TypeError> {
+    aliases: &HashMap<InternedText<'db>, Type<'db>>,
+) -> Result<Type<'db>, TypeError> {
     convert_type_hint_with_aliases_inner(db, type_hint, aliases)
 }
 
 fn convert_type_hint_with_aliases_inner<'db>(
     db: &'db dyn crate::Db,
     type_hint: TypeHint<'db>,
-    aliases: &HashMap<InternedText<'db>, TypeAndHeap<'db>>,
-) -> Result<TypeAndHeap<'db>, TypeError> {    let ty = match type_hint {
+    aliases: &HashMap<InternedText<'db>, Type<'db>>,
+) -> Result<Type<'db>, TypeError> {    let ty = match type_hint {
         TypeHint::Bool => Type::Datalit(datalit::tycheck::Type::Bool),
         TypeHint::U8 => Type::Datalit(datalit::tycheck::Type::U8),
         TypeHint::I8 => Type::Datalit(datalit::tycheck::Type::I8),
@@ -365,7 +365,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let fields: Result<Vec<_>, TypeError> = t.fields.iter()
                 .map(|f| {
                     let f_ty = convert_type_hint_with_aliases_inner(db, f.clone(), aliases)?;
-                    match f_ty.ty(db) {
+                    match f_ty {
                         Type::Datalit(dt) => Ok(dt.clone()),
                         Type::Function(_) => Err(TypeError::CannotSynthesize),
                     }
@@ -381,7 +381,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
                 .map(|f| {
                     let name = f.name;
                     let f_ty = convert_type_hint_with_aliases_inner(db, (*f.type_hint).clone(), aliases)?;
-                    let dt = match f_ty.ty(db) {
+                    let dt = match f_ty {
                         Type::Datalit(dt) => dt.clone(),
                         Type::Function(_) => return Err(TypeError::CannotSynthesize),
                     };
@@ -402,7 +402,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
                     let name = v.name;
                     let payload = v.payload.as_ref().map(|p| {
                         let p_ty = convert_type_hint_with_aliases_inner(db, (**p).clone(), aliases)?;
-                        match p_ty.ty(db) {
+                        match p_ty {
                             Type::Datalit(dt) => Ok(Box::new(dt.clone())),
                             Type::Function(_) => Err(TypeError::CannotSynthesize),
                         }
@@ -417,7 +417,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
 
         TypeHint::List(l) => {
             let elem_ty = convert_type_hint_with_aliases_inner(db, (*l.element_type).clone(), aliases)?;
-            let dt = match elem_ty.ty(db) {
+            let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
@@ -430,12 +430,12 @@ fn convert_type_hint_with_aliases_inner<'db>(
 
         TypeHint::Map(m) => {
             let key_ty = convert_type_hint_with_aliases_inner(db, (*m.key_type).clone(), aliases)?;
-            let key_dt = match key_ty.ty(db) {
+            let key_dt = match key_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
             let value_ty = convert_type_hint_with_aliases_inner(db, (*m.value_type).clone(), aliases)?;
-            let value_dt = match value_ty.ty(db) {
+            let value_dt = match value_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
@@ -449,7 +449,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
 
         TypeHint::Set(s) => {
             let elem_ty = convert_type_hint_with_aliases_inner(db, (*s.element_type).clone(), aliases)?;
-            let dt = match elem_ty.ty(db) {
+            let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
@@ -462,7 +462,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
 
         TypeHint::Option(o) => {
             let inner_ty = convert_type_hint_with_aliases_inner(db, (*o.inner_type).clone(), aliases)?;
-            let dt = match inner_ty.ty(db) {
+            let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
@@ -475,7 +475,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
 
         TypeHint::Result(r) => {
             let inner_ty = convert_type_hint_with_aliases_inner(db, (*r.inner_type).clone(), aliases)?;
-            let dt = match inner_ty.ty(db) {
+            let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
@@ -488,7 +488,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
 
         TypeHint::Tensor(t) => {
             let elem_ty = convert_type_hint_with_aliases_inner(db, (*t.element_type).clone(), aliases)?;
-            let dt = match elem_ty.ty(db) {
+            let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => return Err(TypeError::CannotSynthesize),
             };
@@ -515,7 +515,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
                 .map(|c| {
                     let name = c.name;
                     let c_ty = convert_type_hint_with_aliases_inner(db, (*c.type_hint).clone(), aliases)?;
-                    let dt = match c_ty.ty(db) {
+                    let dt = match c_ty {
                         Type::Datalit(dt) => dt.clone(),
                         Type::Function(_) => return Err(TypeError::CannotSynthesize),
                     };
@@ -531,7 +531,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
         }
     };
 
-    Ok(TypeAndHeap::new(ty))
+    Ok(ty)
 }
 
 // ============================================================================
@@ -544,9 +544,9 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
         Type::Datalit(dt) => datalit::tycheck::type_to_string(db, dt),
         Type::Function(f) => {
             let params: Vec<_> = f.param_types(db).iter()
-                .map(|p| type_to_string(db, p.ty(db)))
+                .map(|p| type_to_string(db, p))
                 .collect();
-            let ret = type_to_string(db, f.return_type(db).ty(db));
+            let ret = type_to_string(db, &f.return_type(db));
             format!("fn({}) -> {}", params.join(", "), ret)
         }
     }
@@ -557,9 +557,9 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
 // ============================================================================
 
 /// Create the unit type `()`.
-pub fn unit_type<'db>(_db: &'db dyn crate::Db) -> TypeAndHeap<'db> {
+pub fn unit_type<'db>(_db: &'db dyn crate::Db) -> Type<'db> {
     let datalit_unit = datalit::tycheck::unit_type();
-    TypeAndHeap::new(Type::Datalit(datalit_unit))
+    Type::Datalit(datalit_unit)
 }
 
 // ============================================================================
@@ -569,13 +569,13 @@ pub fn unit_type<'db>(_db: &'db dyn crate::Db) -> TypeAndHeap<'db> {
 /// Check that an element type is compatible with the expected element type.
 pub fn check_element_compatible<'db>(
     db: &'db dyn crate::Db,
-    expected: &TypeAndHeap<'db>,
-    actual: &TypeAndHeap<'db>,
+    expected: &Type<'db>,
+    actual: &Type<'db>,
 ) -> Result<(), TypeError> {
-    if !types_equivalent(db, expected.ty(db), actual.ty(db)) {
+    if !types_equivalent(db, expected, actual) {
         return Err(TypeError::TypeMismatch {
-            expected: type_to_string(db, expected.ty(db)),
-            actual: type_to_string(db, actual.ty(db)),
+            expected: type_to_string(db, expected),
+            actual: type_to_string(db, actual),
         });
     }
     Ok(())
@@ -611,15 +611,15 @@ pub fn check_hex_fits_wrapped_type<'db>(
 
 /// Unwrap Option/Result wrappers to get the innermost type.
 pub fn unwrap_wrapper_types<'db>(
-    db: &'db dyn crate::Db,
-    ty: &TypeAndHeap<'db>,
-) -> TypeAndHeap<'db> {
-    match ty.ty(db) {
+    _db: &'db dyn crate::Db,
+    ty: &Type<'db>,
+) -> Type<'db> {
+    match ty {
         Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
-            TypeAndHeap::new(Type::Datalit((*opt.inner_type).clone()))
+            Type::Datalit(*opt.inner_type.clone())
         }
         Type::Datalit(datalit::tycheck::Type::Result(res)) => {
-            TypeAndHeap::new(Type::Datalit((*res.inner_type).clone()))
+            Type::Datalit(*res.inner_type.clone())
         }
         _ => ty.clone(),
     }
@@ -629,13 +629,13 @@ pub fn unwrap_wrapper_types<'db>(
 // Type Conversion Helpers
 // ============================================================================
 
-/// Convert datafun TypeAndHeap to datalit TypeAndHeap.
+/// Convert datafun Type to datalit Type.
 pub fn to_datalit_type_and_heap<'db>(
-    db: &'db dyn crate::Db,
-    ty: TypeAndHeap<'db>,
-) -> Result<crate::TypeAndHeap<'db>, TypeError> {
-    match ty.ty(db) {
-        Type::Datalit(dt) => Ok(crate::TypeAndHeap::new(Type::Datalit(dt.clone()))),
+    _db: &'db dyn crate::Db,
+    ty: Type<'db>,
+) -> Result<crate::Type<'db>, TypeError> {
+    match ty {
+        Type::Datalit(dt) => Ok(crate::Type::Datalit(dt.clone())),
         Type::Function(_) => Err(TypeError::CannotSynthesize),
     }
 }

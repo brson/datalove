@@ -22,7 +22,7 @@ use super::LowerError;
 /// deriving from AST type hints. This is necessary when type aliases are used.
 pub fn lower_function_for_module<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::TypeAndHeap<'db>>],
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     func: ast::StmtFun<'db>,

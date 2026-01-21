@@ -10,7 +10,7 @@ use crate::check::check_expr;
 use crate::types::{convert_type_hint_with_aliases, type_to_string, unit_type, is_primitive_name};
 use crate::ModuleId;
 
-pub use crate::{Type, TypeAndHeap, TypeFunction, TypeError};
+pub use crate::{Type, TypeFunction, TypeError};
 
 // ============================================================================
 // Type Alias Collection
@@ -321,11 +321,11 @@ pub fn check_statement<'db>(
                 };
 
                 // Extract inner type from Option or Result.
-                let inner_ty = match condition_ty.ty(db) {
-                    Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
+                let inner_ty = match condition_ty {
+                    Type::Datalit(datalit::tycheck::Type::Option(ref opt)) => {
                         opt.inner_type.clone()
                     }
-                    Type::Datalit(datalit::tycheck::Type::Result(res)) => {
+                    Type::Datalit(datalit::tycheck::Type::Result(ref res)) => {
                         // F046: Result destructuring requires error-binding else branch.
                         if else_body.is_none() || else_binding.is_none() {
                             let err = ctx.error_result_requires_binding(condition);
@@ -347,9 +347,9 @@ pub fn check_statement<'db>(
                     }
                 };
 
-                // Convert datalit Type to datafun TypeAndHeap.
+                // Convert datalit Type to datafun Type.
                 let inner_type = Type::Datalit((*inner_ty).clone());
-                let binding_ty = TypeAndHeap::new(inner_type);
+                let binding_ty = inner_type;
 
                 // Save all variables before entering then branch.
                 let saved_variables = ctx.variables.C();
@@ -372,13 +372,13 @@ pub fn check_statement<'db>(
 
                     // If there's an else binding, bind error type for Result.
                     if let Some(else_binding_name) = else_binding {
-                        if let Type::Datalit(datalit::tycheck::Type::Result(_)) = condition_ty.ty(db) {
+                        if let Type::Datalit(datalit::tycheck::Type::Result(_)) = condition_ty {
                             // Bind Error type.
-                            let error_ty = TypeAndHeap::new(Type::Datalit(datalit::tycheck::Type::Error),
+                            let error_ty = Type::Datalit(datalit::tycheck::Type::Error,
                             );
                             ctx.variables.insert(else_binding_name, error_ty);
                         } else {
-                            let actual_type = type_to_string(db, condition_ty.ty(db));
+                            let actual_type = type_to_string(db, &condition_ty);
                             let err = ctx.error_type_mismatch(
                                 condition,
                                 "Result",
@@ -398,7 +398,7 @@ pub fn check_statement<'db>(
                 }
             } else {
                 // No binding: check condition is bool type.
-                let bool_type = TypeAndHeap::new(Type::Datalit(datalit::tycheck::Type::Bool),
+                let bool_type = Type::Datalit(datalit::tycheck::Type::Bool,
                 );
 
                 if let Err(e) = check_expr(ctx, condition, &bool_type) {
@@ -439,7 +439,7 @@ pub fn check_statement<'db>(
 
             // Type check while condition (if present).
             if let Some(condition) = stmt.condition {
-                let bool_type = TypeAndHeap::new(Type::Datalit(datalit::tycheck::Type::Bool),
+                let bool_type = Type::Datalit(datalit::tycheck::Type::Bool,
                 );
                 if let Err(e) = check_expr(ctx, condition, &bool_type) {
                     ctx.add_error(e);
@@ -504,18 +504,18 @@ pub fn check_statement<'db>(
 fn typecheck_set_target_proj<'db>(
     ctx: &mut TypeContext<'db>,
     proj: &SetTargetProj<'db>,
-) -> Result<TypeAndHeap<'db>, TypeError> {
+) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
 
     // First, resolve the base to get the starting type.
     let base_ty = typecheck_set_target(ctx, &proj.base)?;
 
     // Base must be a datalit type (tuple or struct).
-    let base_datalit_ty = match base_ty.ty(db) {
+    let base_datalit_ty = match &base_ty {
         Type::Datalit(dt) => dt,
         _ => {
             return Err(TypeError::ProjectionOnNonAggregate {
-                ty: type_to_string(db, base_ty.ty(db)),
+                ty: type_to_string(db, &base_ty),
             });
         }
     };
@@ -535,11 +535,11 @@ fn typecheck_set_target_proj<'db>(
                     }
                     let field_ty = &tuple.fields[idx_usize];
                     let ty = Type::Datalit(field_ty.clone());
-                    Ok(TypeAndHeap::new(ty))
+                    Ok(ty)
                 }
                 _ => {
                     Err(TypeError::ProjectionOnNonAggregate {
-                        ty: type_to_string(db, base_ty.ty(db)),
+                        ty: type_to_string(db, &base_ty),
                     })
                 }
             }
@@ -552,17 +552,17 @@ fn typecheck_set_target_proj<'db>(
                     for field in &struct_ty.fields {
                         if field.name.text(db) == name_str {
                             let ty = Type::Datalit((*field.ty).clone());
-                            return Ok(TypeAndHeap::new(ty));
+                            return Ok(ty);
                         }
                     }
                     Err(TypeError::FieldNotFound {
                         field_name: name_str.S(),
-                        ty: type_to_string(db, base_ty.ty(db)),
+                        ty: type_to_string(db, &base_ty),
                     })
                 }
                 _ => {
                     Err(TypeError::ProjectionOnNonAggregate {
-                        ty: type_to_string(db, base_ty.ty(db)),
+                        ty: type_to_string(db, &base_ty),
                     })
                 }
             }
@@ -574,7 +574,7 @@ fn typecheck_set_target_proj<'db>(
 fn typecheck_set_target<'db>(
     ctx: &mut TypeContext<'db>,
     target: &SetTarget<'db>,
-) -> Result<TypeAndHeap<'db>, TypeError> {
+) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
 
     match target {

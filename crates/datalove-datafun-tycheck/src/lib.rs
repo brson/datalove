@@ -78,36 +78,14 @@ pub enum Type<'db> {
     Function(TypeFunction<'db>),
 }
 
-/// Wrapper type for backwards compatibility during heap removal migration.
-///
-/// This used to contain both a Type and a Heap. Now heap is always omitted.
-/// TODO: Remove this wrapper and use Type directly everywhere.
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub struct TypeAndHeap<'db> {
-    ty: Type<'db>,
-}
-
-impl<'db> TypeAndHeap<'db> {
-    /// Create a new TypeAndHeap from a Type.
-    pub fn new(ty: Type<'db>) -> Self {
-        TypeAndHeap { ty }
-    }
-
-    /// Get the inner Type.
-    pub fn ty(&self, _db: &'db dyn Db) -> &Type<'db> {
-        &self.ty
-    }
-}
-
 #[salsa::tracked]
 pub struct TypeFunction<'db> {
     #[tracked]
     #[returns(ref)]
-    pub param_types: Vec<TypeAndHeap<'db>>,
+    pub param_types: Vec<Type<'db>>,
     pub param_modes: Vec<ParamMode>,
     #[tracked]
-    pub return_type: TypeAndHeap<'db>,
+    pub return_type: Type<'db>,
 }
 
 /// Type error representation.
@@ -367,7 +345,7 @@ pub struct TypecheckResult<'db> {
 
     /// Expression types, indexed by ExprFun ID.
     #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub expr_types: Vec<Option<Type<'db>>>,
 
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     #[returns(ref)]
@@ -388,7 +366,7 @@ pub struct ExprTypecheckResult<'db> {
     pub errors: Vec<TypeErrorEntry<'db>>,
     /// Expression types, indexed by ExprFun ID.
     #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub expr_types: Vec<Option<Type<'db>>>,
 }
 
 /// Kind of script unit for batch typechecking (with parsed content).
@@ -486,7 +464,7 @@ pub struct UnitTypecheckResultTracked<'db> {
     pub errors: Vec<TypeErrorEntry<'db>>,
     /// Expression types, indexed by ExprFun ID.
     #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub expr_types: Vec<Option<Type<'db>>>,
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     #[returns(ref)]
     pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
@@ -564,7 +542,7 @@ pub struct SingleModuleTypecheckResult<'db> {
 
     /// Exported type aliases.
     #[returns(ref)]
-    pub exported_type_aliases: Vec<(InternedText<'db>, TypeAndHeap<'db>)>,
+    pub exported_type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
 
     /// Imported functions: (local_name, source_module_id, source_name).
     #[returns(ref)]
@@ -572,7 +550,7 @@ pub struct SingleModuleTypecheckResult<'db> {
 
     /// Expression types for this module.
     #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub expr_types: Vec<Option<Type<'db>>>,
 
     /// Resolved call targets for this module.
     #[returns(ref)]
@@ -591,7 +569,7 @@ pub struct ModuleExports<'db> {
 
     /// Type aliases as a vector of (name, type) pairs.
     #[returns(ref)]
-    pub type_aliases: Vec<(InternedText<'db>, TypeAndHeap<'db>)>,
+    pub type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
 }
 
 /// Imported functions for a module.
@@ -628,7 +606,7 @@ pub struct ModuleGraphTypecheckResult<'db> {
     /// Indexed by ExprFun salsa ID, contains types for all expressions
     /// across all modules in the graph.
     #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
+    pub expr_types: Vec<Option<Type<'db>>>,
 
     /// Resolved call targets from all modules, combined.
     ///

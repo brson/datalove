@@ -20,7 +20,6 @@ pub use bct::module_graph::ModuleId;
 pub use crate::{
     PendingDiagnostic,
     Type,
-    TypeAndHeap,
     TypeFunction,
     TypeError,
     TypeErrorEntry,
@@ -90,7 +89,7 @@ pub fn type_check_script_units<'db>(
     // Build module function info for import resolution using shared helper.
     let (module_functions, path_to_module_id) = build_script_module_functions(db, spec.modules(db));
 
-    let mut accumulated_vars: HashMap<InternedText<'db>, TypeAndHeap<'db>> = HashMap::new();
+    let mut accumulated_vars: HashMap<InternedText<'db>, Type<'db>> = HashMap::new();
     let mut accumulated_fns: HashMap<InternedText<'db>, TypeFunction<'db>> = HashMap::new();
     let mut accumulated_fn_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<ModuleId>)> = HashMap::new();
     let mut results = Vec::new();
@@ -105,8 +104,8 @@ pub fn type_check_script_units<'db>(
         let result_unit_ty = datalit::tycheck::Type::Result(
             datalit::tycheck::TypeResult { inner_type: Box::new(unit_tuple_ty) }
         );
-        ctx.expected_return_type = Some(TypeAndHeap::new(
-            Type::Datalit(result_unit_ty),
+        ctx.expected_return_type = Some(
+            Type::Datalit(result_unit_ty,
         ));
 
         // Seed with accumulated bindings from prior units.
@@ -549,7 +548,7 @@ pub fn typecheck_module_graph<'db>(
     let mut module_exports_map: BTreeMap<ModuleId, ModuleExports<'db>> = BTreeMap::new();
     let mut module_imports_map: BTreeMap<ModuleId, ModuleImports<'db>> = BTreeMap::new();
     let mut module_results_map: BTreeMap<ModuleId, SingleModuleTypecheckResult<'db>> = BTreeMap::new();
-    let mut combined_expr_types: Vec<Option<TypeAndHeap<'db>>> = Vec::new();
+    let mut combined_expr_types: Vec<Option<Type<'db>>> = Vec::new();
     let mut combined_call_targets: Vec<Option<ResolvedCallTarget<'db>>> = Vec::new();
 
     for module in prep.graph.iter_modules(db) {
@@ -921,7 +920,7 @@ fn resolve_module_imports_internal<'db>(
 /// Collected exports from a module.
 struct CollectedExports<'db> {
     functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
-    type_aliases: Vec<(InternedText<'db>, TypeAndHeap<'db>)>,
+    type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
 }
 
 /// Implementation of export collection (non-tracked).
@@ -932,7 +931,7 @@ fn collect_module_exports_impl<'db>(
     use crate::types::is_primitive_name;
 
     // Pass 0: collect type aliases first.
-    let mut type_aliases_map: HashMap<InternedText<'db>, TypeAndHeap<'db>> = HashMap::new();
+    let mut type_aliases_map: HashMap<InternedText<'db>, Type<'db>> = HashMap::new();
     let mut type_aliases_vec = Vec::new();
 
     for statement in &parsed.statements {
