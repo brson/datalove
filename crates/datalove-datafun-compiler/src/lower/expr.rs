@@ -124,6 +124,7 @@ pub fn lower_field_proj_as_ref<'db>(
 ///
 /// For field projections, emits GetFieldRef to borrow the field without copying.
 /// This avoids the shallow-copy problem with move types containing pointers.
+/// For names (variables/params), returns the operand directly to borrow without moving.
 /// For other expressions, uses standard lower_expression.
 pub fn lower_expression_for_ref<'db>(
     ctx: &mut LowerCtx<'db>,
@@ -133,6 +134,17 @@ pub fn lower_expression_for_ref<'db>(
         ExprFunKind::FieldProj(proj) => {
             // Field projections use GetFieldRef to borrow without copying.
             lower_field_proj_as_ref(ctx, expr, proj)
+        }
+        ExprFunKind::Name(name) => {
+            // For named values/params, return the operand directly to borrow.
+            // This avoids the Move that lower_expression would emit for Params,
+            // which would transfer ownership and leave the Param empty.
+            let name_str = name.text(ctx.db);
+            if let Some(operand) = ctx.lookup_var(name_str) {
+                Ok(operand)
+            } else {
+                Err(LowerError::VariableNotFound(name_str.to_string()))
+            }
         }
         _ => {
             // All other expressions: use standard lowering.

@@ -7,11 +7,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    store s0, v0\n    v1 = const true\n    branch v1, block1, block2\nblock1:\n    v2 = const true\n    branch v2, block4, block5\nblock4:\n    v3 = const 1u32\n    store s0, v3\n    goto block6\nblock5:\n    v4 = const 2u32\n    store s0, v4\n    goto block6\nblock6:\n    goto block3\nblock2:\n    v5 = const 3u32\n    store s0, v5\n    goto block3\nblock3:\n    v6 = load s0\n    debuglog v6\n    unit_end\nexports:\n    x = s0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    store s0, v0\n    v1 = const true\n    branch v1, block1, block2\nblock1:\n    v2 = const true\n    branch v2, block4, block5\nblock4:\n    v3 = const 1u32\n    store s0, v3\n    goto block6\nblock5:\n    v4 = const 2u32\n    store s0, v4\n    goto block6\nblock6:\n    goto block3\nblock2:\n    v5 = const 3u32\n    store s0, v5\n    goto block3\nblock3:\n    debuglog s0\n    unit_end\nexports:\n    x = s0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    store s0, v0\n    v1 = const true\n    branch v1, block1, block2\nblock1:\n    v2 = const true\n    branch v2, block4, block5\nblock4:\n    v3 = const 1u32\n    store s0, v3\n    goto block6\nblock5:\n    v4 = const 2u32\n    store s0, v4\n    goto block6\nblock6:\n    goto block3\nblock2:\n    v5 = const 3u32\n    store s0, v5\n    goto block3\nblock3:\n    v6 = load s0\n    debuglog v6\n    unit_end\nexports:\n    x = s0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    store s0, v0\n    v1 = const true\n    branch v1, block1, block2\nblock1:\n    v2 = const true\n    branch v2, block4, block5\nblock4:\n    v3 = const 1u32\n    store s0, v3\n    goto block6\nblock5:\n    v4 = const 2u32\n    store s0, v4\n    goto block6\nblock6:\n    goto block3\nblock2:\n    v5 = const 3u32\n    store s0, v5\n    goto block3\nblock3:\n    debuglog s0\n    unit_end\nexports:\n    x = s0\n",
             ),
             ir_match: true,
             interp_output: "@1\n",

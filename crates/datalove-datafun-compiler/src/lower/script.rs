@@ -464,18 +464,16 @@ fn lower_statement_for_script<'db>(
             let operand = lower_expression_for_ref(ctx, debug_expr)?;
             ctx.emit(Instruction::DebugLog { operand });
             // Check if the expression produces a temporary that needs dropping.
-            // - Named Value bindings: NOT temps (dropped by binding system)
-            // - Named Slots/Params: load creates temp, needs drop
+            // - Named bindings (Value/Slot/Param): returned directly, NOT temps
             // - Field projections: use GetFieldRef (ref is Copy, no drop)
-            // - Other expressions: produce temps, need drop
+            // - Other expressions: produce temps (Values), need drop
             let expr_type = ctx.expr_type(debug_expr);
             if !expr_type.is_copy() {
                 let needs_drop = match debug_expr.expr(ctx.db) {
-                    ExprFunKind::Name(name) => {
-                        let name_str = name.text(ctx.db);
-                        // Value bindings don't need drops here - they're tracked.
-                        // Slot/Param loads create temps that need dropping.
-                        !matches!(ctx.lookup_var(name_str), Some(Operand::Value(_)))
+                    ExprFunKind::Name(_) => {
+                        // Named bindings are returned directly by lower_expression_for_ref.
+                        // They're managed by the binding system, not temps.
+                        false
                     }
                     ExprFunKind::FieldProj(_) => {
                         // Field projections use GetFieldRef which produces a ref.

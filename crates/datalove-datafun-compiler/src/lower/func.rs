@@ -133,3 +133,4 @@ pub fn lower_function_body<'db>(
         slot_types: std::mem::take(&mut ctx.slot_types),
     })
 }
+

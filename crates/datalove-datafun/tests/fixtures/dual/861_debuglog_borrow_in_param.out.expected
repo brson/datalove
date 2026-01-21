@@ -1,0 +1,51 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "module",
+            name: Some("local/gen/test"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "fn test_int(p0):\nblock0:\n    debuglog p0\n    v0 = const false\n    drop p0\n    return v0\n\nfn test_string(p0):\nblock0:\n    debuglog p0\n    v0 = const 42u32\n    drop p0\n    return v0\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "fn test_int(p0):\nblock0:\n    debuglog p0\n    v0 = const false\n    drop p0\n    return v0\n\nfn test_string(p0):\nblock0:\n    debuglog p0\n    v0 = const 42u32\n    drop p0\n    return v0\n",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 12345int\n    v1 = call m0.f0(v0)\n    debuglog v1\n    v2 = const \"hello\"\n    v3 = call m0.f1(v2)\n    debuglog v3\n    unit_end\nexports:\n    r1 = v1\n    r2 = v3\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 12345int\n    v1 = call m0.f0(v0)\n    debuglog v1\n    v2 = const \"hello\"\n    v3 = call m0.f1(v2)\n    debuglog v3\n    unit_end\nexports:\n    r1 = v1\n    r2 = v3\n",
+            ),
+            ir_match: true,
+            interp_output: "@12345\n@false\n@\"hello\"\n@42\n",
+            aot_output: "@12345\n@false\n@\"hello\"\n@42\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)
