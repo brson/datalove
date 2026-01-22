@@ -386,13 +386,7 @@ impl IrInterpreter {
                     rt_handle, lhs.ptr, int_tydesc, rhs.ptr, int_tydesc, dest.ptr, int_tydesc,
                 ),
                 BinOp::Div => {
-                    let status = datalove_rt::c::dtlv_rti_int_div_checked(
-                        rt_handle, lhs.ptr, int_tydesc, rhs.ptr, int_tydesc, dest.ptr, int_tydesc,
-                    );
-                    if status != RtStatus::Ok {
-                        return Err(InterpError::DivisionByZero);
-                    }
-                    return Ok(());
+                    unreachable!();
                 }
                 BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
                     use datalove_rt::c::RtOrdering;

@@ -233,7 +233,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             BinOp::Add => runtime.int_add,
             BinOp::Sub => runtime.int_sub,
             BinOp::Mul => runtime.int_mul,
-            BinOp::Div => runtime.int_div,
             _ => {
                 return Err(AotError::Unsupported(format!(
                     "Int binop not yet supported: {:?}",
