@@ -330,8 +330,9 @@ th {
 
 .thing-box {
     background: var(--code-bg);
-    border: 1px solid var(--accent);
-    border-radius: 5px;
+    border: none;
+    border-left: 3px solid var(--accent);
+    border-radius: 0 5px 5px 0;
     padding: 1rem 1.25rem;
 }
 
@@ -347,25 +348,25 @@ th {
 }
 
 .thing-box:nth-child(1) {
-    border-color: var(--accent-1);
+    border-left-color: var(--accent-1);
 }
 .thing-box:nth-child(1) p em {
     color: var(--accent-1);
 }
 .thing-box:nth-child(2) {
-    border-color: var(--accent-2);
+    border-left-color: var(--accent-2);
 }
 .thing-box:nth-child(2) p em {
     color: var(--accent-2);
 }
 .thing-box:nth-child(3) {
-    border-color: var(--accent-3);
+    border-left-color: var(--accent-3);
 }
 .thing-box:nth-child(3) p em {
     color: var(--accent-3);
 }
 .thing-box:nth-child(4) {
-    border-color: var(--accent-4);
+    border-left-color: var(--accent-4);
 }
 .thing-box:nth-child(4) p em {
     color: var(--accent-4);
