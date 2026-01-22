@@ -862,51 +862,8 @@ mod tests {
         assert!(result.is_ok(), "compile failed: {:?}", result.err());
     }
 
-    #[test]
-    fn test_compile_binop_add() {
-        let isa = create_test_isa();
-        let mut module = create_test_module(isa.clone());
-
-        // Create a function: fn foo() -> i32 { 10 + 32 }
-        let func = IrFunction {
-            id: IrFuncId(0),
-            name: "test_add".into(),
-            params: vec![],
-            param_modes: vec![],
-            param_types: vec![],
-            return_type: IrType::I32,
-            blocks: vec![
-                IrBlock { id: BlockId(0), params: vec![], instructions: vec![
-                        Instruction::Const {
-                            dest: ValueId(0),
-                            value: ConstValue::I32(10),
-                        },
-                        Instruction::Const {
-                            dest: ValueId(1),
-                            value: ConstValue::I32(32),
-                        },
-                        Instruction::BinOp {
-                            dest: ValueId(2),
-                            op: BinOp::Add,
-                            lhs: Operand::Value(ValueId(0)),
-                            rhs: Operand::Value(ValueId(1)),
-                        },
-                    ],
-                    terminator: Terminator::Return {
-                        value: Some(Operand::Value(ValueId(2))),
-                    },
-                },
-            ],
-            value_count: 3,
-            slot_count: 0,
-            value_types: vec![IrType::I32, IrType::I32, IrType::I32],
-            slot_types: vec![],
-        };
-
-        let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
-        let result = compiler.compile();
-        assert!(result.is_ok(), "compile failed: {:?}", result.err());
-    }
+    // test_compile_binop_add removed: i32 + i32 -> i32 is invalid IR.
+    // Fixed-width integer arithmetic uses widening (-> Int) or checked ops (BinOpChecked).
 
     #[test]
     fn test_compile_comparison() {

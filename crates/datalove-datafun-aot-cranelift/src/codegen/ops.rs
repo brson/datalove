@@ -95,22 +95,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         } else {
             match op {
-                BinOp::Add => builder.ins().iadd(lhs_val, rhs_val),
-                BinOp::Sub => builder.ins().isub(lhs_val, rhs_val),
-                BinOp::Mul => builder.ins().imul(lhs_val, rhs_val),
-                BinOp::Div => {
-                    if is_signed {
-                        builder.ins().sdiv(lhs_val, rhs_val)
-                    } else {
-                        builder.ins().udiv(lhs_val, rhs_val)
-                    }
-                }
-                BinOp::Mod => {
-                    if is_signed {
-                        builder.ins().srem(lhs_val, rhs_val)
-                    } else {
-                        builder.ins().urem(lhs_val, rhs_val)
-                    }
+                // Arithmetic ops on fixed-width integers are unreachable here:
+                // - Regular +, -, *, / widen to Int (handled by compile_int_binop above)
+                // - Checked +!, -!, *!, /! and optional +?, -?, *?, /? use BinOpChecked
+                BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
+                    unreachable!(
+                        "fixed-width integer arithmetic should use widening or checked ops"
+                    )
                 }
                 BinOp::Eq => {
                     builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, lhs_val, rhs_val)

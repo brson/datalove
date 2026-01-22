@@ -244,18 +244,18 @@ impl JitEngine {
 mod tests {
     use super::*;
     use datalove_datafun_ir::{
-        IrBlock, Instruction, Terminator, BinOp, Operand,
+        IrBlock, Instruction, Terminator, Operand,
         ValueId, BlockId, ConstValue, IrType,
     };
     use datalove_datafun_interp::{
         ExecutionContext, FrameStore, FunctionRegistry, IrInterpreter,
     };
 
-    fn make_add_function() -> IrFunction {
-        // fn add() -> i32 { 1 + 2 }
+    fn make_test_function() -> IrFunction {
+        // fn test() -> i32 { 42 }
         IrFunction {
             id: FuncId(0),
-            name: "add".to_string(),
+            name: "test".to_string(),
             params: vec![],
             param_modes: vec![],
             param_types: vec![],
@@ -264,22 +264,15 @@ mod tests {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![
-                    Instruction::Const { dest: ValueId(0), value: ConstValue::I32(1) },
-                    Instruction::Const { dest: ValueId(1), value: ConstValue::I32(2) },
-                    Instruction::BinOp {
-                        dest: ValueId(2),
-                        op: BinOp::Add,
-                        lhs: Operand::Value(ValueId(0)),
-                        rhs: Operand::Value(ValueId(1)),
-                    },
+                    Instruction::Const { dest: ValueId(0), value: ConstValue::I32(42) },
                 ],
                 terminator: Terminator::Return {
-                    value: Some(Operand::Value(ValueId(2))),
+                    value: Some(Operand::Value(ValueId(0))),
                 },
             }],
-            value_count: 3,
+            value_count: 1,
             slot_count: 0,
-            value_types: vec![IrType::I32, IrType::I32, IrType::I32],
+            value_types: vec![IrType::I32],
             slot_types: vec![],
         }
     }
@@ -293,7 +286,7 @@ mod tests {
     #[test]
     fn test_call_counting() {
         let mut jit = JitEngine::new(3).unwrap();
-        let func = make_add_function();
+        let func = make_test_function();
         let key = FunctionKey::local(FuncId(0));
 
         // First two calls should not trigger compilation.
@@ -314,7 +307,7 @@ mod tests {
     #[test]
     fn test_compilation_produces_code() {
         let mut jit = JitEngine::new(1).unwrap(); // Compile immediately
-        let func = make_add_function();
+        let func = make_test_function();
         let key = FunctionKey::local(FuncId(0));
 
         let result = jit.record_call(key, &func);
@@ -334,7 +327,7 @@ mod tests {
         let runtime = datalove_rt::rust::Runtime::new();
 
         let mut jit = JitEngine::new(1).unwrap();
-        let func = make_add_function();
+        let func = make_test_function();
         let key = FunctionKey::local(FuncId(0));
 
         // Compile the function.
@@ -361,7 +354,7 @@ mod tests {
 
         // Extract i32 from the buffer.
         let result = result_buf as i32;
-        assert_eq!(result, 3, "1 + 2 should equal 3");
+        assert_eq!(result, 42, "test function should return 42");
     }
 
     /// Test full integration: interpreter -> dispatcher -> JIT.
@@ -372,36 +365,31 @@ mod tests {
         };
         use datalove_datafun_ir::ParamId;
 
-        // Create callee: fn add(a: i32, b: i32) -> i32 { a + b }
-        let add_fn = IrFunction {
+        // Create callee: fn identity(a: i32) -> i32 { a }
+        // Note: We use identity instead of arithmetic because fixed-width
+        // integer arithmetic widens to Int; arithmetic on i32 uses BinOpChecked.
+        let identity_fn = IrFunction {
             id: FuncId(0),
-            name: "add".to_string(),
-            params: vec![ParamId(0), ParamId(1)],
+            name: "identity".to_string(),
+            params: vec![ParamId(0)],
             param_modes: vec![],
-            param_types: vec![IrType::I32, IrType::I32],
+            param_types: vec![IrType::I32],
             return_type: IrType::I32,
             blocks: vec![IrBlock {
                 id: BlockId(0),
                 params: vec![],
-                instructions: vec![
-                    Instruction::BinOp {
-                        dest: ValueId(0),
-                        op: BinOp::Add,
-                        lhs: Operand::Param(ParamId(0)),
-                        rhs: Operand::Param(ParamId(1)),
-                    },
-                ],
+                instructions: vec![],
                 terminator: Terminator::Return {
-                    value: Some(Operand::Value(ValueId(0))),
+                    value: Some(Operand::Param(ParamId(0))),
                 },
             }],
-            value_count: 1,
+            value_count: 0,
             slot_count: 0,
-            value_types: vec![IrType::I32],
+            value_types: vec![],
             slot_types: vec![],
         };
 
-        // Create caller: fn main() -> i32 { add(10, 20) }
+        // Create caller: fn main() -> i32 { identity(42) }
         let main_fn = IrFunction {
             id: FuncId(1),
             name: "main".to_string(),
@@ -413,24 +401,22 @@ mod tests {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![
-                    Instruction::Const { dest: ValueId(0), value: ConstValue::I32(10) },
-                    Instruction::Const { dest: ValueId(1), value: ConstValue::I32(20) },
+                    Instruction::Const { dest: ValueId(0), value: ConstValue::I32(42) },
                     Instruction::Call {
-                        dest: ValueId(2),
+                        dest: ValueId(1),
                         func: datalove_datafun_ir::FuncRef::Local(FuncId(0)),
                         args: vec![
                             Operand::Value(ValueId(0)),
-                            Operand::Value(ValueId(1)),
                         ],
                     },
                 ],
                 terminator: Terminator::Return {
-                    value: Some(Operand::Value(ValueId(2))),
+                    value: Some(Operand::Value(ValueId(1))),
                 },
             }],
-            value_count: 3,
+            value_count: 2,
             slot_count: 0,
-            value_types: vec![IrType::I32, IrType::I32, IrType::I32],
+            value_types: vec![IrType::I32, IrType::I32],
             slot_types: vec![],
         };
 
@@ -442,7 +428,7 @@ mod tests {
         );
 
         // Set up execution context with both functions.
-        let functions = vec![add_fn, main_fn.clone()];
+        let functions = vec![identity_fn, main_fn.clone()];
         let ctx = ExecutionContext::new(&functions);
         let registry = FunctionRegistry::new();
         let mut frames = FrameStore::new();
@@ -455,56 +441,51 @@ mod tests {
             tydesc: ret_tydesc,
         };
 
-        // Execute main, which calls add(10, 20).
-        // The call to add should go through the JIT dispatcher.
+        // Execute main, which calls identity(42).
+        // The call to identity should go through the JIT dispatcher.
         interp.call_in_context(&main_fn, vec![], ret_dest, &ctx, &registry, &mut frames)
             .expect("execution failed");
 
-        // Verify result: 10 + 20 = 30.
-        assert_eq!(result as i32, 30, "add(10, 20) should equal 30");
+        // Verify result.
+        assert_eq!(result as i32, 42, "identity(42) should equal 42");
     }
 
     /// Test JIT code calling back to interpreter via trampoline.
     ///
     /// This test:
-    /// 1. Compiles `main()` to JIT (which calls `add()`)
-    /// 2. `add()` is NOT compiled, so the call goes through the trampoline
+    /// 1. Compiles `main()` to JIT (which calls `identity()`)
+    /// 2. `identity()` is NOT compiled, so the call goes through the trampoline
     /// 3. The trampoline dispatches to the interpreter
     /// 4. Result flows back through the trampoline to JIT code
     #[test]
     fn test_jit_calls_interpreter() {
         use datalove_datafun_ir::ParamId;
 
-        // Create callee: fn add(a: i32, b: i32) -> i32 { a + b }
-        let add_fn = IrFunction {
+        // Create callee: fn identity(a: i32) -> i32 { a }
+        // Note: We use identity instead of arithmetic because fixed-width
+        // integer arithmetic widens to Int; arithmetic on i32 uses BinOpChecked.
+        let identity_fn = IrFunction {
             id: FuncId(0),
-            name: "add".to_string(),
-            params: vec![ParamId(0), ParamId(1)],
+            name: "identity".to_string(),
+            params: vec![ParamId(0)],
             param_modes: vec![],
-            param_types: vec![IrType::I32, IrType::I32],
+            param_types: vec![IrType::I32],
             return_type: IrType::I32,
             blocks: vec![IrBlock {
                 id: BlockId(0),
                 params: vec![],
-                instructions: vec![
-                    Instruction::BinOp {
-                        dest: ValueId(0),
-                        op: BinOp::Add,
-                        lhs: Operand::Param(ParamId(0)),
-                        rhs: Operand::Param(ParamId(1)),
-                    },
-                ],
+                instructions: vec![],
                 terminator: Terminator::Return {
-                    value: Some(Operand::Value(ValueId(0))),
+                    value: Some(Operand::Param(ParamId(0))),
                 },
             }],
-            value_count: 1,
+            value_count: 0,
             slot_count: 0,
-            value_types: vec![IrType::I32],
+            value_types: vec![],
             slot_types: vec![],
         };
 
-        // Create caller: fn main() -> i32 { add(10, 20) }
+        // Create caller: fn main() -> i32 { identity(42) }
         let main_fn = IrFunction {
             id: FuncId(1),
             name: "main".to_string(),
@@ -516,36 +497,34 @@ mod tests {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![
-                    Instruction::Const { dest: ValueId(0), value: ConstValue::I32(10) },
-                    Instruction::Const { dest: ValueId(1), value: ConstValue::I32(20) },
+                    Instruction::Const { dest: ValueId(0), value: ConstValue::I32(42) },
                     Instruction::Call {
-                        dest: ValueId(2),
+                        dest: ValueId(1),
                         func: datalove_datafun_ir::FuncRef::Local(FuncId(0)),
                         args: vec![
                             Operand::Value(ValueId(0)),
-                            Operand::Value(ValueId(1)),
                         ],
                     },
                 ],
                 terminator: Terminator::Return {
-                    value: Some(Operand::Value(ValueId(2))),
+                    value: Some(Operand::Value(ValueId(1))),
                 },
             }],
-            value_count: 3,
+            value_count: 2,
             slot_count: 0,
-            value_types: vec![IrType::I32, IrType::I32, IrType::I32],
+            value_types: vec![IrType::I32, IrType::I32],
             slot_types: vec![],
         };
 
         // Set up context with both functions.
-        let functions = vec![add_fn, main_fn.clone()];
+        let functions = vec![identity_fn, main_fn.clone()];
         let ctx = ExecutionContext::new(&functions);
         let registry = FunctionRegistry::new();
 
         // Create JIT engine.
         let mut jit = JitEngine::new(1).expect("JitEngine creation failed");
 
-        // Compile main() with context (creates stub for add()).
+        // Compile main() with context (creates stub for identity()).
         let main_key = FunctionKey::local(FuncId(1));
         let (code_ptr, uses_sret) = jit
             .record_call_with_context(main_key, &main_fn, &ctx, &registry)
@@ -585,10 +564,10 @@ mod tests {
         // Call the JIT-compiled main().
         // This will:
         // 1. Execute JIT code for main()
-        // 2. main() calls add() via stub
+        // 2. main() calls identity() via stub
         // 3. Stub calls __jit_dispatch_call
-        // 4. Dispatcher sees add() is not compiled
-        // 5. Dispatcher calls interpreter to execute add()
+        // 4. Dispatcher sees identity() is not compiled
+        // 5. Dispatcher calls interpreter to execute identity()
         // 6. Result flows back through the chain
         // SAFETY: code_ptr is valid JIT code.
         let return_type = IrType::I32;
@@ -600,8 +579,8 @@ mod tests {
         // Clear dispatch context.
         clear_dispatch_context();
 
-        // Verify result: add(10, 20) = 30.
-        assert_eq!(result as i32, 30, "add(10, 20) should equal 30");
+        // Verify result: identity(42) = 42.
+        assert_eq!(result as i32, 42, "identity(42) should equal 42");
     }
 }
 

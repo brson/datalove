@@ -52,6 +52,11 @@ impl_checked_int_ops!(u64);
 // IsizeRepr/UsizeRepr are type aliases to i32/u32 or i64/u64 - covered above.
 
 /// Generate a binop function for a fixed-width integer type.
+///
+/// Only comparisons and bitwise operations are valid here. Arithmetic operations
+/// (Add, Sub, Mul, Div, Mod) on fixed-width integers are either:
+/// - Widened to Int (bigint) for regular `+`, `-`, `*`, `/`
+/// - Handled via BinOpChecked for `+!`, `-!`, `*!`, `/!` and `+?`, `-?`, `*?`, `/?`
 macro_rules! impl_int_binop {
     ($fname:ident, $ty:ty) => {
         fn $fname(
@@ -64,27 +69,20 @@ macro_rules! impl_int_binop {
                 let a = *(lhs.ptr as *const $ty);
                 let b = *(rhs.ptr as *const $ty);
                 match op {
-                    BinOp::Add => *(dest.ptr as *mut $ty) = a.wrapping_add(b),
-                    BinOp::Sub => *(dest.ptr as *mut $ty) = a.wrapping_sub(b),
-                    BinOp::Mul => *(dest.ptr as *mut $ty) = a.wrapping_mul(b),
-                    BinOp::Div => {
-                        if b == 0 {
-                            return Err(InterpError::DivisionByZero);
-                        }
-                        *(dest.ptr as *mut $ty) = a.wrapping_div(b);
+                    // Arithmetic ops are unreachable - they widen to Int or use checked ops.
+                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
+                        unreachable!(
+                            "fixed-width arithmetic should use widening or checked ops, not BinOp"
+                        )
                     }
-                    BinOp::Mod => {
-                        if b == 0 {
-                            return Err(InterpError::DivisionByZero);
-                        }
-                        *(dest.ptr as *mut $ty) = a.wrapping_rem(b);
-                    }
+                    // Comparisons are valid.
                     BinOp::Lt => *(dest.ptr as *mut bool) = a < b,
                     BinOp::Le => *(dest.ptr as *mut bool) = a <= b,
                     BinOp::Gt => *(dest.ptr as *mut bool) = a > b,
                     BinOp::Ge => *(dest.ptr as *mut bool) = a >= b,
                     BinOp::Eq => *(dest.ptr as *mut bool) = a == b,
                     BinOp::Ne => *(dest.ptr as *mut bool) = a != b,
+                    // Bitwise operations are valid.
                     BinOp::BitAnd => *(dest.ptr as *mut $ty) = a & b,
                     BinOp::BitOr => *(dest.ptr as *mut $ty) = a | b,
                     BinOp::BitXor => *(dest.ptr as *mut $ty) = a ^ b,
