@@ -1,0 +1,16 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 2u32\n    v2 = call f0(v0, v1)\n    unit_end\n\nfn all_ops(p0, p1):\nblock0:\n    v0, v1 = add.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = const \"arithmetic overflow\"\n    v3 = error_from v2\n    v4 = err v3\n    return v4\nblock2:\n    v5, v6 = sub.checked p0, p1\n    branch v6, block3, block4\nblock3:\n    v7 = const \"arithmetic overflow\"\n    v8 = error_from v7\n    v9 = err v8\n    return v9\nblock4:\n    v10, v11 = mul.checked p0, p1\n    branch v11, block5, block6\nblock5:\n    v12 = const \"arithmetic overflow\"\n    v13 = error_from v12\n    v14 = err v13\n    return v14\nblock6:\n    v15, v16 = div.checked p0, p1\n    branch v16, block7, block8\nblock7:\n    v17 = const \"arithmetic overflow\"\n    v18 = error_from v17\n    v19 = err v18\n    return v19\nblock8:\n    v20 = ok v15\n    return v20\nexports:\n    all_ops = f0\n    output = v2\n",
+            ),
+            output: "(fragment executed)",
+        ),
+    ],
+)

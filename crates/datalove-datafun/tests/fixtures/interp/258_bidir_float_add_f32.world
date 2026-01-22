@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test bidirectional type inference: float literals infer f32 from return type
+fun add(): f32
+    ret 1.0 + 2.0
+end fun
+
+let output = add()

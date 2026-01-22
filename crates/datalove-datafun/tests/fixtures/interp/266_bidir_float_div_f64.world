@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test bidirectional type inference: float division with f64
+fun div(a: f64, b: f64): f64
+    ret a / b
+end fun
+
+let output = div(10.0, 4.0)

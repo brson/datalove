@@ -1,0 +1,16 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 2.5f64\n    v1 = const 4f64\n    v2 = call f0(v0, v1)\n    unit_end\n\nfn mul(p0, p1):\nblock0:\n    v0 = mul p0, p1\n    return v0\nexports:\n    mul = f0\n    output = v2\n",
+            ),
+            output: "(fragment executed)",
+        ),
+    ],
+)

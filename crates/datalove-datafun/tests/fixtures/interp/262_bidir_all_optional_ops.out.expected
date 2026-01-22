@@ -1,0 +1,16 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = const 10i32\n    v1 = const 2i32\n    v2 = call f0(v0, v1)\n    unit_end\n\nfn all_ops(p0, p1):\nblock0:\n    v0, v1 = add.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3, v4 = sub.checked p0, p1\n    branch v4, block3, block4\nblock3:\n    v5 = none\n    return v5\nblock4:\n    v6, v7 = mul.checked p0, p1\n    branch v7, block5, block6\nblock5:\n    v8 = none\n    return v8\nblock6:\n    v9, v10 = div.checked p0, p1\n    branch v10, block7, block8\nblock7:\n    v11 = none\n    return v11\nblock8:\n    v12 = some v9\n    return v12\nexports:\n    all_ops = f0\n    output = v2\n",
+            ),
+            output: "(fragment executed)",
+        ),
+    ],
+)

@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test bidirectional type inference with u64 params
+fun mul(a: u64, b: u64): !u64
+    ret ok (a *! b)
+end fun
+
+let output = mul(100, 200)

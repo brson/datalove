@@ -1,0 +1,16 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    unit_end\n\nfn nested():\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2, v3 = add.checked v0, v1\n    branch v3, block1, block2\nblock1:\n    v4 = const \"arithmetic overflow\"\n    v5 = error_from v4\n    v6 = err v5\n    return v6\nblock2:\n    v7 = const 3u32\n    v8, v9 = add.checked v2, v7\n    branch v9, block3, block4\nblock3:\n    v10 = const \"arithmetic overflow\"\n    v11 = error_from v10\n    v12 = err v11\n    return v12\nblock4:\n    v13 = ok v8\n    return v13\nexports:\n    nested = f0\n    output = v0\n",
+            ),
+            output: "(fragment executed)",
+        ),
+    ],
+)

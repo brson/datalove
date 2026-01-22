@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test bidirectional type inference: float subtraction
+fun sub(): f32
+    ret 10.5 - 3.5
+end fun
+
+let output = sub()

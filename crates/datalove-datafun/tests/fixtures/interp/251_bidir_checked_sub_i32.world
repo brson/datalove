@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test bidirectional type inference: literals infer i32 from !i32 return type
+fun sub(): !i32
+    ret ok (10 -! 3)
+end fun
+
+let output = sub()

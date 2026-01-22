@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test bidirectional type inference: literals infer u32 from !u32 return type
+fun div(): !u32
+    ret ok (10 /! 2)
+end fun
+
+let output = div()

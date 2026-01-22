@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test bidirectional type inference with nested checked operations
+fun nested(): !u32
+    ret ok ((1 +! 2) +! 3)
+end fun
+
+let output = nested()

@@ -359,8 +359,25 @@ pub fn check_expr<'db>(
             let is_optional = matches!(op,
                 BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional);
 
+            // For checked/optional ops, verify the function's return type is compatible.
+            // Checked ops require Result return type, optional ops require Option return type.
+            // If this check fails, fall through to synthesis which will produce the proper error.
+            let return_type_ok = if is_checked {
+                matches!(
+                    ctx.expected_return_type,
+                    Some(Type::Datalit(datalit::tycheck::Type::Result(_)))
+                )
+            } else if is_optional {
+                matches!(
+                    ctx.expected_return_type,
+                    Some(Type::Datalit(datalit::tycheck::Type::Option(_)))
+                )
+            } else {
+                true
+            };
+
             // Checked/optional ops on fixed ints: propagate expected type to operands.
-            if (is_checked || is_optional) && is_fixed_int_type(expected) {
+            if return_type_ok && (is_checked || is_optional) && is_fixed_int_type(expected) {
                 let lhs_result = check_expr(ctx, binop.lhs, expected);
                 let rhs_result = check_expr(ctx, binop.rhs, expected);
 
@@ -372,7 +389,7 @@ pub fn check_expr<'db>(
             }
 
             // Bigint division: propagate int to operands.
-            if matches!(op, BinOp::DivChecked | BinOp::DivOptional) && is_bigint_type(expected) {
+            if return_type_ok && matches!(op, BinOp::DivChecked | BinOp::DivOptional) && is_bigint_type(expected) {
                 let lhs_result = check_expr(ctx, binop.lhs, expected);
                 let rhs_result = check_expr(ctx, binop.rhs, expected);
 
@@ -395,16 +412,8 @@ pub fn check_expr<'db>(
                 }
             }
 
-            // Bare arithmetic on bigints: propagate int type.
-            if matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul) && is_bigint_type(expected) {
-                let lhs_result = check_expr(ctx, binop.lhs, expected);
-                let rhs_result = check_expr(ctx, binop.rhs, expected);
-
-                if lhs_result.is_ok() && rhs_result.is_ok() {
-                    ctx.store_expr_type(expr, expected);
-                    return Ok(());
-                }
-            }
+            // Note: Bare arithmetic on fixed ints widens to int via synthesis.
+            // We don't do bidirectional checking for this case - let synthesis handle it.
 
             // Fall through to default synthesis behavior.
             let synthesized = ctx.synthesize_expr(expr)?;

@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test bidirectional type inference with u8
+fun mul(): ?u8
+    ret some (2 *? 3)
+end fun
+
+let output = mul()

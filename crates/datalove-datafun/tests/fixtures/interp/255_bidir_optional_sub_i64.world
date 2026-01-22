@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test bidirectional type inference with i64 params
+fun sub(a: i64, b: i64): ?i64
+    ret some (a -? b)
+end fun
+
+let output = sub(100, 50)

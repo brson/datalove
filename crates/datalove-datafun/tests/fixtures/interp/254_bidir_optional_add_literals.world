@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test bidirectional type inference: literals infer u32 from ?u32 return type
+fun add(): ?u32
+    ret some (1 +? 2)
+end fun
+
+let output = add()

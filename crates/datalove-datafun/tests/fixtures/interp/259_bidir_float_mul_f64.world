@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test bidirectional type inference with f64 params
+fun mul(a: f64, b: f64): f64
+    ret a * b
+end fun
+
+let output = mul(2.5, 4.0)

@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test bidirectional type inference with i16
+fun div(a: i16, b: i16): !i16
+    ret ok (a /! b)
+end fun
+
+let output = div(100, 10)
