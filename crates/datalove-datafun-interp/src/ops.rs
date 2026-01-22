@@ -273,7 +273,7 @@ impl IrInterpreter {
         lhs: &Value,
         rhs: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         unsafe {
             let lhs_tag = (*lhs.tydesc).type_tag;
             let dest_tag = (*dest.tydesc).type_tag;
@@ -281,7 +281,8 @@ impl IrInterpreter {
             // Widening arithmetic: fixed-width int operands -> Int result.
             // This is triggered when dest is Int but operands are fixed-width ints.
             if dest_tag == rtdt::TyTag::Int && Self::is_fixed_width_int(lhs_tag) {
-                return self.execute_binop_widening(op, lhs, rhs, dest);
+                self.execute_binop_widening(op, lhs, rhs, dest);
+                return;
             }
 
             // Dispatch on operand type.
@@ -296,14 +297,13 @@ impl IrInterpreter {
                 rtdt::TyTag::U64 => Self::execute_binop_u64(op, lhs, rhs, dest),
                 rtdt::TyTag::Usize => Self::execute_binop_usize(op, lhs, rhs, dest),
                 rtdt::TyTag::Isize => Self::execute_binop_isize(op, lhs, rhs, dest),
-                rtdt::TyTag::Int => return self.execute_binop_bigint(op, lhs, rhs, dest),
+                rtdt::TyTag::Int => self.execute_binop_bigint(op, lhs, rhs, dest),
                 rtdt::TyTag::F32 => Self::execute_binop_f32(op, lhs, rhs, dest),
                 rtdt::TyTag::F64 => Self::execute_binop_f64(op, lhs, rhs, dest),
                 rtdt::TyTag::Bool => Self::execute_binop_bool(op, lhs, rhs, dest),
                 // Type checker ensures only valid types reach here.
                 _ => unreachable!("unsupported binop {:?} for type {:?}", op, lhs_tag),
             }
-            Ok(())
         }
     }
 
@@ -314,7 +314,7 @@ impl IrInterpreter {
         lhs: &Value,
         rhs: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         use datalove_rt::c::RtStatus;
 
         unsafe {
@@ -352,12 +352,8 @@ impl IrInterpreter {
             self.destroy_temp_int(&rhs_int);
 
             if status != RtStatus::Ok {
-                return Err(InterpError::RuntimeError(format!(
-                    "widening Int {:?} operation failed",
-                    op
-                )));
+                unreachable!("widening Int {:?} operation failed", op);
             }
-            Ok(())
         }
     }
 
@@ -368,7 +364,7 @@ impl IrInterpreter {
         lhs: &Value,
         rhs: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         use datalove_rt::c::RtStatus;
 
         unsafe {
@@ -403,7 +399,7 @@ impl IrInterpreter {
                         _ => unreachable!(),
                     };
                     *(dest.ptr as *mut bool) = result;
-                    return Ok(());
+                    return;
                 }
                 // Type checker ensures only arithmetic and comparisons reach here.
                 _ => unreachable!("unsupported Int binop {:?}", op),
@@ -412,7 +408,6 @@ impl IrInterpreter {
             if status != RtStatus::Ok {
                 unreachable!("unexpected runtime failure {:?}", status);
             }
-            Ok(())
         }
     }
 

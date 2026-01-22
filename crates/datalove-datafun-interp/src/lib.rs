@@ -565,7 +565,7 @@ impl IrInterpreter {
                 let lhs_val = self.read_operand(lhs, frame, frames)?;
                 let rhs_val = self.read_operand(rhs, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
-                self.execute_binop(*op, &lhs_val, &rhs_val, dest_slot)?;
+                self.execute_binop(*op, &lhs_val, &rhs_val, dest_slot);
                 frame.mark_value_initialized(*dest);
             }
             Instruction::UnaryOp { dest, op, operand } => {
