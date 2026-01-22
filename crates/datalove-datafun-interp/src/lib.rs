@@ -705,8 +705,8 @@ impl IrInterpreter {
                 self.execute_unwrap_option(&src_val, dest_slot, is_some_slot);
                 frame.mark_value_initialized(*dest);
                 frame.mark_value_initialized(*is_some);
-                // Don't mark source as dropped - let the explicit Drop instruction handle cleanup.
-                // The ownership analysis emits drops for Option values after unwrap.
+                // Unwrap is destructive - source is consumed.
+                Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::WrapOk { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
@@ -731,8 +731,8 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*ok_dest);
                 frame.mark_value_initialized(*err_dest);
                 frame.mark_value_initialized(*is_ok);
-                // Don't mark source as dropped - let the explicit Drop instruction handle cleanup.
-                // The ownership analysis emits drops for Result values after unwrap.
+                // Unwrap is destructive - source is consumed.
+                Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::ErrorFrom { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;

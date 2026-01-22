@@ -7,11 +7,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = ok v2\n    v4, v5, v6 = unwrap_result v3\n    branch v6, block2, block1\nblock1:\n    v7 = err v5\n    return v7\nblock2:\n    v8 = getfield v4.0\n    v9 = ok v8\n    drop v3\n    return v9\nexports:\n    test = f0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = ok v2\n    v4, v5, v6 = unwrap_result v3\n    branch v6, block2, block1\nblock1:\n    v7 = err v5\n    return v7\nblock2:\n    v8 = getfield v4.0\n    v9 = ok v8\n    return v9\nexports:\n    test = f0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = ok v2\n    v4, v5, v6 = unwrap_result v3\n    branch v6, block2, block1\nblock1:\n    v7 = err v5\n    return v7\nblock2:\n    v8 = getfield v4.0\n    v9 = ok v8\n    drop v3\n    return v9\nexports:\n    test = f0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = ok v2\n    v4, v5, v6 = unwrap_result v3\n    branch v6, block2, block1\nblock1:\n    v7 = err v5\n    return v7\nblock2:\n    v8 = getfield v4.0\n    v9 = ok v8\n    return v9\nexports:\n    test = f0\n",
             ),
             ir_match: true,
             interp_output: "ok 10\n",

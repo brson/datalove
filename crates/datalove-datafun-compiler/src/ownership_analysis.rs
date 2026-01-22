@@ -811,6 +811,12 @@ impl<'db> AnalysisCtx<'db> {
                 }
                 None
             }
+            ExprFunKind::FieldProj(proj) => {
+                // Field projection reads from the base, doesn't consume it.
+                // The base expression may itself consume values (e.g., try operator).
+                self.analyze_expr_moves(proj.base, false);
+                None
+            }
             // Literals don't move anything.
             _ => None,
         }
