@@ -7,11 +7,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn get_value():\nblock0:\n    v0 = const 99u32\n    v1 = ok v0\n    v2 = ok v1\n    v3, v4, v5 = unwrap_result v2\n    branch v5, block2, block1\nblock1:\n    v6 = err v4\n    return v6\nblock2:\n    return v3\nexports:\n    get_value = f0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn get_value():\nblock0:\n    v0 = const 99u32\n    v1 = ok v0\n    v2, v3, v4 = unwrap_result v1\n    branch v4, block2, block1\nblock1:\n    v5 = err v3\n    return v5\nblock2:\n    v6 = ok v2\n    return v6\nexports:\n    get_value = f0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn get_value():\nblock0:\n    v0 = const 99u32\n    v1 = ok v0\n    v2 = ok v1\n    v3, v4, v5 = unwrap_result v2\n    branch v5, block2, block1\nblock1:\n    v6 = err v4\n    return v6\nblock2:\n    return v3\nexports:\n    get_value = f0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn get_value():\nblock0:\n    v0 = const 99u32\n    v1 = ok v0\n    v2, v3, v4 = unwrap_result v1\n    branch v4, block2, block1\nblock1:\n    v5 = err v3\n    return v5\nblock2:\n    v6 = ok v2\n    return v6\nexports:\n    get_value = f0\n",
             ),
             ir_match: true,
             interp_output: "ok 99\n",
