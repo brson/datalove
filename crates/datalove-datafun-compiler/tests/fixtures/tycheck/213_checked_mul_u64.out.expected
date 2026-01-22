@@ -1,0 +1,21 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "mul",
+      "params": [
+        {
+          "name": "a",
+          "type": "u64"
+        },
+        {
+          "name": "b",
+          "type": "u64"
+        }
+      ],
+      "return_type": "!u64"
+    }
+  ]
+}

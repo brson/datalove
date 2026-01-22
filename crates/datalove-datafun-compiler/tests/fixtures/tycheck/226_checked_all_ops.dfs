@@ -1,0 +1,7 @@
+fun all_ops(a: u32, b: u32): !u32
+    let sum: u32 = a +! b
+    let diff: u32 = a -! b
+    let prod: u32 = a *! b
+    let quot: u32 = a /! b
+    ret ok quot
+end fun

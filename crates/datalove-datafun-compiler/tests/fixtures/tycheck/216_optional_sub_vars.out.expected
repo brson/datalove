@@ -1,0 +1,21 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "sub",
+      "params": [
+        {
+          "name": "a",
+          "type": "i64"
+        },
+        {
+          "name": "b",
+          "type": "i64"
+        }
+      ],
+      "return_type": "?i64"
+    }
+  ]
+}

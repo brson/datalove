@@ -1,0 +1,12 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "div",
+      "params": [],
+      "return_type": "f32"
+    }
+  ]
+}

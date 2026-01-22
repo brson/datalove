@@ -1,0 +1,21 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "div",
+      "params": [
+        {
+          "name": "a",
+          "type": "i16"
+        },
+        {
+          "name": "b",
+          "type": "i16"
+        }
+      ],
+      "return_type": "?i16"
+    }
+  ]
+}

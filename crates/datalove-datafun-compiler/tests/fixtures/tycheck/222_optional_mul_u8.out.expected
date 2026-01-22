@@ -1,0 +1,12 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "mul",
+      "params": [],
+      "return_type": "?u8"
+    }
+  ]
+}

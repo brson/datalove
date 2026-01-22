@@ -1,0 +1,7 @@
+fun all_ops(a: i32, b: i32): ?i32
+    let sum: i32 = a +? b
+    let diff: i32 = a -? b
+    let prod: i32 = a *? b
+    let quot: i32 = a /? b
+    ret some quot
+end fun

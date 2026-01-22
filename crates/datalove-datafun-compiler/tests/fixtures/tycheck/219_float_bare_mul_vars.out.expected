@@ -1,0 +1,21 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "mul",
+      "params": [
+        {
+          "name": "a",
+          "type": "f64"
+        },
+        {
+          "name": "b",
+          "type": "f64"
+        }
+      ],
+      "return_type": "f64"
+    }
+  ]
+}

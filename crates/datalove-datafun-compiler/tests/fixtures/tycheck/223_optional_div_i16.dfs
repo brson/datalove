@@ -1,0 +1,3 @@
+fun div(a: i16, b: i16): ?i16
+    ret some (a /? b)
+end fun

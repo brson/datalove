@@ -1,0 +1,3 @@
+fun div(): !u32
+    ret ok (10 /! 2)
+end fun
