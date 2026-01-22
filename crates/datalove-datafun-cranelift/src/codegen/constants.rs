@@ -187,22 +187,23 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
 
-        // Call dtlv_rti_string_create_local(rt, dest, tydesc).
-        let create_ref = self.module.declare_func_in_func(runtime.string_create, builder.func);
-        builder.ins().call(create_ref, &[rt_handle, base, tydesc_ptr]);
-
-        if !s.is_empty() {
-            // Emit string bytes as static data.
+        // Get bytes pointer and length.
+        let (bytes_ptr, len) = if s.is_empty() {
+            let null_ptr = builder.ins().iconst(PTR_TYPE, 0);
+            let zero_len = builder.ins().iconst(cl_types::I32, 0);
+            (null_ptr, zero_len)
+        } else {
             let bytes = s.as_bytes();
             let bytes_data_id = self.emit_static_bytes(bytes)?;
             let bytes_gv = self.module.declare_data_in_func(bytes_data_id, builder.func);
             let bytes_ptr = builder.ins().global_value(PTR_TYPE, bytes_gv);
             let len = builder.ins().iconst(cl_types::I32, bytes.len() as i64);
+            (bytes_ptr, len)
+        };
 
-            // Call dtlv_rti_string_push_bytes_local(rt, dest, tydesc, bytes, len).
-            let push_ref = self.module.declare_func_in_func(runtime.string_push_bytes, builder.func);
-            builder.ins().call(push_ref, &[rt_handle, base, tydesc_ptr, bytes_ptr, len]);
-        }
+        // Call dtlv_rti_string_from_bytes(rt, bytes, len, dest, tydesc).
+        let from_bytes_ref = self.module.declare_func_in_func(runtime.string_from_bytes, builder.func);
+        builder.ins().call(from_bytes_ref, &[rt_handle, bytes_ptr, len, base, tydesc_ptr]);
 
         // Store base pointer for this value.
         self.values.insert(dest, base);

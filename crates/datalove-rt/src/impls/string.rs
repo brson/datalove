@@ -128,6 +128,50 @@ pub unsafe fn string_push_bytes_local(
     }
 }
 
+/// Creates a string from bytes in a single call.
+///
+/// If bytes_len is 0, initializes an empty string with null data pointer.
+/// Otherwise allocates a buffer, copies the bytes, and sets the String fields.
+pub unsafe fn string_from_bytes(
+    rt: LocalRtHandle,
+    bytes_ptr: *const u8,
+    bytes_len: rtdt::UsizeRepr,
+    result_out: *mut u8,
+    result_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        let ty = &*result_tydesc;
+        if ty.type_tag != rtdt::TyTag::String {
+            return RtStatus::Error;
+        }
+
+        let string_ptr = result_out as *mut rtdt::String;
+
+        if bytes_len == 0 {
+            // Empty string: null data, zero size/capacity.
+            (*string_ptr).data = std::ptr::null();
+            (*string_ptr).size = rtdt::Usize::ZERO;
+            (*string_ptr).capacity = rtdt::Usize::ZERO;
+        } else {
+            // Allocate buffer and copy bytes.
+            let rt_ref = &mut *(rt as *mut RtLocal);
+            let capacity = bytes_len;
+            let data = rt_ref.alloc.alloc(1, 1, capacity);
+            if data.is_null() {
+                return RtStatus::Error;
+            }
+
+            std::ptr::copy_nonoverlapping(bytes_ptr, data, bytes_len as usize);
+
+            (*string_ptr).data = data;
+            (*string_ptr).size = rtdt::Usize(bytes_len);
+            (*string_ptr).capacity = rtdt::Usize(capacity);
+        }
+
+        RtStatus::Ok
+    }
+}
+
 /// Clears a string by setting its size to zero.
 ///
 /// The capacity is retained so the buffer can be reused.
@@ -428,6 +472,109 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Error);
+
+            let rt = Box::from_raw(rt_handle as *mut RtLocal);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_string_from_bytes_empty() {
+        let rt = rt_local::RtLocal::new();
+        let rt_handle = Box::into_raw(rt) as LocalRtHandle;
+        let tydesc = unsafe { create_string_tydesc() };
+
+        unsafe {
+            let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
+            let status = string_from_bytes(
+                rt_handle,
+                std::ptr::null(),
+                0,
+                string.as_mut_ptr() as *mut u8,
+                &tydesc,
+            );
+
+            assert_eq!(status, RtStatus::Ok);
+
+            let string = string.assume_init();
+            assert!(string.data.is_null());
+            assert_eq!(string.size, rtdt::Usize::ZERO);
+            assert_eq!(string.capacity, rtdt::Usize::ZERO);
+
+            let rt = Box::from_raw(rt_handle as *mut RtLocal);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_string_from_bytes_ascii() {
+        let rt = rt_local::RtLocal::new();
+        let rt_handle = Box::into_raw(rt) as LocalRtHandle;
+        let tydesc = unsafe { create_string_tydesc() };
+
+        unsafe {
+            let data = b"hello";
+            let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
+            let status = string_from_bytes(
+                rt_handle,
+                data.as_ptr(),
+                data.len() as rtdt::UsizeRepr,
+                string.as_mut_ptr() as *mut u8,
+                &tydesc,
+            );
+
+            assert_eq!(status, RtStatus::Ok);
+
+            let string = string.assume_init();
+            assert!(!string.data.is_null());
+            assert_eq!(string.size, rtdt::Usize(5));
+            assert!(string.capacity >= rtdt::Usize(5));
+
+            let content = std::slice::from_raw_parts(string.data, string.size.as_usize());
+            assert_eq!(content, b"hello");
+
+            string_destroy_local(
+                rt_handle,
+                &string as *const rtdt::String as *mut u8,
+                &tydesc,
+            );
+
+            let rt = Box::from_raw(rt_handle as *mut RtLocal);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    fn test_string_from_bytes_unicode() {
+        let rt = rt_local::RtLocal::new();
+        let rt_handle = Box::into_raw(rt) as LocalRtHandle;
+        let tydesc = unsafe { create_string_tydesc() };
+
+        unsafe {
+            let data = "hello world".as_bytes();
+            let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
+            let status = string_from_bytes(
+                rt_handle,
+                data.as_ptr(),
+                data.len() as rtdt::UsizeRepr,
+                string.as_mut_ptr() as *mut u8,
+                &tydesc,
+            );
+
+            assert_eq!(status, RtStatus::Ok);
+
+            let string = string.assume_init();
+            assert!(!string.data.is_null());
+            assert_eq!(string.size.as_usize(), data.len());
+
+            let content = std::slice::from_raw_parts(string.data, string.size.as_usize());
+            assert_eq!(content, data);
+
+            string_destroy_local(
+                rt_handle,
+                &string as *const rtdt::String as *mut u8,
+                &tydesc,
+            );
 
             let rt = Box::from_raw(rt_handle as *mut RtLocal);
             rt.shutdown();

@@ -28,6 +28,8 @@ pub struct RuntimeImports {
     pub string_create: FuncId,
     /// `dtlv_rti_string_push_bytes_local(rt: LocalRtHandle, value_mut: *mut u8, tydesc: *const TyDesc, bytes: *const u8, len: u32) -> RtStatus`
     pub string_push_bytes: FuncId,
+    /// `dtlv_rti_string_from_bytes(rt: LocalRtHandle, bytes: *const u8, len: u32, result_out: *mut u8, tydesc: *const TyDesc) -> RtStatus`
+    pub string_from_bytes: FuncId,
 
     // Collection functions.
     /// `dtlv_rti_list_create_local(rt, value_out, tydesc) -> RtStatus`
@@ -175,6 +177,20 @@ impl RuntimeImports {
             module
                 .declare_function("dtlv_rti_string_push_bytes_local", Linkage::Import, &sig)
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_string_push_bytes_local: {}", e)))?
+        };
+
+        // dtlv_rti_string_from_bytes(ptr, ptr, u32, ptr, ptr) -> u8
+        let string_from_bytes = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE));      // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE));      // bytes ptr
+            sig.params.push(AbiParam::new(cl_types::I32)); // len
+            sig.params.push(AbiParam::new(PTR_TYPE));      // result_out
+            sig.params.push(AbiParam::new(PTR_TYPE));      // tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_string_from_bytes", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_string_from_bytes: {}", e)))?
         };
 
         // dtlv_rti_list_create_local(rt, value_out, tydesc) -> u8
@@ -422,6 +438,7 @@ impl RuntimeImports {
             mem_alloc_raw,
             string_create,
             string_push_bytes,
+            string_from_bytes,
             list_create,
             list_push,
             set_create,

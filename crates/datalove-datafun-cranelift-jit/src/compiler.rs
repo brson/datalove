@@ -409,6 +409,7 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     // String functions.
     jit_builder.symbol("dtlv_rti_string_create_local", c::dtlv_rti_string_create_local as *const u8);
     jit_builder.symbol("dtlv_rti_string_push_bytes_local", c::dtlv_rti_string_push_bytes_local as *const u8);
+    jit_builder.symbol("dtlv_rti_string_from_bytes", c::dtlv_rti_string_from_bytes as *const u8);
 
     // Collection functions.
     jit_builder.symbol("dtlv_rti_list_create_local", c::dtlv_rti_list_create_local as *const u8);

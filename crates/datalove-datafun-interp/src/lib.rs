@@ -1289,31 +1289,14 @@ impl IrInterpreter {
                     *(dest.ptr as *mut f64) = *n;
                 }
                 ConstValue::String(s) => {
-                    let rt_handle = self.runtime.handle();
-                    let status = datalove_rt::c::dtlv_rti_string_create_local(
-                        rt_handle,
+                    let bytes_ptr = if s.is_empty() { std::ptr::null() } else { s.as_ptr() };
+                    datalove_rt::c::dtlv_rti_string_from_bytes(
+                        self.runtime.handle(),
+                        bytes_ptr,
+                        s.len() as rtdt::UsizeRepr,
                         dest.ptr,
                         dest.tydesc,
                     );
-                    if status != datalove_rt::c::RtStatus::Ok {
-                        return Err(InterpError::RuntimeError(
-                            "Failed to create string".to_string()
-                        ));
-                    }
-                    if !s.is_empty() {
-                        let status = datalove_rt::c::dtlv_rti_string_push_bytes_local(
-                            rt_handle,
-                            dest.ptr,
-                            dest.tydesc,
-                            s.as_ptr(),
-                            s.len() as rtdt::UsizeRepr,
-                        );
-                        if status != datalove_rt::c::RtStatus::Ok {
-                            return Err(InterpError::RuntimeError(
-                                "Failed to push string bytes".to_string()
-                            ));
-                        }
-                    }
                 }
             }
         }

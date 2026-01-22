@@ -605,6 +605,27 @@ pub unsafe extern "C-unwind" fn dtlv_rti_string_clear_local(
     }
 }
 
+/// Creates a string from UTF-8 bytes in a single call.
+///
+/// If bytes_len is 0, bytes_ptr may be null.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_string_from_bytes(
+    rt: LocalRtHandle,
+    bytes_ptr: *const u8,
+    bytes_len: rtdt::UsizeRepr,
+    result_out: *mut u8,
+    result_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!result_out.is_null(), "result_out is null");
+    debug_assert!(!result_tydesc.is_null(), "result_tydesc is null");
+    debug_assert!(bytes_len == 0 || !bytes_ptr.is_null(), "bytes_ptr is null with non-zero len");
+    debug_assert_aligned(result_out, result_tydesc, "string_from_bytes:result_out");
+    unsafe {
+        crate::impls::string::string_from_bytes(rt, bytes_ptr, bytes_len, result_out, result_tydesc)
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_pretty_print_local(
     rt: LocalRtHandle,
