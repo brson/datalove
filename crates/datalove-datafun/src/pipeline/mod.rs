@@ -50,14 +50,16 @@
 
 mod result;
 mod compiled_modules;
-mod script_context;
+mod script_compiler;
+mod script_executor;
 mod module_pipeline;
 pub mod aot;
 
 // Re-export main types.
 pub use result::{TypecheckResult, LoweringResult, format_lowering_result, ScriptUnitResult, ScriptLowerResult, ScriptCompilationResult};
 pub use compiled_modules::{SharedModuleContext, CompiledModules};
-pub use script_context::{ScriptCompiler, ScriptExecutor};
+pub use script_compiler::ScriptCompiler;
+pub use script_executor::ScriptExecutor;
 pub use module_pipeline::ModuleCompilationPipeline;
 
 #[cfg(test)]
