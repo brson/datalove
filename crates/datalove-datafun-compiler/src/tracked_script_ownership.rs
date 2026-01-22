@@ -12,7 +12,7 @@ use datalove_datafun_tycheck::UnitTypecheckResultTracked;
 
 use crate::ir_ext::IrTypeExt;
 use crate::ownership_analysis::{
-    self, DropSchedule, BindingInfo, BindingId, FunctionAnalysis,
+    self, DropSchedule, BindingInfo, BindingId, FunctionAnalysis, TrackingCategory,
     ScriptFunctionAnalyses, format_analysis_errors,
 };
 
@@ -22,6 +22,7 @@ use crate::ownership_analysis::{
 pub struct FunctionAnalysisData {
     pub schedule: DropSchedule,
     pub bindings: Vec<BindingInfo>,
+    pub tracking: Vec<TrackingCategory>,
 }
 
 impl From<FunctionAnalysis> for FunctionAnalysisData {
@@ -29,6 +30,7 @@ impl From<FunctionAnalysis> for FunctionAnalysisData {
         Self {
             schedule: analysis.schedule,
             bindings: analysis.bindings,
+            tracking: analysis.tracking,
         }
     }
 }
@@ -39,6 +41,7 @@ impl From<FunctionAnalysis> for FunctionAnalysisData {
 pub struct ScriptAnalysisData {
     pub schedule: DropSchedule,
     pub bindings: Vec<BindingInfo>,
+    pub tracking: Vec<TrackingCategory>,
     pub unit_end: Vec<BindingId>,
 }
 
@@ -85,6 +88,7 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
                     errors: Vec::new(), // Errors already extracted at analysis boundary.
                     schedule: data.schedule.clone(),
                     bindings: data.bindings.clone(),
+                    tracking: data.tracking.clone(),
                 };
                 map.insert(func, analysis);
             }
@@ -168,6 +172,7 @@ pub fn analyze_script_fragment_tracked<'db>(
     let script_data = ScriptAnalysisData {
         schedule: script_analysis.schedule,
         bindings: script_analysis.bindings,
+        tracking: script_analysis.tracking,
         unit_end: script_analysis.unit_end,
     };
 

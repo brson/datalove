@@ -68,6 +68,22 @@ pub enum BindingState {
     Moved,
 }
 
+/// Tracking category for a binding.
+///
+/// Determines whether the binding needs runtime tracking for moves/drops.
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+pub enum TrackingCategory {
+    /// Copy type - no tracking needed, no drops.
+    Copy,
+    /// Precise ownership - state is statically known at every program point.
+    /// Uses precise move/drop instructions (no runtime checks).
+    Precise,
+    /// Tracked ownership - state may vary at runtime.
+    /// Uses tracked move/drop instructions (with runtime checks).
+    /// Examples: exports, out params, conditional moves, mutable slots.
+    Tracked,
+}
+
 /// Initialization state for Out params.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OutParamInitState {
@@ -242,6 +258,9 @@ pub struct FunctionAnalysis {
     pub schedule: DropSchedule,
     /// Information about each binding (indexed by BindingId).
     pub bindings: Vec<BindingInfo>,
+    /// Tracking category for each binding (indexed by BindingId).
+    /// Determines whether precise or tracked move/drop instructions are used.
+    pub tracking: Vec<TrackingCategory>,
 }
 
 // ============================================================================
@@ -268,6 +287,9 @@ struct AnalysisCtx<'db> {
     errors: Vec<AnalysisError>,
     /// Computed drop schedule.
     schedule: DropSchedule,
+    /// Bindings that were conditionally moved (moved in one branch, not the other).
+    /// These need tracked semantics since their state varies at runtime.
+    conditionally_moved: std::collections::HashSet<BindingId>,
 }
 
 /// A scope frame for tracking bindings.
@@ -312,7 +334,31 @@ impl<'db> AnalysisCtx<'db> {
             scope_stack: Vec::new(),
             errors: Vec::new(),
             schedule: DropSchedule::default(),
+            conditionally_moved: std::collections::HashSet::new(),
         }
+    }
+
+    /// Compute tracking category for each binding.
+    ///
+    /// Categories:
+    /// - Copy: type is copy (no tracking needed)
+    /// - Tracked: exported, out param, slot (var), or conditionally moved
+    /// - Precise: everything else (state statically known)
+    fn compute_tracking(&self) -> Vec<TrackingCategory> {
+        self.bindings.iter().enumerate().map(|(idx, info)| {
+            let id = BindingId(idx as u32);
+            if info.ty.is_copy() {
+                TrackingCategory::Copy
+            } else if info.is_script_unit
+                || info.param_mode == Some(ParamMode::Out)
+                || info.is_slot
+                || self.conditionally_moved.contains(&id)
+            {
+                TrackingCategory::Tracked
+            } else {
+                TrackingCategory::Precise
+            }
+        }).collect()
     }
 
     /// Allocate a new binding ID.
@@ -864,10 +910,14 @@ pub fn analyze_function<'db>(
     let _final_drops = ctx.exit_scope();
     // Note: Final drops are handled by lowering's implicit return path.
 
+    // Compute tracking categories.
+    let tracking = ctx.compute_tracking();
+
     FunctionAnalysis {
         errors: ctx.errors,
         schedule: ctx.schedule,
         bindings: ctx.bindings,
+        tracking,
     }
 }
 
@@ -920,6 +970,9 @@ pub struct ScriptAnalysis {
     pub schedule: DropSchedule,
     /// Information about each binding (indexed by BindingId).
     pub bindings: Vec<BindingInfo>,
+    /// Tracking category for each binding (indexed by BindingId).
+    /// Determines whether precise or tracked move/drop instructions are used.
+    pub tracking: Vec<TrackingCategory>,
     /// Bindings to drop at unit end (only populated when for_aot=true).
     pub unit_end: Vec<BindingId>,
 }
@@ -954,10 +1007,14 @@ pub fn analyze_script_statements<'db>(
     // Exit scope. For AOT, capture final drops. For REPL, they're empty.
     let final_drops = ctx.exit_scope();
 
+    // Compute tracking categories.
+    let tracking = ctx.compute_tracking();
+
     ScriptAnalysis {
         errors: ctx.errors,
         schedule: ctx.schedule,
         bindings: ctx.bindings,
+        tracking,
         unit_end: final_drops,
     }
 }
@@ -1265,7 +1322,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
 
     // Compute convergence drops.
     // For each binding that is Live in one branch but Moved in another,
-    // schedule a drop on the Live branch.
+    // schedule a drop on the Live branch and mark as conditionally moved.
     let mut then_extra_drops = Vec::new();
     let mut else_extra_drops = Vec::new();
 
@@ -1273,6 +1330,11 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
         let else_state = state_after_else.get(&id).copied().unwrap_or(BindingState::Live);
 
         if then_state != else_state {
+            // Mark as conditionally moved - needs tracked semantics.
+            if !ctx.bindings[id.0 as usize].ty.is_copy() {
+                ctx.conditionally_moved.insert(id);
+            }
+
             if then_state == BindingState::Live {
                 // Live in then, moved in else -> drop in then.
                 if !ctx.bindings[id.0 as usize].ty.is_copy() {
