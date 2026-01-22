@@ -31,6 +31,7 @@
 
 ## In progress
 
+- binop typechecking
 - worldfile generator
 - human docs
 
@@ -39,7 +40,7 @@
 
 ## On deck
 
-- clone and coerce
+- clone and coerce - waiting on binop typechecking
 - updates feed
 - roadmap status page
 - clean up benchmarks
