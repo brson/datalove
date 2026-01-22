@@ -125,26 +125,6 @@ impl IrInterpreter {
         )
     }
 
-    /// Check if a type tag is a copy type (can be duplicated without ownership transfer).
-    pub(crate) fn is_copy_type_tag(tag: rtdt::TyTag) -> bool {
-        matches!(
-            tag,
-            rtdt::TyTag::Bool
-                | rtdt::TyTag::U8
-                | rtdt::TyTag::U16
-                | rtdt::TyTag::U32
-                | rtdt::TyTag::U64
-                | rtdt::TyTag::I8
-                | rtdt::TyTag::I16
-                | rtdt::TyTag::I32
-                | rtdt::TyTag::I64
-                | rtdt::TyTag::Usize
-                | rtdt::TyTag::Isize
-                | rtdt::TyTag::F32
-                | rtdt::TyTag::F64
-        )
-    }
-
     /// Widen a fixed-width integer value to an Int in a stack-allocated buffer.
     ///
     /// The caller is responsible for destroying the Int (freeing its limbs) after use.

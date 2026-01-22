@@ -8,7 +8,7 @@ AotAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"hello world\"\n    v1 = enum_variant 1 v0\n    debuglog v1\n    drop v1\n    unit_end\nexports:\n    message = v1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const \"hello world\"\n    v1 = enum_variant 1 v0\n    debuglog v1\n    drop.tracked v1\n    unit_end\nexports:\n    message = v1\n",
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Success",

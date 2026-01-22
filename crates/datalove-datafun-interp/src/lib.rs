@@ -705,15 +705,8 @@ impl IrInterpreter {
                 self.execute_unwrap_option(&src_val, dest_slot, is_some_slot);
                 frame.mark_value_initialized(*dest);
                 frame.mark_value_initialized(*is_some);
-                // Mark source as consumed only if inner type is non-copy.
-                // Option<copy_type> is itself copy, so unwrapping doesn't consume it.
-                let inner_is_copy = unsafe {
-                    let option_info = (*src_val.tydesc).type_info.option;
-                    Self::is_copy_type_tag((*option_info.inner_tydesc).type_tag)
-                };
-                if !inner_is_copy {
-                    Self::mark_source_dropped_all(src, frame, frames);
-                }
+                // Don't mark source as dropped - let the explicit Drop instruction handle cleanup.
+                // The ownership analysis emits drops for Option values after unwrap.
             }
             Instruction::WrapOk { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
@@ -738,7 +731,8 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*ok_dest);
                 frame.mark_value_initialized(*err_dest);
                 frame.mark_value_initialized(*is_ok);
-                Self::mark_source_dropped_all(src, frame, frames);
+                // Don't mark source as dropped - let the explicit Drop instruction handle cleanup.
+                // The ownership analysis emits drops for Result values after unwrap.
             }
             Instruction::ErrorFrom { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
@@ -916,20 +910,25 @@ impl IrInterpreter {
                 }
             }
             Instruction::Drop { operand } => {
-                // Skip drop if already dropped (can happen with move semantics).
+                // Precise drop: ownership analysis guarantees value exists.
+                let val = self.read_operand(operand, frame, frames)?;
+                self.execute_drop(&val);
+                Self::mark_source_dropped_local(operand, frame);
+            }
+            Instruction::DropTracked { operand } => {
+                // Tracked drop: check initialization first, skip if not present.
+                // Used for script unit_end drops where bindings may have been moved.
                 let val = match self.read_operand(operand, frame, frames) {
                     Ok(v) => v,
                     Err(InterpError::UninitializedValue(_))
                     | Err(InterpError::UninitializedSlot(_))
                     | Err(InterpError::UninitializedParam(_)) => {
-                        // Already dropped, skip.
+                        // Already dropped or moved, skip.
                         return Ok(());
                     }
                     Err(e) => return Err(e),
                 };
                 self.execute_drop(&val);
-                // Mark as dropped to prevent double-destroy in destroy_all.
-                // External values/slots are in other frames, handled separately.
                 Self::mark_source_dropped_local(operand, frame);
             }
             Instruction::DebugLog { operand } => {

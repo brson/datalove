@@ -101,7 +101,7 @@ fn ensure_runtime_lib() -> &'static Path {
 
 /// Normalize IR dump by removing trailing Drop instructions before unit_end.
 ///
-/// The for_aot flag causes extra Drop instructions to be emitted at unit end.
+/// The for_aot flag causes extra Drop/DropTracked instructions to be emitted at unit end.
 /// This function strips those to allow comparison between interpreter and AOT IR.
 fn normalize_ir(ir: &str) -> String {
     let mut lines: Vec<&str> = ir.lines().collect();
@@ -115,10 +115,10 @@ fn normalize_ir(ir: &str) -> String {
 
         // Stop at unit_end line.
         if line.starts_with("unit_end") {
-            // Now go backwards and remove drop instructions.
+            // Now go backwards and remove drop instructions (both precise and tracked).
             while i > 0 {
                 let prev_line = lines[i - 1].trim();
-                if prev_line.starts_with("drop ") {
+                if prev_line.starts_with("drop ") || prev_line.starts_with("drop.tracked ") {
                     lines.remove(i - 1);
                     i -= 1;
                 } else {

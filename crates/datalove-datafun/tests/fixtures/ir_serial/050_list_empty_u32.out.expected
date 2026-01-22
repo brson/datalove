@@ -7,11 +7,11 @@ IrSerialAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = list []\n    debuglog v0\n    drop v0\n    unit_end\nexports:\n    xs = v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = list []\n    debuglog v0\n    drop.tracked v0\n    unit_end\nexports:\n    xs = v0\n",
             ),
             direct_interp_output: "[]\n",
             direct_aot_output: "[]\n",
-            serialized_ir_size: 814,
+            serialized_ir_size: 821,
             serialized_registry_size: 177,
             deser_success: true,
             deser_interp_output: "[]\n",

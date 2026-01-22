@@ -8,7 +8,7 @@ AotAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = tensor [3] [v0, v1, v2]\n    v4 = const 42u32\n    debuglog v4\n    drop v3\n    unit_end\nexports:\n    t = v3\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = tensor [3] [v0, v1, v2]\n    v4 = const 42u32\n    debuglog v4\n    drop.tracked v3\n    unit_end\nexports:\n    t = v3\n",
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Success",

@@ -8,7 +8,7 @@ AotAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = list []\n    debuglog v0\n    drop v0\n    unit_end\nexports:\n    xs = v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = list []\n    debuglog v0\n    drop.tracked v0\n    unit_end\nexports:\n    xs = v0\n",
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Success",

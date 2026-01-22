@@ -11,7 +11,7 @@ DualAnalysis(
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = const 3u32\n    v4 = const 4u32\n    v5 = pack Tuple2 {v3, v4}\n    v6 = table [v2, v5]\n    debuglog v6\n    drop v6\n    unit_end\nexports:\n    t = v6\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = const 3u32\n    v4 = const 4u32\n    v5 = pack Tuple2 {v3, v4}\n    v6 = table [v2, v5]\n    debuglog v6\n    drop.tracked v6\n    unit_end\nexports:\n    t = v6\n",
             ),
             ir_match: true,
             interp_output: "{| a, b; 1, 2; 3, 4 |}\n",

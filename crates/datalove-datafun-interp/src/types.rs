@@ -88,6 +88,9 @@ impl IrInterpreter {
     }
 
     /// Unwrap an Option, producing (inner_value, is_some).
+    ///
+    /// After unwrapping, the source Option's payload is zeroed to prevent
+    /// double-free when the source is dropped later.
     pub(crate) fn execute_unwrap_option(
         &self,
         src: &Value,
@@ -103,11 +106,10 @@ impl IrInterpreter {
             *(is_some_dest.ptr as *mut bool) = is_some;
             if is_some {
                 let inner_size = (*option_info.inner_tydesc).size as usize;
-                std::ptr::copy_nonoverlapping(
-                    src.ptr.add(layout.payload_offset as usize),
-                    dest.ptr,
-                    inner_size,
-                );
+                let payload_ptr = src.ptr.add(layout.payload_offset as usize);
+                std::ptr::copy_nonoverlapping(payload_ptr, dest.ptr, inner_size);
+                // Zero source payload so dropping the source is safe.
+                std::ptr::write_bytes(payload_ptr, 0, inner_size);
             }
         }
     }
@@ -149,6 +151,9 @@ impl IrInterpreter {
     ///
     /// - ok_dest: receives Ok payload when is_ok=true
     /// - err_dest: receives Error when is_ok=false
+    ///
+    /// After unwrapping, the source Result's payload is zeroed to prevent
+    /// double-free when the source is dropped later.
     pub(crate) fn execute_unwrap_result(
         &self,
         src: &Value,
@@ -163,21 +168,18 @@ impl IrInterpreter {
             let tag = *(src.ptr as *const u8);
             let is_ok = tag == rtdt::ResultTag::Ok as u8;
             *(is_ok_dest.ptr as *mut bool) = is_ok;
-            // Copy payload to appropriate destination.
+            // Copy payload to appropriate destination, then zero source to prevent double-free.
+            let payload_ptr = src.ptr.add(layout.payload_offset as usize);
             if is_ok {
                 let ok_size = (*result_info.ok_tydesc).size as usize;
-                std::ptr::copy_nonoverlapping(
-                    src.ptr.add(layout.payload_offset as usize),
-                    ok_dest.ptr,
-                    ok_size,
-                );
+                std::ptr::copy_nonoverlapping(payload_ptr, ok_dest.ptr, ok_size);
+                // Zero source payload so dropping the source is safe.
+                std::ptr::write_bytes(payload_ptr, 0, ok_size);
             } else {
                 let err_size = std::mem::size_of::<rtdt::Error>();
-                std::ptr::copy_nonoverlapping(
-                    src.ptr.add(layout.payload_offset as usize),
-                    err_dest.ptr,
-                    err_size,
-                );
+                std::ptr::copy_nonoverlapping(payload_ptr, err_dest.ptr, err_size);
+                // Zero source payload so dropping the source is safe.
+                std::ptr::write_bytes(payload_ptr, 0, err_size);
             }
         }
     }

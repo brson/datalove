@@ -404,6 +404,9 @@ impl fmt::Display for Instruction {
             Instruction::Drop { operand } => {
                 write!(f, "drop {}", operand)
             }
+            Instruction::DropTracked { operand } => {
+                write!(f, "drop.tracked {}", operand)
+            }
             Instruction::DebugLog { operand } => {
                 write!(f, "debuglog {}", operand)
             }

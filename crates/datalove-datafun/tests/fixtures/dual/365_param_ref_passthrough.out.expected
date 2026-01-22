@@ -11,7 +11,7 @@ DualAnalysis(
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 11int\n    v1 = call f1(v0)\n    debuglog v1\n    drop v1\n    debuglog v0\n    drop v0\n    unit_end\n\nfn inner(p0):\nblock0:\n    v0 = add p0, p0\n    return v0\nfn outer(p0):\nblock0:\n    v0 = call f0(p0)\n    return v0\nexports:\n    inner = f0\n    outer = f1\n    val = v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 11int\n    v1 = call f1(v0)\n    debuglog v1\n    drop v1\n    debuglog v0\n    drop.tracked v0\n    unit_end\n\nfn inner(p0):\nblock0:\n    v0 = add p0, p0\n    return v0\nfn outer(p0):\nblock0:\n    v0 = call f0(p0)\n    return v0\nexports:\n    inner = f0\n    outer = f1\n    val = v0\n",
             ),
             ir_match: true,
             interp_output: "22\n11\n",

@@ -828,8 +828,17 @@ pub enum Instruction {
     /// Load value from mutable slot (move semantics - slot becomes invalid).
     SlotLoadMove { dest: ValueId, slot: SlotId },
 
-    /// Drop a value (run destructor).
+    /// Drop a value (precise - value must exist).
+    ///
+    /// Used for drops where ownership analysis guarantees the value is present.
+    /// Unconditionally runs the destructor.
     Drop { operand: Operand },
+
+    /// Drop a value if initialized (tracked - may have been moved).
+    ///
+    /// Used for script unit_end drops where bindings may have been moved or
+    /// exported. Checks initialization state at runtime and skips if empty.
+    DropTracked { operand: Operand },
 
     /// Debug log a value (borrows, does not consume).
     DebugLog { operand: Operand },
