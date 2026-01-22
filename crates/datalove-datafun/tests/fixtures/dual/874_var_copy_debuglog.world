@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+let v0: i16 = 3
+var v1: i16 = v0
+debuglog v0

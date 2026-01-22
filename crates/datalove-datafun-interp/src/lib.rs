@@ -576,6 +576,8 @@ impl IrInterpreter {
             }
             Instruction::SlotStore { dest, value } => {
                 let src_val = self.read_operand(value, frame, frames)?;
+                // Check if type is Copy (includes composite types with all-copy fields).
+                let is_copy = unsafe { Self::is_copy_tydesc(src_val.tydesc) };
                 match dest {
                     SlotDest::Local(slot_id) => {
                         // Destroy old value if slot was already initialized.
@@ -590,16 +592,21 @@ impl IrInterpreter {
                             }
                         }
                         let dest_slot = frame.slot_dest(*slot_id);
-                        // Move value into slot (consumes source).
-                        unsafe { self.move_value(&src_val, dest_slot); }
-                        frame.mark_slot_initialized(*slot_id);
-                        // Mark source as dropped.
-                        match value {
-                            Operand::Value(id) => frame.mark_value_dropped(*id),
-                            Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                            Operand::Param(id) => frame.mark_param_dropped(*id),
-                            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                        if is_copy {
+                            // Copy types: just copy the bytes, source remains valid.
+                            unsafe { self.copy_value(&src_val, dest_slot); }
+                        } else {
+                            // Move value into slot (consumes source).
+                            unsafe { self.move_value(&src_val, dest_slot); }
+                            // Mark source as dropped.
+                            match value {
+                                Operand::Value(id) => frame.mark_value_dropped(*id),
+                                Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                                Operand::Param(id) => frame.mark_param_dropped(*id),
+                                Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                            }
                         }
+                        frame.mark_slot_initialized(*slot_id);
                     }
                     SlotDest::External { unit, slot } => {
                         frames.write_external_slot(
@@ -608,12 +615,14 @@ impl IrInterpreter {
                             *slot,
                             &src_val,
                         )?;
-                        // Mark source as dropped for external store too.
-                        match value {
-                            Operand::Value(id) => frame.mark_value_dropped(*id),
-                            Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                            Operand::Param(id) => frame.mark_param_dropped(*id),
-                            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                        // Mark source as dropped only for non-copy types.
+                        if !is_copy {
+                            match value {
+                                Operand::Value(id) => frame.mark_value_dropped(*id),
+                                Operand::Slot(id) => frame.mark_slot_dropped(*id),
+                                Operand::Param(id) => frame.mark_param_dropped(*id),
+                                Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+                            }
                         }
                     }
                     SlotDest::Param(_) => {
