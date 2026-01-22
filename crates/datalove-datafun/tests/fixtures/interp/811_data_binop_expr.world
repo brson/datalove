@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+// Test that `data` parses the full binop expression without parens.
+// `let x: data = data a + b` should parse as `let x: data = data (a + b)`.
+fun get_data(a: u32, b: u32): data
+    ret data a + b
+end fun
+
+let output = get_data(5, 3)
+
+----------
+scriptunit-expr
+----------
+
+output
