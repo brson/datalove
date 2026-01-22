@@ -3,6 +3,7 @@
 use rmx::prelude::*;
 use std::sync::Arc;
 
+use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
 use datalove_datafun_ir::{IrType, IrScriptUnit};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_compiler::tracked_script_lower::{
@@ -23,6 +24,18 @@ use super::result::{
     TypecheckResult, LoweringResult,
     ScriptUnitResult, ScriptLowerResult, ScriptCompilationResult,
 };
+
+/// Parsed script unit ready for compilation.
+enum ParsedUnit<'db> {
+    /// A fragment (statements) with for_aot flag.
+    Fragment {
+        parsed: ParsedStatements<'db>,
+        stmts: Vec<Statement<'db>>,
+        for_aot: bool,
+    },
+    /// A single expression.
+    Expr(ExprFun<'db>),
+}
 
 // Extension impl for CompiledModules to create script contexts.
 impl<'db> CompiledModules<'db> {
@@ -174,105 +187,13 @@ impl<'db> ScriptCompilationContext<'db> {
         let parsed = parse_result.parsed;
 
         let parse_diags = datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
-        if !parse_diags.is_empty() {
-            let parse_errors: Vec<String> = parse_diags.iter()
-                .map(|d| {
-                    let diag = d.to_diagnostic(self.db);
-                    diag.message.as_str(self.db).S()
-                })
-                .collect();
-            return ScriptCompilationResult {
-                typecheck: TypecheckResult::ParseError { errors: parse_errors },
-                lowering: LoweringResult::Skipped,
-                ir_unit: None,
-            };
-        }
-
-        let spans = datalove_datafun_parser::datafun_spans(self.db, src);
-        let unit_spec = ScriptUnitSpec::new(src, spans, ScriptUnitKind::Fragment(parsed.clone()));
-        self.accumulated_unit_specs.push(unit_spec);
-        let batch_spec = create_batch_spec(
-            self.db,
-            src,
-            self.accumulated_unit_specs.clone(),
-            self.module_specs.clone(),
-        );
-        self.last_batch_spec = Some(batch_spec);
-        let typecheck_results = type_check_script_units(self.db, batch_spec);
-        let all_results = typecheck_results.results(self.db);
-        let tycheck_result = *all_results.last().unwrap();
-
-        let tycheck_errors: Vec<_> = tycheck_result.errors(self.db).into_iter()
-            .map(|e| format!("{:?}", e.error(self.db)))
-            .collect();
-        if !tycheck_errors.is_empty() {
-            return ScriptCompilationResult {
-                typecheck: TypecheckResult::Error { errors: tycheck_errors },
-                lowering: LoweringResult::Skipped,
-                ir_unit: None,
-            };
+        if let Some(result) = self.check_parse_errors(&parse_diags) {
+            return result;
         }
 
         let stmts = parsed.statements.to_vec();
-
-        // 1. Ownership analysis (tracked, memoized separately).
-        let ownership_result = analyze_script_fragment_tracked(
-            self.db,
-            tycheck_result,
-            stmts.clone(),
-            for_aot,
-        );
-
-        // 2. Check for ownership errors.
-        if !ownership_result.errors(self.db).is_empty() {
-            let error_msg = ownership_result.errors(self.db).join("\n");
-            return ScriptCompilationResult {
-                typecheck: TypecheckResult::Success,
-                lowering: LoweringResult::Error { message: error_msg },
-                ir_unit: None,
-            };
-        }
-
-        // 3. Lowering with ownership result.
-        let lower_output = lower_script_fragment_tracked(
-            self.db,
-            tycheck_result,
-            self.module_specs.clone(),
-            self.accumulated_lower_bindings.clone(),
-            stmts,
-            ownership_result,
-        );
-
-        // Check for lowering errors.
-        if let Some(error) = lower_output.error(self.db).as_ref() {
-            return ScriptCompilationResult {
-                typecheck: TypecheckResult::Success,
-                lowering: LoweringResult::Error { message: error.clone() },
-                ir_unit: None,
-            };
-        }
-
-        let ir_unit = lower_output.ir_unit(self.db).clone().expect("ir_unit should be Some when error is None");
-        let ir_dump = format!("{}", ir_unit);
-
-        // Update accumulated state for next unit.
-        let unit_index = self.accumulated_lower_bindings.current_unit;
-        self.accumulated_lower_bindings.add_exports(
-            unit_index,
-            lower_output.new_exports(self.db),
-            lower_output.value_types(self.db),
-            lower_output.slot_types(self.db),
-        );
-
-        // Also update script_ctx for interpreter use (maps exports to execution-time bindings).
-        self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.value_types, &ir_unit.slot_types);
-        self.script_ctx.current_unit += 1;
-
-        ScriptCompilationResult {
-            typecheck: TypecheckResult::Success,
-            lowering: LoweringResult::Success { ir: ir_dump },
-            ir_unit: Some(ir_unit),
-        }
+        let unit = ParsedUnit::Fragment { parsed, stmts, for_aot };
+        self.compile_unit_inner(src, unit)
     }
 
     /// Internal: compile an expression through all phases without executing.
@@ -282,23 +203,48 @@ impl<'db> ScriptCompilationContext<'db> {
         let expr = datalove_datafun_parser::parse_expr(self.db, src);
 
         let parse_diags = datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
-        if !parse_diags.is_empty() {
-            let parse_errors: Vec<String> = parse_diags.iter()
-                .map(|d| {
-                    let diag = d.to_diagnostic(self.db);
-                    diag.message.as_str(self.db).S()
-                })
-                .collect();
-            return ScriptCompilationResult {
-                typecheck: TypecheckResult::ParseError { errors: parse_errors },
-                lowering: LoweringResult::Skipped,
-                ir_unit: None,
-            };
+        if let Some(result) = self.check_parse_errors(&parse_diags) {
+            return result;
         }
 
+        let unit = ParsedUnit::Expr(expr);
+        self.compile_unit_inner(src, unit)
+    }
+
+    /// Check for parse errors and return early result if any.
+    fn check_parse_errors(&self, parse_diags: &[&datalove_diagnostic::ParseDiagnostic]) -> Option<ScriptCompilationResult> {
+        if parse_diags.is_empty() {
+            return None;
+        }
+        let parse_errors: Vec<String> = parse_diags.iter()
+            .map(|d| {
+                let diag = d.to_diagnostic(self.db);
+                diag.message.as_str(self.db).S()
+            })
+            .collect();
+        Some(ScriptCompilationResult {
+            typecheck: TypecheckResult::ParseError { errors: parse_errors },
+            lowering: LoweringResult::Skipped,
+            ir_unit: None,
+        })
+    }
+
+    /// Internal: compile a parsed unit through typecheck, ownership, and lowering.
+    fn compile_unit_inner(
+        &mut self,
+        src: bct::input::Source,
+        unit: ParsedUnit<'db>,
+    ) -> ScriptCompilationResult {
+        // Create unit spec for typechecking.
         let spans = datalove_datafun_parser::datafun_spans(self.db, src);
-        let unit_spec = ScriptUnitSpec::new(src, spans, ScriptUnitKind::Expr(expr));
+        let unit_kind = match &unit {
+            ParsedUnit::Fragment { parsed, .. } => ScriptUnitKind::Fragment(parsed.clone()),
+            ParsedUnit::Expr(expr) => ScriptUnitKind::Expr(*expr),
+        };
+        let unit_spec = ScriptUnitSpec::new(src, spans, unit_kind);
         self.accumulated_unit_specs.push(unit_spec);
+
+        // Run typechecking.
         let batch_spec = create_batch_spec(
             self.db,
             src,
@@ -310,6 +256,7 @@ impl<'db> ScriptCompilationContext<'db> {
         let all_results = typecheck_results.results(self.db);
         let tycheck_result = *all_results.last().unwrap();
 
+        // Check for typecheck errors.
         let tycheck_errors: Vec<_> = tycheck_result.errors(self.db).into_iter()
             .map(|e| format!("{:?}", e.error(self.db)))
             .collect();
@@ -321,33 +268,56 @@ impl<'db> ScriptCompilationContext<'db> {
             };
         }
 
-        // 1. Ownership analysis (tracked, memoized separately).
-        // Expression units have minimal ownership requirements.
-        let ownership_result = analyze_script_expr_tracked(
-            self.db,
-            tycheck_result,
-            expr,
-        );
-
-        // 2. Check for ownership errors (should be empty for expressions).
-        if !ownership_result.errors(self.db).is_empty() {
-            let error_msg = ownership_result.errors(self.db).join("\n");
-            return ScriptCompilationResult {
-                typecheck: TypecheckResult::Success,
-                lowering: LoweringResult::Error { message: error_msg },
-                ir_unit: None,
-            };
-        }
-
-        // 3. Lowering with ownership result.
-        let lower_output = lower_script_expr_tracked(
-            self.db,
-            tycheck_result,
-            self.module_specs.clone(),
-            self.accumulated_lower_bindings.clone(),
-            expr,
-            ownership_result,
-        );
+        // Run ownership analysis and lowering (unit-kind-specific).
+        let lower_output = match unit {
+            ParsedUnit::Fragment { stmts, for_aot, .. } => {
+                let ownership_result = analyze_script_fragment_tracked(
+                    self.db,
+                    tycheck_result,
+                    stmts.clone(),
+                    for_aot,
+                );
+                if !ownership_result.errors(self.db).is_empty() {
+                    let error_msg = ownership_result.errors(self.db).join("\n");
+                    return ScriptCompilationResult {
+                        typecheck: TypecheckResult::Success,
+                        lowering: LoweringResult::Error { message: error_msg },
+                        ir_unit: None,
+                    };
+                }
+                lower_script_fragment_tracked(
+                    self.db,
+                    tycheck_result,
+                    self.module_specs.clone(),
+                    self.accumulated_lower_bindings.clone(),
+                    stmts,
+                    ownership_result,
+                )
+            }
+            ParsedUnit::Expr(expr) => {
+                let ownership_result = analyze_script_expr_tracked(
+                    self.db,
+                    tycheck_result,
+                    expr,
+                );
+                if !ownership_result.errors(self.db).is_empty() {
+                    let error_msg = ownership_result.errors(self.db).join("\n");
+                    return ScriptCompilationResult {
+                        typecheck: TypecheckResult::Success,
+                        lowering: LoweringResult::Error { message: error_msg },
+                        ir_unit: None,
+                    };
+                }
+                lower_script_expr_tracked(
+                    self.db,
+                    tycheck_result,
+                    self.module_specs.clone(),
+                    self.accumulated_lower_bindings.clone(),
+                    expr,
+                    ownership_result,
+                )
+            }
+        };
 
         // Check for lowering errors.
         if let Some(error) = lower_output.error(self.db).as_ref() {
