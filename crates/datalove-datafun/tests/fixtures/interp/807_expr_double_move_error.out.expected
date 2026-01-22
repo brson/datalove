@@ -1,0 +1,16 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Error",
+                message: "error[D001]: use of moved value: `x`",
+            ),
+            output: "",
+        ),
+    ],
+)

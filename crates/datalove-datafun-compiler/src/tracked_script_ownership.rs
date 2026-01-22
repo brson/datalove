@@ -181,7 +181,9 @@ pub fn analyze_script_fragment_tracked<'db>(
 
 /// Analyze ownership for a script expression unit.
 ///
-/// Expression units have no functions and minimal ownership requirements.
+/// Expression units have no functions but still need ownership analysis to detect
+/// use-after-move errors within the expression. For example, `(x, x)` where x is non-Copy.
+///
 /// Memoized: if typecheck_result and expr match a previous call, returns the cached result.
 #[salsa::tracked]
 pub fn analyze_script_expr_tracked<'db>(
@@ -189,16 +191,17 @@ pub fn analyze_script_expr_tracked<'db>(
     typecheck_result: UnitTypecheckResultTracked<'db>,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
 ) -> ScriptUnitOwnershipResult<'db> {
-    // Expression units don't have statements, no drop schedule needed.
-    // They also have no function definitions.
-    // The expression itself doesn't need ownership analysis since it doesn't
-    // create bindings that need dropping at the expression level.
-    let _ = (typecheck_result, expr);
+    let expr_types = typecheck_result.expr_types(db);
+    let call_targets = typecheck_result.call_targets(db);
 
-    ScriptUnitOwnershipResult::new(
-        db,
-        Vec::new(),
-        None,
-        Vec::new(),
-    )
+    let analysis = ownership_analysis::analyze_expr(db, expr, expr_types, call_targets);
+
+    if !analysis.errors.is_empty() {
+        let error_msg = format_analysis_errors(&analysis.errors);
+        return ScriptUnitOwnershipResult::new(db, Vec::new(), None, vec![error_msg]);
+    }
+
+    // Expression units have no functions and no script-level drop schedule.
+    // The expression result is consumed by the caller, so no drops needed.
+    ScriptUnitOwnershipResult::new(db, Vec::new(), None, Vec::new())
 }

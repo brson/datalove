@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+// Error test: double move in expression within the same fragment.
+// The tuple construction (x, x) tries to move x twice.
+// This should produce a DoubleMove error.
+let x: int = :int/42
+let y = (x, x)

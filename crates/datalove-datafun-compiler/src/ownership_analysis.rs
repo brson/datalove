@@ -938,6 +938,46 @@ pub fn analyze_script_statements<'db>(
     }
 }
 
+/// Result of analyzing a standalone expression.
+#[derive(Clone, Debug)]
+pub struct ExprAnalysis {
+    /// Errors detected during analysis.
+    pub errors: Vec<AnalysisError>,
+    /// Information about each binding (indexed by BindingId).
+    pub bindings: Vec<BindingInfo>,
+}
+
+/// Analyze a standalone expression for ownership errors.
+///
+/// Used for script expression units where the unit is just an expression (no statements).
+/// Detects use-after-move within the expression itself, e.g. `(x, x)` where x is non-Copy.
+///
+/// Note: Expression units don't need a drop schedule because:
+/// - The expression result is returned/consumed by the caller
+/// - Temporaries created during evaluation are handled by lowering's temp tracking
+pub fn analyze_expr<'db>(
+    db: &'db dyn salsa::Database,
+    expr: datalove_datafun_ast::ast::ExprFun<'db>,
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+) -> ExprAnalysis {
+    let mut ctx = AnalysisCtx::new(db, expr_types, call_targets);
+
+    // Enter a scope for the expression analysis.
+    ctx.enter_scope(ScopeKind::Function);
+
+    // Expression result is consumed (it's the unit result).
+    ctx.analyze_expr_moves(expr, true);
+
+    // Exit scope. No drops needed since expression result is returned.
+    let _ = ctx.exit_scope();
+
+    ExprAnalysis {
+        errors: ctx.errors,
+        bindings: ctx.bindings,
+    }
+}
+
 // ============================================================================
 // Statement analysis
 // ============================================================================
