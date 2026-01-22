@@ -1,4 +1,4 @@
-//! Frame layout computation for AOT compilation.
+//! Frame layout computation for Cranelift compilation.
 //!
 //! Computes stack slot offsets for values and mutable slots within a function frame,
 //! matching the interpreter's layout for ABI compatibility.

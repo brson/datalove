@@ -7,7 +7,7 @@ use cranelift_module::Module;
 use datalove_datafun_ir::{BinOp, IrType, Operand, UnaryOp, ValueId};
 
 use crate::types::PTR_TYPE;
-use crate::AotError;
+use crate::CraneliftError;
 
 use super::FunctionCompiler;
 
@@ -20,7 +20,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         op: BinOp,
         lhs: &Operand,
         rhs: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get the type of the result to determine how to compile.
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
@@ -87,7 +87,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     builder.ins().fcmp(cl_ir::condcodes::FloatCC::GreaterThanOrEqual, lhs_val, rhs_val)
                 }
                 _ => {
-                    return Err(AotError::Unsupported(format!(
+                    return Err(CraneliftError::Unsupported(format!(
                         "float binop not supported: {:?}",
                         op
                     )));
@@ -178,7 +178,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         op: UnaryOp,
         operand: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
         // Int (bigint) negation requires runtime call.
@@ -219,13 +219,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         op: BinOp,
         lhs: &Operand,
         rhs: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
         let runtime = self.runtime.ok_or_else(|| {
-            AotError::Codegen("Int BinOp requires runtime imports".into())
+            CraneliftError::Codegen("Int BinOp requires runtime imports".into())
         })?;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("Int BinOp requires runtime handle".into())
+            CraneliftError::Codegen("Int BinOp requires runtime handle".into())
         })?;
 
         // Select the runtime function based on the operation.
@@ -234,7 +234,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             BinOp::Sub => runtime.int_sub,
             BinOp::Mul => runtime.int_mul,
             _ => {
-                return Err(AotError::Unsupported(format!(
+                return Err(CraneliftError::Unsupported(format!(
                     "Int binop not yet supported: {:?}",
                     op
                 )));
@@ -247,14 +247,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get frame slot and destination address.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for Int BinOp result".into())
+            CraneliftError::Codegen("no frame slot for Int BinOp result".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let result_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get Int TyDesc.
         let int_tydesc_id = self.tydesc_emitter.get(&IrType::Int).ok_or_else(|| {
-            AotError::Codegen("TyDesc not found for Int".into())
+            CraneliftError::Codegen("TyDesc not found for Int".into())
         })?;
         let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
         let int_tydesc_ptr = builder.ins().global_value(PTR_TYPE, int_tydesc_gv);
@@ -282,13 +282,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         operand: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
         let runtime = self.runtime.ok_or_else(|| {
-            AotError::Codegen("Int Neg requires runtime imports".into())
+            CraneliftError::Codegen("Int Neg requires runtime imports".into())
         })?;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("Int Neg requires runtime handle".into())
+            CraneliftError::Codegen("Int Neg requires runtime handle".into())
         })?;
 
         // Get pointer to operand.
@@ -296,14 +296,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get frame slot and destination address.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for Int Neg result".into())
+            CraneliftError::Codegen("no frame slot for Int Neg result".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let result_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get Int TyDesc.
         let int_tydesc_id = self.tydesc_emitter.get(&IrType::Int).ok_or_else(|| {
-            AotError::Codegen("TyDesc not found for Int".into())
+            CraneliftError::Codegen("TyDesc not found for Int".into())
         })?;
         let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
         let int_tydesc_ptr = builder.ins().global_value(PTR_TYPE, int_tydesc_gv);
@@ -336,13 +336,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         op: BinOp,
         lhs: &Operand,
         rhs: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
         let runtime = self.runtime.ok_or_else(|| {
-            AotError::Codegen("Int comparison requires runtime imports".into())
+            CraneliftError::Codegen("Int comparison requires runtime imports".into())
         })?;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("Int comparison requires runtime handle".into())
+            CraneliftError::Codegen("Int comparison requires runtime handle".into())
         })?;
 
         // Get pointers to operands.
@@ -351,7 +351,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get Int TyDesc.
         let int_tydesc_id = self.tydesc_emitter.get(&IrType::Int).ok_or_else(|| {
-            AotError::Codegen("TyDesc not found for Int".into())
+            CraneliftError::Codegen("TyDesc not found for Int".into())
         })?;
         let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
         let int_tydesc_ptr = builder.ins().global_value(PTR_TYPE, int_tydesc_gv);
@@ -403,7 +403,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().icmp(cl_ir::condcodes::IntCC::NotEqual, ordering, equal)
             }
             _ => {
-                return Err(AotError::Unsupported(format!(
+                return Err(CraneliftError::Unsupported(format!(
                     "Int comparison: unexpected op {:?}",
                     op
                 )));
@@ -423,7 +423,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         op: BinOp,
         lhs: &Operand,
         rhs: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
         // Only supported for fixed-width integers.
@@ -439,7 +439,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             IrType::Usize => (false, crate::index_types::INDEX_BITS, crate::index_types::INDEX_TYPE),
             IrType::Isize => (true, crate::index_types::INDEX_BITS, crate::index_types::INDEX_TYPE),
             _ => {
-                return Err(AotError::Unsupported(format!(
+                return Err(CraneliftError::Unsupported(format!(
                     "checked binop not supported for type: {:?}",
                     dest_ty
                 )));
@@ -555,7 +555,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 (result, overflow)
             }
             _ => {
-                return Err(AotError::Unsupported(format!(
+                return Err(CraneliftError::Unsupported(format!(
                     "checked binop only supports Add/Sub/Mul/Div, got {:?}",
                     op
                 )));
@@ -575,10 +575,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         overflow_dest: ValueId,
         op: UnaryOp,
         operand: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Only negation can overflow for signed integers.
         if op != UnaryOp::Neg {
-            return Err(AotError::Unsupported(format!(
+            return Err(CraneliftError::Unsupported(format!(
                 "checked unaryop only supports Neg, got {:?}",
                 op
             )));
@@ -594,7 +594,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             IrType::I64 => (i64::MIN, cl_types::I64),
             IrType::Isize => (datalove_rtdt::IsizeRepr::MIN as i64, crate::index_types::INDEX_TYPE),
             _ => {
-                return Err(AotError::Unsupported(format!(
+                return Err(CraneliftError::Unsupported(format!(
                     "checked negation only supported for signed integers, got {:?}",
                     dest_ty
                 )));
@@ -621,34 +621,34 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         src: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
         let runtime = self.runtime.ok_or_else(|| {
-            AotError::Codegen("Widen requires runtime imports".into())
+            CraneliftError::Codegen("Widen requires runtime imports".into())
         })?;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("Widen requires runtime handle".into())
+            CraneliftError::Codegen("Widen requires runtime handle".into())
         })?;
 
         // Get pointer to source operand and its type.
         let src_ptr = self.get_operand_ptr(builder, src)?;
         let src_ty = self.get_operand_type(src)?;
         let src_tydesc_id = self.tydesc_emitter.get(&src_ty).ok_or_else(|| {
-            AotError::Codegen(format!("TyDesc not found for source type {:?}", src_ty))
+            CraneliftError::Codegen(format!("TyDesc not found for source type {:?}", src_ty))
         })?;
         let src_tydesc_gv = self.module.declare_data_in_func(src_tydesc_id, builder.func);
         let src_tydesc_ptr = builder.ins().global_value(PTR_TYPE, src_tydesc_gv);
 
         // Get frame slot and destination address for Int result.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for Widen result".into())
+            CraneliftError::Codegen("no frame slot for Widen result".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let result_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get Int TyDesc for result.
         let int_tydesc_id = self.tydesc_emitter.get(&IrType::Int).ok_or_else(|| {
-            AotError::Codegen("TyDesc not found for Int".into())
+            CraneliftError::Codegen("TyDesc not found for Int".into())
         })?;
         let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
         let int_tydesc_ptr = builder.ins().global_value(PTR_TYPE, int_tydesc_gv);

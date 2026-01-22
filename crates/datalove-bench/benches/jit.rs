@@ -1,7 +1,7 @@
 //! Benchmarks comparing interpreter execution with and without JIT.
 
 use datalove_datafun as datafun;
-use datalove_datafun_jit::JitEngine;
+use datalove_datafun_cranelift_jit::JitEngine;
 use datalove_datafun_interp::CallDispatcher;
 use datafun::pipeline::ModuleCompilationPipeline;
 

@@ -7,7 +7,7 @@ use cranelift_module::{FuncId, Module};
 use datalove_datafun_ir::{FuncRef, Operand, ValueId};
 
 use crate::types::PTR_TYPE;
-use crate::AotError;
+use crate::CraneliftError;
 
 use super::{uses_sret, FunctionCompiler};
 
@@ -22,10 +22,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         func_ref: &FuncRef,
         args: &[Operand],
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get rt_handle for threading.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("Call requires runtime handle".into())
+            CraneliftError::Codegen("Call requires runtime handle".into())
         })?;
 
         // Look up or declare the callee.
@@ -43,7 +43,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let sret_ptr = if callee_uses_sret {
             // Get the destination's offset in our frame (already allocated by FrameLayout).
             let frame_slot = self.frame_slot.ok_or_else(|| {
-                AotError::Codegen("no frame slot for sret return value".into())
+                CraneliftError::Codegen("no frame slot for sret return value".into())
             })?;
             let dest_offset = self.layout.value_offset(dest.0);
             let ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
@@ -85,7 +85,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 
     /// Resolve a FuncRef to a Cranelift FuncId.
-    pub(super) fn resolve_func_ref(&mut self, func_ref: &FuncRef) -> Result<FuncId, AotError> {
+    pub(super) fn resolve_func_ref(&mut self, func_ref: &FuncRef) -> Result<FuncId, CraneliftError> {
         match func_ref {
             FuncRef::Local(ir_func_id) => {
                 // Look up in local_funcs or declare.
@@ -96,13 +96,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // For now, assume local functions aren't pre-declared.
                 // This requires the callee to be compiled before the caller,
                 // or a two-pass approach (declare all, then define all).
-                Err(AotError::Unsupported(format!(
+                Err(CraneliftError::Unsupported(format!(
                     "local function {:?} not yet declared - needs two-pass compilation",
                     ir_func_id
                 )))
             }
             FuncRef::External { unit, func } => {
-                Err(AotError::Unsupported(format!(
+                Err(CraneliftError::Unsupported(format!(
                     "external function call (unit={}, func={:?}) not yet implemented",
                     unit, func
                 )))
@@ -110,7 +110,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             FuncRef::Module { module, func } => {
                 // Look up in module_funcs (pre-declared in three-pass compilation).
                 self.module_funcs.get(&(*module, *func)).copied().ok_or_else(|| {
-                    AotError::Unsupported(format!(
+                    CraneliftError::Unsupported(format!(
                         "module function ({:?}, {:?}) not pre-compiled",
                         module, func
                     ))

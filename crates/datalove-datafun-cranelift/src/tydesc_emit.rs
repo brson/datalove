@@ -19,7 +19,7 @@ use datalove_rtdt::{
     TyInfoTuple, TyInfoTupleField, TyTag,
 };
 
-use crate::AotError;
+use crate::CraneliftError;
 
 // Offsets within TyInfo union for collection types.
 // TyInfoList: element_tydesc at offset 0
@@ -109,7 +109,7 @@ impl TyDescEmitter {
     /// Emit a TyDesc for the given type, returning its DataId.
     ///
     /// Returns cached DataId if already emitted.
-    pub fn emit<M: Module>(&mut self, module: &mut M, ty: &IrType) -> Result<DataId, AotError> {
+    pub fn emit<M: Module>(&mut self, module: &mut M, ty: &IrType) -> Result<DataId, CraneliftError> {
         // Check cache.
         if let Some(&id) = self.tydescs.get(ty) {
             return Ok(id);
@@ -171,7 +171,7 @@ impl TyDescEmitter {
         // Declare data.
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare tydesc data: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare tydesc data: {}", e)))?;
 
         // Define data.
         let mut data_desc = DataDescription::new();
@@ -180,7 +180,7 @@ impl TyDescEmitter {
 
         module
             .define_data(data_id, &data_desc)
-            .map_err(|e| AotError::Module(format!("define tydesc data: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define tydesc data: {}", e)))?;
 
         self.tydescs.insert(ty.clone(), data_id);
         Ok(data_id)
@@ -191,7 +191,7 @@ impl TyDescEmitter {
         &mut self,
         module: &mut M,
         elem_ty: &IrType,
-    ) -> Result<DataId, AotError> {
+    ) -> Result<DataId, CraneliftError> {
         let list_ty = IrType::List(Box::new(elem_ty.clone()));
 
         // Check cache (may have been emitted during recursive call).
@@ -219,7 +219,7 @@ impl TyDescEmitter {
         // Declare data.
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare list tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare list tydesc: {}", e)))?;
 
         // Define data with relocation to element tydesc.
         let mut data_desc = DataDescription::new();
@@ -233,7 +233,7 @@ impl TyDescEmitter {
 
         module
             .define_data(data_id, &data_desc)
-            .map_err(|e| AotError::Module(format!("define list tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define list tydesc: {}", e)))?;
 
         self.tydescs.insert(list_ty, data_id);
         Ok(data_id)
@@ -244,7 +244,7 @@ impl TyDescEmitter {
         &mut self,
         module: &mut M,
         elem_ty: &IrType,
-    ) -> Result<DataId, AotError> {
+    ) -> Result<DataId, CraneliftError> {
         let set_ty = IrType::Set(Box::new(elem_ty.clone()));
 
         // Check cache.
@@ -272,7 +272,7 @@ impl TyDescEmitter {
         // Declare data.
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare set tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare set tydesc: {}", e)))?;
 
         // Define data with relocation to element tydesc.
         let mut data_desc = DataDescription::new();
@@ -286,7 +286,7 @@ impl TyDescEmitter {
 
         module
             .define_data(data_id, &data_desc)
-            .map_err(|e| AotError::Module(format!("define set tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define set tydesc: {}", e)))?;
 
         self.tydescs.insert(set_ty, data_id);
         Ok(data_id)
@@ -298,7 +298,7 @@ impl TyDescEmitter {
         module: &mut M,
         key_ty: &IrType,
         val_ty: &IrType,
-    ) -> Result<DataId, AotError> {
+    ) -> Result<DataId, CraneliftError> {
         let map_ty = IrType::Map(Box::new(key_ty.clone()), Box::new(val_ty.clone()));
 
         // Check cache.
@@ -327,7 +327,7 @@ impl TyDescEmitter {
         // Declare data.
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare map tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare map tydesc: {}", e)))?;
 
         // Define data with relocations to key and value tydescs.
         let mut data_desc = DataDescription::new();
@@ -346,7 +346,7 @@ impl TyDescEmitter {
 
         module
             .define_data(data_id, &data_desc)
-            .map_err(|e| AotError::Module(format!("define map tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define map tydesc: {}", e)))?;
 
         self.tydescs.insert(map_ty, data_id);
         Ok(data_id)
@@ -358,7 +358,7 @@ impl TyDescEmitter {
         module: &mut M,
         elem_ty: &IrType,
         rank: u32,
-    ) -> Result<DataId, AotError> {
+    ) -> Result<DataId, CraneliftError> {
         let tensor_ty = IrType::Tensor(Box::new(elem_ty.clone()), rank);
 
         // Check cache.
@@ -390,7 +390,7 @@ impl TyDescEmitter {
         // Declare data.
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare tensor tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare tensor tydesc: {}", e)))?;
 
         // Define data with relocation to element tydesc.
         let mut data_desc = DataDescription::new();
@@ -404,7 +404,7 @@ impl TyDescEmitter {
 
         module
             .define_data(data_id, &data_desc)
-            .map_err(|e| AotError::Module(format!("define tensor tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define tensor tydesc: {}", e)))?;
 
         self.tydescs.insert(tensor_ty, data_id);
         Ok(data_id)
@@ -415,7 +415,7 @@ impl TyDescEmitter {
         &mut self,
         module: &mut M,
         inner_ty: &IrType,
-    ) -> Result<DataId, AotError> {
+    ) -> Result<DataId, CraneliftError> {
         let option_ty = IrType::Option(Box::new(inner_ty.clone()));
 
         // Check cache.
@@ -448,7 +448,7 @@ impl TyDescEmitter {
         // Declare data.
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare option tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare option tydesc: {}", e)))?;
 
         // Define data with relocation to inner tydesc.
         let mut data_desc = DataDescription::new();
@@ -462,7 +462,7 @@ impl TyDescEmitter {
 
         module
             .define_data(data_id, &data_desc)
-            .map_err(|e| AotError::Module(format!("define option tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define option tydesc: {}", e)))?;
 
         self.tydescs.insert(option_ty, data_id);
         Ok(data_id)
@@ -473,7 +473,7 @@ impl TyDescEmitter {
         &mut self,
         module: &mut M,
         ok_ty: &IrType,
-    ) -> Result<DataId, AotError> {
+    ) -> Result<DataId, CraneliftError> {
         let result_ty = IrType::Result(Box::new(ok_ty.clone()));
 
         // Check cache.
@@ -510,7 +510,7 @@ impl TyDescEmitter {
         // Declare data.
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare result tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare result tydesc: {}", e)))?;
 
         // Define data with relocation to ok tydesc.
         let mut data_desc = DataDescription::new();
@@ -524,7 +524,7 @@ impl TyDescEmitter {
 
         module
             .define_data(data_id, &data_desc)
-            .map_err(|e| AotError::Module(format!("define result tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define result tydesc: {}", e)))?;
 
         self.tydescs.insert(result_ty, data_id);
         Ok(data_id)
@@ -540,7 +540,7 @@ impl TyDescEmitter {
         module: &mut M,
         ref_ty: &IrType,
         inner_ty: &IrType,
-    ) -> Result<DataId, AotError> {
+    ) -> Result<DataId, CraneliftError> {
         // Check cache.
         if let Some(&id) = self.tydescs.get(ref_ty) {
             return Ok(id);
@@ -549,7 +549,7 @@ impl TyDescEmitter {
         // Get inner type's tydesc (should already be emitted).
         let inner_tydesc_id = self.tydescs.get(inner_ty)
             .copied()
-            .ok_or_else(|| AotError::Codegen("inner tydesc not found for ref".into()))?;
+            .ok_or_else(|| CraneliftError::Codegen("inner tydesc not found for ref".into()))?;
 
         // Create the fields array with 1 field (the inner type).
         let fields_size = TYINFO_TUPLE_FIELD_SIZE;
@@ -564,7 +564,7 @@ impl TyDescEmitter {
 
         let fields_id = module
             .declare_data(&fields_name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare ref fields: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare ref fields: {}", e)))?;
 
         let mut fields_desc = DataDescription::new();
         fields_desc.define(fields_bytes.into_boxed_slice());
@@ -580,7 +580,7 @@ impl TyDescEmitter {
 
         module
             .define_data(fields_id, &fields_desc)
-            .map_err(|e| AotError::Module(format!("define ref fields: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define ref fields: {}", e)))?;
 
         // Build the TyDesc for the ref type.
         let mut bytes = vec![0u8; TYDESC_SIZE];
@@ -597,7 +597,7 @@ impl TyDescEmitter {
 
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare ref tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare ref tydesc: {}", e)))?;
 
         let mut data_desc = DataDescription::new();
         data_desc.define(bytes.into_boxed_slice());
@@ -610,7 +610,7 @@ impl TyDescEmitter {
 
         module
             .define_data(data_id, &data_desc)
-            .map_err(|e| AotError::Module(format!("define ref tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define ref tydesc: {}", e)))?;
 
         self.tydescs.insert(ref_ty.clone(), data_id);
         Ok(data_id)
@@ -622,7 +622,7 @@ impl TyDescEmitter {
         module: &mut M,
         original_ty: &IrType,
         field_types: &[IrType],
-    ) -> Result<DataId, AotError> {
+    ) -> Result<DataId, CraneliftError> {
         // Check cache using the original type.
         if let Some(&id) = self.tydescs.get(original_ty) {
             return Ok(id);
@@ -662,7 +662,7 @@ impl TyDescEmitter {
 
             let fields_id = module
                 .declare_data(&fields_name, Linkage::Local, false, false)
-                .map_err(|e| AotError::Module(format!("declare tuple fields: {}", e)))?;
+                .map_err(|e| CraneliftError::Module(format!("declare tuple fields: {}", e)))?;
 
             let mut fields_desc = DataDescription::new();
             fields_desc.define(fields_bytes.into_boxed_slice());
@@ -677,7 +677,7 @@ impl TyDescEmitter {
 
             module
                 .define_data(fields_id, &fields_desc)
-                .map_err(|e| AotError::Module(format!("define tuple fields: {}", e)))?;
+                .map_err(|e| CraneliftError::Module(format!("define tuple fields: {}", e)))?;
 
             Some(fields_id)
         };
@@ -710,7 +710,7 @@ impl TyDescEmitter {
         // Declare data.
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare tuple tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare tuple tydesc: {}", e)))?;
 
         // Define data with relocation to fields array.
         let mut data_desc = DataDescription::new();
@@ -727,7 +727,7 @@ impl TyDescEmitter {
 
         module
             .define_data(data_id, &data_desc)
-            .map_err(|e| AotError::Module(format!("define tuple tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define tuple tydesc: {}", e)))?;
 
         self.tydescs.insert(original_ty.clone(), data_id);
         Ok(data_id)
@@ -739,7 +739,7 @@ impl TyDescEmitter {
         module: &mut M,
         original_ty: &IrType,
         fields: &[(String, IrType)],
-    ) -> Result<DataId, AotError> {
+    ) -> Result<DataId, CraneliftError> {
         // Check cache using the original type.
         if let Some(&id) = self.tydescs.get(original_ty) {
             return Ok(id);
@@ -771,7 +771,7 @@ impl TyDescEmitter {
 
                 let name_id = module
                     .declare_data(&name_name, Linkage::Local, false, false)
-                    .map_err(|e| AotError::Module(format!("declare struct field name: {}", e)))?;
+                    .map_err(|e| CraneliftError::Module(format!("declare struct field name: {}", e)))?;
 
                 let mut name_desc = DataDescription::new();
                 name_desc.define(name_bytes.to_vec().into_boxed_slice());
@@ -779,7 +779,7 @@ impl TyDescEmitter {
 
                 module
                     .define_data(name_id, &name_desc)
-                    .map_err(|e| AotError::Module(format!("define struct field name: {}", e)))?;
+                    .map_err(|e| CraneliftError::Module(format!("define struct field name: {}", e)))?;
 
                 name_data_ids.push(name_id);
             }
@@ -810,7 +810,7 @@ impl TyDescEmitter {
 
             let fields_id = module
                 .declare_data(&fields_name, Linkage::Local, false, false)
-                .map_err(|e| AotError::Module(format!("declare struct fields: {}", e)))?;
+                .map_err(|e| CraneliftError::Module(format!("declare struct fields: {}", e)))?;
 
             let mut fields_desc = DataDescription::new();
             fields_desc.define(fields_bytes.into_boxed_slice());
@@ -832,7 +832,7 @@ impl TyDescEmitter {
 
             module
                 .define_data(fields_id, &fields_desc)
-                .map_err(|e| AotError::Module(format!("define struct fields: {}", e)))?;
+                .map_err(|e| CraneliftError::Module(format!("define struct fields: {}", e)))?;
 
             Some(fields_id)
         };
@@ -857,7 +857,7 @@ impl TyDescEmitter {
         // Declare data.
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare struct tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare struct tydesc: {}", e)))?;
 
         // Define data with relocation to fields array.
         let mut data_desc = DataDescription::new();
@@ -873,7 +873,7 @@ impl TyDescEmitter {
 
         module
             .define_data(data_id, &data_desc)
-            .map_err(|e| AotError::Module(format!("define struct tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define struct tydesc: {}", e)))?;
 
         self.tydescs.insert(original_ty.clone(), data_id);
         Ok(data_id)
@@ -885,7 +885,7 @@ impl TyDescEmitter {
         module: &mut M,
         original_ty: &IrType,
         variants: &[(String, Option<IrType>)],
-    ) -> Result<DataId, AotError> {
+    ) -> Result<DataId, CraneliftError> {
         // Check cache using the original type.
         if let Some(&id) = self.tydescs.get(original_ty) {
             return Ok(id);
@@ -923,7 +923,7 @@ impl TyDescEmitter {
 
                 let name_id = module
                     .declare_data(&name_name, Linkage::Local, false, false)
-                    .map_err(|e| AotError::Module(format!("declare enum variant name: {}", e)))?;
+                    .map_err(|e| CraneliftError::Module(format!("declare enum variant name: {}", e)))?;
 
                 let mut name_desc = DataDescription::new();
                 name_desc.define(name_bytes.to_vec().into_boxed_slice());
@@ -931,7 +931,7 @@ impl TyDescEmitter {
 
                 module
                     .define_data(name_id, &name_desc)
-                    .map_err(|e| AotError::Module(format!("define enum variant name: {}", e)))?;
+                    .map_err(|e| CraneliftError::Module(format!("define enum variant name: {}", e)))?;
 
                 name_data_ids.push(name_id);
             }
@@ -959,7 +959,7 @@ impl TyDescEmitter {
 
             let variants_id = module
                 .declare_data(&variants_name, Linkage::Local, false, false)
-                .map_err(|e| AotError::Module(format!("declare enum variants: {}", e)))?;
+                .map_err(|e| CraneliftError::Module(format!("declare enum variants: {}", e)))?;
 
             let mut variants_desc = DataDescription::new();
             variants_desc.define(variants_bytes.into_boxed_slice());
@@ -984,7 +984,7 @@ impl TyDescEmitter {
 
             module
                 .define_data(variants_id, &variants_desc)
-                .map_err(|e| AotError::Module(format!("define enum variants: {}", e)))?;
+                .map_err(|e| CraneliftError::Module(format!("define enum variants: {}", e)))?;
 
             Some(variants_id)
         };
@@ -1009,7 +1009,7 @@ impl TyDescEmitter {
         // Declare data.
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare enum tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare enum tydesc: {}", e)))?;
 
         // Define data with relocation to variants array.
         let mut data_desc = DataDescription::new();
@@ -1025,7 +1025,7 @@ impl TyDescEmitter {
 
         module
             .define_data(data_id, &data_desc)
-            .map_err(|e| AotError::Module(format!("define enum tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define enum tydesc: {}", e)))?;
 
         self.tydescs.insert(original_ty.clone(), data_id);
         Ok(data_id)
@@ -1037,7 +1037,7 @@ impl TyDescEmitter {
         module: &mut M,
         original_ty: &IrType,
         columns: &[(String, Box<IrType>)],
-    ) -> Result<DataId, AotError> {
+    ) -> Result<DataId, CraneliftError> {
         // Check cache using the original type.
         if let Some(&id) = self.tydescs.get(original_ty) {
             return Ok(id);
@@ -1063,7 +1063,7 @@ impl TyDescEmitter {
 
                 let name_id = module
                     .declare_data(&name_name, Linkage::Local, false, false)
-                    .map_err(|e| AotError::Module(format!("declare table column name: {}", e)))?;
+                    .map_err(|e| CraneliftError::Module(format!("declare table column name: {}", e)))?;
 
                 let mut name_desc = DataDescription::new();
                 name_desc.define(name_bytes.to_vec().into_boxed_slice());
@@ -1071,7 +1071,7 @@ impl TyDescEmitter {
 
                 module
                     .define_data(name_id, &name_desc)
-                    .map_err(|e| AotError::Module(format!("define table column name: {}", e)))?;
+                    .map_err(|e| CraneliftError::Module(format!("define table column name: {}", e)))?;
 
                 name_data_ids.push(name_id);
             }
@@ -1097,7 +1097,7 @@ impl TyDescEmitter {
 
             let columns_id = module
                 .declare_data(&columns_name, Linkage::Local, false, false)
-                .map_err(|e| AotError::Module(format!("declare table columns: {}", e)))?;
+                .map_err(|e| CraneliftError::Module(format!("declare table columns: {}", e)))?;
 
             let mut columns_desc = DataDescription::new();
             columns_desc.define(columns_bytes.into_boxed_slice());
@@ -1119,7 +1119,7 @@ impl TyDescEmitter {
 
             module
                 .define_data(columns_id, &columns_desc)
-                .map_err(|e| AotError::Module(format!("define table columns: {}", e)))?;
+                .map_err(|e| CraneliftError::Module(format!("define table columns: {}", e)))?;
 
             Some(columns_id)
         };
@@ -1146,7 +1146,7 @@ impl TyDescEmitter {
         // Declare data.
         let data_id = module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare table tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare table tydesc: {}", e)))?;
 
         // Define data with relocation to columns array.
         let mut data_desc = DataDescription::new();
@@ -1162,7 +1162,7 @@ impl TyDescEmitter {
 
         module
             .define_data(data_id, &data_desc)
-            .map_err(|e| AotError::Module(format!("define table tydesc: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define table tydesc: {}", e)))?;
 
         self.tydescs.insert(original_ty.clone(), data_id);
         Ok(data_id)
@@ -1176,7 +1176,7 @@ impl TyDescEmitter {
         &mut self,
         module: &mut M,
         types: impl IntoIterator<Item = IrType>,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         for ty in types {
             // Skip types we can't emit - they'll error at use site if needed.
             if self.can_emit(&ty) {
@@ -1245,7 +1245,7 @@ impl TyDescEmitter {
     }
 
     /// Build the raw bytes for a TyDesc.
-    fn build_tydesc_bytes(&self, ty: &IrType) -> Result<Vec<u8>, AotError> {
+    fn build_tydesc_bytes(&self, ty: &IrType) -> Result<Vec<u8>, CraneliftError> {
         let mut bytes = vec![0u8; TYDESC_SIZE];
 
         let (tag, size, align) = match ty {
@@ -1268,7 +1268,7 @@ impl TyDescEmitter {
             IrType::Data => (TyTag::Data as u8, size_of::<RtData>() as u32, align_of::<RtData>() as u32),
             IrType::Error => (TyTag::Error as u8, size_of::<RtError>() as u32, align_of::<RtError>() as u32),
             _ => {
-                return Err(AotError::Unsupported(format!(
+                return Err(CraneliftError::Unsupported(format!(
                     "tydesc emission for type: {:?}",
                     ty
                 )));

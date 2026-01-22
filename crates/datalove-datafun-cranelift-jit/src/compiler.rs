@@ -13,10 +13,10 @@ use target_lexicon::Triple;
 
 use datalove_datafun_ir::{FuncRef, Instruction, IrFunction, IrModuleId};
 use datalove_datafun_interp::{ExecutionContext, FunctionRegistry};
-use datalove_datafun_aot_cranelift::codegen::{self, build_signature_for_func, uses_sret};
-use datalove_datafun_aot_cranelift::runtime::RuntimeImports;
-use datalove_datafun_aot_cranelift::tydesc_emit::{self, TyDescEmitter};
-use datalove_datafun_aot_cranelift::types::PTR_TYPE;
+use datalove_datafun_cranelift::codegen::{self, build_signature_for_func, uses_sret};
+use datalove_datafun_cranelift::runtime::RuntimeImports;
+use datalove_datafun_cranelift::tydesc_emit::{self, TyDescEmitter};
+use datalove_datafun_cranelift::types::PTR_TYPE;
 
 use crate::trampoline::{self, EncodedFuncKey};
 use crate::JitError;

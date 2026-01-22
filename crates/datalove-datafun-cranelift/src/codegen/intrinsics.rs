@@ -10,7 +10,7 @@ use cranelift_module::Module;
 use datalove_datafun_intrinsics::IntrinsicId;
 use datalove_datafun_ir::{ValueId, Operand};
 
-use crate::AotError;
+use crate::CraneliftError;
 use crate::codegen::FunctionCompiler;
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
@@ -21,7 +21,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         intrinsic: IntrinsicId,
         args: &[Operand],
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         use IntrinsicId::*;
 
         let result = match intrinsic {

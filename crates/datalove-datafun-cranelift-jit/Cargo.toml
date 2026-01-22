@@ -1,29 +1,32 @@
 [package]
-name = "datalove-datafun-aot-cranelift"
+name = "datalove-datafun-cranelift-jit"
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
 
-[features]
-index-64 = [
-    "datalove-rtdt/index-64",
-    "datalove-datafun-ir/index-64",
-    "datalove-datafun-intrinsics/index-64",
-]
-
 [dependencies]
 rmx.workspace = true
-datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
 datalove-datafun-ir.path = "../datalove-datafun-ir"
+datalove-datafun-interp.path = "../datalove-datafun-interp"
+datalove-datafun-cranelift.path = "../datalove-datafun-cranelift"
 datalove-rtdt.path = "../datalove-rtdt"
 datalove-rt.path = "../datalove-rt"
 
 cranelift-codegen = "0.116"
 cranelift-frontend = "0.116"
 cranelift-module = "0.116"
-cranelift-object = "0.116"
+cranelift-jit = "0.116"
 target-lexicon = "0.13"
 
 [dev-dependencies]
 datalove-datafun.path = "../datalove-datafun"
+
+[features]
+index-64 = [
+    "datalove-datafun-ir/index-64",
+    "datalove-datafun-interp/index-64",
+    "datalove-datafun-cranelift/index-64",
+    "datalove-rtdt/index-64",
+    "datalove-rt/index-64",
+]

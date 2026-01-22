@@ -9,7 +9,7 @@ use cranelift_module::{Linkage, Module};
 use datalove_datafun_ir::{ConstValue, IrType, ValueId};
 
 use crate::types::PTR_TYPE;
-use crate::AotError;
+use crate::CraneliftError;
 
 use super::FunctionCompiler;
 
@@ -23,13 +23,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         value: &ConstValue,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let cl_val = match value {
             ConstValue::Unit => {
                 // Unit is zero-sized, but we need a valid address for debuglog.
                 // Store the frame address like other aggregates.
                 let frame_slot = self.frame_slot.ok_or_else(|| {
-                    AotError::Codegen("no frame slot for Unit constant".into())
+                    CraneliftError::Codegen("no frame slot for Unit constant".into())
                 })?;
                 let dest_offset = self.layout.value_offset(dest.0);
                 let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
@@ -110,7 +110,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         limbs: &[u32],
         negative: bool,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         use datalove_rtdt as rtdt;
 
         // Capacity type depends on index-64 feature.
@@ -121,7 +121,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get frame slot and destination address.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for Int constant".into())
+            CraneliftError::Codegen("no frame slot for Int constant".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
@@ -137,10 +137,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         } else {
             // Need runtime handle for memory allocation.
             let rt_handle = self.rt_handle_param.ok_or_else(|| {
-                AotError::Codegen("Int constant requires runtime handle".into())
+                CraneliftError::Codegen("Int constant requires runtime handle".into())
             })?;
             let runtime = self.runtime.as_ref().ok_or_else(|| {
-                AotError::Codegen("Int constant requires runtime imports".into())
+                CraneliftError::Codegen("Int constant requires runtime imports".into())
             })?;
 
             // Allocate limbs: 4 bytes each, 4-byte aligned.
@@ -187,25 +187,25 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         s: &str,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get frame slot and destination address.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for String constant".into())
+            CraneliftError::Codegen("no frame slot for String constant".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Need runtime handle and imports.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("String constant requires runtime handle".into())
+            CraneliftError::Codegen("String constant requires runtime handle".into())
         })?;
         let runtime = self.runtime.ok_or_else(|| {
-            AotError::Codegen("String constant requires runtime imports".into())
+            CraneliftError::Codegen("String constant requires runtime imports".into())
         })?;
 
         // Get String TyDesc.
         let tydesc_id = self.tydesc_emitter.get(&IrType::String).ok_or_else(|| {
-            AotError::Codegen("TyDesc not found for String".into())
+            CraneliftError::Codegen("TyDesc not found for String".into())
         })?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
@@ -233,7 +233,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 
     /// Emit static bytes data and return its DataId.
-    pub(super) fn emit_static_bytes(&mut self, bytes: &[u8]) -> Result<cranelift_module::DataId, AotError> {
+    pub(super) fn emit_static_bytes(&mut self, bytes: &[u8]) -> Result<cranelift_module::DataId, CraneliftError> {
         use cranelift_module::DataDescription;
 
         // Generate globally unique name for this data using an atomic counter.
@@ -243,14 +243,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let data_id = self.module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| AotError::Module(format!("declare string bytes: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare string bytes: {}", e)))?;
 
         let mut desc = DataDescription::new();
         desc.define(bytes.to_vec().into_boxed_slice());
 
         self.module
             .define_data(data_id, &desc)
-            .map_err(|e| AotError::Module(format!("define string bytes: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define string bytes: {}", e)))?;
 
         Ok(data_id)
     }

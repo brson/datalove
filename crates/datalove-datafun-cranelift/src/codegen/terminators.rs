@@ -7,7 +7,7 @@ use cranelift_module::Module;
 use datalove_datafun_ir::Terminator;
 
 use crate::types::{self, PTR_TYPE};
-use crate::AotError;
+use crate::CraneliftError;
 
 use super::FunctionCompiler;
 
@@ -17,7 +17,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         &mut self,
         builder: &mut FunctionBuilder,
         term: &Terminator,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         match term {
             Terminator::Goto { target, args } => {
                 let block = self.blocks[target];

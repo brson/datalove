@@ -21,7 +21,7 @@ datalove-datafun-interp.path = "../datalove-datafun-interp"
 datalove-datafun-pkg.path = "../datalove-datafun-pkg"
 datalove-rt.path = "../datalove-rt"
 datalove-diagnostic.path = "../datalove-diagnostic"
-datalove-datafun-aot-cranelift.path = "../datalove-datafun-aot-cranelift"
+datalove-datafun-cranelift-aot.path = "../datalove-datafun-cranelift-aot"
 
 [features]
 default = []
@@ -30,7 +30,7 @@ index-64 = [
     "datalove-datafun-interp/index-64",
     "datalove-datafun-ir/index-64",
     "datalove-datafun-compiler/index-64",
-    "datalove-datafun-aot-cranelift/index-64",
+    "datalove-datafun-cranelift-aot/index-64",
     "datalove-exampletest/index-64",
 ]
 
@@ -38,7 +38,7 @@ index-64 = [
 datalove-exampletest.path = "../datalove-exampletest"
 datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"
-datalove-datafun-jit.path = "../datalove-datafun-jit"
+datalove-datafun-cranelift-jit.path = "../datalove-datafun-cranelift-jit"
 datalove-rtdt.path = "../datalove-rtdt"
 ron = "0.8"
 serde_json = "1"

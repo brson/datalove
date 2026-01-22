@@ -82,7 +82,7 @@ use crate::layout::FrameLayout;
 use crate::runtime::RuntimeImports;
 use crate::tydesc_emit::TyDescEmitter;
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
-use crate::AotError;
+use crate::CraneliftError;
 
 /// Build a Cranelift function signature for an IR function.
 ///
@@ -294,14 +294,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ///
     /// This declares the function with Export linkage and then defines it.
     /// Use `compile_predeclared` for functions that have already been declared.
-    pub fn compile(mut self) -> Result<FuncId, AotError> {
+    pub fn compile(mut self) -> Result<FuncId, CraneliftError> {
         // Build function signature.
         let sig = self.build_signature();
 
         // Declare function in module.
         let func_id = self.module
             .declare_function(&self.func.name, Linkage::Export, &sig)
-            .map_err(|e| AotError::Module(format!("declare function: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare function: {}", e)))?;
 
         self.compile_body(func_id, sig)
     }
@@ -309,13 +309,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Compile a function that has already been declared.
     ///
     /// Use this for two-pass compilation where functions are declared first.
-    pub fn compile_predeclared(mut self, func_id: FuncId) -> Result<FuncId, AotError> {
+    pub fn compile_predeclared(mut self, func_id: FuncId) -> Result<FuncId, CraneliftError> {
         let sig = self.build_signature();
         self.compile_body(func_id, sig)
     }
 
     /// Compile the function body using the given FuncId and signature.
-    fn compile_body(&mut self, func_id: FuncId, sig: cl_ir::Signature) -> Result<FuncId, AotError> {
+    fn compile_body(&mut self, func_id: FuncId, sig: cl_ir::Signature) -> Result<FuncId, CraneliftError> {
         // Create Cranelift function.
         let mut cl_func = cl_ir::Function::with_name_signature(
             cl_ir::UserFuncName::user(0, func_id.as_u32()),
@@ -475,7 +475,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         self.module
             .define_function(func_id, &mut ctx)
-            .map_err(|e| AotError::Codegen(format!("define function: {}", e)))?;
+            .map_err(|e| CraneliftError::Codegen(format!("define function: {}", e)))?;
 
         Ok(func_id)
     }
@@ -495,7 +495,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         &mut self,
         builder: &mut FunctionBuilder,
         inst: &Instruction,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         match inst {
             Instruction::Const { dest, value } => {
                 self.compile_const(builder, *dest, value)?;
@@ -650,11 +650,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         &mut self,
         builder: &mut FunctionBuilder,
         operand: &Operand,
-    ) -> Result<cl_ir::Value, AotError> {
+    ) -> Result<cl_ir::Value, CraneliftError> {
         // Params are already passed by pointer - just return the pointer.
         if let Operand::Param(pid) = operand {
             return self.param_values.get(pid).copied().ok_or_else(|| {
-                AotError::Codegen(format!("undefined param: {:?}", pid))
+                CraneliftError::Codegen(format!("undefined param: {:?}", pid))
             });
         }
 
@@ -663,7 +663,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // go to the original slot, not a copy.
         if let Operand::Slot(slot_id) = operand {
             let frame_slot = self.frame_slot.ok_or_else(|| {
-                AotError::Codegen("no frame slot for slot operand".into())
+                CraneliftError::Codegen("no frame slot for slot operand".into())
             })?;
             let slot_offset = self.layout.slot_offset(slot_id.0);
             let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
@@ -692,7 +692,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 if let Operand::Value(vid) = operand {
                     let offset = self.layout.value_offset(vid.0);
                     let frame_slot = self.frame_slot.ok_or_else(|| {
-                        AotError::Codegen("no frame slot for value spill".into())
+                        CraneliftError::Codegen("no frame slot for value spill".into())
                     })?;
                     let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, offset as i32);
                     builder.ins().store(MemFlags::new(), val, addr, 0);
@@ -720,17 +720,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         &self,
         builder: &mut FunctionBuilder,
         op: &Operand,
-    ) -> Result<cl_ir::Value, AotError> {
+    ) -> Result<cl_ir::Value, CraneliftError> {
         match op {
             Operand::Value(vid) => {
                 self.values.get(vid).copied().ok_or_else(|| {
-                    AotError::Codegen(format!("undefined value: {:?}", vid))
+                    CraneliftError::Codegen(format!("undefined value: {:?}", vid))
                 })
             }
             Operand::Param(pid) => {
                 // Params are passed by pointer. Load the value from the pointer.
                 let param_ptr = self.param_values.get(pid).copied().ok_or_else(|| {
-                    AotError::Codegen(format!("undefined param: {:?}", pid))
+                    CraneliftError::Codegen(format!("undefined param: {:?}", pid))
                 })?;
 
                 let param_ty = &self.func.param_types[pid.0 as usize];
@@ -750,7 +750,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Operand::Slot(slot_id) => {
                 // Load value from slot in frame.
                 let frame_slot = self.frame_slot.ok_or_else(|| {
-                    AotError::Codegen("no frame slot for slot operand".into())
+                    CraneliftError::Codegen("no frame slot for slot operand".into())
                 })?;
 
                 let slot_offset = self.layout.slot_offset(slot_id.0);
@@ -769,7 +769,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 }
             }
             Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
-                Err(AotError::Unsupported(format!(
+                Err(CraneliftError::Unsupported(format!(
                     "operand type not yet implemented: {:?}",
                     op
                 )))
@@ -778,7 +778,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 
     /// Get the type of an operand.
-    fn get_operand_type(&self, op: &Operand) -> Result<IrType, AotError> {
+    fn get_operand_type(&self, op: &Operand) -> Result<IrType, CraneliftError> {
         match op {
             Operand::Value(vid) => {
                 Ok(self.func.value_types[vid.0 as usize].clone())
@@ -789,7 +789,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Operand::Slot(sid) => {
                 Ok(self.func.slot_types[sid.0 as usize].clone())
             }
-            _ => Err(AotError::Unsupported(format!(
+            _ => Err(CraneliftError::Unsupported(format!(
                 "get_operand_type for {:?}",
                 op
             ))),

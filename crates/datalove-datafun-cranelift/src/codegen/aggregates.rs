@@ -7,7 +7,7 @@ use cranelift_module::Module;
 use datalove_datafun_ir::{IrType, Operand, ValueId};
 
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
-use crate::AotError;
+use crate::CraneliftError;
 
 use super::FunctionCompiler;
 
@@ -18,7 +18,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         src: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let val = self.get_operand_value(builder, src)?;
         self.values.insert(dest, val);
         Ok(())
@@ -30,7 +30,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         fields: &[Operand],
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let dest_ty = &self.func.value_types[dest.0 as usize];
         let repr = types::ir_type_to_cranelift(dest_ty);
 
@@ -41,7 +41,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     let val = self.get_operand_value(builder, &fields[0])?;
                     self.values.insert(dest, val);
                 } else {
-                    return Err(AotError::Unsupported(
+                    return Err(CraneliftError::Unsupported(
                         "scalar pack with multiple fields".into()
                     ));
                 }
@@ -49,7 +49,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftRepr::Aggregate(_layout) => {
                 // Allocate in frame and store fields.
                 let frame_slot = self.frame_slot.ok_or_else(|| {
-                    AotError::Codegen("no frame slot for aggregate".into())
+                    CraneliftError::Codegen("no frame slot for aggregate".into())
                 })?;
 
                 let dest_offset = self.layout.value_offset(dest.0);
@@ -61,7 +61,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     IrType::Tuple(tys) => tys.clone(),
                     IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
                     _ => {
-                        return Err(AotError::Unsupported(format!(
+                        return Err(CraneliftError::Unsupported(format!(
                             "pack for non-tuple/struct: {:?}",
                             dest_ty
                         )));
@@ -86,7 +86,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                             // Look up pre-emitted TyDesc.
                             let tydesc_id = self.tydesc_emitter.get(field_ty).ok_or_else(|| {
-                                AotError::Codegen(format!(
+                                CraneliftError::Codegen(format!(
                                     "TyDesc not found for type {:?} - should have been emitted upfront",
                                     field_ty
                                 ))
@@ -96,10 +96,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                             // Call move_value runtime function.
                             let move_func_id = self.runtime.as_ref()
-                                .ok_or_else(|| AotError::Codegen("Pack aggregate requires runtime imports".into()))?
+                                .ok_or_else(|| CraneliftError::Codegen("Pack aggregate requires runtime imports".into()))?
                                 .move_value;
                             let rt_handle = self.rt_handle_param.ok_or_else(|| {
-                                AotError::Codegen("Pack aggregate requires runtime handle parameter".into())
+                                CraneliftError::Codegen("Pack aggregate requires runtime handle parameter".into())
                             })?;
                             let move_ref = self.module.declare_func_in_func(move_func_id, builder.func);
                             builder.ins().call(move_ref, &[rt_handle, field_val, tydesc_ptr, dst_addr]);
@@ -121,7 +121,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dests: &[ValueId],
         src: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get source type from first dest's expected type.
         // Actually we need the source operand's type.
         let src_ty = self.get_operand_type(src)?;
@@ -134,7 +134,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     let val = self.get_operand_value(builder, src)?;
                     self.values.insert(dests[0], val);
                 } else {
-                    return Err(AotError::Unsupported(
+                    return Err(CraneliftError::Unsupported(
                         "scalar unpack with multiple dests".into()
                     ));
                 }
@@ -147,7 +147,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     IrType::Tuple(tys) => tys.clone(),
                     IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
                     _ => {
-                        return Err(AotError::Unsupported(format!(
+                        return Err(CraneliftError::Unsupported(format!(
                             "unpack from non-tuple/struct: {:?}",
                             src_ty
                         )));
@@ -186,7 +186,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         src: &Operand,
         field_index: u32,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let src_ty = self.get_operand_type(src)?;
         let repr = types::ir_type_to_cranelift(&src_ty);
 
@@ -197,7 +197,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     let val = self.get_operand_value(builder, src)?;
                     self.values.insert(dest, val);
                 } else {
-                    return Err(AotError::Unsupported(
+                    return Err(CraneliftError::Unsupported(
                         format!("scalar get_field with field_index {} (max 0)", field_index)
                     ));
                 }
@@ -210,7 +210,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     IrType::Tuple(tys) => tys.clone(),
                     IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
                     _ => {
-                        return Err(AotError::Unsupported(format!(
+                        return Err(CraneliftError::Unsupported(format!(
                             "get_field from non-tuple/struct: {:?}",
                             src_ty
                         )));
@@ -218,7 +218,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 };
 
                 if field_index as usize >= field_types.len() {
-                    return Err(AotError::Codegen(format!(
+                    return Err(CraneliftError::Codegen(format!(
                         "field index {} out of bounds for type with {} fields",
                         field_index,
                         field_types.len()
@@ -242,7 +242,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                         // Get dest's frame location.
                         let frame_slot = self.frame_slot.ok_or_else(|| {
-                            AotError::Codegen("GetField aggregate requires frame slot".into())
+                            CraneliftError::Codegen("GetField aggregate requires frame slot".into())
                         })?;
                         let dest_offset = self.layout.value_offset(dest.0);
                         let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
@@ -270,7 +270,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         src: &Operand,
         field_index: u32,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let src_ty = self.get_operand_type(src)?;
         let repr = types::ir_type_to_cranelift(&src_ty);
 
@@ -279,7 +279,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Single-element tuple. Need to get address of the value.
                 // This requires spilling the scalar to memory first.
                 if field_index != 0 {
-                    return Err(AotError::Unsupported(
+                    return Err(CraneliftError::Unsupported(
                         format!("scalar get_field_ref with field_index {} (max 0)", field_index)
                     ));
                 }
@@ -295,7 +295,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     IrType::Tuple(tys) => tys.clone(),
                     IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
                     _ => {
-                        return Err(AotError::Unsupported(format!(
+                        return Err(CraneliftError::Unsupported(format!(
                             "get_field_ref from non-tuple/struct: {:?}",
                             src_ty
                         )));
@@ -303,7 +303,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 };
 
                 if field_index as usize >= field_types.len() {
-                    return Err(AotError::Codegen(format!(
+                    return Err(CraneliftError::Codegen(format!(
                         "field index {} out of bounds for type with {} fields",
                         field_index,
                         field_types.len()
@@ -328,24 +328,24 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         slot: &datalove_datafun_ir::SlotDest,
         field_path: &[u32],
         value: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         use datalove_datafun_ir::SlotDest;
 
         // Get base address and type.
         let (base, slot_ty) = match slot {
             SlotDest::Local(slot_id) => {
                 let frame_slot = self.frame_slot.ok_or_else(|| {
-                    AotError::Codegen("no frame slot for set_field".into())
+                    CraneliftError::Codegen("no frame slot for set_field".into())
                 })?;
                 let slot_offset = self.layout.slot_offset(slot_id.0);
                 let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
                 let ty = self.func.slot_types.get(slot_id.0 as usize)
                     .cloned()
-                    .ok_or_else(|| AotError::Codegen(format!("slot {:?} type not found", slot_id)))?;
+                    .ok_or_else(|| CraneliftError::Codegen(format!("slot {:?} type not found", slot_id)))?;
                 (addr, ty)
             }
             SlotDest::External { unit: _, slot: _ } => {
-                return Err(AotError::Unsupported(
+                return Err(CraneliftError::Unsupported(
                     "set_field on external slot".into()
                 ));
             }
@@ -360,7 +360,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 IrType::Tuple(tys) => tys.clone(),
                 IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
                 _ => {
-                    return Err(AotError::Codegen(format!(
+                    return Err(CraneliftError::Codegen(format!(
                         "set_field path through non-aggregate type: {:?}",
                         current_ty
                     )));
@@ -368,7 +368,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             };
 
             if field_idx as usize >= field_types.len() {
-                return Err(AotError::Codegen(format!(
+                return Err(CraneliftError::Codegen(format!(
                     "field index {} out of bounds",
                     field_idx
                 )));
@@ -382,7 +382,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Destroy old field value before overwriting (handles move types).
         // Get TyDesc for the field type.
         let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
-            AotError::Codegen(format!(
+            CraneliftError::Codegen(format!(
                 "TyDesc not found for type {:?}",
                 current_ty
             ))
@@ -392,10 +392,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Call destroy_local on old field value.
         let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| AotError::Codegen("SetField requires runtime imports".into()))?
+            .ok_or_else(|| CraneliftError::Codegen("SetField requires runtime imports".into()))?
             .destroy_local;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("SetField requires runtime handle parameter".into())
+            CraneliftError::Codegen("SetField requires runtime handle parameter".into())
         })?;
         let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
         builder.ins().call(destroy_ref, &[rt_handle, current_addr, tydesc_ptr]);
@@ -411,7 +411,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftRepr::Aggregate(_) => {
                 // Call move_value runtime function.
                 let move_func_id = self.runtime.as_ref()
-                    .ok_or_else(|| AotError::Codegen("SetField aggregate requires runtime imports".into()))?
+                    .ok_or_else(|| CraneliftError::Codegen("SetField aggregate requires runtime imports".into()))?
                     .move_value;
                 let move_ref = self.module.declare_func_in_func(move_func_id, builder.func);
                 builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, current_addr]);
@@ -428,14 +428,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         param: &datalove_datafun_ir::ParamId,
         field_path: &[u32],
         value: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get base address and type from param.
         let addr = self.param_values.get(param).copied().ok_or_else(|| {
-            AotError::Codegen(format!("param {:?} not found in param_values", param))
+            CraneliftError::Codegen(format!("param {:?} not found in param_values", param))
         })?;
         let ty = self.func.param_types.get(param.0 as usize)
             .cloned()
-            .ok_or_else(|| AotError::Codegen(format!("param {:?} type not found", param)))?;
+            .ok_or_else(|| CraneliftError::Codegen(format!("param {:?} type not found", param)))?;
 
         // Navigate field path to find target.
         let mut current_addr = addr;
@@ -446,7 +446,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 IrType::Tuple(tys) => tys.clone(),
                 IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
                 _ => {
-                    return Err(AotError::Codegen(format!(
+                    return Err(CraneliftError::Codegen(format!(
                         "param_set_field path through non-aggregate type: {:?}",
                         current_ty
                     )));
@@ -454,7 +454,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             };
 
             if field_idx as usize >= field_types.len() {
-                return Err(AotError::Codegen(format!(
+                return Err(CraneliftError::Codegen(format!(
                     "field index {} out of bounds",
                     field_idx
                 )));
@@ -467,7 +467,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Destroy old field value before overwriting.
         let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
-            AotError::Codegen(format!(
+            CraneliftError::Codegen(format!(
                 "TyDesc not found for type {:?}",
                 current_ty
             ))
@@ -476,10 +476,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
 
         let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| AotError::Codegen("ParamSetField requires runtime imports".into()))?
+            .ok_or_else(|| CraneliftError::Codegen("ParamSetField requires runtime imports".into()))?
             .destroy_local;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("ParamSetField requires runtime handle parameter".into())
+            CraneliftError::Codegen("ParamSetField requires runtime handle parameter".into())
         })?;
         let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
         builder.ins().call(destroy_ref, &[rt_handle, current_addr, tydesc_ptr]);
@@ -494,7 +494,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             CraneliftRepr::Aggregate(_) => {
                 let move_func_id = self.runtime.as_ref()
-                    .ok_or_else(|| AotError::Codegen("ParamSetField aggregate requires runtime imports".into()))?
+                    .ok_or_else(|| CraneliftError::Codegen("ParamSetField aggregate requires runtime imports".into()))?
                     .move_value;
                 let move_ref = self.module.declare_func_in_func(move_func_id, builder.func);
                 builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, current_addr]);

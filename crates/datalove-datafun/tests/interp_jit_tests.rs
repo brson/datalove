@@ -9,7 +9,7 @@ use serde::{Serialize, Deserialize};
 
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection, ParsedWorldfile};
-use datalove_datafun_jit::JitEngine;
+use datalove_datafun_cranelift_jit::JitEngine;
 use datafun::pipeline::{
     ModuleCompilationPipeline, TypecheckResult, LoweringResult, format_lowering_result,
 };

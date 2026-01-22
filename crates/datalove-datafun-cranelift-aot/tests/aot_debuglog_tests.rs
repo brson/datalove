@@ -1,6 +1,6 @@
 //! Integration tests for AOT compilation of debuglog statements.
 
-use datalove_datafun_aot_cranelift::AotCompiler;
+use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_ir::{
     BlockId, ConstValue, IrBlock, IrScriptUnit, IrType, Instruction, Operand, Terminator, ValueId,
 };

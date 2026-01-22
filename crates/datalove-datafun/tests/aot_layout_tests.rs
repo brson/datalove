@@ -3,7 +3,7 @@
 //! These tests ensure ABI compatibility between AOT-compiled code and the runtime
 //! by comparing the AOT crate's computed layouts against the interpreter's TyDescTable.
 
-use datalove_datafun_aot_cranelift::types::{ir_type_to_cranelift, TypeLayout};
+use datalove_datafun_cranelift_aot::types::{ir_type_to_cranelift, TypeLayout};
 use datalove_datafun_interp::IrTyDescTable;
 use datalove_datafun_ir::IrType;
 use datalove_rtdt::TyDescRef;

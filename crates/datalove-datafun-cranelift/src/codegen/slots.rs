@@ -7,7 +7,7 @@ use cranelift_module::Module;
 use datalove_datafun_ir::{Operand, ParamId, SlotDest, SlotId, ValueId};
 
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
-use crate::AotError;
+use crate::CraneliftError;
 
 use super::FunctionCompiler;
 
@@ -19,11 +19,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: &SlotDest,
         value: &Operand,
         is_copy: bool,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let slot_id = match dest {
             SlotDest::Local(id) => *id,
             SlotDest::External { unit, slot } => {
-                return Err(AotError::Unsupported(format!(
+                return Err(CraneliftError::Unsupported(format!(
                     "external slot store (unit={}, slot={:?}) not yet implemented",
                     unit, slot
                 )));
@@ -31,7 +31,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for slot store".into())
+            CraneliftError::Codegen("no frame slot for slot store".into())
         })?;
 
         let slot_offset = self.layout.slot_offset(slot_id.0);
@@ -52,16 +52,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 // Destroy the old value in the slot before overwriting.
                 let destroy_func_id = self.runtime.as_ref()
-                    .ok_or_else(|| AotError::Codegen("SlotStore aggregate requires runtime imports".into()))?
+                    .ok_or_else(|| CraneliftError::Codegen("SlotStore aggregate requires runtime imports".into()))?
                     .destroy_local;
 
                 let rt_handle = self.rt_handle_param.ok_or_else(|| {
-                    AotError::Codegen("SlotStore aggregate requires runtime handle parameter".into())
+                    CraneliftError::Codegen("SlotStore aggregate requires runtime handle parameter".into())
                 })?;
 
                 // Get TyDesc for the slot type.
                 let tydesc_id = self.tydesc_emitter.get(slot_ty).ok_or_else(|| {
-                    AotError::Codegen(format!(
+                    CraneliftError::Codegen(format!(
                         "TyDesc not found for slot type {:?}",
                         slot_ty
                     ))
@@ -104,9 +104,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         slot: SlotId,
         _is_copy: bool,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for slot load".into())
+            CraneliftError::Codegen("no frame slot for slot load".into())
         })?;
 
         let slot_offset = self.layout.slot_offset(slot.0);
@@ -140,10 +140,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         param: ParamId,
         value: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get the param pointer (points to caller's data).
         let param_ptr = self.param_values.get(&param).copied().ok_or_else(|| {
-            AotError::Codegen(format!("undefined param: {:?}", param))
+            CraneliftError::Codegen(format!("undefined param: {:?}", param))
         })?;
 
         let param_ty = &self.func.param_types[param.0 as usize];
@@ -153,16 +153,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // (Out params would be uninitialized, but we don't track that at compile time.)
         // Call destroy_local on the existing value.
         let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| AotError::Codegen("ParamStore requires runtime imports".into()))?
+            .ok_or_else(|| CraneliftError::Codegen("ParamStore requires runtime imports".into()))?
             .destroy_local;
 
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("ParamStore requires runtime handle parameter".into())
+            CraneliftError::Codegen("ParamStore requires runtime handle parameter".into())
         })?;
 
         // Get TyDesc for the param type.
         let tydesc_id = self.tydesc_emitter.get(param_ty).ok_or_else(|| {
-            AotError::Codegen(format!(
+            CraneliftError::Codegen(format!(
                 "TyDesc not found for param type {:?}",
                 param_ty
             ))

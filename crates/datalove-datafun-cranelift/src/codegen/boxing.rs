@@ -7,7 +7,7 @@ use cranelift_module::Module;
 use datalove_datafun_ir::{Operand, ValueId};
 
 use crate::types::PTR_TYPE;
-use crate::AotError;
+use crate::CraneliftError;
 
 use super::FunctionCompiler;
 
@@ -20,13 +20,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         inner: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let error_from_func_id = self.runtime.as_ref()
-            .ok_or_else(|| AotError::Codegen("ErrorFrom requires runtime imports".into()))?
+            .ok_or_else(|| CraneliftError::Codegen("ErrorFrom requires runtime imports".into()))?
             .error_from;
 
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("ErrorFrom requires runtime handle parameter".into())
+            CraneliftError::Codegen("ErrorFrom requires runtime handle parameter".into())
         })?;
 
         // Get the type of the inner operand.
@@ -37,7 +37,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get TyDesc for the inner type.
         let inner_tydesc_id = self.tydesc_emitter.get(&inner_ty).ok_or_else(|| {
-            AotError::Codegen(format!(
+            CraneliftError::Codegen(format!(
                 "TyDesc not found for inner type {:?}",
                 inner_ty
             ))
@@ -72,13 +72,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         inner: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let data_from_func_id = self.runtime.as_ref()
-            .ok_or_else(|| AotError::Codegen("DataFrom requires runtime imports".into()))?
+            .ok_or_else(|| CraneliftError::Codegen("DataFrom requires runtime imports".into()))?
             .data_from;
 
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("DataFrom requires runtime handle parameter".into())
+            CraneliftError::Codegen("DataFrom requires runtime handle parameter".into())
         })?;
 
         // Get the type of the inner operand.
@@ -89,7 +89,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get TyDesc for the inner type.
         let inner_tydesc_id = self.tydesc_emitter.get(&inner_ty).ok_or_else(|| {
-            AotError::Codegen(format!(
+            CraneliftError::Codegen(format!(
                 "TyDesc not found for inner type {:?}",
                 inner_ty
             ))

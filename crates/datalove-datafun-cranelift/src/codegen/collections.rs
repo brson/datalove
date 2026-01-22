@@ -7,7 +7,7 @@ use cranelift_module::Module;
 use datalove_datafun_ir::{IrType, Operand, ValueId};
 
 use crate::types::PTR_TYPE;
-use crate::AotError;
+use crate::CraneliftError;
 
 use super::FunctionCompiler;
 
@@ -20,41 +20,41 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         elements: &[Operand],
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
         let runtime = self.runtime.ok_or_else(|| {
-            AotError::Codegen("ListNew requires runtime imports".into())
+            CraneliftError::Codegen("ListNew requires runtime imports".into())
         })?;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("ListNew requires runtime handle".into())
+            CraneliftError::Codegen("ListNew requires runtime handle".into())
         })?;
 
         // Get list type from dest.
         let list_ty = self.func.value_types[dest.0 as usize].clone();
         let elem_ty = match &list_ty {
             IrType::List(elem) => elem.as_ref().clone(),
-            _ => return Err(AotError::Codegen(format!(
+            _ => return Err(CraneliftError::Codegen(format!(
                 "ListNew dest has non-list type: {:?}", list_ty
             ))),
         };
 
         // Get frame slot and destination address.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for ListNew".into())
+            CraneliftError::Codegen("no frame slot for ListNew".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let list_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get List TyDesc.
         let list_tydesc_id = self.tydesc_emitter.get(&list_ty).ok_or_else(|| {
-            AotError::Codegen(format!("TyDesc not found for {:?}", list_ty))
+            CraneliftError::Codegen(format!("TyDesc not found for {:?}", list_ty))
         })?;
         let list_tydesc_gv = self.module.declare_data_in_func(list_tydesc_id, builder.func);
         let list_tydesc_ptr = builder.ins().global_value(PTR_TYPE, list_tydesc_gv);
 
         // Get element TyDesc.
         let elem_tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
-            AotError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
+            CraneliftError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
         })?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
         let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
@@ -85,41 +85,41 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         elements: &[Operand],
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
         let runtime = self.runtime.ok_or_else(|| {
-            AotError::Codegen("SetNew requires runtime imports".into())
+            CraneliftError::Codegen("SetNew requires runtime imports".into())
         })?;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("SetNew requires runtime handle".into())
+            CraneliftError::Codegen("SetNew requires runtime handle".into())
         })?;
 
         // Get set type from dest.
         let set_ty = self.func.value_types[dest.0 as usize].clone();
         let elem_ty = match &set_ty {
             IrType::Set(elem) => elem.as_ref().clone(),
-            _ => return Err(AotError::Codegen(format!(
+            _ => return Err(CraneliftError::Codegen(format!(
                 "SetNew dest has non-set type: {:?}", set_ty
             ))),
         };
 
         // Get frame slot and destination address.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for SetNew".into())
+            CraneliftError::Codegen("no frame slot for SetNew".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let set_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get Set TyDesc.
         let set_tydesc_id = self.tydesc_emitter.get(&set_ty).ok_or_else(|| {
-            AotError::Codegen(format!("TyDesc not found for {:?}", set_ty))
+            CraneliftError::Codegen(format!("TyDesc not found for {:?}", set_ty))
         })?;
         let set_tydesc_gv = self.module.declare_data_in_func(set_tydesc_id, builder.func);
         let set_tydesc_ptr = builder.ins().global_value(PTR_TYPE, set_tydesc_gv);
 
         // Get element TyDesc.
         let elem_tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
-            AotError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
+            CraneliftError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
         })?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
         let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
@@ -159,48 +159,48 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         entries: &[(Operand, Operand)],
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
         let runtime = self.runtime.ok_or_else(|| {
-            AotError::Codegen("MapNew requires runtime imports".into())
+            CraneliftError::Codegen("MapNew requires runtime imports".into())
         })?;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("MapNew requires runtime handle".into())
+            CraneliftError::Codegen("MapNew requires runtime handle".into())
         })?;
 
         // Get map type from dest.
         let map_ty = self.func.value_types[dest.0 as usize].clone();
         let (key_ty, val_ty) = match &map_ty {
             IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
-            _ => return Err(AotError::Codegen(format!(
+            _ => return Err(CraneliftError::Codegen(format!(
                 "MapNew dest has non-map type: {:?}", map_ty
             ))),
         };
 
         // Get frame slot and destination address.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for MapNew".into())
+            CraneliftError::Codegen("no frame slot for MapNew".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let map_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get Map TyDesc.
         let map_tydesc_id = self.tydesc_emitter.get(&map_ty).ok_or_else(|| {
-            AotError::Codegen(format!("TyDesc not found for {:?}", map_ty))
+            CraneliftError::Codegen(format!("TyDesc not found for {:?}", map_ty))
         })?;
         let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
         let map_tydesc_ptr = builder.ins().global_value(PTR_TYPE, map_tydesc_gv);
 
         // Get key TyDesc.
         let key_tydesc_id = self.tydesc_emitter.get(&key_ty).ok_or_else(|| {
-            AotError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
+            CraneliftError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
         })?;
         let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
         let key_tydesc_ptr = builder.ins().global_value(PTR_TYPE, key_tydesc_gv);
 
         // Get value TyDesc.
         let val_tydesc_id = self.tydesc_emitter.get(&val_ty).ok_or_else(|| {
-            AotError::Codegen(format!("TyDesc not found for value type {:?}", val_ty))
+            CraneliftError::Codegen(format!("TyDesc not found for value type {:?}", val_ty))
         })?;
         let val_tydesc_gv = self.module.declare_data_in_func(val_tydesc_id, builder.func);
         let val_tydesc_ptr = builder.ins().global_value(PTR_TYPE, val_tydesc_gv);
@@ -235,41 +235,41 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         shape: &[u32],
         elements: &[Operand],
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
         let runtime = self.runtime.ok_or_else(|| {
-            AotError::Codegen("TensorNew requires runtime imports".into())
+            CraneliftError::Codegen("TensorNew requires runtime imports".into())
         })?;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("TensorNew requires runtime handle".into())
+            CraneliftError::Codegen("TensorNew requires runtime handle".into())
         })?;
 
         // Get tensor type from dest.
         let tensor_ty = self.func.value_types[dest.0 as usize].clone();
         let elem_ty = match &tensor_ty {
             IrType::Tensor(elem, _rank) => elem.as_ref().clone(),
-            _ => return Err(AotError::Codegen(format!(
+            _ => return Err(CraneliftError::Codegen(format!(
                 "TensorNew dest has non-tensor type: {:?}", tensor_ty
             ))),
         };
 
         // Get frame slot and destination address.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for TensorNew".into())
+            CraneliftError::Codegen("no frame slot for TensorNew".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let tensor_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get Tensor TyDesc.
         let tensor_tydesc_id = self.tydesc_emitter.get(&tensor_ty).ok_or_else(|| {
-            AotError::Codegen(format!("TyDesc not found for {:?}", tensor_ty))
+            CraneliftError::Codegen(format!("TyDesc not found for {:?}", tensor_ty))
         })?;
         let tensor_tydesc_gv = self.module.declare_data_in_func(tensor_tydesc_id, builder.func);
         let tensor_tydesc_ptr = builder.ins().global_value(PTR_TYPE, tensor_tydesc_gv);
 
         // Get element TyDesc.
         let elem_tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
-            AotError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
+            CraneliftError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
         })?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
         let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
@@ -352,20 +352,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         rows: &[Operand],
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
         let runtime = self.runtime.ok_or_else(|| {
-            AotError::Codegen("TableNew requires runtime imports".into())
+            CraneliftError::Codegen("TableNew requires runtime imports".into())
         })?;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("TableNew requires runtime handle".into())
+            CraneliftError::Codegen("TableNew requires runtime handle".into())
         })?;
 
         // Get table type from dest.
         let table_ty = self.func.value_types[dest.0 as usize].clone();
         let columns = match &table_ty {
             IrType::Table(cols) => cols.clone(),
-            _ => return Err(AotError::Codegen(format!(
+            _ => return Err(CraneliftError::Codegen(format!(
                 "TableNew dest has non-table type: {:?}", table_ty
             ))),
         };
@@ -375,21 +375,21 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get frame slot and destination address.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for TableNew".into())
+            CraneliftError::Codegen("no frame slot for TableNew".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let table_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get Table TyDesc.
         let table_tydesc_id = self.tydesc_emitter.get(&table_ty).ok_or_else(|| {
-            AotError::Codegen(format!("TyDesc not found for {:?}", table_ty))
+            CraneliftError::Codegen(format!("TyDesc not found for {:?}", table_ty))
         })?;
         let table_tydesc_gv = self.module.declare_data_in_func(table_tydesc_id, builder.func);
         let table_tydesc_ptr = builder.ins().global_value(PTR_TYPE, table_tydesc_gv);
 
         // Get row (tuple) TyDesc.
         let row_tydesc_id = self.tydesc_emitter.get(&row_ty).ok_or_else(|| {
-            AotError::Codegen(format!("TyDesc not found for row type {:?}", row_ty))
+            CraneliftError::Codegen(format!("TyDesc not found for row type {:?}", row_ty))
         })?;
         let row_tydesc_gv = self.module.declare_data_in_func(row_tydesc_id, builder.func);
         let row_tydesc_ptr = builder.ins().global_value(PTR_TYPE, row_tydesc_gv);

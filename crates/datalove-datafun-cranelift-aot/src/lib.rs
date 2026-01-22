@@ -23,18 +23,11 @@
 //! - `__script_body(rt: *mut u8)`: The script body taking a runtime handle.
 //! - `main()`: Entry point that initializes runtime, runs body, cleans up.
 
-/// IR to Cranelift translation.
-pub mod codegen;
-/// Cranelift types for index-sized values.
-pub mod index_types;
-/// Stack frame layout computation.
-pub mod layout;
-/// Runtime function imports.
-pub mod runtime;
-/// Type descriptor emission as static data.
-pub mod tydesc_emit;
-/// Type mapping from IR to Cranelift.
-pub mod types;
+// Re-export shared codegen infrastructure.
+pub use datalove_datafun_cranelift::{
+    codegen, index_types, layout, runtime, tydesc_emit, types,
+    CraneliftError,
+};
 
 use std::collections::HashMap;
 
@@ -72,6 +65,16 @@ impl std::fmt::Display for AotError {
 }
 
 impl std::error::Error for AotError {}
+
+impl From<CraneliftError> for AotError {
+    fn from(e: CraneliftError) -> Self {
+        match e {
+            CraneliftError::Codegen(msg) => AotError::Codegen(msg),
+            CraneliftError::Module(msg) => AotError::Module(msg),
+            CraneliftError::Unsupported(msg) => AotError::Unsupported(msg),
+        }
+    }
+}
 
 /// AOT compiler context.
 ///
@@ -174,7 +177,7 @@ impl AotCompiler {
 
         // Declare runtime imports.
         let call_conv = self.isa.default_call_conv();
-        let runtime = runtime::RuntimeImports::declare(&mut obj_module, call_conv)?;
+        let runtime_imports = runtime::RuntimeImports::declare(&mut obj_module, call_conv)?;
 
         // Emit all TyDescs upfront (whole-world compilation).
         let mut tydesc_emitter = tydesc_emit::TyDescEmitter::new();
@@ -210,7 +213,7 @@ impl AotCompiler {
                 func,
                 self.isa.as_ref(),
                 &mut obj_module,
-                runtime.clone(),
+                runtime_imports.clone(),
                 tydesc_emitter.clone(),
                 Some(registry),
             );
@@ -228,7 +231,7 @@ impl AotCompiler {
                 ir_func,
                 self.isa.as_ref(),
                 &mut obj_module,
-                runtime.clone(),
+                runtime_imports.clone(),
                 tydesc_emitter.clone(),
                 Some(registry),
             );
@@ -245,7 +248,7 @@ impl AotCompiler {
             &body_func,
             self.isa.as_ref(),
             &mut obj_module,
-            runtime,
+            runtime_imports,
             tydesc_emitter,
             Some(registry),
         );
@@ -289,7 +292,7 @@ impl AotCompiler {
         let call_conv = self.isa.default_call_conv();
 
         // Declare runtime functions we need.
-        let runtime = runtime::RuntimeImports::declare(module, call_conv)?;
+        let runtime_imports = runtime::RuntimeImports::declare(module, call_conv)?;
 
         // Signature: main() -> i32
         let mut sig = cl_ir::Signature::new(call_conv);
@@ -312,12 +315,12 @@ impl AotCompiler {
         builder.seal_block(entry_block);
 
         // Call dtlv_rti_init() to get runtime handle.
-        let init_ref = module.declare_func_in_func(runtime.init, builder.func);
+        let init_ref = module.declare_func_in_func(runtime_imports.init, builder.func);
         let call_inst = builder.ins().call(init_ref, &[]);
         let rt_handle = builder.inst_results(call_inst)[0];
 
         // Call dtlv_rti_set_debug_mode(rt, Stderr=0).
-        let set_debug_ref = module.declare_func_in_func(runtime.set_debug_mode, builder.func);
+        let set_debug_ref = module.declare_func_in_func(runtime_imports.set_debug_mode, builder.func);
         let stderr_mode = builder.ins().iconst(cl_types::I8, 0); // Stderr = 0
         builder.ins().call(set_debug_ref, &[rt_handle, stderr_mode]);
 
@@ -326,7 +329,7 @@ impl AotCompiler {
         builder.ins().call(body_ref, &[rt_handle]);
 
         // Call dtlv_rti_shutdown(rt).
-        let shutdown_ref = module.declare_func_in_func(runtime.shutdown, builder.func);
+        let shutdown_ref = module.declare_func_in_func(runtime_imports.shutdown, builder.func);
         builder.ins().call(shutdown_ref, &[rt_handle]);
 
         // Return 0.

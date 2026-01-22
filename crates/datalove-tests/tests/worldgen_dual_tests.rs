@@ -20,8 +20,8 @@ use rand::Rng;
 use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
-use datalove_datafun_jit::ChaosDispatcher;
-use datalove_datafun_aot_cranelift::AotCompiler;
+use datalove_datafun_cranelift_jit::ChaosDispatcher;
+use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_ir::FunctionRegistry;
 use datafun::pipeline::ModuleCompilationPipeline;
 

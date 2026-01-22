@@ -1053,7 +1053,7 @@ dependencies = [
  "bcts",
  "datalove-datafun",
  "datalove-datafun-compiler",
- "datalove-datafun-jit",
+ "datalove-datafun-cranelift-jit",
  "datalove-datafun-tycheck",
  "divan",
 ]
@@ -1066,8 +1066,8 @@ dependencies = [
  "bcts",
  "datalove",
  "datalove-datafun",
+ "datalove-datafun-cranelift-jit",
  "datalove-datafun-interp",
- "datalove-datafun-jit",
  "datalove-datafun-parser",
  "datalove-datafun-pkg",
  "datalove-datafun-tycheck",
@@ -1100,12 +1100,12 @@ version = "0.1.0"
 dependencies = [
  "bcts",
  "datalove-ct",
- "datalove-datafun-aot-cranelift",
  "datalove-datafun-ast",
  "datalove-datafun-compiler",
+ "datalove-datafun-cranelift-aot",
+ "datalove-datafun-cranelift-jit",
  "datalove-datafun-interp",
  "datalove-datafun-ir",
- "datalove-datafun-jit",
  "datalove-datafun-parser",
  "datalove-datafun-pkg",
  "datalove-datafun-tycheck",
@@ -1119,23 +1119,6 @@ dependencies = [
  "salsa",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "datalove-datafun-aot-cranelift"
-version = "0.1.0"
-dependencies = [
- "cranelift-codegen",
- "cranelift-frontend",
- "cranelift-module",
- "cranelift-object",
- "datalove-datafun",
- "datalove-datafun-intrinsics",
- "datalove-datafun-ir",
- "datalove-rt",
- "datalove-rtdt",
- "rustmax",
- "target-lexicon",
 ]
 
 [[package]]
@@ -1175,6 +1158,55 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-datafun-cranelift"
+version = "0.1.0"
+dependencies = [
+ "cranelift-codegen",
+ "cranelift-frontend",
+ "cranelift-module",
+ "cranelift-object",
+ "datalove-datafun-intrinsics",
+ "datalove-datafun-ir",
+ "datalove-rt",
+ "datalove-rtdt",
+ "rustmax",
+ "target-lexicon",
+]
+
+[[package]]
+name = "datalove-datafun-cranelift-aot"
+version = "0.1.0"
+dependencies = [
+ "cranelift-codegen",
+ "cranelift-frontend",
+ "cranelift-module",
+ "cranelift-object",
+ "datalove-datafun",
+ "datalove-datafun-cranelift",
+ "datalove-datafun-ir",
+ "rustmax",
+ "target-lexicon",
+]
+
+[[package]]
+name = "datalove-datafun-cranelift-jit"
+version = "0.1.0"
+dependencies = [
+ "cranelift-codegen",
+ "cranelift-frontend",
+ "cranelift-jit",
+ "cranelift-module",
+ "datalove-datafun",
+ "datalove-datafun-cranelift",
+ "datalove-datafun-interp",
+ "datalove-datafun-ir",
+ "datalove-rt",
+ "datalove-rtdt",
+ "rustmax",
+ "target-lexicon",
+]
+
+[[package]]
 name = "datalove-datafun-interp"
 version = "0.1.0"
 dependencies = [
@@ -1202,24 +1234,6 @@ dependencies = [
  "ron",
  "salsa",
  "serde",
-]
-
-[[package]]
-name = "datalove-datafun-jit"
-version = "0.1.0"
-dependencies = [
- "cranelift-codegen",
- "cranelift-frontend",
- "cranelift-jit",
- "cranelift-module",
- "datalove-datafun",
- "datalove-datafun-aot-cranelift",
- "datalove-datafun-interp",
- "datalove-datafun-ir",
- "datalove-rt",
- "datalove-rtdt",
- "rustmax",
- "target-lexicon",
 ]
 
 [[package]]
@@ -1374,9 +1388,9 @@ name = "datalove-tests"
 version = "0.1.0"
 dependencies = [
  "datalove-datafun",
- "datalove-datafun-aot-cranelift",
+ "datalove-datafun-cranelift-aot",
+ "datalove-datafun-cranelift-jit",
  "datalove-datafun-ir",
- "datalove-datafun-jit",
  "datalove-datafun-pkg",
  "datalove-rt",
  "datalove-worldgen",

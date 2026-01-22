@@ -7,7 +7,7 @@ use cranelift_module::Module;
 use datalove_datafun_ir::{IrType, Operand};
 
 use crate::types::PTR_TYPE;
-use crate::AotError;
+use crate::CraneliftError;
 
 use super::FunctionCompiler;
 
@@ -17,15 +17,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         &mut self,
         builder: &mut FunctionBuilder,
         operand: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Need runtime imports for debuglog.
         let debuglog_func_id = self.runtime.as_ref()
-            .ok_or_else(|| AotError::Codegen("DebugLog requires runtime imports".into()))?
+            .ok_or_else(|| CraneliftError::Codegen("DebugLog requires runtime imports".into()))?
             .debuglog_local;
 
         // Need runtime handle.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("DebugLog requires runtime handle parameter".into())
+            CraneliftError::Codegen("DebugLog requires runtime handle parameter".into())
         })?;
 
         // Get the type of the operand.
@@ -47,7 +47,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Look up pre-emitted TyDesc for the actual (non-ref) type.
         let tydesc_id = self.tydesc_emitter.get(&actual_ty).ok_or_else(|| {
-            AotError::Codegen(format!(
+            CraneliftError::Codegen(format!(
                 "TyDesc not found for type {:?} - should have been emitted upfront",
                 actual_ty
             ))
@@ -76,15 +76,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         &mut self,
         builder: &mut FunctionBuilder,
         operand: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Need runtime imports for destroy.
         let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| AotError::Codegen("Drop requires runtime imports".into()))?
+            .ok_or_else(|| CraneliftError::Codegen("Drop requires runtime imports".into()))?
             .destroy_local;
 
         // Need runtime handle.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            AotError::Codegen("Drop requires runtime handle parameter".into())
+            CraneliftError::Codegen("Drop requires runtime handle parameter".into())
         })?;
 
         // Get the type of the operand.
@@ -95,7 +95,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Look up pre-emitted TyDesc.
         let tydesc_id = self.tydesc_emitter.get(&ty).ok_or_else(|| {
-            AotError::Codegen(format!(
+            CraneliftError::Codegen(format!(
                 "TyDesc not found for type {:?} - should have been emitted upfront",
                 ty
             ))

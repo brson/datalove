@@ -1,4 +1,4 @@
-//! Runtime function imports for AOT compilation.
+//! Runtime function imports for Cranelift compilation.
 //!
 //! Declares external runtime functions that will be linked at load time.
 
@@ -7,7 +7,7 @@ use cranelift_codegen::isa::CallConv;
 use cranelift_module::{FuncId, Linkage, Module};
 
 use crate::types::PTR_TYPE;
-use crate::AotError;
+use crate::CraneliftError;
 
 /// Imported runtime functions.
 #[derive(Clone, Copy)]
@@ -78,14 +78,14 @@ pub struct RuntimeImports {
 
 impl RuntimeImports {
     /// Declare all runtime function imports in the module.
-    pub fn declare<M: Module>(module: &mut M, call_conv: CallConv) -> Result<Self, AotError> {
+    pub fn declare<M: Module>(module: &mut M, call_conv: CallConv) -> Result<Self, CraneliftError> {
         // dtlv_rti_init() -> ptr
         let init = {
             let mut sig = cl_ir::Signature::new(call_conv);
             sig.returns.push(AbiParam::new(PTR_TYPE));
             module
                 .declare_function("dtlv_rti_init", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_init: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_init: {}", e)))?
         };
 
         // dtlv_rti_shutdown(ptr) -> u8
@@ -95,7 +95,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_shutdown", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_shutdown: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_shutdown: {}", e)))?
         };
 
         // dtlv_rti_set_debug_mode(ptr, u8) -> u8
@@ -106,7 +106,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_set_debug_mode", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_set_debug_mode: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_set_debug_mode: {}", e)))?
         };
 
         // dtlv_rti_debuglog_local(ptr, ptr, ptr) -> u8
@@ -118,7 +118,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_debuglog_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_debuglog_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_debuglog_local: {}", e)))?
         };
 
         // dtlv_rti_any_destroy_local(ptr, ptr, ptr) -> u8
@@ -130,7 +130,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_any_destroy_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_any_destroy_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_any_destroy_local: {}", e)))?
         };
 
         // dtlv_rti_mem_alloc_raw_local(ptr, u32, u32, UsizeRepr) -> ptr
@@ -146,7 +146,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(PTR_TYPE));     // allocated ptr
             module
                 .declare_function("dtlv_rti_mem_alloc_raw_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_mem_alloc_raw_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_mem_alloc_raw_local: {}", e)))?
         };
 
         // dtlv_rti_string_create_local(ptr, ptr, ptr) -> u8
@@ -158,7 +158,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_string_create_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_string_create_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_string_create_local: {}", e)))?
         };
 
         // dtlv_rti_string_push_bytes_local(ptr, ptr, ptr, ptr, u32) -> u8
@@ -172,7 +172,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_string_push_bytes_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_string_push_bytes_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_string_push_bytes_local: {}", e)))?
         };
 
         // dtlv_rti_list_create_local(rt, value_out, tydesc) -> u8
@@ -184,7 +184,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_list_create_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_list_create_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_list_create_local: {}", e)))?
         };
 
         // dtlv_rti_list_push_local(rt, list_value_mut, list_tydesc, element_in, element_tydesc) -> u8
@@ -198,7 +198,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_list_push_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_list_push_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_list_push_local: {}", e)))?
         };
 
         // dtlv_rti_btreeset_create_local(rt, value_out, tydesc) -> u8
@@ -210,7 +210,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_btreeset_create_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_btreeset_create_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_btreeset_create_local: {}", e)))?
         };
 
         // dtlv_rti_btreeset_insert_local(rt, set_value_mut, set_tydesc, element_in, element_tydesc, bool_out) -> u8
@@ -225,7 +225,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_btreeset_insert_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_btreeset_insert_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_btreeset_insert_local: {}", e)))?
         };
 
         // dtlv_rti_btreemap_create_local(rt, value_out, tydesc) -> u8
@@ -237,7 +237,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_btreemap_create_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_btreemap_create_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_btreemap_create_local: {}", e)))?
         };
 
         // dtlv_rti_btreemap_insert_local(rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc) -> u8
@@ -253,7 +253,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_btreemap_insert_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_btreemap_insert_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_btreemap_insert_local: {}", e)))?
         };
 
         // dtlv_rti_tensor_init_local(rt, element_data_in, element_count, element_tydesc, shape_ptr, rank, tensor_out, tensor_tydesc) -> u8
@@ -270,7 +270,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_tensor_init_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_tensor_init_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_tensor_init_local: {}", e)))?
         };
 
         // dtlv_rti_table_create_local(rt, value_out, tydesc) -> u8
@@ -282,7 +282,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_table_create_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_table_create_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_table_create_local: {}", e)))?
         };
 
         // dtlv_rti_table_push_row_local(rt, table_mut, table_tydesc, row_ref, row_tydesc) -> u8
@@ -296,7 +296,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_table_push_row_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_table_push_row_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_table_push_row_local: {}", e)))?
         };
 
         // Int (bigint) binary operations: (rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> u8
@@ -315,19 +315,19 @@ impl RuntimeImports {
 
         let int_add = module
             .declare_function("dtlv_rti_int_add", Linkage::Import, &int_binop_sig())
-            .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_add: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_int_add: {}", e)))?;
 
         let int_sub = module
             .declare_function("dtlv_rti_int_sub", Linkage::Import, &int_binop_sig())
-            .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_sub: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_int_sub: {}", e)))?;
 
         let int_mul = module
             .declare_function("dtlv_rti_int_mul", Linkage::Import, &int_binop_sig())
-            .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_mul: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_int_mul: {}", e)))?;
 
         let int_div = module
             .declare_function("dtlv_rti_int_div_checked", Linkage::Import, &int_binop_sig())
-            .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_div_checked: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_int_div_checked: {}", e)))?;
 
         // Int (bigint) unary operation: (rt, a_in, a_tydesc, result_out, result_tydesc) -> u8
         let int_unary_sig = || {
@@ -343,11 +343,11 @@ impl RuntimeImports {
 
         let int_neg = module
             .declare_function("dtlv_rti_int_neg", Linkage::Import, &int_unary_sig())
-            .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_neg: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_int_neg: {}", e)))?;
 
         let int_from_fixed = module
             .declare_function("dtlv_rti_int_from_fixed", Linkage::Import, &int_unary_sig())
-            .map_err(|e| AotError::Module(format!("declare dtlv_rti_int_from_fixed: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_int_from_fixed: {}", e)))?;
 
         // Int (bigint) comparison: (rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtOrdering (u8)
         let int_cmp = {
@@ -360,7 +360,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8)); // RtOrdering
             module
                 .declare_function("dtlv_rti_cmp_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_cmp_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_cmp_local: {}", e)))?
         };
 
         // dtlv_rti_move_value_local(ptr, ptr, ptr, ptr) -> u8
@@ -373,7 +373,7 @@ impl RuntimeImports {
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_move_value_local", Linkage::Import, &sig)
-                .map_err(|e| AotError::Module(format!("declare dtlv_rti_move_value_local: {}", e)))?
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_move_value_local: {}", e)))?
         };
 
         // Boxing functions: error_from, data_from
@@ -390,11 +390,11 @@ impl RuntimeImports {
 
         let error_from = module
             .declare_function("dtlv_rti_error_from_local", Linkage::Import, &boxing_sig())
-            .map_err(|e| AotError::Module(format!("declare dtlv_rti_error_from_local: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_error_from_local: {}", e)))?;
 
         let data_from = module
             .declare_function("dtlv_rti_data_from_local", Linkage::Import, &boxing_sig())
-            .map_err(|e| AotError::Module(format!("declare dtlv_rti_data_from_local: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_data_from_local: {}", e)))?;
 
         Ok(Self {
             init,

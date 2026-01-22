@@ -8,7 +8,7 @@ use datalove_datafun_ir::{IrType, Operand, ValueId};
 use datalove_rtdt::{Error as RtError, OptionTag, ResultTag};
 
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
-use crate::AotError;
+use crate::CraneliftError;
 
 use super::FunctionCompiler;
 
@@ -19,14 +19,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         inner: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
         // Get inner type from Option<inner>.
         let inner_ty = match dest_ty {
             IrType::Option(t) => t.as_ref(),
             _ => {
-                return Err(AotError::Codegen(format!(
+                return Err(CraneliftError::Codegen(format!(
                     "WrapSome dest is not Option: {:?}",
                     dest_ty
                 )));
@@ -40,7 +40,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get destination address in frame.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for WrapSome".into())
+            CraneliftError::Codegen("no frame slot for WrapSome".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
@@ -75,10 +75,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         &mut self,
         builder: &mut FunctionBuilder,
         dest: ValueId,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get destination address in frame.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for WrapNone".into())
+            CraneliftError::Codegen("no frame slot for WrapNone".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
@@ -98,14 +98,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         inner: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
         // Get ok type from Result<ok>.
         let ok_ty = match dest_ty {
             IrType::Result(t) => t.as_ref(),
             _ => {
-                return Err(AotError::Codegen(format!(
+                return Err(CraneliftError::Codegen(format!(
                     "WrapOk dest is not Result: {:?}",
                     dest_ty
                 )));
@@ -121,7 +121,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get destination address in frame.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for WrapOk".into())
+            CraneliftError::Codegen("no frame slot for WrapOk".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
@@ -157,14 +157,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
         inner: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
         // Get ok type from Result<ok> to compute layout.
         let ok_ty = match dest_ty {
             IrType::Result(t) => t.as_ref(),
             _ => {
-                return Err(AotError::Codegen(format!(
+                return Err(CraneliftError::Codegen(format!(
                     "WrapErr dest is not Result: {:?}",
                     dest_ty
                 )));
@@ -181,7 +181,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get destination address in frame.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for WrapErr".into())
+            CraneliftError::Codegen("no frame slot for WrapErr".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
@@ -208,13 +208,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         is_some: ValueId,
         src: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get source Option type.
         let src_ty = self.get_operand_type(src)?;
         let inner_ty = match &src_ty {
             IrType::Option(t) => t.as_ref(),
             _ => {
-                return Err(AotError::Codegen(format!(
+                return Err(CraneliftError::Codegen(format!(
                     "UnwrapOption src is not Option: {:?}",
                     src_ty
                 )));
@@ -269,14 +269,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         variant_index: u32,
         payload: Option<&Operand>,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
         // Get variant info from Enum type.
         let variants = match dest_ty {
             IrType::Enum(v) => v,
             _ => {
-                return Err(AotError::Codegen(format!(
+                return Err(CraneliftError::Codegen(format!(
                     "EnumVariant dest is not Enum: {:?}",
                     dest_ty
                 )));
@@ -293,7 +293,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get destination address in frame.
         let frame_slot = self.frame_slot.ok_or_else(|| {
-            AotError::Codegen("no frame slot for EnumVariant".into())
+            CraneliftError::Codegen("no frame slot for EnumVariant".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
@@ -305,7 +305,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Copy payload if present.
         if let Some(payload_op) = payload {
             let payload_ty = &variants[variant_index as usize].1.as_ref().ok_or_else(|| {
-                AotError::Codegen("EnumVariant has payload but variant has no payload type".into())
+                CraneliftError::Codegen("EnumVariant has payload but variant has no payload type".into())
             })?;
             let payload_repr = types::ir_type_to_cranelift(payload_ty);
             let payload_addr = builder.ins().iadd_imm(dest_addr, payload_offset as i64);
@@ -336,13 +336,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         err_dest: ValueId,
         is_ok: ValueId,
         src: &Operand,
-    ) -> Result<(), AotError> {
+    ) -> Result<(), CraneliftError> {
         // Get source Result type.
         let src_ty = self.get_operand_type(src)?;
         let ok_ty = match &src_ty {
             IrType::Result(t) => t.as_ref(),
             _ => {
-                return Err(AotError::Codegen(format!(
+                return Err(CraneliftError::Codegen(format!(
                     "UnwrapResult src is not Result: {:?}",
                     src_ty
                 )));

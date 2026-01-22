@@ -12,7 +12,7 @@ use std::hash::{Hash, Hasher};
 
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection, ParsedWorldfile};
-use datalove_datafun_jit::{JitEngine, ChaosDispatcher};
+use datalove_datafun_cranelift_jit::{JitEngine, ChaosDispatcher};
 use datalove_datafun_interp::CallDispatcher;
 use datafun::pipeline::ModuleCompilationPipeline;
 

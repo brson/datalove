@@ -21,7 +21,7 @@ use std::path::Path;
 use std::process::Command;
 
 use datalove_datafun as datafun;
-use datalove_datafun_aot_cranelift::AotCompiler;
+use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_interp::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 

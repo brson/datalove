@@ -403,7 +403,7 @@ impl ScriptCommand {
 
         // Create JIT engine if --jit flag is set (threshold=1 compiles on first call).
         let call_dispatcher: Option<Box<dyn datalove_datafun_interp::CallDispatcher>> = if jit {
-            let jit_engine = datalove_datafun_jit::JitEngine::new(1)
+            let jit_engine = datalove_datafun_cranelift_jit::JitEngine::new(1)
                 .map_err(|e| anyhow!("Failed to create JIT engine: {:?}", e))?;
             Some(Box::new(jit_engine))
         } else {

@@ -11,7 +11,7 @@ divan = "0.1"
 datalove-datafun-compiler = { path = "../datalove-datafun-compiler" }
 datalove-datafun-tycheck = { path = "../datalove-datafun-tycheck" }
 datalove-datafun = { path = "../datalove-datafun" }
-datalove-datafun-jit = { path = "../datalove-datafun-jit" }
+datalove-datafun-cranelift-jit = { path = "../datalove-datafun-cranelift-jit" }
 bct.workspace = true
 
 [[bench]]

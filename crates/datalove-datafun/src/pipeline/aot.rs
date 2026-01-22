@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use datalove_datafun_aot_cranelift::AotCompiler;
+use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_ir::{IrScriptUnit, FunctionRegistry, IrFunction};
 
 /// Linking error.

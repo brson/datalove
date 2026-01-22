@@ -6,7 +6,7 @@
 //! # Usage
 //!
 //! ```ignore
-//! use datalove_datafun_jit::JitEngine;
+//! use datalove_datafun_cranelift_jit::JitEngine;
 //! use datalove_datafun_interp::IrInterpreter;
 //! use datalove_rt::c::DebugOutputMode;
 //!
