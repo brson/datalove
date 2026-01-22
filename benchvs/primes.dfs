@@ -3,22 +3,22 @@
 
 fun is_prime(n: u32): bool
   if n .< 2
-    ret @false
+    ret false
   end if
   if n == 2
-    ret @true
+    ret true
   end if
   if icall rem_u32(n, 2) == 0
-    ret @false
+    ret false
   end if
   var d: u32 = 3
   loop while icall mul_wrapping_u32(d, d) <= n
     if icall rem_u32(n, d) == 0
-      ret @false
+      ret false
     end if
     set d = icall add_wrapping_u32(d, 2)
   end loop
-  ret @true
+  ret true
 end fun
 
 fun count_primes(limit: u32): u32

@@ -14,5 +14,5 @@ let result = sum_to(1000000)
 if result |value|
   debuglog(value)
 else |err|
-  debuglog(@false)
+  debuglog(false)
 end if
