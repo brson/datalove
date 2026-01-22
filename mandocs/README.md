@@ -19,9 +19,9 @@ Then we'll add I/O to it &mdash; carefully.
 
 
 
-> **Roadmap**: [8 of 29 complete &middot; updated 2026-01-22](roadmap.md)
+> **Roadmap**: [8 of 29 complete &middot; updated 2026-01-22](roadmap.md).
 
-> **Latest news**: todo
+> **Latest news**: [No news yet](posts.html).
 
 
 
@@ -60,14 +60,8 @@ Then we'll add I/O to it &mdash; carefully.
 
 <br>
 
-> Datalove is a testbed for my personal compiler and language design experiments.
-> There is no recommended way to install or test.
-
-<br>
 
 
-
----
 
 Datalove is built from three sublanguages of increasing power.
 
