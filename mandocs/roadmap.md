@@ -33,7 +33,6 @@
 
 - worldfile generator
 - human docs
-- script/pipeline compilation unification
 
 
 
