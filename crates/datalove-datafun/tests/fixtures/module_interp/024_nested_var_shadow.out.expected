@@ -4,7 +4,7 @@ ModulesAnalysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn main():\nblock0:\n    v0 = const 1u32\n    store s0, v0\n    v1 = const true\n    branch v1, block1, block2\nblock1:\n    v2 = const 2u32\n    store s1, v2\n    v3 = const 3u32\n    store s1, v3\n    v4 = load s1\n    return v4\nblock2:\n    v5 = const 88u32\n    return v5\n",
+        ir: "fn main():\nblock0:\n    v0 = const 1u32\n    store.copy s0, v0\n    v1 = const true\n    branch v1, block1, block2\nblock1:\n    v2 = const 2u32\n    store.copy s1, v2\n    v3 = const 3u32\n    store.copy s1, v3\n    v4 = load.copy s1\n    return v4\nblock2:\n    v5 = const 88u32\n    return v5\n",
     ),
     output: "3",
 )

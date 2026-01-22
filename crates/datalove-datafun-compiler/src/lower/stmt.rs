@@ -64,11 +64,13 @@ pub fn lower_statement_indexed<'db>(
             // Get type from the initialization expression.
             let init_expr = var_stmt.value;
             let slot_type = ctx.expr_type(init_expr);
-            let slot = ctx.fresh_slot(slot_type.clone());
+            let is_copy = slot_type.is_copy();
+            let slot = ctx.fresh_slot(slot_type);
             let value_id = lower_expression(ctx, init_expr)?;
             ctx.emit(Instruction::SlotStore {
                 dest: SlotDest::Local(slot),
                 value: Operand::Value(value_id),
+                is_copy,
             });
             let operand = Operand::Slot(slot);
             ctx.bind_var(&name, operand);
@@ -566,14 +568,14 @@ fn lower_set<'db>(
             match ctx.lookup_var(&name_str) {
                 Some(Operand::Slot(slot)) => {
                     // Drop old value before storing new one.
-                    if let Some(slot_type) = ctx.slot_type(slot).cloned() {
-                        if !slot_type.is_copy() {
-                            ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
-                        }
+                    let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);
+                    if !is_copy {
+                        ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
                     }
                     ctx.emit(Instruction::SlotStore {
                         dest: SlotDest::Local(slot),
                         value: Operand::Value(value_id),
+                        is_copy,
                     });
                     Ok(())
                 }

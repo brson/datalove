@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn conditional_set(p0, p1):\nblock0:\n    v0 = copy p1\n    branch v0, block1, block2\nblock1:\n    v1 = const 42u32\n    store p0, v1\n    goto block3\nblock2:\n    v2 = const 99u32\n    store p0, v2\n    goto block3\nblock3:\n    v3 = const true\n    return v3\n\nfn test_true():\nblock0:\n    v0 = const 0u32\n    store s0, v0\n    v1 = const true\n    v2 = call m0.f0(s0, v1)\n    v3 = load s0\n    return v3\n\nfn test_false():\nblock0:\n    v0 = const 0u32\n    store s0, v0\n    v1 = const false\n    v2 = call m0.f0(s0, v1)\n    v3 = load s0\n    return v3\n",
+                ir: "fn conditional_set(p0, p1):\nblock0:\n    v0 = copy p1\n    branch v0, block1, block2\nblock1:\n    v1 = const 42u32\n    store p0, v1\n    goto block3\nblock2:\n    v2 = const 99u32\n    store p0, v2\n    goto block3\nblock3:\n    v3 = const true\n    return v3\n\nfn test_true():\nblock0:\n    v0 = const 0u32\n    store.copy s0, v0\n    v1 = const true\n    v2 = call m0.f0(s0, v1)\n    v3 = load.copy s0\n    return v3\n\nfn test_false():\nblock0:\n    v0 = const 0u32\n    store.copy s0, v0\n    v1 = const false\n    v2 = call m0.f0(s0, v1)\n    v3 = load.copy s0\n    return v3\n",
             ),
             output: "",
         ),

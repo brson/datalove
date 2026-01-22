@@ -259,11 +259,13 @@ fn lower_statement_for_script<'db>(
             let name = var_stmt.name.text(ctx.db).to_string();
             let init_expr = var_stmt.value;
             let slot_type = ctx.expr_type(init_expr);
+            let is_copy = slot_type.is_copy();
             let slot = ctx.fresh_slot(slot_type);
             let value_id = lower_expression(ctx, init_expr)?;
             ctx.emit(Instruction::SlotStore {
                 dest: SlotDest::Local(slot),
                 value: Operand::Value(value_id),
+                is_copy,
             });
             let operand = Operand::Slot(slot);
             ctx.bind_var(&name, operand);
@@ -292,29 +294,29 @@ fn lower_statement_for_script<'db>(
                         match operand {
                             Operand::Slot(slot) => {
                                 // Drop old value before storing new one.
-                                if let Some(slot_type) = ctx.slot_type(slot).cloned() {
-                                    if !slot_type.is_copy() {
-                                        ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
-                                    }
+                                let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);
+                                if !is_copy {
+                                    ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
                                 }
                                 ctx.emit(Instruction::SlotStore {
                                     dest: SlotDest::Local(slot),
                                     value: Operand::Value(value_id),
+                                    is_copy,
                                 });
                                 Ok(())
                             }
                             Operand::ExternalSlot { unit, slot } => {
                                 // Drop old value before storing new one.
-                                if let Some(slot_type) = ctx.external_slot_type(&name).cloned() {
-                                    if !slot_type.is_copy() {
-                                        ctx.emit(Instruction::Drop {
-                                            operand: Operand::ExternalSlot { unit, slot },
-                                        });
-                                    }
+                                let is_copy = ctx.external_slot_type(&name).map(|t| t.is_copy()).unwrap_or(false);
+                                if !is_copy {
+                                    ctx.emit(Instruction::Drop {
+                                        operand: Operand::ExternalSlot { unit, slot },
+                                    });
                                 }
                                 ctx.emit(Instruction::SlotStore {
                                     dest: SlotDest::External { unit, slot },
                                     value: Operand::Value(value_id),
+                                    is_copy,
                                 });
                                 Ok(())
                             }

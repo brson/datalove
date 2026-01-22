@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn init_string(p0):\nblock0:\n    v0 = const \"hello\"\n    store p0, v0\n    v1 = const true\n    return v1\n\nfn test():\nblock0:\n    v0 = const \"\"\n    store s0, v0\n    v1 = call m0.f0(s0)\n    v2 = load s0\n    return v2\n",
+                ir: "fn init_string(p0):\nblock0:\n    v0 = const \"hello\"\n    store p0, v0\n    v1 = const true\n    return v1\n\nfn test():\nblock0:\n    v0 = const \"\"\n    store.move s0, v0\n    v1 = call m0.f0(s0)\n    v2 = load.move s0\n    return v2\n",
             ),
             output: "",
         ),

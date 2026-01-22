@@ -196,8 +196,9 @@ pub fn lower_expression<'db>(
                     Operand::Slot(s) => {
                         // For slots, emit a load.
                         let slot_type = ctx.expr_type(expr);
+                        let is_copy = slot_type.is_copy();
                         let dest = ctx.fresh_value(slot_type);
-                        ctx.emit(Instruction::SlotLoad { dest, slot: s });
+                        ctx.emit(Instruction::SlotLoad { dest, slot: s, is_copy });
                         Ok(dest)
                     }
                     Operand::Param(_) => {

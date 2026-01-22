@@ -7,11 +7,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = pack Struct0 {v2}\n    store s0, v3\n    v4 = const 99u32\n    setfield s0.0.0, v4\n    v5 = load s0\n    v6 = getfield v5.0\n    v7 = getfield v6.0\n    return v7\nexports:\n    test = f0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = pack Struct0 {v2}\n    store.copy s0, v3\n    v4 = const 99u32\n    setfield s0.0.0, v4\n    v5 = load.copy s0\n    v6 = getfield v5.0\n    v7 = getfield v6.0\n    return v7\nexports:\n    test = f0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = pack Struct0 {v2}\n    store s0, v3\n    v4 = const 99u32\n    setfield s0.0.0, v4\n    v5 = load s0\n    v6 = getfield v5.0\n    v7 = getfield v6.0\n    return v7\nexports:\n    test = f0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = pack Struct0 {v2}\n    store.copy s0, v3\n    v4 = const 99u32\n    setfield s0.0.0, v4\n    v5 = load.copy s0\n    v6 = getfield v5.0\n    v7 = getfield v6.0\n    return v7\nexports:\n    test = f0\n",
             ),
             ir_match: true,
             interp_output: "99\n",

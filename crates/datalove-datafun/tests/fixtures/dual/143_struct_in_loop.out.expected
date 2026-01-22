@@ -7,11 +7,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    v1 = pack Struct0 {v0}\n    store s0, v1\n    goto block1\nblock1:\n    v2 = const 1u32\n    setfield s0.0, v2\n    goto block3\nblock2:\n    goto block1\nblock3:\n    v3 = getfieldref s0.0\n    debuglog v3\n    goto block4\nblock4:\n    v4 = const 2u32\n    setfield s0.0, v4\n    goto block6\nblock5:\n    goto block4\nblock6:\n    v5 = getfieldref s0.0\n    debuglog v5\n    unit_end\nexports:\n    s = s0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    v1 = pack Struct0 {v0}\n    store.copy s0, v1\n    goto block1\nblock1:\n    v2 = const 1u32\n    setfield s0.0, v2\n    goto block3\nblock2:\n    goto block1\nblock3:\n    v3 = getfieldref s0.0\n    debuglog v3\n    goto block4\nblock4:\n    v4 = const 2u32\n    setfield s0.0, v4\n    goto block6\nblock5:\n    goto block4\nblock6:\n    v5 = getfieldref s0.0\n    debuglog v5\n    unit_end\nexports:\n    s = s0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    v1 = pack Struct0 {v0}\n    store s0, v1\n    goto block1\nblock1:\n    v2 = const 1u32\n    setfield s0.0, v2\n    goto block3\nblock2:\n    goto block1\nblock3:\n    v3 = getfieldref s0.0\n    debuglog v3\n    goto block4\nblock4:\n    v4 = const 2u32\n    setfield s0.0, v4\n    goto block6\nblock5:\n    goto block4\nblock6:\n    v5 = getfieldref s0.0\n    debuglog v5\n    unit_end\nexports:\n    s = s0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    v1 = pack Struct0 {v0}\n    store.copy s0, v1\n    goto block1\nblock1:\n    v2 = const 1u32\n    setfield s0.0, v2\n    goto block3\nblock2:\n    goto block1\nblock3:\n    v3 = getfieldref s0.0\n    debuglog v3\n    goto block4\nblock4:\n    v4 = const 2u32\n    setfield s0.0, v4\n    goto block6\nblock5:\n    goto block4\nblock6:\n    v5 = getfieldref s0.0\n    debuglog v5\n    unit_end\nexports:\n    s = s0\n",
             ),
             ir_match: true,
             interp_output: "1\n2\n",

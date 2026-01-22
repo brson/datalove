@@ -18,6 +18,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: &SlotDest,
         value: &Operand,
+        is_copy: bool,
     ) -> Result<(), AotError> {
         let slot_id = match dest {
             SlotDest::Local(id) => *id,
@@ -51,12 +52,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().store(MemFlags::new(), val, addr, 0);
             }
             CraneliftRepr::Aggregate(layout) => {
-                // Aggregate: destroy old value in dest, copy from source, zero source.
-                //
-                // This implements move semantics for aggregate types:
-                // 1. Destroy old value in destination slot (free allocations)
-                // 2. Copy bytes from source to destination
-                // 3. Zero out source (transfers ownership, prevents double-free)
+                // Aggregate: destroy old value in dest, copy from source.
+                // For move semantics (!is_copy), also zero the source.
                 let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
 
                 // Destroy the old value in the slot before overwriting.
@@ -88,12 +85,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
                 builder.call_memcpy(self.isa.frontend_config(), dest_addr, src_ptr, size);
 
-                // Zero out the source to complete the move (prevents double-free).
-                // Both Slot and Value sources need to be zeroed since they can hold
-                // allocations that would otherwise be freed when their frame storage
-                // is destroyed at function cleanup.
-                let zero = builder.ins().iconst(cranelift_codegen::ir::types::I8, 0);
-                builder.call_memset(self.isa.frontend_config(), src_ptr, zero, size);
+                if !is_copy {
+                    // Zero out the source to complete the move (prevents double-free).
+                    // Both Slot and Value sources need to be zeroed since they can hold
+                    // allocations that would otherwise be freed when their frame storage
+                    // is destroyed at function cleanup.
+                    let zero = builder.ins().iconst(cranelift_codegen::ir::types::I8, 0);
+                    builder.call_memset(self.isa.frontend_config(), src_ptr, zero, size);
+                }
             }
         }
 
@@ -101,11 +100,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 
     /// Compile a SlotLoad instruction.
+    ///
+    /// For aggregates, this returns a pointer to the slot. The `is_copy` parameter
+    /// is available for future optimization but not currently used here - move
+    /// semantics for aggregates are handled when the value is consumed elsewhere.
     pub(super) fn compile_slot_load(
         &mut self,
         builder: &mut FunctionBuilder,
         dest: ValueId,
         slot: SlotId,
+        _is_copy: bool,
     ) -> Result<(), AotError> {
         let frame_slot = self.frame_slot.ok_or_else(|| {
             AotError::Codegen("no frame slot for slot load".into())

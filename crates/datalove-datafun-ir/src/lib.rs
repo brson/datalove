@@ -797,7 +797,7 @@ pub enum Instruction {
     },
 
     /// Store value to mutable slot.
-    SlotStore { dest: SlotDest, value: Operand },
+    SlotStore { dest: SlotDest, value: Operand, is_copy: bool },
 
     /// Store value to a field within a mutable slot.
     ///
@@ -813,7 +813,7 @@ pub enum Instruction {
     ParamStore { param: ParamId, value: Operand },
 
     /// Load value from mutable slot.
-    SlotLoad { dest: ValueId, slot: SlotId },
+    SlotLoad { dest: ValueId, slot: SlotId, is_copy: bool },
 
     /// Drop a value (run destructor).
     Drop { operand: Operand },

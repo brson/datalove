@@ -544,11 +544,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::Call { dest, func, args } => {
                 self.compile_call(builder, *dest, func, args)?;
             }
-            Instruction::SlotStore { dest, value } => {
-                self.compile_slot_store(builder, dest, value)?;
+            Instruction::SlotStore { dest, value, is_copy } => {
+                self.compile_slot_store(builder, dest, value, *is_copy)?;
             }
-            Instruction::SlotLoad { dest, slot } => {
-                self.compile_slot_load(builder, *dest, *slot)?;
+            Instruction::SlotLoad { dest, slot, is_copy } => {
+                self.compile_slot_load(builder, *dest, *slot, *is_copy)?;
             }
             Instruction::ParamStore { param, value } => {
                 self.compile_param_store(builder, *param, value)?;

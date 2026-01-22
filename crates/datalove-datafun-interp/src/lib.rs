@@ -574,10 +574,8 @@ impl IrInterpreter {
                 self.execute_unaryop(*op, &src_val, dest_slot)?;
                 frame.mark_value_initialized(*dest);
             }
-            Instruction::SlotStore { dest, value } => {
+            Instruction::SlotStore { dest, value, is_copy } => {
                 let src_val = self.read_operand(value, frame, frames)?;
-                // Check if type is Copy (includes composite types with all-copy fields).
-                let is_copy = unsafe { Self::is_copy_tydesc(src_val.tydesc) };
                 match dest {
                     SlotDest::Local(slot_id) => {
                         // Destroy old value if slot was already initialized.
@@ -592,7 +590,7 @@ impl IrInterpreter {
                             }
                         }
                         let dest_slot = frame.slot_dest(*slot_id);
-                        if is_copy {
+                        if *is_copy {
                             // Copy types: just copy the bytes, source remains valid.
                             unsafe { self.copy_value(&src_val, dest_slot); }
                         } else {
@@ -616,7 +614,7 @@ impl IrInterpreter {
                             &src_val,
                         )?;
                         // Mark source as dropped only for non-copy types.
-                        if !is_copy {
+                        if !*is_copy {
                             match value {
                                 Operand::Value(id) => frame.mark_value_dropped(*id),
                                 Operand::Slot(id) => frame.mark_slot_dropped(*id),
@@ -660,12 +658,10 @@ impl IrInterpreter {
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
                 }
             }
-            Instruction::SlotLoad { dest, slot } => {
+            Instruction::SlotLoad { dest, slot, is_copy } => {
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest);
-                // Check if type is Copy (includes composite types with all-copy fields).
-                let is_copy = unsafe { Self::is_copy_tydesc(slot_val.tydesc) };
-                if is_copy {
+                if *is_copy {
                     // Copy types: just copy the bytes, slot remains valid.
                     unsafe { self.copy_value(&slot_val, dest_slot); }
                 } else {

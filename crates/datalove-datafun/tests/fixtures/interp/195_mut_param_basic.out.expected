@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn set_to_42(p0):\nblock0:\n    v0 = const 42u32\n    store p0, v0\n    v1 = const true\n    return v1\n\nfn test():\nblock0:\n    v0 = const 5u32\n    store s0, v0\n    v1 = call m0.f0(s0)\n    v2 = load s0\n    return v2\n",
+                ir: "fn set_to_42(p0):\nblock0:\n    v0 = const 42u32\n    store p0, v0\n    v1 = const true\n    return v1\n\nfn test():\nblock0:\n    v0 = const 5u32\n    store.copy s0, v0\n    v1 = call m0.f0(s0)\n    v2 = load.copy s0\n    return v2\n",
             ),
             output: "",
         ),
