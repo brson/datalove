@@ -11,18 +11,18 @@ and they may be mutually recursive.
 // Pretend this is a module.
 
 fun is_even(n: u32): !bool
-    if n == @0
-        ret ok @true
+    if n == 0
+        ret ok true
     else
-        ret is_odd(n -! @1)  // Forward reference OK in modules.
+        ret is_odd(n -! 1)  // Forward reference OK in modules.
     end if
 end fun
 
 fun is_odd(n: u32): !bool
-    if n == @0
-        ret ok @false
+    if n == 0
+        ret ok false
     else
-        ret is_even(n -! @1)
+        ret is_even(n -! 1)
     end if
 end fun
 ```
@@ -37,18 +37,18 @@ Names may only refer to previous declarations.
 // In scripts, `is_odd` must be defined before `is_even` can call it.
 
 fun is_odd(n: u32): !bool
-    if n == @0
-        ret ok @false
+    if n == 0
+        ret ok false
     else
-        ret is_even(n -! @1)  // ERROR: `is_even` not yet defined.
+        ret is_even(n -! 1)  // ERROR: `is_even` not yet defined.
     end if
 end fun
 
 fun is_even(n: u32): !bool
-    if n == @0
-        ret ok @true
+    if n == 0
+        ret ok true
     else
-        ret is_odd(n -! @1)  // OK: `is_odd` already defined.
+        ret is_odd(n -! 1)  // OK: `is_odd` already defined.
     end if
 end fun
 ```
@@ -62,7 +62,7 @@ Functions with return types require `ret` with value.
 
 ```datalove
 fun choose(a: u32): bool
-  if a < 10
+  if a .< 10
     ret true
   else
     ret false
@@ -79,7 +79,7 @@ fun foo()
 end fun
 
 fun choose(a: u32)
-  if a < 10
+  if a .< 10
     ret
   end if
 end fun

@@ -26,6 +26,7 @@ Uses Salsa for incremental compilation. REPL-first design.
 | `usize` | Unsigned index type (32 or 64-bit) | Implemented |
 | `isize` | Signed index type (32 or 64-bit) | Implemented |
 | `f32` | 32-bit float | Implemented |
+| `f64` | 64-bit float | Implemented |
 | `int` | Arbitrary precision signed integer (bigint) | Implemented |
 | `string` | UTF-8 string | Implemented |
 
@@ -121,7 +122,7 @@ Note: Named tuples, structs, and enums were removed from the language.
 : u8 / 0x7F         // integer value 127
 : f32 / 0xABABABAB  // f32 bit pattern coercion
 ```
-Hex literals can be used with any integer type or f32. With f32, the hex value is interpreted as a raw bit pattern.
+Hex literals can be used with any integer type or f32/f64. With floats, the hex value is interpreted as a raw bit pattern.
 
 ---
 
@@ -186,7 +187,7 @@ See `botdocs/op-precedence.md` for detailed reference.
 
 | Type | `+` `-` `*` | `/` | Unary `-` |
 |------|-------------|-----|-----------|
-| **f32** | Returns f32 | Returns f32 | Returns f32 |
+| **f32/f64** | Returns same type | Returns same type | Returns same type |
 | **int** (bigint) | Returns int | Not allowed (use `/!` or `/?`) | Returns int |
 | **Fixed ints** | Widens to int | Not allowed | Not allowed |
 
@@ -201,7 +202,7 @@ See `botdocs/op-precedence.md` for detailed reference.
 
 | Type | `+!` `-!` `*!` | `/!` | Unary `-!` |
 |------|----------------|------|------------|
-| **f32** | Not allowed | Not allowed | Not allowed |
+| **f32/f64** | Not allowed | Not allowed | Not allowed |
 | **int** | Not allowed | Returns `!int` | Not allowed |
 | **Fixed ints** | Returns `!T` (same type) | Returns `!T` | Returns `!T` |
 
@@ -214,7 +215,7 @@ These operators early-return on overflow/div0, requiring the enclosing function 
 
 | Type | `+?` `-?` `*?` | `/?` | Unary `-?` |
 |------|----------------|------|------------|
-| **f32** | Not allowed | Not allowed | Not allowed |
+| **f32/f64** | Not allowed | Not allowed | Not allowed |
 | **int** | Not allowed | Returns `?int` | Not allowed |
 | **Fixed ints** | Returns `?T` (same type) | Returns `?T` | Signed only, returns `?T` |
 
@@ -455,7 +456,7 @@ Type aliases are collected in Pass 0 of typechecking, before function signatures
 | Duplicate alias name | `DuplicateTypeAlias` |
 | Shadowing primitive type | `CannotShadowPrimitive` |
 
-**Primitives that cannot be shadowed:** `bool`, `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, `usize`, `isize`, `f32`, `int`, `string`
+**Primitives that cannot be shadowed:** `bool`, `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, `usize`, `isize`, `f32`, `f64`, `int`, `string`
 
 **Semantics:**
 - Type aliases are purely syntactic - the alias name resolves to the structural type during typechecking
@@ -556,7 +557,7 @@ isize -> int
 
 | Copy Types | Linear Types |
 |------------|--------------|
-| bool, u8-u64, i8-i64, usize, isize, f32 | int, string, list, map, set, tensor, table, data, error |
+| bool, u8-u64, i8-i64, usize, isize, f32, f64 | int, string, list, map, set, tensor, table, data, error |
 
 Linear types have move semantics; copy types can be freely duplicated.
 
@@ -581,7 +582,7 @@ end loop
 ```
 
 **Exceptions:**
-- Copy types (fixed-width integers, bool, f32) can be used freely in loops
+- Copy types (fixed-width integers, bool, f32, f64) can be used freely in loops
 - Binary operators borrow their operands (don't consume), so `a + b` doesn't move `a` or `b`
 
 ---

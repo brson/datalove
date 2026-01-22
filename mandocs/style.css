@@ -104,10 +104,13 @@
         --syn-brace-paren: var(--cave-base02);
         --syn-brace-angle: var(--cave-base02);
         --syn-brace-square: var(--cave-base02);
-        --syn-op-cmp: var(--cave-base02);
+        --syn-op-cmp: var(--cave-red);
         --syn-op-result: var(--cave-orange);
         --syn-op-option: var(--cave-violet);
+        --syn-op-arith: var(--cave-blue);
         --syn-type-colon: var(--cave-cyan);
+        --syn-type-hint-slash: var(--cave-cyan);
+        --syn-brace-table: var(--cave-orange);
         --syn-punctuation: var(--cave-base02);
 
         --accent-1: var(--cave-cyan);
@@ -138,10 +141,13 @@
         --syn-brace-paren: var(--cave-base05);
         --syn-brace-angle: var(--cave-base05);
         --syn-brace-square: var(--cave-base05);
-        --syn-op-cmp: var(--cave-base05);
+        --syn-op-cmp: var(--cave-red);
         --syn-op-result: var(--cave-orange);
         --syn-op-option: var(--cave-violet);
+        --syn-op-arith: var(--cave-blue);
         --syn-type-colon: var(--cave-cyan);
+        --syn-type-hint-slash: var(--cave-cyan);
+        --syn-brace-table: var(--cave-orange);
         --syn-punctuation: var(--cave-base05);
     }
 }
@@ -306,7 +312,10 @@ th {
 .token.op-cmp { color: var(--syn-op-cmp); }
 .token.op-result { color: var(--syn-op-result); }
 .token.op-option { color: var(--syn-op-option); }
+.token.op-arith { color: var(--syn-op-arith); }
 .token.type-colon { color: var(--syn-type-colon); }
+.token.type-hint-slash { color: var(--syn-type-hint-slash); }
+.token.brace-table { color: var(--syn-brace-table); }
 .token.punctuation { color: var(--syn-punctuation); }
 
 /* Admonition boxes */
