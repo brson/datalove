@@ -57,9 +57,10 @@ pub fn lower_function_body<'db>(
 
     let name = func.name(ctx.db).text(ctx.db).to_string();
 
-    // Set drop schedule for this function.
+    // Set drop schedule and tracking for this function.
     ctx.drop_schedule = analysis.schedule;
     ctx.binding_info = analysis.bindings;
+    ctx.tracking = analysis.tracking;
 
     // Reset counters - each function has its own statement/binding ID space.
     ctx.next_stmt_id = 0;
@@ -139,9 +140,8 @@ pub fn lower_function_body<'db>(
         slot_count: ctx.next_slot,
         value_types: std::mem::take(&mut ctx.value_types),
         slot_types: std::mem::take(&mut ctx.slot_types),
-        // TODO: Populate from ownership analysis when categorization is implemented.
-        tracked_values: Vec::new(),
-        tracked_slots: Vec::new(),
+        tracked_values: ctx.compute_tracked_values(),
+        tracked_slots: ctx.compute_tracked_slots(),
     })
 }
 

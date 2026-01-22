@@ -85,6 +85,7 @@ pub fn lower_script_unit<'db>(
                 .expect("script_analysis required for Fragment units");
             ctx.drop_schedule = analysis.schedule;
             ctx.binding_info = analysis.bindings;
+            ctx.tracking = analysis.tracking;
             ctx.unit_end_drops = analysis.unit_end;
 
             // Lower all statements with index tracking.
@@ -122,9 +123,8 @@ pub fn lower_script_unit<'db>(
         slot_count: ctx.next_slot,
         value_types: std::mem::take(&mut ctx.value_types),
         slot_types: std::mem::take(&mut ctx.slot_types),
-        // TODO: Populate from ownership analysis when categorization is implemented.
-        tracked_values: Vec::new(),
-        tracked_slots: Vec::new(),
+        tracked_values: ctx.compute_tracked_values(),
+        tracked_slots: ctx.compute_tracked_slots(),
         functions: ctx.functions,
         symbols: ctx.symbols,
         result,
@@ -158,6 +158,7 @@ pub fn lower_script_fragment_raw<'db>(
     // Use pre-computed script analysis from ownership analysis phase.
     ctx.drop_schedule = script_analysis.schedule;
     ctx.binding_info = script_analysis.bindings;
+    ctx.tracking = script_analysis.tracking;
     ctx.unit_end_drops = script_analysis.unit_end;
 
     // Lower all statements with index tracking.
@@ -182,9 +183,8 @@ pub fn lower_script_fragment_raw<'db>(
         slot_count: ctx.next_slot,
         value_types: std::mem::take(&mut ctx.value_types),
         slot_types: std::mem::take(&mut ctx.slot_types),
-        // TODO: Populate from ownership analysis when categorization is implemented.
-        tracked_values: Vec::new(),
-        tracked_slots: Vec::new(),
+        tracked_values: ctx.compute_tracked_values(),
+        tracked_slots: ctx.compute_tracked_slots(),
         functions: ctx.functions,
         symbols: ctx.symbols,
         result: None,
@@ -227,9 +227,8 @@ pub fn lower_script_expr<'db>(
         slot_count: ctx.next_slot,
         value_types: std::mem::take(&mut ctx.value_types),
         slot_types: std::mem::take(&mut ctx.slot_types),
-        // TODO: Populate from ownership analysis when categorization is implemented.
-        tracked_values: Vec::new(),
-        tracked_slots: Vec::new(),
+        tracked_values: ctx.compute_tracked_values(),
+        tracked_slots: ctx.compute_tracked_slots(),
         functions: ctx.functions,
         symbols: ctx.symbols,
         result: Some(value_id),

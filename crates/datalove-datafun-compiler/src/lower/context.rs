@@ -13,7 +13,7 @@ use datalove_datafun_ir::{
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
 };
 use crate::ir_ext::IrTypeExt;
-use crate::ownership_analysis::{BindingId, DropSchedule, BindingInfo};
+use crate::ownership_analysis::{BindingId, DropSchedule, BindingInfo, TrackingCategory};
 use super::LowerError;
 
 /// Context for a single loop during lowering.
@@ -156,6 +156,8 @@ pub struct LowerCtx<'db> {
     pub(super) drop_schedule: DropSchedule,
     /// Binding info from analysis (for looking up names).
     pub(super) binding_info: Vec<BindingInfo>,
+    /// Tracking category for each binding (indexed by BindingId).
+    pub(super) tracking: Vec<TrackingCategory>,
     /// Mapping from BindingId to Operand (built during lowering).
     pub(super) binding_to_operand: HashMap<BindingId, Operand>,
     /// Next BindingId to allocate (must match analysis traversal order).
@@ -210,6 +212,7 @@ impl<'db> LowerCtx<'db> {
             expr_temps: Vec::new(),
             drop_schedule: DropSchedule::default(),
             binding_info: Vec::new(),
+            tracking: Vec::new(),
             binding_to_operand: HashMap::new(),
             next_binding_id: 0,
             next_stmt_id: 0,
@@ -255,6 +258,7 @@ impl<'db> LowerCtx<'db> {
             expr_temps: Vec::new(),
             drop_schedule: DropSchedule::default(),
             binding_info: Vec::new(),
+            tracking: Vec::new(),
             binding_to_operand: HashMap::new(),
             next_binding_id: 0,
             next_stmt_id: 0,
@@ -339,6 +343,7 @@ impl<'db> LowerCtx<'db> {
             expr_temps: Vec::new(),
             drop_schedule: DropSchedule::default(),
             binding_info: Vec::new(),
+            tracking: Vec::new(),
             binding_to_operand: HashMap::new(),
             next_binding_id: 0,
             next_stmt_id: 0,
@@ -553,6 +558,54 @@ impl<'db> LowerCtx<'db> {
         id
     }
 
+    /// Check if a binding is tracked (needs runtime checks for drops/moves).
+    pub fn is_binding_tracked(&self, id: BindingId) -> bool {
+        self.tracking.get(id.0 as usize)
+            .map(|cat| *cat == TrackingCategory::Tracked)
+            .unwrap_or(true) // Default to tracked if not found (safe fallback).
+    }
+
+    /// Emit a drop for a binding, using DropTracked if tracked, Drop if precise.
+    fn emit_binding_drop(&mut self, id: BindingId) {
+        if let Some(&operand) = self.binding_to_operand.get(&id) {
+            if self.is_binding_tracked(id) {
+                self.emit(Instruction::DropTracked { operand });
+            } else {
+                self.emit(Instruction::Drop { operand });
+            }
+        }
+    }
+
+    /// Compute tracked_values for the current unit.
+    ///
+    /// Returns ValueIds for bindings that are tracked and stored in values.
+    pub fn compute_tracked_values(&self) -> Vec<ValueId> {
+        let mut result = Vec::new();
+        for (id, &operand) in &self.binding_to_operand {
+            if self.is_binding_tracked(*id) {
+                if let Operand::Value(value_id) = operand {
+                    result.push(value_id);
+                }
+            }
+        }
+        result
+    }
+
+    /// Compute tracked_slots for the current unit.
+    ///
+    /// Returns SlotIds for bindings that are tracked and stored in slots.
+    pub fn compute_tracked_slots(&self) -> Vec<SlotId> {
+        let mut result = Vec::new();
+        for (id, &operand) in &self.binding_to_operand {
+            if self.is_binding_tracked(*id) {
+                if let Operand::Slot(slot_id) = operand {
+                    result.push(slot_id);
+                }
+            }
+        }
+        result
+    }
+
     /// Allocate and return the next global statement ID.
     ///
     /// Must be called in the same order as during ownership analysis.
@@ -564,25 +617,25 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit drops scheduled for a then-branch exit.
     pub fn emit_then_branch_drops(&mut self, stmt_idx: usize) {
-        let operands = self.get_scheduled_drops_then(stmt_idx);
-        for operand in operands {
-            self.emit(Instruction::Drop { operand });
+        let binding_ids = self.get_scheduled_binding_ids_then(stmt_idx);
+        for id in binding_ids {
+            self.emit_binding_drop(id);
         }
     }
 
     /// Emit drops scheduled for an else-branch exit.
     pub fn emit_else_branch_drops(&mut self, stmt_idx: usize) {
-        let operands = self.get_scheduled_drops_else(stmt_idx);
-        for operand in operands {
-            self.emit(Instruction::Drop { operand });
+        let binding_ids = self.get_scheduled_binding_ids_else(stmt_idx);
+        for id in binding_ids {
+            self.emit_binding_drop(id);
         }
     }
 
     /// Emit drops scheduled before a return statement.
     pub fn emit_before_return_drops(&mut self, stmt_idx: usize) {
-        let operands = self.get_scheduled_drops_return(stmt_idx);
-        for operand in operands {
-            self.emit(Instruction::Drop { operand });
+        let binding_ids = self.get_scheduled_binding_ids_return(stmt_idx);
+        for id in binding_ids {
+            self.emit_binding_drop(id);
         }
     }
 
@@ -591,126 +644,84 @@ impl<'db> LowerCtx<'db> {
     /// Uses current_stmt_idx since TryReturn happens within expression lowering.
     pub fn emit_before_try_return_drops(&mut self) {
         if let Some(stmt_idx) = self.current_stmt_idx {
-            let operands = self.get_scheduled_drops_try(stmt_idx);
-            for operand in operands {
-                self.emit(Instruction::Drop { operand });
+            let binding_ids = self.get_scheduled_binding_ids_try(stmt_idx);
+            for id in binding_ids {
+                self.emit_binding_drop(id);
             }
         }
     }
 
-    /// Get operands to drop for then-branch exit.
-    fn get_scheduled_drops_then(&self, stmt_idx: usize) -> Vec<Operand> {
-        let mut result = Vec::new();
-        if let Some(binding_ids) = self.drop_schedule.then_branch_exit.get(&stmt_idx) {
-            for &id in binding_ids {
-                if let Some(&operand) = self.binding_to_operand.get(&id) {
-                    result.push(operand);
-                }
-            }
-        }
-        result
+    /// Get binding IDs to drop for then-branch exit.
+    fn get_scheduled_binding_ids_then(&self, stmt_idx: usize) -> Vec<BindingId> {
+        self.drop_schedule.then_branch_exit.get(&stmt_idx)
+            .cloned()
+            .unwrap_or_default()
     }
 
-    /// Get operands to drop for else-branch exit.
-    fn get_scheduled_drops_else(&self, stmt_idx: usize) -> Vec<Operand> {
-        let mut result = Vec::new();
-        if let Some(binding_ids) = self.drop_schedule.else_branch_exit.get(&stmt_idx) {
-            for &id in binding_ids {
-                if let Some(&operand) = self.binding_to_operand.get(&id) {
-                    result.push(operand);
-                }
-            }
-        }
-        result
+    /// Get binding IDs to drop for else-branch exit.
+    fn get_scheduled_binding_ids_else(&self, stmt_idx: usize) -> Vec<BindingId> {
+        self.drop_schedule.else_branch_exit.get(&stmt_idx)
+            .cloned()
+            .unwrap_or_default()
     }
 
-    /// Get operands to drop before return.
-    fn get_scheduled_drops_return(&self, stmt_idx: usize) -> Vec<Operand> {
-        let mut result = Vec::new();
-        if let Some(binding_ids) = self.drop_schedule.before_return.get(&stmt_idx) {
-            for &id in binding_ids {
-                if let Some(&operand) = self.binding_to_operand.get(&id) {
-                    result.push(operand);
-                }
-            }
-        }
-        result
+    /// Get binding IDs to drop before return.
+    fn get_scheduled_binding_ids_return(&self, stmt_idx: usize) -> Vec<BindingId> {
+        self.drop_schedule.before_return.get(&stmt_idx)
+            .cloned()
+            .unwrap_or_default()
     }
 
-    /// Get operands to drop before TryReturn.
-    fn get_scheduled_drops_try(&self, stmt_idx: usize) -> Vec<Operand> {
-        let mut result = Vec::new();
-        if let Some(binding_ids) = self.drop_schedule.before_try_return.get(&stmt_idx) {
-            for &id in binding_ids {
-                if let Some(&operand) = self.binding_to_operand.get(&id) {
-                    result.push(operand);
-                }
-            }
-        }
-        result
+    /// Get binding IDs to drop before TryReturn.
+    fn get_scheduled_binding_ids_try(&self, stmt_idx: usize) -> Vec<BindingId> {
+        self.drop_schedule.before_try_return.get(&stmt_idx)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Emit drops scheduled for loop body end.
     pub fn emit_loop_body_end_drops(&mut self, stmt_idx: usize) {
-        let operands = self.get_scheduled_drops_loop(stmt_idx);
-        for operand in operands {
-            self.emit(Instruction::Drop { operand });
+        let binding_ids = self.get_scheduled_binding_ids_loop(stmt_idx);
+        for id in binding_ids {
+            self.emit_binding_drop(id);
         }
     }
 
     /// Emit drops scheduled before a break statement.
     pub fn emit_before_break_drops(&mut self, stmt_idx: usize) {
-        let operands = self.get_scheduled_drops_break(stmt_idx);
-        for operand in operands {
-            self.emit(Instruction::Drop { operand });
+        let binding_ids = self.get_scheduled_binding_ids_break(stmt_idx);
+        for id in binding_ids {
+            self.emit_binding_drop(id);
         }
     }
 
     /// Emit drops scheduled before a continue statement.
     pub fn emit_before_continue_drops(&mut self, stmt_idx: usize) {
-        let operands = self.get_scheduled_drops_continue(stmt_idx);
-        for operand in operands {
-            self.emit(Instruction::Drop { operand });
+        let binding_ids = self.get_scheduled_binding_ids_continue(stmt_idx);
+        for id in binding_ids {
+            self.emit_binding_drop(id);
         }
     }
 
-    /// Get operands to drop at loop body end.
-    fn get_scheduled_drops_loop(&self, stmt_idx: usize) -> Vec<Operand> {
-        let mut result = Vec::new();
-        if let Some(binding_ids) = self.drop_schedule.loop_body_end.get(&stmt_idx) {
-            for &id in binding_ids {
-                if let Some(&operand) = self.binding_to_operand.get(&id) {
-                    result.push(operand);
-                }
-            }
-        }
-        result
+    /// Get binding IDs to drop at loop body end.
+    fn get_scheduled_binding_ids_loop(&self, stmt_idx: usize) -> Vec<BindingId> {
+        self.drop_schedule.loop_body_end.get(&stmt_idx)
+            .cloned()
+            .unwrap_or_default()
     }
 
-    /// Get operands to drop before break.
-    fn get_scheduled_drops_break(&self, stmt_idx: usize) -> Vec<Operand> {
-        let mut result = Vec::new();
-        if let Some(binding_ids) = self.drop_schedule.before_break.get(&stmt_idx) {
-            for &id in binding_ids {
-                if let Some(&operand) = self.binding_to_operand.get(&id) {
-                    result.push(operand);
-                }
-            }
-        }
-        result
+    /// Get binding IDs to drop before break.
+    fn get_scheduled_binding_ids_break(&self, stmt_idx: usize) -> Vec<BindingId> {
+        self.drop_schedule.before_break.get(&stmt_idx)
+            .cloned()
+            .unwrap_or_default()
     }
 
-    /// Get operands to drop before continue.
-    fn get_scheduled_drops_continue(&self, stmt_idx: usize) -> Vec<Operand> {
-        let mut result = Vec::new();
-        if let Some(binding_ids) = self.drop_schedule.before_continue.get(&stmt_idx) {
-            for &id in binding_ids {
-                if let Some(&operand) = self.binding_to_operand.get(&id) {
-                    result.push(operand);
-                }
-            }
-        }
-        result
+    /// Get binding IDs to drop before continue.
+    fn get_scheduled_binding_ids_continue(&self, stmt_idx: usize) -> Vec<BindingId> {
+        self.drop_schedule.before_continue.get(&stmt_idx)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Emit drops for unit end (for AOT compilation).
