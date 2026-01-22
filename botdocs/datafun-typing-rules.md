@@ -280,6 +280,96 @@ e <= error
 er(e) <= Result<T>
 ```
 
+### Rule: Check-BinOp (Bidirectional Type Propagation)
+
+Binary operators support checking mode for type propagation from context to operands.
+
+#### Check-BinOp-Checked (Fixed Int)
+```
+T is fixed int (u8, i8, u16, i16, u32, i32, u64, i64, usize, isize)
+function returns Result<U>
+e1 <= T
+e2 <= T
+------------------------------------------
+e1 +! e2 <= T   (also -!, *!, /!)
+```
+
+**Note**: The expected type T propagates to both operands, allowing literals to infer their type from context.
+
+#### Check-BinOp-Optional (Fixed Int)
+```
+T is fixed int
+function returns Option<U>
+e1 <= T
+e2 <= T
+------------------------------------------
+e1 +? e2 <= T   (also -?, *?, /?)
+```
+
+#### Check-BinOp-Checked (Bigint Division)
+```
+T is bigint (int)
+function returns Result<U>
+e1 <= T
+e2 <= T
+------------------------------------------
+e1 /! e2 <= T
+```
+
+#### Check-BinOp-Optional (Bigint Division)
+```
+T is bigint (int)
+function returns Option<U>
+e1 <= T
+e2 <= T
+------------------------------------------
+e1 /? e2 <= T
+```
+
+#### Check-BinOp-Float
+```
+T is float (f32 or f64)
+e1 <= T
+e2 <= T
+------------------------------------------
+e1 + e2 <= T   (also -, *, /)
+```
+
+**Note**: Float literals can check against f32 or f64 and infer their type.
+
+#### Check-BinOp Fallback
+
+If checking fails (e.g., operand type mismatch, wrong return type), the expression falls through to synthesis mode and the synthesized type is compared against the expected type.
+
+```
+check fails
+e => T'
+T' = T OR can_widen(T', T)
+---------------------------
+e <= T
+```
+
+**Example - Type Propagation:**
+```
+fun add(): !u32
+    ret ok (1 +! 2)    // 1 and 2 check against u32 from ok wrapper
+end fun
+```
+
+1. `ok (1 +! 2)` checks against `!u32`
+2. Check-Ok extracts inner type `u32`
+3. `1 +! 2` checks against `u32`
+4. Check-BinOp-Checked: return type is Result, T=u32 is fixed int
+5. `1` checks against `u32` (Check-Int succeeds)
+6. `2` checks against `u32` (Check-Int succeeds)
+7. Expression type is `u32`
+
+**Example - Return Type Validation:**
+```
+// ERROR: +? requires Option return, but script returns Result
+let x: u32 = a +? b    // Falls through to synthesis, produces error
+```
+
 ### Rule: Check-AnonEnum
 ```
 variant V exists in expected enum type
