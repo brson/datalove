@@ -650,8 +650,8 @@ fn lower_set<'db>(
                     // Only Mut params can have field projections set.
                     let mode = ctx.param_mode(param);
                     if mode == Some(ParamMode::Mut) {
-                        ctx.emit(Instruction::SetField {
-                            slot: SlotDest::Param(param),
+                        ctx.emit(Instruction::ParamSetField {
+                            param,
                             field_path,
                             value: Operand::Value(value_id),
                         });

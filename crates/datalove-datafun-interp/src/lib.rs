@@ -548,9 +548,6 @@ impl IrInterpreter {
                             &src_val,
                         )?;
                     }
-                    SlotDest::Param(_) => {
-                        unreachable!("SlotStoreCopy with Param destination is a compiler bug");
-                    }
                 }
             }
             Instruction::SlotStoreMove { dest, value } => {
@@ -582,9 +579,6 @@ impl IrInterpreter {
                             &src_val,
                         )?;
                         Self::mark_source_dropped_local(value, frame);
-                    }
-                    SlotDest::Param(_) => {
-                        unreachable!("SlotStoreMove with Param destination is a compiler bug");
                     }
                 }
             }
@@ -1056,7 +1050,6 @@ impl IrInterpreter {
                             unit, ext_slot
                         )));
                     }
-                    SlotDest::Param(id) => frame.param_dest(*id),
                 };
 
                 // Navigate field path to find target field.
@@ -1085,6 +1078,56 @@ impl IrInterpreter {
                 }
 
                 // Destroy old field value before overwriting (handles move types).
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        self.runtime.handle(),
+                        current_ptr,
+                        current_tydesc,
+                    );
+                }
+
+                // Copy new value to target field.
+                let size = unsafe { (*current_tydesc).size as usize };
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        value_val.ptr,
+                        current_ptr,
+                        size,
+                    );
+                }
+            }
+            Instruction::ParamSetField { param, field_path, value } => {
+                let value_val = self.read_operand(value, frame, frames)?;
+
+                // Get the param's base pointer and tydesc.
+                let slot_info = frame.param_dest(*param);
+
+                // Navigate field path to find target field.
+                let mut current_ptr = slot_info.ptr;
+                let mut current_tydesc = slot_info.tydesc;
+
+                for &field_idx in field_path.iter() {
+                    let tag = unsafe { (*current_tydesc).type_tag };
+                    match tag {
+                        rtdt::TyTag::Tuple => {
+                            let tuple_info = unsafe { (*current_tydesc).type_info.tuple };
+                            let field_info = unsafe { &*tuple_info.fields.add(field_idx as usize) };
+                            current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
+                            current_tydesc = field_info.tydesc;
+                        }
+                        rtdt::TyTag::Struct => {
+                            let struct_info = unsafe { (*current_tydesc).type_info.struct_ };
+                            let field_info = unsafe { &*struct_info.fields.add(field_idx as usize) };
+                            current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
+                            current_tydesc = field_info.tydesc;
+                        }
+                        _ => return Err(InterpError::TypeMismatch(
+                            format!("ParamSetField path element requires tuple or struct type, got {:?}", tag)
+                        )),
+                    }
+                }
+
+                // Destroy old field value before overwriting.
                 unsafe {
                     datalove_rt::c::dtlv_rti_any_destroy_local(
                         self.runtime.handle(),

@@ -93,7 +93,6 @@ impl fmt::Display for SlotDest {
         match self {
             SlotDest::Local(s) => write!(f, "{}", s),
             SlotDest::External { unit, slot } => write!(f, "unit{}.{}", unit, slot),
-            SlotDest::Param(p) => write!(f, "{}", p),
         }
     }
 }
@@ -388,6 +387,13 @@ impl fmt::Display for Instruction {
             }
             Instruction::ParamStore { param, value } => {
                 write!(f, "store {}, {}", param, value)
+            }
+            Instruction::ParamSetField { param, field_path, value } => {
+                write!(f, "setfield {}", param)?;
+                for idx in field_path {
+                    write!(f, ".{}", idx)?;
+                }
+                write!(f, ", {}", value)
             }
             Instruction::SlotLoadCopy { dest, slot } => {
                 write!(f, "{} = load.copy {}", dest, slot)

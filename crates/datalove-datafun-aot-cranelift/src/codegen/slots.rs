@@ -28,11 +28,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     unit, slot
                 )));
             }
-            SlotDest::Param(_) => {
-                // SlotStore should never target Param - use ParamStore instead.
-                // SetField can target Param, but SlotStore cannot.
-                unreachable!("SlotStore with Param destination is a compiler bug");
-            }
         };
 
         let frame_slot = self.frame_slot.ok_or_else(|| {

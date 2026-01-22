@@ -349,16 +349,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     "set_field on external slot".into()
                 ));
             }
-            SlotDest::Param(param_id) => {
-                // Param pointer is already in param_values.
-                let addr = self.param_values.get(param_id).copied().ok_or_else(|| {
-                    AotError::Codegen(format!("param {:?} not found in param_values", param_id))
-                })?;
-                let ty = self.func.param_types.get(param_id.0 as usize)
-                    .cloned()
-                    .ok_or_else(|| AotError::Codegen(format!("param {:?} type not found", param_id)))?;
-                (addr, ty)
-            }
         };
 
         // Navigate field path to find target.
@@ -422,6 +412,89 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Call move_value runtime function.
                 let move_func_id = self.runtime.as_ref()
                     .ok_or_else(|| AotError::Codegen("SetField aggregate requires runtime imports".into()))?
+                    .move_value;
+                let move_ref = self.module.declare_func_in_func(move_func_id, builder.func);
+                builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, current_addr]);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Compile a ParamSetField instruction.
+    pub(super) fn compile_param_set_field(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        param: &datalove_datafun_ir::ParamId,
+        field_path: &[u32],
+        value: &Operand,
+    ) -> Result<(), AotError> {
+        // Get base address and type from param.
+        let addr = self.param_values.get(param).copied().ok_or_else(|| {
+            AotError::Codegen(format!("param {:?} not found in param_values", param))
+        })?;
+        let ty = self.func.param_types.get(param.0 as usize)
+            .cloned()
+            .ok_or_else(|| AotError::Codegen(format!("param {:?} type not found", param)))?;
+
+        // Navigate field path to find target.
+        let mut current_addr = addr;
+        let mut current_ty = ty;
+
+        for &field_idx in field_path.iter() {
+            let field_types: Vec<_> = match &current_ty {
+                IrType::Tuple(tys) => tys.clone(),
+                IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                _ => {
+                    return Err(AotError::Codegen(format!(
+                        "param_set_field path through non-aggregate type: {:?}",
+                        current_ty
+                    )));
+                }
+            };
+
+            if field_idx as usize >= field_types.len() {
+                return Err(AotError::Codegen(format!(
+                    "field index {} out of bounds",
+                    field_idx
+                )));
+            }
+
+            let offsets = types::compute_tuple_field_offsets(&field_types);
+            current_addr = builder.ins().iadd_imm(current_addr, offsets[field_idx as usize] as i64);
+            current_ty = field_types[field_idx as usize].clone();
+        }
+
+        // Destroy old field value before overwriting.
+        let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
+            AotError::Codegen(format!(
+                "TyDesc not found for type {:?}",
+                current_ty
+            ))
+        })?;
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+        let destroy_func_id = self.runtime.as_ref()
+            .ok_or_else(|| AotError::Codegen("ParamSetField requires runtime imports".into()))?
+            .destroy_local;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            AotError::Codegen("ParamSetField requires runtime handle parameter".into())
+        })?;
+        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
+        builder.ins().call(destroy_ref, &[rt_handle, current_addr, tydesc_ptr]);
+
+        // Store new value at target address.
+        let val = self.get_operand_value(builder, value)?;
+        let field_repr = types::ir_type_to_cranelift(&current_ty);
+
+        match field_repr {
+            CraneliftRepr::Scalar(_) => {
+                builder.ins().store(MemFlags::new(), val, current_addr, 0);
+            }
+            CraneliftRepr::Aggregate(_) => {
+                let move_func_id = self.runtime.as_ref()
+                    .ok_or_else(|| AotError::Codegen("ParamSetField aggregate requires runtime imports".into()))?
                     .move_value;
                 let move_ref = self.module.declare_func_in_func(move_func_id, builder.func);
                 builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, current_addr]);

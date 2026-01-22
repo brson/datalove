@@ -517,16 +517,14 @@ pub enum Operand {
 
 /// Destination for slot store operations.
 ///
-/// Distinguishes between local slots (in current unit), external slots
-/// (in a previous script unit), and mutable parameters.
+/// Distinguishes between local slots (in current unit) and external slots
+/// (in a previous script unit).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum SlotDest {
     /// Local slot in current unit.
     Local(SlotId),
     /// Slot in a previous script unit.
     External { unit: u32, slot: SlotId },
-    /// Mutable parameter (writes through to caller's data).
-    Param(ParamId),
 }
 
 /// Constant value that can be loaded.
@@ -814,6 +812,15 @@ pub enum Instruction {
 
     /// Store value to mutable parameter (writes through to caller's data).
     ParamStore { param: ParamId, value: Operand },
+
+    /// Store value to a field within a mutable parameter.
+    ///
+    /// Similar to SetField but targets a parameter instead of a slot.
+    ParamSetField {
+        param: ParamId,
+        field_path: Vec<u32>,
+        value: Operand,
+    },
 
     /// Load value from mutable slot (copy semantics - slot remains valid).
     SlotLoadCopy { dest: ValueId, slot: SlotId },

@@ -559,6 +559,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::ParamStore { param, value } => {
                 self.compile_param_store(builder, *param, value)?;
             }
+            Instruction::ParamSetField { param, field_path, value } => {
+                self.compile_param_set_field(builder, param, field_path, value)?;
+            }
             Instruction::Drop { operand } => {
                 self.compile_drop(builder, operand)?;
             }
