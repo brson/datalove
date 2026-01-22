@@ -139,6 +139,9 @@ pub fn lower_function_body<'db>(
         slot_count: ctx.next_slot,
         value_types: std::mem::take(&mut ctx.value_types),
         slot_types: std::mem::take(&mut ctx.slot_types),
+        // TODO: Populate from ownership analysis when categorization is implemented.
+        tracked_values: Vec::new(),
+        tracked_slots: Vec::new(),
     })
 }
 

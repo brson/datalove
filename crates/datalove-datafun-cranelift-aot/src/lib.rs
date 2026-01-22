@@ -280,6 +280,8 @@ impl AotCompiler {
             slot_count: unit.slot_count,
             value_types: unit.value_types.clone(),
             slot_types: unit.slot_types.clone(),
+            tracked_values: unit.tracked_values.clone(),
+            tracked_slots: unit.tracked_slots.clone(),
         }
     }
 

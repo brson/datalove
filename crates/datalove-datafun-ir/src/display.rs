@@ -233,6 +233,9 @@ impl fmt::Display for Instruction {
             Instruction::Move { dest, src } => {
                 write!(f, "{} = move {}", dest, src)
             }
+            Instruction::MoveTracked { dest, src } => {
+                write!(f, "{} = move.tracked {}", dest, src)
+            }
             Instruction::BinOp { dest, op, lhs, rhs } => {
                 write!(f, "{} = {} {}, {}", dest, op, lhs, rhs)
             }
@@ -400,6 +403,9 @@ impl fmt::Display for Instruction {
             }
             Instruction::SlotLoadMove { dest, slot } => {
                 write!(f, "{} = load.move {}", dest, slot)
+            }
+            Instruction::SlotLoadMoveTracked { dest, slot } => {
+                write!(f, "{} = load.move.tracked {}", dest, slot)
             }
             Instruction::Drop { operand } => {
                 write!(f, "drop {}", operand)

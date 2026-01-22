@@ -489,6 +489,18 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
             }
             Instruction::Move { dest, src } => {
+                // Precise move: ownership analysis guarantees source exists.
+                // TODO: When value_tracked flags are added to Frame, skip
+                // mark_source_dropped_all for precise values. For now, always
+                // mark to prevent double-free in destroy_all().
+                let src_val = self.read_operand(src, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest);
+                unsafe { self.move_value(&src_val, dest_slot); }
+                frame.mark_value_initialized(*dest);
+                Self::mark_source_dropped_all(src, frame, frames);
+            }
+            Instruction::MoveTracked { dest, src } => {
+                // Tracked move: source may have been moved, updates tracking.
                 let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&src_val, dest_slot); }
@@ -598,6 +610,18 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
             }
             Instruction::SlotLoadMove { dest, slot } => {
+                // Precise slot load: ownership analysis guarantees slot is occupied.
+                // TODO: When slot_tracked flags are added to Frame, skip
+                // mark_slot_dropped for precise slots. For now, always mark
+                // to prevent double-free in destroy_all().
+                let slot_val = frame.slot(*slot)?;
+                let dest_slot = frame.value_dest(*dest);
+                unsafe { self.move_value(&slot_val, dest_slot); }
+                frame.mark_slot_dropped(*slot);
+                frame.mark_value_initialized(*dest);
+            }
+            Instruction::SlotLoadMoveTracked { dest, slot } => {
+                // Tracked slot load: slot may have been moved, updates tracking.
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&slot_val, dest_slot); }

@@ -519,7 +519,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.compile_copy(builder, *dest, src)?;
             }
             Instruction::Move { dest, src } => {
-                // Move is same as copy for now (ownership tracking is semantic).
+                // Precise move: same as copy, no tracking update needed.
+                self.compile_copy(builder, *dest, src)?;
+            }
+            Instruction::MoveTracked { dest, src } => {
+                // Tracked move: same as copy for now. Tracking is handled
+                // by zeroing in consumers (SlotStoreMove) and checked by DropTracked.
                 self.compile_copy(builder, *dest, src)?;
             }
             Instruction::Pack { dest, ty: _, fields } => {
@@ -554,6 +559,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.compile_slot_load(builder, *dest, *slot, true)?;
             }
             Instruction::SlotLoadMove { dest, slot } => {
+                // Precise slot load: compiler guarantees slot is occupied.
+                self.compile_slot_load(builder, *dest, *slot, false)?;
+            }
+            Instruction::SlotLoadMoveTracked { dest, slot } => {
+                // Tracked slot load: slot may have been moved. For now same behavior,
+                // tracking is handled by zeroing in consumers and checked by DropTracked.
                 self.compile_slot_load(builder, *dest, *slot, false)?;
             }
             Instruction::ParamStore { param, value } => {
@@ -867,6 +878,8 @@ mod tests {
             slot_count: 0,
             value_types: vec![IrType::I32],
             slot_types: vec![],
+            tracked_values: vec![],
+            tracked_slots: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
@@ -916,6 +929,8 @@ mod tests {
             slot_count: 0,
             value_types: vec![IrType::I32, IrType::I32, IrType::Bool],
             slot_types: vec![],
+            tracked_values: vec![],
+            tracked_slots: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
@@ -957,6 +972,8 @@ mod tests {
             slot_count: 0,
             value_types: vec![IrType::I32, IrType::I32],
             slot_types: vec![],
+            tracked_values: vec![],
+            tracked_slots: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
@@ -1029,6 +1046,8 @@ mod tests {
             slot_count: 0,
             value_types: vec![IrType::Bool, IrType::I32, IrType::I32],
             slot_types: vec![],
+            tracked_values: vec![],
+            tracked_slots: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);

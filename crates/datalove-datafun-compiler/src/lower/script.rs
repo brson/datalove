@@ -122,6 +122,9 @@ pub fn lower_script_unit<'db>(
         slot_count: ctx.next_slot,
         value_types: std::mem::take(&mut ctx.value_types),
         slot_types: std::mem::take(&mut ctx.slot_types),
+        // TODO: Populate from ownership analysis when categorization is implemented.
+        tracked_values: Vec::new(),
+        tracked_slots: Vec::new(),
         functions: ctx.functions,
         symbols: ctx.symbols,
         result,
@@ -179,6 +182,9 @@ pub fn lower_script_fragment_raw<'db>(
         slot_count: ctx.next_slot,
         value_types: std::mem::take(&mut ctx.value_types),
         slot_types: std::mem::take(&mut ctx.slot_types),
+        // TODO: Populate from ownership analysis when categorization is implemented.
+        tracked_values: Vec::new(),
+        tracked_slots: Vec::new(),
         functions: ctx.functions,
         symbols: ctx.symbols,
         result: None,
@@ -221,6 +227,9 @@ pub fn lower_script_expr<'db>(
         slot_count: ctx.next_slot,
         value_types: std::mem::take(&mut ctx.value_types),
         slot_types: std::mem::take(&mut ctx.slot_types),
+        // TODO: Populate from ownership analysis when categorization is implemented.
+        tracked_values: Vec::new(),
+        tracked_slots: Vec::new(),
         functions: ctx.functions,
         symbols: ctx.symbols,
         result: Some(value_id),

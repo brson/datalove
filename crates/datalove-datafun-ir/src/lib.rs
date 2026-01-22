@@ -644,8 +644,17 @@ pub enum Instruction {
     /// Copy a value (for Copy types).
     Copy { dest: ValueId, src: Operand },
 
-    /// Move a value (transfers ownership).
+    /// Move a value (transfers ownership, precise).
+    ///
+    /// Used when ownership analysis guarantees the source exists.
+    /// Does not update tracking state.
     Move { dest: ValueId, src: Operand },
+
+    /// Move a value (transfers ownership, tracked).
+    ///
+    /// Used when the source may have been moved. Updates tracking state
+    /// to mark the source as consumed.
+    MoveTracked { dest: ValueId, src: Operand },
 
     /// Binary operation.
     BinOp {
@@ -825,8 +834,17 @@ pub enum Instruction {
     /// Load value from mutable slot (copy semantics - slot remains valid).
     SlotLoadCopy { dest: ValueId, slot: SlotId },
 
-    /// Load value from mutable slot (move semantics - slot becomes invalid).
+    /// Load value from mutable slot (move semantics, precise).
+    ///
+    /// Used when ownership analysis guarantees the slot is occupied.
+    /// Does not update tracking state.
     SlotLoadMove { dest: ValueId, slot: SlotId },
+
+    /// Load value from mutable slot (move semantics, tracked).
+    ///
+    /// Used when the slot may have been moved. Updates tracking state
+    /// to mark the slot as empty.
+    SlotLoadMoveTracked { dest: ValueId, slot: SlotId },
 
     /// Drop a value (precise - value must exist).
     ///
@@ -931,6 +949,18 @@ pub struct IrFunction {
     pub value_types: Vec<IrType>,
     /// Type for each SlotId (indexed by SlotId.0).
     pub slot_types: Vec<IrType>,
+    /// Values that need runtime tracking (may have been moved).
+    ///
+    /// Values not in this list are "precise" - ownership analysis guarantees
+    /// their state at every use point. Empty means all values are precise.
+    #[serde(default)]
+    pub tracked_values: Vec<ValueId>,
+    /// Slots that need runtime tracking (may have been moved).
+    ///
+    /// Slots not in this list are "precise" - ownership analysis guarantees
+    /// their state at every use point. Empty means all slots are precise.
+    #[serde(default)]
+    pub tracked_slots: Vec<SlotId>,
 }
 
 impl IrFunction {
@@ -971,6 +1001,12 @@ pub struct IrScriptUnit {
     pub value_types: Vec<IrType>,
     /// Type for each SlotId (indexed by SlotId.0).
     pub slot_types: Vec<IrType>,
+    /// Values that need runtime tracking (may have been moved).
+    #[serde(default)]
+    pub tracked_values: Vec<ValueId>,
+    /// Slots that need runtime tracking (may have been moved).
+    #[serde(default)]
+    pub tracked_slots: Vec<SlotId>,
     /// Functions defined in this unit.
     pub functions: Vec<IrFunction>,
     /// Symbol table for this unit.

@@ -61,6 +61,8 @@ fn make_identity_function() -> IrFunction {
         slot_count: 0,
         value_types: vec![],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     }
 }
 
@@ -107,6 +109,8 @@ fn test_simple_function_call() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     // Create context with both functions.
@@ -151,6 +155,8 @@ fn test_nested_function_calls() {
         slot_count: 0,
         value_types: vec![],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     // fn nested(x: i64) -> i64 { passthrough(passthrough(x)) }
@@ -186,6 +192,8 @@ fn test_nested_function_calls() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     // Create context with both functions.
@@ -298,6 +306,8 @@ fn test_const_u8() {
         slot_count: 0,
         value_types: vec![IrType::U8],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     let functions = [func.clone()];
@@ -341,6 +351,8 @@ fn test_const_i32() {
         slot_count: 0,
         value_types: vec![IrType::I32],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     let functions = [func.clone()];
@@ -384,6 +396,8 @@ fn test_const_bool() {
         slot_count: 0,
         value_types: vec![IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -426,6 +440,8 @@ fn test_binop_eq() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -460,6 +476,8 @@ fn test_binop_ne() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -494,6 +512,8 @@ fn test_binop_lt() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -528,6 +548,8 @@ fn test_binop_bitand() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 8);
@@ -562,6 +584,8 @@ fn test_binop_bitor() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 14);
@@ -596,6 +620,8 @@ fn test_binop_shl() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 16);
@@ -636,6 +662,8 @@ fn test_binop_checked_no_overflow() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 30);
@@ -672,6 +700,8 @@ fn test_binop_checked_overflow() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -708,6 +738,8 @@ fn test_unaryop_neg() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), -42);
@@ -740,6 +772,8 @@ fn test_unaryop_not() {
         slot_count: 0,
         value_types: vec![IrType::Bool, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert!(!run_bool_function(&func));
@@ -772,6 +806,8 @@ fn test_unaryop_bitnot() {
         slot_count: 0,
         value_types: vec![IrType::U32, IrType::U32],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_u32_function(&func), 0xFFFFFFFF);
@@ -810,6 +846,8 @@ fn test_slot_store_load() {
         slot_count: 1,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64],
         slot_types: vec![IrType::I64],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -849,6 +887,8 @@ fn test_slot_multiple_updates() {
         slot_count: 1,
         value_types: vec![IrType::I64; 5],
         slot_types: vec![IrType::I64],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 8);
@@ -895,6 +935,8 @@ fn test_branch_true() {
         slot_count: 0,
         value_types: vec![IrType::Bool, IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 1);
@@ -937,6 +979,8 @@ fn test_branch_false() {
         slot_count: 0,
         value_types: vec![IrType::Bool, IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 2);
@@ -985,6 +1029,8 @@ fn test_goto_chain() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     // Returns 2 from block1, proving control flow worked.
@@ -1018,6 +1064,8 @@ fn test_copy() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -1046,6 +1094,8 @@ fn test_move() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -1090,6 +1140,8 @@ fn test_pack_tuple() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, tuple_ty, IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 10);
@@ -1135,6 +1187,8 @@ fn test_unpack_tuple() {
             IrType::I64, IrType::I64
         ],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 20);
@@ -1177,6 +1231,8 @@ fn test_wrap_some_unwrap() {
         slot_count: 0,
         value_types: vec![IrType::I64, opt_ty, IrType::I64, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -1215,6 +1271,8 @@ fn test_is_some() {
         slot_count: 0,
         value_types: vec![IrType::I64, opt_ty, IrType::I64, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -1254,6 +1312,8 @@ fn test_is_none() {
         slot_count: 0,
         value_types: vec![opt_ty, IrType::I64, IrType::Bool, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -1307,6 +1367,8 @@ fn test_option_branch() {
         slot_count: 0,
         value_types: vec![IrType::I64, opt_ty, IrType::I64, IrType::Bool, IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 1);
@@ -1350,6 +1412,8 @@ fn test_wrap_ok_unwrap() {
         slot_count: 0,
         value_types: vec![IrType::I64, res_ty, IrType::I64, IrType::Error, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -1389,6 +1453,8 @@ fn test_is_ok() {
         slot_count: 0,
         value_types: vec![IrType::I64, res_ty, IrType::I64, IrType::Error, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -1435,6 +1501,8 @@ fn test_is_err() {
         slot_count: 0,
         value_types: vec![IrType::Unit, res_ty, IrType::I64, IrType::Error, IrType::Bool, IrType::Bool],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -1489,6 +1557,8 @@ fn test_result_branch() {
         slot_count: 0,
         value_types: vec![IrType::I64, res_ty, IrType::I64, IrType::Error, IrType::Bool, IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 1);
@@ -1536,6 +1606,8 @@ fn test_pack_struct() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, struct_ty, IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 10);
@@ -1584,6 +1656,8 @@ fn test_unpack_struct() {
             IrType::I64, IrType::I64
         ],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 20);
@@ -1612,6 +1686,8 @@ fn test_crossunit_external_value() {
         slot_count: 0,
         value_types: vec![IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
         functions: vec![],
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
@@ -1636,6 +1712,8 @@ fn test_crossunit_external_value() {
         slot_count: 0,
         value_types: vec![IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
         functions: vec![],
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: Some(ValueId(0)),
@@ -1693,6 +1771,8 @@ fn test_crossunit_external_slot() {
         slot_count: 1,
         value_types: vec![IrType::I64],
         slot_types: vec![IrType::I64],
+        tracked_values: vec![],
+        tracked_slots: vec![],
         functions: vec![],
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
@@ -1717,6 +1797,8 @@ fn test_crossunit_external_slot() {
         slot_count: 0,
         value_types: vec![IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
         functions: vec![],
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: Some(ValueId(0)),
@@ -1773,6 +1855,8 @@ fn test_crossunit_external_function() {
         slot_count: 0,
         value_types: vec![],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
     };
 
     let unit0 = IrScriptUnit {
@@ -1786,6 +1870,8 @@ fn test_crossunit_external_function() {
         slot_count: 0,
         value_types: vec![],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
         functions: vec![identity_fn],
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
@@ -1814,6 +1900,8 @@ fn test_crossunit_external_function() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
         functions: vec![],
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: Some(ValueId(1)),
@@ -1867,6 +1955,8 @@ fn test_crossunit_chain() {
         slot_count: 0,
         value_types: vec![IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
         functions: vec![],
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
@@ -1891,6 +1981,8 @@ fn test_crossunit_chain() {
         slot_count: 0,
         value_types: vec![IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
         functions: vec![],
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
@@ -1915,6 +2007,8 @@ fn test_crossunit_chain() {
         slot_count: 0,
         value_types: vec![IrType::I64],
         slot_types: vec![],
+        tracked_values: vec![],
+        tracked_slots: vec![],
         functions: vec![],
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: Some(ValueId(0)),
