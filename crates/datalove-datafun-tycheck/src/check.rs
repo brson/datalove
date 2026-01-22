@@ -351,6 +351,79 @@ pub fn check_expr<'db>(
             Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
         }
 
+        // Handle binary operations - bidirectional type propagation for arithmetic.
+        ExprFunKind::BinOp(ref binop) => {
+            let op = binop.op;
+            let is_checked = matches!(op,
+                BinOp::AddChecked | BinOp::SubChecked | BinOp::MulChecked | BinOp::DivChecked);
+            let is_optional = matches!(op,
+                BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional);
+
+            // Checked/optional ops on fixed ints: propagate expected type to operands.
+            if (is_checked || is_optional) && is_fixed_int_type(expected) {
+                let lhs_result = check_expr(ctx, binop.lhs, expected);
+                let rhs_result = check_expr(ctx, binop.rhs, expected);
+
+                if lhs_result.is_ok() && rhs_result.is_ok() {
+                    ctx.store_expr_type(expr, expected);
+                    return Ok(());
+                }
+                // Fall through to synthesis if checking fails.
+            }
+
+            // Bigint division: propagate int to operands.
+            if matches!(op, BinOp::DivChecked | BinOp::DivOptional) && is_bigint_type(expected) {
+                let lhs_result = check_expr(ctx, binop.lhs, expected);
+                let rhs_result = check_expr(ctx, binop.rhs, expected);
+
+                if lhs_result.is_ok() && rhs_result.is_ok() {
+                    ctx.store_expr_type(expr, expected);
+                    return Ok(());
+                }
+            }
+
+            // Bare arithmetic on floats: propagate float type.
+            if matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div)
+                && is_float_type(expected)
+            {
+                let lhs_result = check_expr(ctx, binop.lhs, expected);
+                let rhs_result = check_expr(ctx, binop.rhs, expected);
+
+                if lhs_result.is_ok() && rhs_result.is_ok() {
+                    ctx.store_expr_type(expr, expected);
+                    return Ok(());
+                }
+            }
+
+            // Bare arithmetic on bigints: propagate int type.
+            if matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul) && is_bigint_type(expected) {
+                let lhs_result = check_expr(ctx, binop.lhs, expected);
+                let rhs_result = check_expr(ctx, binop.rhs, expected);
+
+                if lhs_result.is_ok() && rhs_result.is_ok() {
+                    ctx.store_expr_type(expr, expected);
+                    return Ok(());
+                }
+            }
+
+            // Fall through to default synthesis behavior.
+            let synthesized = ctx.synthesize_expr(expr)?;
+            if types_equivalent(db, &synthesized, expected) {
+                return Ok(());
+            }
+            if let (Type::Datalit(synth_ty), Type::Datalit(expect_ty)) = (&synthesized, expected) {
+                if datalit::tycheck::can_widen_to(synth_ty, expect_ty) {
+                    return Ok(());
+                }
+            }
+            if let Type::Datalit(datalit::tycheck::Type::Data) = expected {
+                return Ok(());
+            }
+            let expected_str = type_to_string(db, expected);
+            let actual_str = type_to_string(db, &synthesized);
+            Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+        }
+
         // For other non-datalit expressions, use synthesis + comparison with coercion support.
         _ => {
             let synthesized = ctx.synthesize_expr(expr)?;

@@ -1,27 +1,6 @@
 {
-  "diagnostics": [
-    {
-      "code": "F016",
-      "labels": [
-        {
-          "message": "type mismatch",
-          "span": [
-            41,
-            47
-          ],
-          "text": "a +! b"
-        }
-      ],
-      "message": "mismatched types: expected `!u32`, found `u32`"
-    }
-  ],
-  "errors": [
-    {
-      "actual": "u32",
-      "expected": "!u32",
-      "kind": "TypeMismatch"
-    }
-  ],
+  "diagnostics": [],
+  "errors": [],
   "judgements": [
     {
       "kind": "function",
