@@ -1,4 +1,22 @@
 //! Module compilation pipeline with incremental recompilation support.
+//!
+//! The [`ModuleCompilationPipeline`] manages module compilation through parsing,
+//! typechecking, ownership analysis, and IR lowering. It supports both fresh
+//! compilation and incremental updates via salsa.
+//!
+//! # Example
+//!
+//! ```ignore
+//! let mut pipeline = ModuleCompilationPipeline::new();
+//! pipeline.add_module(&db, "local", "mypackage", "main", source);
+//! let compiled = pipeline.compile_fresh(&db);
+//!
+//! if compiled.is_successful() {
+//!     let compiler = compiled.script_compiler(&db).unwrap();
+//!     let executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
+//!     // ...
+//! }
+//! ```
 
 use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, HashMap};

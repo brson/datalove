@@ -1,4 +1,26 @@
 //! Script compilation for script units.
+//!
+//! The [`ScriptCompiler`] incrementally compiles script fragments and expressions
+//! to IR. It maintains accumulated state across compilations to support REPL-style
+//! workflows where later units can reference bindings from earlier ones.
+//!
+//! Create a compiler via [`CompiledModules::script_compiler()`]. For execution,
+//! use a separate [`ScriptExecutor`](super::ScriptExecutor).
+//!
+//! # Example
+//!
+//! ```ignore
+//! let mut compiler = compiled.script_compiler(&db).unwrap();
+//!
+//! // Compile a fragment (statements).
+//! let result = compiler.compile_fragment("let x = 42", false);
+//! if let Some(ir_unit) = result.ir_unit {
+//!     // Pass to executor for execution.
+//! }
+//!
+//! // Later compilation can reference x.
+//! let result2 = compiler.compile_fragment("let y = x + 1", false);
+//! ```
 
 use rmx::prelude::*;
 

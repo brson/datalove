@@ -1,4 +1,28 @@
 //! Script execution for compiled IR units.
+//!
+//! The [`ScriptExecutor`] runs compiled IR units and maintains runtime state
+//! (bindings, values) across executions. It wraps the IR interpreter and
+//! provides a higher-level API for REPL-style workflows.
+//!
+//! Create an executor via [`CompiledModules::script_executor()`]. For compilation,
+//! use a separate [`ScriptCompiler`](super::ScriptCompiler).
+//!
+//! # Example
+//!
+//! ```ignore
+//! let mut executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
+//!
+//! // Execute a compiled IR unit.
+//! let output = executor.execute_fragment(&ir_unit);
+//!
+//! // Query bindings.
+//! if let Some((ty, val)) = executor.get_binding("x") {
+//!     println!("x: {} = {}", ty, val);
+//! }
+//!
+//! // Clean up when done.
+//! executor.destroy_all();
+//! ```
 
 use rmx::prelude::*;
 use std::sync::Arc;

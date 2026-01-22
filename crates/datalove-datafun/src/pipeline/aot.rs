@@ -1,4 +1,26 @@
 //! AOT compilation: compile scripts to native executables via Cranelift.
+//!
+//! This module provides utilities for ahead-of-time compilation of IR units
+//! to native code. The workflow is: compile IR to object file, link with the
+//! runtime library, and optionally execute the result.
+//!
+//! # Functions
+//!
+//! - [`compile_script_to_object`]: Compile IR to object bytes.
+//! - [`link_object_to_temp_executable`]: Link object to executable in temp dir.
+//! - [`run_executable`]: Run an AOT-compiled executable.
+//! - [`compile_link_run`]: Convenience function combining all steps.
+//!
+//! # Example
+//!
+//! ```ignore
+//! use datalove_datafun::pipeline::aot;
+//!
+//! let obj_bytes = aot::compile_script_to_object(&ir_unit)?;
+//! let (exe_path, _dir) = aot::link_object_to_temp_executable(&obj_bytes)?;
+//! let output = aot::run_executable(&exe_path)?;
+//! println!("stderr: {}", output.stderr);
+//! ```
 
 use rmx::prelude::*;
 use std::path::{Path, PathBuf};

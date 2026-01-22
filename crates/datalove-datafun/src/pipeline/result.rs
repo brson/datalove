@@ -1,4 +1,9 @@
 //! Result types for script compilation and execution.
+//!
+//! These types represent the outcomes of compilation and execution phases:
+//! - [`TypecheckResult`] and [`LoweringResult`]: Phase-specific status.
+//! - [`ScriptCompilationResult`]: Output of script compilation (no execution).
+//! - [`ScriptUnitResult`]: Combined compile+execute result for tests.
 
 use datalove_datafun_ir::IrScriptUnit;
 
@@ -46,7 +51,9 @@ pub fn format_lowering_result(
     }
 }
 
-/// Result of `eval_fragment` or `eval_expr`.
+/// Combined result of script compilation and execution.
+///
+/// Used primarily in tests to capture both compilation status and execution output.
 pub struct ScriptUnitResult {
     pub typecheck: TypecheckResult,
     pub lowering: LoweringResult,
@@ -56,17 +63,10 @@ pub struct ScriptUnitResult {
     pub output: String,
 }
 
-/// Result of `lower_fragment_for_aot` or `lower_expr_for_aot` (IR without execution).
-pub struct ScriptLowerResult {
-    pub typecheck: TypecheckResult,
-    pub lowering: LoweringResult,
-    /// The lowered IR unit, if successful.
-    pub ir_unit: Option<IrScriptUnit>,
-}
-
-/// Result of compilation phases (no execution).
+/// Result of script compilation (no execution).
 ///
-/// Returned by `ScriptCompiler::compile_fragment` and `ScriptCompiler::compile_expr`.
+/// Returned by [`ScriptCompiler::compile_fragment`](super::ScriptCompiler::compile_fragment)
+/// and [`ScriptCompiler::compile_expr`](super::ScriptCompiler::compile_expr).
 pub struct ScriptCompilationResult {
     pub typecheck: TypecheckResult,
     pub lowering: LoweringResult,

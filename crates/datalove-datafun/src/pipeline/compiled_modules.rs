@@ -1,4 +1,8 @@
 //! Compiled module results and shared context.
+//!
+//! This module contains the output types from module compilation:
+//! - [`SharedModuleContext`]: Shared data across script compilers/executors.
+//! - [`CompiledModules`]: Result of compiling a module graph, with error info.
 
 use rmx::std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -11,10 +15,11 @@ use datalove_datafun_compiler::module_graph::{
     ParsedModuleGraph,
 };
 
-/// Compiled module data shared across script contexts.
+/// Compiled module data shared across script compilers and executors.
 ///
 /// Contains the module graph, typecheck results, and function registry.
-/// Thread-safe via `Arc` wrapping.
+/// Thread-safe via `Arc` wrapping. Multiple `ScriptCompiler` and `ScriptExecutor`
+/// instances can share the same context.
 pub struct SharedModuleContext<'db> {
     pub module_graph: ModuleGraph,
     pub parsed_graph: ParsedModuleGraph<'db>,
@@ -25,8 +30,9 @@ pub struct SharedModuleContext<'db> {
 
 /// Result of module compilation.
 ///
-/// Call `script_context()` to create script execution contexts. Multiple
-/// independent contexts can share the same compilation.
+/// Use `script_compiler()` to create a compiler for script units, and
+/// `script_executor()` to create an executor for running compiled IR.
+/// Multiple independent compilers and executors can share the same compilation.
 pub struct CompiledModules<'db> {
     pub shared: Arc<SharedModuleContext<'db>>,
     pub resolution_error: Option<String>,
