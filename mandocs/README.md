@@ -14,20 +14,24 @@ Then we'll add I/O to it &mdash; carefully.
 
 
 
-<div>
-Brief roadmap status.
-</div>
+<br>
 
-<div>
-News snippet.
-</div>
+
+
+
+> **Roadmap**: [8 of 29 complete &middot; updated 2026-01-22](roadmap.md)
+
+> **Latest news**: todo
 
 
 
 
 <br>
 
-<h2><center>4 Things to Remember <br> … about Datalove</center></h2>
+
+
+
+<h2><center>4 Things to Remember <br> about Datalove</center></h2>
 
 <div class="four-things-grid">
   <div class="thing-box">
@@ -54,16 +58,18 @@ News snippet.
 
 
 
+<br>
 
 > Datalove is a testbed for my personal compiler and language design experiments.
 > There is no recommended way to install or test.
 
-
-
-
 <br>
-<center>Datalove is built from three sublanguages of increasing power.</center>
-<br>
+
+
+
+---
+
+Datalove is built from three sublanguages of increasing power.
 
 
 

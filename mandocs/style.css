@@ -8,6 +8,7 @@
     --font-text: 'Source Sans 3', system-ui, sans-serif;
     --font-text: 'Source Serif 4', system-ui, sans-serif;
     --font-code: 'Source Code Pro', monospace;
+    --baseline: 1.6rem;
 
     /* Dune palette */
     --dune-base00: #20201d;
@@ -151,6 +152,7 @@
 
 body {
     font-family: var(--font-text);
+    font-feature-settings: "onum" 1, "kern" 1;
     background: var(--bg);
     color: var(--fg);
     margin: 0;
@@ -202,12 +204,22 @@ h1, h2, h3, h4 {
     margin-top: 2rem;
 }
 
-h1 { font-size: 2rem; }
-h2 { font-size: 1.5rem; }
+h1 { font-size: 2rem; letter-spacing: -0.02em; }
+h2 { font-size: 1.5rem; letter-spacing: -0.01em; }
 h3 { font-size: 1.25rem; }
 
 a {
     color: var(--link);
+}
+
+p {
+    margin: var(--baseline) 0;
+    hyphens: auto;
+}
+
+abbr, .smallcaps {
+    font-feature-settings: "smcp" 1;
+    letter-spacing: 0.05em;
 }
 
 code {
@@ -215,17 +227,18 @@ code {
     padding: 0.2rem 0.4rem;
     border-radius: 3px;
     font-family: var(--font-code);
+    font-feature-settings: "lnum" 1;
 }
 
 pre {
     background: var(--code-bg);
     padding: 1rem;
     border-radius: 5px;
-    border-color: var(--accent);
-    border-style: solid;
-    border-width: 1px;
+    border: none;
+    border-left: 3px solid var(--accent);
     overflow-x: auto;
-    margin: 2rem 0;
+    margin: var(--baseline) 0;
+    font-feature-settings: "lnum" 1;
 }
 
 pre code {
@@ -234,12 +247,13 @@ pre code {
 }
 
 blockquote {
-    border-radius: 5px;
-    border-color: var(--accent);
-    border-style: solid;
-    border-width: 1px;
-    padding: 0 1rem;
-    margin: 2rem 0;
+    border-radius: 0;
+    border: none;
+    border-left: 3px solid var(--accent);
+    padding-left: 1.5rem;
+    margin-left: -0.5rem;
+    margin-top: var(--baseline);
+    margin-bottom: var(--baseline);
 }
 
 hr {
@@ -249,26 +263,31 @@ hr {
 }
 
 ul, ol {
-    padding-left: 1.5rem;
+    padding-left: 1rem;
+    margin: var(--baseline) 0;
 }
 
 li {
     margin: 0.5rem 0;
+    list-style-position: outside;
 }
 
 table {
     border-collapse: collapse;
-    margin: 1rem 0;
+    margin: var(--baseline) 0;
+    font-feature-settings: "lnum" 1;
 }
 
 th, td {
-    border: 1px solid var(--accent);
+    border: none;
+    border-bottom: 1px solid var(--accent);
     padding: 0.5rem 0.75rem;
     text-align: left;
 }
 
 th {
     background: var(--table-header-bg);
+    border-bottom-width: 2px;
 }
 
 /* Syntax highlighting */
@@ -289,6 +308,17 @@ th {
 .token.op-option { color: var(--syn-op-option); }
 .token.type-colon { color: var(--syn-type-colon); }
 .token.punctuation { color: var(--syn-punctuation); }
+
+/* Admonition boxes */
+.note, .warning, .tip {
+    border-left: 4px solid;
+    padding: 0.5rem 1rem;
+    margin: var(--baseline) 0;
+    border-radius: 0 5px 5px 0;
+}
+.note { border-color: var(--cave-blue); }
+.warning { border-color: var(--cave-orange); }
+.tip { border-color: var(--cave-green); }
 
 /* Four things grid */
 .four-things-grid {
