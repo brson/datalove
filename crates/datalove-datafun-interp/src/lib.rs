@@ -211,25 +211,13 @@ impl IrInterpreter {
     }
 
     /// Destroy a value, freeing any associated allocations.
-    pub fn destroy_value(&mut self, value: &Value) -> Result<(), InterpError> {
-        use datalove_rt::c::RtStatus;
-
-        let rt_handle = self.runtime.handle();
-
+    pub fn destroy_value(&mut self, value: &Value) {
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_any_destroy_local(
-                rt_handle,
+            datalove_rt::c::dtlv_rti_any_destroy_local(
+                self.runtime.handle(),
                 value.ptr,
                 value.tydesc,
             );
-
-            if status != RtStatus::Ok {
-                return Err(InterpError::RuntimeError(
-                    "Failed to destroy value".to_string(),
-                ));
-            }
-
-            Ok(())
         }
     }
 

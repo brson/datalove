@@ -106,7 +106,7 @@ impl ScriptExecutor {
                 };
                 let output_str = self.interp.pretty_print_value(&value)
                     .unwrap_or_else(|e| format!("Error: {:?}", e));
-                let _ = self.interp.destroy_value(&value);
+                self.interp.destroy_value(&value);
                 output_str
             }
             Err(e) => format!("Error: {:?}", e),
@@ -150,7 +150,7 @@ impl ScriptExecutor {
                     };
                     let output_str = self.interp.pretty_print_value(&value)
                         .unwrap_or_else(|e| format!("Error: {:?}", e));
-                    let _ = self.interp.destroy_value(&value);
+                    self.interp.destroy_value(&value);
                     output_str
                 }
                 Ok(UnitCompletion::EarlyReturn) => {
@@ -160,7 +160,7 @@ impl ScriptExecutor {
                     };
                     let output_str = self.interp.pretty_print_value(&value)
                         .unwrap_or_else(|e| format!("Error: {:?}", e));
-                    let _ = self.interp.destroy_value(&value);
+                    self.interp.destroy_value(&value);
                     output_str
                 }
                 Err(e) => format!("Error: {:?}", e),

@@ -160,7 +160,7 @@ pub fn analyze_modules_worldfile(
             let output_str = interp.pretty_print_value(&value)
                 .unwrap_or_else(|e| format!("Error: {:?}", e));
             // Destroy the value to free any allocations.
-            let _ = interp.destroy_value(&value);
+            interp.destroy_value(&value);
             output_str
         }
         Err(e) => format!("Error: {:?}", e),
