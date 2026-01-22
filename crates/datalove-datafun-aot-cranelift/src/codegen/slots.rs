@@ -29,10 +29,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 )));
             }
             SlotDest::Param(_) => {
-                // SlotStore to param should use ParamStore instruction instead.
-                return Err(AotError::Codegen(
-                    "SlotStore with Param destination not supported, use ParamStore".into()
-                ));
+                // SlotStore should never target Param - use ParamStore instead.
+                // SetField can target Param, but SlotStore cannot.
+                unreachable!("SlotStore with Param destination is a compiler bug");
             }
         };
 

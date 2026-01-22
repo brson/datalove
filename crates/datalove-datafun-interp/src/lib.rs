@@ -404,18 +404,7 @@ impl IrInterpreter {
                         // destroyed by call_in_context, so we must transfer
                         // ownership to avoid double-free.
                         unsafe { self.move_value(&val, ret_dest); }
-                        // Mark source as dropped to prevent destroy in frame.destroy_all().
-                        match op {
-                            Operand::Value(id) => frame.mark_value_dropped(*id),
-                            Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                            Operand::Param(id) => frame.mark_param_dropped(*id),
-                            Operand::ExternalValue { unit, value } => {
-                                frames.mark_external_value_dropped(*unit, *value);
-                            }
-                            Operand::ExternalSlot { unit, slot } => {
-                                frames.mark_external_slot_dropped(*unit, *slot);
-                            }
-                        }
+                        Self::mark_source_dropped_all(op, frame, frames);
                     }
                     return Ok(UnitCompletion::Normal);
                 }
@@ -425,17 +414,7 @@ impl IrInterpreter {
                         // Write to expr_dest (not ret_dest) for expression results.
                         let dest = expr_dest.expect("UnitEnd with result requires expr_dest");
                         unsafe { self.move_value(&val, dest); }
-                        match op {
-                            Operand::Value(id) => frame.mark_value_dropped(*id),
-                            Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                            Operand::Param(id) => frame.mark_param_dropped(*id),
-                            Operand::ExternalValue { unit, value } => {
-                                frames.mark_external_value_dropped(*unit, *value);
-                            }
-                            Operand::ExternalSlot { unit, slot } => {
-                                frames.mark_external_slot_dropped(*unit, *slot);
-                            }
-                        }
+                        Self::mark_source_dropped_all(op, frame, frames);
                     }
                     return Ok(UnitCompletion::Normal);
                 }
@@ -457,17 +436,7 @@ impl IrInterpreter {
                     }
                     // Write to ret_dest (Result<(), Error> type).
                     unsafe { self.move_value(&val, ret_dest); }
-                    match value {
-                        Operand::Value(id) => frame.mark_value_dropped(*id),
-                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                        Operand::Param(id) => frame.mark_param_dropped(*id),
-                        Operand::ExternalValue { unit, value } => {
-                            frames.mark_external_value_dropped(*unit, *value);
-                        }
-                        Operand::ExternalSlot { unit, slot } => {
-                            frames.mark_external_slot_dropped(*unit, *slot);
-                        }
-                    }
+                    Self::mark_source_dropped_all(value, frame, frames);
                     return Ok(UnitCompletion::EarlyReturn);
                 }
             }
@@ -505,19 +474,7 @@ impl IrInterpreter {
             // Block args use move semantics.
             unsafe { self.move_value(&src_val, dest_slot); }
             frame.mark_value_initialized(*param_id);
-
-            // Mark source as dropped.
-            match arg {
-                Operand::Value(id) => frame.mark_value_dropped(*id),
-                Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                Operand::Param(id) => frame.mark_param_dropped(*id),
-                Operand::ExternalValue { unit, value } => {
-                    frames.mark_external_value_dropped(*unit, *value);
-                }
-                Operand::ExternalSlot { unit, slot } => {
-                    frames.mark_external_slot_dropped(*unit, *slot);
-                }
-            }
+            Self::mark_source_dropped_all(arg, frame, frames);
         }
         Ok(())
     }
@@ -548,18 +505,7 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&src_val, dest_slot); }
                 frame.mark_value_initialized(*dest);
-                // Mark source as dropped to prevent double-free.
-                match src {
-                    Operand::Value(id) => frame.mark_value_dropped(*id),
-                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                    Operand::Param(id) => frame.mark_param_dropped(*id),
-                    Operand::ExternalValue { unit, value } => {
-                        frames.mark_external_value_dropped(*unit, *value);
-                    }
-                    Operand::ExternalSlot { unit, slot } => {
-                        frames.mark_external_slot_dropped(*unit, *slot);
-                    }
-                }
+                Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
                 let lhs_val = self.read_operand(lhs, frame, frames)?;
@@ -574,11 +520,12 @@ impl IrInterpreter {
                 self.execute_unaryop(*op, &src_val, dest_slot);
                 frame.mark_value_initialized(*dest);
             }
-            Instruction::SlotStore { dest, value, is_copy } => {
+            Instruction::SlotStoreCopy { dest, value } => {
                 let src_val = self.read_operand(value, frame, frames)?;
                 match dest {
                     SlotDest::Local(slot_id) => {
                         // Destroy old value if slot was already initialized.
+                        // This happens when reassigning copy types (no Drop emitted for them).
                         if frame.is_slot_initialized(*slot_id) {
                             let old_val = frame.slot(*slot_id)?;
                             unsafe {
@@ -590,20 +537,7 @@ impl IrInterpreter {
                             }
                         }
                         let dest_slot = frame.slot_dest(*slot_id);
-                        if *is_copy {
-                            // Copy types: just copy the bytes, source remains valid.
-                            unsafe { self.copy_value(&src_val, dest_slot); }
-                        } else {
-                            // Move value into slot (consumes source).
-                            unsafe { self.move_value(&src_val, dest_slot); }
-                            // Mark source as dropped.
-                            match value {
-                                Operand::Value(id) => frame.mark_value_dropped(*id),
-                                Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                                Operand::Param(id) => frame.mark_param_dropped(*id),
-                                Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                            }
-                        }
+                        unsafe { self.copy_value(&src_val, dest_slot); }
                         frame.mark_slot_initialized(*slot_id);
                     }
                     SlotDest::External { unit, slot } => {
@@ -613,21 +547,44 @@ impl IrInterpreter {
                             *slot,
                             &src_val,
                         )?;
-                        // Mark source as dropped only for non-copy types.
-                        if !*is_copy {
-                            match value {
-                                Operand::Value(id) => frame.mark_value_dropped(*id),
-                                Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                                Operand::Param(id) => frame.mark_param_dropped(*id),
-                                Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                            }
-                        }
                     }
                     SlotDest::Param(_) => {
-                        // SlotStore to param should use ParamStore instruction instead.
-                        return Err(InterpError::RuntimeError(
-                            "SlotStore with Param destination not supported, use ParamStore".into()
-                        ));
+                        unreachable!("SlotStoreCopy with Param destination is a compiler bug");
+                    }
+                }
+            }
+            Instruction::SlotStoreMove { dest, value } => {
+                let src_val = self.read_operand(value, frame, frames)?;
+                match dest {
+                    SlotDest::Local(slot_id) => {
+                        // For move types, the compiler emits Drop before SlotStoreMove,
+                        // so the slot should not be initialized. But check defensively.
+                        if frame.is_slot_initialized(*slot_id) {
+                            let old_val = frame.slot(*slot_id)?;
+                            unsafe {
+                                datalove_rt::c::dtlv_rti_any_destroy_local(
+                                    self.runtime.handle(),
+                                    old_val.ptr,
+                                    old_val.tydesc,
+                                );
+                            }
+                        }
+                        let dest_slot = frame.slot_dest(*slot_id);
+                        unsafe { self.move_value(&src_val, dest_slot); }
+                        Self::mark_source_dropped_local(value, frame);
+                        frame.mark_slot_initialized(*slot_id);
+                    }
+                    SlotDest::External { unit, slot } => {
+                        frames.write_external_slot(
+                            self.runtime.handle(),
+                            *unit,
+                            *slot,
+                            &src_val,
+                        )?;
+                        Self::mark_source_dropped_local(value, frame);
+                    }
+                    SlotDest::Param(_) => {
+                        unreachable!("SlotStoreMove with Param destination is a compiler bug");
                     }
                 }
             }
@@ -650,25 +607,19 @@ impl IrInterpreter {
                 unsafe { self.move_value(&src_val, dest_ptr); }
                 // Mark param as initialized (important for Out params).
                 frame.mark_param_initialized(*param);
-                // Mark source as dropped.
-                match value {
-                    Operand::Value(id) => frame.mark_value_dropped(*id),
-                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                    Operand::Param(id) => frame.mark_param_dropped(*id),
-                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                }
+                Self::mark_source_dropped_local(value, frame);
             }
-            Instruction::SlotLoad { dest, slot, is_copy } => {
+            Instruction::SlotLoadCopy { dest, slot } => {
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest);
-                if *is_copy {
-                    // Copy types: just copy the bytes, slot remains valid.
-                    unsafe { self.copy_value(&slot_val, dest_slot); }
-                } else {
-                    // Non-copy types: move value out, slot becomes invalid.
-                    unsafe { self.move_value(&slot_val, dest_slot); }
-                    frame.mark_slot_dropped(*slot);
-                }
+                unsafe { self.copy_value(&slot_val, dest_slot); }
+                frame.mark_value_initialized(*dest);
+            }
+            Instruction::SlotLoadMove { dest, slot } => {
+                let slot_val = frame.slot(*slot)?;
+                let dest_slot = frame.value_dest(*dest);
+                unsafe { self.move_value(&slot_val, dest_slot); }
+                frame.mark_slot_dropped(*slot);
                 frame.mark_value_initialized(*dest);
             }
             Instruction::Pack { dest, ty: _, fields } => {
@@ -688,12 +639,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
                 // Mark source fields as moved (linear semantics - consumes fields).
                 for field in fields {
-                    match field {
-                        Operand::Value(id) => frame.mark_value_dropped(*id),
-                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                        Operand::Param(id) => frame.mark_param_dropped(*id),
-                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                    }
+                    Self::mark_source_dropped_local(field, frame);
                 }
             }
             Instruction::Unpack { dests, src } => {
@@ -751,13 +697,7 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_wrap_some(&inner_val, dest_slot);
                 frame.mark_value_initialized(*dest);
-                // Mark source as moved (linear semantics - consumes inner value).
-                match inner {
-                    Operand::Value(id) => frame.mark_value_dropped(*id),
-                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                    Operand::Param(id) => frame.mark_param_dropped(*id),
-                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                }
+                Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::WrapNone { dest } => {
                 let dest_slot = frame.value_dest(*dest);
@@ -773,12 +713,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
                 // Mark payload source as moved if present.
                 if let Some(p) = payload {
-                    match p {
-                        Operand::Value(id) => frame.mark_value_dropped(*id),
-                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                        Operand::Param(id) => frame.mark_param_dropped(*id),
-                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                    }
+                    Self::mark_source_dropped_local(p, frame);
                 }
             }
             Instruction::UnwrapOption { dest, is_some, src } => {
@@ -795,17 +730,7 @@ impl IrInterpreter {
                     Self::is_copy_type_tag((*option_info.inner_tydesc).type_tag)
                 };
                 if !inner_is_copy {
-                    match src {
-                        Operand::Value(id) => frame.mark_value_dropped(*id),
-                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                        Operand::Param(id) => frame.mark_param_dropped(*id),
-                        Operand::ExternalValue { unit, value } => {
-                            frames.mark_external_value_dropped(*unit, *value);
-                        }
-                        Operand::ExternalSlot { unit, slot } => {
-                            frames.mark_external_slot_dropped(*unit, *slot);
-                        }
-                    }
+                    Self::mark_source_dropped_all(src, frame, frames);
                 }
             }
             Instruction::WrapOk { dest, inner } => {
@@ -813,26 +738,14 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_wrap_ok(&inner_val, dest_slot);
                 frame.mark_value_initialized(*dest);
-                // Mark source as moved (linear semantics - consumes inner value).
-                match inner {
-                    Operand::Value(id) => frame.mark_value_dropped(*id),
-                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                    Operand::Param(id) => frame.mark_param_dropped(*id),
-                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                }
+                Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::WrapErr { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_wrap_err(&inner_val, dest_slot);
                 frame.mark_value_initialized(*dest);
-                // Mark source as moved (linear semantics - consumes inner Error).
-                match inner {
-                    Operand::Value(id) => frame.mark_value_dropped(*id),
-                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                    Operand::Param(id) => frame.mark_param_dropped(*id),
-                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                }
+                Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
                 let src_val = self.read_operand(src, frame, frames)?;
@@ -843,44 +756,21 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*ok_dest);
                 frame.mark_value_initialized(*err_dest);
                 frame.mark_value_initialized(*is_ok);
-                // Mark source as consumed - Result is destructured.
-                match src {
-                    Operand::Value(id) => frame.mark_value_dropped(*id),
-                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                    Operand::Param(id) => frame.mark_param_dropped(*id),
-                    Operand::ExternalValue { unit, value } => {
-                        frames.mark_external_value_dropped(*unit, *value);
-                    }
-                    Operand::ExternalSlot { unit, slot } => {
-                        frames.mark_external_slot_dropped(*unit, *slot);
-                    }
-                }
+                Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::ErrorFrom { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_error_from(&inner_val, dest_slot);
                 frame.mark_value_initialized(*dest);
-                // Mark source as moved (linear semantics - consumes inner).
-                match inner {
-                    Operand::Value(id) => frame.mark_value_dropped(*id),
-                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                    Operand::Param(id) => frame.mark_param_dropped(*id),
-                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                }
+                Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::DataFrom { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_data_from(&inner_val, dest_slot);
                 frame.mark_value_initialized(*dest);
-                // Mark source as moved (linear semantics - consumes inner).
-                match inner {
-                    Operand::Value(id) => frame.mark_value_dropped(*id),
-                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                    Operand::Param(id) => frame.mark_param_dropped(*id),
-                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                }
+                Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::Call { dest, func, args } => {
                 // Look up the function and determine the correct context for the callee.
@@ -934,12 +824,7 @@ impl IrInterpreter {
                         }
                     }
                     // Non-Copy In mode: ownership transfers to callee, mark source dropped.
-                    match arg {
-                        Operand::Value(id) => frame.mark_value_dropped(*id),
-                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                        Operand::Param(id) => frame.mark_param_dropped(*id),
-                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                    }
+                    Self::mark_source_dropped_local(arg, frame);
                 }
 
                 // Try dispatcher first (for JIT integration).
@@ -1008,12 +893,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
-                    match elem {
-                        Operand::Value(id) => frame.mark_value_dropped(*id),
-                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                        Operand::Param(id) => frame.mark_param_dropped(*id),
-                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                    }
+                    Self::mark_source_dropped_local(elem, frame);
                 }
             }
             Instruction::SetNew { dest, elements } => {
@@ -1022,12 +902,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
-                    match elem {
-                        Operand::Value(id) => frame.mark_value_dropped(*id),
-                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                        Operand::Param(id) => frame.mark_param_dropped(*id),
-                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                    }
+                    Self::mark_source_dropped_local(elem, frame);
                 }
             }
             Instruction::MapNew { dest, entries } => {
@@ -1036,18 +911,8 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
                 // Mark source entries as moved (linear semantics - consumes entries).
                 for (key, val) in entries {
-                    match key {
-                        Operand::Value(id) => frame.mark_value_dropped(*id),
-                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                        Operand::Param(id) => frame.mark_param_dropped(*id),
-                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                    }
-                    match val {
-                        Operand::Value(id) => frame.mark_value_dropped(*id),
-                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                        Operand::Param(id) => frame.mark_param_dropped(*id),
-                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                    }
+                    Self::mark_source_dropped_local(key, frame);
+                    Self::mark_source_dropped_local(val, frame);
                 }
             }
             Instruction::TensorNew { dest, shape, elements } => {
@@ -1056,12 +921,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
-                    match elem {
-                        Operand::Value(id) => frame.mark_value_dropped(*id),
-                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                        Operand::Param(id) => frame.mark_param_dropped(*id),
-                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                    }
+                    Self::mark_source_dropped_local(elem, frame);
                 }
             }
             Instruction::TableNew { dest, rows } => {
@@ -1070,12 +930,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
                 // Mark source rows as moved (linear semantics - consumes rows).
                 for row in rows {
-                    match row {
-                        Operand::Value(id) => frame.mark_value_dropped(*id),
-                        Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                        Operand::Param(id) => frame.mark_param_dropped(*id),
-                        Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                    }
+                    Self::mark_source_dropped_local(row, frame);
                 }
             }
             Instruction::Drop { operand } => {
@@ -1092,13 +947,8 @@ impl IrInterpreter {
                 };
                 self.execute_drop(&val);
                 // Mark as dropped to prevent double-destroy in destroy_all.
-                match operand {
-                    Operand::Value(id) => frame.mark_value_dropped(*id),
-                    Operand::Slot(id) => frame.mark_slot_dropped(*id),
-                    Operand::Param(id) => frame.mark_param_dropped(*id),
-                    // External values/slots are in other frames, handled separately.
-                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-                }
+                // External values/slots are in other frames, handled separately.
+                Self::mark_source_dropped_local(operand, frame);
             }
             Instruction::DebugLog { operand } => {
                 let val = self.read_operand(operand, frame, frames)?;
@@ -1260,6 +1110,38 @@ impl IrInterpreter {
             }
         }
         Ok(())
+    }
+
+    /// Mark a local operand as dropped after a move.
+    ///
+    /// Handles Value, Slot, and Param operands in the current frame.
+    /// External operands are ignored since they belong to other frames and are
+    /// handled separately (typically in terminators via `mark_source_dropped_all`).
+    fn mark_source_dropped_local(operand: &Operand, frame: &mut Frame) {
+        match operand {
+            Operand::Value(id) => frame.mark_value_dropped(*id),
+            Operand::Slot(id) => frame.mark_slot_dropped(*id),
+            Operand::Param(id) => frame.mark_param_dropped(*id),
+            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+        }
+    }
+
+    /// Mark any operand as dropped after a move, including external operands.
+    ///
+    /// Used for terminators (Return, UnitEnd, UnitEarlyReturn) and the Move
+    /// instruction where external values/slots may be consumed.
+    fn mark_source_dropped_all(operand: &Operand, frame: &mut Frame, frames: &mut FrameStore) {
+        match operand {
+            Operand::Value(id) => frame.mark_value_dropped(*id),
+            Operand::Slot(id) => frame.mark_slot_dropped(*id),
+            Operand::Param(id) => frame.mark_param_dropped(*id),
+            Operand::ExternalValue { unit, value } => {
+                frames.mark_external_value_dropped(*unit, *value);
+            }
+            Operand::ExternalSlot { unit, slot } => {
+                frames.mark_external_slot_dropped(*unit, *slot);
+            }
+        }
     }
 
     pub(crate) fn read_operand(

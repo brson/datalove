@@ -373,9 +373,11 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, "]")
             }
-            Instruction::SlotStore { dest, value, is_copy } => {
-                let suffix = if *is_copy { ".copy" } else { ".move" };
-                write!(f, "store{} {}, {}", suffix, dest, value)
+            Instruction::SlotStoreCopy { dest, value } => {
+                write!(f, "store.copy {}, {}", dest, value)
+            }
+            Instruction::SlotStoreMove { dest, value } => {
+                write!(f, "store.move {}, {}", dest, value)
             }
             Instruction::SetField { slot, field_path, value } => {
                 write!(f, "setfield {}", slot)?;
@@ -387,9 +389,11 @@ impl fmt::Display for Instruction {
             Instruction::ParamStore { param, value } => {
                 write!(f, "store {}, {}", param, value)
             }
-            Instruction::SlotLoad { dest, slot, is_copy } => {
-                let suffix = if *is_copy { ".copy" } else { ".move" };
-                write!(f, "{} = load{} {}", dest, suffix, slot)
+            Instruction::SlotLoadCopy { dest, slot } => {
+                write!(f, "{} = load.copy {}", dest, slot)
+            }
+            Instruction::SlotLoadMove { dest, slot } => {
+                write!(f, "{} = load.move {}", dest, slot)
             }
             Instruction::Drop { operand } => {
                 write!(f, "drop {}", operand)

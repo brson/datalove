@@ -796,12 +796,12 @@ fn test_slot_store_load() {
                 instructions: vec![
                     // var x = 10
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
-                    Instruction::SlotStore { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(0)), is_copy: true },
+                    Instruction::SlotStoreCopy { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(0)) },
                     // x = 42
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(42) },
-                    Instruction::SlotStore { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(1)), is_copy: true },
+                    Instruction::SlotStoreCopy { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(1)) },
                     // ret x
-                    Instruction::SlotLoad { dest: ValueId(2), slot: SlotId(0), is_copy: true },
+                    Instruction::SlotLoadCopy { dest: ValueId(2), slot: SlotId(0) },
                 ],
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
@@ -829,18 +829,18 @@ fn test_slot_multiple_updates() {
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
-                    Instruction::SlotStore { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(0)), is_copy: true },
+                    Instruction::SlotStoreCopy { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(0)) },
                     // x = 2
                     Instruction::Const { dest: ValueId(1), value: ConstValue::I64(2) },
-                    Instruction::SlotStore { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(1)), is_copy: true },
+                    Instruction::SlotStoreCopy { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(1)) },
                     // x = 4
                     Instruction::Const { dest: ValueId(2), value: ConstValue::I64(4) },
-                    Instruction::SlotStore { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(2)), is_copy: true },
+                    Instruction::SlotStoreCopy { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(2)) },
                     // x = 8
                     Instruction::Const { dest: ValueId(3), value: ConstValue::I64(8) },
-                    Instruction::SlotStore { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(3)), is_copy: true },
+                    Instruction::SlotStoreCopy { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(3)) },
                     // ret x
-                    Instruction::SlotLoad { dest: ValueId(4), slot: SlotId(0), is_copy: true },
+                    Instruction::SlotLoadCopy { dest: ValueId(4), slot: SlotId(0) },
                 ],
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(4))) },
             },
@@ -1681,10 +1681,9 @@ fn test_crossunit_external_slot() {
                         dest: ValueId(0),
                         value: ConstValue::I64(10),
                     },
-                    Instruction::SlotStore {
+                    Instruction::SlotStoreCopy {
                         dest: SlotDest::Local(SlotId(0)),
                         value: Operand::Value(ValueId(0)),
-                        is_copy: true,
                     },
                 ],
                 terminator: Terminator::UnitEnd { result: None },

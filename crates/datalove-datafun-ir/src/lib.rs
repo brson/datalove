@@ -796,8 +796,11 @@ pub enum Instruction {
         rows: Vec<Operand>,
     },
 
-    /// Store value to mutable slot.
-    SlotStore { dest: SlotDest, value: Operand, is_copy: bool },
+    /// Store value to mutable slot (copy semantics - source remains valid).
+    SlotStoreCopy { dest: SlotDest, value: Operand },
+
+    /// Store value to mutable slot (move semantics - consumes source).
+    SlotStoreMove { dest: SlotDest, value: Operand },
 
     /// Store value to a field within a mutable slot.
     ///
@@ -812,8 +815,11 @@ pub enum Instruction {
     /// Store value to mutable parameter (writes through to caller's data).
     ParamStore { param: ParamId, value: Operand },
 
-    /// Load value from mutable slot.
-    SlotLoad { dest: ValueId, slot: SlotId, is_copy: bool },
+    /// Load value from mutable slot (copy semantics - slot remains valid).
+    SlotLoadCopy { dest: ValueId, slot: SlotId },
+
+    /// Load value from mutable slot (move semantics - slot becomes invalid).
+    SlotLoadMove { dest: ValueId, slot: SlotId },
 
     /// Drop a value (run destructor).
     Drop { operand: Operand },

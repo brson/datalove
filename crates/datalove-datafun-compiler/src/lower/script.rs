@@ -262,11 +262,18 @@ fn lower_statement_for_script<'db>(
             let is_copy = slot_type.is_copy();
             let slot = ctx.fresh_slot(slot_type);
             let value_id = lower_expression(ctx, init_expr)?;
-            ctx.emit(Instruction::SlotStore {
-                dest: SlotDest::Local(slot),
-                value: Operand::Value(value_id),
-                is_copy,
-            });
+            let instr = if is_copy {
+                Instruction::SlotStoreCopy {
+                    dest: SlotDest::Local(slot),
+                    value: Operand::Value(value_id),
+                }
+            } else {
+                Instruction::SlotStoreMove {
+                    dest: SlotDest::Local(slot),
+                    value: Operand::Value(value_id),
+                }
+            };
+            ctx.emit(instr);
             let operand = Operand::Slot(slot);
             ctx.bind_var(&name, operand);
             // Record binding operand for drop schedule.
@@ -298,11 +305,18 @@ fn lower_statement_for_script<'db>(
                                 if !is_copy {
                                     ctx.emit(Instruction::Drop { operand: Operand::Slot(slot) });
                                 }
-                                ctx.emit(Instruction::SlotStore {
-                                    dest: SlotDest::Local(slot),
-                                    value: Operand::Value(value_id),
-                                    is_copy,
-                                });
+                                let instr = if is_copy {
+                                    Instruction::SlotStoreCopy {
+                                        dest: SlotDest::Local(slot),
+                                        value: Operand::Value(value_id),
+                                    }
+                                } else {
+                                    Instruction::SlotStoreMove {
+                                        dest: SlotDest::Local(slot),
+                                        value: Operand::Value(value_id),
+                                    }
+                                };
+                                ctx.emit(instr);
                                 Ok(())
                             }
                             Operand::ExternalSlot { unit, slot } => {
@@ -313,11 +327,18 @@ fn lower_statement_for_script<'db>(
                                         operand: Operand::ExternalSlot { unit, slot },
                                     });
                                 }
-                                ctx.emit(Instruction::SlotStore {
-                                    dest: SlotDest::External { unit, slot },
-                                    value: Operand::Value(value_id),
-                                    is_copy,
-                                });
+                                let instr = if is_copy {
+                                    Instruction::SlotStoreCopy {
+                                        dest: SlotDest::External { unit, slot },
+                                        value: Operand::Value(value_id),
+                                    }
+                                } else {
+                                    Instruction::SlotStoreMove {
+                                        dest: SlotDest::External { unit, slot },
+                                        value: Operand::Value(value_id),
+                                    }
+                                };
+                                ctx.emit(instr);
                                 Ok(())
                             }
                             _ => Err(LowerError::VariableNotMutable(name)),
