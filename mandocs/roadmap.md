@@ -38,6 +38,7 @@
 
 ## On deck
 
+- fix rt error/alloc semantics
 - clone and coerce
 - updates feed
 - roadmap status page
