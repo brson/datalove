@@ -11,6 +11,46 @@ use crate::error::InterpError;
 use crate::value::{Destination, Value};
 use crate::IrInterpreter;
 
+/// Trait for checked integer operations (overflow detection).
+trait CheckedIntOps: Sized + Default {
+    fn overflowing_add_impl(self, rhs: Self) -> (Self, bool);
+    fn overflowing_sub_impl(self, rhs: Self) -> (Self, bool);
+    fn overflowing_mul_impl(self, rhs: Self) -> (Self, bool);
+    fn checked_div_impl(self, rhs: Self) -> (Self, bool);
+}
+
+macro_rules! impl_checked_int_ops {
+    ($ty:ty) => {
+        impl CheckedIntOps for $ty {
+            fn overflowing_add_impl(self, rhs: Self) -> (Self, bool) {
+                self.overflowing_add(rhs)
+            }
+            fn overflowing_sub_impl(self, rhs: Self) -> (Self, bool) {
+                self.overflowing_sub(rhs)
+            }
+            fn overflowing_mul_impl(self, rhs: Self) -> (Self, bool) {
+                self.overflowing_mul(rhs)
+            }
+            fn checked_div_impl(self, rhs: Self) -> (Self, bool) {
+                match self.checked_div(rhs) {
+                    Some(r) => (r, false),
+                    None => (0, true),
+                }
+            }
+        }
+    };
+}
+
+impl_checked_int_ops!(i8);
+impl_checked_int_ops!(i16);
+impl_checked_int_ops!(i32);
+impl_checked_int_ops!(i64);
+impl_checked_int_ops!(u8);
+impl_checked_int_ops!(u16);
+impl_checked_int_ops!(u32);
+impl_checked_int_ops!(u64);
+// IsizeRepr/UsizeRepr are type aliases to i32/u32 or i64/u64 - covered above.
+
 /// Generate a binop function for a fixed-width integer type.
 macro_rules! impl_int_binop {
     ($fname:ident, $ty:ty) => {
@@ -650,54 +690,57 @@ impl IrInterpreter {
         dest: Destination,
         overflow_dest: Destination,
     ) -> Result<(), InterpError> {
-        // Macro to generate checked binop implementations for integer types.
-        macro_rules! checked_int_binop {
-            ($tag:ident, $ty:ty, $lhs:expr, $rhs:expr, $dest:expr, $overflow:expr, $op:expr) => {
-                if (*$lhs.tydesc).type_tag == rtdt::TyTag::$tag {
-                    let a = *($lhs.ptr as *const $ty);
-                    let b = *($rhs.ptr as *const $ty);
-                    let (result, overflowed) = match $op {
-                        BinOp::Add => a.overflowing_add(b),
-                        BinOp::Sub => a.overflowing_sub(b),
-                        BinOp::Mul => a.overflowing_mul(b),
-                        BinOp::Div => {
-                            // checked_div returns None on div-by-zero or overflow.
-                            match a.checked_div(b) {
-                                Some(r) => (r, false),
-                                None => (0 as $ty, true),
-                            }
-                        }
-                        _ => {
-                            return Err(InterpError::TypeMismatch(format!(
-                                "checked binop only supports Add/Sub/Mul/Div, got {:?}",
-                                $op
-                            )))
-                        }
-                    };
-                    *($dest.ptr as *mut $ty) = result;
-                    *($overflow.ptr as *mut bool) = overflowed;
-                    return Ok(());
+        unsafe {
+            let tag = (*lhs.tydesc).type_tag;
+
+            match tag {
+                rtdt::TyTag::I8 => Self::execute_binop_checked_int::<i8>(op, lhs, rhs, dest, overflow_dest),
+                rtdt::TyTag::I16 => Self::execute_binop_checked_int::<i16>(op, lhs, rhs, dest, overflow_dest),
+                rtdt::TyTag::I32 => Self::execute_binop_checked_int::<i32>(op, lhs, rhs, dest, overflow_dest),
+                rtdt::TyTag::I64 => Self::execute_binop_checked_int::<i64>(op, lhs, rhs, dest, overflow_dest),
+                rtdt::TyTag::Isize => Self::execute_binop_checked_int::<rtdt::IsizeRepr>(op, lhs, rhs, dest, overflow_dest),
+                rtdt::TyTag::U8 => Self::execute_binop_checked_int::<u8>(op, lhs, rhs, dest, overflow_dest),
+                rtdt::TyTag::U16 => Self::execute_binop_checked_int::<u16>(op, lhs, rhs, dest, overflow_dest),
+                rtdt::TyTag::U32 => Self::execute_binop_checked_int::<u32>(op, lhs, rhs, dest, overflow_dest),
+                rtdt::TyTag::U64 => Self::execute_binop_checked_int::<u64>(op, lhs, rhs, dest, overflow_dest),
+                rtdt::TyTag::Usize => Self::execute_binop_checked_int::<rtdt::UsizeRepr>(op, lhs, rhs, dest, overflow_dest),
+                _ => Err(InterpError::TypeMismatch(format!(
+                    "unsupported checked binop {:?} for type {:?}",
+                    op, tag
+                ))),
+            }
+        }
+    }
+
+    /// Checked integer binop implementation using generics.
+    fn execute_binop_checked_int<T>(
+        op: BinOp,
+        lhs: &Value,
+        rhs: &Value,
+        dest: Destination,
+        overflow_dest: Destination,
+    ) -> Result<(), InterpError>
+    where
+        T: Copy + CheckedIntOps,
+    {
+        unsafe {
+            let a = *(lhs.ptr as *const T);
+            let b = *(rhs.ptr as *const T);
+            let (result, overflowed) = match op {
+                BinOp::Add => a.overflowing_add_impl(b),
+                BinOp::Sub => a.overflowing_sub_impl(b),
+                BinOp::Mul => a.overflowing_mul_impl(b),
+                BinOp::Div => a.checked_div_impl(b),
+                _ => {
+                    return Err(InterpError::TypeMismatch(format!(
+                        "checked binop only supports Add/Sub/Mul/Div, got {:?}",
+                        op
+                    )))
                 }
             };
-        }
-
-        unsafe {
-            checked_int_binop!(I8, i8, lhs, rhs, dest, overflow_dest, op);
-            checked_int_binop!(I16, i16, lhs, rhs, dest, overflow_dest, op);
-            checked_int_binop!(I32, i32, lhs, rhs, dest, overflow_dest, op);
-            checked_int_binop!(I64, i64, lhs, rhs, dest, overflow_dest, op);
-            checked_int_binop!(U8, u8, lhs, rhs, dest, overflow_dest, op);
-            checked_int_binop!(U16, u16, lhs, rhs, dest, overflow_dest, op);
-            checked_int_binop!(U32, u32, lhs, rhs, dest, overflow_dest, op);
-            checked_int_binop!(U64, u64, lhs, rhs, dest, overflow_dest, op);
-            checked_int_binop!(Usize, rtdt::UsizeRepr, lhs, rhs, dest, overflow_dest, op);
-            checked_int_binop!(Isize, rtdt::IsizeRepr, lhs, rhs, dest, overflow_dest, op);
-
-            let tag = (*lhs.tydesc).type_tag;
-            Err(InterpError::TypeMismatch(format!(
-                "unsupported checked binop {:?} for type {:?}",
-                op, tag
-            )))
+            *(dest.ptr as *mut T) = result;
+            *(overflow_dest.ptr as *mut bool) = overflowed;
+            Ok(())
         }
     }
 
@@ -717,31 +760,59 @@ impl IrInterpreter {
             )));
         }
 
-        // Macro to generate checked negation for signed integer types.
-        macro_rules! checked_signed_neg {
-            ($tag:ident, $ty:ty, $src:expr, $dest:expr, $overflow:expr) => {
-                if (*$src.tydesc).type_tag == rtdt::TyTag::$tag {
-                    let a = *($src.ptr as *const $ty);
-                    let (result, overflowed) = a.overflowing_neg();
-                    *($dest.ptr as *mut $ty) = result;
-                    *($overflow.ptr as *mut bool) = overflowed;
-                    return Ok(());
-                }
-            };
-        }
-
         unsafe {
-            checked_signed_neg!(I8, i8, src, dest, overflow_dest);
-            checked_signed_neg!(I16, i16, src, dest, overflow_dest);
-            checked_signed_neg!(I32, i32, src, dest, overflow_dest);
-            checked_signed_neg!(I64, i64, src, dest, overflow_dest);
-            checked_signed_neg!(Isize, rtdt::IsizeRepr, src, dest, overflow_dest);
-
             let tag = (*src.tydesc).type_tag;
-            Err(InterpError::TypeMismatch(format!(
-                "checked negation only supported for signed integers, got {:?}",
-                tag
-            )))
+
+            match tag {
+                rtdt::TyTag::I8 => Self::execute_checked_neg::<i8>(src, dest, overflow_dest),
+                rtdt::TyTag::I16 => Self::execute_checked_neg::<i16>(src, dest, overflow_dest),
+                rtdt::TyTag::I32 => Self::execute_checked_neg::<i32>(src, dest, overflow_dest),
+                rtdt::TyTag::I64 => Self::execute_checked_neg::<i64>(src, dest, overflow_dest),
+                rtdt::TyTag::Isize => Self::execute_checked_neg::<rtdt::IsizeRepr>(src, dest, overflow_dest),
+                _ => Err(InterpError::TypeMismatch(format!(
+                    "checked negation only supported for signed integers, got {:?}",
+                    tag
+                ))),
+            }
+        }
+    }
+
+    /// Checked negation for signed integers.
+    fn execute_checked_neg<T>(
+        src: &Value,
+        dest: Destination,
+        overflow_dest: Destination,
+    ) -> Result<(), InterpError>
+    where
+        T: Copy + CheckedNeg,
+    {
+        unsafe {
+            let a = *(src.ptr as *const T);
+            let (result, overflowed) = a.overflowing_neg_impl();
+            *(dest.ptr as *mut T) = result;
+            *(overflow_dest.ptr as *mut bool) = overflowed;
+            Ok(())
         }
     }
 }
+
+/// Trait for checked negation.
+trait CheckedNeg: Sized {
+    fn overflowing_neg_impl(self) -> (Self, bool);
+}
+
+macro_rules! impl_checked_neg {
+    ($ty:ty) => {
+        impl CheckedNeg for $ty {
+            fn overflowing_neg_impl(self) -> (Self, bool) {
+                self.overflowing_neg()
+            }
+        }
+    };
+}
+
+impl_checked_neg!(i8);
+impl_checked_neg!(i16);
+impl_checked_neg!(i32);
+impl_checked_neg!(i64);
+// IsizeRepr is a type alias to i32 or i64 - covered above.
