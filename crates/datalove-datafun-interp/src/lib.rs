@@ -491,7 +491,7 @@ impl IrInterpreter {
         match instr {
             Instruction::Const { dest, value } => {
                 let dest_slot = frame.value_dest(*dest);
-                self.write_const(value, dest_slot)?;
+                self.write_const(value, dest_slot);
                 frame.mark_value_initialized(*dest);
             }
             Instruction::Copy { dest, src } => {
@@ -1235,7 +1235,7 @@ impl IrInterpreter {
         }
     }
 
-    fn write_const(&mut self, value: &ConstValue, dest: Destination) -> Result<(), InterpError> {
+    fn write_const(&mut self, value: &ConstValue, dest: Destination) {
         unsafe {
             match value {
                 ConstValue::Unit => {}
@@ -1300,7 +1300,6 @@ impl IrInterpreter {
                 }
             }
         }
-        Ok(())
     }
 
     unsafe fn copy_value(&self, src: &Value, dest: Destination) {
