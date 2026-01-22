@@ -1273,38 +1273,14 @@ impl IrInterpreter {
                     *(dest.ptr as *mut rtdt::IsizeRepr) = *n;
                 }
                 ConstValue::Int { limbs, negative } => {
-                    let int_ptr = dest.ptr as *mut rtdt::Int;
-                    if limbs.is_empty() {
-                        (*int_ptr).data = std::ptr::null();
-                        (*int_ptr).size_and_sign = 0;
-                        (*int_ptr).capacity = rtdt::Usize::ZERO;
-                    } else {
-                        // Allocate limbs in runtime memory.
-                        // Must use size=4, count=num_limbs to match the destroy code.
-                        let rt_handle = self.runtime.handle();
-                        let num_limbs = limbs.len() as rtdt::UsizeRepr;
-                        let limbs_ptr = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-                            rt_handle,
-                            4,          // size of one limb
-                            4,          // align
-                            num_limbs,  // count
-                        ) as *mut u32;
-                        if limbs_ptr.is_null() {
-                            return Err(InterpError::RuntimeError(
-                                "Failed to allocate bigint limbs".to_string()
-                            ));
-                        }
-                        for (i, &limb) in limbs.iter().enumerate() {
-                            *limbs_ptr.add(i) = limb;
-                        }
-                        (*int_ptr).data = limbs_ptr as *const u32;
-                        (*int_ptr).size_and_sign = if *negative {
-                            -(limbs.len() as i32)
-                        } else {
-                            limbs.len() as i32
-                        };
-                        (*int_ptr).capacity = rtdt::Usize(num_limbs);
-                    }
+                    datalove_rt::c::dtlv_rti_int_from_limbs(
+                        self.runtime.handle(),
+                        if limbs.is_empty() { std::ptr::null() } else { limbs.as_ptr() },
+                        limbs.len() as u32,
+                        *negative,
+                        dest.ptr,
+                        dest.tydesc,
+                    );
                 }
                 ConstValue::F32(n) => {
                     *(dest.ptr as *mut f32) = *n;

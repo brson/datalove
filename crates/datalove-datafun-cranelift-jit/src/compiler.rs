@@ -426,6 +426,7 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     jit_builder.symbol("dtlv_rti_int_div_checked", c::dtlv_rti_int_div_checked as *const u8);
     jit_builder.symbol("dtlv_rti_int_neg", c::dtlv_rti_int_neg as *const u8);
     jit_builder.symbol("dtlv_rti_int_from_fixed", c::dtlv_rti_int_from_fixed as *const u8);
+    jit_builder.symbol("dtlv_rti_int_from_limbs", c::dtlv_rti_int_from_limbs as *const u8);
     jit_builder.symbol("dtlv_rti_cmp_local", c::dtlv_rti_cmp_local as *const u8);
 
     // Value move function.

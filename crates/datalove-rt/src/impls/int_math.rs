@@ -739,3 +739,42 @@ pub(crate) unsafe fn int_from_fixed_impl(
     }
 }
 
+/// Construct an Int from a limbs array.
+///
+/// Takes a pointer to u32 limbs (little-endian, least significant first),
+/// the count of limbs, and a sign flag. Allocates new limb memory and
+/// initializes the Int struct at the destination.
+pub(crate) unsafe fn int_from_limbs_impl(
+    rt: &mut RtLocal,
+    limbs_ptr: *const u32,
+    limb_count: u32,
+    negative: bool,
+    result_out: *mut u8,
+) -> RtStatus {
+    unsafe {
+        let result = &mut *(result_out as *mut rtdt::Int);
+
+        if limb_count == 0 {
+            // Zero value.
+            result.data = std::ptr::null();
+            result.size_and_sign = 0;
+            result.capacity = rtdt::Usize::ZERO;
+        } else {
+            // Allocate and copy limbs.
+            let count = limb_count as rtdt::UsizeRepr;
+            let new_limbs = rt.alloc.alloc(4, 4, count) as *mut u32;
+            std::ptr::copy_nonoverlapping(limbs_ptr, new_limbs, limb_count as usize);
+
+            result.data = new_limbs as *const u32;
+            result.size_and_sign = if negative {
+                -(limb_count as i32)
+            } else {
+                limb_count as i32
+            };
+            result.capacity = rtdt::Usize(count);
+        }
+
+        RtStatus::Ok
+    }
+}
+

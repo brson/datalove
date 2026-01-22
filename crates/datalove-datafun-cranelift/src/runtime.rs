@@ -62,6 +62,8 @@ pub struct RuntimeImports {
     pub int_neg: FuncId,
     /// `dtlv_rti_int_from_fixed(rt, src_in, src_tydesc, result_out, result_tydesc) -> RtStatus`
     pub int_from_fixed: FuncId,
+    /// `dtlv_rti_int_from_limbs(rt, limbs_ptr, limb_count, negative, result_out, result_tydesc) -> RtStatus`
+    pub int_from_limbs: FuncId,
     /// `dtlv_rti_cmp_local(rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtOrdering`
     pub int_cmp: FuncId,
 
@@ -349,6 +351,21 @@ impl RuntimeImports {
             .declare_function("dtlv_rti_int_from_fixed", Linkage::Import, &int_unary_sig())
             .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_int_from_fixed: {}", e)))?;
 
+        // dtlv_rti_int_from_limbs(rt, limbs_ptr, limb_count, negative, result_out, result_tydesc) -> u8
+        let int_from_limbs = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE));      // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE));      // limbs_ptr
+            sig.params.push(AbiParam::new(cl_types::I32)); // limb_count
+            sig.params.push(AbiParam::new(cl_types::I8));  // negative (bool)
+            sig.params.push(AbiParam::new(PTR_TYPE));      // result_out
+            sig.params.push(AbiParam::new(PTR_TYPE));      // result_tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_int_from_limbs", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_int_from_limbs: {}", e)))?
+        };
+
         // Int (bigint) comparison: (rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtOrdering (u8)
         let int_cmp = {
             let mut sig = cl_ir::Signature::new(call_conv);
@@ -420,6 +437,7 @@ impl RuntimeImports {
             int_div,
             int_neg,
             int_from_fixed,
+            int_from_limbs,
             int_cmp,
             move_value,
             error_from,

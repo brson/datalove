@@ -2,7 +2,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use cranelift_codegen::ir::{types as cl_types, InstBuilder, MemFlags};
+use cranelift_codegen::ir::{types as cl_types, InstBuilder};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{Linkage, Module};
 
@@ -101,9 +101,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile an Int (bigint) constant.
     ///
-    /// Int layout varies based on index-64 feature:
-    /// - Default: `{ data: *const u32, size_and_sign: i32, capacity: Usize(u32) }` = 16 bytes
-    /// - index-64: `{ data: *const u32, size_and_sign: i32, [pad], capacity: Usize(u64) }` = 24 bytes
+    /// Uses the runtime function `dtlv_rti_int_from_limbs` to construct the Int.
     pub(super) fn compile_int_const(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -111,14 +109,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         limbs: &[u32],
         negative: bool,
     ) -> Result<(), CraneliftError> {
-        use datalove_rtdt as rtdt;
-
-        // Capacity type depends on index-64 feature.
-        use crate::index_types::INDEX_TYPE;
-
-        // Offset of capacity field in Int struct.
-        let capacity_offset = std::mem::offset_of!(rtdt::Int, capacity) as i32;
-
         // Get frame slot and destination address.
         let frame_slot = self.frame_slot.ok_or_else(|| {
             CraneliftError::Codegen("no frame slot for Int constant".into())
@@ -126,53 +116,40 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let dest_offset = self.layout.value_offset(dest.0);
         let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
-        if limbs.is_empty() {
-            // Zero: null data, size=0, capacity=0.
-            let null = builder.ins().iconst(cl_types::I64, 0);
-            let zero32 = builder.ins().iconst(cl_types::I32, 0);
-            let zero_cap = builder.ins().iconst(INDEX_TYPE, 0);
-            builder.ins().store(MemFlags::new(), null, base, 0);     // data
-            builder.ins().store(MemFlags::new(), zero32, base, 8);   // size_and_sign
-            builder.ins().store(MemFlags::new(), zero_cap, base, capacity_offset);  // capacity
+        // Need runtime handle.
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("Int constant requires runtime handle".into())
+        })?;
+        let int_from_limbs_func = self.runtime.as_ref().ok_or_else(|| {
+            CraneliftError::Codegen("Int constant requires runtime imports".into())
+        })?.int_from_limbs;
+
+        // Get Int TyDesc.
+        let tydesc_id = self.tydesc_emitter.get(&datalove_datafun_ir::IrType::Int).ok_or_else(|| {
+            CraneliftError::Codegen("TyDesc not found for Int".into())
+        })?;
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+        // Get limbs pointer (null for zero, static data otherwise).
+        let limbs_ptr = if limbs.is_empty() {
+            builder.ins().iconst(PTR_TYPE, 0)
         } else {
-            // Need runtime handle for memory allocation.
-            let rt_handle = self.rt_handle_param.ok_or_else(|| {
-                CraneliftError::Codegen("Int constant requires runtime handle".into())
-            })?;
-            let runtime = self.runtime.as_ref().ok_or_else(|| {
-                CraneliftError::Codegen("Int constant requires runtime imports".into())
-            })?;
+            // Emit limbs as static data (little-endian bytes, 4-byte aligned for u32 access).
+            let limbs_bytes: Vec<u8> = limbs.iter()
+                .flat_map(|&limb| limb.to_le_bytes())
+                .collect();
+            let limbs_data_id = self.emit_static_bytes_aligned(&limbs_bytes, 4)?;
+            let limbs_gv = self.module.declare_data_in_func(limbs_data_id, builder.func);
+            builder.ins().global_value(PTR_TYPE, limbs_gv)
+        };
 
-            // Allocate limbs: 4 bytes each, 4-byte aligned.
-            // Count parameter type must match UsizeRepr.
-            let alloc_ref = self.module.declare_func_in_func(runtime.mem_alloc_raw, builder.func);
-            let size = builder.ins().iconst(cl_types::I32, 4);   // size of u32
-            let align = builder.ins().iconst(cl_types::I32, 4);  // align of u32
-            let count = builder.ins().iconst(INDEX_TYPE, limbs.len() as i64);
-            let call = builder.ins().call(alloc_ref, &[rt_handle, size, align, count]);
-            let limbs_ptr = builder.inst_results(call)[0];
+        let limb_count = builder.ins().iconst(cl_types::I32, limbs.len() as i64);
+        let negative_val = builder.ins().iconst(cl_types::I8, negative as i64);
 
-            // Write limbs to allocated memory.
-            for (i, &limb) in limbs.iter().enumerate() {
-                let limb_val = builder.ins().iconst(cl_types::I32, limb as i64);
-                let offset = (i * 4) as i32;
-                builder.ins().store(MemFlags::new(), limb_val, limbs_ptr, offset);
-            }
-
-            // Write Int struct fields.
-            builder.ins().store(MemFlags::new(), limbs_ptr, base, 0);  // data
-
-            let size_and_sign = if negative {
-                -(limbs.len() as i32)
-            } else {
-                limbs.len() as i32
-            };
-            let size_val = builder.ins().iconst(cl_types::I32, size_and_sign as i64);
-            builder.ins().store(MemFlags::new(), size_val, base, 8);   // size_and_sign
-
-            let cap_val = builder.ins().iconst(INDEX_TYPE, limbs.len() as i64);
-            builder.ins().store(MemFlags::new(), cap_val, base, capacity_offset);   // capacity
-        }
+        // Call dtlv_rti_int_from_limbs(rt, limbs_ptr, limb_count, negative, result_out, result_tydesc).
+        let func_ref = self.module.declare_func_in_func(int_from_limbs_func, builder.func);
+        builder.ins().call(func_ref, &[rt_handle, limbs_ptr, limb_count, negative_val, base, tydesc_ptr]);
 
         // Store base pointer for this value.
         self.values.insert(dest, base);
@@ -234,23 +211,29 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Emit static bytes data and return its DataId.
     pub(super) fn emit_static_bytes(&mut self, bytes: &[u8]) -> Result<cranelift_module::DataId, CraneliftError> {
+        self.emit_static_bytes_aligned(bytes, 1)
+    }
+
+    /// Emit static bytes data with specified alignment and return its DataId.
+    pub(super) fn emit_static_bytes_aligned(&mut self, bytes: &[u8], align: u64) -> Result<cranelift_module::DataId, CraneliftError> {
         use cranelift_module::DataDescription;
 
         // Generate globally unique name for this data using an atomic counter.
         // This avoids collisions when multiple modules have functions with the same name.
         let global_id = GLOBAL_STATIC_DATA_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let name = format!("__string_bytes_{}", global_id);
+        let name = format!("__static_bytes_{}", global_id);
 
         let data_id = self.module
             .declare_data(&name, Linkage::Local, false, false)
-            .map_err(|e| CraneliftError::Module(format!("declare string bytes: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("declare static bytes: {}", e)))?;
 
         let mut desc = DataDescription::new();
         desc.define(bytes.to_vec().into_boxed_slice());
+        desc.set_align(align);
 
         self.module
             .define_data(data_id, &desc)
-            .map_err(|e| CraneliftError::Module(format!("define string bytes: {}", e)))?;
+            .map_err(|e| CraneliftError::Module(format!("define static bytes: {}", e)))?;
 
         Ok(data_id)
     }

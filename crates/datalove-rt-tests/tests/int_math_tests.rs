@@ -1365,3 +1365,266 @@ fn test_int_div_knuth_refinement_break() -> AnyResult<()> {
     }
     Ok(())
 }
+
+// ============================================================================
+// int_from_limbs Tests
+// ============================================================================
+
+#[test]
+fn test_int_from_limbs_zero() -> AnyResult<()> {
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    let (ptr_expected, tydesc_expected) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 0")?;
+
+    // Allocate result buffer.
+    let result_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_expected, 1)
+    };
+    assert!(!result_ptr.is_null());
+
+    // Construct zero from empty limbs.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_int_from_limbs(
+            rt.handle(),
+            std::ptr::null(),  // limbs_ptr (null is ok for zero)
+            0,                 // limb_count
+            false,             // negative
+            result_ptr,
+            tydesc_expected,
+        )
+    };
+    assert_eq!(status, RtStatus::Ok);
+
+    // Compare result with expected.
+    let eq_result = unsafe {
+        datalove_rt::c::dtlv_rti_eq_local(
+            std::ptr::null_mut(),
+            result_ptr, tydesc_expected,
+            ptr_expected, tydesc_expected,
+        )
+    };
+    assert!(matches!(eq_result, RtEq::Equals), "Zero from limbs does not match expected");
+
+    unsafe {
+        cleanup_value(&rt, result_ptr, tydesc_expected);
+        cleanup_value(&rt, ptr_expected, tydesc_expected);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_from_limbs_single_positive() -> AnyResult<()> {
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    // 42 as a single limb.
+    let (ptr_expected, tydesc_expected) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 42")?;
+
+    let result_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_expected, 1)
+    };
+    assert!(!result_ptr.is_null());
+
+    let limbs: [u32; 1] = [42];
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_int_from_limbs(
+            rt.handle(),
+            limbs.as_ptr(),
+            1,
+            false,
+            result_ptr,
+            tydesc_expected,
+        )
+    };
+    assert_eq!(status, RtStatus::Ok);
+
+    let eq_result = unsafe {
+        datalove_rt::c::dtlv_rti_eq_local(
+            std::ptr::null_mut(),
+            result_ptr, tydesc_expected,
+            ptr_expected, tydesc_expected,
+        )
+    };
+    assert!(matches!(eq_result, RtEq::Equals), "42 from limbs does not match expected");
+
+    unsafe {
+        cleanup_value(&rt, result_ptr, tydesc_expected);
+        cleanup_value(&rt, ptr_expected, tydesc_expected);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_from_limbs_single_negative() -> AnyResult<()> {
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    // -42 as a single limb with negative flag.
+    let (ptr_expected, tydesc_expected) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / -42")?;
+
+    let result_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_expected, 1)
+    };
+    assert!(!result_ptr.is_null());
+
+    let limbs: [u32; 1] = [42];
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_int_from_limbs(
+            rt.handle(),
+            limbs.as_ptr(),
+            1,
+            true,  // negative
+            result_ptr,
+            tydesc_expected,
+        )
+    };
+    assert_eq!(status, RtStatus::Ok);
+
+    let eq_result = unsafe {
+        datalove_rt::c::dtlv_rti_eq_local(
+            std::ptr::null_mut(),
+            result_ptr, tydesc_expected,
+            ptr_expected, tydesc_expected,
+        )
+    };
+    assert!(matches!(eq_result, RtEq::Equals), "-42 from limbs does not match expected");
+
+    unsafe {
+        cleanup_value(&rt, result_ptr, tydesc_expected);
+        cleanup_value(&rt, ptr_expected, tydesc_expected);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_from_limbs_multi_positive() -> AnyResult<()> {
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    // 2^32 + 1 = 4294967297 as two limbs: [1, 1] (little-endian).
+    let (ptr_expected, tydesc_expected) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 4294967297")?;
+
+    let result_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_expected, 1)
+    };
+    assert!(!result_ptr.is_null());
+
+    let limbs: [u32; 2] = [1, 1];  // low limb first: 1 + 1*2^32 = 4294967297
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_int_from_limbs(
+            rt.handle(),
+            limbs.as_ptr(),
+            2,
+            false,
+            result_ptr,
+            tydesc_expected,
+        )
+    };
+    assert_eq!(status, RtStatus::Ok);
+
+    let eq_result = unsafe {
+        datalove_rt::c::dtlv_rti_eq_local(
+            std::ptr::null_mut(),
+            result_ptr, tydesc_expected,
+            ptr_expected, tydesc_expected,
+        )
+    };
+    assert!(matches!(eq_result, RtEq::Equals), "4294967297 from limbs does not match expected");
+
+    unsafe {
+        cleanup_value(&rt, result_ptr, tydesc_expected);
+        cleanup_value(&rt, ptr_expected, tydesc_expected);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_from_limbs_multi_negative() -> AnyResult<()> {
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    // -4294967297 as two limbs with negative flag.
+    let (ptr_expected, tydesc_expected) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / -4294967297")?;
+
+    let result_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_expected, 1)
+    };
+    assert!(!result_ptr.is_null());
+
+    let limbs: [u32; 2] = [1, 1];
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_int_from_limbs(
+            rt.handle(),
+            limbs.as_ptr(),
+            2,
+            true,  // negative
+            result_ptr,
+            tydesc_expected,
+        )
+    };
+    assert_eq!(status, RtStatus::Ok);
+
+    let eq_result = unsafe {
+        datalove_rt::c::dtlv_rti_eq_local(
+            std::ptr::null_mut(),
+            result_ptr, tydesc_expected,
+            ptr_expected, tydesc_expected,
+        )
+    };
+    assert!(matches!(eq_result, RtEq::Equals), "-4294967297 from limbs does not match expected");
+
+    unsafe {
+        cleanup_value(&rt, result_ptr, tydesc_expected);
+        cleanup_value(&rt, ptr_expected, tydesc_expected);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_int_from_limbs_large() -> AnyResult<()> {
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    // 2^64 = 18446744073709551616 as three limbs: [0, 0, 1].
+    let (ptr_expected, tydesc_expected) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 18446744073709551616")?;
+
+    let result_ptr = unsafe {
+        datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc_expected, 1)
+    };
+    assert!(!result_ptr.is_null());
+
+    let limbs: [u32; 3] = [0, 0, 1];  // 0 + 0*2^32 + 1*2^64 = 2^64
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_int_from_limbs(
+            rt.handle(),
+            limbs.as_ptr(),
+            3,
+            false,
+            result_ptr,
+            tydesc_expected,
+        )
+    };
+    assert_eq!(status, RtStatus::Ok);
+
+    let eq_result = unsafe {
+        datalove_rt::c::dtlv_rti_eq_local(
+            std::ptr::null_mut(),
+            result_ptr, tydesc_expected,
+            ptr_expected, tydesc_expected,
+        )
+    };
+    assert!(matches!(eq_result, RtEq::Equals), "2^64 from limbs does not match expected");
+
+    unsafe {
+        cleanup_value(&rt, result_ptr, tydesc_expected);
+        cleanup_value(&rt, ptr_expected, tydesc_expected);
+    }
+    Ok(())
+}

@@ -462,6 +462,32 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_from_fixed(
     }
 }
 
+/// Construct an Int (bigint) from a limbs array.
+///
+/// Takes a pointer to u32 limbs (little-endian, least significant first),
+/// the count of limbs, and a sign flag. Allocates new limb memory and
+/// initializes the Int struct at the destination.
+///
+/// For zero values, pass limb_count=0 (limbs_ptr may be null).
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_int_from_limbs(
+    rt: LocalRtHandle,
+    limbs_ptr: *const u32,
+    limb_count: u32,
+    negative: bool,
+    result_out: *mut u8,
+    _result_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!result_out.is_null(), "result_out is null");
+    debug_assert!(limb_count == 0 || !limbs_ptr.is_null(), "limbs_ptr is null with non-zero count");
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::int_math::int_from_limbs_impl(rt_ref, limbs_ptr, limb_count, negative, result_out)
+    }
+}
+
 /// Destroys any type of value, freeing allocations recursively.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_any_destroy_local(
