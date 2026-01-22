@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2026-01-18
+Last verified: 2026-01-22
 
 ## Overview
 
@@ -472,6 +472,63 @@ Type aliases are collected in Pass 0 of typechecking, before function signatures
 - Expressions **synthesize** types (bottom-up)
 - Expressions **check** against expected types (top-down)
 - Type hints provide expected types: `: type / expr`
+
+#### Binop Type Propagation
+
+Arithmetic binary operators support bidirectional type propagation, allowing operand types to be inferred from context rather than requiring explicit type hints.
+
+**Checked/Optional Arithmetic (`+!` `-!` `*!` `/!` `+?` `-?` `*?` `/?`):**
+
+When checking against a fixed-int type inside an `ok`/`some` wrapper, the expected type propagates to operands:
+
+```
+fun add(): !u32
+    ret ok (1 +! 2)    // 1 and 2 infer type u32 from !u32 context
+end fun
+
+fun sub(a: i64, b: i64): ?i64
+    ret some (a -? b)  // operands checked against i64
+end fun
+```
+
+Requirements for bidirectional propagation:
+- Checked ops (`+!` etc.) require the function to return `!T` (Result type)
+- Optional ops (`+?` etc.) require the function to return `?T` (Option type)
+- If return type doesn't match, falls through to synthesis (producing proper error)
+
+**Bigint Division (`/!` `/?`):**
+
+Bigint division also supports bidirectional propagation when checking against `int`:
+
+```
+fun div(a: int, b: int): !int
+    ret ok (a /! b)    // checked against int
+end fun
+```
+
+**Bare Float Arithmetic (`+` `-` `*` `/`):**
+
+Float literals infer their type from context:
+
+```
+fun add(): f32
+    ret 1.0 + 2.0      // literals infer f32 from return type
+end fun
+
+fun mul(a: f64, b: f64): f64
+    ret a * b          // operands checked against f64
+end fun
+```
+
+**Bare Integer Arithmetic:**
+
+Bare arithmetic on fixed integers (`+` `-` `*`) widens operands to `int` via synthesis. No bidirectional propagation occurs - widening is the correct semantic behavior.
+
+```
+fun add(): int
+    ret 1 + 2          // synthesizes: both widen to int, result is int
+end fun
+```
 
 ### 3.2 Numeric Widening
 
