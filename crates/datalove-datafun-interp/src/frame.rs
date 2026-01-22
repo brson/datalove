@@ -3,6 +3,7 @@
 //! A `Frame` holds all values and slots for a single function/unit execution.
 //! `FrameStore` accumulates frames from script units for cross-unit value access.
 
+use std::collections::HashSet;
 use datalove_rt::rust::AlignedBuffer;
 use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::{ValueId, SlotId, ParamId};
@@ -24,6 +25,12 @@ pub struct Frame {
     value_borrowed: Vec<bool>,
     /// Track which values are references (store pointers, dereference on read).
     value_is_ref: Vec<bool>,
+    /// Values that need runtime tracking (checked in destroy_all).
+    /// Precise values (not in this set) are skipped in destroy_all.
+    value_tracked: HashSet<u32>,
+    /// Slots that need runtime tracking (checked in destroy_all).
+    /// Precise slots (not in this set) are skipped in destroy_all.
+    slot_tracked: HashSet<u32>,
     /// Pointers to caller's data for each parameter.
     param_ptrs: Vec<*mut u8>,
     /// Type descriptors for each parameter.
@@ -35,8 +42,16 @@ pub struct Frame {
 }
 
 impl Frame {
-    /// Create a new frame from layout.
-    pub fn new(layout: IrLayout, param_count: usize) -> Self {
+    /// Create a new frame from layout and tracking info.
+    ///
+    /// `tracked_values`: ValueIds that need runtime tracking (checked in destroy_all).
+    /// `tracked_slots`: SlotIds that need runtime tracking (checked in destroy_all).
+    pub fn new(
+        layout: IrLayout,
+        param_count: usize,
+        tracked_values: &[ValueId],
+        tracked_slots: &[SlotId],
+    ) -> Self {
         let value_count = layout.value_offsets.len();
         let slot_count = layout.slot_offsets.len();
         let data = AlignedBuffer::with_align(
@@ -51,6 +66,8 @@ impl Frame {
             slot_initialized: vec![false; slot_count],
             value_borrowed: vec![false; value_count],
             value_is_ref: vec![false; value_count],
+            value_tracked: tracked_values.iter().map(|v| v.0).collect(),
+            slot_tracked: tracked_slots.iter().map(|s| s.0).collect(),
             param_ptrs: vec![std::ptr::null_mut(); param_count],
             param_tydescs: vec![std::ptr::null(); param_count],
             param_borrowed: vec![false; param_count],
@@ -167,6 +184,30 @@ impl Frame {
         idx < self.slot_initialized.len() && self.slot_initialized[idx]
     }
 
+    /// Check if value is tracked (needs runtime initialized check in destroy_all).
+    ///
+    /// TRANSITIONAL: Returns true for ALL values when tracked set is empty.
+    pub fn is_value_tracked(&self, id: ValueId) -> bool {
+        self.value_tracked.is_empty() || self.value_tracked.contains(&id.0)
+    }
+
+    /// Check if slot is tracked (needs runtime initialized check in destroy_all).
+    ///
+    /// TRANSITIONAL: Returns true for ALL slots when tracked set is empty.
+    pub fn is_slot_tracked(&self, id: SlotId) -> bool {
+        self.slot_tracked.is_empty() || self.slot_tracked.contains(&id.0)
+    }
+
+    /// Check if we're in "track all" mode (empty tracked sets).
+    pub fn is_track_all_values(&self) -> bool {
+        self.value_tracked.is_empty()
+    }
+
+    /// Check if we're in "track all" mode (empty tracked sets).
+    pub fn is_track_all_slots(&self) -> bool {
+        self.slot_tracked.is_empty()
+    }
+
     /// Mark value as dropped to prevent double-destroy.
     pub fn mark_value_dropped(&mut self, id: ValueId) {
         let idx = id.0 as usize;
@@ -244,12 +285,16 @@ impl Frame {
         }
     }
 
-    /// Destroy all initialized values, slots, and owned params.
+    /// Destroy all initialized tracked values, slots, and owned params.
     ///
-    /// Calls the runtime destructor for each initialized value/slot.
-    /// Skips borrowed values and borrowed params (they're not owned by this frame).
+    /// Calls the runtime destructor for each initialized tracked value/slot.
+    /// Skips:
+    /// - Borrowed values (not owned by this frame)
+    /// - Borrowed params (caller retains ownership)
+    /// - Untracked (precise) values/slots (handled explicitly by Drop instructions)
     pub fn destroy_all(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
         // Destroy In params (not borrowed, and initialized - callee owns through pointer).
+        // Note: params are always tracked since their state depends on call patterns.
         for idx in 0..self.param_ptrs.len() {
             let ptr = self.param_ptrs[idx];
             if !ptr.is_null() && !self.param_borrowed[idx] && self.param_initialized[idx] {
@@ -262,9 +307,14 @@ impl Frame {
             }
         }
 
-        // Destroy initialized values (skip borrowed ones).
+        // Destroy initialized tracked values (skip borrowed and untracked).
+        // Untracked (precise) values are handled by explicit Drop instructions.
+        // TRANSITIONAL: When tracked set is empty, treat all values as tracked
+        // until ownership analysis populates tracked_values.
+        let track_all_values = self.value_tracked.is_empty();
         for idx in 0..self.value_initialized.len() {
-            if self.value_initialized[idx] && !self.value_borrowed[idx] {
+            let is_tracked = track_all_values || self.value_tracked.contains(&(idx as u32));
+            if self.value_initialized[idx] && !self.value_borrowed[idx] && is_tracked {
                 let offset = self.layout.value_offsets[idx] as usize;
                 let tydesc = self.layout.value_tydescs[idx];
                 let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
@@ -275,9 +325,14 @@ impl Frame {
             }
         }
 
-        // Destroy initialized slots.
+        // Destroy initialized tracked slots (skip untracked).
+        // Untracked (precise) slots are handled by explicit Drop instructions.
+        // TRANSITIONAL: When tracked set is empty, treat all slots as tracked
+        // until ownership analysis populates tracked_slots.
+        let track_all_slots = self.slot_tracked.is_empty();
         for idx in 0..self.slot_initialized.len() {
-            if self.slot_initialized[idx] {
+            let is_tracked = track_all_slots || self.slot_tracked.contains(&(idx as u32));
+            if self.slot_initialized[idx] && is_tracked {
                 let offset = self.layout.slot_offsets[idx] as usize;
                 let tydesc = self.layout.slot_tydescs[idx];
                 let ptr = unsafe { self.data.as_mut_ptr().add(offset) };

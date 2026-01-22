@@ -256,8 +256,13 @@ impl IrInterpreter {
             &mut self.tydesc_table,
         );
 
-        // Create frame with param storage.
-        let mut frame = Frame::new(layout, func.params.len());
+        // Create frame with param storage and tracking info.
+        let mut frame = Frame::new(
+            layout,
+            func.params.len(),
+            &func.tracked_values,
+            &func.tracked_slots,
+        );
 
         // Set up parameters as pointers to caller's data.
         // All params store pointers - mode determines ownership semantics.
@@ -317,8 +322,13 @@ impl IrInterpreter {
             &mut self.tydesc_table,
         );
 
-        // Create frame (script units have no function params).
-        let mut frame = Frame::new(layout, 0);
+        // Create frame with tracking info (script units have no function params).
+        let mut frame = Frame::new(
+            layout,
+            0,
+            &unit.tracked_values,
+            &unit.tracked_slots,
+        );
 
         // Create execution context with local functions.
         let ctx = ExecutionContext::new(&unit.functions);
@@ -490,17 +500,20 @@ impl IrInterpreter {
             }
             Instruction::Move { dest, src } => {
                 // Precise move: ownership analysis guarantees source exists.
-                // TODO: When value_tracked flags are added to Frame, skip
-                // mark_source_dropped_all for precise values. For now, always
-                // mark to prevent double-free in destroy_all().
+                // TRANSITIONAL: In track_all mode (empty tracked sets), still mark
+                // source dropped to avoid double-free in destroy_all.
                 let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&src_val, dest_slot); }
                 frame.mark_value_initialized(*dest);
-                Self::mark_source_dropped_all(src, frame, frames);
+                // Only skip mark_source_dropped when we have explicit tracking info.
+                if frame.is_track_all_values() {
+                    Self::mark_source_dropped_all(src, frame, frames);
+                }
             }
             Instruction::MoveTracked { dest, src } => {
                 // Tracked move: source may have been moved, updates tracking.
+                // Mark source dropped so destroy_all skips it.
                 let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&src_val, dest_slot); }
@@ -611,17 +624,20 @@ impl IrInterpreter {
             }
             Instruction::SlotLoadMove { dest, slot } => {
                 // Precise slot load: ownership analysis guarantees slot is occupied.
-                // TODO: When slot_tracked flags are added to Frame, skip
-                // mark_slot_dropped for precise slots. For now, always mark
-                // to prevent double-free in destroy_all().
+                // TRANSITIONAL: In track_all mode (empty tracked sets), still mark
+                // slot dropped to avoid double-free in destroy_all.
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&slot_val, dest_slot); }
-                frame.mark_slot_dropped(*slot);
+                // Only skip mark_slot_dropped when we have explicit tracking info.
+                if frame.is_track_all_slots() {
+                    frame.mark_slot_dropped(*slot);
+                }
                 frame.mark_value_initialized(*dest);
             }
             Instruction::SlotLoadMoveTracked { dest, slot } => {
                 // Tracked slot load: slot may have been moved, updates tracking.
+                // Mark slot dropped so destroy_all skips it.
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&slot_val, dest_slot); }
