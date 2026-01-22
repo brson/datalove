@@ -733,7 +733,7 @@ impl IrInterpreter {
                 let rhs_val = self.read_operand(rhs, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 let overflow_slot = frame.value_dest(*overflow);
-                self.execute_binop_checked(*op, &lhs_val, &rhs_val, dest_slot, overflow_slot)?;
+                self.execute_binop_checked(*op, &lhs_val, &rhs_val, dest_slot, overflow_slot);
                 frame.mark_value_initialized(*dest);
                 frame.mark_value_initialized(*overflow);
             }
@@ -742,7 +742,7 @@ impl IrInterpreter {
                 let operand_val = self.read_operand(operand, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 let overflow_slot = frame.value_dest(*overflow);
-                self.execute_unaryop_checked(*op, &operand_val, dest_slot, overflow_slot)?;
+                self.execute_unaryop_checked(*op, &operand_val, dest_slot, overflow_slot);
                 frame.mark_value_initialized(*dest);
                 frame.mark_value_initialized(*overflow);
             }

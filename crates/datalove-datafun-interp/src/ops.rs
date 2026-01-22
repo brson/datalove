@@ -64,7 +64,7 @@ macro_rules! impl_int_binop {
             lhs: &Value,
             rhs: &Value,
             dest: Destination,
-        ) -> Result<(), InterpError> {
+        ) {
             unsafe {
                 let a = *(lhs.ptr as *const $ty);
                 let b = *(rhs.ptr as *const $ty);
@@ -88,11 +88,9 @@ macro_rules! impl_int_binop {
                     BinOp::BitXor => *(dest.ptr as *mut $ty) = a ^ b,
                     BinOp::Shl => *(dest.ptr as *mut $ty) = a.wrapping_shl(b as u32),
                     BinOp::Shr => *(dest.ptr as *mut $ty) = a.wrapping_shr(b as u32),
-                    _ => return Err(InterpError::TypeMismatch(format!(
-                        "unsupported integer binop {:?}", op
-                    ))),
+                    // Type checker ensures only valid ops reach here.
+                    _ => unreachable!("unsupported integer binop {:?}", op),
                 }
-                Ok(())
             }
         }
     };
@@ -298,15 +296,14 @@ impl IrInterpreter {
                 rtdt::TyTag::U64 => Self::execute_binop_u64(op, lhs, rhs, dest),
                 rtdt::TyTag::Usize => Self::execute_binop_usize(op, lhs, rhs, dest),
                 rtdt::TyTag::Isize => Self::execute_binop_isize(op, lhs, rhs, dest),
-                rtdt::TyTag::Int => self.execute_binop_bigint(op, lhs, rhs, dest),
+                rtdt::TyTag::Int => return self.execute_binop_bigint(op, lhs, rhs, dest),
                 rtdt::TyTag::F32 => Self::execute_binop_f32(op, lhs, rhs, dest),
                 rtdt::TyTag::F64 => Self::execute_binop_f64(op, lhs, rhs, dest),
                 rtdt::TyTag::Bool => Self::execute_binop_bool(op, lhs, rhs, dest),
-                _ => Err(InterpError::TypeMismatch(format!(
-                    "unsupported binop {:?} for type {:?}",
-                    op, lhs_tag
-                ))),
+                // Type checker ensures only valid types reach here.
+                _ => unreachable!("unsupported binop {:?} for type {:?}", op, lhs_tag),
             }
+            Ok(())
         }
     }
 
@@ -347,14 +344,8 @@ impl IrInterpreter {
                 BinOp::Mul => datalove_rt::c::dtlv_rti_int_mul(
                     rt_handle, lhs_ptr, int_tydesc, rhs_ptr, int_tydesc, dest.ptr, int_tydesc,
                 ),
-                _ => {
-                    self.destroy_temp_int(&lhs_int);
-                    self.destroy_temp_int(&rhs_int);
-                    return Err(InterpError::TypeMismatch(format!(
-                        "widening arithmetic not supported for {:?}",
-                        op
-                    )));
-                }
+                // Only Add/Sub/Mul widen; type checker ensures this.
+                _ => unreachable!("widening arithmetic not supported for {:?}", op),
             };
 
             self.destroy_temp_int(&lhs_int);
@@ -420,12 +411,8 @@ impl IrInterpreter {
                     *(dest.ptr as *mut bool) = result;
                     return Ok(());
                 }
-                _ => {
-                    return Err(InterpError::TypeMismatch(format!(
-                        "unsupported Int binop {:?}",
-                        op
-                    )))
-                }
+                // Type checker ensures only arithmetic and comparisons reach here.
+                _ => unreachable!("unsupported Int binop {:?}", op),
             };
 
             if status != RtStatus::Ok {
@@ -444,7 +431,7 @@ impl IrInterpreter {
         lhs: &Value,
         rhs: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         unsafe {
             let a = *(lhs.ptr as *const f32);
             let b = *(rhs.ptr as *const f32);
@@ -459,11 +446,9 @@ impl IrInterpreter {
                 BinOp::Ge => *(dest.ptr as *mut bool) = a >= b,
                 BinOp::Eq => *(dest.ptr as *mut bool) = a == b,
                 BinOp::Ne => *(dest.ptr as *mut bool) = a != b,
-                _ => return Err(InterpError::TypeMismatch(format!(
-                    "unsupported F32 binop {:?}", op
-                ))),
+                // Type checker ensures only valid ops reach here.
+                _ => unreachable!("unsupported F32 binop {:?}", op),
             }
-            Ok(())
         }
     }
 
@@ -473,7 +458,7 @@ impl IrInterpreter {
         lhs: &Value,
         rhs: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         unsafe {
             let a = *(lhs.ptr as *const f64);
             let b = *(rhs.ptr as *const f64);
@@ -488,11 +473,9 @@ impl IrInterpreter {
                 BinOp::Ge => *(dest.ptr as *mut bool) = a >= b,
                 BinOp::Eq => *(dest.ptr as *mut bool) = a == b,
                 BinOp::Ne => *(dest.ptr as *mut bool) = a != b,
-                _ => return Err(InterpError::TypeMismatch(format!(
-                    "unsupported F64 binop {:?}", op
-                ))),
+                // Type checker ensures only valid ops reach here.
+                _ => unreachable!("unsupported F64 binop {:?}", op),
             }
-            Ok(())
         }
     }
 
@@ -502,7 +485,7 @@ impl IrInterpreter {
         lhs: &Value,
         rhs: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         unsafe {
             let a = *(lhs.ptr as *const bool);
             let b = *(rhs.ptr as *const bool);
@@ -512,11 +495,9 @@ impl IrInterpreter {
                 BinOp::LogicXor => *(dest.ptr as *mut bool) = a ^ b,
                 BinOp::Eq => *(dest.ptr as *mut bool) = a == b,
                 BinOp::Ne => *(dest.ptr as *mut bool) = a != b,
-                _ => return Err(InterpError::TypeMismatch(format!(
-                    "unsupported Bool binop {:?}", op
-                ))),
+                // Type checker ensures only valid ops reach here.
+                _ => unreachable!("unsupported Bool binop {:?}", op),
             }
-            Ok(())
         }
     }
 
@@ -541,15 +522,14 @@ impl IrInterpreter {
                 rtdt::TyTag::U32 => Self::execute_unaryop_unsigned::<u32>(op, src, dest),
                 rtdt::TyTag::U64 => Self::execute_unaryop_unsigned::<u64>(op, src, dest),
                 rtdt::TyTag::Usize => Self::execute_unaryop_unsigned::<rtdt::UsizeRepr>(op, src, dest),
-                rtdt::TyTag::Int => self.execute_unaryop_bigint(op, src, dest),
+                rtdt::TyTag::Int => return self.execute_unaryop_bigint(op, src, dest),
                 rtdt::TyTag::F32 => Self::execute_unaryop_f32(op, src, dest),
                 rtdt::TyTag::F64 => Self::execute_unaryop_f64(op, src, dest),
                 rtdt::TyTag::Bool => Self::execute_unaryop_bool(op, src, dest),
-                _ => Err(InterpError::TypeMismatch(format!(
-                    "unsupported unaryop {:?} for type {:?}",
-                    op, tag
-                ))),
+                // Type checker ensures only valid types reach here.
+                _ => unreachable!("unsupported unaryop {:?} for type {:?}", op, tag),
             }
+            Ok(())
         }
     }
 
@@ -558,7 +538,7 @@ impl IrInterpreter {
         op: UnaryOp,
         src: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError>
+    )
     where
         T: Copy + std::ops::Neg<Output = T> + std::ops::Not<Output = T>,
     {
@@ -567,11 +547,9 @@ impl IrInterpreter {
             match op {
                 UnaryOp::Neg => *(dest.ptr as *mut T) = -a,
                 UnaryOp::BitNot => *(dest.ptr as *mut T) = !a,
-                _ => return Err(InterpError::TypeMismatch(format!(
-                    "unsupported signed int unaryop {:?}", op
-                ))),
+                // Type checker ensures only valid ops reach here.
+                _ => unreachable!("unsupported signed int unaryop {:?}", op),
             }
-            Ok(())
         }
     }
 
@@ -580,7 +558,7 @@ impl IrInterpreter {
         op: UnaryOp,
         src: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError>
+    )
     where
         T: Copy + std::ops::Not<Output = T>,
     {
@@ -588,11 +566,9 @@ impl IrInterpreter {
             let a = *(src.ptr as *const T);
             match op {
                 UnaryOp::BitNot => *(dest.ptr as *mut T) = !a,
-                _ => return Err(InterpError::TypeMismatch(format!(
-                    "unsupported unsigned int unaryop {:?}", op
-                ))),
+                // Type checker ensures only valid ops reach here.
+                _ => unreachable!("unsupported unsigned int unaryop {:?}", op),
             }
-            Ok(())
         }
     }
 
@@ -618,9 +594,8 @@ impl IrInterpreter {
                     }
                     Ok(())
                 }
-                _ => Err(InterpError::TypeMismatch(format!(
-                    "unsupported Int unaryop {:?}", op
-                ))),
+                // Type checker ensures only Neg reaches here.
+                _ => unreachable!("unsupported Int unaryop {:?}", op),
             }
         }
     }
@@ -630,16 +605,14 @@ impl IrInterpreter {
         op: UnaryOp,
         src: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         unsafe {
             let a = *(src.ptr as *const f32);
             match op {
                 UnaryOp::Neg => *(dest.ptr as *mut f32) = -a,
-                _ => return Err(InterpError::TypeMismatch(format!(
-                    "unsupported F32 unaryop {:?}", op
-                ))),
+                // Type checker ensures only Neg reaches here.
+                _ => unreachable!("unsupported F32 unaryop {:?}", op),
             }
-            Ok(())
         }
     }
 
@@ -648,16 +621,14 @@ impl IrInterpreter {
         op: UnaryOp,
         src: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         unsafe {
             let a = *(src.ptr as *const f64);
             match op {
                 UnaryOp::Neg => *(dest.ptr as *mut f64) = -a,
-                _ => return Err(InterpError::TypeMismatch(format!(
-                    "unsupported F64 unaryop {:?}", op
-                ))),
+                // Type checker ensures only Neg reaches here.
+                _ => unreachable!("unsupported F64 unaryop {:?}", op),
             }
-            Ok(())
         }
     }
 
@@ -666,16 +637,14 @@ impl IrInterpreter {
         op: UnaryOp,
         src: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         unsafe {
             let a = *(src.ptr as *const bool);
             match op {
                 UnaryOp::Not | UnaryOp::LogicNot => *(dest.ptr as *mut bool) = !a,
-                _ => return Err(InterpError::TypeMismatch(format!(
-                    "unsupported Bool unaryop {:?}", op
-                ))),
+                // Type checker ensures only Not/LogicNot reach here.
+                _ => unreachable!("unsupported Bool unaryop {:?}", op),
             }
-            Ok(())
         }
     }
 
@@ -687,7 +656,7 @@ impl IrInterpreter {
         rhs: &Value,
         dest: Destination,
         overflow_dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         unsafe {
             let tag = (*lhs.tydesc).type_tag;
 
@@ -702,10 +671,8 @@ impl IrInterpreter {
                 rtdt::TyTag::U32 => Self::execute_binop_checked_int::<u32>(op, lhs, rhs, dest, overflow_dest),
                 rtdt::TyTag::U64 => Self::execute_binop_checked_int::<u64>(op, lhs, rhs, dest, overflow_dest),
                 rtdt::TyTag::Usize => Self::execute_binop_checked_int::<rtdt::UsizeRepr>(op, lhs, rhs, dest, overflow_dest),
-                _ => Err(InterpError::TypeMismatch(format!(
-                    "unsupported checked binop {:?} for type {:?}",
-                    op, tag
-                ))),
+                // Checked ops only apply to fixed-width ints; type checker ensures this.
+                _ => unreachable!("unsupported checked binop {:?} for type {:?}", op, tag),
             }
         }
     }
@@ -717,7 +684,7 @@ impl IrInterpreter {
         rhs: &Value,
         dest: Destination,
         overflow_dest: Destination,
-    ) -> Result<(), InterpError>
+    )
     where
         T: Copy + CheckedIntOps,
     {
@@ -729,16 +696,11 @@ impl IrInterpreter {
                 BinOp::Sub => a.overflowing_sub_impl(b),
                 BinOp::Mul => a.overflowing_mul_impl(b),
                 BinOp::Div => a.checked_div_impl(b),
-                _ => {
-                    return Err(InterpError::TypeMismatch(format!(
-                        "checked binop only supports Add/Sub/Mul/Div, got {:?}",
-                        op
-                    )))
-                }
+                // Only Add/Sub/Mul/Div have checked variants; type checker ensures this.
+                _ => unreachable!("checked binop only supports Add/Sub/Mul/Div, got {:?}", op),
             };
             *(dest.ptr as *mut T) = result;
             *(overflow_dest.ptr as *mut bool) = overflowed;
-            Ok(())
         }
     }
 
@@ -749,13 +711,10 @@ impl IrInterpreter {
         src: &Value,
         dest: Destination,
         overflow_dest: Destination,
-    ) -> Result<(), InterpError> {
-        // Only negation can overflow for signed integers.
+    ) {
+        // Only negation can overflow for signed integers; type checker ensures this.
         if op != UnaryOp::Neg {
-            return Err(InterpError::TypeMismatch(format!(
-                "checked unaryop only supports Neg, got {:?}",
-                op
-            )));
+            unreachable!("checked unaryop only supports Neg, got {:?}", op);
         }
 
         unsafe {
@@ -767,10 +726,8 @@ impl IrInterpreter {
                 rtdt::TyTag::I32 => Self::execute_checked_neg::<i32>(src, dest, overflow_dest),
                 rtdt::TyTag::I64 => Self::execute_checked_neg::<i64>(src, dest, overflow_dest),
                 rtdt::TyTag::Isize => Self::execute_checked_neg::<rtdt::IsizeRepr>(src, dest, overflow_dest),
-                _ => Err(InterpError::TypeMismatch(format!(
-                    "checked negation only supported for signed integers, got {:?}",
-                    tag
-                ))),
+                // Checked negation only for signed ints; type checker ensures this.
+                _ => unreachable!("checked negation only supported for signed integers, got {:?}", tag),
             }
         }
     }
@@ -780,7 +737,7 @@ impl IrInterpreter {
         src: &Value,
         dest: Destination,
         overflow_dest: Destination,
-    ) -> Result<(), InterpError>
+    )
     where
         T: Copy + CheckedNeg,
     {
@@ -789,7 +746,6 @@ impl IrInterpreter {
             let (result, overflowed) = a.overflowing_neg_impl();
             *(dest.ptr as *mut T) = result;
             *(overflow_dest.ptr as *mut bool) = overflowed;
-            Ok(())
         }
     }
 }
