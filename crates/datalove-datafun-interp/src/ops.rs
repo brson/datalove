@@ -11,7 +11,68 @@ use crate::error::InterpError;
 use crate::value::{Destination, Value};
 use crate::IrInterpreter;
 
+/// Generate a binop function for a fixed-width integer type.
+macro_rules! impl_int_binop {
+    ($fname:ident, $ty:ty) => {
+        fn $fname(
+            op: BinOp,
+            lhs: &Value,
+            rhs: &Value,
+            dest: Destination,
+        ) -> Result<(), InterpError> {
+            unsafe {
+                let a = *(lhs.ptr as *const $ty);
+                let b = *(rhs.ptr as *const $ty);
+                match op {
+                    BinOp::Add => *(dest.ptr as *mut $ty) = a.wrapping_add(b),
+                    BinOp::Sub => *(dest.ptr as *mut $ty) = a.wrapping_sub(b),
+                    BinOp::Mul => *(dest.ptr as *mut $ty) = a.wrapping_mul(b),
+                    BinOp::Div => {
+                        if b == 0 {
+                            return Err(InterpError::DivisionByZero);
+                        }
+                        *(dest.ptr as *mut $ty) = a.wrapping_div(b);
+                    }
+                    BinOp::Mod => {
+                        if b == 0 {
+                            return Err(InterpError::DivisionByZero);
+                        }
+                        *(dest.ptr as *mut $ty) = a.wrapping_rem(b);
+                    }
+                    BinOp::Lt => *(dest.ptr as *mut bool) = a < b,
+                    BinOp::Le => *(dest.ptr as *mut bool) = a <= b,
+                    BinOp::Gt => *(dest.ptr as *mut bool) = a > b,
+                    BinOp::Ge => *(dest.ptr as *mut bool) = a >= b,
+                    BinOp::Eq => *(dest.ptr as *mut bool) = a == b,
+                    BinOp::Ne => *(dest.ptr as *mut bool) = a != b,
+                    BinOp::BitAnd => *(dest.ptr as *mut $ty) = a & b,
+                    BinOp::BitOr => *(dest.ptr as *mut $ty) = a | b,
+                    BinOp::BitXor => *(dest.ptr as *mut $ty) = a ^ b,
+                    BinOp::Shl => *(dest.ptr as *mut $ty) = a.wrapping_shl(b as u32),
+                    BinOp::Shr => *(dest.ptr as *mut $ty) = a.wrapping_shr(b as u32),
+                    _ => return Err(InterpError::TypeMismatch(format!(
+                        "unsupported integer binop {:?}", op
+                    ))),
+                }
+                Ok(())
+            }
+        }
+    };
+}
+
 impl IrInterpreter {
+    // Generate binop functions for each integer type.
+    impl_int_binop!(execute_binop_i8, i8);
+    impl_int_binop!(execute_binop_i16, i16);
+    impl_int_binop!(execute_binop_i32, i32);
+    impl_int_binop!(execute_binop_i64, i64);
+    impl_int_binop!(execute_binop_u8, u8);
+    impl_int_binop!(execute_binop_u16, u16);
+    impl_int_binop!(execute_binop_u32, u32);
+    impl_int_binop!(execute_binop_u64, u64);
+    impl_int_binop!(execute_binop_usize, rtdt::UsizeRepr);
+    impl_int_binop!(execute_binop_isize, rtdt::IsizeRepr);
+
     /// Check if a type tag is a fixed-width integer (u8-u64, i8-i64, usize, isize).
     pub(crate) fn is_fixed_width_int(tag: rtdt::TyTag) -> bool {
         matches!(
@@ -177,89 +238,6 @@ impl IrInterpreter {
         rhs: &Value,
         dest: Destination,
     ) -> Result<(), InterpError> {
-        // Macro to generate binop implementations for integer types.
-        macro_rules! int_binop {
-            ($tag:ident, $ty:ty, $lhs:expr, $rhs:expr, $dest:expr, $op:expr) => {
-                if (*$lhs.tydesc).type_tag == rtdt::TyTag::$tag {
-                    let a = *($lhs.ptr as *const $ty);
-                    let b = *($rhs.ptr as *const $ty);
-                    match $op {
-                        BinOp::Add => {
-                            *($dest.ptr as *mut $ty) = a.wrapping_add(b);
-                            return Ok(());
-                        }
-                        BinOp::Sub => {
-                            *($dest.ptr as *mut $ty) = a.wrapping_sub(b);
-                            return Ok(());
-                        }
-                        BinOp::Mul => {
-                            *($dest.ptr as *mut $ty) = a.wrapping_mul(b);
-                            return Ok(());
-                        }
-                        BinOp::Div => {
-                            if b == 0 {
-                                return Err(InterpError::DivisionByZero);
-                            }
-                            *($dest.ptr as *mut $ty) = a.wrapping_div(b);
-                            return Ok(());
-                        }
-                        BinOp::Mod => {
-                            if b == 0 {
-                                return Err(InterpError::DivisionByZero);
-                            }
-                            *($dest.ptr as *mut $ty) = a.wrapping_rem(b);
-                            return Ok(());
-                        }
-                        BinOp::Lt => {
-                            *($dest.ptr as *mut bool) = a < b;
-                            return Ok(());
-                        }
-                        BinOp::Le => {
-                            *($dest.ptr as *mut bool) = a <= b;
-                            return Ok(());
-                        }
-                        BinOp::Gt => {
-                            *($dest.ptr as *mut bool) = a > b;
-                            return Ok(());
-                        }
-                        BinOp::Ge => {
-                            *($dest.ptr as *mut bool) = a >= b;
-                            return Ok(());
-                        }
-                        BinOp::Eq => {
-                            *($dest.ptr as *mut bool) = a == b;
-                            return Ok(());
-                        }
-                        BinOp::Ne => {
-                            *($dest.ptr as *mut bool) = a != b;
-                            return Ok(());
-                        }
-                        BinOp::BitAnd => {
-                            *($dest.ptr as *mut $ty) = a & b;
-                            return Ok(());
-                        }
-                        BinOp::BitOr => {
-                            *($dest.ptr as *mut $ty) = a | b;
-                            return Ok(());
-                        }
-                        BinOp::BitXor => {
-                            *($dest.ptr as *mut $ty) = a ^ b;
-                            return Ok(());
-                        }
-                        BinOp::Shl => {
-                            *($dest.ptr as *mut $ty) = a.wrapping_shl(b as u32);
-                            return Ok(());
-                        }
-                        BinOp::Shr => {
-                            *($dest.ptr as *mut $ty) = a.wrapping_shr(b as u32);
-                            return Ok(());
-                        }
-                        _ => {}
-                    }
-                }
-            };
-        }
-
         unsafe {
             let lhs_tag = (*lhs.tydesc).type_tag;
             let dest_tag = (*dest.tydesc).type_tag;
@@ -267,311 +245,240 @@ impl IrInterpreter {
             // Widening arithmetic: fixed-width int operands -> Int result.
             // This is triggered when dest is Int but operands are fixed-width ints.
             if dest_tag == rtdt::TyTag::Int && Self::is_fixed_width_int(lhs_tag) {
-                use datalove_rt::c::RtStatus;
+                return self.execute_binop_widening(op, lhs, rhs, dest);
+            }
 
-                // Allocate temporary Ints on the stack for widened operands.
-                let mut lhs_int = std::mem::MaybeUninit::<rtdt::Int>::uninit();
-                let mut rhs_int = std::mem::MaybeUninit::<rtdt::Int>::uninit();
+            // Dispatch on operand type.
+            match lhs_tag {
+                rtdt::TyTag::I8 => Self::execute_binop_i8(op, lhs, rhs, dest),
+                rtdt::TyTag::I16 => Self::execute_binop_i16(op, lhs, rhs, dest),
+                rtdt::TyTag::I32 => Self::execute_binop_i32(op, lhs, rhs, dest),
+                rtdt::TyTag::I64 => Self::execute_binop_i64(op, lhs, rhs, dest),
+                rtdt::TyTag::U8 => Self::execute_binop_u8(op, lhs, rhs, dest),
+                rtdt::TyTag::U16 => Self::execute_binop_u16(op, lhs, rhs, dest),
+                rtdt::TyTag::U32 => Self::execute_binop_u32(op, lhs, rhs, dest),
+                rtdt::TyTag::U64 => Self::execute_binop_u64(op, lhs, rhs, dest),
+                rtdt::TyTag::Usize => Self::execute_binop_usize(op, lhs, rhs, dest),
+                rtdt::TyTag::Isize => Self::execute_binop_isize(op, lhs, rhs, dest),
+                rtdt::TyTag::Int => self.execute_binop_bigint(op, lhs, rhs, dest),
+                rtdt::TyTag::F32 => Self::execute_binop_f32(op, lhs, rhs, dest),
+                rtdt::TyTag::F64 => Self::execute_binop_f64(op, lhs, rhs, dest),
+                rtdt::TyTag::Bool => Self::execute_binop_bool(op, lhs, rhs, dest),
+                _ => Err(InterpError::TypeMismatch(format!(
+                    "unsupported binop {:?} for type {:?}",
+                    op, lhs_tag
+                ))),
+            }
+        }
+    }
 
-                self.widen_to_int(lhs, lhs_int.assume_init_mut());
-                self.widen_to_int(rhs, rhs_int.assume_init_mut());
+    /// Widening arithmetic: fixed-width int operands -> Int result.
+    fn execute_binop_widening(
+        &mut self,
+        op: BinOp,
+        lhs: &Value,
+        rhs: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError> {
+        use datalove_rt::c::RtStatus;
 
-                let lhs_int = lhs_int.assume_init();
-                let rhs_int = rhs_int.assume_init();
+        unsafe {
+            // Allocate temporary Ints on the stack for widened operands.
+            let mut lhs_int = std::mem::MaybeUninit::<rtdt::Int>::uninit();
+            let mut rhs_int = std::mem::MaybeUninit::<rtdt::Int>::uninit();
 
-                let rt_handle = self.runtime.handle();
-                let int_tydesc = self.tydesc_table.get_or_create(&IrType::Int);
+            self.widen_to_int(lhs, lhs_int.assume_init_mut());
+            self.widen_to_int(rhs, rhs_int.assume_init_mut());
 
-                let lhs_ptr = &lhs_int as *const rtdt::Int as *mut u8;
-                let rhs_ptr = &rhs_int as *const rtdt::Int as *mut u8;
+            let lhs_int = lhs_int.assume_init();
+            let rhs_int = rhs_int.assume_init();
 
-                let status = match op {
-                    BinOp::Add => datalove_rt::c::dtlv_rti_int_add(
-                        rt_handle,
-                        lhs_ptr,
-                        int_tydesc,
-                        rhs_ptr,
-                        int_tydesc,
-                        dest.ptr,
-                        int_tydesc,
-                    ),
-                    BinOp::Sub => datalove_rt::c::dtlv_rti_int_sub(
-                        rt_handle,
-                        lhs_ptr,
-                        int_tydesc,
-                        rhs_ptr,
-                        int_tydesc,
-                        dest.ptr,
-                        int_tydesc,
-                    ),
-                    BinOp::Mul => datalove_rt::c::dtlv_rti_int_mul(
-                        rt_handle,
-                        lhs_ptr,
-                        int_tydesc,
-                        rhs_ptr,
-                        int_tydesc,
-                        dest.ptr,
-                        int_tydesc,
-                    ),
-                    _ => {
-                        // Clean up temporaries before returning error.
-                        self.destroy_temp_int(&lhs_int);
-                        self.destroy_temp_int(&rhs_int);
-                        return Err(InterpError::TypeMismatch(format!(
-                            "widening arithmetic not supported for {:?}",
-                            op
-                        )));
-                    }
-                };
+            let rt_handle = self.runtime.handle();
+            let int_tydesc = self.tydesc_table.get_or_create(&IrType::Int);
 
-                // Clean up temporary Int allocations.
-                self.destroy_temp_int(&lhs_int);
-                self.destroy_temp_int(&rhs_int);
+            let lhs_ptr = &lhs_int as *const rtdt::Int as *mut u8;
+            let rhs_ptr = &rhs_int as *const rtdt::Int as *mut u8;
 
-                if status != RtStatus::Ok {
-                    return Err(InterpError::RuntimeError(format!(
-                        "widening Int {:?} operation failed",
+            let status = match op {
+                BinOp::Add => datalove_rt::c::dtlv_rti_int_add(
+                    rt_handle, lhs_ptr, int_tydesc, rhs_ptr, int_tydesc, dest.ptr, int_tydesc,
+                ),
+                BinOp::Sub => datalove_rt::c::dtlv_rti_int_sub(
+                    rt_handle, lhs_ptr, int_tydesc, rhs_ptr, int_tydesc, dest.ptr, int_tydesc,
+                ),
+                BinOp::Mul => datalove_rt::c::dtlv_rti_int_mul(
+                    rt_handle, lhs_ptr, int_tydesc, rhs_ptr, int_tydesc, dest.ptr, int_tydesc,
+                ),
+                _ => {
+                    self.destroy_temp_int(&lhs_int);
+                    self.destroy_temp_int(&rhs_int);
+                    return Err(InterpError::TypeMismatch(format!(
+                        "widening arithmetic not supported for {:?}",
                         op
                     )));
                 }
-                return Ok(());
+            };
+
+            self.destroy_temp_int(&lhs_int);
+            self.destroy_temp_int(&rhs_int);
+
+            if status != RtStatus::Ok {
+                return Err(InterpError::RuntimeError(format!(
+                    "widening Int {:?} operation failed",
+                    op
+                )));
             }
+            Ok(())
+        }
+    }
 
-            // Same-type operations: fixed-width int operands with fixed-width int result.
-            let tag = lhs_tag;
+    /// Bigint operations via runtime.
+    fn execute_binop_bigint(
+        &mut self,
+        op: BinOp,
+        lhs: &Value,
+        rhs: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError> {
+        use datalove_rt::c::RtStatus;
 
-            // Try all integer types.
-            int_binop!(I8, i8, lhs, rhs, dest, op);
-            int_binop!(I16, i16, lhs, rhs, dest, op);
-            int_binop!(I32, i32, lhs, rhs, dest, op);
-            int_binop!(I64, i64, lhs, rhs, dest, op);
-            int_binop!(U8, u8, lhs, rhs, dest, op);
-            int_binop!(U16, u16, lhs, rhs, dest, op);
-            int_binop!(U32, u32, lhs, rhs, dest, op);
-            int_binop!(U64, u64, lhs, rhs, dest, op);
-            int_binop!(Usize, rtdt::UsizeRepr, lhs, rhs, dest, op);
-            int_binop!(Isize, rtdt::IsizeRepr, lhs, rhs, dest, op);
+        unsafe {
+            let rt_handle = self.runtime.handle();
+            let int_tydesc = self.tydesc_table.get_or_create(&IrType::Int);
 
-            // Bigint operations via runtime (when operands are already Int).
-            if tag == rtdt::TyTag::Int {
-                use datalove_rt::c::RtStatus;
-
-                let rt_handle = self.runtime.handle();
-                let int_tydesc = self.tydesc_table.get_or_create(&IrType::Int);
-
-                let status = match op {
-                    BinOp::Add => datalove_rt::c::dtlv_rti_int_add(
-                        rt_handle,
-                        lhs.ptr,
-                        int_tydesc,
-                        rhs.ptr,
-                        int_tydesc,
-                        dest.ptr,
-                        int_tydesc,
-                    ),
-                    BinOp::Sub => datalove_rt::c::dtlv_rti_int_sub(
-                        rt_handle,
-                        lhs.ptr,
-                        int_tydesc,
-                        rhs.ptr,
-                        int_tydesc,
-                        dest.ptr,
-                        int_tydesc,
-                    ),
-                    BinOp::Mul => datalove_rt::c::dtlv_rti_int_mul(
-                        rt_handle,
-                        lhs.ptr,
-                        int_tydesc,
-                        rhs.ptr,
-                        int_tydesc,
-                        dest.ptr,
-                        int_tydesc,
-                    ),
-                    BinOp::Div => {
-                        let status = datalove_rt::c::dtlv_rti_int_div_checked(
-                            rt_handle,
-                            lhs.ptr,
-                            int_tydesc,
-                            rhs.ptr,
-                            int_tydesc,
-                            dest.ptr,
-                            int_tydesc,
-                        );
-                        if status != RtStatus::Ok {
-                            return Err(InterpError::DivisionByZero);
-                        }
-                        return Ok(());
+            let status = match op {
+                BinOp::Add => datalove_rt::c::dtlv_rti_int_add(
+                    rt_handle, lhs.ptr, int_tydesc, rhs.ptr, int_tydesc, dest.ptr, int_tydesc,
+                ),
+                BinOp::Sub => datalove_rt::c::dtlv_rti_int_sub(
+                    rt_handle, lhs.ptr, int_tydesc, rhs.ptr, int_tydesc, dest.ptr, int_tydesc,
+                ),
+                BinOp::Mul => datalove_rt::c::dtlv_rti_int_mul(
+                    rt_handle, lhs.ptr, int_tydesc, rhs.ptr, int_tydesc, dest.ptr, int_tydesc,
+                ),
+                BinOp::Div => {
+                    let status = datalove_rt::c::dtlv_rti_int_div_checked(
+                        rt_handle, lhs.ptr, int_tydesc, rhs.ptr, int_tydesc, dest.ptr, int_tydesc,
+                    );
+                    if status != RtStatus::Ok {
+                        return Err(InterpError::DivisionByZero);
                     }
-                    // Int comparison operations via runtime.
-                    BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
-                        use datalove_rt::c::RtOrdering;
-                        let cmp = datalove_rt::c::dtlv_rti_cmp_local(
-                            rt_handle,
-                            lhs.ptr,
-                            int_tydesc,
-                            rhs.ptr,
-                            int_tydesc,
-                        );
-                        let result = match op {
-                            BinOp::Eq => cmp == RtOrdering::Equal,
-                            BinOp::Ne => cmp != RtOrdering::Equal,
-                            BinOp::Lt => cmp == RtOrdering::Less,
-                            BinOp::Le => cmp == RtOrdering::Less || cmp == RtOrdering::Equal,
-                            BinOp::Gt => cmp == RtOrdering::Greater,
-                            BinOp::Ge => cmp == RtOrdering::Greater || cmp == RtOrdering::Equal,
-                            _ => unreachable!(),
-                        };
-                        *(dest.ptr as *mut bool) = result;
-                        return Ok(());
-                    }
-                    _ => {
-                        return Err(InterpError::TypeMismatch(format!(
-                            "unsupported Int binop {:?}",
-                            op
-                        )))
-                    }
-                };
-
-                if status != RtStatus::Ok {
-                    return Err(InterpError::RuntimeError(format!(
-                        "Int {:?} operation failed",
+                    return Ok(());
+                }
+                BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
+                    use datalove_rt::c::RtOrdering;
+                    let cmp = datalove_rt::c::dtlv_rti_cmp_local(
+                        rt_handle, lhs.ptr, int_tydesc, rhs.ptr, int_tydesc,
+                    );
+                    let result = match op {
+                        BinOp::Eq => cmp == RtOrdering::Equal,
+                        BinOp::Ne => cmp != RtOrdering::Equal,
+                        BinOp::Lt => cmp == RtOrdering::Less,
+                        BinOp::Le => cmp == RtOrdering::Less || cmp == RtOrdering::Equal,
+                        BinOp::Gt => cmp == RtOrdering::Greater,
+                        BinOp::Ge => cmp == RtOrdering::Greater || cmp == RtOrdering::Equal,
+                        _ => unreachable!(),
+                    };
+                    *(dest.ptr as *mut bool) = result;
+                    return Ok(());
+                }
+                _ => {
+                    return Err(InterpError::TypeMismatch(format!(
+                        "unsupported Int binop {:?}",
                         op
-                    )));
+                    )))
                 }
-                return Ok(());
-            }
+            };
 
-            // F32 operations.
-            if tag == rtdt::TyTag::F32 {
-                let a = *(lhs.ptr as *const f32);
-                let b = *(rhs.ptr as *const f32);
-                match op {
-                    BinOp::Add => {
-                        *(dest.ptr as *mut f32) = a + b;
-                        return Ok(());
-                    }
-                    BinOp::Sub => {
-                        *(dest.ptr as *mut f32) = a - b;
-                        return Ok(());
-                    }
-                    BinOp::Mul => {
-                        *(dest.ptr as *mut f32) = a * b;
-                        return Ok(());
-                    }
-                    BinOp::Div => {
-                        *(dest.ptr as *mut f32) = a / b;
-                        return Ok(());
-                    }
-                    BinOp::Lt => {
-                        *(dest.ptr as *mut bool) = a < b;
-                        return Ok(());
-                    }
-                    BinOp::Le => {
-                        *(dest.ptr as *mut bool) = a <= b;
-                        return Ok(());
-                    }
-                    BinOp::Gt => {
-                        *(dest.ptr as *mut bool) = a > b;
-                        return Ok(());
-                    }
-                    BinOp::Ge => {
-                        *(dest.ptr as *mut bool) = a >= b;
-                        return Ok(());
-                    }
-                    BinOp::Eq => {
-                        *(dest.ptr as *mut bool) = a == b;
-                        return Ok(());
-                    }
-                    BinOp::Ne => {
-                        *(dest.ptr as *mut bool) = a != b;
-                        return Ok(());
-                    }
-                    _ => {}
-                }
+            if status != RtStatus::Ok {
+                return Err(InterpError::RuntimeError(format!(
+                    "Int {:?} operation failed",
+                    op
+                )));
             }
+            Ok(())
+        }
+    }
 
-            // F64 operations.
-            if tag == rtdt::TyTag::F64 {
-                let a = *(lhs.ptr as *const f64);
-                let b = *(rhs.ptr as *const f64);
-                match op {
-                    BinOp::Add => {
-                        *(dest.ptr as *mut f64) = a + b;
-                        return Ok(());
-                    }
-                    BinOp::Sub => {
-                        *(dest.ptr as *mut f64) = a - b;
-                        return Ok(());
-                    }
-                    BinOp::Mul => {
-                        *(dest.ptr as *mut f64) = a * b;
-                        return Ok(());
-                    }
-                    BinOp::Div => {
-                        *(dest.ptr as *mut f64) = a / b;
-                        return Ok(());
-                    }
-                    BinOp::Lt => {
-                        *(dest.ptr as *mut bool) = a < b;
-                        return Ok(());
-                    }
-                    BinOp::Le => {
-                        *(dest.ptr as *mut bool) = a <= b;
-                        return Ok(());
-                    }
-                    BinOp::Gt => {
-                        *(dest.ptr as *mut bool) = a > b;
-                        return Ok(());
-                    }
-                    BinOp::Ge => {
-                        *(dest.ptr as *mut bool) = a >= b;
-                        return Ok(());
-                    }
-                    BinOp::Eq => {
-                        *(dest.ptr as *mut bool) = a == b;
-                        return Ok(());
-                    }
-                    BinOp::Ne => {
-                        *(dest.ptr as *mut bool) = a != b;
-                        return Ok(());
-                    }
-                    _ => {}
-                }
+    /// F32 binary operations.
+    fn execute_binop_f32(
+        op: BinOp,
+        lhs: &Value,
+        rhs: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError> {
+        unsafe {
+            let a = *(lhs.ptr as *const f32);
+            let b = *(rhs.ptr as *const f32);
+            match op {
+                BinOp::Add => *(dest.ptr as *mut f32) = a + b,
+                BinOp::Sub => *(dest.ptr as *mut f32) = a - b,
+                BinOp::Mul => *(dest.ptr as *mut f32) = a * b,
+                BinOp::Div => *(dest.ptr as *mut f32) = a / b,
+                BinOp::Lt => *(dest.ptr as *mut bool) = a < b,
+                BinOp::Le => *(dest.ptr as *mut bool) = a <= b,
+                BinOp::Gt => *(dest.ptr as *mut bool) = a > b,
+                BinOp::Ge => *(dest.ptr as *mut bool) = a >= b,
+                BinOp::Eq => *(dest.ptr as *mut bool) = a == b,
+                BinOp::Ne => *(dest.ptr as *mut bool) = a != b,
+                _ => return Err(InterpError::TypeMismatch(format!(
+                    "unsupported F32 binop {:?}", op
+                ))),
             }
+            Ok(())
+        }
+    }
 
-            // Boolean operations.
-            if tag == rtdt::TyTag::Bool {
-                let a = *(lhs.ptr as *const bool);
-                let b = *(rhs.ptr as *const bool);
-                match op {
-                    BinOp::And | BinOp::LogicAnd => {
-                        *(dest.ptr as *mut bool) = a && b;
-                        return Ok(());
-                    }
-                    BinOp::Or | BinOp::LogicOr => {
-                        *(dest.ptr as *mut bool) = a || b;
-                        return Ok(());
-                    }
-                    BinOp::LogicXor => {
-                        *(dest.ptr as *mut bool) = a ^ b;
-                        return Ok(());
-                    }
-                    BinOp::Eq => {
-                        *(dest.ptr as *mut bool) = a == b;
-                        return Ok(());
-                    }
-                    BinOp::Ne => {
-                        *(dest.ptr as *mut bool) = a != b;
-                        return Ok(());
-                    }
-                    _ => {}
-                }
+    /// F64 binary operations.
+    fn execute_binop_f64(
+        op: BinOp,
+        lhs: &Value,
+        rhs: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError> {
+        unsafe {
+            let a = *(lhs.ptr as *const f64);
+            let b = *(rhs.ptr as *const f64);
+            match op {
+                BinOp::Add => *(dest.ptr as *mut f64) = a + b,
+                BinOp::Sub => *(dest.ptr as *mut f64) = a - b,
+                BinOp::Mul => *(dest.ptr as *mut f64) = a * b,
+                BinOp::Div => *(dest.ptr as *mut f64) = a / b,
+                BinOp::Lt => *(dest.ptr as *mut bool) = a < b,
+                BinOp::Le => *(dest.ptr as *mut bool) = a <= b,
+                BinOp::Gt => *(dest.ptr as *mut bool) = a > b,
+                BinOp::Ge => *(dest.ptr as *mut bool) = a >= b,
+                BinOp::Eq => *(dest.ptr as *mut bool) = a == b,
+                BinOp::Ne => *(dest.ptr as *mut bool) = a != b,
+                _ => return Err(InterpError::TypeMismatch(format!(
+                    "unsupported F64 binop {:?}", op
+                ))),
             }
+            Ok(())
+        }
+    }
 
-            Err(InterpError::TypeMismatch(format!(
-                "unsupported binop {:?} for type {:?}",
-                op, tag
-            )))
+    /// Boolean binary operations.
+    fn execute_binop_bool(
+        op: BinOp,
+        lhs: &Value,
+        rhs: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError> {
+        unsafe {
+            let a = *(lhs.ptr as *const bool);
+            let b = *(rhs.ptr as *const bool);
+            match op {
+                BinOp::And | BinOp::LogicAnd => *(dest.ptr as *mut bool) = a && b,
+                BinOp::Or | BinOp::LogicOr => *(dest.ptr as *mut bool) = a || b,
+                BinOp::LogicXor => *(dest.ptr as *mut bool) = a ^ b,
+                BinOp::Eq => *(dest.ptr as *mut bool) = a == b,
+                BinOp::Ne => *(dest.ptr as *mut bool) = a != b,
+                _ => return Err(InterpError::TypeMismatch(format!(
+                    "unsupported Bool binop {:?}", op
+                ))),
+            }
+            Ok(())
         }
     }
 
@@ -581,104 +488,156 @@ impl IrInterpreter {
         src: &Value,
         dest: Destination,
     ) -> Result<(), InterpError> {
-        // Macro to generate unaryop implementations for signed integer types.
-        macro_rules! signed_int_unaryop {
-            ($tag:ident, $ty:ty, $src:expr, $dest:expr, $op:expr) => {
-                if (*$src.tydesc).type_tag == rtdt::TyTag::$tag {
-                    let a = *($src.ptr as *const $ty);
-                    match $op {
-                        UnaryOp::Neg => {
-                            *($dest.ptr as *mut $ty) = a.wrapping_neg();
-                            return Ok(());
-                        }
-                        UnaryOp::BitNot => {
-                            *($dest.ptr as *mut $ty) = !a;
-                            return Ok(());
-                        }
-                        UnaryOp::Not | UnaryOp::LogicNot => {}
-                    }
-                }
-            };
-        }
-
-        // Macro for unsigned integers (only BitNot).
-        macro_rules! unsigned_int_unaryop {
-            ($tag:ident, $ty:ty, $src:expr, $dest:expr, $op:expr) => {
-                if (*$src.tydesc).type_tag == rtdt::TyTag::$tag {
-                    let a = *($src.ptr as *const $ty);
-                    match $op {
-                        UnaryOp::BitNot => {
-                            *($dest.ptr as *mut $ty) = !a;
-                            return Ok(());
-                        }
-                        UnaryOp::Neg | UnaryOp::Not | UnaryOp::LogicNot => {}
-                    }
-                }
-            };
-        }
-
         unsafe {
             let tag = (*src.tydesc).type_tag;
 
-            // Signed integer negation and bitnot.
-            signed_int_unaryop!(I8, i8, src, dest, op);
-            signed_int_unaryop!(I16, i16, src, dest, op);
-            signed_int_unaryop!(I32, i32, src, dest, op);
-            signed_int_unaryop!(I64, i64, src, dest, op);
-            signed_int_unaryop!(Isize, rtdt::IsizeRepr, src, dest, op);
-
-            // Unsigned integer bitnot.
-            unsigned_int_unaryop!(U8, u8, src, dest, op);
-            unsigned_int_unaryop!(U16, u16, src, dest, op);
-            unsigned_int_unaryop!(U32, u32, src, dest, op);
-            unsigned_int_unaryop!(U64, u64, src, dest, op);
-            unsigned_int_unaryop!(Usize, rtdt::UsizeRepr, src, dest, op);
-
-            // F32 negation.
-            if tag == rtdt::TyTag::F32 && op == UnaryOp::Neg {
-                let a = *(src.ptr as *const f32);
-                *(dest.ptr as *mut f32) = -a;
-                return Ok(());
+            // Dispatch on operand type.
+            match tag {
+                rtdt::TyTag::I8 => Self::execute_unaryop_signed::<i8>(op, src, dest),
+                rtdt::TyTag::I16 => Self::execute_unaryop_signed::<i16>(op, src, dest),
+                rtdt::TyTag::I32 => Self::execute_unaryop_signed::<i32>(op, src, dest),
+                rtdt::TyTag::I64 => Self::execute_unaryop_signed::<i64>(op, src, dest),
+                rtdt::TyTag::Isize => Self::execute_unaryop_signed::<rtdt::IsizeRepr>(op, src, dest),
+                rtdt::TyTag::U8 => Self::execute_unaryop_unsigned::<u8>(op, src, dest),
+                rtdt::TyTag::U16 => Self::execute_unaryop_unsigned::<u16>(op, src, dest),
+                rtdt::TyTag::U32 => Self::execute_unaryop_unsigned::<u32>(op, src, dest),
+                rtdt::TyTag::U64 => Self::execute_unaryop_unsigned::<u64>(op, src, dest),
+                rtdt::TyTag::Usize => Self::execute_unaryop_unsigned::<rtdt::UsizeRepr>(op, src, dest),
+                rtdt::TyTag::Int => self.execute_unaryop_bigint(op, src, dest),
+                rtdt::TyTag::F32 => Self::execute_unaryop_f32(op, src, dest),
+                rtdt::TyTag::F64 => Self::execute_unaryop_f64(op, src, dest),
+                rtdt::TyTag::Bool => Self::execute_unaryop_bool(op, src, dest),
+                _ => Err(InterpError::TypeMismatch(format!(
+                    "unsupported unaryop {:?} for type {:?}",
+                    op, tag
+                ))),
             }
+        }
+    }
 
-            // F64 negation.
-            if tag == rtdt::TyTag::F64 && op == UnaryOp::Neg {
-                let a = *(src.ptr as *const f64);
-                *(dest.ptr as *mut f64) = -a;
-                return Ok(());
+    /// Signed integer unary operations.
+    fn execute_unaryop_signed<T>(
+        op: UnaryOp,
+        src: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError>
+    where
+        T: Copy + std::ops::Neg<Output = T> + std::ops::Not<Output = T>,
+    {
+        unsafe {
+            let a = *(src.ptr as *const T);
+            match op {
+                UnaryOp::Neg => *(dest.ptr as *mut T) = -a,
+                UnaryOp::BitNot => *(dest.ptr as *mut T) = !a,
+                _ => return Err(InterpError::TypeMismatch(format!(
+                    "unsupported signed int unaryop {:?}", op
+                ))),
             }
+            Ok(())
+        }
+    }
 
-            // Boolean not.
-            if tag == rtdt::TyTag::Bool && (op == UnaryOp::Not || op == UnaryOp::LogicNot) {
-                let a = *(src.ptr as *const bool);
-                *(dest.ptr as *mut bool) = !a;
-                return Ok(());
+    /// Unsigned integer unary operations.
+    fn execute_unaryop_unsigned<T>(
+        op: UnaryOp,
+        src: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError>
+    where
+        T: Copy + std::ops::Not<Output = T>,
+    {
+        unsafe {
+            let a = *(src.ptr as *const T);
+            match op {
+                UnaryOp::BitNot => *(dest.ptr as *mut T) = !a,
+                _ => return Err(InterpError::TypeMismatch(format!(
+                    "unsupported unsigned int unaryop {:?}", op
+                ))),
             }
+            Ok(())
+        }
+    }
 
-            // Bigint negation.
-            if tag == rtdt::TyTag::Int && op == UnaryOp::Neg {
-                use datalove_rt::c::RtStatus;
+    /// Bigint unary operations.
+    fn execute_unaryop_bigint(
+        &mut self,
+        op: UnaryOp,
+        src: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError> {
+        use datalove_rt::c::RtStatus;
 
-                let rt_handle = self.runtime.handle();
-                let int_tydesc = self.tydesc_table.get_or_create(&IrType::Int);
-
-                let status = datalove_rt::c::dtlv_rti_int_neg(
-                    rt_handle,
-                    src.ptr,
-                    int_tydesc,
-                    dest.ptr,
-                    int_tydesc,
-                );
-                if status != RtStatus::Ok {
-                    return Err(InterpError::RuntimeError("Int negation failed".to_string()));
+        unsafe {
+            match op {
+                UnaryOp::Neg => {
+                    let rt_handle = self.runtime.handle();
+                    let int_tydesc = self.tydesc_table.get_or_create(&IrType::Int);
+                    let status = datalove_rt::c::dtlv_rti_int_neg(
+                        rt_handle, src.ptr, int_tydesc, dest.ptr, int_tydesc,
+                    );
+                    if status != RtStatus::Ok {
+                        return Err(InterpError::RuntimeError("Int negation failed".to_string()));
+                    }
+                    Ok(())
                 }
-                return Ok(());
+                _ => Err(InterpError::TypeMismatch(format!(
+                    "unsupported Int unaryop {:?}", op
+                ))),
             }
+        }
+    }
 
-            Err(InterpError::TypeMismatch(format!(
-                "unsupported unaryop {:?} for type {:?}",
-                op, tag
-            )))
+    /// F32 unary operations.
+    fn execute_unaryop_f32(
+        op: UnaryOp,
+        src: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError> {
+        unsafe {
+            let a = *(src.ptr as *const f32);
+            match op {
+                UnaryOp::Neg => *(dest.ptr as *mut f32) = -a,
+                _ => return Err(InterpError::TypeMismatch(format!(
+                    "unsupported F32 unaryop {:?}", op
+                ))),
+            }
+            Ok(())
+        }
+    }
+
+    /// F64 unary operations.
+    fn execute_unaryop_f64(
+        op: UnaryOp,
+        src: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError> {
+        unsafe {
+            let a = *(src.ptr as *const f64);
+            match op {
+                UnaryOp::Neg => *(dest.ptr as *mut f64) = -a,
+                _ => return Err(InterpError::TypeMismatch(format!(
+                    "unsupported F64 unaryop {:?}", op
+                ))),
+            }
+            Ok(())
+        }
+    }
+
+    /// Boolean unary operations.
+    fn execute_unaryop_bool(
+        op: UnaryOp,
+        src: &Value,
+        dest: Destination,
+    ) -> Result<(), InterpError> {
+        unsafe {
+            let a = *(src.ptr as *const bool);
+            match op {
+                UnaryOp::Not | UnaryOp::LogicNot => *(dest.ptr as *mut bool) = !a,
+                _ => return Err(InterpError::TypeMismatch(format!(
+                    "unsupported Bool unaryop {:?}", op
+                ))),
+            }
+            Ok(())
         }
     }
 
