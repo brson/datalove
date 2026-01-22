@@ -64,9 +64,12 @@ pub struct ScriptLowerResult {
     pub ir_unit: Option<IrScriptUnit>,
 }
 
-/// Internal result of compilation phases (no execution).
-pub(super) struct ScriptCompilationResult {
-    pub(super) typecheck: TypecheckResult,
-    pub(super) lowering: LoweringResult,
-    pub(super) ir_unit: Option<IrScriptUnit>,
+/// Result of compilation phases (no execution).
+///
+/// Returned by `ScriptCompiler::compile_fragment` and `ScriptCompiler::compile_expr`.
+pub struct ScriptCompilationResult {
+    pub typecheck: TypecheckResult,
+    pub lowering: LoweringResult,
+    /// The lowered IR unit, if compilation succeeded.
+    pub ir_unit: Option<IrScriptUnit>,
 }

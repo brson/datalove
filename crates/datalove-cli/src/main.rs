@@ -443,17 +443,17 @@ impl ScriptCommand {
 
         // Look up the "output" binding from the exports.
         // After eval_fragment, the exports are in script_ctx and the frame is stored.
-        if let Some((unit_idx, value_id)) = ctx.script_ctx.values.get("output").cloned() {
+        if let Some((unit_idx, value_id)) = ctx.get_value_binding("output") {
             // It's a let binding - read value from frame.
-            let value = ctx.env.frames.external_value(unit_idx, value_id)
+            let value = ctx.env().frames.external_value(unit_idx, value_id)
                 .map_err(|e| anyhow!("Failed to read output value: {:?}", e))?;
             let mut interp = datalove_datafun_interp::IrInterpreter::new();
             let output_str = interp.pretty_print_value(&value)
                 .map_err(|e| anyhow!("Failed to pretty print output: {:?}", e))?;
             println!("{}", output_str);
-        } else if let Some((unit_idx, slot_id)) = ctx.script_ctx.slots.get("output").cloned() {
+        } else if let Some((unit_idx, slot_id)) = ctx.get_slot_binding("output") {
             // It's a var binding - read slot from frame.
-            let value = ctx.env.frames.external_slot(unit_idx, slot_id)
+            let value = ctx.env().frames.external_slot(unit_idx, slot_id)
                 .map_err(|e| anyhow!("Failed to read output slot: {:?}", e))?;
             let mut interp = datalove_datafun_interp::IrInterpreter::new();
             let output_str = interp.pretty_print_value(&value)
@@ -587,8 +587,8 @@ impl AotCompileCommand {
         // Compile to object bytes using pipeline::aot.
         let obj_bytes = aot::compile_script_to_object_with_world(
             &ir_unit,
-            ctx.env.registry.iter_all_functions(),
-            &ctx.env.registry,
+            ctx.env().registry.iter_all_functions(),
+            &ctx.env().registry,
         )?;
 
         // --run implies --link.

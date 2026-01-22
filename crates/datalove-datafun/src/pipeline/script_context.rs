@@ -1,4 +1,4 @@
-//! Script execution context with persistent bindings.
+//! Script compilation and execution, separated into compiler and executor.
 
 use rmx::prelude::*;
 use std::sync::Arc;
@@ -37,26 +37,17 @@ enum ParsedUnit<'db> {
     Expr(ExprFun<'db>),
 }
 
-// Extension impl for CompiledModules to create script contexts.
+// Extension impl for CompiledModules to create script compiler and executor.
 impl<'db> CompiledModules<'db> {
-    /// Create a script execution context.
+    /// Create a script compiler for compiling script units.
     ///
     /// Returns `None` if module compilation failed (has errors).
-    /// Can be called multiple times to create independent contexts sharing the
-    /// same module compilation. The optional `call_dispatcher` enables JIT or
-    /// custom call dispatch.
-    pub fn script_context(
-        &self,
-        db: &'db dyn salsa::Database,
-        debug_mode: datalove_rt::c::DebugOutputMode,
-        call_dispatcher: Option<Box<dyn CallDispatcher>>,
-    ) -> Option<ScriptCompilationContext<'db>> {
-        // Don't create script context if module compilation failed.
+    /// The compiler handles only compilation; use `script_executor()` for execution.
+    pub fn script_compiler(&self, db: &'db dyn salsa::Database) -> Option<ScriptCompiler<'db>> {
         if self.has_errors() {
             return None;
         }
 
-        let script_ctx = lower::ScriptLowerContext::new();
         let mut module_specs = Vec::new();
 
         // Build a map of spans for quick lookup.
@@ -82,105 +73,84 @@ impl<'db> CompiledModules<'db> {
             ));
         }
 
-        // Create a new ScriptEnvironment that shares the module registry.
-        let env = ScriptEnvironment::with_module_registry(Arc::clone(&self.shared.module_registry));
-
-        Some(ScriptCompilationContext {
+        Some(ScriptCompiler {
             db,
-            script_ctx,
-            env,
             accumulated_unit_specs: Vec::new(),
             accumulated_lower_bindings: AccumulatedLowerBindings::default(),
             module_specs,
-            interp: datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher),
             last_source: None,
             last_batch_spec: None,
         })
     }
+
+    /// Create a script executor for executing compiled script units.
+    ///
+    /// Returns `None` if module compilation failed (has errors).
+    /// The executor handles only execution; use `script_compiler()` for compilation.
+    pub fn script_executor(
+        &self,
+        debug_mode: datalove_rt::c::DebugOutputMode,
+        call_dispatcher: Option<Box<dyn CallDispatcher>>,
+    ) -> Option<ScriptExecutor> {
+        if self.has_errors() {
+            return None;
+        }
+
+        let script_ctx = lower::ScriptLowerContext::new();
+        let env = ScriptEnvironment::with_module_registry(Arc::clone(&self.shared.module_registry));
+        let interp = datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher);
+
+        Some(ScriptExecutor {
+            script_ctx,
+            env,
+            interp,
+        })
+    }
+
+    /// Get a function registry containing module functions for AOT compilation.
+    ///
+    /// This provides access to module function types without creating an executor.
+    /// The returned registry has an empty unit registry (only module functions).
+    pub fn module_registry(&self) -> datalove_datafun_interp::FunctionRegistry {
+        datalove_datafun_interp::FunctionRegistry::with_module_registry(
+            Arc::clone(&self.shared.module_registry)
+        )
+    }
+
+    /// Create a combined script context for backwards compatibility.
+    ///
+    /// Returns `None` if module compilation failed (has errors).
+    #[deprecated(note = "Use script_compiler() and script_executor() separately")]
+    pub fn script_context(
+        &self,
+        db: &'db dyn salsa::Database,
+        debug_mode: datalove_rt::c::DebugOutputMode,
+        call_dispatcher: Option<Box<dyn CallDispatcher>>,
+    ) -> Option<ScriptCompilationContext<'db>> {
+        let compiler = self.script_compiler(db)?;
+        let executor = self.script_executor(debug_mode, call_dispatcher)?;
+        Some(ScriptCompilationContext { compiler, executor })
+    }
 }
 
-/// Script execution context with persistent bindings.
+/// Script compiler for compiling script units.
 ///
-/// Compiles and executes script fragments (`eval_fragment`) and expressions
-/// (`eval_expr`). Bindings from `let` and `var` statements persist across
-/// evaluations.
-pub struct ScriptCompilationContext<'db> {
+/// Handles compilation only. No interpreter dependency.
+/// Use `compile_fragment()` or `compile_expr()` to compile units.
+pub struct ScriptCompiler<'db> {
     db: &'db dyn salsa::Database,
-    pub script_ctx: lower::ScriptLowerContext,
-    pub env: ScriptEnvironment,
     accumulated_unit_specs: Vec<ScriptUnitSpec<'db>>,
     accumulated_lower_bindings: AccumulatedLowerBindings,
     module_specs: Vec<ModuleSpec<'db>>,
-    interp: datalove_datafun_interp::IrInterpreter,
     last_source: Option<bct::input::Source>,
     last_batch_spec: Option<ScriptBatchSpec<'db>>,
 }
 
-impl<'db> ScriptCompilationContext<'db> {
-    /// Compile and execute a script fragment (statements like `let x = 1`).
-    pub fn eval_fragment(&mut self, source: &str) -> ScriptUnitResult {
-        let compiled = self.compile_fragment_inner(source, false);
-        if let Some(ir_unit) = &compiled.ir_unit {
-            let output = self.execute_fragment(ir_unit);
-            ScriptUnitResult {
-                typecheck: compiled.typecheck,
-                lowering: compiled.lowering,
-                ty: None,
-                output,
-            }
-        } else {
-            ScriptUnitResult {
-                typecheck: compiled.typecheck,
-                lowering: compiled.lowering,
-                ty: None,
-                output: String::new(),
-            }
-        }
-    }
-
-    /// Compile and execute an expression, returning its value.
-    pub fn eval_expr(&mut self, source: &str) -> ScriptUnitResult {
-        let compiled = self.compile_expr_inner(source, false);
-        if let Some(ir_unit) = &compiled.ir_unit {
-            let (ty, output) = self.execute_expr(ir_unit);
-            ScriptUnitResult {
-                typecheck: compiled.typecheck,
-                lowering: compiled.lowering,
-                ty,
-                output,
-            }
-        } else {
-            ScriptUnitResult {
-                typecheck: compiled.typecheck,
-                lowering: compiled.lowering,
-                ty: None,
-                output: String::new(),
-            }
-        }
-    }
-
-    /// Lower a fragment to IR for AOT compilation.
-    pub fn lower_fragment_for_aot(&mut self, source: &str) -> ScriptLowerResult {
-        let compiled = self.compile_fragment_inner(source, true);
-        ScriptLowerResult {
-            typecheck: compiled.typecheck,
-            lowering: compiled.lowering,
-            ir_unit: compiled.ir_unit,
-        }
-    }
-
-    /// Lower an expression to IR for AOT compilation.
-    pub fn lower_expr_for_aot(&mut self, source: &str) -> ScriptLowerResult {
-        let compiled = self.compile_expr_inner(source, true);
-        ScriptLowerResult {
-            typecheck: compiled.typecheck,
-            lowering: compiled.lowering,
-            ir_unit: compiled.ir_unit,
-        }
-    }
-
-    /// Internal: compile a fragment through all phases without executing.
-    fn compile_fragment_inner(&mut self, source: &str, for_aot: bool) -> ScriptCompilationResult {
+impl<'db> ScriptCompiler<'db> {
+    /// Compile a script fragment (statements).
+    ///
+    /// If `for_aot` is true, emits drops for script-level bindings (for AOT compilation).
+    pub fn compile_fragment(&mut self, source: &str, for_aot: bool) -> ScriptCompilationResult {
         let src = bct::input::Source::new(self.db, source.S());
         self.last_source = Some(src);
         let parse_result = datalove_datafun_parser::parse(self.db, src);
@@ -196,8 +166,8 @@ impl<'db> ScriptCompilationContext<'db> {
         self.compile_unit_inner(src, unit)
     }
 
-    /// Internal: compile an expression through all phases without executing.
-    fn compile_expr_inner(&mut self, source: &str, _for_aot: bool) -> ScriptCompilationResult {
+    /// Compile a script expression.
+    pub fn compile_expr(&mut self, source: &str) -> ScriptCompilationResult {
         let src = bct::input::Source::new(self.db, source.S());
         self.last_source = Some(src);
         let expr = datalove_datafun_parser::parse_expr(self.db, src);
@@ -209,6 +179,29 @@ impl<'db> ScriptCompilationContext<'db> {
 
         let unit = ParsedUnit::Expr(expr);
         self.compile_unit_inner(src, unit)
+    }
+
+    /// Get parse diagnostics from the last compilation.
+    pub fn get_parse_diagnostics(&self) -> Vec<&datalove_diagnostic::ParseDiagnostic> {
+        if let Some(src) = self.last_source {
+            datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src)
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Get type diagnostics from the last compilation.
+    pub fn get_type_diagnostics(&self) -> Vec<&datalove_diagnostic::TypeDiagnostic> {
+        if let Some(batch_spec) = self.last_batch_spec {
+            type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(self.db, batch_spec)
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Get the database reference.
+    pub fn db(&self) -> &'db dyn salsa::Database {
+        self.db
     }
 
     /// Check for parse errors and return early result if any.
@@ -229,7 +222,7 @@ impl<'db> ScriptCompilationContext<'db> {
         })
     }
 
-    /// Internal: compile a parsed unit through typecheck, ownership, and lowering.
+    /// Compile a parsed unit through typecheck, ownership, and lowering.
     fn compile_unit_inner(
         &mut self,
         src: bct::input::Source,
@@ -340,19 +333,31 @@ impl<'db> ScriptCompilationContext<'db> {
             lower_output.slot_types(self.db),
         );
 
-        // Also update script_ctx for interpreter use.
-        self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.value_types, &ir_unit.slot_types);
-        self.script_ctx.current_unit += 1;
-
         ScriptCompilationResult {
             typecheck: TypecheckResult::Success,
             lowering: LoweringResult::Success { ir: ir_dump },
             ir_unit: Some(ir_unit),
         }
     }
+}
 
-    /// Internal: execute an already-compiled fragment unit.
-    fn execute_fragment(&mut self, ir_unit: &IrScriptUnit) -> String {
+/// Script executor for executing compiled script units.
+///
+/// Handles execution only. No salsa/compilation dependency.
+pub struct ScriptExecutor {
+    script_ctx: lower::ScriptLowerContext,
+    pub env: ScriptEnvironment,
+    interp: datalove_datafun_interp::IrInterpreter,
+}
+
+impl ScriptExecutor {
+    /// Execute a compiled fragment unit.
+    ///
+    /// Registers bindings from the unit and executes it.
+    pub fn execute_fragment(&mut self, ir_unit: &IrScriptUnit) -> String {
+        // Register bindings for future lookups.
+        self.register_bindings(ir_unit);
+
         let ret_type = IrType::Result(Box::new(IrType::Unit));
         let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
         let (ret_size, ret_align) = unsafe { ((*ret_tydesc).size, (*ret_tydesc).align) };
@@ -378,10 +383,13 @@ impl<'db> ScriptCompilationContext<'db> {
         }
     }
 
-    /// Internal: execute an already-compiled expression unit.
+    /// Execute a compiled expression unit.
     ///
-    /// Returns (result_type, output_string).
-    fn execute_expr(&mut self, ir_unit: &IrScriptUnit) -> (Option<String>, String) {
+    /// Registers bindings from the unit and executes it, returning (type, value).
+    pub fn execute_expr(&mut self, ir_unit: &IrScriptUnit) -> (Option<String>, String) {
+        // Register bindings for future lookups.
+        self.register_bindings(ir_unit);
+
         let result_ty = ir_unit.result
             .map(|id| format!("{}", &ir_unit.value_types[id.0 as usize]));
 
@@ -432,6 +440,13 @@ impl<'db> ScriptCompilationContext<'db> {
         };
 
         (result_ty, output)
+    }
+
+    /// Register bindings from an IR unit for future lookups.
+    fn register_bindings(&mut self, ir_unit: &IrScriptUnit) {
+        let unit_index = self.script_ctx.current_unit;
+        self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.value_types, &ir_unit.slot_types);
+        self.script_ctx.current_unit += 1;
     }
 
     /// Get the type and value of a binding by name.
@@ -506,29 +521,6 @@ impl<'db> ScriptCompilationContext<'db> {
         result
     }
 
-    /// Get parse diagnostics from the last evaluation.
-    pub fn get_parse_diagnostics(&self) -> Vec<&datalove_diagnostic::ParseDiagnostic> {
-        if let Some(src) = self.last_source {
-            datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src)
-        } else {
-            Vec::new()
-        }
-    }
-
-    /// Get type diagnostics from the last evaluation.
-    pub fn get_type_diagnostics(&self) -> Vec<&datalove_diagnostic::TypeDiagnostic> {
-        if let Some(batch_spec) = self.last_batch_spec {
-            type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(self.db, batch_spec)
-        } else {
-            Vec::new()
-        }
-    }
-
-    /// Get the database reference.
-    pub fn db(&self) -> &'db dyn salsa::Database {
-        self.db
-    }
-
     /// Get buffered debug output.
     pub fn get_debug_buffer(&self) -> String {
         self.interp.get_debug_buffer()
@@ -542,5 +534,138 @@ impl<'db> ScriptCompilationContext<'db> {
     /// Destroy all allocated runtime values.
     pub fn destroy_all(&mut self) {
         self.env.destroy_all(self.interp.runtime_handle());
+    }
+}
+
+/// Combined script compilation and execution context (deprecated).
+///
+/// Use `ScriptCompiler` and `ScriptExecutor` separately for cleaner separation.
+#[deprecated(note = "Use ScriptCompiler and ScriptExecutor separately")]
+pub struct ScriptCompilationContext<'db> {
+    pub compiler: ScriptCompiler<'db>,
+    pub executor: ScriptExecutor,
+}
+
+#[allow(deprecated)]
+impl<'db> ScriptCompilationContext<'db> {
+    /// Compile and execute a script fragment.
+    pub fn eval_fragment(&mut self, source: &str) -> ScriptUnitResult {
+        let compiled = self.compiler.compile_fragment(source, false);
+        if let Some(ir_unit) = &compiled.ir_unit {
+            let output = self.executor.execute_fragment(ir_unit);
+            ScriptUnitResult {
+                typecheck: compiled.typecheck,
+                lowering: compiled.lowering,
+                ty: None,
+                output,
+            }
+        } else {
+            ScriptUnitResult {
+                typecheck: compiled.typecheck,
+                lowering: compiled.lowering,
+                ty: None,
+                output: String::new(),
+            }
+        }
+    }
+
+    /// Compile and execute an expression.
+    pub fn eval_expr(&mut self, source: &str) -> ScriptUnitResult {
+        let compiled = self.compiler.compile_expr(source);
+        if let Some(ir_unit) = &compiled.ir_unit {
+            let (ty, output) = self.executor.execute_expr(ir_unit);
+            ScriptUnitResult {
+                typecheck: compiled.typecheck,
+                lowering: compiled.lowering,
+                ty,
+                output,
+            }
+        } else {
+            ScriptUnitResult {
+                typecheck: compiled.typecheck,
+                lowering: compiled.lowering,
+                ty: None,
+                output: String::new(),
+            }
+        }
+    }
+
+    /// Lower a fragment to IR for AOT compilation.
+    pub fn lower_fragment_for_aot(&mut self, source: &str) -> ScriptLowerResult {
+        let compiled = self.compiler.compile_fragment(source, true);
+        ScriptLowerResult {
+            typecheck: compiled.typecheck,
+            lowering: compiled.lowering,
+            ir_unit: compiled.ir_unit,
+        }
+    }
+
+    /// Lower an expression to IR for AOT compilation.
+    pub fn lower_expr_for_aot(&mut self, source: &str) -> ScriptLowerResult {
+        let compiled = self.compiler.compile_expr(source);
+        ScriptLowerResult {
+            typecheck: compiled.typecheck,
+            lowering: compiled.lowering,
+            ir_unit: compiled.ir_unit,
+        }
+    }
+
+    /// Get the type and value of a binding by name.
+    pub fn get_binding(&mut self, name: &str) -> Option<(String, String)> {
+        self.executor.get_binding(name)
+    }
+
+    /// Get all bindings as (name, kind, type, value) tuples.
+    pub fn get_environment(&mut self) -> Vec<(String, String, String, String)> {
+        self.executor.get_environment()
+    }
+
+    /// Get parse diagnostics from the last evaluation.
+    pub fn get_parse_diagnostics(&self) -> Vec<&datalove_diagnostic::ParseDiagnostic> {
+        self.compiler.get_parse_diagnostics()
+    }
+
+    /// Get type diagnostics from the last evaluation.
+    pub fn get_type_diagnostics(&self) -> Vec<&datalove_diagnostic::TypeDiagnostic> {
+        self.compiler.get_type_diagnostics()
+    }
+
+    /// Get the database reference.
+    pub fn db(&self) -> &'db dyn salsa::Database {
+        self.compiler.db()
+    }
+
+    /// Get buffered debug output.
+    pub fn get_debug_buffer(&self) -> String {
+        self.executor.get_debug_buffer()
+    }
+
+    /// Clear buffered debug output.
+    pub fn clear_debug_buffer(&self) {
+        self.executor.clear_debug_buffer();
+    }
+
+    /// Destroy all allocated runtime values.
+    pub fn destroy_all(&mut self) {
+        self.executor.destroy_all();
+    }
+
+    /// Get a reference to the environment (for backwards compatibility).
+    pub fn env(&self) -> &ScriptEnvironment {
+        &self.executor.env
+    }
+
+    /// Get a value binding's location by name.
+    ///
+    /// Returns (unit_index, value_id) if found.
+    pub fn get_value_binding(&self, name: &str) -> Option<(u32, datalove_datafun_ir::ValueId)> {
+        self.executor.script_ctx.values.get(name).cloned()
+    }
+
+    /// Get a slot binding's location by name.
+    ///
+    /// Returns (unit_index, slot_id) if found.
+    pub fn get_slot_binding(&self, name: &str) -> Option<(u32, datalove_datafun_ir::SlotId)> {
+        self.executor.script_ctx.slots.get(name).cloned()
     }
 }

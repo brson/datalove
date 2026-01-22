@@ -17,8 +17,8 @@ use serde::{Serialize, Deserialize};
 use std::path::Path;
 
 use datalove_datafun as datafun;
-use datafun::pipeline::{aot as pipeline_aot, TypecheckResult, LoweringResult};
-use datalove_datafun_ir::FunctionRegistry;
+use datafun::pipeline::{aot as pipeline_aot, ScriptCompiler, TypecheckResult, LoweringResult};
+use datalove_datafun_interp::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 
 /// Result of AOT analysis.
@@ -136,8 +136,8 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
         }
     }
 
-    // Create script compilation context with Disabled mode (we don't use interpreter).
-    let Some(mut ctx) = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled, None) else {
+    // Create script compiler (we don't need executor for AOT).
+    let Some(mut compiler) = compiled.script_compiler(&db) else {
         // Module compilation failed, return skipped results for all script sections.
         for section in &parsed.sections {
             if matches!(section, WorldfileSection::ScriptFragment { .. } | WorldfileSection::ScriptExpr { .. }) {
@@ -160,6 +160,9 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
         return AotAnalysis { sections: results };
     };
 
+    // Get the module registry for world types.
+    let registry = compiled.module_registry();
+
     // Process script units via AOT.
     for section in &parsed.sections {
         match section {
@@ -172,35 +175,35 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
                 // Already handled above (or not relevant for AOT tests).
             }
             WorldfileSection::ScriptFragment { source } => {
-                let result = compile_and_run_fragment(&mut ctx, source);
+                let result = compile_and_run_fragment(&mut compiler, source, &registry);
                 results.push(result);
             }
             WorldfileSection::ScriptExpr { source } => {
-                let result = compile_and_run_expr(&mut ctx, source);
+                let result = compile_and_run_expr(&mut compiler, source, &registry);
                 results.push(result);
             }
         }
     }
 
-    ctx.destroy_all();
     AotAnalysis { sections: results }
 }
 
 /// Compile and run a script fragment via AOT.
 fn compile_and_run_fragment(
-    ctx: &mut datafun::pipeline::ScriptCompilationContext<'_>,
+    compiler: &mut ScriptCompiler<'_>,
     source: &str,
+    registry: &FunctionRegistry,
 ) -> AotSectionResult {
-    // Lower to IR for AOT (emits drops for script-level bindings).
-    let lower_result = ctx.lower_fragment_for_aot(source);
+    // Compile to IR for AOT (for_aot=true emits drops for script-level bindings).
+    let compiled = compiler.compile_fragment(source, true);
 
     // If typecheck or lowering failed, return early.
-    if !matches!(&lower_result.typecheck, datafun::pipeline::TypecheckResult::Success) {
+    if !matches!(&compiled.typecheck, datafun::pipeline::TypecheckResult::Success) {
         return AotSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
-            typecheck: lower_result.typecheck,
-            lowering: lower_result.lowering,
+            typecheck: compiled.typecheck,
+            lowering: compiled.lowering,
             aot_compile: None,
             link: None,
             execution: None,
@@ -208,12 +211,12 @@ fn compile_and_run_fragment(
         };
     }
 
-    if !matches!(&lower_result.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
+    if !matches!(&compiled.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
         return AotSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
-            typecheck: lower_result.typecheck,
-            lowering: lower_result.lowering,
+            typecheck: compiled.typecheck,
+            lowering: compiled.lowering,
             aot_compile: None,
             link: None,
             execution: None,
@@ -222,14 +225,14 @@ fn compile_and_run_fragment(
     }
 
     // Get the IR unit.
-    let ir_unit = match lower_result.ir_unit {
+    let ir_unit = match compiled.ir_unit {
         Some(unit) => unit,
         None => {
             return AotSectionResult {
                 section_type: "scriptunit-fragment".to_string(),
                 name: None,
-                typecheck: lower_result.typecheck,
-                lowering: lower_result.lowering,
+                typecheck: compiled.typecheck,
+                lowering: compiled.lowering,
                 aot_compile: Some(AotCompileResult::Error {
                     message: "IR unit not available".to_string(),
                 }),
@@ -243,28 +246,29 @@ fn compile_and_run_fragment(
     // AOT compile with world types from module functions.
     aot_compile_link_run(
         "scriptunit-fragment",
-        lower_result.typecheck,
-        lower_result.lowering,
+        compiled.typecheck,
+        compiled.lowering,
         ir_unit,
-        &ctx.env.registry,
+        registry,
     )
 }
 
 /// Compile and run a script expression via AOT.
 fn compile_and_run_expr(
-    ctx: &mut datafun::pipeline::ScriptCompilationContext<'_>,
+    compiler: &mut ScriptCompiler<'_>,
     source: &str,
+    registry: &FunctionRegistry,
 ) -> AotSectionResult {
-    // Lower to IR for AOT.
-    let lower_result = ctx.lower_expr_for_aot(source);
+    // Compile to IR for AOT.
+    let compiled = compiler.compile_expr(source);
 
     // If typecheck or lowering failed, return early.
-    if !matches!(&lower_result.typecheck, datafun::pipeline::TypecheckResult::Success) {
+    if !matches!(&compiled.typecheck, datafun::pipeline::TypecheckResult::Success) {
         return AotSectionResult {
             section_type: "scriptunit-expr".to_string(),
             name: None,
-            typecheck: lower_result.typecheck,
-            lowering: lower_result.lowering,
+            typecheck: compiled.typecheck,
+            lowering: compiled.lowering,
             aot_compile: None,
             link: None,
             execution: None,
@@ -272,12 +276,12 @@ fn compile_and_run_expr(
         };
     }
 
-    if !matches!(&lower_result.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
+    if !matches!(&compiled.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
         return AotSectionResult {
             section_type: "scriptunit-expr".to_string(),
             name: None,
-            typecheck: lower_result.typecheck,
-            lowering: lower_result.lowering,
+            typecheck: compiled.typecheck,
+            lowering: compiled.lowering,
             aot_compile: None,
             link: None,
             execution: None,
@@ -286,14 +290,14 @@ fn compile_and_run_expr(
     }
 
     // Get the IR unit.
-    let ir_unit = match lower_result.ir_unit {
+    let ir_unit = match compiled.ir_unit {
         Some(unit) => unit,
         None => {
             return AotSectionResult {
                 section_type: "scriptunit-expr".to_string(),
                 name: None,
-                typecheck: lower_result.typecheck,
-                lowering: lower_result.lowering,
+                typecheck: compiled.typecheck,
+                lowering: compiled.lowering,
                 aot_compile: Some(AotCompileResult::Error {
                     message: "IR unit not available".to_string(),
                 }),
@@ -307,10 +311,10 @@ fn compile_and_run_expr(
     // AOT compile with world types from module functions.
     aot_compile_link_run(
         "scriptunit-expr",
-        lower_result.typecheck,
-        lower_result.lowering,
+        compiled.typecheck,
+        compiled.lowering,
         ir_unit,
-        &ctx.env.registry,
+        registry,
     )
 }
 

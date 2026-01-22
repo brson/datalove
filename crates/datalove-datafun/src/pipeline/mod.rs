@@ -51,9 +51,11 @@ mod module_pipeline;
 pub mod aot;
 
 // Re-export main types.
-pub use result::{TypecheckResult, LoweringResult, format_lowering_result, ScriptUnitResult, ScriptLowerResult};
+pub use result::{TypecheckResult, LoweringResult, format_lowering_result, ScriptUnitResult, ScriptLowerResult, ScriptCompilationResult};
 pub use compiled_modules::{SharedModuleContext, CompiledModules};
+#[allow(deprecated)]
 pub use script_context::ScriptCompilationContext;
+pub use script_context::{ScriptCompiler, ScriptExecutor};
 pub use module_pipeline::ModuleCompilationPipeline;
 
 #[cfg(test)]

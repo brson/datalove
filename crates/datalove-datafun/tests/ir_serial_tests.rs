@@ -481,7 +481,7 @@ fn analyze_worldfile_ir_serial(
     let lower_result = ctx.lower_fragment_for_aot(fragment_source);
 
     // Get registry before destroying ctx.
-    let registry = ctx.env.registry.clone();
+    let registry = ctx.env().registry.clone();
     ctx.destroy_all();
 
     // Check for typecheck/lowering errors.

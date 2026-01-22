@@ -262,7 +262,7 @@ fn run_with_aot(
     };
 
     // AOT compile.
-    let result = aot_compile_link_run(&ir_unit, &ctx.env.registry);
+    let result = aot_compile_link_run(&ir_unit, &ctx.env().registry);
     ctx.destroy_all();
     result
 }

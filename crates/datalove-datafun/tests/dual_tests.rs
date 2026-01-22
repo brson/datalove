@@ -22,7 +22,7 @@ use std::process::Command;
 
 use datalove_datafun as datafun;
 use datalove_datafun_aot_cranelift::AotCompiler;
-use datalove_datafun_ir::FunctionRegistry;
+use datalove_datafun_interp::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 
 /// Result of dual analysis.
@@ -256,7 +256,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     }
 
     // Run interpreter pipeline.
-    let Some(mut interp_ctx) = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Buffer, None) else {
+    let Some(mut interp_compiler) = compiled.script_compiler(&db) else {
         // Module compilation failed, script execution skipped.
         // Both lowerings are Skipped, so they match.
         results.push(DualSectionResult {
@@ -276,24 +276,33 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         });
         return DualAnalysis { sections: results };
     };
-    interp_ctx.clear_debug_buffer();
-    let interp_result = interp_ctx.eval_fragment(fragment_source);
-    let interp_output = interp_ctx.get_debug_buffer();
-    interp_ctx.destroy_all();
+    let Some(mut interp_executor) = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, None) else {
+        return DualAnalysis { sections: results };
+    };
 
-    // Build pipeline again for AOT context (necessary because script_context consumes compiled).
+    interp_executor.clear_debug_buffer();
+    let interp_compiled = interp_compiler.compile_fragment(fragment_source, false);
+    let _interp_result_output = if let Some(ir_unit) = &interp_compiled.ir_unit {
+        interp_executor.execute_fragment(ir_unit)
+    } else {
+        String::new()
+    };
+    let interp_output = interp_executor.get_debug_buffer();
+    interp_executor.destroy_all();
+
+    // Build pipeline again for AOT context (necessary because script_compiler borrows compiled).
     let mut pipeline2 = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
     let compiled2 = pipeline2.compile_fresh(&db);
 
     // Run AOT pipeline.
-    let Some(mut aot_ctx) = compiled2.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled, None) else {
+    let Some(mut aot_compiler) = compiled2.script_compiler(&db) else {
         // Module compilation failed for AOT, but interp succeeded.
         // This shouldn't happen if both use the same input, but handle it.
         results.push(DualSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
             typecheck: datafun::pipeline::TypecheckResult::Skipped,
-            interp_lowering: interp_result.lowering,
+            interp_lowering: interp_compiled.lowering,
             aot_lowering: datafun::pipeline::LoweringResult::Skipped,
             ir_match: false,
             ir_diff: None,
@@ -306,17 +315,17 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         });
         return DualAnalysis { sections: results };
     };
-    let aot_lower_result = aot_ctx.lower_fragment_for_aot(fragment_source);
+    let aot_compiled = aot_compiler.compile_fragment(fragment_source, true);
+    let registry = compiled2.module_registry();
 
     // If typecheck failed, return early.
-    if !matches!(&aot_lower_result.typecheck, datafun::pipeline::TypecheckResult::Success) {
-        aot_ctx.destroy_all();
+    if !matches!(&aot_compiled.typecheck, datafun::pipeline::TypecheckResult::Success) {
         results.push(DualSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
-            typecheck: aot_lower_result.typecheck,
-            interp_lowering: interp_result.lowering,
-            aot_lowering: aot_lower_result.lowering,
+            typecheck: aot_compiled.typecheck,
+            interp_lowering: interp_compiled.lowering,
+            aot_lowering: aot_compiled.lowering,
             ir_match: false,
             ir_diff: None,
             interp_output,
@@ -330,14 +339,13 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     }
 
     // If lowering failed, return early.
-    if !matches!(&aot_lower_result.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
-        aot_ctx.destroy_all();
+    if !matches!(&aot_compiled.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
         results.push(DualSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
-            typecheck: aot_lower_result.typecheck,
-            interp_lowering: interp_result.lowering,
-            aot_lowering: aot_lower_result.lowering,
+            typecheck: aot_compiled.typecheck,
+            interp_lowering: interp_compiled.lowering,
+            aot_lowering: aot_compiled.lowering,
             ir_match: false,
             ir_diff: None,
             interp_output,
@@ -351,11 +359,11 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     }
 
     // Get IR dumps and normalize for comparison.
-    let interp_ir = match &interp_result.lowering {
+    let interp_ir = match &interp_compiled.lowering {
         datafun::pipeline::LoweringResult::Success { ir } => ir.clone(),
         _ => String::new(),
     };
-    let aot_ir = match &aot_lower_result.lowering {
+    let aot_ir = match &aot_compiled.lowering {
         datafun::pipeline::LoweringResult::Success { ir } => ir.clone(),
         _ => String::new(),
     };
@@ -373,16 +381,15 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     };
 
     // Get the IR unit for AOT compilation.
-    let ir_unit = match aot_lower_result.ir_unit {
+    let ir_unit = match aot_compiled.ir_unit {
         Some(unit) => unit,
         None => {
-            aot_ctx.destroy_all();
             results.push(DualSectionResult {
                 section_type: "scriptunit-fragment".to_string(),
                 name: None,
-                typecheck: aot_lower_result.typecheck,
-                interp_lowering: interp_result.lowering,
-                aot_lowering: aot_lower_result.lowering,
+                typecheck: aot_compiled.typecheck,
+                interp_lowering: interp_compiled.lowering,
+                aot_lowering: aot_compiled.lowering,
                 ir_match,
                 ir_diff,
                 interp_output,
@@ -399,17 +406,16 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     };
 
     // AOT compile, link, run.
-    let (aot_compile, link, execution, aot_output) = aot_compile_link_run(&ir_unit, &aot_ctx.env.registry);
-    aot_ctx.destroy_all();
+    let (aot_compile, link, execution, aot_output) = aot_compile_link_run(&ir_unit, &registry);
 
     let output_match = interp_output == aot_output;
 
     results.push(DualSectionResult {
         section_type: "scriptunit-fragment".to_string(),
         name: None,
-        typecheck: aot_lower_result.typecheck,
-        interp_lowering: interp_result.lowering,
-        aot_lowering: aot_lower_result.lowering,
+        typecheck: aot_compiled.typecheck,
+        interp_lowering: interp_compiled.lowering,
+        aot_lowering: aot_compiled.lowering,
         ir_match,
         ir_diff,
         interp_output,

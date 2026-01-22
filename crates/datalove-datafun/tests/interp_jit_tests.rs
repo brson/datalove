@@ -99,8 +99,8 @@ pub fn analyze_worldfile_with_jit(
     // Create JIT engine with threshold=1 (compile on first call).
     let jit = JitEngine::new(1).expect("JitEngine creation failed");
 
-    // Create script compilation context with Buffer mode and JIT enabled.
-    let Some(mut ctx) = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, Some(Box::new(jit))) else {
+    // Create script compiler and executor with Buffer mode and JIT enabled.
+    let Some(mut compiler) = compiled.script_compiler(db) else {
         // Module compilation failed, return skipped results for script sections.
         for section in &parsed.sections {
             match section {
@@ -130,6 +130,10 @@ pub fn analyze_worldfile_with_jit(
         return Ok(Analysis { sections: results });
     };
 
+    let Some(mut executor) = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, Some(Box::new(jit))) else {
+        return Ok(Analysis { sections: results });
+    };
+
     // Process script units.
     for section in &parsed.sections {
         match section {
@@ -144,28 +148,39 @@ pub fn analyze_worldfile_with_jit(
                 // Module action sections are for memo tests only.
             }
             WorldfileSection::ScriptFragment { source } => {
-                ctx.clear_debug_buffer();
-                let unit_result = ctx.eval_fragment(source);
-                let debug_output = ctx.get_debug_buffer();
+                executor.clear_debug_buffer();
+                let compiled_unit = compiler.compile_fragment(source, false);
+                let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+                    executor.execute_fragment(ir_unit)
+                } else {
+                    String::new()
+                };
+                let debug_output = executor.get_debug_buffer();
                 results.push(SectionResult {
                     section_type: "scriptunit-fragment".to_string(),
                     name: None,
-                    typecheck: unit_result.typecheck,
-                    lowering: unit_result.lowering,
-                    output: unit_result.output,
+                    typecheck: compiled_unit.typecheck,
+                    lowering: compiled_unit.lowering,
+                    output,
                     debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
                 });
             }
             WorldfileSection::ScriptExpr { source } => {
-                ctx.clear_debug_buffer();
-                let unit_result = ctx.eval_expr(source);
-                let debug_output = ctx.get_debug_buffer();
+                executor.clear_debug_buffer();
+                let compiled_unit = compiler.compile_expr(source);
+                let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+                    let (_, value) = executor.execute_expr(ir_unit);
+                    value
+                } else {
+                    String::new()
+                };
+                let debug_output = executor.get_debug_buffer();
                 results.push(SectionResult {
                     section_type: "scriptunit-expr".to_string(),
                     name: None,
-                    typecheck: unit_result.typecheck,
-                    lowering: unit_result.lowering,
-                    output: unit_result.output,
+                    typecheck: compiled_unit.typecheck,
+                    lowering: compiled_unit.lowering,
+                    output,
                     debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
                 });
             }
@@ -173,7 +188,7 @@ pub fn analyze_worldfile_with_jit(
     }
 
     // Cleanup.
-    ctx.destroy_all();
+    executor.destroy_all();
 
     Ok(Analysis { sections: results })
 }

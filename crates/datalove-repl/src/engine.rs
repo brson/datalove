@@ -4,13 +4,15 @@ use rmx::prelude::*;
 
 use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, EvalFun, InputParse, Input};
 use datalove_datafun as datafun;
-use datafun::pipeline::{ModuleCompilationPipeline, ScriptCompilationContext, TypecheckResult, LoweringResult};
+use datafun::pipeline::{ModuleCompilationPipeline, ScriptCompiler, ScriptExecutor, TypecheckResult, LoweringResult};
 
 pub struct Engine<'db> {
     db: &'db datafun::Database,
     history: ReplHistory,
-    /// Script compilation context for incremental evaluation.
-    ctx: ScriptCompilationContext<'db>,
+    /// Script compiler for incremental compilation.
+    compiler: ScriptCompiler<'db>,
+    /// Script executor for running compiled units.
+    executor: ScriptExecutor,
 }
 
 struct ReplHistory {
@@ -49,25 +51,30 @@ impl<'db> Engine<'db> {
             bail!("Module compilation failed: {}", errors.join("; "));
         }
 
-        // Create script compilation context (safe to unwrap since we checked for errors above).
-        let ctx = compiled.script_context(db, datalove_datafun::DebugOutputMode::Disabled, None)
-            .expect("script_context should succeed after is_successful check");
+        // Create compiler and executor (safe to unwrap since we checked for errors above).
+        let compiler = compiled.script_compiler(db)
+            .expect("script_compiler should succeed after is_successful check");
+        let executor = compiled.script_executor(datalove_datafun::DebugOutputMode::Disabled, None)
+            .expect("script_executor should succeed after is_successful check");
 
         Ok(Engine {
             db,
             history: ReplHistory::new(),
-            ctx,
+            compiler,
+            executor,
         })
     }
 
     fn reset(&mut self) {
         self.history = ReplHistory::new();
-        // Cleanup the current context.
-        self.ctx.destroy_all();
-        // Create a new context (empty pipeline always succeeds).
+        // Cleanup the current executor.
+        self.executor.destroy_all();
+        // Create new compiler and executor (empty pipeline always succeeds).
         let mut pipeline = ModuleCompilationPipeline::new();
         let compiled = pipeline.compile_fresh(self.db);
-        self.ctx = compiled.script_context(self.db, datalove_datafun::DebugOutputMode::Disabled, None)
+        self.compiler = compiled.script_compiler(self.db)
+            .expect("empty pipeline compilation should succeed");
+        self.executor = compiled.script_executor(datalove_datafun::DebugOutputMode::Disabled, None)
             .expect("empty pipeline compilation should succeed");
     }
 
@@ -175,26 +182,34 @@ impl<'db> Engine<'db> {
     }
 
     fn eval_script_statement(&mut self, source: String) -> Eval {
-        let result = self.ctx.eval_fragment(&source);
+        // Compile the fragment.
+        let compiled = self.compiler.compile_fragment(&source, false);
 
         // Check for parse errors.
-        if let TypecheckResult::ParseError { errors } = &result.typecheck {
+        if let TypecheckResult::ParseError { errors } = &compiled.typecheck {
             return Eval::Error(errors.join("; "));
         }
 
         // Check for typecheck errors.
-        if let TypecheckResult::Error { errors } = &result.typecheck {
+        if let TypecheckResult::Error { errors } = &compiled.typecheck {
             return Eval::Error(errors.join("; "));
         }
 
         // Check for lowering errors.
-        if let LoweringResult::Error { message } = &result.lowering {
+        if let LoweringResult::Error { message } = &compiled.lowering {
             return Eval::Error(message.C());
         }
 
+        // Execute if compilation succeeded.
+        let output = if let Some(ir_unit) = &compiled.ir_unit {
+            self.executor.execute_fragment(ir_unit)
+        } else {
+            String::new()
+        };
+
         // Check for runtime errors.
-        if result.output.starts_with("Error:") {
-            return Eval::Error(result.output);
+        if output.starts_with("Error:") {
+            return Eval::Error(output);
         }
 
         // Detect what kind of statement was evaluated.
@@ -207,8 +222,8 @@ impl<'db> Engine<'db> {
                 .unwrap_or("?")
                 .S();
 
-            // Look up type and value from the context.
-            let (ty, value) = self.ctx.get_binding(&name)
+            // Look up type and value from the executor.
+            let (ty, value) = self.executor.get_binding(&name)
                 .unwrap_or(("?".S(), "?".S()));
 
             Eval::SuccessLet(EvalLet { name, ty, value })
@@ -228,8 +243,8 @@ impl<'db> Engine<'db> {
                 .unwrap_or("?")
                 .S();
 
-            // Look up type and value from the context.
-            let (ty, value) = self.ctx.get_binding(&name)
+            // Look up type and value from the executor.
+            let (ty, value) = self.executor.get_binding(&name)
                 .unwrap_or(("?".S(), "?".S()));
 
             Eval::SuccessLet(EvalLet { name, ty, value })
@@ -239,32 +254,40 @@ impl<'db> Engine<'db> {
     }
 
     fn eval_expression(&mut self, source: String) -> Eval {
-        let result = self.ctx.eval_expr(&source);
+        // Compile the expression.
+        let compiled = self.compiler.compile_expr(&source);
 
         // Check for parse errors.
-        if let TypecheckResult::ParseError { errors } = &result.typecheck {
+        if let TypecheckResult::ParseError { errors } = &compiled.typecheck {
             return Eval::Error(errors.join("; "));
         }
 
         // Check for typecheck errors.
-        if let TypecheckResult::Error { errors } = &result.typecheck {
+        if let TypecheckResult::Error { errors } = &compiled.typecheck {
             return Eval::Error(errors.join("; "));
         }
 
         // Check for lowering errors.
-        if let LoweringResult::Error { message } = &result.lowering {
+        if let LoweringResult::Error { message } = &compiled.lowering {
             return Eval::Error(message.C());
         }
 
+        // Execute if compilation succeeded.
+        let (ty, output) = if let Some(ir_unit) = &compiled.ir_unit {
+            self.executor.execute_expr(ir_unit)
+        } else {
+            (None, String::new())
+        };
+
         // Check for runtime errors.
-        if result.output.starts_with("Error:") {
-            return Eval::Error(result.output);
+        if output.starts_with("Error:") {
+            return Eval::Error(output);
         }
 
         Eval::SuccessExpr(EvalExpr {
             expr_kind: "expr".S(),
-            ty: result.ty.unwrap_or_else(|| "?".S()),
-            value: result.output,
+            ty: ty.unwrap_or_else(|| "?".S()),
+            value: output,
         })
     }
 
@@ -272,8 +295,8 @@ impl<'db> Engine<'db> {
     ///
     /// Returns a list of (name, type, value) triples, sorted by name.
     pub fn get_environment(&mut self) -> Vec<(String, String, String)> {
-        // Delegate to the script context's get_environment method.
-        self.ctx.get_environment()
+        // Delegate to the executor's get_environment method.
+        self.executor.get_environment()
             .into_iter()
             .map(|(name, _kind, ty, value)| (name, ty, value))
             .collect()
@@ -308,6 +331,6 @@ impl<'db> Engine<'db> {
 
 impl<'db> Drop for Engine<'db> {
     fn drop(&mut self) {
-        self.ctx.destroy_all();
+        self.executor.destroy_all();
     }
 }

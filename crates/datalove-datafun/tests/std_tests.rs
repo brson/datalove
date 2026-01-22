@@ -54,44 +54,63 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         }
     }
 
-    // Create script compilation context (module specs are built internally from module graph).
-    let Some(mut ctx) = compiled.script_context(&db, datafun::DebugOutputMode::Disabled, None) else {
+    // Create script compiler and executor (module specs are built internally from module graph).
+    let Some(mut compiler) = compiled.script_compiler(&db) else {
+        return Err("Module compilation failed".to_string());
+    };
+    let Some(mut executor) = compiled.script_executor(datafun::DebugOutputMode::Disabled, None) else {
         return Err("Module compilation failed".to_string());
     };
 
-    // Run the script as a fragment.
-    let result = ctx.eval_fragment(&script_text);
+    // Compile the script as a fragment.
+    let result = compiler.compile_fragment(&script_text, false);
 
     // Check for errors.
     if let TypecheckResult::Error { errors } = &result.typecheck {
-        ctx.destroy_all();
+        executor.destroy_all();
         return Err(format!("Script typecheck errors: {:?}", errors));
     }
     if let LoweringResult::Error { message } = &result.lowering {
-        ctx.destroy_all();
+        executor.destroy_all();
         return Err(format!("Script lowering error: {}", message));
     }
-    if result.output.starts_with("Error:") {
-        ctx.destroy_all();
-        return Err(result.output);
+
+    // Execute if compilation succeeded.
+    if let Some(ir_unit) = &result.ir_unit {
+        let output = executor.execute_fragment(ir_unit);
+        if output.starts_with("Error:") {
+            executor.destroy_all();
+            return Err(output);
+        }
     }
 
-    // Evaluate the output variable.
-    let output_result = ctx.eval_expr("output");
-    ctx.destroy_all();
+    // Compile and evaluate the output variable.
+    let output_compiled = compiler.compile_expr("output");
 
     // Check for errors.
-    if let TypecheckResult::Error { errors } = &output_result.typecheck {
+    if let TypecheckResult::Error { errors } = &output_compiled.typecheck {
+        executor.destroy_all();
         return Err(format!("Output typecheck errors: {:?}", errors));
     }
-    if let LoweringResult::Error { message } = &output_result.lowering {
+    if let LoweringResult::Error { message } = &output_compiled.lowering {
+        executor.destroy_all();
         return Err(format!("Output lowering error: {}", message));
     }
-    if output_result.output.starts_with("Error:") {
-        return Err(output_result.output);
+
+    // Execute the output expression.
+    let output = if let Some(ir_unit) = &output_compiled.ir_unit {
+        let (_, value) = executor.execute_expr(ir_unit);
+        value
+    } else {
+        String::new()
+    };
+    executor.destroy_all();
+
+    if output.starts_with("Error:") {
+        return Err(output);
     }
 
-    Ok(output_result.output)
+    Ok(output)
 }
 
 fn main() {
