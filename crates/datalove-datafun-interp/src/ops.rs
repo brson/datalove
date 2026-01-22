@@ -410,10 +410,7 @@ impl IrInterpreter {
             };
 
             if status != RtStatus::Ok {
-                return Err(InterpError::RuntimeError(format!(
-                    "Int {:?} operation failed",
-                    op
-                )));
+                unreachable!("unexpected runtime failure {:?}", status);
             }
             Ok(())
         }
