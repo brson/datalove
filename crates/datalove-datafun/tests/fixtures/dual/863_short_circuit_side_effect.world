@@ -1,0 +1,21 @@
+----------
+module local/test/effects
+----------
+
+fun side_effect(msg: string): bool
+  debuglog msg
+  ret true
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/effects
+import effects.side_effect
+
+debuglog "start"
+let v0: bool = true or side_effect("should_not_print")
+debuglog "middle"
+let v1: bool = false or side_effect("should_print")
+debuglog "end"

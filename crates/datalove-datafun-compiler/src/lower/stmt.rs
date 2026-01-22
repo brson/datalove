@@ -141,8 +141,8 @@ pub fn lower_statement_indexed<'db>(
             // This borrows the value instead of copying, avoiding shallow-copy issues.
             let operand = lower_expression_for_ref(ctx, stmt.value)?;
             ctx.emit(Instruction::DebugLog { operand });
-            // Note: no drop - debuglog borrows, does not consume.
-            // Refs are Copy and don't need drops.
+            // Drop any expression temporaries (e.g., string literals created for debuglog).
+            ctx.emit_expr_temp_drops();
             Ok(())
         }
         Statement::TypeAlias(_) => {

@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+var done: bool = false
+loop
+    if done
+        break
+    end if
+    debuglog "loop_iteration"
+    set done = true
+end loop
+debuglog "done"

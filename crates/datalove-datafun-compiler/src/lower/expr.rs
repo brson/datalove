@@ -46,6 +46,9 @@ pub fn lower_operand<'db>(
 ///
 /// For ref/mut/out params with field projection args, emits GetFieldRef instead
 /// of GetField to pass a reference to the field without copying.
+///
+/// For 'in' mode params, the function CONSUMES the argument (takes ownership).
+/// So we don't record temps - the value is transferred to the callee.
 fn lower_call_arg<'db>(
     ctx: &mut LowerCtx<'db>,
     arg: ExprFun<'db>,
@@ -56,9 +59,29 @@ fn lower_call_arg<'db>(
         if let ExprFunKind::FieldProj(proj) = arg.expr(ctx.db) {
             return lower_field_proj_as_ref(ctx, arg, proj);
         }
+        // For ref/mut/out modes, use lower_operand which records temps.
+        // The caller retains ownership and must drop after the call.
+        return lower_operand(ctx, arg);
     }
-    // Default: use lower_operand.
-    lower_operand(ctx, arg)
+
+    // For 'in' mode: function consumes the argument, so don't record temps.
+    match arg.expr(ctx.db) {
+        ExprFunKind::Name(name) => {
+            // Return the operand directly (Value, Slot, or Param).
+            let name_str = name.text(ctx.db);
+            if let Some(operand) = ctx.lookup_var(name_str) {
+                Ok(operand)
+            } else {
+                Err(LowerError::VariableNotFound(name_str.to_string()))
+            }
+        }
+        _ => {
+            // Compound expression: lower to a value without recording temps.
+            // The function consumes this value, so no drop needed by caller.
+            let value_id = lower_expression(ctx, arg)?;
+            Ok(Operand::Value(value_id))
+        }
+    }
 }
 
 /// Lower a field projection as a reference (pointer to field).
@@ -148,7 +171,9 @@ pub fn lower_expression_for_ref<'db>(
         }
         _ => {
             // All other expressions: use standard lowering.
+            let expr_type = ctx.expr_type(expr);
             let value_id = lower_expression(ctx, expr)?;
+            ctx.record_expr_temp(value_id, expr_type);
             Ok(Operand::Value(value_id))
         }
     }

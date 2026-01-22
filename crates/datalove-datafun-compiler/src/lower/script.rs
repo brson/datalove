@@ -486,35 +486,14 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::DebugLog(stmt) => {
-            let debug_expr = stmt.value;
             // Use lower_expression_for_ref to handle field projections with GetFieldRef.
-            // This borrows the value instead of copying, which is correct for debuglog
-            // and avoids the shallow-copy problem with move types.
-            let operand = lower_expression_for_ref(ctx, debug_expr)?;
+            // This borrows the value instead of copying, avoiding shallow-copy issues.
+            let operand = lower_expression_for_ref(ctx, stmt.value)?;
             ctx.emit(Instruction::DebugLog { operand });
-            // Check if the expression produces a temporary that needs dropping.
-            // - Named bindings (Value/Slot/Param): returned directly, NOT temps
-            // - Field projections: use GetFieldRef (ref is Copy, no drop)
-            // - Other expressions: produce temps (Values), need drop
-            let expr_type = ctx.expr_type(debug_expr);
-            if !expr_type.is_copy() {
-                let needs_drop = match debug_expr.expr(ctx.db) {
-                    ExprFunKind::Name(_) => {
-                        // Named bindings are returned directly by lower_expression_for_ref.
-                        // They're managed by the binding system, not temps.
-                        false
-                    }
-                    ExprFunKind::FieldProj(_) => {
-                        // Field projections use GetFieldRef which produces a ref.
-                        // Refs are Copy, so no drop needed.
-                        false
-                    }
-                    _ => true,
-                };
-                if needs_drop {
-                    ctx.emit(Instruction::Drop { operand });
-                }
-            }
+            // Drop any expression temporaries (e.g., string literals, binop results).
+            // lower_expression_for_ref records temps for compound expressions,
+            // but not for Name lookups or FieldProj (which use refs).
+            ctx.emit_expr_temp_drops();
             Ok(())
         }
         Statement::TypeAlias(_) => {
