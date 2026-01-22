@@ -492,7 +492,7 @@ impl IrInterpreter {
         op: UnaryOp,
         src: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         unsafe {
             let tag = (*src.tydesc).type_tag;
 
@@ -508,14 +508,13 @@ impl IrInterpreter {
                 rtdt::TyTag::U32 => Self::execute_unaryop_unsigned::<u32>(op, src, dest),
                 rtdt::TyTag::U64 => Self::execute_unaryop_unsigned::<u64>(op, src, dest),
                 rtdt::TyTag::Usize => Self::execute_unaryop_unsigned::<rtdt::UsizeRepr>(op, src, dest),
-                rtdt::TyTag::Int => return self.execute_unaryop_bigint(op, src, dest),
+                rtdt::TyTag::Int => self.execute_unaryop_bigint(op, src, dest),
                 rtdt::TyTag::F32 => Self::execute_unaryop_f32(op, src, dest),
                 rtdt::TyTag::F64 => Self::execute_unaryop_f64(op, src, dest),
                 rtdt::TyTag::Bool => Self::execute_unaryop_bool(op, src, dest),
                 // Type checker ensures only valid types reach here.
                 _ => unreachable!("unsupported unaryop {:?} for type {:?}", op, tag),
             }
-            Ok(())
         }
     }
 
@@ -564,7 +563,7 @@ impl IrInterpreter {
         op: UnaryOp,
         src: &Value,
         dest: Destination,
-    ) -> Result<(), InterpError> {
+    ) {
         use datalove_rt::c::RtStatus;
 
         unsafe {
@@ -576,9 +575,8 @@ impl IrInterpreter {
                         rt_handle, src.ptr, int_tydesc, dest.ptr, int_tydesc,
                     );
                     if status != RtStatus::Ok {
-                        return Err(InterpError::RuntimeError("Int negation failed".to_string()));
+                        unreachable!("Int negation failed");
                     }
-                    Ok(())
                 }
                 // Type checker ensures only Neg reaches here.
                 _ => unreachable!("unsupported Int unaryop {:?}", op),

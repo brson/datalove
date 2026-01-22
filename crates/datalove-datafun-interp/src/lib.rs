@@ -571,7 +571,7 @@ impl IrInterpreter {
             Instruction::UnaryOp { dest, op, operand } => {
                 let src_val = self.read_operand(operand, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
-                self.execute_unaryop(*op, &src_val, dest_slot)?;
+                self.execute_unaryop(*op, &src_val, dest_slot);
                 frame.mark_value_initialized(*dest);
             }
             Instruction::SlotStore { dest, value, is_copy } => {
