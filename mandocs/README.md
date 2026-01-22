@@ -288,7 +288,7 @@ but I do have a [vision](vision.md) about what it will be.
 
 
 
-- [10 Minute Intro](intro.md)
+
 - [Principles](principles.md)
 - [Lexical Structure](lexer.md)
 - [Datalove Literals](datalit-types.md)
