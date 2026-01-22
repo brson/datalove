@@ -235,9 +235,9 @@ Loops provide iteration with `break` and `continue`:
 ```datalove
 // Loop until break
 fun count_to(limit: u32): !u32
-  var n: u32 = @0
+  var n: u32 = 0
   loop
-    set n = n +! @1
+    set n = n +! 1
     if n >= limit
       break
     end if
@@ -247,11 +247,11 @@ end fun
 
 // Loop while condition holds
 fun sum_below(limit: u32): u32
-  var n: u32 = @0
-  var total: u32 = @0
+  var n: u32 = 0
+  var total: u32 = 0
   loop while n .< limit
     set total = total + n
-    set n = n + @1
+    set n = n + 1
   end loop
   ret total
 end fun
@@ -263,11 +263,11 @@ If statements support `else if` chains:
 type Rating: enum { Poor, Fair, Good, Excellent }
 
 fun classify(score: u32): Rating
-  if score .< @50
+  if score .< 50
     ret enum Poor
-  else if score .< @70
+  else if score .< 70
     ret enum Fair
-  else if score .< @90
+  else if score .< 90
     ret enum Good
   else
     ret enum Excellent
