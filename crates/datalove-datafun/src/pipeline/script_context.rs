@@ -20,10 +20,7 @@ use datalove_datafun_interp::{CallDispatcher, ScriptEnvironment, UnitCompletion}
 use datalove_rt::rust::AlignedBuffer;
 
 use super::compiled_modules::CompiledModules;
-use super::result::{
-    TypecheckResult, LoweringResult,
-    ScriptUnitResult, ScriptLowerResult, ScriptCompilationResult,
-};
+use super::result::{TypecheckResult, LoweringResult, ScriptCompilationResult};
 
 /// Parsed script unit ready for compilation.
 enum ParsedUnit<'db> {
@@ -115,21 +112,6 @@ impl<'db> CompiledModules<'db> {
         datalove_datafun_interp::FunctionRegistry::with_module_registry(
             Arc::clone(&self.shared.module_registry)
         )
-    }
-
-    /// Create a combined script context for backwards compatibility.
-    ///
-    /// Returns `None` if module compilation failed (has errors).
-    #[deprecated(note = "Use script_compiler() and script_executor() separately")]
-    pub fn script_context(
-        &self,
-        db: &'db dyn salsa::Database,
-        debug_mode: datalove_rt::c::DebugOutputMode,
-        call_dispatcher: Option<Box<dyn CallDispatcher>>,
-    ) -> Option<ScriptCompilationContext<'db>> {
-        let compiler = self.script_compiler(db)?;
-        let executor = self.script_executor(debug_mode, call_dispatcher)?;
-        Some(ScriptCompilationContext { compiler, executor })
     }
 }
 
@@ -534,138 +516,5 @@ impl ScriptExecutor {
     /// Destroy all allocated runtime values.
     pub fn destroy_all(&mut self) {
         self.env.destroy_all(self.interp.runtime_handle());
-    }
-}
-
-/// Combined script compilation and execution context (deprecated).
-///
-/// Use `ScriptCompiler` and `ScriptExecutor` separately for cleaner separation.
-#[deprecated(note = "Use ScriptCompiler and ScriptExecutor separately")]
-pub struct ScriptCompilationContext<'db> {
-    pub compiler: ScriptCompiler<'db>,
-    pub executor: ScriptExecutor,
-}
-
-#[allow(deprecated)]
-impl<'db> ScriptCompilationContext<'db> {
-    /// Compile and execute a script fragment.
-    pub fn eval_fragment(&mut self, source: &str) -> ScriptUnitResult {
-        let compiled = self.compiler.compile_fragment(source, false);
-        if let Some(ir_unit) = &compiled.ir_unit {
-            let output = self.executor.execute_fragment(ir_unit);
-            ScriptUnitResult {
-                typecheck: compiled.typecheck,
-                lowering: compiled.lowering,
-                ty: None,
-                output,
-            }
-        } else {
-            ScriptUnitResult {
-                typecheck: compiled.typecheck,
-                lowering: compiled.lowering,
-                ty: None,
-                output: String::new(),
-            }
-        }
-    }
-
-    /// Compile and execute an expression.
-    pub fn eval_expr(&mut self, source: &str) -> ScriptUnitResult {
-        let compiled = self.compiler.compile_expr(source);
-        if let Some(ir_unit) = &compiled.ir_unit {
-            let (ty, output) = self.executor.execute_expr(ir_unit);
-            ScriptUnitResult {
-                typecheck: compiled.typecheck,
-                lowering: compiled.lowering,
-                ty,
-                output,
-            }
-        } else {
-            ScriptUnitResult {
-                typecheck: compiled.typecheck,
-                lowering: compiled.lowering,
-                ty: None,
-                output: String::new(),
-            }
-        }
-    }
-
-    /// Lower a fragment to IR for AOT compilation.
-    pub fn lower_fragment_for_aot(&mut self, source: &str) -> ScriptLowerResult {
-        let compiled = self.compiler.compile_fragment(source, true);
-        ScriptLowerResult {
-            typecheck: compiled.typecheck,
-            lowering: compiled.lowering,
-            ir_unit: compiled.ir_unit,
-        }
-    }
-
-    /// Lower an expression to IR for AOT compilation.
-    pub fn lower_expr_for_aot(&mut self, source: &str) -> ScriptLowerResult {
-        let compiled = self.compiler.compile_expr(source);
-        ScriptLowerResult {
-            typecheck: compiled.typecheck,
-            lowering: compiled.lowering,
-            ir_unit: compiled.ir_unit,
-        }
-    }
-
-    /// Get the type and value of a binding by name.
-    pub fn get_binding(&mut self, name: &str) -> Option<(String, String)> {
-        self.executor.get_binding(name)
-    }
-
-    /// Get all bindings as (name, kind, type, value) tuples.
-    pub fn get_environment(&mut self) -> Vec<(String, String, String, String)> {
-        self.executor.get_environment()
-    }
-
-    /// Get parse diagnostics from the last evaluation.
-    pub fn get_parse_diagnostics(&self) -> Vec<&datalove_diagnostic::ParseDiagnostic> {
-        self.compiler.get_parse_diagnostics()
-    }
-
-    /// Get type diagnostics from the last evaluation.
-    pub fn get_type_diagnostics(&self) -> Vec<&datalove_diagnostic::TypeDiagnostic> {
-        self.compiler.get_type_diagnostics()
-    }
-
-    /// Get the database reference.
-    pub fn db(&self) -> &'db dyn salsa::Database {
-        self.compiler.db()
-    }
-
-    /// Get buffered debug output.
-    pub fn get_debug_buffer(&self) -> String {
-        self.executor.get_debug_buffer()
-    }
-
-    /// Clear buffered debug output.
-    pub fn clear_debug_buffer(&self) {
-        self.executor.clear_debug_buffer();
-    }
-
-    /// Destroy all allocated runtime values.
-    pub fn destroy_all(&mut self) {
-        self.executor.destroy_all();
-    }
-
-    /// Get a reference to the environment (for backwards compatibility).
-    pub fn env(&self) -> &ScriptEnvironment {
-        &self.executor.env
-    }
-
-    /// Get a value binding's location by name.
-    ///
-    /// Returns (unit_index, value_id) if found.
-    pub fn get_value_binding(&self, name: &str) -> Option<(u32, datalove_datafun_ir::ValueId)> {
-        self.executor.script_ctx.values.get(name).cloned()
-    }
-
-    /// Get a slot binding's location by name.
-    ///
-    /// Returns (unit_index, slot_id) if found.
-    pub fn get_slot_binding(&self, name: &str) -> Option<(u32, datalove_datafun_ir::SlotId)> {
-        self.executor.script_ctx.slots.get(name).cloned()
     }
 }

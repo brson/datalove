@@ -105,8 +105,16 @@ fn run_with_chaos_interp(
         }
     };
 
-    let Some(mut ctx) = compiled.script_context(
-        db,
+    let Some(mut compiler) = compiled.script_compiler(db) else {
+        return RunResult {
+            compiled: true,
+            debuglog: String::new(),
+            success: false,
+            error: Some("Module compilation failed".to_string()),
+        };
+    };
+
+    let Some(mut executor) = compiled.script_executor(
         datalove_rt::c::DebugOutputMode::Buffer,
         Some(Box::new(chaos)),
     ) else {
@@ -124,25 +132,28 @@ fn run_with_chaos_interp(
 
     for section in &parsed.sections {
         if let WorldfileSection::ScriptFragment { source } = section {
-            ctx.clear_debug_buffer();
-            let result = ctx.eval_fragment(source);
+            executor.clear_debug_buffer();
+            let compiled_unit = compiler.compile_fragment(source, false);
+            if let Some(ir_unit) = &compiled_unit.ir_unit {
+                executor.execute_fragment(ir_unit);
+            }
 
-            debuglog.push_str(&ctx.get_debug_buffer());
+            debuglog.push_str(&executor.get_debug_buffer());
 
-            if matches!(result.typecheck, datafun::pipeline::TypecheckResult::Error { .. }) {
+            if matches!(compiled_unit.typecheck, datafun::pipeline::TypecheckResult::Error { .. }) {
                 success = false;
-                error = Some(format!("Script typecheck error: {:?}", result.typecheck));
+                error = Some(format!("Script typecheck error: {:?}", compiled_unit.typecheck));
                 break;
             }
-            if matches!(result.lowering, datafun::pipeline::LoweringResult::Error { .. }) {
+            if matches!(compiled_unit.lowering, datafun::pipeline::LoweringResult::Error { .. }) {
                 success = false;
-                error = Some(format!("Script lowering error: {:?}", result.lowering));
+                error = Some(format!("Script lowering error: {:?}", compiled_unit.lowering));
                 break;
             }
         }
     }
 
-    ctx.destroy_all();
+    executor.destroy_all();
 
     RunResult {
         compiled: true,
@@ -217,8 +228,8 @@ fn run_with_aot(
         }
     };
 
-    // Lower for AOT.
-    let Some(mut ctx) = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Disabled, None) else {
+    // Compile for AOT.
+    let Some(mut compiler) = compiled.script_compiler(db) else {
         return RunResult {
             compiled: true,
             debuglog: String::new(),
@@ -226,32 +237,29 @@ fn run_with_aot(
             error: Some("Module compilation failed".to_string()),
         };
     };
-    let lower_result = ctx.lower_fragment_for_aot(fragment_source);
+    let compiled_unit = compiler.compile_fragment(fragment_source, true);
 
-    if !matches!(lower_result.typecheck, datafun::pipeline::TypecheckResult::Success) {
-        ctx.destroy_all();
+    if !matches!(compiled_unit.typecheck, datafun::pipeline::TypecheckResult::Success) {
         return RunResult {
             compiled: false,
             debuglog: String::new(),
             success: false,
-            error: Some(format!("Script typecheck error: {:?}", lower_result.typecheck)),
+            error: Some(format!("Script typecheck error: {:?}", compiled_unit.typecheck)),
         };
     }
 
-    if !matches!(lower_result.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
-        ctx.destroy_all();
+    if !matches!(compiled_unit.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
         return RunResult {
             compiled: false,
             debuglog: String::new(),
             success: false,
-            error: Some(format!("Script lowering error: {:?}", lower_result.lowering)),
+            error: Some(format!("Script lowering error: {:?}", compiled_unit.lowering)),
         };
     }
 
-    let ir_unit = match lower_result.ir_unit {
+    let ir_unit = match compiled_unit.ir_unit {
         Some(unit) => unit,
         None => {
-            ctx.destroy_all();
             return RunResult {
                 compiled: false,
                 debuglog: String::new(),
@@ -262,9 +270,8 @@ fn run_with_aot(
     };
 
     // AOT compile.
-    let result = aot_compile_link_run(&ir_unit, &ctx.env().registry);
-    ctx.destroy_all();
-    result
+    let registry = compiled.module_registry();
+    aot_compile_link_run(&ir_unit, &registry)
 }
 
 /// AOT compile, link, and run an IR unit.

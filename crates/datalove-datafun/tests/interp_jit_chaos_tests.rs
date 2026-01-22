@@ -13,6 +13,7 @@ use std::hash::{Hash, Hasher};
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection, ParsedWorldfile};
 use datalove_datafun_jit::{JitEngine, ChaosDispatcher};
+use datalove_datafun_interp::CallDispatcher;
 use datafun::pipeline::ModuleCompilationPipeline;
 
 /// Simplified result for comparison.
@@ -23,10 +24,11 @@ struct UnitOutput {
     had_error: bool,
 }
 
-/// Run a worldfile with pure interpreter (no JIT).
-fn run_with_interpreter(
+/// Run a worldfile with optional call dispatcher (interpreter, JIT, or chaos).
+fn run_worldfile(
     db: &datafun::Database,
     parsed: &ParsedWorldfile,
+    call_dispatcher: Option<Box<dyn CallDispatcher>>,
 ) -> Vec<UnitOutput> {
     let mut results = Vec::new();
 
@@ -42,8 +44,16 @@ fn run_with_interpreter(
         return results;
     }
 
-    // No call dispatcher - pure interpreter.
-    let Some(mut ctx) = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, None) else {
+    let Some(mut compiler) = compiled.script_compiler(db) else {
+        results.push(UnitOutput {
+            section_type: "compilation".into(),
+            output: "error".into(),
+            had_error: true,
+        });
+        return results;
+    };
+
+    let Some(mut executor) = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, call_dispatcher) else {
         results.push(UnitOutput {
             section_type: "compilation".into(),
             output: "error".into(),
@@ -61,30 +71,49 @@ fn run_with_interpreter(
             | WorldfileSection::ModuleChangeAst { .. }
             | WorldfileSection::ModuleChangeTy { .. } => {}
             WorldfileSection::ScriptFragment { source } => {
-                ctx.clear_debug_buffer();
-                let unit_result = ctx.eval_fragment(source);
+                executor.clear_debug_buffer();
+                let compiled_unit = compiler.compile_fragment(source, false);
+                let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+                    executor.execute_fragment(ir_unit)
+                } else {
+                    String::new()
+                };
                 results.push(UnitOutput {
                     section_type: "scriptunit-fragment".into(),
-                    output: unit_result.output.clone(),
-                    had_error: matches!(unit_result.typecheck, datafun::pipeline::TypecheckResult::Error { .. })
-                        || matches!(unit_result.lowering, datafun::pipeline::LoweringResult::Error { .. }),
+                    output,
+                    had_error: matches!(compiled_unit.typecheck, datafun::pipeline::TypecheckResult::Error { .. })
+                        || matches!(compiled_unit.lowering, datafun::pipeline::LoweringResult::Error { .. }),
                 });
             }
             WorldfileSection::ScriptExpr { source } => {
-                ctx.clear_debug_buffer();
-                let unit_result = ctx.eval_expr(source);
+                executor.clear_debug_buffer();
+                let compiled_unit = compiler.compile_expr(source);
+                let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+                    let (_, value) = executor.execute_expr(ir_unit);
+                    value
+                } else {
+                    String::new()
+                };
                 results.push(UnitOutput {
                     section_type: "scriptunit-expr".into(),
-                    output: unit_result.output.clone(),
-                    had_error: matches!(unit_result.typecheck, datafun::pipeline::TypecheckResult::Error { .. })
-                        || matches!(unit_result.lowering, datafun::pipeline::LoweringResult::Error { .. }),
+                    output,
+                    had_error: matches!(compiled_unit.typecheck, datafun::pipeline::TypecheckResult::Error { .. })
+                        || matches!(compiled_unit.lowering, datafun::pipeline::LoweringResult::Error { .. }),
                 });
             }
         }
     }
 
-    ctx.destroy_all();
+    executor.destroy_all();
     results
+}
+
+/// Run a worldfile with pure interpreter (no JIT).
+fn run_with_interpreter(
+    db: &datafun::Database,
+    parsed: &ParsedWorldfile,
+) -> Vec<UnitOutput> {
+    run_worldfile(db, parsed, None)
 }
 
 /// Run a worldfile with JIT (threshold=1, compile immediately).
@@ -92,63 +121,8 @@ fn run_with_jit(
     db: &datafun::Database,
     parsed: &ParsedWorldfile,
 ) -> Vec<UnitOutput> {
-    let mut results = Vec::new();
-
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
-    let compiled = pipeline.compile_fresh(db);
-
-    if compiled.resolution_error.is_some() {
-        results.push(UnitOutput {
-            section_type: "resolution".into(),
-            output: "error".into(),
-            had_error: true,
-        });
-        return results;
-    }
-
     let jit = JitEngine::new(1).expect("JitEngine creation failed");
-    let Some(mut ctx) = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, Some(Box::new(jit))) else {
-        results.push(UnitOutput {
-            section_type: "compilation".into(),
-            output: "error".into(),
-            had_error: true,
-        });
-        return results;
-    };
-
-    for section in &parsed.sections {
-        match section {
-            WorldfileSection::Module { .. } => {}
-            WorldfileSection::ModuleAdd { .. }
-            | WorldfileSection::ModuleRemove { .. }
-            | WorldfileSection::ModuleChangeWs { .. }
-            | WorldfileSection::ModuleChangeAst { .. }
-            | WorldfileSection::ModuleChangeTy { .. } => {}
-            WorldfileSection::ScriptFragment { source } => {
-                ctx.clear_debug_buffer();
-                let unit_result = ctx.eval_fragment(source);
-                results.push(UnitOutput {
-                    section_type: "scriptunit-fragment".into(),
-                    output: unit_result.output.clone(),
-                    had_error: matches!(unit_result.typecheck, datafun::pipeline::TypecheckResult::Error { .. })
-                        || matches!(unit_result.lowering, datafun::pipeline::LoweringResult::Error { .. }),
-                });
-            }
-            WorldfileSection::ScriptExpr { source } => {
-                ctx.clear_debug_buffer();
-                let unit_result = ctx.eval_expr(source);
-                results.push(UnitOutput {
-                    section_type: "scriptunit-expr".into(),
-                    output: unit_result.output.clone(),
-                    had_error: matches!(unit_result.typecheck, datafun::pipeline::TypecheckResult::Error { .. })
-                        || matches!(unit_result.lowering, datafun::pipeline::LoweringResult::Error { .. }),
-                });
-            }
-        }
-    }
-
-    ctx.destroy_all();
-    results
+    run_worldfile(db, parsed, Some(Box::new(jit)))
 }
 
 /// Run a worldfile with chaos JIT.
@@ -157,63 +131,8 @@ fn run_with_chaos(
     parsed: &ParsedWorldfile,
     seed: u64,
 ) -> Vec<UnitOutput> {
-    let mut results = Vec::new();
-
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
-    let compiled = pipeline.compile_fresh(db);
-
-    if compiled.resolution_error.is_some() {
-        results.push(UnitOutput {
-            section_type: "resolution".into(),
-            output: "error".into(),
-            had_error: true,
-        });
-        return results;
-    }
-
     let chaos = ChaosDispatcher::new(seed, 75, 50).expect("ChaosDispatcher creation failed");
-    let Some(mut ctx) = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, Some(Box::new(chaos))) else {
-        results.push(UnitOutput {
-            section_type: "compilation".into(),
-            output: "error".into(),
-            had_error: true,
-        });
-        return results;
-    };
-
-    for section in &parsed.sections {
-        match section {
-            WorldfileSection::Module { .. } => {}
-            WorldfileSection::ModuleAdd { .. }
-            | WorldfileSection::ModuleRemove { .. }
-            | WorldfileSection::ModuleChangeWs { .. }
-            | WorldfileSection::ModuleChangeAst { .. }
-            | WorldfileSection::ModuleChangeTy { .. } => {}
-            WorldfileSection::ScriptFragment { source } => {
-                ctx.clear_debug_buffer();
-                let unit_result = ctx.eval_fragment(source);
-                results.push(UnitOutput {
-                    section_type: "scriptunit-fragment".into(),
-                    output: unit_result.output.clone(),
-                    had_error: matches!(unit_result.typecheck, datafun::pipeline::TypecheckResult::Error { .. })
-                        || matches!(unit_result.lowering, datafun::pipeline::LoweringResult::Error { .. }),
-                });
-            }
-            WorldfileSection::ScriptExpr { source } => {
-                ctx.clear_debug_buffer();
-                let unit_result = ctx.eval_expr(source);
-                results.push(UnitOutput {
-                    section_type: "scriptunit-expr".into(),
-                    output: unit_result.output.clone(),
-                    had_error: matches!(unit_result.typecheck, datafun::pipeline::TypecheckResult::Error { .. })
-                        || matches!(unit_result.lowering, datafun::pipeline::LoweringResult::Error { .. }),
-                });
-            }
-        }
-    }
-
-    ctx.destroy_all();
-    results
+    run_worldfile(db, parsed, Some(Box::new(chaos)))
 }
 
 /// Compute a hash of the file contents for reproducible randomness.

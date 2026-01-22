@@ -106,11 +106,11 @@ pub fn analyze_worldfile(
         }
     }
 
-    // Create script compilation context with Buffer mode for capturing debuglog output.
-    // Returns None if module compilation failed.
-    let mut ctx = compiled.script_context(db, datalove_rt::c::DebugOutputMode::Buffer, None);
+    // Create script compiler and executor with Buffer mode for capturing debuglog output.
+    let mut compiler = compiled.script_compiler(db);
+    let mut executor = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, None);
 
-    // Process script units using the context.
+    // Process script units using the compiler and executor.
     for section in &parsed.sections {
         match section {
             WorldfileSection::Module { .. } => {
@@ -124,18 +124,25 @@ pub fn analyze_worldfile(
                 // Module action sections are for memo tests only.
             }
             WorldfileSection::ScriptFragment { source } => {
-                if let Some(ref mut ctx) = ctx {
+                if let (Some(compiler), Some(executor)) = (&mut compiler, &mut executor) {
                     // Clear debug buffer before execution.
-                    ctx.clear_debug_buffer();
-                    let unit_result = ctx.eval_fragment(source);
+                    executor.clear_debug_buffer();
+                    // Compile the fragment.
+                    let compiled_unit = compiler.compile_fragment(source, false);
+                    // Execute if compilation succeeded.
+                    let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+                        executor.execute_fragment(ir_unit)
+                    } else {
+                        String::new()
+                    };
                     // Capture debug output.
-                    let debug_output = ctx.get_debug_buffer();
+                    let debug_output = executor.get_debug_buffer();
                     results.push(SectionResult {
                         section_type: "scriptunit-fragment".S(),
                         name: None,
-                        typecheck: unit_result.typecheck,
-                        lowering: unit_result.lowering,
-                        output: unit_result.output,
+                        typecheck: compiled_unit.typecheck,
+                        lowering: compiled_unit.lowering,
+                        output,
                         debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
                     });
                 } else {
@@ -151,18 +158,26 @@ pub fn analyze_worldfile(
                 }
             }
             WorldfileSection::ScriptExpr { source } => {
-                if let Some(ref mut ctx) = ctx {
+                if let (Some(compiler), Some(executor)) = (&mut compiler, &mut executor) {
                     // Clear debug buffer before execution.
-                    ctx.clear_debug_buffer();
-                    let unit_result = ctx.eval_expr(source);
+                    executor.clear_debug_buffer();
+                    // Compile the expression.
+                    let compiled_unit = compiler.compile_expr(source);
+                    // Execute if compilation succeeded.
+                    let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+                        let (_, value) = executor.execute_expr(ir_unit);
+                        value
+                    } else {
+                        String::new()
+                    };
                     // Capture debug output.
-                    let debug_output = ctx.get_debug_buffer();
+                    let debug_output = executor.get_debug_buffer();
                     results.push(SectionResult {
                         section_type: "scriptunit-expr".S(),
                         name: None,
-                        typecheck: unit_result.typecheck,
-                        lowering: unit_result.lowering,
-                        output: unit_result.output,
+                        typecheck: compiled_unit.typecheck,
+                        lowering: compiled_unit.lowering,
+                        output,
                         debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
                     });
                 } else {
@@ -181,8 +196,8 @@ pub fn analyze_worldfile(
     }
 
     // Cleanup.
-    if let Some(ref mut ctx) = ctx {
-        ctx.destroy_all();
+    if let Some(ref mut executor) = executor {
+        executor.destroy_all();
     }
 
     Ok(Analysis { sections: results })

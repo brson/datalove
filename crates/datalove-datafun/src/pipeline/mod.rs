@@ -7,9 +7,10 @@
 //! 1. **Module compilation** ([`ModuleCompilationPipeline`]): Parses, typechecks,
 //!    analyzes drops, and lowers modules to IR. Produces [`CompiledModules`].
 //!
-//! 2. **Script execution** ([`ScriptCompilationContext`]): Incrementally compiles
-//!    and executes script fragments against the compiled modules. Multiple
-//!    independent script contexts can share the same module compilation.
+//! 2. **Script compilation and execution** ([`ScriptCompiler`] and [`ScriptExecutor`]):
+//!    Incrementally compiles script fragments with `ScriptCompiler`, then executes
+//!    them with `ScriptExecutor`. Multiple independent contexts can share the same
+//!    module compilation.
 //!
 //! # Example
 //!
@@ -19,11 +20,14 @@
 //! pipeline.add_module(&db, "local", "mypackage", "main", source);
 //! let compiled = pipeline.compile_fresh(&db);
 //!
-//! // Stage 2: run scripts (only if compilation succeeded).
-//! let mut ctx = compiled.script_context(&db, DebugOutputMode::Stderr, None)
-//!     .expect("module compilation succeeded");
-//! ctx.eval_fragment("let x = 42");
-//! ctx.eval_expr("x + 1");
+//! // Stage 2: compile and run scripts (only if compilation succeeded).
+//! let mut compiler = compiled.script_compiler(&db).expect("compilation succeeded");
+//! let mut executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
+//!
+//! let result = compiler.compile_fragment("let x = 42", false);
+//! if let Some(ir_unit) = &result.ir_unit {
+//!     executor.execute_fragment(ir_unit);
+//! }
 //! ```
 //!
 //! # Incremental Compilation
@@ -53,8 +57,6 @@ pub mod aot;
 // Re-export main types.
 pub use result::{TypecheckResult, LoweringResult, format_lowering_result, ScriptUnitResult, ScriptLowerResult, ScriptCompilationResult};
 pub use compiled_modules::{SharedModuleContext, CompiledModules};
-#[allow(deprecated)]
-pub use script_context::ScriptCompilationContext;
 pub use script_context::{ScriptCompiler, ScriptExecutor};
 pub use module_pipeline::ModuleCompilationPipeline;
 

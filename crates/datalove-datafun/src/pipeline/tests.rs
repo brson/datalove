@@ -5,6 +5,54 @@ fn make_db() -> crate::Database {
     crate::Database::default()
 }
 
+/// Helper struct that wraps compiler and executor for tests.
+struct TestContext<'db> {
+    compiler: ScriptCompiler<'db>,
+    executor: ScriptExecutor,
+}
+
+impl<'db> TestContext<'db> {
+    fn new(compiled: &CompiledModules<'db>, db: &'db dyn salsa::Database) -> Self {
+        let compiler = compiled.script_compiler(db).unwrap();
+        let executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
+        Self { compiler, executor }
+    }
+
+    fn eval_fragment(&mut self, source: &str) -> ScriptUnitResult {
+        let compiled = self.compiler.compile_fragment(source, false);
+        let output = if let Some(ir_unit) = &compiled.ir_unit {
+            self.executor.execute_fragment(ir_unit)
+        } else {
+            String::new()
+        };
+        ScriptUnitResult {
+            typecheck: compiled.typecheck,
+            lowering: compiled.lowering,
+            ty: None,
+            output,
+        }
+    }
+
+    fn eval_expr(&mut self, source: &str) -> ScriptUnitResult {
+        let compiled = self.compiler.compile_expr(source);
+        let (ty, output) = if let Some(ir_unit) = &compiled.ir_unit {
+            self.executor.execute_expr(ir_unit)
+        } else {
+            (None, String::new())
+        };
+        ScriptUnitResult {
+            typecheck: compiled.typecheck,
+            lowering: compiled.lowering,
+            ty,
+            output,
+        }
+    }
+
+    fn destroy_all(&mut self) {
+        self.executor.destroy_all();
+    }
+}
+
 /// Test creating multiple script contexts from the same compiled modules.
 #[test]
 fn test_multiple_script_contexts() {
@@ -16,12 +64,12 @@ fn test_multiple_script_contexts() {
     assert!(compiled.is_successful(), "compilation should succeed");
 
     // Create first script context.
-    let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+    let mut ctx1 = TestContext::new(&compiled, &db);
     let result1 = ctx1.eval_fragment("let x = 10");
     assert!(matches!(result1.typecheck, TypecheckResult::Success), "ctx1 fragment should typecheck");
 
     // Create second script context from the same compiled modules.
-    let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+    let mut ctx2 = TestContext::new(&compiled, &db);
     let result2 = ctx2.eval_fragment("let y = 20");
     assert!(matches!(result2.typecheck, TypecheckResult::Success), "ctx2 fragment should typecheck");
 
@@ -52,8 +100,8 @@ fn test_interleaved_execution() {
     let compiled = pipeline.compile_fresh(&db);
     assert!(compiled.is_successful());
 
-    let mut ctx_a = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
-    let mut ctx_b = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+    let mut ctx_a = TestContext::new(&compiled, &db);
+    let mut ctx_b = TestContext::new(&compiled, &db);
 
     // Define simple identity functions in each context.
     let r1 = ctx_a.eval_fragment("fun id_a(n: u32): u32\n  ret n\nend fun");
@@ -132,25 +180,41 @@ end fun
                 // Use the cloned database for this thread.
                 let db_ref = db_clone.as_salsa_db();
 
-                // Create a script context from the shared compiled modules.
-                let mut ctx = compiled.script_context(db_ref, DebugOutputMode::Disabled, None).unwrap();
+                // Create compiler and executor from the shared compiled modules.
+                let mut compiler = compiled.script_compiler(db_ref).unwrap();
+                let mut executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
 
                 // Import and use the shared module function.
-                let r = ctx.eval_fragment("require module local/pkg/math\nimport math.square");
-                assert!(matches!(r.typecheck, TypecheckResult::Success),
-                    "import failed: {:?}", r.typecheck);
+                let compiled_unit = compiler.compile_fragment("require module local/pkg/math\nimport math.square", false);
+                assert!(matches!(compiled_unit.typecheck, TypecheckResult::Success),
+                    "import failed: {:?}", compiled_unit.typecheck);
+                if let Some(ir_unit) = &compiled_unit.ir_unit {
+                    executor.execute_fragment(ir_unit);
+                }
 
                 // Define local variable and compute.
                 let val = (i + 1) * 10;
-                let _ = ctx.eval_fragment(&format!("let n: int = {}", val));
-                let _ = ctx.eval_fragment("let result = square(n)");
+                let compiled_unit = compiler.compile_fragment(&format!("let n: int = {}", val), false);
+                if let Some(ir_unit) = &compiled_unit.ir_unit {
+                    executor.execute_fragment(ir_unit);
+                }
+                let compiled_unit = compiler.compile_fragment("let result = square(n)", false);
+                if let Some(ir_unit) = &compiled_unit.ir_unit {
+                    executor.execute_fragment(ir_unit);
+                }
 
-                let result = ctx.eval_expr("result");
-                ctx.destroy_all();
+                let compiled_unit = compiler.compile_expr("result");
+                let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+                    let (_, value) = executor.execute_expr(ir_unit);
+                    value
+                } else {
+                    String::new()
+                };
+                executor.destroy_all();
 
                 let expected = val * val;
-                assert_eq!(result.output, format!("{}", expected),
-                    "thread {} expected {} but got {}", i, expected, result.output);
+                assert_eq!(output, format!("{}", expected),
+                    "thread {} expected {} but got {}", i, expected, output);
                 results.lock().unwrap().push((i, expected));
             });
         }
@@ -181,7 +245,7 @@ end fun
 
     // First run: import and call module function.
     {
-        let mut ctx = compiled1.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+        let mut ctx = TestContext::new(&compiled1, &db);
         let r = ctx.eval_fragment("require module local/pkg/v1\nimport v1.value");
         assert!(matches!(r.typecheck, TypecheckResult::Success), "import failed: {:?}", r.typecheck);
         let result = ctx.eval_expr("value(100)");
@@ -191,7 +255,7 @@ end fun
 
     // Create a second context from the same compilation.
     {
-        let mut ctx2 = compiled1.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+        let mut ctx2 = TestContext::new(&compiled1, &db);
         let r = ctx2.eval_fragment("require module local/pkg/v1\nimport v1.value");
         assert!(matches!(r.typecheck, TypecheckResult::Success), "second import failed: {:?}", r.typecheck);
         let result = ctx2.eval_expr("value(200)");
@@ -209,8 +273,8 @@ fn test_isolated_unit_functions() {
     let compiled = pipeline.compile_fresh(&db);
     assert!(compiled.is_successful());
 
-    let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
-    let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+    let mut ctx1 = TestContext::new(&compiled, &db);
+    let mut ctx2 = TestContext::new(&compiled, &db);
 
     // Define functions with the same name returning different values.
     let r1_def = ctx1.eval_fragment("fun local_fn(x: u32): u32\n  ret 10\nend fun");
@@ -243,7 +307,7 @@ fn test_many_script_contexts() {
 
     // Create many contexts.
     for i in 0..20u32 {
-        let mut ctx = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+        let mut ctx = TestContext::new(&compiled, &db);
         let r = ctx.eval_fragment("fun id(x: u32): u32\n  ret x\nend fun");
         assert!(matches!(r.typecheck, TypecheckResult::Success), "fn def failed: {:?}", r.typecheck);
         let result = ctx.eval_expr(&format!("id({})", i));
@@ -268,8 +332,8 @@ end fun
     assert!(compiled.is_successful(), "compilation failed: {:?}", compiled.all_errors());
 
     // Create two contexts that both use the module function.
-    let mut ctx1 = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
-    let mut ctx2 = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+    let mut ctx1 = TestContext::new(&compiled, &db);
+    let mut ctx2 = TestContext::new(&compiled, &db);
 
     // Both contexts import and use the module function.
     let r1 = ctx1.eval_fragment("require module local/pkg/math\nimport math.id");
@@ -299,7 +363,7 @@ fn test_per_unit_memoization_behavior() {
     let db = make_db();
     let mut pipeline = ModuleCompilationPipeline::new();
     let compiled = pipeline.compile_fresh(&db);
-    let mut ctx = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+    let mut ctx = TestContext::new(&compiled, &db);
 
     // Unit 1: define x.
     let r1 = ctx.eval_fragment("let x: u32 = 10");
@@ -333,7 +397,7 @@ fn test_per_unit_function_propagation() {
     let db = make_db();
     let mut pipeline = ModuleCompilationPipeline::new();
     let compiled = pipeline.compile_fresh(&db);
-    let mut ctx = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+    let mut ctx = TestContext::new(&compiled, &db);
 
     // Unit 1: define an identity function.
     let r1 = ctx.eval_fragment("fun id(n: u32): u32\n  ret n\nend fun");
@@ -370,7 +434,7 @@ fn test_per_unit_lowering_memoization() {
     let db = make_db();
     let mut pipeline = ModuleCompilationPipeline::new();
     let compiled = pipeline.compile_fresh(&db);
-    let mut ctx = compiled.script_context(&db, DebugOutputMode::Disabled, None).unwrap();
+    let mut ctx = TestContext::new(&compiled, &db);
 
     // Unit 1: define a function that returns a list (ownership implications).
     let r1 = ctx.eval_fragment("fun make_list(n: u32): [u32]\n  ret [n, n]\nend fun");

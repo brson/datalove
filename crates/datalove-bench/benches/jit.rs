@@ -2,6 +2,7 @@
 
 use datalove_datafun as datafun;
 use datalove_datafun_jit::JitEngine;
+use datalove_datafun_interp::CallDispatcher;
 use datafun::pipeline::ModuleCompilationPipeline;
 
 fn main() {
@@ -39,20 +40,28 @@ let n = 100000
 debuglog run_many(repeat, n)
 "#;
 
-/// Run the benchmark without JIT (interpreter only).
-fn run_without_jit() {
+/// Run the benchmark with optional call dispatcher.
+fn run_benchmark(call_dispatcher: Option<Box<dyn CallDispatcher>>) {
     let db = datafun::Database::default();
     let mut pipeline = ModuleCompilationPipeline::new();
     let compiled = pipeline.compile_fresh(&db);
 
-    let mut ctx = compiled.script_context(
-        &db,
+    let mut compiler = compiled.script_compiler(&db).unwrap();
+    let mut executor = compiled.script_executor(
         datafun::DebugOutputMode::Disabled,
-        None, // No JIT
-    );
+        call_dispatcher,
+    ).unwrap();
 
-    let _result = ctx.eval_fragment(JITBENCH_SOURCE);
-    ctx.destroy_all();
+    let compiled_unit = compiler.compile_fragment(JITBENCH_SOURCE, false);
+    if let Some(ir_unit) = &compiled_unit.ir_unit {
+        executor.execute_fragment(ir_unit);
+    }
+    executor.destroy_all();
+}
+
+/// Run the benchmark without JIT (interpreter only).
+fn run_without_jit() {
+    run_benchmark(None);
 }
 
 /// Run the benchmark with JIT enabled.
@@ -60,19 +69,8 @@ fn run_without_jit() {
 /// Must be called from a spawned thread due to Cranelift JIT limitations
 /// with PIE binaries.
 fn run_with_jit() {
-    let db = datafun::Database::default();
-    let mut pipeline = ModuleCompilationPipeline::new();
-    let compiled = pipeline.compile_fresh(&db);
-
     let jit = JitEngine::new(1).expect("JitEngine creation failed");
-    let mut ctx = compiled.script_context(
-        &db,
-        datafun::DebugOutputMode::Disabled,
-        Some(Box::new(jit)),
-    );
-
-    let _result = ctx.eval_fragment(JITBENCH_SOURCE);
-    ctx.destroy_all();
+    run_benchmark(Some(Box::new(jit)));
 }
 
 #[divan::bench]

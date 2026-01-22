@@ -410,60 +410,55 @@ impl ScriptCommand {
             None
         };
 
-        // Create script compilation context with Stderr mode for debuglog output.
+        // Create script compiler and executor with Stderr mode for debuglog output.
         // Safe to unwrap since we checked has_errors() above.
-        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, call_dispatcher)
-            .expect("script_context should succeed after error check");
+        let mut compiler = compiled.script_compiler(&db)
+            .expect("script_compiler should succeed after error check");
+        let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, call_dispatcher)
+            .expect("script_executor should succeed after error check");
 
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(file_path)
             .with_context(|| format!("Failed to read script file: {}", file_path.display()))?;
 
-        // Execute the script as a fragment.
-        let result = ctx.eval_fragment(&script_source);
+        // Compile the script as a fragment.
+        let compiled_unit = compiler.compile_fragment(&script_source, false);
 
         // Check for errors and render diagnostics.
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
-        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &result.typecheck {
-            let parse_diags = ctx.get_parse_diagnostics();
-            render::render_parse_diagnostics(ctx.db(), &parse_diags, file_path, &cwd);
+        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &compiled_unit.typecheck {
+            let parse_diags = compiler.get_parse_diagnostics();
+            render::render_parse_diagnostics(compiler.db(), &parse_diags, file_path, &cwd);
             bail!("Parse error");
         }
-        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &result.typecheck {
-            let type_diags = ctx.get_type_diagnostics();
-            render::render_type_diagnostics(ctx.db(), &type_diags, file_path, &cwd);
+        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &compiled_unit.typecheck {
+            let type_diags = compiler.get_type_diagnostics();
+            render::render_type_diagnostics(compiler.db(), &type_diags, file_path, &cwd);
             bail!("Type error");
         }
-        if let datafun::pipeline::LoweringResult::Error { message } = &result.lowering {
+        if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }
-        if result.output.starts_with("Error:") {
-            bail!("{}", result.output);
+
+        // Execute the compiled unit.
+        let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+            executor.execute_fragment(ir_unit)
+        } else {
+            String::new()
+        };
+        if output.starts_with("Error:") {
+            bail!("{}", output);
         }
 
         // Look up the "output" binding from the exports.
-        // After eval_fragment, the exports are in script_ctx and the frame is stored.
-        if let Some((unit_idx, value_id)) = ctx.get_value_binding("output") {
-            // It's a let binding - read value from frame.
-            let value = ctx.env().frames.external_value(unit_idx, value_id)
-                .map_err(|e| anyhow!("Failed to read output value: {:?}", e))?;
-            let mut interp = datalove_datafun_interp::IrInterpreter::new();
-            let output_str = interp.pretty_print_value(&value)
-                .map_err(|e| anyhow!("Failed to pretty print output: {:?}", e))?;
-            println!("{}", output_str);
-        } else if let Some((unit_idx, slot_id)) = ctx.get_slot_binding("output") {
-            // It's a var binding - read slot from frame.
-            let value = ctx.env().frames.external_slot(unit_idx, slot_id)
-                .map_err(|e| anyhow!("Failed to read output slot: {:?}", e))?;
-            let mut interp = datalove_datafun_interp::IrInterpreter::new();
-            let output_str = interp.pretty_print_value(&value)
-                .map_err(|e| anyhow!("Failed to pretty print output: {:?}", e))?;
-            println!("{}", output_str);
+        if let Some((ty, value)) = executor.get_binding("output") {
+            let _ = ty; // Type not needed for display.
+            println!("{}", value);
         }
         // No output binding found - this is okay, just don't print anything.
 
         // Cleanup.
-        ctx.destroy_all();
+        executor.destroy_all();
 
         Ok(())
     }
@@ -491,41 +486,40 @@ impl ScriptIrCommand {
             bail!("Compilation failed with {} error(s):\n{}", errors.len(), errors.join("\n"));
         }
 
-        // Create script compilation context.
+        // Create script compiler.
         // Safe to unwrap since we checked has_errors() above.
-        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None)
-            .expect("script_context should succeed after error check");
+        let mut compiler = compiled.script_compiler(&db)
+            .expect("script_compiler should succeed after error check");
 
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(&self.file_path)
             .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
 
-        // Lower to IR for AOT (emits drops for script-level bindings).
-        let lower_result = ctx.lower_fragment_for_aot(&script_source);
+        // Compile to IR for AOT (for_aot=true emits drops for script-level bindings).
+        let compiled_unit = compiler.compile_fragment(&script_source, true);
 
         // Check for errors and render diagnostics.
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
-        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &lower_result.typecheck {
-            let parse_diags = ctx.get_parse_diagnostics();
-            render::render_parse_diagnostics(ctx.db(), &parse_diags, &self.file_path, &cwd);
+        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &compiled_unit.typecheck {
+            let parse_diags = compiler.get_parse_diagnostics();
+            render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &cwd);
             bail!("Parse error");
         }
-        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &lower_result.typecheck {
-            let type_diags = ctx.get_type_diagnostics();
-            render::render_type_diagnostics(ctx.db(), &type_diags, &self.file_path, &cwd);
+        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &compiled_unit.typecheck {
+            let type_diags = compiler.get_type_diagnostics();
+            render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
             bail!("Type error");
         }
-        if let datafun::pipeline::LoweringResult::Error { message } = &lower_result.lowering {
+        if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }
 
         // Get the IR unit and print it.
-        let ir_unit = lower_result.ir_unit
+        let ir_unit = compiled_unit.ir_unit
             .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
 
         println!("{}", ir_unit);
 
-        ctx.destroy_all();
         Ok(())
     }
 }
@@ -552,43 +546,44 @@ impl AotCompileCommand {
             bail!("Compilation failed with {} error(s):\n{}", errors.len(), errors.join("\n"));
         }
 
-        // Create script compilation context.
+        // Create script compiler and get registry for AOT.
         // Safe to unwrap since we checked has_errors() above.
-        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None)
-            .expect("script_context should succeed after error check");
+        let mut compiler = compiled.script_compiler(&db)
+            .expect("script_compiler should succeed after error check");
+        let registry = compiled.module_registry();
 
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(&self.file_path)
             .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
 
-        // Lower to IR for AOT (emits drops for script-level bindings).
-        let lower_result = ctx.lower_fragment_for_aot(&script_source);
+        // Compile to IR for AOT (for_aot=true emits drops for script-level bindings).
+        let compiled_unit = compiler.compile_fragment(&script_source, true);
 
         // Check for errors and render diagnostics.
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
-        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &lower_result.typecheck {
-            let parse_diags = ctx.get_parse_diagnostics();
-            render::render_parse_diagnostics(ctx.db(), &parse_diags, &self.file_path, &cwd);
+        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &compiled_unit.typecheck {
+            let parse_diags = compiler.get_parse_diagnostics();
+            render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &cwd);
             bail!("Parse error");
         }
-        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &lower_result.typecheck {
-            let type_diags = ctx.get_type_diagnostics();
-            render::render_type_diagnostics(ctx.db(), &type_diags, &self.file_path, &cwd);
+        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &compiled_unit.typecheck {
+            let type_diags = compiler.get_type_diagnostics();
+            render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
             bail!("Type error");
         }
-        if let datafun::pipeline::LoweringResult::Error { message } = &lower_result.lowering {
+        if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }
 
         // Get the IR unit.
-        let ir_unit = lower_result.ir_unit
+        let ir_unit = compiled_unit.ir_unit
             .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
 
         // Compile to object bytes using pipeline::aot.
         let obj_bytes = aot::compile_script_to_object_with_world(
             &ir_unit,
-            ctx.env().registry.iter_all_functions(),
-            &ctx.env().registry,
+            registry.iter_all_functions(),
+            &registry,
         )?;
 
         // --run implies --link.
@@ -636,7 +631,6 @@ impl AotCompileCommand {
             println!("Wrote object file: {}", output_path.display());
         }
 
-        ctx.destroy_all();
         Ok(())
     }
 }
@@ -693,48 +687,63 @@ impl ScriptWorldCommand {
             bail!("Module compilation error");
         }
 
-        // Create script compilation context.
+        // Create script compiler and executor.
         // Safe to unwrap since we checked has_errors() above.
-        let mut ctx = compiled.script_context(&db, datafun::DebugOutputMode::Stderr, None)
-            .expect("script_context should succeed after error check");
+        let mut compiler = compiled.script_compiler(&db)
+            .expect("script_compiler should succeed after error check");
+        let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, None)
+            .expect("script_executor should succeed after error check");
 
-        // Execute the script section.
+        // Compile and execute the script section.
         let script_section = script_sections[0];
-        let result = match script_section {
+        let (compiled_unit, output) = match script_section {
             WorldfileSection::ScriptFragment { source } => {
-                ctx.eval_fragment(source)
+                let compiled_unit = compiler.compile_fragment(source, false);
+                let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+                    executor.execute_fragment(ir_unit)
+                } else {
+                    String::new()
+                };
+                (compiled_unit, output)
             }
             WorldfileSection::ScriptExpr { source } => {
-                ctx.eval_expr(source)
+                let compiled_unit = compiler.compile_expr(source);
+                let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+                    let (_, value) = executor.execute_expr(ir_unit);
+                    value
+                } else {
+                    String::new()
+                };
+                (compiled_unit, output)
             }
             _ => unreachable!(),
         };
 
         // Check for script errors and render diagnostics.
-        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &result.typecheck {
-            let parse_diags = ctx.get_parse_diagnostics();
-            render::render_parse_diagnostics(ctx.db(), &parse_diags, &self.file_path, &cwd);
+        if let datafun::pipeline::TypecheckResult::ParseError { errors: _ } = &compiled_unit.typecheck {
+            let parse_diags = compiler.get_parse_diagnostics();
+            render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &cwd);
             bail!("Parse error");
         }
-        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &result.typecheck {
-            let type_diags = ctx.get_type_diagnostics();
-            render::render_type_diagnostics(ctx.db(), &type_diags, &self.file_path, &cwd);
+        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &compiled_unit.typecheck {
+            let type_diags = compiler.get_type_diagnostics();
+            render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
             bail!("Type error");
         }
-        if let datafun::pipeline::LoweringResult::Error { message } = &result.lowering {
+        if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }
-        if result.output.starts_with("Error:") {
-            bail!("{}", result.output);
+        if output.starts_with("Error:") {
+            bail!("{}", output);
         }
 
         // Print output if any (for scriptunit-expr).
-        if !result.output.is_empty() && result.output != "(fragment executed)" {
-            println!("{}", result.output);
+        if !output.is_empty() && output != "(fragment executed)" {
+            println!("{}", output);
         }
 
         // Cleanup.
-        ctx.destroy_all();
+        executor.destroy_all();
 
         Ok(())
     }

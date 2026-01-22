@@ -454,9 +454,9 @@ fn analyze_worldfile_ir_serial(
         return IrSerialAnalysis { sections: results };
     }
 
-    // Lower for AOT (includes drops).
-    let Some(mut ctx) = compiled.script_context(&db, datalove_rt::c::DebugOutputMode::Disabled, None) else {
-        // Module compilation failed (typecheck or ownership errors), script context not created.
+    // Compile for AOT (includes drops).
+    let Some(mut compiler) = compiled.script_compiler(&db) else {
+        // Module compilation failed (typecheck or ownership errors).
         results.push(IrSerialSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
@@ -478,22 +478,21 @@ fn analyze_worldfile_ir_serial(
         });
         return IrSerialAnalysis { sections: results };
     };
-    let lower_result = ctx.lower_fragment_for_aot(fragment_source);
+    let compiled_unit = compiler.compile_fragment(fragment_source, true);
 
-    // Get registry before destroying ctx.
-    let registry = ctx.env().registry.clone();
-    ctx.destroy_all();
+    // Get registry for AOT.
+    let registry = compiled.module_registry();
 
     // Check for typecheck/lowering errors.
     if !matches!(
-        &lower_result.typecheck,
+        &compiled_unit.typecheck,
         datafun::pipeline::TypecheckResult::Success
     ) {
         results.push(IrSerialSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
-            typecheck: lower_result.typecheck,
-            lowering: lower_result.lowering,
+            typecheck: compiled_unit.typecheck,
+            lowering: compiled_unit.lowering,
             direct_interp_output: String::new(),
             direct_aot_output: String::new(),
             serialized_ir_size: 0,
@@ -512,14 +511,14 @@ fn analyze_worldfile_ir_serial(
     }
 
     if !matches!(
-        &lower_result.lowering,
+        &compiled_unit.lowering,
         datafun::pipeline::LoweringResult::Success { .. }
     ) {
         results.push(IrSerialSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
-            typecheck: lower_result.typecheck,
-            lowering: lower_result.lowering,
+            typecheck: compiled_unit.typecheck,
+            lowering: compiled_unit.lowering,
             direct_interp_output: String::new(),
             direct_aot_output: String::new(),
             serialized_ir_size: 0,
@@ -537,13 +536,13 @@ fn analyze_worldfile_ir_serial(
         return IrSerialAnalysis { sections: results };
     }
 
-    let ir_unit = match lower_result.ir_unit {
+    let ir_unit = match compiled_unit.ir_unit {
         Some(unit) => unit,
         None => {
             results.push(IrSerialSectionResult {
                 section_type: "scriptunit-fragment".to_string(),
                 name: None,
-                typecheck: lower_result.typecheck,
+                typecheck: compiled_unit.typecheck,
                 lowering: datafun::pipeline::LoweringResult::Error {
                     message: "No IR unit produced".to_string(),
                 },
@@ -576,8 +575,8 @@ fn analyze_worldfile_ir_serial(
             results.push(IrSerialSectionResult {
                 section_type: "scriptunit-fragment".to_string(),
                 name: None,
-                typecheck: lower_result.typecheck,
-                lowering: lower_result.lowering,
+                typecheck: compiled_unit.typecheck,
+                lowering: compiled_unit.lowering,
                 direct_interp_output,
                 direct_aot_output,
                 serialized_ir_size: 0,
@@ -605,8 +604,8 @@ fn analyze_worldfile_ir_serial(
             results.push(IrSerialSectionResult {
                 section_type: "scriptunit-fragment".to_string(),
                 name: None,
-                typecheck: lower_result.typecheck,
-                lowering: lower_result.lowering,
+                typecheck: compiled_unit.typecheck,
+                lowering: compiled_unit.lowering,
                 direct_interp_output,
                 direct_aot_output,
                 serialized_ir_size,
@@ -634,8 +633,8 @@ fn analyze_worldfile_ir_serial(
             results.push(IrSerialSectionResult {
                 section_type: "scriptunit-fragment".to_string(),
                 name: None,
-                typecheck: lower_result.typecheck,
-                lowering: lower_result.lowering,
+                typecheck: compiled_unit.typecheck,
+                lowering: compiled_unit.lowering,
                 direct_interp_output,
                 direct_aot_output,
                 serialized_ir_size,
@@ -661,8 +660,8 @@ fn analyze_worldfile_ir_serial(
             results.push(IrSerialSectionResult {
                 section_type: "scriptunit-fragment".to_string(),
                 name: None,
-                typecheck: lower_result.typecheck,
-                lowering: lower_result.lowering,
+                typecheck: compiled_unit.typecheck,
+                lowering: compiled_unit.lowering,
                 direct_interp_output,
                 direct_aot_output,
                 serialized_ir_size,
@@ -693,8 +692,8 @@ fn analyze_worldfile_ir_serial(
     results.push(IrSerialSectionResult {
         section_type: "scriptunit-fragment".to_string(),
         name: None,
-        typecheck: lower_result.typecheck,
-        lowering: lower_result.lowering,
+        typecheck: compiled_unit.typecheck,
+        lowering: compiled_unit.lowering,
         direct_interp_output,
         direct_aot_output,
         serialized_ir_size,
