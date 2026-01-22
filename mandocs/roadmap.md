@@ -9,10 +9,9 @@
 - script interpreter reactivity
 - [x] tensors and tables
 - table column projections
-- closures
 - clone and coerce (@)
 - [x] logic ops
-- type aliases
+- [x] type aliases
 - generic functions for built-in generic types
 - basic repl,
 - [x] script runner
@@ -76,6 +75,7 @@
 
 ## Backburner
 
+- closures
 - comptime / const evaluation
 - allocation statistics
 - jit statistics

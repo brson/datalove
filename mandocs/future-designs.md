@@ -1,3 +1,56 @@
+# Future designs
+
+
+
+
+## 2026/01/22 - Atoms and enums
+
+The design of enums is intertwined with the design of named types.
+
+Datalove is mostly structurally typed,
+with a single mechanism to introduce a named version of
+any structural type.
+
+Enum variants are also named types,
+so we treat them as the primary mechanism of naming,
+with enums summing named types.
+
+```datalove
+// Anonymous atom
+let a = atom Foo (1)
+
+// The name is followed by a single expr
+let a = atom Foo (1)    // tuple
+let a = atom Foo 1      // etc
+var b = atom Bar set { 1 }
+
+// For anonymous enums the name must match
+// for compatibility but the names still don't have
+// (identity?) - any two names match.
+set b = atom Bar set { 2 }
+
+// Named atom
+atom Foo: int
+
+// Anonymous atom coerces to named atom
+let c: Foo = atom Foo 1
+```
+
+Anonymous enums
+
+```datalove
+let a = atom Foo 1
+
+let b: enum Bunny {
+  Foo: int,
+} = a
+```
+
+todo
+
+
+
+
 ## 2026/01/21 - Ergonomic switches
 
 - fixed int math op widening to int
