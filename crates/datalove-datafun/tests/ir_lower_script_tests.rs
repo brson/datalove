@@ -90,6 +90,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let script_analysis = ScriptAnalysisData {
                     schedule: script_analysis_raw.schedule,
                     bindings: script_analysis_raw.bindings,
+                    tracking: script_analysis_raw.tracking,
                     unit_end: script_analysis_raw.unit_end,
                 };
 
