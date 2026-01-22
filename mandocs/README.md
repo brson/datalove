@@ -11,8 +11,19 @@ of modern pure data types.
 Let's do that really well.
 Then we'll add I/O to it &mdash; carefully.
 
-> Datalove is a testbed for my personal compiler and language design experiments.
-> There is no recommended way to install or test.
+
+
+
+<div>
+Brief roadmap status.
+</div>
+
+<div>
+News snippet.
+</div>
+
+
+
 
 <br>
 
@@ -44,9 +55,16 @@ Then we'll add I/O to it &mdash; carefully.
 
 
 
+> Datalove is a testbed for my personal compiler and language design experiments.
+> There is no recommended way to install or test.
+
+
+
+
 <br>
 <center>Datalove is built from three sublanguages of increasing power.</center>
 <br>
+
 
 
 
