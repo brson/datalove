@@ -7,7 +7,6 @@
 use datalove_datafun_ir::{BinOp, IrType, UnaryOp};
 use datalove_rtdt as rtdt;
 
-use crate::error::InterpError;
 use crate::value::{Destination, Value};
 use crate::IrInterpreter;
 
