@@ -41,8 +41,12 @@ pub fn gen_script<'db, R: Rng>(
     }
 
     // Generate a final expression using a variable or function call.
-    if !ctx.variables.is_empty() && rng.gen_bool(0.7) {
-        let var = &ctx.variables[rng.gen_range(0..ctx.variables.len())];
+    // Filter to only variables that haven't been consumed (moved).
+    let live_vars: Vec<_> = ctx.variables.iter()
+        .filter(|v| !ctx.is_consumed(&v.name))
+        .collect();
+    if !live_vars.is_empty() && rng.gen_bool(0.7) {
+        let var = live_vars[rng.gen_range(0..live_vars.len())];
         lines.push(String::new());
         // Use debuglog to output the value.
         lines.push(format!("debuglog {}", var.name));

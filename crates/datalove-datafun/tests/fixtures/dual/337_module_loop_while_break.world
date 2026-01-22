@@ -1,0 +1,32 @@
+----------
+module local/test/mod
+----------
+
+fun fn0(): i32
+    loop while true
+        let v0: string = ""
+        if true
+            let v1: u64 = 160
+        else
+            let v2: u32 = 241
+        end if
+        break
+    end loop
+    loop while false
+        if true
+            let v4: i64 = 1
+        end if
+        let v6: f32 = 245.9
+        break
+    end loop
+    ret 111
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/mod
+import mod.fn0
+
+debuglog fn0()

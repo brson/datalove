@@ -256,6 +256,8 @@ struct AnalysisCtx<'db> {
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     /// Next binding ID to allocate.
     next_binding: u32,
+    /// Next global statement ID for drop schedule keys.
+    next_stmt_id: usize,
     /// All bindings (indexed by BindingId).
     bindings: Vec<BindingInfo>,
     /// Name to binding ID mapping (current scope).
@@ -304,6 +306,7 @@ impl<'db> AnalysisCtx<'db> {
             expr_types,
             call_targets,
             next_binding: 0,
+            next_stmt_id: 0,
             bindings: Vec::new(),
             name_to_binding: HashMap::new(),
             scope_stack: Vec::new(),
@@ -479,6 +482,13 @@ impl<'db> AnalysisCtx<'db> {
         }
     }
 
+    /// Allocate and return the next global statement ID.
+    fn alloc_stmt_id(&mut self) -> usize {
+        let id = self.next_stmt_id;
+        self.next_stmt_id += 1;
+        id
+    }
+
     /// Get all live bindings defined in scopes we're exiting (for break/continue).
     ///
     /// Only includes bindings that were created within the scopes being traversed,
@@ -520,20 +530,28 @@ impl<'db> AnalysisCtx<'db> {
 
             // Include bindings defined in this frame.
             for &id in &frame.bindings {
+                // Mark as seen first - inner scopes have the most up-to-date state.
+                if !seen.insert(id) {
+                    continue;
+                }
                 if frame.current_state.get(&id) == Some(&BindingState::Live) {
                     let info = &self.bindings[id.0 as usize];
                     // Skip Copy types and borrowed params (caller retains ownership).
-                    if !info.ty.is_copy() && !info.is_borrowed() && seen.insert(id) {
+                    if !info.ty.is_copy() && !info.is_borrowed() {
                         result.push(id);
                     }
                 }
             }
             // Also include bindings from parent scopes that are tracked here.
             for (&id, &state) in &frame.current_state {
+                // Mark as seen first - inner scopes have the most up-to-date state.
+                if !seen.insert(id) {
+                    continue;
+                }
                 if state == BindingState::Live {
                     let info = &self.bindings[id.0 as usize];
                     // Skip Copy types and borrowed params (caller retains ownership).
-                    if !info.ty.is_copy() && !info.is_borrowed() && seen.insert(id) {
+                    if !info.ty.is_copy() && !info.is_borrowed() {
                         result.push(id);
                     }
                 }
@@ -983,39 +1001,44 @@ pub fn analyze_expr<'db>(
 // ============================================================================
 
 /// Analyze statements for ownership tracking.
+///
+/// Uses globally-unique statement IDs for drop schedule keys to avoid
+/// collisions between nested scopes (e.g., breaks in different loops).
 fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>]) {
-    for (i, stmt) in stmts.iter().enumerate() {
+    for stmt in stmts.iter() {
+        // Allocate a globally-unique statement ID.
+        let stmt_id = ctx.alloc_stmt_id();
         match stmt {
             Statement::Let(let_stmt) => {
-                analyze_let(ctx, let_stmt, i);
+                analyze_let(ctx, let_stmt, stmt_id);
             }
             Statement::Var(var_stmt) => {
-                analyze_var(ctx, var_stmt, i);
+                analyze_var(ctx, var_stmt, stmt_id);
             }
             Statement::Set(set_stmt) => {
-                analyze_set(ctx, set_stmt, i);
+                analyze_set(ctx, set_stmt, stmt_id);
             }
             Statement::Ret(ret_stmt) => {
-                analyze_return(ctx, ret_stmt, i);
+                analyze_return(ctx, ret_stmt, stmt_id);
             }
             Statement::If(if_stmt) => {
-                analyze_if(ctx, if_stmt, i);
+                analyze_if(ctx, if_stmt, stmt_id);
             }
             Statement::Loop(loop_stmt) => {
-                analyze_loop(ctx, loop_stmt, i);
+                analyze_loop(ctx, loop_stmt, stmt_id);
             }
             Statement::Break(_) => {
                 // Drops before break: all live bindings in loop body.
                 let drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
                 if !drops.is_empty() {
-                    ctx.schedule.before_break.insert(i, drops);
+                    ctx.schedule.before_break.insert(stmt_id, drops);
                 }
             }
             Statement::Continue(_) => {
                 // Drops before continue: all live bindings in loop body.
                 let drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
                 if !drops.is_empty() {
-                    ctx.schedule.before_continue.insert(i, drops);
+                    ctx.schedule.before_continue.insert(stmt_id, drops);
                 }
             }
             Statement::Fun(_) => {

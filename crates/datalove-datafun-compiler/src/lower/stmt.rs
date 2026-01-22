@@ -39,15 +39,27 @@ pub fn lower_statement<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &Statement<'db>,
 ) -> Result<(), LowerError> {
-    lower_statement_indexed(ctx, stmt, 0)
+    lower_statement_impl(ctx, stmt)
 }
 
 /// Lower a statement with index tracking for drop schedule.
+///
+/// DEPRECATED: Use lower_statement_impl instead. The stmt_idx parameter is ignored.
 pub fn lower_statement_indexed<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &Statement<'db>,
-    stmt_idx: usize,
+    _stmt_idx: usize,
 ) -> Result<(), LowerError> {
+    lower_statement_impl(ctx, stmt)
+}
+
+/// Lower a statement, allocating a globally-unique statement ID.
+fn lower_statement_impl<'db>(
+    ctx: &mut LowerCtx<'db>,
+    stmt: &Statement<'db>,
+) -> Result<(), LowerError> {
+    // Allocate a globally-unique statement ID that matches ownership analysis.
+    let stmt_idx = ctx.alloc_stmt_id();
     match stmt {
         Statement::Let(let_stmt) => {
             let name = let_stmt.name.text(ctx.db).to_string();
@@ -535,14 +547,19 @@ pub fn lower_loop<'db>(
         lower_statement_indexed(ctx, stmt, idx)?;
     }
 
-    // Emit drops before looping back.
-    ctx.emit_loop_body_end_drops(stmt_idx);
+    // Only emit loop-back if the body didn't terminate early (via break/return).
+    // If the body terminated, the current block is unreachable and we shouldn't
+    // emit drops that reference values defined only in the loop body.
+    if !ctx.is_unreachable() {
+        // Emit drops before looping back.
+        ctx.emit_loop_body_end_drops(stmt_idx);
 
-    // Loop back to header.
-    ctx.finish_block(Terminator::Goto {
-        target: loop_header,
-        args: Vec::new(),
-    });
+        // Loop back to header.
+        ctx.finish_block(Terminator::Goto {
+            target: loop_header,
+            args: Vec::new(),
+        });
+    }
 
     // Pop loop context.
     ctx.loop_stack.pop();

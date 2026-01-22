@@ -61,6 +61,11 @@ pub fn lower_function_body<'db>(
     ctx.drop_schedule = analysis.schedule;
     ctx.binding_info = analysis.bindings;
 
+    // Reset counters - each function has its own statement/binding ID space.
+    ctx.next_stmt_id = 0;
+    ctx.next_binding_id = 0;
+    ctx.binding_to_operand.clear();
+
     // Save and set function context for try operators.
     let saved_return_type = ctx.return_type.take();
     let saved_is_script_unit = ctx.is_script_unit;

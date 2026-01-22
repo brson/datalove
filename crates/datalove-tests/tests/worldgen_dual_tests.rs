@@ -127,8 +127,8 @@ fn run_with_chaos_interp(
     };
 
     let mut debuglog = String::new();
-    let mut success = true;
-    let mut error = None;
+    let success = true;
+    let error = None;
 
     for section in &parsed.sections {
         if let WorldfileSection::ScriptFragment { source } = section {
@@ -141,14 +141,20 @@ fn run_with_chaos_interp(
             debuglog.push_str(&executor.get_debug_buffer());
 
             if matches!(compiled_unit.typecheck, datafun::pipeline::TypecheckResult::Error { .. }) {
-                success = false;
-                error = Some(format!("Script typecheck error: {:?}", compiled_unit.typecheck));
-                break;
+                return RunResult {
+                    compiled: false,
+                    debuglog,
+                    success: false,
+                    error: Some(format!("Script typecheck error: {:?}", compiled_unit.typecheck)),
+                };
             }
             if matches!(compiled_unit.lowering, datafun::pipeline::LoweringResult::Error { .. }) {
-                success = false;
-                error = Some(format!("Script lowering error: {:?}", compiled_unit.lowering));
-                break;
+                return RunResult {
+                    compiled: false,
+                    debuglog,
+                    success: false,
+                    error: Some(format!("Script lowering error: {:?}", compiled_unit.lowering)),
+                };
             }
         }
     }

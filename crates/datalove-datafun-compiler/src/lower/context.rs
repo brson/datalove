@@ -160,6 +160,8 @@ pub struct LowerCtx<'db> {
     pub(super) binding_to_operand: HashMap<BindingId, Operand>,
     /// Next BindingId to allocate (must match analysis traversal order).
     pub(super) next_binding_id: u32,
+    /// Next global statement ID (must match analysis traversal order).
+    pub(super) next_stmt_id: usize,
     /// Current statement index in the parent body (for drop schedule lookup).
     pub(super) current_stmt_idx: Option<usize>,
     /// Types of external slots from previous script units, keyed by name.
@@ -210,6 +212,7 @@ impl<'db> LowerCtx<'db> {
             binding_info: Vec::new(),
             binding_to_operand: HashMap::new(),
             next_binding_id: 0,
+            next_stmt_id: 0,
             current_stmt_idx: None,
             external_slot_types: HashMap::new(),
             unit_end_drops: Vec::new(),
@@ -254,6 +257,7 @@ impl<'db> LowerCtx<'db> {
             binding_info: Vec::new(),
             binding_to_operand: HashMap::new(),
             next_binding_id: 0,
+            next_stmt_id: 0,
             current_stmt_idx: None,
             external_slot_types: HashMap::new(),
             unit_end_drops: Vec::new(),
@@ -337,6 +341,7 @@ impl<'db> LowerCtx<'db> {
             binding_info: Vec::new(),
             binding_to_operand: HashMap::new(),
             next_binding_id: 0,
+            next_stmt_id: 0,
             current_stmt_idx: None,
             external_slot_types: script_ctx.slot_types,
             unit_end_drops: Vec::new(),
@@ -545,6 +550,15 @@ impl<'db> LowerCtx<'db> {
         let id = BindingId(self.next_binding_id);
         self.next_binding_id += 1;
         self.binding_to_operand.insert(id, operand);
+        id
+    }
+
+    /// Allocate and return the next global statement ID.
+    ///
+    /// Must be called in the same order as during ownership analysis.
+    pub fn alloc_stmt_id(&mut self) -> usize {
+        let id = self.next_stmt_id;
+        self.next_stmt_id += 1;
         id
     }
 
