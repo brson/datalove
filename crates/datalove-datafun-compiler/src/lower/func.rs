@@ -63,7 +63,9 @@ pub fn lower_function_body<'db>(
     ctx.body.tracking = analysis.tracking;
 
     // Reset counters - each function has its own statement/binding ID space.
-    ctx.next_stmt_id = 0;
+    // Note: For nested functions, these are already 0 from swap_body_state(),
+    // but we reset explicitly for module functions using the same ctx.
+    ctx.body.next_stmt_id = 0;
     ctx.body.next_binding_id = 0;
     ctx.body.binding_to_operand.clear();
 
@@ -105,10 +107,10 @@ pub fn lower_function_body<'db>(
     // Lower the function body with statement indices.
     let body = func.body(ctx.db);
     for (idx, stmt) in body.iter().enumerate() {
-        ctx.current_stmt_idx = Some(idx);
+        ctx.body.current_stmt_idx = Some(idx);
         lower_statement_indexed(ctx, stmt, idx)?;
     }
-    ctx.current_stmt_idx = None;
+    ctx.body.current_stmt_idx = None;
 
     // If no explicit return, add implicit return unit.
     // Drop analysis schedules drops at function scope exit.

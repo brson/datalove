@@ -122,7 +122,7 @@ fn lower_statement_impl<'db>(
             lower_loop(ctx, loop_stmt, stmt_idx)
         }
         Statement::Break(_) => {
-            let loop_ctx = ctx.loop_stack.last()
+            let loop_ctx = ctx.body.loop_stack.last()
                 .ok_or(LowerError::BreakOutsideLoop)?;
             let break_target = loop_ctx.exit;
 
@@ -136,7 +136,7 @@ fn lower_statement_impl<'db>(
             Ok(())
         }
         Statement::Continue(_) => {
-            let loop_ctx = ctx.loop_stack.last()
+            let loop_ctx = ctx.body.loop_stack.last()
                 .ok_or(LowerError::ContinueOutsideLoop)?;
             let continue_target = loop_ctx.header;
 
@@ -537,7 +537,7 @@ pub fn lower_loop<'db>(
     };
 
     // Push loop context for break/continue.
-    ctx.loop_stack.push(LoopLowerContext {
+    ctx.body.loop_stack.push(LoopLowerContext {
         header: loop_header,
         exit: loop_exit,
     });
@@ -562,7 +562,7 @@ pub fn lower_loop<'db>(
     }
 
     // Pop loop context.
-    ctx.loop_stack.pop();
+    ctx.body.loop_stack.pop();
 
     // Start loop exit block.
     ctx.start_block(loop_exit);

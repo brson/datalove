@@ -90,10 +90,10 @@ pub fn lower_script_unit<'db>(
 
             // Lower all statements with index tracking.
             for (idx, stmt) in stmts.iter().enumerate() {
-                ctx.current_stmt_idx = Some(idx);
+                ctx.body.current_stmt_idx = Some(idx);
                 lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, Some(&func_param_types))?;
             }
-            ctx.current_stmt_idx = None;
+            ctx.body.current_stmt_idx = None;
 
             // Fragment units have no result value.
             None
@@ -170,10 +170,10 @@ pub fn lower_script_fragment_raw<'db>(
 
     // Lower all statements with index tracking.
     for (idx, stmt) in stmts.iter().enumerate() {
-        ctx.current_stmt_idx = Some(idx);
+        ctx.body.current_stmt_idx = Some(idx);
         lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, func_param_types)?;
     }
-    ctx.current_stmt_idx = None;
+    ctx.body.current_stmt_idx = None;
 
     // Compute unit_end and tracked values/slots BEFORE emit_unit_end_drops,
     // because that method consumes unit_end_drops which we need.
@@ -471,7 +471,7 @@ fn lower_statement_for_script<'db>(
             super::stmt::lower_loop(ctx, loop_stmt, stmt_idx)
         }
         Statement::Break(_) => {
-            let loop_ctx = ctx.loop_stack.last()
+            let loop_ctx = ctx.body.loop_stack.last()
                 .ok_or(LowerError::BreakOutsideLoop)?;
             let break_target = loop_ctx.exit;
 
@@ -485,7 +485,7 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Continue(_) => {
-            let loop_ctx = ctx.loop_stack.last()
+            let loop_ctx = ctx.body.loop_stack.last()
                 .ok_or(LowerError::ContinueOutsideLoop)?;
             let continue_target = loop_ctx.header;
 

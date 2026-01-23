@@ -59,6 +59,16 @@ pub struct FunctionBodyState {
     pub binding_info: Vec<BindingInfo>,
     /// Drop schedule from analysis.
     pub drop_schedule: DropSchedule,
+    /// Loop context stack for each nested loop.
+    pub loop_stack: Vec<LoopLowerContext>,
+    /// Whether current block is unreachable (after return/break/continue).
+    pub in_unreachable: bool,
+    /// Temporary values to drop after the current expression is evaluated.
+    pub expr_temps: Vec<(ValueId, IrType)>,
+    /// Next global statement ID (must match analysis traversal order).
+    pub next_stmt_id: usize,
+    /// Current statement index in the parent body (for drop schedule lookup).
+    pub current_stmt_idx: Option<usize>,
 }
 
 impl FunctionBodyState {
@@ -83,6 +93,11 @@ impl FunctionBodyState {
             tracking: Vec::new(),
             binding_info: Vec::new(),
             drop_schedule: DropSchedule::default(),
+            loop_stack: Vec::new(),
+            in_unreachable: false,
+            expr_temps: Vec::new(),
+            next_stmt_id: 0,
+            current_stmt_idx: None,
         }
     }
 }
@@ -200,29 +215,16 @@ pub struct LowerCtx<'db> {
     /// Available functions: name -> FuncRef (for resolving calls).
     /// Used for script-local and external unit functions (not module functions).
     pub(super) func_scope: HashMap<String, FuncRef>,
-
-    // Control flow.
-    /// Loop context stack for each nested loop.
-    pub(super) loop_stack: Vec<LoopLowerContext>,
-    /// Return type for current function/script (for try operators).
-    pub(super) return_type: Option<IrType>,
-    /// Whether we're in a script unit (vs function).
-    pub(super) is_script_unit: bool,
-    /// Whether current block is unreachable (after return/break/continue).
-    pub(super) in_unreachable: bool,
-
-    // Expression temps and statement tracking.
-    /// Temporary values to drop after the current expression is evaluated.
-    /// These are created during operand lowering for compound expressions.
-    pub(super) expr_temps: Vec<(ValueId, IrType)>,
-    /// Next global statement ID (must match analysis traversal order).
-    pub(super) next_stmt_id: usize,
-    /// Current statement index in the parent body (for drop schedule lookup).
-    pub(super) current_stmt_idx: Option<usize>,
     /// Types of external slots from previous script units, keyed by name.
     pub(super) external_slot_types: HashMap<String, IrType>,
     /// Bindings to drop at unit end (for AOT compilation).
     pub(super) unit_end_drops: Vec<BindingId>,
+
+    // Control flow (saved/restored manually, not part of body swap).
+    /// Return type for current function/script (for try operators).
+    pub(super) return_type: Option<IrType>,
+    /// Whether we're in a script unit (vs function).
+    pub(super) is_script_unit: bool,
 }
 
 /// Empty func_id_map for contexts that don't need module function resolution.
@@ -245,15 +247,10 @@ impl<'db> LowerCtx<'db> {
             functions: Vec::new(),
             symbols: SymbolTable::new(),
             func_scope: HashMap::new(),
-            loop_stack: Vec::new(),
-            return_type: None,
-            is_script_unit: false,
-            in_unreachable: false,
-            expr_temps: Vec::new(),
-            next_stmt_id: 0,
-            current_stmt_idx: None,
             external_slot_types: HashMap::new(),
             unit_end_drops: Vec::new(),
+            return_type: None,
+            is_script_unit: false,
         }
     }
 
@@ -274,15 +271,10 @@ impl<'db> LowerCtx<'db> {
             functions: Vec::new(),
             symbols: SymbolTable::new(),
             func_scope: HashMap::new(),
-            loop_stack: Vec::new(),
-            return_type: None,
-            is_script_unit: false,
-            in_unreachable: false,
-            expr_temps: Vec::new(),
-            next_stmt_id: 0,
-            current_stmt_idx: None,
             external_slot_types: HashMap::new(),
             unit_end_drops: Vec::new(),
+            return_type: None,
+            is_script_unit: false,
         }
     }
 
@@ -344,16 +336,11 @@ impl<'db> LowerCtx<'db> {
             functions: Vec::new(),
             symbols: SymbolTable::new(),
             func_scope,
-            loop_stack: Vec::new(),
+            external_slot_types: script_ctx.slot_types,
+            unit_end_drops: Vec::new(),
             // Script units have Result<()> return type for ! operator.
             return_type: Some(IrType::Result(Box::new(IrType::Unit))),
             is_script_unit: true,
-            in_unreachable: false,
-            expr_temps: Vec::new(),
-            next_stmt_id: 0,
-            current_stmt_idx: None,
-            external_slot_types: script_ctx.slot_types,
-            unit_end_drops: Vec::new(),
         }
     }
 
@@ -472,19 +459,19 @@ impl<'db> LowerCtx<'db> {
     pub fn start_block(&mut self, id: BlockId) {
         self.body.current_block = id;
         self.body.current_instructions.clear();
-        self.in_unreachable = false;
+        self.body.in_unreachable = false;
     }
 
     /// Start building an unreachable block (after return/break/continue).
     pub fn start_unreachable_block(&mut self, id: BlockId) {
         self.body.current_block = id;
         self.body.current_instructions.clear();
-        self.in_unreachable = true;
+        self.body.in_unreachable = true;
     }
 
     /// Check if current block is unreachable.
     pub fn is_unreachable(&self) -> bool {
-        self.in_unreachable
+        self.body.in_unreachable
     }
 
     /// Bind a variable name to an operand.
@@ -507,13 +494,13 @@ impl<'db> LowerCtx<'db> {
     /// Record an expression temporary that needs dropping after the operation.
     pub fn record_expr_temp(&mut self, value: ValueId, ty: IrType) {
         if !ty.is_copy() {
-            self.expr_temps.push((value, ty));
+            self.body.expr_temps.push((value, ty));
         }
     }
 
     /// Emit Drop instructions for all expression temporaries and clear the list.
     pub fn emit_expr_temp_drops(&mut self) {
-        let temps = std::mem::take(&mut self.expr_temps);
+        let temps = std::mem::take(&mut self.body.expr_temps);
         for (value, _ty) in temps {
             self.emit(Instruction::Drop { operand: Operand::Value(value) });
         }
@@ -695,8 +682,8 @@ impl<'db> LowerCtx<'db> {
     ///
     /// Must be called in the same order as during ownership analysis.
     pub fn alloc_stmt_id(&mut self) -> usize {
-        let id = self.next_stmt_id;
-        self.next_stmt_id += 1;
+        let id = self.body.next_stmt_id;
+        self.body.next_stmt_id += 1;
         id
     }
 
@@ -728,7 +715,7 @@ impl<'db> LowerCtx<'db> {
     ///
     /// Uses current_stmt_idx since TryReturn happens within expression lowering.
     pub fn emit_before_try_return_drops(&mut self) {
-        if let Some(stmt_idx) = self.current_stmt_idx {
+        if let Some(stmt_idx) = self.body.current_stmt_idx {
             let binding_ids = self.get_scheduled_binding_ids_try(stmt_idx);
             for id in binding_ids {
                 self.emit_binding_drop(id);
