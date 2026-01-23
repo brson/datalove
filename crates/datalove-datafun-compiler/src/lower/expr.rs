@@ -200,6 +200,8 @@ pub fn lower_expression<'db>(
                         let dest = ctx.fresh_value(slot_type);
                         let instr = if is_copy {
                             Instruction::SlotLoadCopy { dest, slot: s }
+                        } else if ctx.is_operand_tracked(operand) {
+                            Instruction::SlotLoadMoveTracked { dest, slot: s }
                         } else {
                             Instruction::SlotLoadMove { dest, slot: s }
                         };
@@ -213,6 +215,8 @@ pub fn lower_expression<'db>(
                         let dest = ctx.fresh_value(param_type.clone());
                         if param_type.is_copy() {
                             ctx.emit(Instruction::Copy { dest, src: operand });
+                        } else if ctx.is_operand_tracked(operand) {
+                            ctx.emit(Instruction::MoveTracked { dest, src: operand });
                         } else {
                             ctx.emit(Instruction::Move { dest, src: operand });
                         }
@@ -221,12 +225,13 @@ pub fn lower_expression<'db>(
                     Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
                         // External operands from previous script units.
                         // Copy types use Copy, non-copy types use Move.
+                        // External operands are always tracked (script-level state).
                         let ext_type = ctx.expr_type(expr);
                         let dest = ctx.fresh_value(ext_type.clone());
                         if ext_type.is_copy() {
                             ctx.emit(Instruction::Copy { dest, src: operand });
                         } else {
-                            ctx.emit(Instruction::Move { dest, src: operand });
+                            ctx.emit(Instruction::MoveTracked { dest, src: operand });
                         }
                         Ok(dest)
                     }

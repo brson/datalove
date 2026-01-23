@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn add_ten(p0):\nblock0:\n    v0 = const 10int\n    v1 = add p0, v0\n    drop v0\n    return v1\n\nfn main():\nblock0:\n    v0 = const 42int\n    v1 = call m0.f0(v0)\n    drop v0\n    return v1\n",
+                ir: "fn add_ten(p0):\nblock0:\n    v0 = const 10int\n    v1 = add p0, v0\n    drop v0\n    return v1\n\nfn main():\nblock0:\n    v0 = const 42int\n    v1 = call m0.f0(v0)\n    drop.tracked v0\n    return v1\n",
             ),
             output: "",
         ),

@@ -160,6 +160,8 @@ pub struct LowerCtx<'db> {
     pub(super) tracking: Vec<TrackingCategory>,
     /// Mapping from BindingId to Operand (built during lowering).
     pub(super) binding_to_operand: HashMap<BindingId, Operand>,
+    /// Reverse mapping from Operand to BindingId (for tracking lookups).
+    pub(super) operand_to_binding: HashMap<Operand, BindingId>,
     /// Next BindingId to allocate (must match analysis traversal order).
     pub(super) next_binding_id: u32,
     /// Next global statement ID (must match analysis traversal order).
@@ -214,6 +216,7 @@ impl<'db> LowerCtx<'db> {
             binding_info: Vec::new(),
             tracking: Vec::new(),
             binding_to_operand: HashMap::new(),
+            operand_to_binding: HashMap::new(),
             next_binding_id: 0,
             next_stmt_id: 0,
             current_stmt_idx: None,
@@ -260,6 +263,7 @@ impl<'db> LowerCtx<'db> {
             binding_info: Vec::new(),
             tracking: Vec::new(),
             binding_to_operand: HashMap::new(),
+            operand_to_binding: HashMap::new(),
             next_binding_id: 0,
             next_stmt_id: 0,
             current_stmt_idx: None,
@@ -345,6 +349,7 @@ impl<'db> LowerCtx<'db> {
             binding_info: Vec::new(),
             tracking: Vec::new(),
             binding_to_operand: HashMap::new(),
+            operand_to_binding: HashMap::new(),
             next_binding_id: 0,
             next_stmt_id: 0,
             current_stmt_idx: None,
@@ -555,6 +560,7 @@ impl<'db> LowerCtx<'db> {
         let id = BindingId(self.next_binding_id);
         self.next_binding_id += 1;
         self.binding_to_operand.insert(id, operand);
+        self.operand_to_binding.insert(operand, id);
         id
     }
 
@@ -562,6 +568,15 @@ impl<'db> LowerCtx<'db> {
     pub fn is_binding_tracked(&self, id: BindingId) -> bool {
         self.tracking.get(id.0 as usize)
             .map(|cat| *cat == TrackingCategory::Tracked)
+            .unwrap_or(true) // Default to tracked if not found (safe fallback).
+    }
+
+    /// Check if an operand is tracked (for emitting Move vs MoveTracked).
+    ///
+    /// Returns true if the operand's binding is tracked, or true if not found (safe fallback).
+    pub fn is_operand_tracked(&self, operand: Operand) -> bool {
+        self.operand_to_binding.get(&operand)
+            .map(|id| self.is_binding_tracked(*id))
             .unwrap_or(true) // Default to tracked if not found (safe fallback).
     }
 

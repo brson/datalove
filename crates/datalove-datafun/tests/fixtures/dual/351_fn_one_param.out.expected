@@ -7,11 +7,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 4int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n\nfn add_one(p0):\nblock0:\n    v0 = const 1int\n    v1 = add p0, v0\n    drop v0\n    drop p0\n    return v1\nexports:\n    add_one = f0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 4int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n\nfn add_one(p0):\nblock0:\n    v0 = const 1int\n    v1 = add p0, v0\n    drop v0\n    drop.tracked p0\n    return v1\nexports:\n    add_one = f0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 4int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n\nfn add_one(p0):\nblock0:\n    v0 = const 1int\n    v1 = add p0, v0\n    drop v0\n    drop p0\n    return v1\nexports:\n    add_one = f0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 4int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n\nfn add_one(p0):\nblock0:\n    v0 = const 1int\n    v1 = add p0, v0\n    drop v0\n    drop.tracked p0\n    return v1\nexports:\n    add_one = f0\n",
             ),
             ir_match: true,
             interp_output: "5\n",

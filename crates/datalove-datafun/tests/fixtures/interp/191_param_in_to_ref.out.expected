@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn inner(p0):\nblock0:\n    v0 = const 100int\n    v1 = eq p0, v0\n    drop v0\n    return v1\n\nfn outer(p0):\nblock0:\n    v0 = call m0.f0(p0)\n    drop p0\n    return v0\n",
+                ir: "fn inner(p0):\nblock0:\n    v0 = const 100int\n    v1 = eq p0, v0\n    drop v0\n    return v1\n\nfn outer(p0):\nblock0:\n    v0 = call m0.f0(p0)\n    drop.tracked p0\n    return v0\n",
             ),
             output: "",
         ),

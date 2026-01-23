@@ -20,7 +20,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = move unit0.v4\n    unit_end v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = move.tracked unit0.v4\n    unit_end v0\n",
             ),
             output: "map {\"one\" = \"first\", \"two\" = \"second\"}",
         ),

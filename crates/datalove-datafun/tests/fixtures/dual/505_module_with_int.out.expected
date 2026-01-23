@@ -8,11 +8,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn add_ints(p0, p1):\nblock0:\n    v0 = add p0, p1\n    drop p0\n    drop p1\n    return v0\n",
+                ir: "fn add_ints(p0, p1):\nblock0:\n    v0 = add p0, p1\n    drop.tracked p0\n    drop.tracked p1\n    return v0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn add_ints(p0, p1):\nblock0:\n    v0 = add p0, p1\n    drop p0\n    drop p1\n    return v0\n",
+                ir: "fn add_ints(p0, p1):\nblock0:\n    v0 = add p0, p1\n    drop.tracked p0\n    drop.tracked p1\n    return v0\n",
             ),
             ir_match: true,
             interp_output: "",

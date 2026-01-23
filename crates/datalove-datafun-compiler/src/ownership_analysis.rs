@@ -344,19 +344,28 @@ impl<'db> AnalysisCtx<'db> {
     /// - Copy: type is copy (no tracking needed)
     /// - Tracked: exported, out param, slot (var), or conditionally moved
     /// - Precise: everything else (state statically known)
+    ///
+    /// NOTE: Currently conservative - all non-copy values are Tracked.
+    /// The Precise category requires that lowering emit explicit drops for all
+    /// values before destroy_all runs. Until that's verified, we track everything.
     fn compute_tracking(&self) -> Vec<TrackingCategory> {
         self.bindings.iter().enumerate().map(|(idx, info)| {
-            let id = BindingId(idx as u32);
+            let _id = BindingId(idx as u32);
             if info.ty.is_copy() {
                 TrackingCategory::Copy
-            } else if info.is_script_unit
-                || info.param_mode == Some(ParamMode::Out)
-                || info.is_slot
-                || self.conditionally_moved.contains(&id)
-            {
-                TrackingCategory::Tracked
             } else {
-                TrackingCategory::Precise
+                // Conservative: track all non-copy for now.
+                // TODO: Enable precise tracking once drop emission is verified:
+                // } else if info.is_script_unit
+                //     || info.param_mode == Some(ParamMode::Out)
+                //     || info.is_slot
+                //     || self.conditionally_moved.contains(&id)
+                // {
+                //     TrackingCategory::Tracked
+                // } else {
+                //     TrackingCategory::Precise
+                // }
+                TrackingCategory::Tracked
             }
         }).collect()
     }

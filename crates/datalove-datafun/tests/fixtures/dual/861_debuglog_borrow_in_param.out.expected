@@ -8,11 +8,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn test_int(p0):\nblock0:\n    debuglog p0\n    v0 = const false\n    drop p0\n    return v0\n\nfn test_string(p0):\nblock0:\n    debuglog p0\n    v0 = const 42u32\n    drop p0\n    return v0\n",
+                ir: "fn test_int(p0):\nblock0:\n    debuglog p0\n    v0 = const false\n    drop.tracked p0\n    return v0\n\nfn test_string(p0):\nblock0:\n    debuglog p0\n    v0 = const 42u32\n    drop.tracked p0\n    return v0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn test_int(p0):\nblock0:\n    debuglog p0\n    v0 = const false\n    drop p0\n    return v0\n\nfn test_string(p0):\nblock0:\n    debuglog p0\n    v0 = const 42u32\n    drop p0\n    return v0\n",
+                ir: "fn test_int(p0):\nblock0:\n    debuglog p0\n    v0 = const false\n    drop.tracked p0\n    return v0\n\nfn test_string(p0):\nblock0:\n    debuglog p0\n    v0 = const 42u32\n    drop.tracked p0\n    return v0\n",
             ),
             ir_match: true,
             interp_output: "",
