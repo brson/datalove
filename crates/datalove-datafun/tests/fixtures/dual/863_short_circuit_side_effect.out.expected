@@ -8,11 +8,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn side_effect(p0):\nblock0:\n    debuglog p0\n    v0 = const true\n    drop.tracked p0\n    return v0\n",
+                ir: "fn side_effect(p0):\nblock0:\n    debuglog p0\n    v0 = const true\n    drop p0\n    return v0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn side_effect(p0):\nblock0:\n    debuglog p0\n    v0 = const true\n    drop.tracked p0\n    return v0\n",
+                ir: "fn side_effect(p0):\nblock0:\n    debuglog p0\n    v0 = const true\n    drop p0\n    return v0\n",
             ),
             ir_match: true,
             interp_output: "",

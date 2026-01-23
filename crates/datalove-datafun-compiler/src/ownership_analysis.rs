@@ -342,29 +342,26 @@ impl<'db> AnalysisCtx<'db> {
     ///
     /// Categories:
     /// - Copy: type is copy (no tracking needed)
-    /// - Tracked: exported, out param, slot (var), or conditionally moved
-    /// - Precise: everything else (state statically known)
+    /// - Tracked: exported, all params, slot (var), or conditionally moved
+    /// - Precise: let bindings with statically-known state
     ///
-    /// NOTE: Currently conservative - all non-copy values are Tracked.
-    /// The Precise category requires that lowering emit explicit drops for all
-    /// values before destroy_all runs. Until that's verified, we track everything.
+    /// In params inside functions are precise because:
+    /// - Always initialized at function entry
+    /// - Cannot be reassigned (read-only)
+    /// - Not exported (function-local)
+    /// - Lifecycle fully determined by function scope
+    ///
+    /// Other bindings remain tracked for now (conservative).
     fn compute_tracking(&self) -> Vec<TrackingCategory> {
         self.bindings.iter().enumerate().map(|(idx, info)| {
             let _id = BindingId(idx as u32);
             if info.ty.is_copy() {
                 TrackingCategory::Copy
+            } else if info.param_mode == Some(ParamMode::In) && !info.is_script_unit {
+                // In params in functions are precise.
+                TrackingCategory::Precise
             } else {
-                // Conservative: track all non-copy for now.
-                // TODO: Enable precise tracking once drop emission is verified:
-                // } else if info.is_script_unit
-                //     || info.param_mode == Some(ParamMode::Out)
-                //     || info.is_slot
-                //     || self.conditionally_moved.contains(&id)
-                // {
-                //     TrackingCategory::Tracked
-                // } else {
-                //     TrackingCategory::Precise
-                // }
+                // Conservative: track everything else.
                 TrackingCategory::Tracked
             }
         }).collect()
