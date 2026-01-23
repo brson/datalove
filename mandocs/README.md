@@ -78,49 +78,21 @@ anonymous tuples, structs, and enums;
 strings, lists, maps and sets.
 
 ```datalove
-// A book record
-: {
-  title: string,
-  author: string,
-  year: i32,
-  pages: u32,
-  rating: f32,
-  available: bool,
-  genre: enum { Fiction, NonFiction, Reference },
-  subtitle: ?string
-} / {
+{
   title = "Nineteen Eighty-Four",
   author = "George Orwell",
   year = 1949,
-  pages = 328,
   rating = 4.7,
   available = true,
-  genre = enum Fiction,
-  subtitle = none
+  genres = [enum Fiction, enum Reality],
+  subtitle = none,
 }
 ```
 
-It also includes collections: lists, maps, and sets.
+It includes first-class _tables_ (dataframes / structs-of-arrays).
 
 ```datalove
-// A list of ratings
-: [f32] / [4.5, 4.0, 5.0, 3.5]
-
-// ISBN to title mapping
-: map<int, string> / map {
-  9780451524935 = "Nineteen Eighty-Four",
-  9780060850524 = "Brave New World"
-}
-
-// Authors in the collection
-: set<string> / set { "Orwell", "Huxley", "Bradbury" }
-```
-
-It also includes _tables_ (dataframes / structs-of-arrays).
-
-```datalove
-// Book catalog as a table
-: {| title: string, author: string, year: i32 |} / {|
+{|
   title,              author,          year
   "1984",             "Orwell",        1949
   "Brave New World",  "Huxley",        1932
@@ -128,29 +100,7 @@ It also includes _tables_ (dataframes / structs-of-arrays).
 |}
 ```
 
-It includes optional and result types.
-
-```datalove
-: ?string / "A Novel"       // optional with value
-: ?string / none            // optional without value
-
-: !string / "Success"       // result with value
-: !string / error "Failed"  // result with error
-```
-
-It includes two dynamic types:
-`data`, for general dynamic typing;
-and `error`, the payload for result types.
-
-```datalove
-// Heterogeneous data
-: data / data "1984"
-: data / data 328
-: data / data true
-
-// Error payload
-: error / error "Book not found"
-```
+Also lists, sets, maps, _tensors_ (n-dimensional arrays), typical scalar types.
 
 
 
