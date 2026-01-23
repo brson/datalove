@@ -4,7 +4,18 @@ ModulesAnalysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn main():\nblock0:\n    v0 = const 100i64\n    v1 = const 25i64\n    v2 = widen v0\n    v3 = widen v1\n    v4 = sub v2, v3\n    drop v2\n    drop v3\n    return v4\n",
+        ir: """
+            fn main():
+            block0:
+                v0 = const 100i64
+                v1 = const 25i64
+                v2 = widen v0
+                v3 = widen v1
+                v4 = sub v2, v3
+                drop v2
+                drop v3
+                return v4
+        """,
     ),
     output: "75",
 )

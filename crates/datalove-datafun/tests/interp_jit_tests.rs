@@ -3,6 +3,7 @@
 //! Same as interp_tests, but with the JIT compiler enabled. This tests that
 //! JIT compilation produces the same results as interpretation.
 
+use datalove_datafun_ir::expand_ir_strings;
 use rmx::prelude::*;
 use std::path::Path;
 use serde::{Serialize, Deserialize};
@@ -220,8 +221,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             .enumerate_arrays(false)
             .compact_arrays(false);
 
-        ron::ser::to_string_pretty(&analysis, ron_config)
-            .map_err(|e| format!("Failed to serialize to RON: {}", e))
+        let ron_output = ron::ser::to_string_pretty(&analysis, ron_config)
+            .map_err(|e| format!("Failed to serialize to RON: {}", e))?;
+
+        Ok(expand_ir_strings(&ron_output))
     }).join().expect("analysis thread panicked");
 
     result

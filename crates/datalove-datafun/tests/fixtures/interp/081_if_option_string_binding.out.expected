@@ -8,7 +8,28 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"hello world\"\n    v1 = some v0\n    v2 = const \"\"\n    store.move s0, v2\n    v3, v4 = unwrap_option v1\n    branch v4, block1, block2\nblock1:\n    drop.tracked s0\n    store.move s0, v3\n    goto block3\nblock2:\n    goto block3\nblock3:\n    unit_end_drop.tracked s0\n    unit_end\nexports:\n    opt = v1\n    result = s0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "hello world"
+                        v1 = some v0
+                        v2 = const ""
+                        store.move s0, v2
+                        v3, v4 = unwrap_option v1
+                        branch v4, block1, block2
+                    block1:
+                        drop.tracked s0
+                        store.move s0, v3
+                        goto block3
+                    block2:
+                        goto block3
+                    block3:
+                        unit_end_drop.tracked s0
+                        unit_end
+                    exports:
+                        opt = v1
+                        result = s0
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -20,7 +41,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = move.tracked unit0.s0\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move.tracked unit0.s0
+                        unit_end v0
+                """,
             ),
             output: "\"hello world\"",
         ),

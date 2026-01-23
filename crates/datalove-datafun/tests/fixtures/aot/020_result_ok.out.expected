@@ -8,7 +8,29 @@ AotAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    v1, v2, v3 = unwrap_result v0\n    branch v3, block2, block1\nblock1:\n    v4 = err v2\n    unit_early_return v4\nblock2:\n    debuglog v1\n    unit_end\n\nfn get_ok():\nblock0:\n    v0 = const 42u32\n    v1 = ok v0\n    return v1\nexports:\n    get_ok = f0\n    r = v0\n    x = v1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        v1, v2, v3 = unwrap_result v0
+                        branch v3, block2, block1
+                    block1:
+                        v4 = err v2
+                        unit_early_return v4
+                    block2:
+                        debuglog v1
+                        unit_end
+                    
+                    fn get_ok():
+                    block0:
+                        v0 = const 42u32
+                        v1 = ok v0
+                        return v1
+                    exports:
+                        get_ok = f0
+                        r = v0
+                        x = v1
+                """,
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Success",

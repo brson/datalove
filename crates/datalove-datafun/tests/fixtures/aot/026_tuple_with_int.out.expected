@@ -8,7 +8,20 @@ AotAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"label\"\n    v1 = const 123456789012345678901234567890int\n    v2 = pack Tuple2 {v0, v1}\n    debuglog v2\n    unit_end_drop v2\n    unit_end\nexports:\n    label = v0\n    num = v1\n    pair = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "label"
+                        v1 = const 123456789012345678901234567890int
+                        v2 = pack Tuple2 {v0, v1}
+                        debuglog v2
+                        unit_end_drop v2
+                        unit_end
+                    exports:
+                        label = v0
+                        num = v1
+                        pair = v2
+                """,
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Success",

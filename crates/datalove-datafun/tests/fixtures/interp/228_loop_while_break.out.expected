@@ -8,7 +8,46 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0int\n    store.move s0, v0\n    v1 = const 0int\n    store.move s1, v1\n    goto block1\nblock1:\n    v2 = const 100int\n    v3 = lt s1, v2\n    drop v2\n    branch v3, block2, block6\nblock2:\n    v4 = const 5int\n    v5 = ge s1, v4\n    drop v4\n    branch v5, block3, block4\nblock3:\n    goto block6\nblock4:\n    goto block5\nblock5:\n    v6 = add s0, s1\n    drop.tracked s0\n    store.move s0, v6\n    v7 = const 1int\n    v8 = add s1, v7\n    drop v7\n    drop.tracked s1\n    store.move s1, v8\n    goto block1\nblock6:\n    unit_end_drop.tracked s0\n    unit_end_drop.tracked s1\n    unit_end\nexports:\n    sum = s0\n    i = s1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0int
+                        store.move s0, v0
+                        v1 = const 0int
+                        store.move s1, v1
+                        goto block1
+                    block1:
+                        v2 = const 100int
+                        v3 = lt s1, v2
+                        drop v2
+                        branch v3, block2, block6
+                    block2:
+                        v4 = const 5int
+                        v5 = ge s1, v4
+                        drop v4
+                        branch v5, block3, block4
+                    block3:
+                        goto block6
+                    block4:
+                        goto block5
+                    block5:
+                        v6 = add s0, s1
+                        drop.tracked s0
+                        store.move s0, v6
+                        v7 = const 1int
+                        v8 = add s1, v7
+                        drop v7
+                        drop.tracked s1
+                        store.move s1, v8
+                        goto block1
+                    block6:
+                        unit_end_drop.tracked s0
+                        unit_end_drop.tracked s1
+                        unit_end
+                    exports:
+                        sum = s0
+                        i = s1
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -20,7 +59,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = move.tracked unit0.s0\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move.tracked unit0.s0
+                        unit_end v0
+                """,
             ),
             output: "10",
         ),

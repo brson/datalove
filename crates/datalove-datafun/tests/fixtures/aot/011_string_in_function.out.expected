@@ -8,7 +8,23 @@ AotAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test_string():\nblock0:\n    v0 = const \"hello\"\n    debuglog v0\n    v1 = const 0u32\n    drop v0\n    return v1\nexports:\n    test_string = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn test_string():
+                    block0:
+                        v0 = const "hello"
+                        debuglog v0
+                        v1 = const 0u32
+                        drop v0
+                        return v1
+                    exports:
+                        test_string = f0
+                """,
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Success",

@@ -8,7 +8,26 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = some v0\n    v2 = const 0u32\n    store.copy s0, v2\n    v3, v4 = unwrap_option v1\n    branch v4, block1, block2\nblock1:\n    store.copy s0, v3\n    goto block3\nblock2:\n    goto block3\nblock3:\n    unit_end\nexports:\n    opt = v1\n    result = s0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = some v0
+                        v2 = const 0u32
+                        store.copy s0, v2
+                        v3, v4 = unwrap_option v1
+                        branch v4, block1, block2
+                    block1:
+                        store.copy s0, v3
+                        goto block3
+                    block2:
+                        goto block3
+                    block3:
+                        unit_end
+                    exports:
+                        opt = v1
+                        result = s0
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -20,7 +39,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = copy unit0.s0\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = copy unit0.s0
+                        unit_end v0
+                """,
             ),
             output: "42",
         ),

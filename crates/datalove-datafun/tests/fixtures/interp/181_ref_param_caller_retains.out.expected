@@ -8,7 +8,14 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn read_int(p0):\nblock0:\n    v0 = const 0int\n    v1 = add p0, v0\n    drop v0\n    return v1\n",
+                ir: """
+                    fn read_int(p0):
+                    block0:
+                        v0 = const 0int
+                        v1 = add p0, v0
+                        drop v0
+                        return v1
+                """,
             ),
             output: "",
         ),
@@ -20,7 +27,22 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42int\n    v1 = call m0.f0(v0)\n    v2 = call m0.f0(v0)\n    v3 = pack Tuple2 {v1, v2}\n    unit_end_drop v0\n    unit_end_drop v3\n    unit_end\nexports:\n    val = v0\n    result1 = v1\n    result2 = v2\n    output = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42int
+                        v1 = call m0.f0(v0)
+                        v2 = call m0.f0(v0)
+                        v3 = pack Tuple2 {v1, v2}
+                        unit_end_drop v0
+                        unit_end_drop v3
+                        unit_end
+                    exports:
+                        val = v0
+                        result1 = v1
+                        result2 = v2
+                        output = v3
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -32,7 +54,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = move.tracked unit0.v3\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move.tracked unit0.v3
+                        unit_end v0
+                """,
             ),
             output: "(42, 42)",
         ),

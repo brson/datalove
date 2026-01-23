@@ -1,7 +1,51 @@
 //! Pretty-printing for IR.
 
+use regex::Regex;
 use std::fmt;
 use crate::*;
+
+/// Expand `ir: "..."` fields in RON output into readable multiline format.
+///
+/// Transforms escaped strings like:
+///   `ir: "line1\nline2\n",`
+/// Into triple-quoted multiline format:
+///   ```text
+///   ir: """
+///       line1
+///       line2
+///   """,
+///   ```
+///
+/// This makes IR dumps in test expected files human-readable while preserving
+/// the ability to compare actual vs expected output (both use the same format).
+pub fn expand_ir_strings(ron: &str) -> String {
+    // Match `ir: "...",` where the string may contain escaped characters.
+    let re = Regex::new(r#"(?m)^(\s*)ir: "((?:[^"\\]|\\.)*)","#).unwrap();
+
+    re.replace_all(ron, |caps: &regex::Captures| {
+        let indent = &caps[1];
+        let escaped_content = &caps[2];
+
+        // Unescape the string content.
+        let content = escaped_content
+            .replace("\\n", "\n")
+            .replace("\\t", "\t")
+            .replace("\\\"", "\"")
+            .replace("\\\\", "\\");
+
+        // Build multiline format with proper indentation.
+        let inner_indent = format!("{}    ", indent);
+        let mut result = format!("{}ir: \"\"\"\n", indent);
+        for line in content.lines() {
+            result.push_str(&inner_indent);
+            result.push_str(line);
+            result.push('\n');
+        }
+        result.push_str(indent);
+        result.push_str("\"\"\",");
+        result
+    }).to_string()
+}
 
 impl fmt::Display for ValueId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

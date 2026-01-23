@@ -4,7 +4,27 @@ ModulesAnalysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn add_one(p0):\nblock0:\n    v0 = const 1int\n    v1 = add p0, v0\n    drop v0\n    drop p0\n    return v1\n\nfn main():\nblock0:\n    v0 = const 10int\n    v1 = call m1.f0(v0)\n    return v1\n\nfn add_two(p0):\nblock0:\n    v0 = call m0.f0(p0)\n    v1 = call m0.f0(v0)\n    return v1\n",
+        ir: """
+            fn add_one(p0):
+            block0:
+                v0 = const 1int
+                v1 = add p0, v0
+                drop v0
+                drop p0
+                return v1
+            
+            fn main():
+            block0:
+                v0 = const 10int
+                v1 = call m1.f0(v0)
+                return v1
+            
+            fn add_two(p0):
+            block0:
+                v0 = call m0.f0(p0)
+                v1 = call m0.f0(v0)
+                return v1
+        """,
     ),
     output: "12",
 )

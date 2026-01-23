@@ -8,7 +8,20 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn make_person():\nblock0:\n    v0 = const \"Bob\"\n    v1 = const 42u32\n    v2 = pack Struct0 {v0, v1}\n    return v2\nexports:\n    make_person = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                    
+                    fn make_person():
+                    block0:
+                        v0 = const "Bob"
+                        v1 = const 42u32
+                        v2 = pack Struct0 {v0, v1}
+                        return v2
+                    exports:
+                        make_person = f0
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -20,7 +33,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call unit0.f0()\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call unit0.f0()
+                        unit_end v0
+                """,
             ),
             output: "{name = \"Bob\", age = 42}",
         ),

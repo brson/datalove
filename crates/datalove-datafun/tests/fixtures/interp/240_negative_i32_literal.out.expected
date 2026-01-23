@@ -8,7 +8,20 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const -1i32\n    v1 = const -2147483648i32\n    v2 = const -9223372036854775808i64\n    v3 = pack Tuple3 {v0, v1, v2}\n    unit_end\nexports:\n    a = v0\n    b = v1\n    c = v2\n    output = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const -1i32
+                        v1 = const -2147483648i32
+                        v2 = const -9223372036854775808i64
+                        v3 = pack Tuple3 {v0, v1, v2}
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        c = v2
+                        output = v3
+                """,
             ),
             output: "(fragment executed)",
         ),

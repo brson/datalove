@@ -8,7 +8,31 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = const 3u32\n    v2 = call f0(v0, v1)\n    unit_end_drop v2\n    unit_end\n\nfn test_add(p0, p1):\nblock0:\n    v0, v1 = add.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = const \"arithmetic overflow\"\n    v3 = error_from v2\n    v4 = err v3\n    return v4\nblock2:\n    v5 = ok v0\n    return v5\nexports:\n    test_add = f0\n    output = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5u32
+                        v1 = const 3u32
+                        v2 = call f0(v0, v1)
+                        unit_end_drop v2
+                        unit_end
+                    
+                    fn test_add(p0, p1):
+                    block0:
+                        v0, v1 = add.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const "arithmetic overflow"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        return v5
+                    exports:
+                        test_add = f0
+                        output = v2
+                """,
             ),
             output: "(fragment executed)",
         ),

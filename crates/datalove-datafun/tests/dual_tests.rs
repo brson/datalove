@@ -14,8 +14,8 @@
 //! 3. Compares IRs - fails if different
 //! 4. Compares debuglog outputs - fails if different
 
+use datalove_datafun_ir::expand_ir_strings;
 use rmx::prelude::*;
-use regex::Regex;
 use serde::{Serialize, Deserialize};
 use std::path::Path;
 use std::process::Command;
@@ -24,47 +24,6 @@ use datalove_datafun as datafun;
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_interp::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
-
-/// Expand `ir: "..."` fields into readable multiline format.
-///
-/// Transforms escaped strings like:
-///   `ir: "line1\nline2\n",`
-/// Into triple-quoted multiline format:
-///   ```
-///   ir: """
-///       line1
-///       line2
-///   """,
-///   ```
-fn expand_ir_strings(ron: &str) -> String {
-    // Match `ir: "...",` where the string may contain escaped characters.
-    // The pattern captures the indentation and the string content.
-    let re = Regex::new(r#"(?m)^(\s*)ir: "((?:[^"\\]|\\.)*)","#).unwrap();
-
-    re.replace_all(ron, |caps: &regex::Captures| {
-        let indent = &caps[1];
-        let escaped_content = &caps[2];
-
-        // Unescape the string content.
-        let content = escaped_content
-            .replace("\\n", "\n")
-            .replace("\\t", "\t")
-            .replace("\\\"", "\"")
-            .replace("\\\\", "\\");
-
-        // Build multiline format with proper indentation.
-        let inner_indent = format!("{}    ", indent);
-        let mut result = format!("{}ir: \"\"\"\n", indent);
-        for line in content.lines() {
-            result.push_str(&inner_indent);
-            result.push_str(line);
-            result.push('\n');
-        }
-        result.push_str(indent);
-        result.push_str("\"\"\",");
-        result
-    }).to_string()
-}
 
 /// Result of dual analysis.
 #[derive(Debug, Serialize, Deserialize)]

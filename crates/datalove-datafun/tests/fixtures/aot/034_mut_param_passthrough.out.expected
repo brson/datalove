@@ -8,7 +8,35 @@ AotAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f2()\n    debuglog v0\n    unit_end\n\nfn inner(p0):\nblock0:\n    v0 = const 42u32\n    store p0, v0\n    v1 = const true\n    return v1\nfn outer(p0):\nblock0:\n    v0 = call f0(p0)\n    return v0\nfn test():\nblock0:\n    v0 = const 0u32\n    store.copy s0, v0\n    v1 = call f1(s0)\n    v2 = load.copy s0\n    return v2\nexports:\n    inner = f0\n    outer = f1\n    test = f2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f2()
+                        debuglog v0
+                        unit_end
+                    
+                    fn inner(p0):
+                    block0:
+                        v0 = const 42u32
+                        store p0, v0
+                        v1 = const true
+                        return v1
+                    fn outer(p0):
+                    block0:
+                        v0 = call f0(p0)
+                        return v0
+                    fn test():
+                    block0:
+                        v0 = const 0u32
+                        store.copy s0, v0
+                        v1 = call f1(s0)
+                        v2 = load.copy s0
+                        return v2
+                    exports:
+                        inner = f0
+                        outer = f1
+                        test = f2
+                """,
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Success",

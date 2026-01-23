@@ -8,7 +8,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 3735928559u64\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 3735928559u64
+                        unit_end v0
+                """,
             ),
             output: "3735928559",
         ),

@@ -8,7 +8,21 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn make_set():\nblock0:\n    v0 = const 100u32\n    v1 = const 200u32\n    v2 = const 300u32\n    v3 = set {v0, v1, v2}\n    return v3\nexports:\n    make_set = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                    
+                    fn make_set():
+                    block0:
+                        v0 = const 100u32
+                        v1 = const 200u32
+                        v2 = const 300u32
+                        v3 = set {v0, v1, v2}
+                        return v3
+                    exports:
+                        make_set = f0
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -20,7 +34,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call unit0.f0()\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call unit0.f0()
+                        unit_end v0
+                """,
             ),
             output: "set {100, 200, 300}",
         ),

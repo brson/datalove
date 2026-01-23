@@ -4,7 +4,23 @@ ModulesAnalysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn test():\nblock0:\n    v0 = none\n    return v0\n\nfn main():\nblock0:\n    v0 = call m0.f0()\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    v3 = const 999u32\n    return v3\n",
+        ir: """
+            fn test():
+            block0:
+                v0 = none
+                return v0
+            
+            fn main():
+            block0:
+                v0 = call m0.f0()
+                v1, v2 = unwrap_option v0
+                branch v2, block1, block2
+            block1:
+                return v1
+            block2:
+                v3 = const 999u32
+                return v3
+        """,
     ),
     output: "999",
 )

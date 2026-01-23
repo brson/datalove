@@ -4,6 +4,7 @@
 //! scriptunit-fragment and scriptunit-expr sections. Tests execute script
 //! units sequentially using the IR-based interpreter.
 
+use datalove_datafun_ir::expand_ir_strings;
 use rmx::prelude::*;
 use std::path::Path;
 use datalove_datafun as datafun;
@@ -30,8 +31,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         .enumerate_arrays(false)
         .compact_arrays(false);
 
-    ron::ser::to_string_pretty(&analysis, ron_config)
-        .map_err(|e| format!("Failed to serialize to RON: {}", e))
+    let ron_output = ron::ser::to_string_pretty(&analysis, ron_config)
+        .map_err(|e| format!("Failed to serialize to RON: {}", e))?;
+
+    Ok(expand_ir_strings(&ron_output))
 }
 
 fn main() {

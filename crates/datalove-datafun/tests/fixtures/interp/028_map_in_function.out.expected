@@ -8,7 +8,22 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn make_map():\nblock0:\n    v0 = const 1u32\n    v1 = const 1000u32\n    v2 = const 2u32\n    v3 = const 2000u32\n    v4 = map {v0: v1, v2: v3}\n    return v4\nexports:\n    make_map = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                    
+                    fn make_map():
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 1000u32
+                        v2 = const 2u32
+                        v3 = const 2000u32
+                        v4 = map {v0: v1, v2: v3}
+                        return v4
+                    exports:
+                        make_map = f0
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -20,7 +35,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call unit0.f0()\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call unit0.f0()
+                        unit_end v0
+                """,
             ),
             output: "map {1 = 1000, 2 = 2000}",
         ),

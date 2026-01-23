@@ -8,7 +8,20 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = list [v0, v1, v2]\n    v4 = const \"numbers\"\n    v5 = pack Struct0 {v3, v4}\n    unit_end_drop v5\n    unit_end\nexports:\n    container = v5\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = list [v0, v1, v2]
+                        v4 = const "numbers"
+                        v5 = pack Struct0 {v3, v4}
+                        unit_end_drop v5
+                        unit_end
+                    exports:
+                        container = v5
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -20,7 +33,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = move.tracked unit0.v5\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move.tracked unit0.v5
+                        unit_end v0
+                """,
             ),
             output: "{items = [1, 2, 3], label = \"numbers\"}",
         ),

@@ -8,7 +8,23 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n\nfn get_a():\nblock0:\n    v0 = const 10u32\n    return v0\nfn get_b():\nblock0:\n    v0 = const 2u32\n    return v0\nexports:\n    get_a = f0\n    get_b = f1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                    
+                    fn get_a():
+                    block0:
+                        v0 = const 10u32
+                        return v0
+                    fn get_b():
+                    block0:
+                        v0 = const 2u32
+                        return v0
+                    exports:
+                        get_a = f0
+                        get_b = f1
+                """,
             ),
             output: "(fragment executed)",
         ),

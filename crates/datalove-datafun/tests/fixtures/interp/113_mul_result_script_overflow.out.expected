@@ -8,7 +8,34 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    v1 = call f1()\n    v2, v3 = mul.checked v0, v1\n    branch v3, block1, block2\nblock1:\n    v4 = const \"arithmetic overflow\"\n    v5 = error_from v4\n    v6 = err v5\n    unit_early_return v6\nblock2:\n    unit_end\n\nfn get_a():\nblock0:\n    v0 = const 4294967295u32\n    return v0\nfn get_b():\nblock0:\n    v0 = const 2u32\n    return v0\nexports:\n    get_a = f0\n    get_b = f1\n    output = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        v1 = call f1()
+                        v2, v3 = mul.checked v0, v1
+                        branch v3, block1, block2
+                    block1:
+                        v4 = const "arithmetic overflow"
+                        v5 = error_from v4
+                        v6 = err v5
+                        unit_early_return v6
+                    block2:
+                        unit_end
+                    
+                    fn get_a():
+                    block0:
+                        v0 = const 4294967295u32
+                        return v0
+                    fn get_b():
+                    block0:
+                        v0 = const 2u32
+                        return v0
+                    exports:
+                        get_a = f0
+                        get_b = f1
+                        output = v2
+                """,
             ),
             output: "error \"arithmetic overflow\"",
             debug_output: Some("error \"arithmetic overflow\"\n"),

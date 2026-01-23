@@ -8,7 +8,22 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"a\"\n    v1 = const \"b\"\n    v2 = list [v0, v1]\n    v3 = const \"c\"\n    v4 = const \"d\"\n    v5 = const \"e\"\n    v6 = list [v3, v4, v5]\n    v7 = list [v2, v6]\n    unit_end_drop v7\n    unit_end\nexports:\n    nested = v7\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "a"
+                        v1 = const "b"
+                        v2 = list [v0, v1]
+                        v3 = const "c"
+                        v4 = const "d"
+                        v5 = const "e"
+                        v6 = list [v3, v4, v5]
+                        v7 = list [v2, v6]
+                        unit_end_drop v7
+                        unit_end
+                    exports:
+                        nested = v7
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -20,7 +35,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = move.tracked unit0.v7\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move.tracked unit0.v7
+                        unit_end v0
+                """,
             ),
             output: "[[\"a\", \"b\"], [\"c\", \"d\", \"e\"]]",
         ),

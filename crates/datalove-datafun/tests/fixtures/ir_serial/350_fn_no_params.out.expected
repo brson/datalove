@@ -7,7 +7,20 @@ IrSerialAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn get_five():\nblock0:\n    v0 = const 5u32\n    return v0\nexports:\n    get_five = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn get_five():
+                    block0:
+                        v0 = const 5u32
+                        return v0
+                    exports:
+                        get_five = f0
+                """,
             ),
             direct_interp_output: "5\n",
             direct_aot_output: "5\n",

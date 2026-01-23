@@ -8,7 +8,15 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = data_from v2\n    unit_end v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = data_from v2
+                        unit_end v3
+                """,
             ),
             output: "data (1, 2)",
         ),

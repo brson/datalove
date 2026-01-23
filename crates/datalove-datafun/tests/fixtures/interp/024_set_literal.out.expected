@@ -8,7 +8,15 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    v1 = const 10u32\n    v2 = const 15u32\n    v3 = set {v0, v1, v2}\n    unit_end v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5u32
+                        v1 = const 10u32
+                        v2 = const 15u32
+                        v3 = set {v0, v1, v2}
+                        unit_end v3
+                """,
             ),
             output: "set {5, 10, 15}",
         ),

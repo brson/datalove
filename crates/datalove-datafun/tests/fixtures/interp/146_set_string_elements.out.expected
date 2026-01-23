@@ -8,7 +8,18 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"alice\"\n    v1 = const \"bob\"\n    v2 = const \"charlie\"\n    v3 = set {v0, v1, v2}\n    unit_end_drop v3\n    unit_end\nexports:\n    names = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "alice"
+                        v1 = const "bob"
+                        v2 = const "charlie"
+                        v3 = set {v0, v1, v2}
+                        unit_end_drop v3
+                        unit_end
+                    exports:
+                        names = v3
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -20,7 +31,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = move.tracked unit0.v3\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move.tracked unit0.v3
+                        unit_end v0
+                """,
             ),
             output: "set {\"alice\", \"bob\", \"charlie\"}",
         ),

@@ -16,7 +16,7 @@ use std::process::Command;
 use datalove_datafun as datafun;
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_interp::{Destination, IrInterpreter, ScriptEnvironment};
-use datalove_datafun_ir::{FunctionRegistry, IrScriptUnit, IrType};
+use datalove_datafun_ir::{expand_ir_strings, FunctionRegistry, IrScriptUnit, IrType};
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_rt::rust::AlignedBuffer;
 
@@ -747,8 +747,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         .enumerate_arrays(false)
         .compact_arrays(false);
 
-    ron::ser::to_string_pretty(&analysis, ron_config)
-        .map_err(|e| format!("Failed to serialize result: {}", e))
+    let ron_output = ron::ser::to_string_pretty(&analysis, ron_config)
+        .map_err(|e| format!("Failed to serialize result: {}", e))?;
+
+    Ok(expand_ir_strings(&ron_output))
 }
 
 fn main() {

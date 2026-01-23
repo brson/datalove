@@ -4,7 +4,18 @@ ModulesAnalysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn make_error():\nblock0:\n    v0 = const \"something went wrong\"\n    v1 = error_from v0\n    return v1\n\nfn main():\nblock0:\n    v0 = call m0.f0()\n    return v0\n",
+        ir: """
+            fn make_error():
+            block0:
+                v0 = const "something went wrong"
+                v1 = error_from v0
+                return v1
+            
+            fn main():
+            block0:
+                v0 = call m0.f0()
+                return v0
+        """,
     ),
     output: "error \"something went wrong\"",
 )

@@ -8,7 +8,41 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = some v0\n    v2 = const 20int\n    v3 = some v2\n    v4 = const 0int\n    store.move s0, v4\n    v5, v6 = unwrap_option v1\n    branch v6, block1, block5\nblock1:\n    v7, v8 = unwrap_option v3\n    branch v8, block2, block3\nblock2:\n    v9 = add v5, v7\n    drop.tracked s0\n    store.move s0, v9\n    goto block4\nblock3:\n    goto block4\nblock4:\n    drop.tracked v5\n    goto block6\nblock5:\n    drop.tracked v3\n    goto block6\nblock6:\n    unit_end_drop.tracked s0\n    unit_end\nexports:\n    outer = v1\n    inner = v3\n    result = s0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = some v0
+                        v2 = const 20int
+                        v3 = some v2
+                        v4 = const 0int
+                        store.move s0, v4
+                        v5, v6 = unwrap_option v1
+                        branch v6, block1, block5
+                    block1:
+                        v7, v8 = unwrap_option v3
+                        branch v8, block2, block3
+                    block2:
+                        v9 = add v5, v7
+                        drop.tracked s0
+                        store.move s0, v9
+                        goto block4
+                    block3:
+                        goto block4
+                    block4:
+                        drop.tracked v5
+                        goto block6
+                    block5:
+                        drop.tracked v3
+                        goto block6
+                    block6:
+                        unit_end_drop.tracked s0
+                        unit_end
+                    exports:
+                        outer = v1
+                        inner = v3
+                        result = s0
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -20,7 +54,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = move.tracked unit0.s0\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move.tracked unit0.s0
+                        unit_end v0
+                """,
             ),
             output: "30",
         ),

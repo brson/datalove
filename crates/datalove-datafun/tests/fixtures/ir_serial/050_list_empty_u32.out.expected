@@ -7,7 +7,16 @@ IrSerialAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = list []\n    debuglog v0\n    unit_end_drop v0\n    unit_end\nexports:\n    xs = v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = list []
+                        debuglog v0
+                        unit_end_drop v0
+                        unit_end
+                    exports:
+                        xs = v0
+                """,
             ),
             direct_interp_output: "[]\n",
             direct_aot_output: "[]\n",

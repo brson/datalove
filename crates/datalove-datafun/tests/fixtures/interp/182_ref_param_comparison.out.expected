@@ -8,7 +8,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn is_equal(p0, p1):\nblock0:\n    v0 = eq p0, p1\n    return v0\n",
+                ir: """
+                    fn is_equal(p0, p1):
+                    block0:
+                        v0 = eq p0, p1
+                        return v0
+                """,
             ),
             output: "",
         ),
@@ -20,7 +25,29 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = const 20int\n    v2 = const 10int\n    v3 = call m0.f0(v0, v2)\n    v4 = call m0.f0(v0, v1)\n    v5 = call m0.f0(v0, v0)\n    v6 = pack Tuple3 {v3, v4, v5}\n    unit_end_drop v0\n    unit_end_drop v1\n    unit_end_drop v2\n    unit_end\nexports:\n    x = v0\n    y = v1\n    z = v2\n    eq1 = v3\n    eq2 = v4\n    eq3 = v5\n    output = v6\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = const 20int
+                        v2 = const 10int
+                        v3 = call m0.f0(v0, v2)
+                        v4 = call m0.f0(v0, v1)
+                        v5 = call m0.f0(v0, v0)
+                        v6 = pack Tuple3 {v3, v4, v5}
+                        unit_end_drop v0
+                        unit_end_drop v1
+                        unit_end_drop v2
+                        unit_end
+                    exports:
+                        x = v0
+                        y = v1
+                        z = v2
+                        eq1 = v3
+                        eq2 = v4
+                        eq3 = v5
+                        output = v6
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -32,7 +59,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = copy unit0.v6\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = copy unit0.v6
+                        unit_end v0
+                """,
             ),
             output: "(true, false, true)",
         ),

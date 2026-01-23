@@ -4,7 +4,18 @@ ModulesAnalysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn main():\nblock0:\n    v0 = const 1u32\n    store.copy s0, v0\n    v1 = const 2u32\n    store.copy s1, v1\n    v2 = const 3u32\n    store.copy s1, v2\n    v3 = load.copy s1\n    return v3\n",
+        ir: """
+            fn main():
+            block0:
+                v0 = const 1u32
+                store.copy s0, v0
+                v1 = const 2u32
+                store.copy s1, v1
+                v2 = const 3u32
+                store.copy s1, v2
+                v3 = load.copy s1
+                return v3
+        """,
     ),
     output: "3",
 )

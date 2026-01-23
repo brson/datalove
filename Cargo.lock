@@ -1232,6 +1232,7 @@ dependencies = [
  "datalove-datafun-intrinsics",
  "datalove-datalit",
  "datalove-rtdt",
+ "regex",
  "ron",
  "salsa",
  "serde",

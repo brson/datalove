@@ -8,7 +8,16 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"hello\"\n    v1 = enum_variant 1 v0\n    unit_end_drop v1\n    unit_end\nexports:\n    message = v1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "hello"
+                        v1 = enum_variant 1 v0
+                        unit_end_drop v1
+                        unit_end
+                    exports:
+                        message = v1
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -20,7 +29,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = move.tracked unit0.v1\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move.tracked unit0.v1
+                        unit_end v0
+                """,
             ),
             output: "enum Text(\"hello\")",
         ),

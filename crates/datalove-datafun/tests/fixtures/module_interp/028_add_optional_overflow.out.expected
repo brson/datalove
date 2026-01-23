@@ -4,7 +4,25 @@ ModulesAnalysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn test_add(p0, p1):\nblock0:\n    v0, v1 = add.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\n\nfn main():\nblock0:\n    v0 = const 4294967295u32\n    v1 = const 1u32\n    v2 = call m0.f0(v0, v1)\n    return v2\n",
+        ir: """
+            fn test_add(p0, p1):
+            block0:
+                v0, v1 = add.checked p0, p1
+                branch v1, block1, block2
+            block1:
+                v2 = none
+                return v2
+            block2:
+                v3 = some v0
+                return v3
+            
+            fn main():
+            block0:
+                v0 = const 4294967295u32
+                v1 = const 1u32
+                v2 = call m0.f0(v0, v1)
+                return v2
+        """,
     ),
     output: "none",
 )

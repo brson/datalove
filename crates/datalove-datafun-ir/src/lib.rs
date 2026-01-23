@@ -11,6 +11,7 @@ use std::collections::HashMap;
 pub mod display;
 pub mod registry;
 
+pub use display::expand_ir_strings;
 pub use registry::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry};
 
 /// SSA value - defined exactly once, immutable.

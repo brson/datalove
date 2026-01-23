@@ -4,7 +4,12 @@ ModulesAnalysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn main():\nblock0:\n    v0 = const true\n    return v0\n",
+        ir: """
+            fn main():
+            block0:
+                v0 = const true
+                return v0
+        """,
     ),
     output: "true",
 )

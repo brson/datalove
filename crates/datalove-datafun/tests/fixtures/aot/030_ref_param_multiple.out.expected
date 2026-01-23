@@ -8,7 +8,39 @@ AotAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = const 20int\n    v2 = const 30int\n    v3 = call f0(v0, v1)\n    debuglog v3\n    drop v3\n    v4 = call f0(v0, v2)\n    debuglog v4\n    drop v4\n    v5 = call f0(v1, v2)\n    debuglog v5\n    drop v5\n    v6 = call f0(v0, v0)\n    debuglog v6\n    drop v6\n    unit_end_drop v0\n    unit_end_drop v1\n    unit_end_drop v2\n    unit_end\n\nfn add_refs(p0, p1):\nblock0:\n    v0 = add p0, p1\n    return v0\nexports:\n    add_refs = f0\n    x = v0\n    y = v1\n    z = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = const 20int
+                        v2 = const 30int
+                        v3 = call f0(v0, v1)
+                        debuglog v3
+                        drop v3
+                        v4 = call f0(v0, v2)
+                        debuglog v4
+                        drop v4
+                        v5 = call f0(v1, v2)
+                        debuglog v5
+                        drop v5
+                        v6 = call f0(v0, v0)
+                        debuglog v6
+                        drop v6
+                        unit_end_drop v0
+                        unit_end_drop v1
+                        unit_end_drop v2
+                        unit_end
+                    
+                    fn add_refs(p0, p1):
+                    block0:
+                        v0 = add p0, p1
+                        return v0
+                    exports:
+                        add_refs = f0
+                        x = v0
+                        y = v1
+                        z = v2
+                """,
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Success",

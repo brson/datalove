@@ -8,7 +8,20 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "fn inner(p0):\nblock0:\n    v0 = const 100int\n    v1 = eq p0, v0\n    drop v0\n    return v1\n\nfn outer(p0):\nblock0:\n    v0 = call m0.f0(p0)\n    drop p0\n    return v0\n",
+                ir: """
+                    fn inner(p0):
+                    block0:
+                        v0 = const 100int
+                        v1 = eq p0, v0
+                        drop v0
+                        return v1
+                    
+                    fn outer(p0):
+                    block0:
+                        v0 = call m0.f0(p0)
+                        drop p0
+                        return v0
+                """,
             ),
             output: "",
         ),
@@ -20,7 +33,11 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -32,7 +49,13 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100int\n    v1 = call m0.f1(v0)\n    unit_end v1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100int
+                        v1 = call m0.f1(v0)
+                        unit_end v1
+                """,
             ),
             output: "true",
         ),

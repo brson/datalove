@@ -7,7 +7,13 @@ IrSerialAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    debuglog v0\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        debuglog v0
+                        unit_end
+                """,
             ),
             direct_interp_output: "42\n",
             direct_aot_output: "42\n",

@@ -8,7 +8,14 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    unit_end\nexports:\n    a = v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5u32
+                        unit_end
+                    exports:
+                        a = v0
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -20,7 +27,20 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 3u32\n    v1 = widen unit0.v0\n    v2 = widen v0\n    v3 = add v1, v2\n    drop v1\n    drop v2\n    unit_end_drop v3\n    unit_end\nexports:\n    b = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 3u32
+                        v1 = widen unit0.v0
+                        v2 = widen v0
+                        v3 = add v1, v2
+                        drop v1
+                        drop v2
+                        unit_end_drop v3
+                        unit_end
+                    exports:
+                        b = v3
+                """,
             ),
             output: "(fragment executed)",
         ),
@@ -32,7 +52,12 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = move.tracked unit1.v3\n    unit_end v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move.tracked unit1.v3
+                        unit_end v0
+                """,
             ),
             output: "8",
         ),

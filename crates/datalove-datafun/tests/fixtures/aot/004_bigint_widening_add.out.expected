@@ -8,7 +8,20 @@ AotAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 32u32\n    v2 = widen v0\n    v3 = widen v1\n    v4 = add v2, v3\n    drop v2\n    drop v3\n    debuglog v4\n    drop v4\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 32u32
+                        v2 = widen v0
+                        v3 = widen v1
+                        v4 = add v2, v3
+                        drop v2
+                        drop v3
+                        debuglog v4
+                        drop v4
+                        unit_end
+                """,
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Success",

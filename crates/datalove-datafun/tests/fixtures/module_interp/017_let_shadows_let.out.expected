@@ -4,7 +4,13 @@ ModulesAnalysis(
     ),
     lowering: LoweringResult(
         status: "Success",
-        ir: "fn main():\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    return v1\n",
+        ir: """
+            fn main():
+            block0:
+                v0 = const 1u32
+                v1 = const 2u32
+                return v1
+        """,
     ),
     output: "2",
 )
