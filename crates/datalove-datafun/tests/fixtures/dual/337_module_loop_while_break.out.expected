@@ -8,11 +8,89 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn fn0():\nblock0:\n    goto block1\nblock1:\n    v0 = const true\n    branch v0, block2, block6\nblock2:\n    v1 = const \"\"\n    v2 = const true\n    branch v2, block3, block4\nblock3:\n    v3 = const 160u64\n    goto block5\nblock4:\n    v4 = const 241u32\n    goto block5\nblock5:\n    drop v1\n    goto block6\nblock6:\n    goto block7\nblock7:\n    v5 = const false\n    branch v5, block8, block12\nblock8:\n    v6 = const true\n    branch v6, block9, block10\nblock9:\n    v7 = const 1i64\n    goto block11\nblock10:\n    goto block11\nblock11:\n    v8 = const 245.9f32\n    goto block12\nblock12:\n    v9 = const 111i32\n    return v9\n",
+                ir: """
+                    fn fn0():
+                    block0:
+                        goto block1
+                    block1:
+                        v0 = const true
+                        branch v0, block2, block6
+                    block2:
+                        v1 = const ""
+                        v2 = const true
+                        branch v2, block3, block4
+                    block3:
+                        v3 = const 160u64
+                        goto block5
+                    block4:
+                        v4 = const 241u32
+                        goto block5
+                    block5:
+                        drop v1
+                        goto block6
+                    block6:
+                        goto block7
+                    block7:
+                        v5 = const false
+                        branch v5, block8, block12
+                    block8:
+                        v6 = const true
+                        branch v6, block9, block10
+                    block9:
+                        v7 = const 1i64
+                        goto block11
+                    block10:
+                        goto block11
+                    block11:
+                        v8 = const 245.9f32
+                        goto block12
+                    block12:
+                        v9 = const 111i32
+                        return v9
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn fn0():\nblock0:\n    goto block1\nblock1:\n    v0 = const true\n    branch v0, block2, block6\nblock2:\n    v1 = const \"\"\n    v2 = const true\n    branch v2, block3, block4\nblock3:\n    v3 = const 160u64\n    goto block5\nblock4:\n    v4 = const 241u32\n    goto block5\nblock5:\n    drop v1\n    goto block6\nblock6:\n    goto block7\nblock7:\n    v5 = const false\n    branch v5, block8, block12\nblock8:\n    v6 = const true\n    branch v6, block9, block10\nblock9:\n    v7 = const 1i64\n    goto block11\nblock10:\n    goto block11\nblock11:\n    v8 = const 245.9f32\n    goto block12\nblock12:\n    v9 = const 111i32\n    return v9\n",
+                ir: """
+                    fn fn0():
+                    block0:
+                        goto block1
+                    block1:
+                        v0 = const true
+                        branch v0, block2, block6
+                    block2:
+                        v1 = const ""
+                        v2 = const true
+                        branch v2, block3, block4
+                    block3:
+                        v3 = const 160u64
+                        goto block5
+                    block4:
+                        v4 = const 241u32
+                        goto block5
+                    block5:
+                        drop v1
+                        goto block6
+                    block6:
+                        goto block7
+                    block7:
+                        v5 = const false
+                        branch v5, block8, block12
+                    block8:
+                        v6 = const true
+                        branch v6, block9, block10
+                    block9:
+                        v7 = const 1i64
+                        goto block11
+                    block10:
+                        goto block11
+                    block11:
+                        v8 = const 245.9f32
+                        goto block12
+                    block12:
+                        v9 = const 111i32
+                        return v9
+                """,
             ),
             ir_match: true,
             interp_output: "",
@@ -26,11 +104,23 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call m0.f0()\n    debuglog v0\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.f0()
+                        debuglog v0
+                        unit_end
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call m0.f0()\n    debuglog v0\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.f0()
+                        debuglog v0
+                        unit_end
+                """,
             ),
             ir_match: true,
             interp_output: "111\n",

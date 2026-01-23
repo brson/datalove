@@ -7,11 +7,43 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1000000u32\n    v1 = const 2000000u32\n    v2 = const 3000000u32\n    v3 = pack Struct0 {v0, v1, v2}\n    v4 = getfieldref v3.0\n    debuglog v4\n    v5 = getfieldref v3.1\n    debuglog v5\n    v6 = getfieldref v3.2\n    debuglog v6\n    unit_end\nexports:\n    point = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1000000u32
+                        v1 = const 2000000u32
+                        v2 = const 3000000u32
+                        v3 = pack Struct0 {v0, v1, v2}
+                        v4 = getfieldref v3.0
+                        debuglog v4
+                        v5 = getfieldref v3.1
+                        debuglog v5
+                        v6 = getfieldref v3.2
+                        debuglog v6
+                        unit_end
+                    exports:
+                        point = v3
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1000000u32\n    v1 = const 2000000u32\n    v2 = const 3000000u32\n    v3 = pack Struct0 {v0, v1, v2}\n    v4 = getfieldref v3.0\n    debuglog v4\n    v5 = getfieldref v3.1\n    debuglog v5\n    v6 = getfieldref v3.2\n    debuglog v6\n    unit_end\nexports:\n    point = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1000000u32
+                        v1 = const 2000000u32
+                        v2 = const 3000000u32
+                        v3 = pack Struct0 {v0, v1, v2}
+                        v4 = getfieldref v3.0
+                        debuglog v4
+                        v5 = getfieldref v3.1
+                        debuglog v5
+                        v6 = getfieldref v3.2
+                        debuglog v6
+                        unit_end
+                    exports:
+                        point = v3
+                """,
             ),
             ir_match: true,
             interp_output: "1000000\n2000000\n3000000\n",

@@ -7,11 +7,59 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = some v2\n    v4, v5 = unwrap_option v3\n    branch v5, block2, block1\nblock1:\n    v6 = none\n    return v6\nblock2:\n    v7 = getfield v4.0\n    v8 = some v7\n    return v8\nexports:\n    test = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = some v2
+                        v4, v5 = unwrap_option v3
+                        branch v5, block2, block1
+                    block1:
+                        v6 = none
+                        return v6
+                    block2:
+                        v7 = getfield v4.0
+                        v8 = some v7
+                        return v8
+                    exports:
+                        test = f0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = some v2\n    v4, v5 = unwrap_option v3\n    branch v5, block2, block1\nblock1:\n    v6 = none\n    return v6\nblock2:\n    v7 = getfield v4.0\n    v8 = some v7\n    return v8\nexports:\n    test = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = some v2
+                        v4, v5 = unwrap_option v3
+                        branch v5, block2, block1
+                    block1:
+                        v6 = none
+                        return v6
+                    block2:
+                        v7 = getfield v4.0
+                        v8 = some v7
+                        return v8
+                    exports:
+                        test = f0
+                """,
             ),
             ir_match: true,
             interp_output: "some 1\n",

@@ -7,11 +7,45 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = none\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    debuglog v1\n    goto block3\nblock2:\n    v3 = const 0u32\n    debuglog v3\n    goto block3\nblock3:\n    unit_end\nexports:\n    opt = v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = none
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        debuglog v1
+                        goto block3
+                    block2:
+                        v3 = const 0u32
+                        debuglog v3
+                        goto block3
+                    block3:
+                        unit_end
+                    exports:
+                        opt = v0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = none\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    debuglog v1\n    goto block3\nblock2:\n    v3 = const 0u32\n    debuglog v3\n    goto block3\nblock3:\n    unit_end\nexports:\n    opt = v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = none
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        debuglog v1
+                        goto block3
+                    block2:
+                        v3 = const 0u32
+                        debuglog v3
+                        goto block3
+                    block3:
+                        unit_end
+                    exports:
+                        opt = v0
+                """,
             ),
             ir_match: true,
             interp_output: "0\n",

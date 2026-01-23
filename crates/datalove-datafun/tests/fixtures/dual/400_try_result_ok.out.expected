@@ -7,11 +7,43 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = ok v0\n    v2, v3, v4 = unwrap_result v1\n    branch v4, block2, block1\nblock1:\n    v5 = err v3\n    unit_early_return v5\nblock2:\n    debuglog v2\n    unit_end\nexports:\n    input = v1\n    x = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = ok v0
+                        v2, v3, v4 = unwrap_result v1
+                        branch v4, block2, block1
+                    block1:
+                        v5 = err v3
+                        unit_early_return v5
+                    block2:
+                        debuglog v2
+                        unit_end
+                    exports:
+                        input = v1
+                        x = v2
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = ok v0\n    v2, v3, v4 = unwrap_result v1\n    branch v4, block2, block1\nblock1:\n    v5 = err v3\n    unit_early_return v5\nblock2:\n    debuglog v2\n    unit_end\nexports:\n    input = v1\n    x = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = ok v0
+                        v2, v3, v4 = unwrap_result v1
+                        branch v4, block2, block1
+                    block1:
+                        v5 = err v3
+                        unit_early_return v5
+                    block2:
+                        debuglog v2
+                        unit_end
+                    exports:
+                        input = v1
+                        x = v2
+                """,
             ),
             ir_match: true,
             interp_output: "42\n",

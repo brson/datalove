@@ -8,11 +8,23 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn double(p0):\nblock0:\n    v0 = add p0, p0\n    drop p0\n    return v0\n",
+                ir: """
+                    fn double(p0):
+                    block0:
+                        v0 = add p0, p0
+                        drop p0
+                        return v0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn double(p0):\nblock0:\n    v0 = add p0, p0\n    drop p0\n    return v0\n",
+                ir: """
+                    fn double(p0):
+                    block0:
+                        v0 = add p0, p0
+                        drop p0
+                        return v0
+                """,
             ),
             ir_match: true,
             interp_output: "",
@@ -27,11 +39,23 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn quadruple(p0):\nblock0:\n    v0 = call m0.f0(p0)\n    v1 = call m0.f0(v0)\n    return v1\n",
+                ir: """
+                    fn quadruple(p0):
+                    block0:
+                        v0 = call m0.f0(p0)
+                        v1 = call m0.f0(v0)
+                        return v1
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn quadruple(p0):\nblock0:\n    v0 = call m0.f0(p0)\n    v1 = call m0.f0(v0)\n    return v1\n",
+                ir: """
+                    fn quadruple(p0):
+                    block0:
+                        v0 = call m0.f0(p0)
+                        v1 = call m0.f0(v0)
+                        return v1
+                """,
             ),
             ir_match: true,
             interp_output: "",
@@ -45,11 +69,27 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = call m1.f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = call m1.f0(v0)
+                        debuglog v1
+                        drop v1
+                        unit_end
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10int\n    v1 = call m1.f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = call m1.f0(v0)
+                        debuglog v1
+                        drop v1
+                        unit_end
+                """,
             ),
             ir_match: true,
             interp_output: "40\n",

@@ -7,11 +7,33 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    store.copy s0, v0\n    v1 = const 20u32\n    store.copy s0, v1\n    debuglog s0\n    unit_end\nexports:\n    x = s0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        store.copy s0, v0
+                        v1 = const 20u32
+                        store.copy s0, v1
+                        debuglog s0
+                        unit_end
+                    exports:
+                        x = s0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    store.copy s0, v0\n    v1 = const 20u32\n    store.copy s0, v1\n    debuglog s0\n    unit_end\nexports:\n    x = s0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        store.copy s0, v0
+                        v1 = const 20u32
+                        store.copy s0, v1
+                        debuglog s0
+                        unit_end
+                    exports:
+                        x = s0
+                """,
             ),
             ir_match: true,
             interp_output: "20\n",

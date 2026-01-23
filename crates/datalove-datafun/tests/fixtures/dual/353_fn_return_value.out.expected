@@ -7,11 +7,39 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn get_ten():\nblock0:\n    v0 = const 10u32\n    return v0\nexports:\n    get_ten = f0\n    x = v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn get_ten():
+                    block0:
+                        v0 = const 10u32
+                        return v0
+                    exports:
+                        get_ten = f0
+                        x = v0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn get_ten():\nblock0:\n    v0 = const 10u32\n    return v0\nexports:\n    get_ten = f0\n    x = v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn get_ten():
+                    block0:
+                        v0 = const 10u32
+                        return v0
+                    exports:
+                        get_ten = f0
+                        x = v0
+                """,
             ),
             ir_match: true,
             interp_output: "10\n",

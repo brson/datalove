@@ -7,11 +7,41 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 30u32\n    v1 = const 5u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = getfield v2.0\n    v4 = getfield v2.1\n    debuglog v3\n    debuglog v4\n    unit_end\nexports:\n    s = v2\n    a = v3\n    c = v4\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 30u32
+                        v1 = const 5u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = getfield v2.0
+                        v4 = getfield v2.1
+                        debuglog v3
+                        debuglog v4
+                        unit_end
+                    exports:
+                        s = v2
+                        a = v3
+                        c = v4
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 30u32\n    v1 = const 5u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = getfield v2.0\n    v4 = getfield v2.1\n    debuglog v3\n    debuglog v4\n    unit_end\nexports:\n    s = v2\n    a = v3\n    c = v4\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 30u32
+                        v1 = const 5u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = getfield v2.0
+                        v4 = getfield v2.1
+                        debuglog v3
+                        debuglog v4
+                        unit_end
+                    exports:
+                        s = v2
+                        a = v3
+                        c = v4
+                """,
             ),
             ir_match: true,
             interp_output: "30\n5\n",

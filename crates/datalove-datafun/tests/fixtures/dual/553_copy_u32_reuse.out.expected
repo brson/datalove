@@ -7,11 +7,47 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = call f0(v0)\n    debuglog v1\n    v2 = call f0(v0)\n    debuglog v2\n    debuglog v0\n    unit_end\n\nfn use_u32(p0):\nblock0:\n    v0 = copy p0\n    return v0\nexports:\n    use_u32 = f0\n    x = v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = call f0(v0)
+                        debuglog v1
+                        v2 = call f0(v0)
+                        debuglog v2
+                        debuglog v0
+                        unit_end
+                    
+                    fn use_u32(p0):
+                    block0:
+                        v0 = copy p0
+                        return v0
+                    exports:
+                        use_u32 = f0
+                        x = v0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = call f0(v0)\n    debuglog v1\n    v2 = call f0(v0)\n    debuglog v2\n    debuglog v0\n    unit_end\n\nfn use_u32(p0):\nblock0:\n    v0 = copy p0\n    return v0\nexports:\n    use_u32 = f0\n    x = v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = call f0(v0)
+                        debuglog v1
+                        v2 = call f0(v0)
+                        debuglog v2
+                        debuglog v0
+                        unit_end
+                    
+                    fn use_u32(p0):
+                    block0:
+                        v0 = copy p0
+                        return v0
+                    exports:
+                        use_u32 = f0
+                        x = v0
+                """,
             ),
             ir_match: true,
             interp_output: "42\n42\n42\n",

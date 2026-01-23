@@ -7,11 +7,59 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = none\n    v1 = const \"hello\"\n    v2, v3 = unwrap_option v0\n    branch v3, block2, block1\nblock1:\n    v4 = none\n    drop v1\n    return v4\nblock2:\n    v5 = pack Tuple2 {v1, v2}\n    v6 = some v5\n    return v6\nexports:\n    test = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = none
+                        v1 = const "hello"
+                        v2, v3 = unwrap_option v0
+                        branch v3, block2, block1
+                    block1:
+                        v4 = none
+                        drop v1
+                        return v4
+                    block2:
+                        v5 = pack Tuple2 {v1, v2}
+                        v6 = some v5
+                        return v6
+                    exports:
+                        test = f0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = none\n    v1 = const \"hello\"\n    v2, v3 = unwrap_option v0\n    branch v3, block2, block1\nblock1:\n    v4 = none\n    drop v1\n    return v4\nblock2:\n    v5 = pack Tuple2 {v1, v2}\n    v6 = some v5\n    return v6\nexports:\n    test = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = none
+                        v1 = const "hello"
+                        v2, v3 = unwrap_option v0
+                        branch v3, block2, block1
+                    block1:
+                        v4 = none
+                        drop v1
+                        return v4
+                    block2:
+                        v5 = pack Tuple2 {v1, v2}
+                        v6 = some v5
+                        return v6
+                    exports:
+                        test = f0
+                """,
             ),
             ir_match: true,
             interp_output: "none\n",

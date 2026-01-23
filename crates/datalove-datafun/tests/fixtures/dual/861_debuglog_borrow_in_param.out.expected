@@ -8,11 +8,39 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn test_int(p0):\nblock0:\n    debuglog p0\n    v0 = const false\n    drop p0\n    return v0\n\nfn test_string(p0):\nblock0:\n    debuglog p0\n    v0 = const 42u32\n    drop p0\n    return v0\n",
+                ir: """
+                    fn test_int(p0):
+                    block0:
+                        debuglog p0
+                        v0 = const false
+                        drop p0
+                        return v0
+                    
+                    fn test_string(p0):
+                    block0:
+                        debuglog p0
+                        v0 = const 42u32
+                        drop p0
+                        return v0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn test_int(p0):\nblock0:\n    debuglog p0\n    v0 = const false\n    drop p0\n    return v0\n\nfn test_string(p0):\nblock0:\n    debuglog p0\n    v0 = const 42u32\n    drop p0\n    return v0\n",
+                ir: """
+                    fn test_int(p0):
+                    block0:
+                        debuglog p0
+                        v0 = const false
+                        drop p0
+                        return v0
+                    
+                    fn test_string(p0):
+                    block0:
+                        debuglog p0
+                        v0 = const 42u32
+                        drop p0
+                        return v0
+                """,
             ),
             ir_match: true,
             interp_output: "",
@@ -26,11 +54,37 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 12345int\n    v1 = call m0.f0(v0)\n    debuglog v1\n    v2 = const \"hello\"\n    v3 = call m0.f1(v2)\n    debuglog v3\n    unit_end\nexports:\n    r1 = v1\n    r2 = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 12345int
+                        v1 = call m0.f0(v0)
+                        debuglog v1
+                        v2 = const "hello"
+                        v3 = call m0.f1(v2)
+                        debuglog v3
+                        unit_end
+                    exports:
+                        r1 = v1
+                        r2 = v3
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 12345int\n    v1 = call m0.f0(v0)\n    debuglog v1\n    v2 = const \"hello\"\n    v3 = call m0.f1(v2)\n    debuglog v3\n    unit_end\nexports:\n    r1 = v1\n    r2 = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 12345int
+                        v1 = call m0.f0(v0)
+                        debuglog v1
+                        v2 = const "hello"
+                        v3 = call m0.f1(v2)
+                        debuglog v3
+                        unit_end
+                    exports:
+                        r1 = v1
+                        r2 = v3
+                """,
             ),
             ir_match: true,
             interp_output: "12345\nfalse\n\"hello\"\n42\n",

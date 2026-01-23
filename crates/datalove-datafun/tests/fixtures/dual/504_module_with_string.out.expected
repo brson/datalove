@@ -8,11 +8,21 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn greeting():\nblock0:\n    v0 = const \"hello world\"\n    return v0\n",
+                ir: """
+                    fn greeting():
+                    block0:
+                        v0 = const "hello world"
+                        return v0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn greeting():\nblock0:\n    v0 = const \"hello world\"\n    return v0\n",
+                ir: """
+                    fn greeting():
+                    block0:
+                        v0 = const "hello world"
+                        return v0
+                """,
             ),
             ir_match: true,
             interp_output: "",
@@ -26,11 +36,25 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call m0.f0()\n    debuglog v0\n    drop v0\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.f0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call m0.f0()\n    debuglog v0\n    drop v0\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.f0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
             ),
             ir_match: true,
             interp_output: "\"hello world\"\n",

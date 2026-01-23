@@ -7,11 +7,43 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n\nfn double(p0):\nblock0:\n    v0 = add p0, p0\n    drop p0\n    return v0\nexports:\n    double = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5int
+                        v1 = call f0(v0)
+                        debuglog v1
+                        drop v1
+                        unit_end
+                    
+                    fn double(p0):
+                    block0:
+                        v0 = add p0, p0
+                        drop p0
+                        return v0
+                    exports:
+                        double = f0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    unit_end\n\nfn double(p0):\nblock0:\n    v0 = add p0, p0\n    drop p0\n    return v0\nexports:\n    double = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5int
+                        v1 = call f0(v0)
+                        debuglog v1
+                        drop v1
+                        unit_end
+                    
+                    fn double(p0):
+                    block0:
+                        v0 = add p0, p0
+                        drop p0
+                        return v0
+                    exports:
+                        double = f0
+                """,
             ),
             ir_match: true,
             interp_output: "10\n",

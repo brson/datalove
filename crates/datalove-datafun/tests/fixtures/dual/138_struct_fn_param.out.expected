@@ -7,11 +7,63 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = call f0(v2)\n    debuglog v3\n    drop v3\n    unit_end\n\nfn sum_coords(p0):\nblock0:\n    v0 = copy p0\n    v1 = getfield v0.0\n    v2 = copy p0\n    v3 = getfield v2.1\n    v4 = widen v1\n    v5 = widen v3\n    v6 = add v4, v5\n    drop v4\n    drop v5\n    return v6\nexports:\n    sum_coords = f0\n    point = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = call f0(v2)
+                        debuglog v3
+                        drop v3
+                        unit_end
+                    
+                    fn sum_coords(p0):
+                    block0:
+                        v0 = copy p0
+                        v1 = getfield v0.0
+                        v2 = copy p0
+                        v3 = getfield v2.1
+                        v4 = widen v1
+                        v5 = widen v3
+                        v6 = add v4, v5
+                        drop v4
+                        drop v5
+                        return v6
+                    exports:
+                        sum_coords = f0
+                        point = v2
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = call f0(v2)\n    debuglog v3\n    drop v3\n    unit_end\n\nfn sum_coords(p0):\nblock0:\n    v0 = copy p0\n    v1 = getfield v0.0\n    v2 = copy p0\n    v3 = getfield v2.1\n    v4 = widen v1\n    v5 = widen v3\n    v6 = add v4, v5\n    drop v4\n    drop v5\n    return v6\nexports:\n    sum_coords = f0\n    point = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = call f0(v2)
+                        debuglog v3
+                        drop v3
+                        unit_end
+                    
+                    fn sum_coords(p0):
+                    block0:
+                        v0 = copy p0
+                        v1 = getfield v0.0
+                        v2 = copy p0
+                        v3 = getfield v2.1
+                        v4 = widen v1
+                        v5 = widen v3
+                        v6 = add v4, v5
+                        drop v4
+                        drop v5
+                        return v6
+                    exports:
+                        sum_coords = f0
+                        point = v2
+                """,
             ),
             ir_match: true,
             interp_output: "30\n",

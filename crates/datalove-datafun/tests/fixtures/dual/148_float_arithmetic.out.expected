@@ -7,11 +7,59 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 3f32\n    v1 = const 2f32\n    v2 = add v0, v1\n    v3 = sub v0, v1\n    v4 = mul v0, v1\n    v5 = div v0, v1\n    v6 = neg v0\n    debuglog v2\n    debuglog v3\n    debuglog v4\n    debuglog v5\n    debuglog v6\n    unit_end\nexports:\n    a = v0\n    b = v1\n    sum = v2\n    diff = v3\n    prod = v4\n    quot = v5\n    neg = v6\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 3f32
+                        v1 = const 2f32
+                        v2 = add v0, v1
+                        v3 = sub v0, v1
+                        v4 = mul v0, v1
+                        v5 = div v0, v1
+                        v6 = neg v0
+                        debuglog v2
+                        debuglog v3
+                        debuglog v4
+                        debuglog v5
+                        debuglog v6
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        sum = v2
+                        diff = v3
+                        prod = v4
+                        quot = v5
+                        neg = v6
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 3f32\n    v1 = const 2f32\n    v2 = add v0, v1\n    v3 = sub v0, v1\n    v4 = mul v0, v1\n    v5 = div v0, v1\n    v6 = neg v0\n    debuglog v2\n    debuglog v3\n    debuglog v4\n    debuglog v5\n    debuglog v6\n    unit_end\nexports:\n    a = v0\n    b = v1\n    sum = v2\n    diff = v3\n    prod = v4\n    quot = v5\n    neg = v6\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 3f32
+                        v1 = const 2f32
+                        v2 = add v0, v1
+                        v3 = sub v0, v1
+                        v4 = mul v0, v1
+                        v5 = div v0, v1
+                        v6 = neg v0
+                        debuglog v2
+                        debuglog v3
+                        debuglog v4
+                        debuglog v5
+                        debuglog v6
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        sum = v2
+                        diff = v3
+                        prod = v4
+                        quot = v5
+                        neg = v6
+                """,
             ),
             ir_match: true,
             interp_output: "5\n1\n6\n1.5\n-3\n",

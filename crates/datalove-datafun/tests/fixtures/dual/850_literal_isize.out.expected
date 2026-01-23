@@ -7,11 +7,51 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0isize\n    v1 = const 1isize\n    v2 = const -1isize\n    v3 = const -2147483648isize\n    v4 = const 2147483647isize\n    debuglog v0\n    debuglog v1\n    debuglog v2\n    debuglog v3\n    debuglog v4\n    unit_end\nexports:\n    zero = v0\n    one = v1\n    neg_one = v2\n    min = v3\n    max = v4\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0isize
+                        v1 = const 1isize
+                        v2 = const -1isize
+                        v3 = const -2147483648isize
+                        v4 = const 2147483647isize
+                        debuglog v0
+                        debuglog v1
+                        debuglog v2
+                        debuglog v3
+                        debuglog v4
+                        unit_end
+                    exports:
+                        zero = v0
+                        one = v1
+                        neg_one = v2
+                        min = v3
+                        max = v4
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0isize\n    v1 = const 1isize\n    v2 = const -1isize\n    v3 = const -2147483648isize\n    v4 = const 2147483647isize\n    debuglog v0\n    debuglog v1\n    debuglog v2\n    debuglog v3\n    debuglog v4\n    unit_end\nexports:\n    zero = v0\n    one = v1\n    neg_one = v2\n    min = v3\n    max = v4\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0isize
+                        v1 = const 1isize
+                        v2 = const -1isize
+                        v3 = const -2147483648isize
+                        v4 = const 2147483647isize
+                        debuglog v0
+                        debuglog v1
+                        debuglog v2
+                        debuglog v3
+                        debuglog v4
+                        unit_end
+                    exports:
+                        zero = v0
+                        one = v1
+                        neg_one = v2
+                        min = v3
+                        max = v4
+                """,
             ),
             ir_match: true,
             interp_output: "0\n1\n-1\n-2147483648\n2147483647\n",

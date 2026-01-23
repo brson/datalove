@@ -7,11 +7,41 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const -10i32\n    v1 = const -10i32\n    v2 = const 10i32\n    v3 = eq v0, v1\n    debuglog v3\n    v4 = eq v0, v2\n    debuglog v4\n    unit_end\nexports:\n    a = v0\n    b = v1\n    c = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const -10i32
+                        v1 = const -10i32
+                        v2 = const 10i32
+                        v3 = eq v0, v1
+                        debuglog v3
+                        v4 = eq v0, v2
+                        debuglog v4
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        c = v2
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const -10i32\n    v1 = const -10i32\n    v2 = const 10i32\n    v3 = eq v0, v1\n    debuglog v3\n    v4 = eq v0, v2\n    debuglog v4\n    unit_end\nexports:\n    a = v0\n    b = v1\n    c = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const -10i32
+                        v1 = const -10i32
+                        v2 = const 10i32
+                        v3 = eq v0, v1
+                        debuglog v3
+                        v4 = eq v0, v2
+                        debuglog v4
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        c = v2
+                """,
             ),
             ir_match: true,
             interp_output: "true\nfalse\n",

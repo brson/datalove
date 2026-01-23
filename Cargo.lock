@@ -1114,6 +1114,7 @@ dependencies = [
  "datalove-exampletest",
  "datalove-rt",
  "datalove-rtdt",
+ "regex",
  "ron",
  "rustmax",
  "salsa",

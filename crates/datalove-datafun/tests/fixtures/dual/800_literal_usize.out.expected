@@ -7,11 +7,39 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0usize\n    v1 = const 1usize\n    v2 = const 4294967295usize\n    debuglog v0\n    debuglog v1\n    debuglog v2\n    unit_end\nexports:\n    zero = v0\n    one = v1\n    max = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0usize
+                        v1 = const 1usize
+                        v2 = const 4294967295usize
+                        debuglog v0
+                        debuglog v1
+                        debuglog v2
+                        unit_end
+                    exports:
+                        zero = v0
+                        one = v1
+                        max = v2
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0usize\n    v1 = const 1usize\n    v2 = const 4294967295usize\n    debuglog v0\n    debuglog v1\n    debuglog v2\n    unit_end\nexports:\n    zero = v0\n    one = v1\n    max = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0usize
+                        v1 = const 1usize
+                        v2 = const 4294967295usize
+                        debuglog v0
+                        debuglog v1
+                        debuglog v2
+                        unit_end
+                    exports:
+                        zero = v0
+                        one = v1
+                        max = v2
+                """,
             ),
             ir_match: true,
             interp_output: "0\n1\n4294967295\n",

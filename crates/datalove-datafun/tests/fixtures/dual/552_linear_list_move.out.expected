@@ -7,11 +7,51 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = list [v0, v1, v2]\n    v4 = call f0(v3)\n    debuglog v4\n    unit_end\n\nfn consume_list(p0):\nblock0:\n    v0 = move p0\n    v1 = const 42u32\n    drop v0\n    return v1\nexports:\n    consume_list = f0\n    lst = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = list [v0, v1, v2]
+                        v4 = call f0(v3)
+                        debuglog v4
+                        unit_end
+                    
+                    fn consume_list(p0):
+                    block0:
+                        v0 = move p0
+                        v1 = const 42u32
+                        drop v0
+                        return v1
+                    exports:
+                        consume_list = f0
+                        lst = v3
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = list [v0, v1, v2]\n    v4 = call f0(v3)\n    debuglog v4\n    unit_end\n\nfn consume_list(p0):\nblock0:\n    v0 = move p0\n    v1 = const 42u32\n    drop v0\n    return v1\nexports:\n    consume_list = f0\n    lst = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = list [v0, v1, v2]
+                        v4 = call f0(v3)
+                        debuglog v4
+                        unit_end
+                    
+                    fn consume_list(p0):
+                    block0:
+                        v0 = move p0
+                        v1 = const 42u32
+                        drop v0
+                        return v1
+                    exports:
+                        consume_list = f0
+                        lst = v3
+                """,
             ),
             ir_match: true,
             interp_output: "42\n",

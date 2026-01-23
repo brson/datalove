@@ -7,11 +7,93 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0usize\n    v1 = const 1usize\n    v2 = const 4294967295usize\n    v3 = const 2147483647usize\n    v4 = intrinsic UsizeToIsize(v0)\n    debuglog v4\n    v5 = intrinsic UsizeToIsize(v1)\n    debuglog v5\n    v6 = intrinsic UsizeToIsize(v3)\n    debuglog v6\n    v7 = intrinsic UsizeToIsize(v2)\n    debuglog v7\n    v8 = const 0isize\n    v9 = const 1isize\n    v10 = const -1isize\n    v11 = const 2147483647isize\n    v12 = const -2147483648isize\n    v13 = intrinsic IsizeToUsize(v8)\n    debuglog v13\n    v14 = intrinsic IsizeToUsize(v9)\n    debuglog v14\n    v15 = intrinsic IsizeToUsize(v10)\n    debuglog v15\n    v16 = intrinsic IsizeToUsize(v11)\n    debuglog v16\n    v17 = intrinsic IsizeToUsize(v12)\n    debuglog v17\n    unit_end\nexports:\n    u_zero = v0\n    u_one = v1\n    u_max = v2\n    u_half = v3\n    i_zero = v8\n    i_one = v9\n    i_neg = v10\n    i_max = v11\n    i_min = v12\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0usize
+                        v1 = const 1usize
+                        v2 = const 4294967295usize
+                        v3 = const 2147483647usize
+                        v4 = intrinsic UsizeToIsize(v0)
+                        debuglog v4
+                        v5 = intrinsic UsizeToIsize(v1)
+                        debuglog v5
+                        v6 = intrinsic UsizeToIsize(v3)
+                        debuglog v6
+                        v7 = intrinsic UsizeToIsize(v2)
+                        debuglog v7
+                        v8 = const 0isize
+                        v9 = const 1isize
+                        v10 = const -1isize
+                        v11 = const 2147483647isize
+                        v12 = const -2147483648isize
+                        v13 = intrinsic IsizeToUsize(v8)
+                        debuglog v13
+                        v14 = intrinsic IsizeToUsize(v9)
+                        debuglog v14
+                        v15 = intrinsic IsizeToUsize(v10)
+                        debuglog v15
+                        v16 = intrinsic IsizeToUsize(v11)
+                        debuglog v16
+                        v17 = intrinsic IsizeToUsize(v12)
+                        debuglog v17
+                        unit_end
+                    exports:
+                        u_zero = v0
+                        u_one = v1
+                        u_max = v2
+                        u_half = v3
+                        i_zero = v8
+                        i_one = v9
+                        i_neg = v10
+                        i_max = v11
+                        i_min = v12
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0usize\n    v1 = const 1usize\n    v2 = const 4294967295usize\n    v3 = const 2147483647usize\n    v4 = intrinsic UsizeToIsize(v0)\n    debuglog v4\n    v5 = intrinsic UsizeToIsize(v1)\n    debuglog v5\n    v6 = intrinsic UsizeToIsize(v3)\n    debuglog v6\n    v7 = intrinsic UsizeToIsize(v2)\n    debuglog v7\n    v8 = const 0isize\n    v9 = const 1isize\n    v10 = const -1isize\n    v11 = const 2147483647isize\n    v12 = const -2147483648isize\n    v13 = intrinsic IsizeToUsize(v8)\n    debuglog v13\n    v14 = intrinsic IsizeToUsize(v9)\n    debuglog v14\n    v15 = intrinsic IsizeToUsize(v10)\n    debuglog v15\n    v16 = intrinsic IsizeToUsize(v11)\n    debuglog v16\n    v17 = intrinsic IsizeToUsize(v12)\n    debuglog v17\n    unit_end\nexports:\n    u_zero = v0\n    u_one = v1\n    u_max = v2\n    u_half = v3\n    i_zero = v8\n    i_one = v9\n    i_neg = v10\n    i_max = v11\n    i_min = v12\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0usize
+                        v1 = const 1usize
+                        v2 = const 4294967295usize
+                        v3 = const 2147483647usize
+                        v4 = intrinsic UsizeToIsize(v0)
+                        debuglog v4
+                        v5 = intrinsic UsizeToIsize(v1)
+                        debuglog v5
+                        v6 = intrinsic UsizeToIsize(v3)
+                        debuglog v6
+                        v7 = intrinsic UsizeToIsize(v2)
+                        debuglog v7
+                        v8 = const 0isize
+                        v9 = const 1isize
+                        v10 = const -1isize
+                        v11 = const 2147483647isize
+                        v12 = const -2147483648isize
+                        v13 = intrinsic IsizeToUsize(v8)
+                        debuglog v13
+                        v14 = intrinsic IsizeToUsize(v9)
+                        debuglog v14
+                        v15 = intrinsic IsizeToUsize(v10)
+                        debuglog v15
+                        v16 = intrinsic IsizeToUsize(v11)
+                        debuglog v16
+                        v17 = intrinsic IsizeToUsize(v12)
+                        debuglog v17
+                        unit_end
+                    exports:
+                        u_zero = v0
+                        u_one = v1
+                        u_max = v2
+                        u_half = v3
+                        i_zero = v8
+                        i_one = v9
+                        i_neg = v10
+                        i_max = v11
+                        i_min = v12
+                """,
             ),
             ir_match: true,
             interp_output: "0\n1\n2147483647\n-1\n0\n1\n4294967295\n2147483647\n2147483648\n",

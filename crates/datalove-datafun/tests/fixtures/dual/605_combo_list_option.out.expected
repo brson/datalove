@@ -7,11 +7,83 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = list [v0, v1, v2]\n    debuglog v3\n    v4 = call f0()\n    v5 = const 999u32\n    v6 = call f1(v4, v5)\n    debuglog v6\n    unit_end_drop v3\n    unit_end\n\nfn get_opt():\nblock0:\n    v0 = const 42u32\n    v1 = some v0\n    return v1\nfn unwrap(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nexports:\n    get_opt = f0\n    unwrap = f1\n    lst = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = list [v0, v1, v2]
+                        debuglog v3
+                        v4 = call f0()
+                        v5 = const 999u32
+                        v6 = call f1(v4, v5)
+                        debuglog v6
+                        unit_end_drop v3
+                        unit_end
+                    
+                    fn get_opt():
+                    block0:
+                        v0 = const 42u32
+                        v1 = some v0
+                        return v1
+                    fn unwrap(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                    exports:
+                        get_opt = f0
+                        unwrap = f1
+                        lst = v3
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = list [v0, v1, v2]\n    debuglog v3\n    v4 = call f0()\n    v5 = const 999u32\n    v6 = call f1(v4, v5)\n    debuglog v6\n    unit_end_drop v3\n    unit_end\n\nfn get_opt():\nblock0:\n    v0 = const 42u32\n    v1 = some v0\n    return v1\nfn unwrap(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nexports:\n    get_opt = f0\n    unwrap = f1\n    lst = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = list [v0, v1, v2]
+                        debuglog v3
+                        v4 = call f0()
+                        v5 = const 999u32
+                        v6 = call f1(v4, v5)
+                        debuglog v6
+                        unit_end_drop v3
+                        unit_end
+                    
+                    fn get_opt():
+                    block0:
+                        v0 = const 42u32
+                        v1 = some v0
+                        return v1
+                    fn unwrap(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                    exports:
+                        get_opt = f0
+                        unwrap = f1
+                        lst = v3
+                """,
             ),
             ir_match: true,
             interp_output: "[1, 2, 3]\n42\n",

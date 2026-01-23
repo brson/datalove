@@ -7,11 +7,69 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    store.copy s0, v0\n    v1 = const true\n    branch v1, block1, block5\nblock1:\n    v2 = const true\n    branch v2, block2, block3\nblock2:\n    v3 = const 1u32\n    store.copy s0, v3\n    goto block4\nblock3:\n    v4 = const 2u32\n    store.copy s0, v4\n    goto block4\nblock4:\n    goto block6\nblock5:\n    v5 = const 3u32\n    store.copy s0, v5\n    goto block6\nblock6:\n    debuglog s0\n    unit_end\nexports:\n    x = s0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        store.copy s0, v0
+                        v1 = const true
+                        branch v1, block1, block5
+                    block1:
+                        v2 = const true
+                        branch v2, block2, block3
+                    block2:
+                        v3 = const 1u32
+                        store.copy s0, v3
+                        goto block4
+                    block3:
+                        v4 = const 2u32
+                        store.copy s0, v4
+                        goto block4
+                    block4:
+                        goto block6
+                    block5:
+                        v5 = const 3u32
+                        store.copy s0, v5
+                        goto block6
+                    block6:
+                        debuglog s0
+                        unit_end
+                    exports:
+                        x = s0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    store.copy s0, v0\n    v1 = const true\n    branch v1, block1, block5\nblock1:\n    v2 = const true\n    branch v2, block2, block3\nblock2:\n    v3 = const 1u32\n    store.copy s0, v3\n    goto block4\nblock3:\n    v4 = const 2u32\n    store.copy s0, v4\n    goto block4\nblock4:\n    goto block6\nblock5:\n    v5 = const 3u32\n    store.copy s0, v5\n    goto block6\nblock6:\n    debuglog s0\n    unit_end\nexports:\n    x = s0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        store.copy s0, v0
+                        v1 = const true
+                        branch v1, block1, block5
+                    block1:
+                        v2 = const true
+                        branch v2, block2, block3
+                    block2:
+                        v3 = const 1u32
+                        store.copy s0, v3
+                        goto block4
+                    block3:
+                        v4 = const 2u32
+                        store.copy s0, v4
+                        goto block4
+                    block4:
+                        goto block6
+                    block5:
+                        v5 = const 3u32
+                        store.copy s0, v5
+                        goto block6
+                    block6:
+                        debuglog s0
+                        unit_end
+                    exports:
+                        x = s0
+                """,
             ),
             ir_match: true,
             interp_output: "1\n",

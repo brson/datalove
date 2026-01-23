@@ -7,11 +7,45 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"alice\"\n    v1 = const 30u32\n    v2 = const true\n    v3 = pack Struct0 {v1, v2}\n    v4 = const \"bob\"\n    v5 = const 25u32\n    v6 = const false\n    v7 = pack Struct0 {v5, v6}\n    v8 = map {v0: v3, v4: v7}\n    debuglog v8\n    unit_end_drop v8\n    unit_end\nexports:\n    users = v8\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "alice"
+                        v1 = const 30u32
+                        v2 = const true
+                        v3 = pack Struct0 {v1, v2}
+                        v4 = const "bob"
+                        v5 = const 25u32
+                        v6 = const false
+                        v7 = pack Struct0 {v5, v6}
+                        v8 = map {v0: v3, v4: v7}
+                        debuglog v8
+                        unit_end_drop v8
+                        unit_end
+                    exports:
+                        users = v8
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"alice\"\n    v1 = const 30u32\n    v2 = const true\n    v3 = pack Struct0 {v1, v2}\n    v4 = const \"bob\"\n    v5 = const 25u32\n    v6 = const false\n    v7 = pack Struct0 {v5, v6}\n    v8 = map {v0: v3, v4: v7}\n    debuglog v8\n    unit_end_drop v8\n    unit_end\nexports:\n    users = v8\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "alice"
+                        v1 = const 30u32
+                        v2 = const true
+                        v3 = pack Struct0 {v1, v2}
+                        v4 = const "bob"
+                        v5 = const 25u32
+                        v6 = const false
+                        v7 = pack Struct0 {v5, v6}
+                        v8 = map {v0: v3, v4: v7}
+                        debuglog v8
+                        unit_end_drop v8
+                        unit_end
+                    exports:
+                        users = v8
+                """,
             ),
             ir_match: true,
             interp_output: "map {\"alice\" = {age = 30, active = true}, \"bob\" = {age = 25, active = false}}\n",

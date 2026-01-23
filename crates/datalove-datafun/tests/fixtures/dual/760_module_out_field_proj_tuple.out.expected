@@ -8,11 +8,25 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn init_42(p0):\nblock0:\n    v0 = const 42u32\n    store p0, v0\n    v1 = const true\n    return v1\n",
+                ir: """
+                    fn init_42(p0):
+                    block0:
+                        v0 = const 42u32
+                        store p0, v0
+                        v1 = const true
+                        return v1
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn init_42(p0):\nblock0:\n    v0 = const 42u32\n    store p0, v0\n    v1 = const true\n    return v1\n",
+                ir: """
+                    fn init_42(p0):
+                    block0:
+                        v0 = const 42u32
+                        store p0, v0
+                        v1 = const true
+                        return v1
+                """,
             ),
             ir_match: true,
             interp_output: "",
@@ -26,11 +40,45 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    v1 = const 0u32\n    v2 = pack Tuple2 {v0, v1}\n    store.copy s0, v2\n    v3 = getfieldref s0.0\n    v4 = call m0.f0(v3)\n    v5 = getfieldref s0.0\n    debuglog v5\n    v6 = getfieldref s0.1\n    debuglog v6\n    unit_end\nexports:\n    t = s0\n    _ok = v4\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        v1 = const 0u32
+                        v2 = pack Tuple2 {v0, v1}
+                        store.copy s0, v2
+                        v3 = getfieldref s0.0
+                        v4 = call m0.f0(v3)
+                        v5 = getfieldref s0.0
+                        debuglog v5
+                        v6 = getfieldref s0.1
+                        debuglog v6
+                        unit_end
+                    exports:
+                        t = s0
+                        _ok = v4
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    v1 = const 0u32\n    v2 = pack Tuple2 {v0, v1}\n    store.copy s0, v2\n    v3 = getfieldref s0.0\n    v4 = call m0.f0(v3)\n    v5 = getfieldref s0.0\n    debuglog v5\n    v6 = getfieldref s0.1\n    debuglog v6\n    unit_end\nexports:\n    t = s0\n    _ok = v4\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        v1 = const 0u32
+                        v2 = pack Tuple2 {v0, v1}
+                        store.copy s0, v2
+                        v3 = getfieldref s0.0
+                        v4 = call m0.f0(v3)
+                        v5 = getfieldref s0.0
+                        debuglog v5
+                        v6 = getfieldref s0.1
+                        debuglog v6
+                        unit_end
+                    exports:
+                        t = s0
+                        _ok = v4
+                """,
             ),
             ir_match: true,
             interp_output: "42\n0\n",

@@ -7,11 +7,85 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 10u32\n    v1 = some v0\n    v2 = none\n    v3 = const 30u32\n    v4 = some v3\n    v5, v6 = unwrap_option v1\n    branch v6, block2, block1\nblock1:\n    v7 = none\n    return v7\nblock2:\n    v8, v9 = unwrap_option v2\n    branch v9, block4, block3\nblock3:\n    v10 = none\n    return v10\nblock4:\n    v11, v12 = unwrap_option v4\n    branch v12, block6, block5\nblock5:\n    v13 = none\n    return v13\nblock6:\n    v14 = pack Struct0 {v5, v8, v11}\n    v15 = some v14\n    return v15\nexports:\n    test = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 10u32
+                        v1 = some v0
+                        v2 = none
+                        v3 = const 30u32
+                        v4 = some v3
+                        v5, v6 = unwrap_option v1
+                        branch v6, block2, block1
+                    block1:
+                        v7 = none
+                        return v7
+                    block2:
+                        v8, v9 = unwrap_option v2
+                        branch v9, block4, block3
+                    block3:
+                        v10 = none
+                        return v10
+                    block4:
+                        v11, v12 = unwrap_option v4
+                        branch v12, block6, block5
+                    block5:
+                        v13 = none
+                        return v13
+                    block6:
+                        v14 = pack Struct0 {v5, v8, v11}
+                        v15 = some v14
+                        return v15
+                    exports:
+                        test = f0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 10u32\n    v1 = some v0\n    v2 = none\n    v3 = const 30u32\n    v4 = some v3\n    v5, v6 = unwrap_option v1\n    branch v6, block2, block1\nblock1:\n    v7 = none\n    return v7\nblock2:\n    v8, v9 = unwrap_option v2\n    branch v9, block4, block3\nblock3:\n    v10 = none\n    return v10\nblock4:\n    v11, v12 = unwrap_option v4\n    branch v12, block6, block5\nblock5:\n    v13 = none\n    return v13\nblock6:\n    v14 = pack Struct0 {v5, v8, v11}\n    v15 = some v14\n    return v15\nexports:\n    test = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 10u32
+                        v1 = some v0
+                        v2 = none
+                        v3 = const 30u32
+                        v4 = some v3
+                        v5, v6 = unwrap_option v1
+                        branch v6, block2, block1
+                    block1:
+                        v7 = none
+                        return v7
+                    block2:
+                        v8, v9 = unwrap_option v2
+                        branch v9, block4, block3
+                    block3:
+                        v10 = none
+                        return v10
+                    block4:
+                        v11, v12 = unwrap_option v4
+                        branch v12, block6, block5
+                    block5:
+                        v13 = none
+                        return v13
+                    block6:
+                        v14 = pack Struct0 {v5, v8, v11}
+                        v15 = some v14
+                        return v15
+                    exports:
+                        test = f0
+                """,
             ),
             ir_match: true,
             interp_output: "none\n",

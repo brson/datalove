@@ -7,11 +7,59 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 7u32\n    v1 = const 6u32\n    v2 = call f0(v0, v1)\n    debuglog v2\n    drop v2\n    unit_end\n\nfn mul_checked(p0, p1):\nblock0:\n    v0, v1 = mul.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = const \"arithmetic overflow\"\n    v3 = error_from v2\n    v4 = err v3\n    return v4\nblock2:\n    v5 = ok v0\n    return v5\nexports:\n    mul_checked = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 7u32
+                        v1 = const 6u32
+                        v2 = call f0(v0, v1)
+                        debuglog v2
+                        drop v2
+                        unit_end
+                    
+                    fn mul_checked(p0, p1):
+                    block0:
+                        v0, v1 = mul.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const "arithmetic overflow"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        return v5
+                    exports:
+                        mul_checked = f0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 7u32\n    v1 = const 6u32\n    v2 = call f0(v0, v1)\n    debuglog v2\n    drop v2\n    unit_end\n\nfn mul_checked(p0, p1):\nblock0:\n    v0, v1 = mul.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = const \"arithmetic overflow\"\n    v3 = error_from v2\n    v4 = err v3\n    return v4\nblock2:\n    v5 = ok v0\n    return v5\nexports:\n    mul_checked = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 7u32
+                        v1 = const 6u32
+                        v2 = call f0(v0, v1)
+                        debuglog v2
+                        drop v2
+                        unit_end
+                    
+                    fn mul_checked(p0, p1):
+                    block0:
+                        v0, v1 = mul.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const "arithmetic overflow"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        return v5
+                    exports:
+                        mul_checked = f0
+                """,
             ),
             ir_match: true,
             interp_output: "ok 42\n",

@@ -7,11 +7,63 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 1u32\n    v1 = error_from v0\n    v2 = err v1\n    v3 = const \"hello\"\n    v4, v5, v6 = unwrap_result v2\n    branch v6, block2, block1\nblock1:\n    v7 = err v5\n    drop v3\n    return v7\nblock2:\n    v8 = pack Struct0 {v3, v4}\n    v9 = ok v8\n    return v9\nexports:\n    test = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 1u32
+                        v1 = error_from v0
+                        v2 = err v1
+                        v3 = const "hello"
+                        v4, v5, v6 = unwrap_result v2
+                        branch v6, block2, block1
+                    block1:
+                        v7 = err v5
+                        drop v3
+                        return v7
+                    block2:
+                        v8 = pack Struct0 {v3, v4}
+                        v9 = ok v8
+                        return v9
+                    exports:
+                        test = f0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 1u32\n    v1 = error_from v0\n    v2 = err v1\n    v3 = const \"hello\"\n    v4, v5, v6 = unwrap_result v2\n    branch v6, block2, block1\nblock1:\n    v7 = err v5\n    drop v3\n    return v7\nblock2:\n    v8 = pack Struct0 {v3, v4}\n    v9 = ok v8\n    return v9\nexports:\n    test = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 1u32
+                        v1 = error_from v0
+                        v2 = err v1
+                        v3 = const "hello"
+                        v4, v5, v6 = unwrap_result v2
+                        branch v6, block2, block1
+                    block1:
+                        v7 = err v5
+                        drop v3
+                        return v7
+                    block2:
+                        v8 = pack Struct0 {v3, v4}
+                        v9 = ok v8
+                        return v9
+                    exports:
+                        test = f0
+                """,
             ),
             ir_match: true,
             interp_output: "error 1\n",

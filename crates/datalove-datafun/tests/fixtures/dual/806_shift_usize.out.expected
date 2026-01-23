@@ -7,11 +7,79 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1usize\n    v1 = const 2147483648usize\n    v2 = const 16711680usize\n    v3 = const 0u32\n    v4 = intrinsic ShlUsize(v0, v3)\n    debuglog v4\n    v5 = const 4u32\n    v6 = intrinsic ShlUsize(v0, v5)\n    debuglog v6\n    v7 = const 31u32\n    v8 = intrinsic ShlUsize(v0, v7)\n    debuglog v8\n    v9 = const 0u32\n    v10 = intrinsic ShrUsize(v1, v9)\n    debuglog v10\n    v11 = const 4u32\n    v12 = intrinsic ShrUsize(v1, v11)\n    debuglog v12\n    v13 = const 31u32\n    v14 = intrinsic ShrUsize(v1, v13)\n    debuglog v14\n    v15 = const 8u32\n    v16 = intrinsic ShlUsize(v2, v15)\n    v17 = const 8u32\n    v18 = intrinsic ShrUsize(v16, v17)\n    debuglog v18\n    unit_end\nexports:\n    a = v0\n    b = v1\n    mid = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1usize
+                        v1 = const 2147483648usize
+                        v2 = const 16711680usize
+                        v3 = const 0u32
+                        v4 = intrinsic ShlUsize(v0, v3)
+                        debuglog v4
+                        v5 = const 4u32
+                        v6 = intrinsic ShlUsize(v0, v5)
+                        debuglog v6
+                        v7 = const 31u32
+                        v8 = intrinsic ShlUsize(v0, v7)
+                        debuglog v8
+                        v9 = const 0u32
+                        v10 = intrinsic ShrUsize(v1, v9)
+                        debuglog v10
+                        v11 = const 4u32
+                        v12 = intrinsic ShrUsize(v1, v11)
+                        debuglog v12
+                        v13 = const 31u32
+                        v14 = intrinsic ShrUsize(v1, v13)
+                        debuglog v14
+                        v15 = const 8u32
+                        v16 = intrinsic ShlUsize(v2, v15)
+                        v17 = const 8u32
+                        v18 = intrinsic ShrUsize(v16, v17)
+                        debuglog v18
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        mid = v2
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1usize\n    v1 = const 2147483648usize\n    v2 = const 16711680usize\n    v3 = const 0u32\n    v4 = intrinsic ShlUsize(v0, v3)\n    debuglog v4\n    v5 = const 4u32\n    v6 = intrinsic ShlUsize(v0, v5)\n    debuglog v6\n    v7 = const 31u32\n    v8 = intrinsic ShlUsize(v0, v7)\n    debuglog v8\n    v9 = const 0u32\n    v10 = intrinsic ShrUsize(v1, v9)\n    debuglog v10\n    v11 = const 4u32\n    v12 = intrinsic ShrUsize(v1, v11)\n    debuglog v12\n    v13 = const 31u32\n    v14 = intrinsic ShrUsize(v1, v13)\n    debuglog v14\n    v15 = const 8u32\n    v16 = intrinsic ShlUsize(v2, v15)\n    v17 = const 8u32\n    v18 = intrinsic ShrUsize(v16, v17)\n    debuglog v18\n    unit_end\nexports:\n    a = v0\n    b = v1\n    mid = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1usize
+                        v1 = const 2147483648usize
+                        v2 = const 16711680usize
+                        v3 = const 0u32
+                        v4 = intrinsic ShlUsize(v0, v3)
+                        debuglog v4
+                        v5 = const 4u32
+                        v6 = intrinsic ShlUsize(v0, v5)
+                        debuglog v6
+                        v7 = const 31u32
+                        v8 = intrinsic ShlUsize(v0, v7)
+                        debuglog v8
+                        v9 = const 0u32
+                        v10 = intrinsic ShrUsize(v1, v9)
+                        debuglog v10
+                        v11 = const 4u32
+                        v12 = intrinsic ShrUsize(v1, v11)
+                        debuglog v12
+                        v13 = const 31u32
+                        v14 = intrinsic ShrUsize(v1, v13)
+                        debuglog v14
+                        v15 = const 8u32
+                        v16 = intrinsic ShlUsize(v2, v15)
+                        v17 = const 8u32
+                        v18 = intrinsic ShrUsize(v16, v17)
+                        debuglog v18
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        mid = v2
+                """,
             ),
             ir_match: true,
             interp_output: "1\n16\n2147483648\n2147483648\n134217728\n1\n16711680\n",

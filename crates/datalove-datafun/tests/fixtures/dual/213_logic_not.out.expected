@@ -7,11 +7,31 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const true\n    v1 = logic_not v0\n    debuglog v1\n    v2 = const false\n    v3 = logic_not v2\n    debuglog v3\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const true
+                        v1 = logic_not v0
+                        debuglog v1
+                        v2 = const false
+                        v3 = logic_not v2
+                        debuglog v3
+                        unit_end
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const true\n    v1 = logic_not v0\n    debuglog v1\n    v2 = const false\n    v3 = logic_not v2\n    debuglog v3\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const true
+                        v1 = logic_not v0
+                        debuglog v1
+                        v2 = const false
+                        v3 = logic_not v2
+                        debuglog v3
+                        unit_end
+                """,
             ),
             ir_match: true,
             interp_output: "false\ntrue\n",

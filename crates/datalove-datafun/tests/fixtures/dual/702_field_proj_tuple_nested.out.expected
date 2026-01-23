@@ -7,11 +7,69 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = const 3u32\n    v4 = const 4u32\n    v5 = pack Tuple2 {v3, v4}\n    v6 = pack Tuple2 {v2, v5}\n    v7 = getfield v6.0\n    v8 = getfield v7.0\n    v9 = getfield v6.0\n    v10 = getfield v9.1\n    v11 = getfield v6.1\n    v12 = getfield v11.0\n    v13 = getfield v6.1\n    v14 = getfield v13.1\n    debuglog v8\n    debuglog v10\n    debuglog v12\n    debuglog v14\n    unit_end\nexports:\n    t = v6\n    elem00 = v8\n    elem01 = v10\n    elem10 = v12\n    elem11 = v14\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = const 3u32
+                        v4 = const 4u32
+                        v5 = pack Tuple2 {v3, v4}
+                        v6 = pack Tuple2 {v2, v5}
+                        v7 = getfield v6.0
+                        v8 = getfield v7.0
+                        v9 = getfield v6.0
+                        v10 = getfield v9.1
+                        v11 = getfield v6.1
+                        v12 = getfield v11.0
+                        v13 = getfield v6.1
+                        v14 = getfield v13.1
+                        debuglog v8
+                        debuglog v10
+                        debuglog v12
+                        debuglog v14
+                        unit_end
+                    exports:
+                        t = v6
+                        elem00 = v8
+                        elem01 = v10
+                        elem10 = v12
+                        elem11 = v14
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = const 3u32\n    v4 = const 4u32\n    v5 = pack Tuple2 {v3, v4}\n    v6 = pack Tuple2 {v2, v5}\n    v7 = getfield v6.0\n    v8 = getfield v7.0\n    v9 = getfield v6.0\n    v10 = getfield v9.1\n    v11 = getfield v6.1\n    v12 = getfield v11.0\n    v13 = getfield v6.1\n    v14 = getfield v13.1\n    debuglog v8\n    debuglog v10\n    debuglog v12\n    debuglog v14\n    unit_end\nexports:\n    t = v6\n    elem00 = v8\n    elem01 = v10\n    elem10 = v12\n    elem11 = v14\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = const 3u32
+                        v4 = const 4u32
+                        v5 = pack Tuple2 {v3, v4}
+                        v6 = pack Tuple2 {v2, v5}
+                        v7 = getfield v6.0
+                        v8 = getfield v7.0
+                        v9 = getfield v6.0
+                        v10 = getfield v9.1
+                        v11 = getfield v6.1
+                        v12 = getfield v11.0
+                        v13 = getfield v6.1
+                        v14 = getfield v13.1
+                        debuglog v8
+                        debuglog v10
+                        debuglog v12
+                        debuglog v14
+                        unit_end
+                    exports:
+                        t = v6
+                        elem00 = v8
+                        elem01 = v10
+                        elem10 = v12
+                        elem11 = v14
+                """,
             ),
             ir_match: true,
             interp_output: "1\n2\n3\n4\n",

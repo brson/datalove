@@ -7,11 +7,71 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = const 10u32\n    v4 = const 20u32\n    v5 = pack Struct0 {v3, v4}\n    v6 = call f0(v2, v5)\n    debuglog v6\n    drop v6\n    unit_end\n\nfn sum_x(p0, p1):\nblock0:\n    v0 = copy p0\n    v1 = getfield v0.0\n    v2 = copy p1\n    v3 = getfield v2.0\n    v4 = widen v1\n    v5 = widen v3\n    v6 = add v4, v5\n    drop v4\n    drop v5\n    return v6\nexports:\n    sum_x = f0\n    p1 = v2\n    p2 = v5\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = const 10u32
+                        v4 = const 20u32
+                        v5 = pack Struct0 {v3, v4}
+                        v6 = call f0(v2, v5)
+                        debuglog v6
+                        drop v6
+                        unit_end
+                    
+                    fn sum_x(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1 = getfield v0.0
+                        v2 = copy p1
+                        v3 = getfield v2.0
+                        v4 = widen v1
+                        v5 = widen v3
+                        v6 = add v4, v5
+                        drop v4
+                        drop v5
+                        return v6
+                    exports:
+                        sum_x = f0
+                        p1 = v2
+                        p2 = v5
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Struct0 {v0, v1}\n    v3 = const 10u32\n    v4 = const 20u32\n    v5 = pack Struct0 {v3, v4}\n    v6 = call f0(v2, v5)\n    debuglog v6\n    drop v6\n    unit_end\n\nfn sum_x(p0, p1):\nblock0:\n    v0 = copy p0\n    v1 = getfield v0.0\n    v2 = copy p1\n    v3 = getfield v2.0\n    v4 = widen v1\n    v5 = widen v3\n    v6 = add v4, v5\n    drop v4\n    drop v5\n    return v6\nexports:\n    sum_x = f0\n    p1 = v2\n    p2 = v5\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = const 10u32
+                        v4 = const 20u32
+                        v5 = pack Struct0 {v3, v4}
+                        v6 = call f0(v2, v5)
+                        debuglog v6
+                        drop v6
+                        unit_end
+                    
+                    fn sum_x(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1 = getfield v0.0
+                        v2 = copy p1
+                        v3 = getfield v2.0
+                        v4 = widen v1
+                        v5 = widen v3
+                        v6 = add v4, v5
+                        drop v4
+                        drop v5
+                        return v6
+                    exports:
+                        sum_x = f0
+                        p1 = v2
+                        p2 = v5
+                """,
             ),
             ir_match: true,
             interp_output: "11\n",

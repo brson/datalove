@@ -7,11 +7,63 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const true\n    v1 = call f0(v0)\n    debuglog v1\n    unit_end\n\nfn test_cond(p0):\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = list [v0, v1]\n    v3 = copy p0\n    branch v3, block1, block2\nblock1:\n    drop v2\n    goto block3\nblock2:\n    drop.tracked v2\n    goto block3\nblock3:\n    v4 = const 0u32\n    return v4\nexports:\n    test_cond = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const true
+                        v1 = call f0(v0)
+                        debuglog v1
+                        unit_end
+                    
+                    fn test_cond(p0):
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = list [v0, v1]
+                        v3 = copy p0
+                        branch v3, block1, block2
+                    block1:
+                        drop v2
+                        goto block3
+                    block2:
+                        drop.tracked v2
+                        goto block3
+                    block3:
+                        v4 = const 0u32
+                        return v4
+                    exports:
+                        test_cond = f0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const true\n    v1 = call f0(v0)\n    debuglog v1\n    unit_end\n\nfn test_cond(p0):\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = list [v0, v1]\n    v3 = copy p0\n    branch v3, block1, block2\nblock1:\n    drop v2\n    goto block3\nblock2:\n    drop.tracked v2\n    goto block3\nblock3:\n    v4 = const 0u32\n    return v4\nexports:\n    test_cond = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const true
+                        v1 = call f0(v0)
+                        debuglog v1
+                        unit_end
+                    
+                    fn test_cond(p0):
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = list [v0, v1]
+                        v3 = copy p0
+                        branch v3, block1, block2
+                    block1:
+                        drop v2
+                        goto block3
+                    block2:
+                        drop.tracked v2
+                        goto block3
+                    block3:
+                        v4 = const 0u32
+                        return v4
+                    exports:
+                        test_cond = f0
+                """,
             ),
             ir_match: true,
             interp_output: "0\n",

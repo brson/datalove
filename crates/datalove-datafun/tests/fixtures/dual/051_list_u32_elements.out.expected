@@ -7,11 +7,35 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = list [v0, v1, v2]\n    debuglog v3\n    unit_end_drop v3\n    unit_end\nexports:\n    xs = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = list [v0, v1, v2]
+                        debuglog v3
+                        unit_end_drop v3
+                        unit_end
+                    exports:
+                        xs = v3
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = list [v0, v1, v2]\n    debuglog v3\n    unit_end_drop v3\n    unit_end\nexports:\n    xs = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = list [v0, v1, v2]
+                        debuglog v3
+                        unit_end_drop v3
+                        unit_end
+                    exports:
+                        xs = v3
+                """,
             ),
             ir_match: true,
             interp_output: "[1, 2, 3]\n",

@@ -7,11 +7,81 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100usize\n    v1 = const 200usize\n    v2 = call f0(v0, v1)\n    debuglog v2\n    v3 = const 50usize\n    v4 = call f1(v3)\n    debuglog v4\n    v5 = const 0usize\n    v6 = call f2(v5)\n    debuglog v6\n    v7 = const 1usize\n    v8 = call f2(v7)\n    debuglog v8\n    unit_end\n\nfn add_usize(p0, p1):\nblock0:\n    v0 = intrinsic AddWrappingUsize(p0, p1)\n    return v0\nfn double_usize(p0):\nblock0:\n    v0 = intrinsic AddWrappingUsize(p0, p0)\n    return v0\nfn is_zero_usize(p0):\nblock0:\n    v0 = const 0usize\n    v1 = eq p0, v0\n    return v1\nexports:\n    add_usize = f0\n    double_usize = f1\n    is_zero_usize = f2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100usize
+                        v1 = const 200usize
+                        v2 = call f0(v0, v1)
+                        debuglog v2
+                        v3 = const 50usize
+                        v4 = call f1(v3)
+                        debuglog v4
+                        v5 = const 0usize
+                        v6 = call f2(v5)
+                        debuglog v6
+                        v7 = const 1usize
+                        v8 = call f2(v7)
+                        debuglog v8
+                        unit_end
+                    
+                    fn add_usize(p0, p1):
+                    block0:
+                        v0 = intrinsic AddWrappingUsize(p0, p1)
+                        return v0
+                    fn double_usize(p0):
+                    block0:
+                        v0 = intrinsic AddWrappingUsize(p0, p0)
+                        return v0
+                    fn is_zero_usize(p0):
+                    block0:
+                        v0 = const 0usize
+                        v1 = eq p0, v0
+                        return v1
+                    exports:
+                        add_usize = f0
+                        double_usize = f1
+                        is_zero_usize = f2
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100usize\n    v1 = const 200usize\n    v2 = call f0(v0, v1)\n    debuglog v2\n    v3 = const 50usize\n    v4 = call f1(v3)\n    debuglog v4\n    v5 = const 0usize\n    v6 = call f2(v5)\n    debuglog v6\n    v7 = const 1usize\n    v8 = call f2(v7)\n    debuglog v8\n    unit_end\n\nfn add_usize(p0, p1):\nblock0:\n    v0 = intrinsic AddWrappingUsize(p0, p1)\n    return v0\nfn double_usize(p0):\nblock0:\n    v0 = intrinsic AddWrappingUsize(p0, p0)\n    return v0\nfn is_zero_usize(p0):\nblock0:\n    v0 = const 0usize\n    v1 = eq p0, v0\n    return v1\nexports:\n    add_usize = f0\n    double_usize = f1\n    is_zero_usize = f2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100usize
+                        v1 = const 200usize
+                        v2 = call f0(v0, v1)
+                        debuglog v2
+                        v3 = const 50usize
+                        v4 = call f1(v3)
+                        debuglog v4
+                        v5 = const 0usize
+                        v6 = call f2(v5)
+                        debuglog v6
+                        v7 = const 1usize
+                        v8 = call f2(v7)
+                        debuglog v8
+                        unit_end
+                    
+                    fn add_usize(p0, p1):
+                    block0:
+                        v0 = intrinsic AddWrappingUsize(p0, p1)
+                        return v0
+                    fn double_usize(p0):
+                    block0:
+                        v0 = intrinsic AddWrappingUsize(p0, p0)
+                        return v0
+                    fn is_zero_usize(p0):
+                    block0:
+                        v0 = const 0usize
+                        v1 = eq p0, v0
+                        return v1
+                    exports:
+                        add_usize = f0
+                        double_usize = f1
+                        is_zero_usize = f2
+                """,
             ),
             ir_match: true,
             interp_output: "300\n100\ntrue\nfalse\n",

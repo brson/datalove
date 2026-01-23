@@ -7,11 +7,57 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = const 3u32\n    v4 = pack Tuple2 {v2, v3}\n    store.copy s0, v4\n    v5 = const 99u32\n    setfield s0.0.1, v5\n    v6 = load.copy s0\n    v7 = getfield v6.0\n    v8 = getfield v7.1\n    return v8\nexports:\n    test = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = const 3u32
+                        v4 = pack Tuple2 {v2, v3}
+                        store.copy s0, v4
+                        v5 = const 99u32
+                        setfield s0.0.1, v5
+                        v6 = load.copy s0
+                        v7 = getfield v6.0
+                        v8 = getfield v7.1
+                        return v8
+                    exports:
+                        test = f0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = pack Tuple2 {v0, v1}\n    v3 = const 3u32\n    v4 = pack Tuple2 {v2, v3}\n    store.copy s0, v4\n    v5 = const 99u32\n    setfield s0.0.1, v5\n    v6 = load.copy s0\n    v7 = getfield v6.0\n    v8 = getfield v7.1\n    return v8\nexports:\n    test = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = const 3u32
+                        v4 = pack Tuple2 {v2, v3}
+                        store.copy s0, v4
+                        v5 = const 99u32
+                        setfield s0.0.1, v5
+                        v6 = load.copy s0
+                        v7 = getfield v6.0
+                        v8 = getfield v7.1
+                        return v8
+                    exports:
+                        test = f0
+                """,
             ),
             ir_match: true,
             interp_output: "99\n",

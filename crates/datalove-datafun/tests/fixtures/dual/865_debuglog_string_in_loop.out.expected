@@ -7,11 +7,65 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const false\n    store.copy s0, v0\n    goto block1\nblock1:\n    v1 = load.copy s0\n    branch v1, block2, block3\nblock2:\n    goto block5\nblock3:\n    goto block4\nblock4:\n    v2 = const \"loop_iteration\"\n    debuglog v2\n    drop v2\n    v3 = const true\n    store.copy s0, v3\n    goto block1\nblock5:\n    v4 = const \"done\"\n    debuglog v4\n    drop v4\n    unit_end\nexports:\n    done = s0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const false
+                        store.copy s0, v0
+                        goto block1
+                    block1:
+                        v1 = load.copy s0
+                        branch v1, block2, block3
+                    block2:
+                        goto block5
+                    block3:
+                        goto block4
+                    block4:
+                        v2 = const "loop_iteration"
+                        debuglog v2
+                        drop v2
+                        v3 = const true
+                        store.copy s0, v3
+                        goto block1
+                    block5:
+                        v4 = const "done"
+                        debuglog v4
+                        drop v4
+                        unit_end
+                    exports:
+                        done = s0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const false\n    store.copy s0, v0\n    goto block1\nblock1:\n    v1 = load.copy s0\n    branch v1, block2, block3\nblock2:\n    goto block5\nblock3:\n    goto block4\nblock4:\n    v2 = const \"loop_iteration\"\n    debuglog v2\n    drop v2\n    v3 = const true\n    store.copy s0, v3\n    goto block1\nblock5:\n    v4 = const \"done\"\n    debuglog v4\n    drop v4\n    unit_end\nexports:\n    done = s0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const false
+                        store.copy s0, v0
+                        goto block1
+                    block1:
+                        v1 = load.copy s0
+                        branch v1, block2, block3
+                    block2:
+                        goto block5
+                    block3:
+                        goto block4
+                    block4:
+                        v2 = const "loop_iteration"
+                        debuglog v2
+                        drop v2
+                        v3 = const true
+                        store.copy s0, v3
+                        goto block1
+                    block5:
+                        v4 = const "done"
+                        debuglog v4
+                        drop v4
+                        unit_end
+                    exports:
+                        done = s0
+                """,
             ),
             ir_match: true,
             interp_output: "\"loop_iteration\"\n\"done\"\n",

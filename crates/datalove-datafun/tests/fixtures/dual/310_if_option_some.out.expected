@@ -7,11 +7,43 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = some v0\n    v2, v3 = unwrap_option v1\n    branch v3, block1, block2\nblock1:\n    debuglog v2\n    goto block3\nblock2:\n    goto block3\nblock3:\n    unit_end\nexports:\n    opt = v1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = some v0
+                        v2, v3 = unwrap_option v1
+                        branch v3, block1, block2
+                    block1:
+                        debuglog v2
+                        goto block3
+                    block2:
+                        goto block3
+                    block3:
+                        unit_end
+                    exports:
+                        opt = v1
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = some v0\n    v2, v3 = unwrap_option v1\n    branch v3, block1, block2\nblock1:\n    debuglog v2\n    goto block3\nblock2:\n    goto block3\nblock3:\n    unit_end\nexports:\n    opt = v1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = some v0
+                        v2, v3 = unwrap_option v1
+                        branch v3, block1, block2
+                    block1:
+                        debuglog v2
+                        goto block3
+                    block2:
+                        goto block3
+                    block3:
+                        unit_end
+                    exports:
+                        opt = v1
+                """,
             ),
             ir_match: true,
             interp_output: "42\n",

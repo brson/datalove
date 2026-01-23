@@ -7,11 +7,57 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = const 4u32\n    v4 = const 5u32\n    v5 = const 6u32\n    v6 = const 7u32\n    v7 = const 8u32\n    v8 = const 9u32\n    v9 = const 10u32\n    v10 = pack Struct0 {v0, v1, v2, v3, v4, v5, v6, v7, v8, v9}\n    v11 = getfieldref v10.0\n    debuglog v11\n    v12 = getfieldref v10.4\n    debuglog v12\n    v13 = getfieldref v10.9\n    debuglog v13\n    unit_end\nexports:\n    big = v10\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = const 4u32
+                        v4 = const 5u32
+                        v5 = const 6u32
+                        v6 = const 7u32
+                        v7 = const 8u32
+                        v8 = const 9u32
+                        v9 = const 10u32
+                        v10 = pack Struct0 {v0, v1, v2, v3, v4, v5, v6, v7, v8, v9}
+                        v11 = getfieldref v10.0
+                        debuglog v11
+                        v12 = getfieldref v10.4
+                        debuglog v12
+                        v13 = getfieldref v10.9
+                        debuglog v13
+                        unit_end
+                    exports:
+                        big = v10
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = const 3u32\n    v3 = const 4u32\n    v4 = const 5u32\n    v5 = const 6u32\n    v6 = const 7u32\n    v7 = const 8u32\n    v8 = const 9u32\n    v9 = const 10u32\n    v10 = pack Struct0 {v0, v1, v2, v3, v4, v5, v6, v7, v8, v9}\n    v11 = getfieldref v10.0\n    debuglog v11\n    v12 = getfieldref v10.4\n    debuglog v12\n    v13 = getfieldref v10.9\n    debuglog v13\n    unit_end\nexports:\n    big = v10\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = const 4u32
+                        v4 = const 5u32
+                        v5 = const 6u32
+                        v6 = const 7u32
+                        v7 = const 8u32
+                        v8 = const 9u32
+                        v9 = const 10u32
+                        v10 = pack Struct0 {v0, v1, v2, v3, v4, v5, v6, v7, v8, v9}
+                        v11 = getfieldref v10.0
+                        debuglog v11
+                        v12 = getfieldref v10.4
+                        debuglog v12
+                        v13 = getfieldref v10.9
+                        debuglog v13
+                        unit_end
+                    exports:
+                        big = v10
+                """,
             ),
             ir_match: true,
             interp_output: "1\n5\n10\n",

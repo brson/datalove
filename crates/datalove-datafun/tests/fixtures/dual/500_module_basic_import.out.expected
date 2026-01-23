@@ -8,11 +8,21 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn identity(p0):\nblock0:\n    v0 = copy p0\n    return v0\n",
+                ir: """
+                    fn identity(p0):
+                    block0:
+                        v0 = copy p0
+                        return v0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn identity(p0):\nblock0:\n    v0 = copy p0\n    return v0\n",
+                ir: """
+                    fn identity(p0):
+                    block0:
+                        v0 = copy p0
+                        return v0
+                """,
             ),
             ir_match: true,
             interp_output: "",
@@ -26,11 +36,25 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = call m0.f0(v0)\n    debuglog v1\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = call m0.f0(v0)
+                        debuglog v1
+                        unit_end
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = call m0.f0(v0)\n    debuglog v1\n    unit_end\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = call m0.f0(v0)
+                        debuglog v1
+                        unit_end
+                """,
             ),
             ir_match: true,
             interp_output: "42\n",

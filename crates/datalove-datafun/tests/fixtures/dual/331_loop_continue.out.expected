@@ -7,11 +7,89 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    store.copy s0, v0\n    v1 = const true\n    store.copy s1, v1\n    v2 = const false\n    store.copy s2, v2\n    goto block1\nblock1:\n    v3 = load.copy s2\n    branch v3, block2, block3\nblock2:\n    goto block8\nblock3:\n    goto block4\nblock4:\n    v4 = load.copy s1\n    branch v4, block5, block6\nblock5:\n    v5 = const false\n    store.copy s1, v5\n    goto block1\nblock6:\n    goto block7\nblock7:\n    v6 = const 10u32\n    store.copy s0, v6\n    v7 = const true\n    store.copy s2, v7\n    goto block1\nblock8:\n    debuglog s0\n    unit_end\nexports:\n    x = s0\n    skip_once = s1\n    done = s2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        store.copy s0, v0
+                        v1 = const true
+                        store.copy s1, v1
+                        v2 = const false
+                        store.copy s2, v2
+                        goto block1
+                    block1:
+                        v3 = load.copy s2
+                        branch v3, block2, block3
+                    block2:
+                        goto block8
+                    block3:
+                        goto block4
+                    block4:
+                        v4 = load.copy s1
+                        branch v4, block5, block6
+                    block5:
+                        v5 = const false
+                        store.copy s1, v5
+                        goto block1
+                    block6:
+                        goto block7
+                    block7:
+                        v6 = const 10u32
+                        store.copy s0, v6
+                        v7 = const true
+                        store.copy s2, v7
+                        goto block1
+                    block8:
+                        debuglog s0
+                        unit_end
+                    exports:
+                        x = s0
+                        skip_once = s1
+                        done = s2
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0u32\n    store.copy s0, v0\n    v1 = const true\n    store.copy s1, v1\n    v2 = const false\n    store.copy s2, v2\n    goto block1\nblock1:\n    v3 = load.copy s2\n    branch v3, block2, block3\nblock2:\n    goto block8\nblock3:\n    goto block4\nblock4:\n    v4 = load.copy s1\n    branch v4, block5, block6\nblock5:\n    v5 = const false\n    store.copy s1, v5\n    goto block1\nblock6:\n    goto block7\nblock7:\n    v6 = const 10u32\n    store.copy s0, v6\n    v7 = const true\n    store.copy s2, v7\n    goto block1\nblock8:\n    debuglog s0\n    unit_end\nexports:\n    x = s0\n    skip_once = s1\n    done = s2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        store.copy s0, v0
+                        v1 = const true
+                        store.copy s1, v1
+                        v2 = const false
+                        store.copy s2, v2
+                        goto block1
+                    block1:
+                        v3 = load.copy s2
+                        branch v3, block2, block3
+                    block2:
+                        goto block8
+                    block3:
+                        goto block4
+                    block4:
+                        v4 = load.copy s1
+                        branch v4, block5, block6
+                    block5:
+                        v5 = const false
+                        store.copy s1, v5
+                        goto block1
+                    block6:
+                        goto block7
+                    block7:
+                        v6 = const 10u32
+                        store.copy s0, v6
+                        v7 = const true
+                        store.copy s2, v7
+                        goto block1
+                    block8:
+                        debuglog s0
+                        unit_end
+                    exports:
+                        x = s0
+                        skip_once = s1
+                        done = s2
+                """,
             ),
             ir_match: true,
             interp_output: "10\n",

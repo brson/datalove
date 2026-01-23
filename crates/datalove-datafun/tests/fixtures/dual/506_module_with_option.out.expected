@@ -8,11 +8,33 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn safe_div(p0, p1):\nblock0:\n    v0, v1 = div.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\n",
+                ir: """
+                    fn safe_div(p0, p1):
+                    block0:
+                        v0, v1 = div.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn safe_div(p0, p1):\nblock0:\n    v0, v1 = div.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\n",
+                ir: """
+                    fn safe_div(p0, p1):
+                    block0:
+                        v0, v1 = div.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                """,
             ),
             ir_match: true,
             interp_output: "",
@@ -26,11 +48,73 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    v1 = const 5u32\n    v2 = call m0.f0(v0, v1)\n    v3 = const 999u32\n    v4 = call f0(v2, v3)\n    debuglog v4\n    v5 = const 100u32\n    v6 = const 0u32\n    v7 = call m0.f0(v5, v6)\n    v8 = const 999u32\n    v9 = call f0(v7, v8)\n    debuglog v9\n    unit_end\n\nfn unwrap(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nexports:\n    unwrap = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100u32
+                        v1 = const 5u32
+                        v2 = call m0.f0(v0, v1)
+                        v3 = const 999u32
+                        v4 = call f0(v2, v3)
+                        debuglog v4
+                        v5 = const 100u32
+                        v6 = const 0u32
+                        v7 = call m0.f0(v5, v6)
+                        v8 = const 999u32
+                        v9 = call f0(v7, v8)
+                        debuglog v9
+                        unit_end
+                    
+                    fn unwrap(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                    exports:
+                        unwrap = f0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    v1 = const 5u32\n    v2 = call m0.f0(v0, v1)\n    v3 = const 999u32\n    v4 = call f0(v2, v3)\n    debuglog v4\n    v5 = const 100u32\n    v6 = const 0u32\n    v7 = call m0.f0(v5, v6)\n    v8 = const 999u32\n    v9 = call f0(v7, v8)\n    debuglog v9\n    unit_end\n\nfn unwrap(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nexports:\n    unwrap = f0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100u32
+                        v1 = const 5u32
+                        v2 = call m0.f0(v0, v1)
+                        v3 = const 999u32
+                        v4 = call f0(v2, v3)
+                        debuglog v4
+                        v5 = const 100u32
+                        v6 = const 0u32
+                        v7 = call m0.f0(v5, v6)
+                        v8 = const 999u32
+                        v9 = call f0(v7, v8)
+                        debuglog v9
+                        unit_end
+                    
+                    fn unwrap(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                    exports:
+                        unwrap = f0
+                """,
             ),
             ir_match: true,
             interp_output: "20\n999\n",

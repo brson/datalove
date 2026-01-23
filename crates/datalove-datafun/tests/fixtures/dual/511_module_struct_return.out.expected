@@ -8,11 +8,25 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn make_point(p0, p1):\nblock0:\n    v0 = copy p0\n    v1 = copy p1\n    v2 = pack Struct0 {v0, v1}\n    return v2\n",
+                ir: """
+                    fn make_point(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1 = copy p1
+                        v2 = pack Struct0 {v0, v1}
+                        return v2
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn make_point(p0, p1):\nblock0:\n    v0 = copy p0\n    v1 = copy p1\n    v2 = pack Struct0 {v0, v1}\n    return v2\n",
+                ir: """
+                    fn make_point(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1 = copy p1
+                        v2 = pack Struct0 {v0, v1}
+                        return v2
+                """,
             ),
             ir_match: true,
             interp_output: "",
@@ -26,11 +40,37 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = call m0.f0(v0, v1)\n    v3 = getfieldref v2.0\n    debuglog v3\n    v4 = getfieldref v2.1\n    debuglog v4\n    unit_end\nexports:\n    p = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = call m0.f0(v0, v1)
+                        v3 = getfieldref v2.0
+                        debuglog v3
+                        v4 = getfieldref v2.1
+                        debuglog v4
+                        unit_end
+                    exports:
+                        p = v2
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 10u32\n    v1 = const 20u32\n    v2 = call m0.f0(v0, v1)\n    v3 = getfieldref v2.0\n    debuglog v3\n    v4 = getfieldref v2.1\n    debuglog v4\n    unit_end\nexports:\n    p = v2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = call m0.f0(v0, v1)
+                        v3 = getfieldref v2.0
+                        debuglog v3
+                        v4 = getfieldref v2.1
+                        debuglog v4
+                        unit_end
+                    exports:
+                        p = v2
+                """,
             ),
             ir_match: true,
             interp_output: "10\n20\n",

@@ -7,11 +7,47 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 21int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    debuglog v0\n    unit_end_drop v0\n    unit_end\n\nfn double(p0):\nblock0:\n    v0 = add p0, p0\n    return v0\nexports:\n    double = f0\n    val = v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 21int
+                        v1 = call f0(v0)
+                        debuglog v1
+                        drop v1
+                        debuglog v0
+                        unit_end_drop v0
+                        unit_end
+                    
+                    fn double(p0):
+                    block0:
+                        v0 = add p0, p0
+                        return v0
+                    exports:
+                        double = f0
+                        val = v0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 21int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    debuglog v0\n    unit_end_drop v0\n    unit_end\n\nfn double(p0):\nblock0:\n    v0 = add p0, p0\n    return v0\nexports:\n    double = f0\n    val = v0\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 21int
+                        v1 = call f0(v0)
+                        debuglog v1
+                        drop v1
+                        debuglog v0
+                        unit_end_drop v0
+                        unit_end
+                    
+                    fn double(p0):
+                    block0:
+                        v0 = add p0, p0
+                        return v0
+                    exports:
+                        double = f0
+                        val = v0
+                """,
             ),
             ir_match: true,
             interp_output: "42\n21\n",

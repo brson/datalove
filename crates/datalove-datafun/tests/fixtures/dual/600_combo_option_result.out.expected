@@ -7,11 +7,149 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    v1 = const 5u32\n    v2 = call f0(v0, v1)\n    v3 = call f1(v2)\n    v4 = const 999u32\n    v5 = call f2(v3, v4)\n    debuglog v5\n    v6 = const 100u32\n    v7 = const 0u32\n    v8 = call f0(v6, v7)\n    v9 = call f1(v8)\n    v10 = const 999u32\n    v11 = call f2(v9, v10)\n    debuglog v11\n    unit_end\n\nfn safe_divide(p0, p1):\nblock0:\n    v0 = const 0u32\n    v1 = eq p1, v0\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    v3 = ok v2\n    return v3\nblock2:\n    goto block3\nblock3:\n    v4, v5 = div.checked p0, p1\n    branch v5, block4, block5\nblock4:\n    v6 = const \"arithmetic overflow\"\n    v7 = error_from v6\n    v8 = err v7\n    return v8\nblock5:\n    v9 = some v4\n    v10 = ok v9\n    return v10\nfn unwrap_result(p0):\nblock0:\n    v0 = move p0\n    v1, v2, v3 = unwrap_result v0\n    branch v3, block1, block2\nblock1:\n    return v1\nblock2:\n    v4 = none\n    drop.tracked v2\n    return v4\nfn unwrap_opt(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nexports:\n    safe_divide = f0\n    unwrap_result = f1\n    unwrap_opt = f2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100u32
+                        v1 = const 5u32
+                        v2 = call f0(v0, v1)
+                        v3 = call f1(v2)
+                        v4 = const 999u32
+                        v5 = call f2(v3, v4)
+                        debuglog v5
+                        v6 = const 100u32
+                        v7 = const 0u32
+                        v8 = call f0(v6, v7)
+                        v9 = call f1(v8)
+                        v10 = const 999u32
+                        v11 = call f2(v9, v10)
+                        debuglog v11
+                        unit_end
+                    
+                    fn safe_divide(p0, p1):
+                    block0:
+                        v0 = const 0u32
+                        v1 = eq p1, v0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        v3 = ok v2
+                        return v3
+                    block2:
+                        goto block3
+                    block3:
+                        v4, v5 = div.checked p0, p1
+                        branch v5, block4, block5
+                    block4:
+                        v6 = const "arithmetic overflow"
+                        v7 = error_from v6
+                        v8 = err v7
+                        return v8
+                    block5:
+                        v9 = some v4
+                        v10 = ok v9
+                        return v10
+                    fn unwrap_result(p0):
+                    block0:
+                        v0 = move p0
+                        v1, v2, v3 = unwrap_result v0
+                        branch v3, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        v4 = none
+                        drop.tracked v2
+                        return v4
+                    fn unwrap_opt(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                    exports:
+                        safe_divide = f0
+                        unwrap_result = f1
+                        unwrap_opt = f2
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100u32\n    v1 = const 5u32\n    v2 = call f0(v0, v1)\n    v3 = call f1(v2)\n    v4 = const 999u32\n    v5 = call f2(v3, v4)\n    debuglog v5\n    v6 = const 100u32\n    v7 = const 0u32\n    v8 = call f0(v6, v7)\n    v9 = call f1(v8)\n    v10 = const 999u32\n    v11 = call f2(v9, v10)\n    debuglog v11\n    unit_end\n\nfn safe_divide(p0, p1):\nblock0:\n    v0 = const 0u32\n    v1 = eq p1, v0\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    v3 = ok v2\n    return v3\nblock2:\n    goto block3\nblock3:\n    v4, v5 = div.checked p0, p1\n    branch v5, block4, block5\nblock4:\n    v6 = const \"arithmetic overflow\"\n    v7 = error_from v6\n    v8 = err v7\n    return v8\nblock5:\n    v9 = some v4\n    v10 = ok v9\n    return v10\nfn unwrap_result(p0):\nblock0:\n    v0 = move p0\n    v1, v2, v3 = unwrap_result v0\n    branch v3, block1, block2\nblock1:\n    return v1\nblock2:\n    v4 = none\n    drop.tracked v2\n    return v4\nfn unwrap_opt(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nexports:\n    safe_divide = f0\n    unwrap_result = f1\n    unwrap_opt = f2\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100u32
+                        v1 = const 5u32
+                        v2 = call f0(v0, v1)
+                        v3 = call f1(v2)
+                        v4 = const 999u32
+                        v5 = call f2(v3, v4)
+                        debuglog v5
+                        v6 = const 100u32
+                        v7 = const 0u32
+                        v8 = call f0(v6, v7)
+                        v9 = call f1(v8)
+                        v10 = const 999u32
+                        v11 = call f2(v9, v10)
+                        debuglog v11
+                        unit_end
+                    
+                    fn safe_divide(p0, p1):
+                    block0:
+                        v0 = const 0u32
+                        v1 = eq p1, v0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        v3 = ok v2
+                        return v3
+                    block2:
+                        goto block3
+                    block3:
+                        v4, v5 = div.checked p0, p1
+                        branch v5, block4, block5
+                    block4:
+                        v6 = const "arithmetic overflow"
+                        v7 = error_from v6
+                        v8 = err v7
+                        return v8
+                    block5:
+                        v9 = some v4
+                        v10 = ok v9
+                        return v10
+                    fn unwrap_result(p0):
+                    block0:
+                        v0 = move p0
+                        v1, v2, v3 = unwrap_result v0
+                        branch v3, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        v4 = none
+                        drop.tracked v2
+                        return v4
+                    fn unwrap_opt(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                    exports:
+                        safe_divide = f0
+                        unwrap_result = f1
+                        unwrap_opt = f2
+                """,
             ),
             ir_match: true,
             interp_output: "20\n999\n",

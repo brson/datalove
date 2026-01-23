@@ -8,11 +8,25 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn add_ints(p0, p1):\nblock0:\n    v0 = add p0, p1\n    drop p0\n    drop p1\n    return v0\n",
+                ir: """
+                    fn add_ints(p0, p1):
+                    block0:
+                        v0 = add p0, p1
+                        drop p0
+                        drop p1
+                        return v0
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn add_ints(p0, p1):\nblock0:\n    v0 = add p0, p1\n    drop p0\n    drop p1\n    return v0\n",
+                ir: """
+                    fn add_ints(p0, p1):
+                    block0:
+                        v0 = add p0, p1
+                        drop p0
+                        drop p1
+                        return v0
+                """,
             ),
             ir_match: true,
             interp_output: "",
@@ -26,11 +40,35 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100int\n    v1 = const 200int\n    v2 = call m0.f0(v0, v1)\n    debuglog v2\n    drop v2\n    unit_end\nexports:\n    x = v0\n    y = v1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100int
+                        v1 = const 200int
+                        v2 = call m0.f0(v0, v1)
+                        debuglog v2
+                        drop v2
+                        unit_end
+                    exports:
+                        x = v0
+                        y = v1
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100int\n    v1 = const 200int\n    v2 = call m0.f0(v0, v1)\n    debuglog v2\n    drop v2\n    unit_end\nexports:\n    x = v0\n    y = v1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100int
+                        v1 = const 200int
+                        v2 = call m0.f0(v0, v1)
+                        debuglog v2
+                        drop v2
+                        unit_end
+                    exports:
+                        x = v0
+                        y = v1
+                """,
             ),
             ir_match: true,
             interp_output: "300\n",

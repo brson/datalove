@@ -7,11 +7,49 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    store.copy s0, v0\n    v1 = call f0(s0)\n    debuglog s0\n    unit_end\n\nfn set_to_100(p0):\nblock0:\n    v0 = const 100u32\n    store p0, v0\n    v1 = const true\n    return v1\nexports:\n    set_to_100 = f0\n    n = s0\n    _ok = v1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5u32
+                        store.copy s0, v0
+                        v1 = call f0(s0)
+                        debuglog s0
+                        unit_end
+                    
+                    fn set_to_100(p0):
+                    block0:
+                        v0 = const 100u32
+                        store p0, v0
+                        v1 = const true
+                        return v1
+                    exports:
+                        set_to_100 = f0
+                        n = s0
+                        _ok = v1
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 5u32\n    store.copy s0, v0\n    v1 = call f0(s0)\n    debuglog s0\n    unit_end\n\nfn set_to_100(p0):\nblock0:\n    v0 = const 100u32\n    store p0, v0\n    v1 = const true\n    return v1\nexports:\n    set_to_100 = f0\n    n = s0\n    _ok = v1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5u32
+                        store.copy s0, v0
+                        v1 = call f0(s0)
+                        debuglog s0
+                        unit_end
+                    
+                    fn set_to_100(p0):
+                    block0:
+                        v0 = const 100u32
+                        store p0, v0
+                        v1 = const true
+                        return v1
+                    exports:
+                        set_to_100 = f0
+                        n = s0
+                        _ok = v1
+                """,
             ),
             ir_match: true,
             interp_output: "100\n",

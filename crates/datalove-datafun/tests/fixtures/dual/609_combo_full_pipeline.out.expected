@@ -8,11 +8,55 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn safe_add(p0, p1):\nblock0:\n    v0, v1 = add.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\n\nfn safe_mul(p0, p1):\nblock0:\n    v0, v1 = mul.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\n",
+                ir: """
+                    fn safe_add(p0, p1):
+                    block0:
+                        v0, v1 = add.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                    
+                    fn safe_mul(p0, p1):
+                    block0:
+                        v0, v1 = mul.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "fn safe_add(p0, p1):\nblock0:\n    v0, v1 = add.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\n\nfn safe_mul(p0, p1):\nblock0:\n    v0, v1 = mul.checked p0, p1\n    branch v1, block1, block2\nblock1:\n    v2 = none\n    return v2\nblock2:\n    v3 = some v0\n    return v3\n",
+                ir: """
+                    fn safe_add(p0, p1):
+                    block0:
+                        v0, v1 = add.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                    
+                    fn safe_mul(p0, p1):
+                    block0:
+                        v0, v1 = mul.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                """,
             ),
             ir_match: true,
             interp_output: "",
@@ -26,11 +70,115 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 2u32\n    v1 = const 3u32\n    v2 = const 4u32\n    v3 = call f0(v0, v1, v2)\n    v4 = const 999u32\n    v5 = call f1(v3, v4)\n    debuglog v5\n    v6 = const 10u32\n    v7 = const 20u32\n    v8 = const 2u32\n    v9 = call f0(v6, v7, v8)\n    v10 = const 999u32\n    v11 = call f1(v9, v10)\n    debuglog v11\n    unit_end\n\nfn pipeline(p0, p1, p2):\nblock0:\n    v0 = call m0.f0(p0, p1)\n    v1, v2 = unwrap_option v0\n    branch v2, block2, block1\nblock1:\n    v3 = none\n    return v3\nblock2:\n    v4 = call m0.f1(v1, p2)\n    v5, v6 = unwrap_option v4\n    branch v6, block4, block3\nblock3:\n    v7 = none\n    return v7\nblock4:\n    v8 = some v5\n    return v8\nfn unwrap(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nexports:\n    pipeline = f0\n    unwrap = f1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 2u32
+                        v1 = const 3u32
+                        v2 = const 4u32
+                        v3 = call f0(v0, v1, v2)
+                        v4 = const 999u32
+                        v5 = call f1(v3, v4)
+                        debuglog v5
+                        v6 = const 10u32
+                        v7 = const 20u32
+                        v8 = const 2u32
+                        v9 = call f0(v6, v7, v8)
+                        v10 = const 999u32
+                        v11 = call f1(v9, v10)
+                        debuglog v11
+                        unit_end
+                    
+                    fn pipeline(p0, p1, p2):
+                    block0:
+                        v0 = call m0.f0(p0, p1)
+                        v1, v2 = unwrap_option v0
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        return v3
+                    block2:
+                        v4 = call m0.f1(v1, p2)
+                        v5, v6 = unwrap_option v4
+                        branch v6, block4, block3
+                    block3:
+                        v7 = none
+                        return v7
+                    block4:
+                        v8 = some v5
+                        return v8
+                    fn unwrap(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                    exports:
+                        pipeline = f0
+                        unwrap = f1
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 2u32\n    v1 = const 3u32\n    v2 = const 4u32\n    v3 = call f0(v0, v1, v2)\n    v4 = const 999u32\n    v5 = call f1(v3, v4)\n    debuglog v5\n    v6 = const 10u32\n    v7 = const 20u32\n    v8 = const 2u32\n    v9 = call f0(v6, v7, v8)\n    v10 = const 999u32\n    v11 = call f1(v9, v10)\n    debuglog v11\n    unit_end\n\nfn pipeline(p0, p1, p2):\nblock0:\n    v0 = call m0.f0(p0, p1)\n    v1, v2 = unwrap_option v0\n    branch v2, block2, block1\nblock1:\n    v3 = none\n    return v3\nblock2:\n    v4 = call m0.f1(v1, p2)\n    v5, v6 = unwrap_option v4\n    branch v6, block4, block3\nblock3:\n    v7 = none\n    return v7\nblock4:\n    v8 = some v5\n    return v8\nfn unwrap(p0, p1):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block1, block2\nblock1:\n    return v1\nblock2:\n    goto block3\nblock3:\n    v3 = copy p1\n    return v3\nexports:\n    pipeline = f0\n    unwrap = f1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 2u32
+                        v1 = const 3u32
+                        v2 = const 4u32
+                        v3 = call f0(v0, v1, v2)
+                        v4 = const 999u32
+                        v5 = call f1(v3, v4)
+                        debuglog v5
+                        v6 = const 10u32
+                        v7 = const 20u32
+                        v8 = const 2u32
+                        v9 = call f0(v6, v7, v8)
+                        v10 = const 999u32
+                        v11 = call f1(v9, v10)
+                        debuglog v11
+                        unit_end
+                    
+                    fn pipeline(p0, p1, p2):
+                    block0:
+                        v0 = call m0.f0(p0, p1)
+                        v1, v2 = unwrap_option v0
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        return v3
+                    block2:
+                        v4 = call m0.f1(v1, p2)
+                        v5, v6 = unwrap_option v4
+                        branch v6, block4, block3
+                    block3:
+                        v7 = none
+                        return v7
+                    block4:
+                        v8 = some v5
+                        return v8
+                    fn unwrap(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                    exports:
+                        pipeline = f0
+                        unwrap = f1
+                """,
             ),
             ir_match: true,
             interp_output: "20\n60\n",

@@ -7,11 +7,69 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 4278255360usize\n    v1 = const 252645135usize\n    v2 = const 0usize\n    v3 = const 4294967295usize\n    v4 = intrinsic BitnotUsize(v2)\n    debuglog v4\n    v5 = intrinsic BitnotUsize(v3)\n    debuglog v5\n    v6 = intrinsic BitandUsize(v0, v1)\n    debuglog v6\n    v7 = intrinsic BitandUsize(v3, v2)\n    debuglog v7\n    v8 = intrinsic BitorUsize(v0, v1)\n    debuglog v8\n    v9 = intrinsic BitorUsize(v2, v2)\n    debuglog v9\n    v10 = intrinsic BitxorUsize(v0, v1)\n    debuglog v10\n    v11 = intrinsic BitxorUsize(v0, v0)\n    debuglog v11\n    unit_end\nexports:\n    a = v0\n    b = v1\n    zero = v2\n    max = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 4278255360usize
+                        v1 = const 252645135usize
+                        v2 = const 0usize
+                        v3 = const 4294967295usize
+                        v4 = intrinsic BitnotUsize(v2)
+                        debuglog v4
+                        v5 = intrinsic BitnotUsize(v3)
+                        debuglog v5
+                        v6 = intrinsic BitandUsize(v0, v1)
+                        debuglog v6
+                        v7 = intrinsic BitandUsize(v3, v2)
+                        debuglog v7
+                        v8 = intrinsic BitorUsize(v0, v1)
+                        debuglog v8
+                        v9 = intrinsic BitorUsize(v2, v2)
+                        debuglog v9
+                        v10 = intrinsic BitxorUsize(v0, v1)
+                        debuglog v10
+                        v11 = intrinsic BitxorUsize(v0, v0)
+                        debuglog v11
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        zero = v2
+                        max = v3
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 4278255360usize\n    v1 = const 252645135usize\n    v2 = const 0usize\n    v3 = const 4294967295usize\n    v4 = intrinsic BitnotUsize(v2)\n    debuglog v4\n    v5 = intrinsic BitnotUsize(v3)\n    debuglog v5\n    v6 = intrinsic BitandUsize(v0, v1)\n    debuglog v6\n    v7 = intrinsic BitandUsize(v3, v2)\n    debuglog v7\n    v8 = intrinsic BitorUsize(v0, v1)\n    debuglog v8\n    v9 = intrinsic BitorUsize(v2, v2)\n    debuglog v9\n    v10 = intrinsic BitxorUsize(v0, v1)\n    debuglog v10\n    v11 = intrinsic BitxorUsize(v0, v0)\n    debuglog v11\n    unit_end\nexports:\n    a = v0\n    b = v1\n    zero = v2\n    max = v3\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 4278255360usize
+                        v1 = const 252645135usize
+                        v2 = const 0usize
+                        v3 = const 4294967295usize
+                        v4 = intrinsic BitnotUsize(v2)
+                        debuglog v4
+                        v5 = intrinsic BitnotUsize(v3)
+                        debuglog v5
+                        v6 = intrinsic BitandUsize(v0, v1)
+                        debuglog v6
+                        v7 = intrinsic BitandUsize(v3, v2)
+                        debuglog v7
+                        v8 = intrinsic BitorUsize(v0, v1)
+                        debuglog v8
+                        v9 = intrinsic BitorUsize(v2, v2)
+                        debuglog v9
+                        v10 = intrinsic BitxorUsize(v0, v1)
+                        debuglog v10
+                        v11 = intrinsic BitxorUsize(v0, v0)
+                        debuglog v11
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        zero = v2
+                        max = v3
+                """,
             ),
             ir_match: true,
             interp_output: "4294967295\n0\n251662080\n0\n4279238415\n0\n4027576335\n0\n",

@@ -7,11 +7,65 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f1()\n    debuglog v0\n    unit_end\n\nfn extract(p0):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block2, block1\nblock1:\n    v3 = none\n    return v3\nblock2:\n    v4 = some v1\n    return v4\nfn test():\nblock0:\n    v0 = const 99u32\n    v1 = some v0\n    v2 = call f0(v1)\n    return v2\nexports:\n    extract = f0\n    test = f1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f1()
+                        debuglog v0
+                        unit_end
+                    
+                    fn extract(p0):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        return v3
+                    block2:
+                        v4 = some v1
+                        return v4
+                    fn test():
+                    block0:
+                        v0 = const 99u32
+                        v1 = some v0
+                        v2 = call f0(v1)
+                        return v2
+                    exports:
+                        extract = f0
+                        test = f1
+                """,
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = call f1()\n    debuglog v0\n    unit_end\n\nfn extract(p0):\nblock0:\n    v0 = copy p0\n    v1, v2 = unwrap_option v0\n    branch v2, block2, block1\nblock1:\n    v3 = none\n    return v3\nblock2:\n    v4 = some v1\n    return v4\nfn test():\nblock0:\n    v0 = const 99u32\n    v1 = some v0\n    v2 = call f0(v1)\n    return v2\nexports:\n    extract = f0\n    test = f1\n",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f1()
+                        debuglog v0
+                        unit_end
+                    
+                    fn extract(p0):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        return v3
+                    block2:
+                        v4 = some v1
+                        return v4
+                    fn test():
+                    block0:
+                        v0 = const 99u32
+                        v1 = some v0
+                        v2 = call f0(v1)
+                        return v2
+                    exports:
+                        extract = f0
+                        test = f1
+                """,
             ),
             ir_match: true,
             interp_output: "some 99\n",
