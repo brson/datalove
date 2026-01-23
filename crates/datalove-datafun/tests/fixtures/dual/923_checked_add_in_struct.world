@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Checked add overflow in struct field.
+fun test(): ?{label: string, sum: u32}
+    // 4294967295 + 1 overflows
+    ret some {label = "overflow_test", sum = (4294967295 +? 1)}
+end fun
+
+debuglog test()

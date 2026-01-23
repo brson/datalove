@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Multiple try operators in sequence - second one fails.
+fun test(): ?{a: u32, b: u32, c: u32}
+    let opt1: ?u32 = some 10
+    let opt2: ?u32 = none
+    let opt3: ?u32 = some 30
+    // opt1? succeeds, opt2? fails - opt1's result should be dropped
+    ret some {a = opt1?, b = opt2?, c = opt3?}
+end fun
+
+debuglog test()

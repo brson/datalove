@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = none\n    v1 = const \"tuple_elem\"\n    v2, v3 = unwrap_option v0\n    branch v3, block2, block1\nblock1:\n    v4 = none\n    drop v1\n    return v4\nblock2:\n    v5 = const \"leaf\"\n    v6 = pack Tuple2 {v2, v5}\n    v7 = pack Struct0 {v6}\n    v8 = pack Tuple2 {v1, v7}\n    v9 = pack Struct0 {v8}\n    v10 = some v9\n    return v10\nexports:\n    test = f0\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = none\n    v1 = const \"tuple_elem\"\n    v2, v3 = unwrap_option v0\n    branch v3, block2, block1\nblock1:\n    v4 = none\n    drop v1\n    return v4\nblock2:\n    v5 = const \"leaf\"\n    v6 = pack Tuple2 {v2, v5}\n    v7 = pack Struct0 {v6}\n    v8 = pack Tuple2 {v1, v7}\n    v9 = pack Struct0 {v8}\n    v10 = some v9\n    return v10\nexports:\n    test = f0\n",
+            ),
+            ir_match: true,
+            interp_output: "none\n",
+            aot_output: "none\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

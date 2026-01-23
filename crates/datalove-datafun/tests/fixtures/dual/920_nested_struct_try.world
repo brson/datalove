@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+// Deep nesting: struct containing struct containing struct with try.
+fun test(): ?{outer: {middle: {inner: u32}, name: string}, label: string}
+    let opt: ?u32 = none
+    ret some {
+        outer = {
+            middle = {inner = opt?},
+            name = "middle_name"
+        },
+        label = "outer_label"
+    }
+end fun
+
+debuglog test()

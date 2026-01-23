@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Checked mul overflow in struct field.
+fun test(): ?{name: string, product: u32}
+    // Large numbers overflow
+    ret some {name = "mul_test", product = (1000000 *? 1000000)}
+end fun
+
+debuglog test()

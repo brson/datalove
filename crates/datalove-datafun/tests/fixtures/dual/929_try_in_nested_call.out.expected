@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f2()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn identity(p0):\nblock0:\n    v0 = copy p0\n    return v0\nfn outer(p0, p1):\nblock0:\n    v0 = move p0\n    v1 = copy p1\n    v2 = pack Struct0 {v0, v1}\n    return v2\nfn test():\nblock0:\n    v0 = none\n    v1 = const \"test\"\n    v2, v3 = unwrap_option v0\n    branch v3, block2, block1\nblock1:\n    v4 = none\n    drop v1\n    return v4\nblock2:\n    v5 = call f0(v2)\n    v6 = call f1(v1, v5)\n    v7 = some v6\n    return v7\nexports:\n    identity = f0\n    outer = f1\n    test = f2\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f2()\n    debuglog v0\n    drop v0\n    unit_end\n\nfn identity(p0):\nblock0:\n    v0 = copy p0\n    return v0\nfn outer(p0, p1):\nblock0:\n    v0 = move p0\n    v1 = copy p1\n    v2 = pack Struct0 {v0, v1}\n    return v2\nfn test():\nblock0:\n    v0 = none\n    v1 = const \"test\"\n    v2, v3 = unwrap_option v0\n    branch v3, block2, block1\nblock1:\n    v4 = none\n    drop v1\n    return v4\nblock2:\n    v5 = call f0(v2)\n    v6 = call f1(v1, v5)\n    v7 = some v6\n    return v7\nexports:\n    identity = f0\n    outer = f1\n    test = f2\n",
+            ),
+            ir_match: true,
+            interp_output: "none\n",
+            aot_output: "none\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

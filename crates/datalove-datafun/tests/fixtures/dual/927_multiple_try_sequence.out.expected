@@ -1,0 +1,32 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 10u32\n    v1 = some v0\n    v2 = none\n    v3 = const 30u32\n    v4 = some v3\n    v5, v6 = unwrap_option v1\n    branch v6, block2, block1\nblock1:\n    v7 = none\n    return v7\nblock2:\n    v8, v9 = unwrap_option v2\n    branch v9, block4, block3\nblock3:\n    v10 = none\n    return v10\nblock4:\n    v11, v12 = unwrap_option v4\n    branch v12, block6, block5\nblock5:\n    v13 = none\n    return v13\nblock6:\n    v14 = pack Struct0 {v5, v8, v11}\n    v15 = some v14\n    return v15\nexports:\n    test = f0\n",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: "scriptunit:\nblock0:\n    v0 = call f0()\n    debuglog v0\n    unit_end\n\nfn test():\nblock0:\n    v0 = const 10u32\n    v1 = some v0\n    v2 = none\n    v3 = const 30u32\n    v4 = some v3\n    v5, v6 = unwrap_option v1\n    branch v6, block2, block1\nblock1:\n    v7 = none\n    return v7\nblock2:\n    v8, v9 = unwrap_option v2\n    branch v9, block4, block3\nblock3:\n    v10 = none\n    return v10\nblock4:\n    v11, v12 = unwrap_option v4\n    branch v12, block6, block5\nblock5:\n    v13 = none\n    return v13\nblock6:\n    v14 = pack Struct0 {v5, v8, v11}\n    v15 = some v14\n    return v15\nexports:\n    test = f0\n",
+            ),
+            ir_match: true,
+            interp_output: "none\n",
+            aot_output: "none\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

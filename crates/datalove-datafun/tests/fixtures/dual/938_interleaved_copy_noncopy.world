@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Interleaved Copy and non-Copy types with try at end.
+fun test(): ?(u32, string, bool, string, u32, string, u32)
+    let opt: ?u32 = none
+    let one: u32 = 1
+    let ninety_nine: u32 = 99
+    ret some (one, "a", true, "b", ninety_nine, "c", opt?)
+end fun
+
+debuglog test()

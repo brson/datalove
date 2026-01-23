@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Deep nesting: tuple containing tuple containing tuple with try.
+fun test(): ?(string, (string, (u32, string)))
+    let opt: ?u32 = none
+    ret some ("first", ("second", (opt?, "third")))
+end fun
+
+debuglog test()

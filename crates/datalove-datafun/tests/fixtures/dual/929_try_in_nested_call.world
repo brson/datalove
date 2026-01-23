@@ -1,0 +1,20 @@
+----------
+scriptunit-fragment
+----------
+
+// Try in nested function call.
+fun identity(x: u32): u32
+    ret x
+end fun
+
+fun outer(a: string, b: u32): {name: string, value: u32}
+    ret {name = a, value = b}
+end fun
+
+fun test(): ?{name: string, value: u32}
+    let opt: ?u32 = none
+    // "test" passed first, then identity(opt?) fails
+    ret some outer("test", identity(opt?))
+end fun
+
+debuglog test()

@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Result try in struct with multiple string fields.
+fun test(): !{a: string, b: string, c: u32}
+    let res: !u32 = er error 1
+    ret ok {a = "first", b = "second", c = res!}
+end fun
+
+debuglog test()

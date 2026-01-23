@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Deeply nested mixed struct/tuple with try at leaf.
+fun test(): ?{outer: (string, {inner: (u32, string)})}
+    let opt: ?u32 = none
+    ret some {outer = ("tuple_elem", {inner = (opt?, "leaf")})}
+end fun
+
+debuglog test()

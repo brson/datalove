@@ -289,6 +289,9 @@ pub fn lower_expression<'db>(
             lower_unaryop(ctx, expr, unary)
         }
         ExprFunKind::FunctionCall(call) => {
+            // Push a new scope for this call's pending intermediates.
+            ctx.push_pending_scope();
+
             // Resolve function reference using typechecker's resolved call target.
             let func_ref = ctx.resolve_call(call)?;
 
@@ -330,8 +333,9 @@ pub fn lower_expression<'db>(
                 func: func_ref,
                 args,
             });
-            // Args consumed by Call.
+            // Args consumed by Call; pop scope.
             ctx.clear_pending_intermediates();
+            ctx.pop_pending_scope();
             Ok(dest)
         }
         ExprFunKind::Some(some_expr) => {
@@ -374,6 +378,9 @@ pub fn lower_expression<'db>(
             lower_field_proj(ctx, expr, proj)
         }
         ExprFunKind::Tuple(tuple) => {
+            // Push a new scope for this tuple's pending intermediates.
+            ctx.push_pending_scope();
+
             let result_type = ctx.expr_type(expr);
             let element_types: Vec<IrType> = match &result_type {
                 IrType::Tuple(types) => types.clone(),
@@ -395,9 +402,13 @@ pub fn lower_expression<'db>(
                 fields,
             });
             ctx.clear_pending_intermediates();
+            ctx.pop_pending_scope();
             Ok(dest)
         }
         ExprFunKind::AnonTuple(tuple) => {
+            // Push a new scope for this tuple's pending intermediates.
+            ctx.push_pending_scope();
+
             let result_type = ctx.expr_type(expr);
             let element_types: Vec<IrType> = match &result_type {
                 IrType::Tuple(types) => types.clone(),
@@ -419,9 +430,13 @@ pub fn lower_expression<'db>(
                 fields,
             });
             ctx.clear_pending_intermediates();
+            ctx.pop_pending_scope();
             Ok(dest)
         }
         ExprFunKind::List(list) => {
+            // Push a new scope for this list's pending intermediates.
+            ctx.push_pending_scope();
+
             let result_type = ctx.expr_type(expr);
             let elem_type = match &result_type {
                 IrType::List(t) => (**t).clone(),
@@ -437,9 +452,13 @@ pub fn lower_expression<'db>(
             let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::ListNew { dest, elements });
             ctx.clear_pending_intermediates();
+            ctx.pop_pending_scope();
             Ok(dest)
         }
         ExprFunKind::Set(set) => {
+            // Push a new scope for this set's pending intermediates.
+            ctx.push_pending_scope();
+
             let result_type = ctx.expr_type(expr);
             let elem_type = match &result_type {
                 IrType::Set(t) => (**t).clone(),
@@ -455,9 +474,13 @@ pub fn lower_expression<'db>(
             let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::SetNew { dest, elements });
             ctx.clear_pending_intermediates();
+            ctx.pop_pending_scope();
             Ok(dest)
         }
         ExprFunKind::Map(map) => {
+            // Push a new scope for this map's pending intermediates.
+            ctx.push_pending_scope();
+
             let result_type = ctx.expr_type(expr);
             let (key_type, val_type) = match &result_type {
                 IrType::Map(k, v) => ((**k).clone(), (**v).clone()),
@@ -475,6 +498,7 @@ pub fn lower_expression<'db>(
             let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::MapNew { dest, entries });
             ctx.clear_pending_intermediates();
+            ctx.pop_pending_scope();
             Ok(dest)
         }
         ExprFunKind::Error(err_expr) => {
@@ -522,6 +546,9 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::AnonStruct(struct_expr) => {
+            // Push a new scope for this struct's pending intermediates.
+            ctx.push_pending_scope();
+
             // Get the result type - this is IrType::Struct with sorted fields.
             let result_type = ctx.expr_type(expr);
             let field_types: std::collections::HashMap<String, IrType> = match &result_type {
@@ -566,9 +593,13 @@ pub fn lower_expression<'db>(
             });
             // Clear pending - field values are now consumed by Pack.
             ctx.clear_pending_intermediates();
+            ctx.pop_pending_scope();
             Ok(dest)
         }
         ExprFunKind::AnonEnum(enum_expr) => {
+            // Push a new scope for this enum's pending intermediates.
+            ctx.push_pending_scope();
+
             // Get the result type - this is IrType::Enum with sorted variants.
             let result_type = ctx.expr_type(expr);
             let variant_name = enum_expr.variant_name.text(ctx.db).to_string();
@@ -610,9 +641,13 @@ pub fn lower_expression<'db>(
                 payload,
             });
             ctx.clear_pending_intermediates();
+            ctx.pop_pending_scope();
             Ok(dest)
         }
         ExprFunKind::Tensor(tensor) => {
+            // Push a new scope for this tensor's pending intermediates.
+            ctx.push_pending_scope();
+
             let result_type = ctx.expr_type(expr);
             let elem_type = match &result_type {
                 IrType::Tensor(t, _) => (**t).clone(),
@@ -629,9 +664,13 @@ pub fn lower_expression<'db>(
             let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::TensorNew { dest, shape, elements });
             ctx.clear_pending_intermediates();
+            ctx.pop_pending_scope();
             Ok(dest)
         }
         ExprFunKind::Table(table) => {
+            // Push a new scope for this table's pending intermediates.
+            ctx.push_pending_scope();
+
             // Get the table type to determine column types.
             let result_type = ctx.expr_type(expr);
             let column_types = match &result_type {
@@ -675,6 +714,7 @@ pub fn lower_expression<'db>(
             ctx.emit(Instruction::TableNew { dest, rows });
             // All row tuples consumed by TableNew.
             ctx.clear_pending_intermediates();
+            ctx.pop_pending_scope();
             Ok(dest)
         }
         ExprFunKind::ParseError(_) => {

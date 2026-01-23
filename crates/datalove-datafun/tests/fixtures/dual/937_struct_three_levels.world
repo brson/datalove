@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+// Three level struct nesting with strings at each level.
+fun test(): ?{l1: string, l1_inner: {l2: string, l2_inner: {l3: u32}}}
+    let opt: ?u32 = none
+    ret some {
+        l1 = "level1",
+        l1_inner = {
+            l2 = "level2",
+            l2_inner = {l3 = opt?}
+        }
+    }
+end fun
+
+debuglog test()

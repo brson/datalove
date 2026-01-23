@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Tuple inside struct with try in tuple element.
+fun test(): ?{label: string, pair: (string, u32)}
+    let opt: ?u32 = none
+    ret some {label = "outer", pair = ("inner", opt?)}
+end fun
+
+debuglog test()

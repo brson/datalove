@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Checked div by zero in struct field.
+fun test(): ?{label: string, quotient: u32}
+    ret some {label = "div_test", quotient = (100 /? 0)}
+end fun
+
+debuglog test()

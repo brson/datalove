@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Multiple function calls with try in later one.
+fun make_string(): string
+    ret "created"
+end fun
+
+fun get_opt(): ?u32
+    ret none
+end fun
+
+fun test(): ?{a: string, b: u32}
+    ret some {a = make_string(), b = get_opt()?}
+end fun
+
+debuglog test()

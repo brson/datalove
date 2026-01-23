@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Mixed Copy and non-Copy types. Only non-Copy should be dropped.
+fun test(): ?{a: u32, b: string, c: bool, d: string, e: u32}
+    let opt: ?u32 = none
+    // u32 and bool are Copy (no drop needed)
+    // strings are non-Copy (need drop on early return)
+    ret some {a = 42, b = "first", c = true, d = "second", e = opt?}
+end fun
+
+debuglog test()

@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+// Try operator in function argument position.
+fun make_pair(a: string, b: u32): {first: string, second: u32}
+    ret {first = a, second = b}
+end fun
+
+fun test(): ?{first: string, second: u32}
+    let opt: ?u32 = none
+    // "hello" is passed first, then opt? fails
+    ret some make_pair("hello", opt?)
+end fun
+
+debuglog test()

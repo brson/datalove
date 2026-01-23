@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Five element tuple with try on fourth - first three dropped.
+fun test(): ?(string, string, string, u32, string)
+    let opt: ?u32 = none
+    ret some ("one", "two", "three", opt?, "five")
+end fun
+
+debuglog test()
