@@ -11,7 +11,7 @@ DualAnalysis(
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"settings\"\n    v1 = const \"key1\"\n    v2 = const 100u32\n    v3 = const \"key2\"\n    v4 = const 200u32\n    v5 = map {v1: v2, v3: v4}\n    v6 = pack Struct0 {v0, v5}\n    v7 = getfieldref v6.0\n    debuglog v7\n    v8 = getfieldref v6.1\n    debuglog v8\n    drop.tracked v6\n    unit_end\nexports:\n    config = v6\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const \"settings\"\n    v1 = const \"key1\"\n    v2 = const 100u32\n    v3 = const \"key2\"\n    v4 = const 200u32\n    v5 = map {v1: v2, v3: v4}\n    v6 = pack Struct0 {v0, v5}\n    v7 = getfieldref v6.0\n    debuglog v7\n    v8 = getfieldref v6.1\n    debuglog v8\n    drop v6\n    unit_end\nexports:\n    config = v6\n",
             ),
             ir_match: true,
             interp_output: "\"settings\"\nmap {\"key1\" = 100, \"key2\" = 200}\n",

@@ -30,7 +30,7 @@ DualAnalysis(
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100int\n    v1 = const 200int\n    v2 = pack Struct0 {v0, v1}\n    v3 = getfieldref v2.0\n    v4 = call m0.f0(v3)\n    debuglog v4\n    drop v4\n    drop.tracked v2\n    unit_end\nexports:\n    s = v2\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100int\n    v1 = const 200int\n    v2 = pack Struct0 {v0, v1}\n    v3 = getfieldref v2.0\n    v4 = call m0.f0(v3)\n    debuglog v4\n    drop v4\n    drop v2\n    unit_end\nexports:\n    s = v2\n",
             ),
             ir_match: true,
             interp_output: "100\n",

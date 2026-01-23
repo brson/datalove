@@ -592,10 +592,15 @@ fn lower_set<'db>(
             match ctx.lookup_var(&name_str) {
                 Some(Operand::Slot(slot)) => {
                     // Drop old value before storing new one.
-                    // Use DropTracked: slot may have been moved in control flow.
                     let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);
                     if !is_copy {
-                        ctx.emit(Instruction::DropTracked { operand: Operand::Slot(slot) });
+                        // Use DropTracked for tracked slots, Drop for precise.
+                        let operand = Operand::Slot(slot);
+                        if ctx.is_operand_tracked(operand) {
+                            ctx.emit(Instruction::DropTracked { operand });
+                        } else {
+                            ctx.emit(Instruction::Drop { operand });
+                        }
                     }
                     let instr = if is_copy {
                         Instruction::SlotStoreCopy {

@@ -309,10 +309,15 @@ fn lower_statement_for_script<'db>(
                         match operand {
                             Operand::Slot(slot) => {
                                 // Drop old value before storing new one.
-                                // Use DropTracked: slot may have been moved in control flow.
                                 let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);
                                 if !is_copy {
-                                    ctx.emit(Instruction::DropTracked { operand: Operand::Slot(slot) });
+                                    // Use DropTracked for tracked slots, Drop for precise.
+                                    let operand = Operand::Slot(slot);
+                                    if ctx.is_operand_tracked(operand) {
+                                        ctx.emit(Instruction::DropTracked { operand });
+                                    } else {
+                                        ctx.emit(Instruction::Drop { operand });
+                                    }
                                 }
                                 let instr = if is_copy {
                                     Instruction::SlotStoreCopy {
@@ -330,7 +335,7 @@ fn lower_statement_for_script<'db>(
                             }
                             Operand::ExternalSlot { unit, slot } => {
                                 // Drop old value before storing new one.
-                                // Use DropTracked: slot may have been moved in control flow.
+                                // Use DropTracked: external slots are script-level bindings, always tracked.
                                 let is_copy = ctx.external_slot_type(&name).map(|t| t.is_copy()).unwrap_or(false);
                                 if !is_copy {
                                     ctx.emit(Instruction::DropTracked {

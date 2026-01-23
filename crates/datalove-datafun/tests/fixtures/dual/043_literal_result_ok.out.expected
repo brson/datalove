@@ -11,7 +11,7 @@ DualAnalysis(
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = ok v0\n    debuglog v1\n    drop.tracked v1\n    unit_end\nexports:\n    x = v1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = ok v0\n    debuglog v1\n    drop v1\n    unit_end\nexports:\n    x = v1\n",
             ),
             ir_match: true,
             interp_output: "ok 42\n",

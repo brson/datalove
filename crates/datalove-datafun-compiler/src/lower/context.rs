@@ -766,13 +766,11 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit drops for unit end (for AOT compilation).
     ///
-    /// Uses `DropTracked` because script-level bindings may have been moved or
-    /// exported, so initialization must be checked at runtime.
+    /// Uses `emit_binding_drop` to emit `DropTracked` for tracked bindings
+    /// and `Drop` for precise bindings.
     pub fn emit_unit_end_drops(&mut self) {
         for id in std::mem::take(&mut self.unit_end_drops) {
-            if let Some(&operand) = self.binding_to_operand.get(&id) {
-                self.emit(Instruction::DropTracked { operand });
-            }
+            self.emit_binding_drop(id);
         }
     }
 
