@@ -434,11 +434,16 @@ fn lower_statement_for_script<'db>(
             let saved_variables = std::mem::take(&mut ctx.variables);
             // Also save binding/type state that gets modified by lower_function_body.
             let saved_binding_to_operand = std::mem::take(&mut ctx.binding_to_operand);
+            let saved_operand_to_binding = std::mem::take(&mut ctx.operand_to_binding);
             let saved_next_binding_id = ctx.next_binding_id;
             let saved_param_types = std::mem::take(&mut ctx.param_types);
             let saved_param_modes = std::mem::take(&mut ctx.param_modes);
             let saved_value_types = std::mem::take(&mut ctx.value_types);
             let saved_slot_types = std::mem::take(&mut ctx.slot_types);
+            // Save tracking state - each function has its own tracking from ownership analysis.
+            let saved_tracking = std::mem::take(&mut ctx.tracking);
+            let saved_binding_info = std::mem::take(&mut ctx.binding_info);
+            let saved_drop_schedule = std::mem::take(&mut ctx.drop_schedule);
 
             // Reset for function body.
             ctx.current_block = BlockId(0);
@@ -467,11 +472,16 @@ fn lower_statement_for_script<'db>(
             ctx.next_param = saved_next_param;
             ctx.variables = saved_variables;
             ctx.binding_to_operand = saved_binding_to_operand;
+            ctx.operand_to_binding = saved_operand_to_binding;
             ctx.next_binding_id = saved_next_binding_id;
             ctx.param_types = saved_param_types;
             ctx.param_modes = saved_param_modes;
             ctx.value_types = saved_value_types;
             ctx.slot_types = saved_slot_types;
+            // Restore tracking state.
+            ctx.tracking = saved_tracking;
+            ctx.binding_info = saved_binding_info;
+            ctx.drop_schedule = saved_drop_schedule;
 
             // Add the function to the unit's functions.
             ctx.functions.push(func);

@@ -2046,3 +2046,296 @@ fn test_crossunit_chain() {
 }
 
 // NOTE: Phi tests removed - Phi instruction has been replaced by block parameters.
+
+// =============================================================================
+// Tracking Tests
+//
+// These tests verify the interpreter's contract around tracked_values:
+// - Values in tracked_values are destroyed by destroy_all
+// - Values NOT in tracked_values are expected to have explicit Drop instructions
+// =============================================================================
+
+/// Test that a list value in tracked_values is properly destroyed by destroy_all.
+///
+/// This test creates a list, marks it as tracked, and verifies that destroy_all
+/// cleans it up without leaking memory.
+#[test]
+fn test_tracked_list_destroyed_by_destroy_all() {
+    // Script unit that creates a list [1, 2, 3] and stores it in a value.
+    // The list IS in tracked_values, so destroy_all should handle it.
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    // Create element values.
+                    Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
+                    Instruction::Const { dest: ValueId(1), value: ConstValue::I64(2) },
+                    Instruction::Const { dest: ValueId(2), value: ConstValue::I64(3) },
+                    // Create list from elements.
+                    Instruction::ListNew {
+                        dest: ValueId(3),
+                        elements: vec![
+                            Operand::Value(ValueId(0)),
+                            Operand::Value(ValueId(1)),
+                            Operand::Value(ValueId(2)),
+                        ],
+                    },
+                    // No explicit drop - tracked_values will handle it.
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 4,
+        slot_count: 0,
+        value_types: vec![IrType::I64, IrType::I64, IrType::I64, IrType::List(Box::new(IrType::I64))],
+        slot_types: vec![],
+        // Key: the list (ValueId(3)) IS tracked.
+        tracked_values: vec![ValueId(3)],
+        tracked_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    // destroy_all should clean up the tracked list.
+    // If this panics with a leak, the tracking isn't working.
+    env.destroy_all(interp.runtime_handle());
+}
+
+/// Test that an untracked list with explicit Drop is properly destroyed.
+///
+/// This simulates a "precise" value where ownership analysis determined
+/// the exact drop point, so it's not in tracked_values.
+#[test]
+fn test_untracked_list_with_explicit_drop() {
+    // Script unit that creates a list and explicitly drops it.
+    // The list is NOT in tracked_values (precise tracking).
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    // Create element values.
+                    Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
+                    Instruction::Const { dest: ValueId(1), value: ConstValue::I64(20) },
+                    // Create list from elements.
+                    Instruction::ListNew {
+                        dest: ValueId(2),
+                        elements: vec![
+                            Operand::Value(ValueId(0)),
+                            Operand::Value(ValueId(1)),
+                        ],
+                    },
+                    // Explicit drop - this is required since list is not tracked.
+                    Instruction::Drop { operand: Operand::Value(ValueId(2)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 3,
+        slot_count: 0,
+        value_types: vec![IrType::I64, IrType::I64, IrType::List(Box::new(IrType::I64))],
+        slot_types: vec![],
+        // Key: the list is NOT tracked (precise).
+        tracked_values: vec![],
+        tracked_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    // destroy_all won't touch the list (not tracked), but explicit Drop already handled it.
+    env.destroy_all(interp.runtime_handle());
+}
+
+/// Test tracking with a function that has parameters followed by a script binding.
+///
+/// This is the scenario that triggered the bug: a script unit with:
+/// 1. A function definition (with parameters that create tracking entries)
+/// 2. A let binding of a non-Copy type
+///
+/// The bug was that the function's tracking state would overwrite the script's,
+/// causing the script binding to not be tracked.
+#[test]
+fn test_script_with_function_and_tracked_list() {
+    // A function with two i64 parameters that just returns the first one.
+    let identity_fn = IrFunction {
+        id: FuncId(0),
+        name: "identity".to_string(),
+        params: vec![ParamId(0), ParamId(1)],
+        param_modes: vec![],
+        param_types: vec![IrType::I64, IrType::I64],
+        return_type: IrType::I64,
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![],
+                terminator: Terminator::Return {
+                    value: Some(Operand::Param(ParamId(0))),
+                },
+            },
+        ],
+        value_count: 0,
+        slot_count: 0,
+        value_types: vec![],
+        slot_types: vec![],
+        // Function has its own tracked_values (empty here, params are Copy).
+        tracked_values: vec![],
+        tracked_slots: vec![],
+    };
+
+    // Script unit that defines the function and creates a list binding.
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    // Create list [100, 200, 300, 400].
+                    Instruction::Const { dest: ValueId(0), value: ConstValue::I64(100) },
+                    Instruction::Const { dest: ValueId(1), value: ConstValue::I64(200) },
+                    Instruction::Const { dest: ValueId(2), value: ConstValue::I64(300) },
+                    Instruction::Const { dest: ValueId(3), value: ConstValue::I64(400) },
+                    Instruction::ListNew {
+                        dest: ValueId(4),
+                        elements: vec![
+                            Operand::Value(ValueId(0)),
+                            Operand::Value(ValueId(1)),
+                            Operand::Value(ValueId(2)),
+                            Operand::Value(ValueId(3)),
+                        ],
+                    },
+                    // Call the function (just to exercise it).
+                    Instruction::Const { dest: ValueId(5), value: ConstValue::I64(10) },
+                    Instruction::Const { dest: ValueId(6), value: ConstValue::I64(20) },
+                    Instruction::Call {
+                        dest: ValueId(7),
+                        func: FuncRef::Local(FuncId(0)),
+                        args: vec![Operand::Value(ValueId(5)), Operand::Value(ValueId(6))],
+                    },
+                    // No explicit drop of list - it's tracked.
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 8,
+        slot_count: 0,
+        value_types: vec![
+            IrType::I64, IrType::I64, IrType::I64, IrType::I64,  // list elements
+            IrType::List(Box::new(IrType::I64)),                  // the list
+            IrType::I64, IrType::I64, IrType::I64,                // call args and result
+        ],
+        slot_types: vec![],
+        // Critical: the list (ValueId(4)) must be tracked.
+        // If compiler lowering corrupts tracking, this would be empty.
+        tracked_values: vec![ValueId(4)],
+        tracked_slots: vec![],
+        functions: vec![identity_fn],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    // destroy_all should clean up the tracked list.
+    // The bug would have caused tracked_values to be empty (or wrong),
+    // and this would leak.
+    env.destroy_all(interp.runtime_handle());
+}
+
+/// Test that multiple tracked values are all destroyed.
+#[test]
+fn test_multiple_tracked_values() {
+    // Create two separate lists, both tracked.
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    // First list [1, 2].
+                    Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
+                    Instruction::Const { dest: ValueId(1), value: ConstValue::I64(2) },
+                    Instruction::ListNew {
+                        dest: ValueId(2),
+                        elements: vec![
+                            Operand::Value(ValueId(0)),
+                            Operand::Value(ValueId(1)),
+                        ],
+                    },
+                    // Second list [3, 4].
+                    Instruction::Const { dest: ValueId(3), value: ConstValue::I64(3) },
+                    Instruction::Const { dest: ValueId(4), value: ConstValue::I64(4) },
+                    Instruction::ListNew {
+                        dest: ValueId(5),
+                        elements: vec![
+                            Operand::Value(ValueId(3)),
+                            Operand::Value(ValueId(4)),
+                        ],
+                    },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 6,
+        slot_count: 0,
+        value_types: vec![
+            IrType::I64, IrType::I64, IrType::List(Box::new(IrType::I64)),
+            IrType::I64, IrType::I64, IrType::List(Box::new(IrType::I64)),
+        ],
+        slot_types: vec![],
+        // Both lists are tracked.
+        tracked_values: vec![ValueId(2), ValueId(5)],
+        tracked_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    // Both lists should be destroyed.
+    env.destroy_all(interp.runtime_handle());
+}

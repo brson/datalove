@@ -500,16 +500,12 @@ impl IrInterpreter {
             }
             Instruction::Move { dest, src } => {
                 // Precise move: ownership analysis guarantees source exists.
-                // TRANSITIONAL: In track_all mode (empty tracked sets), still mark
-                // source dropped to avoid double-free in destroy_all.
+                // Source is not marked dropped - destroy_all skips untracked values,
+                // and precise values are explicitly dropped via Drop instructions.
                 let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&src_val, dest_slot); }
                 frame.mark_value_initialized(*dest);
-                // Only skip mark_source_dropped when we have explicit tracking info.
-                if frame.is_track_all_values() {
-                    Self::mark_source_dropped_all(src, frame, frames);
-                }
             }
             Instruction::MoveTracked { dest, src } => {
                 // Tracked move: source may have been moved, updates tracking.
@@ -624,15 +620,11 @@ impl IrInterpreter {
             }
             Instruction::SlotLoadMove { dest, slot } => {
                 // Precise slot load: ownership analysis guarantees slot is occupied.
-                // TRANSITIONAL: In track_all mode (empty tracked sets), still mark
-                // slot dropped to avoid double-free in destroy_all.
+                // Slot is not marked dropped - destroy_all skips untracked slots,
+                // and precise slots are explicitly dropped via Drop instructions.
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&slot_val, dest_slot); }
-                // Only skip mark_slot_dropped when we have explicit tracking info.
-                if frame.is_track_all_slots() {
-                    frame.mark_slot_dropped(*slot);
-                }
                 frame.mark_value_initialized(*dest);
             }
             Instruction::SlotLoadMoveTracked { dest, slot } => {

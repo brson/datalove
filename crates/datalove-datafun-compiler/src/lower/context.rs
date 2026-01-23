@@ -593,9 +593,24 @@ impl<'db> LowerCtx<'db> {
 
     /// Compute tracked_values for the current unit.
     ///
-    /// Returns ValueIds for bindings that are tracked and stored in values.
+    /// Returns all non-Copy ValueIds that need runtime tracking for destroy_all.
+    /// This includes:
+    /// - Tracked bindings stored as values
+    /// - All non-binding intermediate values (non-Copy)
+    ///
+    /// Precise bindings are NOT included because they have explicit Drop instructions.
     pub fn compute_tracked_values(&self) -> Vec<ValueId> {
         let mut result = Vec::new();
+
+        // Collect tracked bindings.
+        let binding_values: std::collections::HashSet<ValueId> = self.binding_to_operand
+            .values()
+            .filter_map(|op| match op {
+                Operand::Value(v) => Some(*v),
+                _ => None,
+            })
+            .collect();
+
         for (id, &operand) in &self.binding_to_operand {
             if self.is_binding_tracked(*id) {
                 if let Operand::Value(value_id) = operand {
@@ -603,6 +618,16 @@ impl<'db> LowerCtx<'db> {
                 }
             }
         }
+
+        // Add all non-Copy non-binding values (intermediates).
+        // These don't have explicit Drop instructions, so destroy_all must handle them.
+        for (idx, ty) in self.value_types.iter().enumerate() {
+            let value_id = ValueId(idx as u32);
+            if !ty.is_copy() && !binding_values.contains(&value_id) {
+                result.push(value_id);
+            }
+        }
+
         result
     }
 

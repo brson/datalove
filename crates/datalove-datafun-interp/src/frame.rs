@@ -185,27 +185,13 @@ impl Frame {
     }
 
     /// Check if value is tracked (needs runtime initialized check in destroy_all).
-    ///
-    /// TRANSITIONAL: Returns true for ALL values when tracked set is empty.
     pub fn is_value_tracked(&self, id: ValueId) -> bool {
-        self.value_tracked.is_empty() || self.value_tracked.contains(&id.0)
+        self.value_tracked.contains(&id.0)
     }
 
     /// Check if slot is tracked (needs runtime initialized check in destroy_all).
-    ///
-    /// TRANSITIONAL: Returns true for ALL slots when tracked set is empty.
     pub fn is_slot_tracked(&self, id: SlotId) -> bool {
-        self.slot_tracked.is_empty() || self.slot_tracked.contains(&id.0)
-    }
-
-    /// Check if we're in "track all" mode (empty tracked sets).
-    pub fn is_track_all_values(&self) -> bool {
-        self.value_tracked.is_empty()
-    }
-
-    /// Check if we're in "track all" mode (empty tracked sets).
-    pub fn is_track_all_slots(&self) -> bool {
-        self.slot_tracked.is_empty()
+        self.slot_tracked.contains(&id.0)
     }
 
     /// Mark value as dropped to prevent double-destroy.
@@ -309,11 +295,8 @@ impl Frame {
 
         // Destroy initialized tracked values (skip borrowed and untracked).
         // Untracked (precise) values are handled by explicit Drop instructions.
-        // TRANSITIONAL: When tracked set is empty, treat all values as tracked
-        // until ownership analysis populates tracked_values.
-        let track_all_values = self.value_tracked.is_empty();
         for idx in 0..self.value_initialized.len() {
-            let is_tracked = track_all_values || self.value_tracked.contains(&(idx as u32));
+            let is_tracked = self.value_tracked.contains(&(idx as u32));
             if self.value_initialized[idx] && !self.value_borrowed[idx] && is_tracked {
                 let offset = self.layout.value_offsets[idx] as usize;
                 let tydesc = self.layout.value_tydescs[idx];
@@ -327,11 +310,8 @@ impl Frame {
 
         // Destroy initialized tracked slots (skip untracked).
         // Untracked (precise) slots are handled by explicit Drop instructions.
-        // TRANSITIONAL: When tracked set is empty, treat all slots as tracked
-        // until ownership analysis populates tracked_slots.
-        let track_all_slots = self.slot_tracked.is_empty();
         for idx in 0..self.slot_initialized.len() {
-            let is_tracked = track_all_slots || self.slot_tracked.contains(&(idx as u32));
+            let is_tracked = self.slot_tracked.contains(&(idx as u32));
             if self.slot_initialized[idx] && is_tracked {
                 let offset = self.layout.slot_offsets[idx] as usize;
                 let tydesc = self.layout.slot_tydescs[idx];

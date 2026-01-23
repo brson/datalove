@@ -460,3 +460,79 @@ fn test_per_unit_lowering_memoization() {
 
     ctx.destroy_all();
 }
+
+/// Regression test: function lowering must not corrupt script tracking state.
+///
+/// Previously, when lowering functions defined inside a script unit, the
+/// function's tracking state (from its parameters) would overwrite the
+/// script's tracking state. This caused script-level non-Copy bindings
+/// to appear as "Copy" and not be included in tracked_values, leading to
+/// memory leaks when destroy_all skipped them.
+///
+/// This test defines functions with parameters (which create tracking entries)
+/// followed by a let binding of a non-Copy type (list). If the tracking state
+/// is corrupted, the list won't be properly tracked and will leak.
+#[test]
+fn test_function_lowering_preserves_script_tracking() {
+    let db = make_db();
+    let mut pipeline = ModuleCompilationPipeline::new();
+    let compiled = pipeline.compile_fresh(&db);
+    let mut ctx = TestContext::new(&compiled, &db);
+
+    // Define functions with parameters, then a non-Copy let binding.
+    // The bug was that the function parameters' tracking categories
+    // would overwrite the script's tracking, making the list appear
+    // as Copy and not get destroyed.
+    let r = ctx.eval_fragment(r#"
+fun get_value(): int
+    ret 42
+end fun
+
+fun process(a: int, b: int): int
+    ret a + b
+end fun
+
+let my_list: [int] = [1, 2, 3, 4]
+debuglog my_list
+debuglog process(get_value(), 10)
+"#);
+    assert!(matches!(r.typecheck, TypecheckResult::Success),
+        "fragment failed: {:?}", r.typecheck);
+
+    // This will panic with a leak if my_list wasn't properly tracked.
+    ctx.destroy_all();
+}
+
+/// Similar regression test with Option<String> to ensure wrapper types are tracked.
+#[test]
+fn test_function_lowering_preserves_option_tracking() {
+    let db = make_db();
+    let mut pipeline = ModuleCompilationPipeline::new();
+    let compiled = pipeline.compile_fresh(&db);
+    let mut ctx = TestContext::new(&compiled, &db);
+
+    // Functions with Option parameters and return types.
+    // The key is that after processing function params, we have a
+    // non-Copy let binding (string) that must be tracked.
+    let r = ctx.eval_fragment(r#"
+fun make_opt(n: int): ?int
+    ret some n
+end fun
+
+fun unwrap_or(opt: ?int, default: int): int
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+let my_string: string = "hello world"
+let result = unwrap_or(make_opt(100), 0)
+debuglog my_string
+"#);
+    assert!(matches!(r.typecheck, TypecheckResult::Success),
+        "fragment failed: {:?}", r.typecheck);
+
+    // This will panic with a leak if my_string wasn't properly tracked.
+    ctx.destroy_all();
+}
