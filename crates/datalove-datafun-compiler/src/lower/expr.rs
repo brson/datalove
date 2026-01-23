@@ -318,7 +318,7 @@ pub fn lower_expression<'db>(
                 if mode == ParamMode::In {
                     if let Operand::Value(v) = operand {
                         if let Some(arg_ty) = param_types.get(i) {
-                            ctx.push_pending_intermediate(v, arg_ty.clone());
+                            ctx.push_pending_intermediate(v, arg_ty);
                         }
                     }
                 }
@@ -391,7 +391,7 @@ pub fn lower_expression<'db>(
             for (i, e) in tuple.elements.iter().enumerate() {
                 let value = lower_expression(ctx, *e)?;
                 if let Some(elem_ty) = element_types.get(i) {
-                    ctx.push_pending_intermediate(value, elem_ty.clone());
+                    ctx.push_pending_intermediate(value, elem_ty);
                 }
                 fields.push(Operand::Value(value));
             }
@@ -419,7 +419,7 @@ pub fn lower_expression<'db>(
             for (i, e) in tuple.elements.iter().enumerate() {
                 let value = lower_expression(ctx, *e)?;
                 if let Some(elem_ty) = element_types.get(i) {
-                    ctx.push_pending_intermediate(value, elem_ty.clone());
+                    ctx.push_pending_intermediate(value, elem_ty);
                 }
                 fields.push(Operand::Value(value));
             }
@@ -446,7 +446,7 @@ pub fn lower_expression<'db>(
             let mut elements = Vec::new();
             for e in list.elements.iter() {
                 let value = lower_expression(ctx, *e)?;
-                ctx.push_pending_intermediate(value, elem_type.clone());
+                ctx.push_pending_intermediate(value, &elem_type);
                 elements.push(Operand::Value(value));
             }
             let dest = ctx.fresh_value(result_type);
@@ -468,7 +468,7 @@ pub fn lower_expression<'db>(
             let mut elements = Vec::new();
             for e in set.elements.iter() {
                 let value = lower_expression(ctx, *e)?;
-                ctx.push_pending_intermediate(value, elem_type.clone());
+                ctx.push_pending_intermediate(value, &elem_type);
                 elements.push(Operand::Value(value));
             }
             let dest = ctx.fresh_value(result_type);
@@ -490,9 +490,9 @@ pub fn lower_expression<'db>(
             let mut entries = Vec::new();
             for e in map.entries.iter() {
                 let k = lower_expression(ctx, e.key)?;
-                ctx.push_pending_intermediate(k, key_type.clone());
+                ctx.push_pending_intermediate(k, &key_type);
                 let v = lower_expression(ctx, e.value)?;
-                ctx.push_pending_intermediate(v, val_type.clone());
+                ctx.push_pending_intermediate(v, &val_type);
                 entries.push((Operand::Value(k), Operand::Value(v)));
             }
             let dest = ctx.fresh_value(result_type);
@@ -571,7 +571,7 @@ pub fn lower_expression<'db>(
                 let value = lower_expression(ctx, field.value)?;
                 // Track as pending intermediate so it's dropped on early return.
                 if let Some(field_ty) = field_types.get(&name) {
-                    ctx.push_pending_intermediate(value, field_ty.clone());
+                    ctx.push_pending_intermediate(value, field_ty);
                 }
                 field_values.insert(name, value);
             }
@@ -628,7 +628,7 @@ pub fn lower_expression<'db>(
                     _ => IrType::Unit,
                 };
                 let value = lower_expression(ctx, p)?;
-                ctx.push_pending_intermediate(value, payload_type);
+                ctx.push_pending_intermediate(value, &payload_type);
                 Some(Operand::Value(value))
             } else {
                 None
@@ -658,7 +658,7 @@ pub fn lower_expression<'db>(
             let mut elements = Vec::new();
             for e in tensor.elements.iter() {
                 let value = lower_expression(ctx, *e)?;
-                ctx.push_pending_intermediate(value, elem_type.clone());
+                ctx.push_pending_intermediate(value, &elem_type);
                 elements.push(Operand::Value(value));
             }
             let dest = ctx.fresh_value(result_type);
@@ -692,7 +692,7 @@ pub fn lower_expression<'db>(
                 for (i, e) in row.elements.iter().enumerate() {
                     let value = lower_expression(ctx, *e)?;
                     if let Some(elem_ty) = tuple_fields.get(i) {
-                        ctx.push_pending_intermediate(value, elem_ty.clone());
+                        ctx.push_pending_intermediate(value, elem_ty);
                     }
                     elem_operands.push(Operand::Value(value));
                 }
@@ -706,7 +706,7 @@ pub fn lower_expression<'db>(
                 });
                 // Elements consumed by Pack, but tuple itself is now pending.
                 ctx.clear_pending_intermediates();
-                ctx.push_pending_intermediate(tuple_dest, row_type.clone());
+                ctx.push_pending_intermediate(tuple_dest, &row_type);
                 rows.push(Operand::Value(tuple_dest));
             }
 

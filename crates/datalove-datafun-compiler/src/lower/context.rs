@@ -69,10 +69,15 @@ pub struct FrameState {
     /// Temporary values to drop after the current expression is evaluated.
     pub expr_temps: Vec<(ValueId, IrType)>,
     /// Stack of pending intermediate scopes for nested compound expressions.
-    /// Each scope contains intermediate values that need to be dropped on early return.
-    /// Scopes are pushed when entering a compound expression and popped on completion.
-    /// On early return, ALL scopes are dropped from innermost to outermost.
-    pub pending_intermediate_scopes: Vec<Vec<(ValueId, IrType)>>,
+    ///
+    /// When lowering compound expressions (struct, tuple, list, etc.), we track
+    /// intermediate non-Copy values that have been created but not yet consumed.
+    /// If an early return happens (via try operator), these must be dropped.
+    ///
+    /// Each scope corresponds to one compound expression. Scopes are pushed on
+    /// entry and popped on completion. On early return, ALL scopes are dropped
+    /// from innermost to outermost.
+    pub pending_intermediate_scopes: Vec<Vec<ValueId>>,
     /// Next global statement ID (must match analysis traversal order).
     pub next_stmt_id: usize,
     /// Current statement index in the parent body (for drop schedule lookup).
@@ -542,17 +547,12 @@ impl<'db> LowerCtx<'db> {
 
     /// Push a non-Copy intermediate value to the current scope.
     ///
-    /// Call this when lowering compound expressions (struct fields, tuple elements, etc.)
-    /// after evaluating each sub-expression. These values will be dropped if a later
-    /// sub-expression triggers an early return (e.g., via try operator).
-    pub fn push_pending_intermediate(&mut self, value: ValueId, ty: IrType) {
+    /// Call this after evaluating each sub-expression of a compound expression.
+    /// Copy types are ignored since they don't need dropping.
+    pub fn push_pending_intermediate(&mut self, value: ValueId, ty: &IrType) {
         if !ty.is_copy() {
-            // Push to current scope, or create a root scope if none exists.
-            if self.body.pending_intermediate_scopes.is_empty() {
-                self.body.pending_intermediate_scopes.push(Vec::new());
-            }
             if let Some(scope) = self.body.pending_intermediate_scopes.last_mut() {
-                scope.push((value, ty));
+                scope.push(value);
             }
         }
     }
@@ -560,23 +560,21 @@ impl<'db> LowerCtx<'db> {
     /// Emit Drop instructions for all pending intermediates in all scopes.
     ///
     /// Call this on early return paths (try operators) before emitting binding drops.
-    /// Drops from innermost to outermost scope, ensuring nested compound expression
-    /// intermediates are properly cleaned up.
+    /// Drops innermost scope first, then outer scopes.
     pub fn emit_pending_intermediate_drops(&mut self) {
-        // Collect all intermediates from all scopes (innermost first).
-        let intermediates: Vec<_> = self.body.pending_intermediate_scopes.iter()
+        // Collect all values to drop (innermost scope first, newest values first).
+        let values: Vec<ValueId> = self.body.pending_intermediate_scopes.iter()
             .rev()
-            .flat_map(|scope| scope.iter().rev())
-            .cloned()
+            .flat_map(|scope| scope.iter().rev().copied())
             .collect();
-        for (value, _ty) in intermediates {
+        for value in values {
             self.emit(Instruction::Drop { operand: Operand::Value(value) });
         }
     }
 
-    /// Clear the current scope's pending intermediates without dropping.
+    /// Clear the current scope's pending intermediates without emitting drops.
     ///
-    /// Call this after a compound expression's values are consumed (e.g., after Pack).
+    /// Call this after values are consumed (e.g., after Pack instruction).
     pub fn clear_pending_intermediates(&mut self) {
         if let Some(scope) = self.body.pending_intermediate_scopes.last_mut() {
             scope.clear();
