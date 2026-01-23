@@ -7,11 +7,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 21int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    debuglog v0\n    unit_end\n\nfn double(p0):\nblock0:\n    v0 = add p0, p0\n    return v0\nexports:\n    double = f0\n    val = v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 21int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    debuglog v0\n    unit_end_drop v0\n    unit_end\n\nfn double(p0):\nblock0:\n    v0 = add p0, p0\n    return v0\nexports:\n    double = f0\n    val = v0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 21int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    debuglog v0\n    drop v0\n    unit_end\n\nfn double(p0):\nblock0:\n    v0 = add p0, p0\n    return v0\nexports:\n    double = f0\n    val = v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 21int\n    v1 = call f0(v0)\n    debuglog v1\n    drop v1\n    debuglog v0\n    unit_end_drop v0\n    unit_end\n\nfn double(p0):\nblock0:\n    v0 = add p0, p0\n    return v0\nexports:\n    double = f0\n    val = v0\n",
             ),
             ir_match: true,
             interp_output: "42\n21\n",

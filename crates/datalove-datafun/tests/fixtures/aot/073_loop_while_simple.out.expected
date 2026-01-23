@@ -8,7 +8,7 @@ AotAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 0int\n    store.move s0, v0\n    v1 = const 0int\n    store.move s1, v1\n    goto block1\nblock1:\n    v2 = const 5int\n    v3 = lt s0, v2\n    drop v2\n    branch v3, block2, block3\nblock2:\n    v4 = add s1, s0\n    drop.tracked s1\n    store.move s1, v4\n    v5 = const 1int\n    v6 = add s0, v5\n    drop v5\n    drop.tracked s0\n    store.move s0, v6\n    goto block1\nblock3:\n    debuglog s1\n    drop.tracked s0\n    drop.tracked s1\n    unit_end\nexports:\n    i = s0\n    sum = s1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 0int\n    store.move s0, v0\n    v1 = const 0int\n    store.move s1, v1\n    goto block1\nblock1:\n    v2 = const 5int\n    v3 = lt s0, v2\n    drop v2\n    branch v3, block2, block3\nblock2:\n    v4 = add s1, s0\n    drop.tracked s1\n    store.move s1, v4\n    v5 = const 1int\n    v6 = add s0, v5\n    drop v5\n    drop.tracked s0\n    store.move s0, v6\n    goto block1\nblock3:\n    debuglog s1\n    unit_end_drop.tracked s0\n    unit_end_drop.tracked s1\n    unit_end\nexports:\n    i = s0\n    sum = s1\n",
             ),
             aot_compile: Some(AotCompileResult(
                 status: "Success",

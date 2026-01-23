@@ -106,6 +106,11 @@ pub fn lower_script_unit<'db>(
         }
     };
 
+    // Compute unit_end values/slots BEFORE emit_unit_end_drops, because that
+    // method consumes unit_end_drops which we need to compute these.
+    let unit_end_values = ctx.compute_unit_end_values();
+    let unit_end_slots = ctx.compute_unit_end_slots();
+
     // Emit drops for script-level bindings at unit end (for AOT).
     ctx.emit_unit_end_drops();
 
@@ -125,6 +130,8 @@ pub fn lower_script_unit<'db>(
         slot_types: std::mem::take(&mut ctx.slot_types),
         tracked_values: ctx.compute_tracked_values(),
         tracked_slots: ctx.compute_tracked_slots(),
+        unit_end_values,
+        unit_end_slots,
         functions: ctx.functions,
         symbols: ctx.symbols,
         result,
@@ -168,6 +175,13 @@ pub fn lower_script_fragment_raw<'db>(
     }
     ctx.current_stmt_idx = None;
 
+    // Compute unit_end and tracked values/slots BEFORE emit_unit_end_drops,
+    // because that method consumes unit_end_drops which we need.
+    let unit_end_values = ctx.compute_unit_end_values();
+    let unit_end_slots = ctx.compute_unit_end_slots();
+    let tracked_values = ctx.compute_tracked_values();
+    let tracked_slots = ctx.compute_tracked_slots();
+
     // Emit drops for script-level bindings at unit end (for AOT).
     ctx.emit_unit_end_drops();
 
@@ -183,8 +197,10 @@ pub fn lower_script_fragment_raw<'db>(
         slot_count: ctx.next_slot,
         value_types: std::mem::take(&mut ctx.value_types),
         slot_types: std::mem::take(&mut ctx.slot_types),
-        tracked_values: ctx.compute_tracked_values(),
-        tracked_slots: ctx.compute_tracked_slots(),
+        tracked_values,
+        tracked_slots,
+        unit_end_values,
+        unit_end_slots,
         functions: ctx.functions,
         symbols: ctx.symbols,
         result: None,
@@ -221,6 +237,7 @@ pub fn lower_script_expr<'db>(
     // Renumber blocks for O(1) lookup in interpreter.
     ctx.renumber_blocks();
 
+    // Expression units don't create script-level bindings, so unit_end is empty.
     Ok(IrScriptUnit {
         blocks: std::mem::take(&mut ctx.blocks),
         value_count: ctx.next_value,
@@ -229,6 +246,8 @@ pub fn lower_script_expr<'db>(
         slot_types: std::mem::take(&mut ctx.slot_types),
         tracked_values: ctx.compute_tracked_values(),
         tracked_slots: ctx.compute_tracked_slots(),
+        unit_end_values: Vec::new(),
+        unit_end_slots: Vec::new(),
         functions: ctx.functions,
         symbols: ctx.symbols,
         result: Some(value_id),

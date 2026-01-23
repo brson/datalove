@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = list [v0, v1]\n    store.move s0, v2\n    unit_end\nexports:\n    x = s0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 1u32\n    v1 = const 2u32\n    v2 = list [v0, v1]\n    store.move s0, v2\n    unit_end_drop.tracked s0\n    unit_end\nexports:\n    x = s0\n",
             ),
             output: "(fragment executed)",
         ),

@@ -75,8 +75,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 };
 
                 // Run script-level ownership analysis.
-                // Use for_aot=false since these tests verify REPL behavior with persistent bindings.
-                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, expr_types, call_targets, &stmts, false);
+                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, expr_types, call_targets, &stmts);
 
                 // Check for script analysis errors.
                 if !script_analysis_raw.errors.is_empty() {

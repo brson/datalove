@@ -257,11 +257,14 @@ impl IrInterpreter {
         );
 
         // Create frame with param storage and tracking info.
+        // Functions don't have UnitEndDrop, so unit_end is empty.
         let mut frame = Frame::new(
             layout,
             func.params.len(),
             &func.tracked_values,
             &func.tracked_slots,
+            &[],  // unit_end_values: functions don't have UnitEndDrop
+            &[],  // unit_end_slots: functions don't have UnitEndDrop
         );
 
         // Set up parameters as pointers to caller's data.
@@ -328,6 +331,8 @@ impl IrInterpreter {
             0,
             &unit.tracked_values,
             &unit.tracked_slots,
+            &unit.unit_end_values,
+            &unit.unit_end_slots,
         );
 
         // Create execution context with local functions.
@@ -962,6 +967,14 @@ impl IrInterpreter {
                 };
                 self.execute_drop(&val);
                 Self::mark_source_dropped_local(operand, frame);
+            }
+            Instruction::UnitEndDrop { operand: _ } => {
+                // No-op: script-level bindings persist for subsequent REPL units.
+                // AOT backend handles this as unconditional drop.
+            }
+            Instruction::UnitEndDropTracked { operand: _ } => {
+                // No-op: script-level bindings persist for subsequent REPL units.
+                // AOT backend handles this as conditional drop (checks tracking byte).
             }
             Instruction::DebugLog { operand } => {
                 let val = self.read_operand(operand, frame, frames)?;

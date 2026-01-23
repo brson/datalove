@@ -7,11 +7,11 @@ IrSerialAnalysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"hello world\"\n    debuglog v0\n    drop v0\n    unit_end\nexports:\n    x = v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const \"hello world\"\n    debuglog v0\n    unit_end_drop v0\n    unit_end\nexports:\n    x = v0\n",
             ),
             direct_interp_output: "\"hello world\"\n",
             direct_aot_output: "\"hello world\"\n",
-            serialized_ir_size: 871,
+            serialized_ir_size: 952,
             serialized_registry_size: 177,
             deser_success: true,
             deser_interp_output: "\"hello world\"\n",

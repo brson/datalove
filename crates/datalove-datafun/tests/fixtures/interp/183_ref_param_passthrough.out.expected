@@ -20,7 +20,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 100int\n    v1 = call m0.f1(v0)\n    unit_end\nexports:\n    val = v0\n    result1 = v1\n    output = v1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 100int\n    v1 = call m0.f1(v0)\n    unit_end_drop v0\n    unit_end\nexports:\n    val = v0\n    result1 = v1\n    output = v1\n",
             ),
             output: "(fragment executed)",
         ),

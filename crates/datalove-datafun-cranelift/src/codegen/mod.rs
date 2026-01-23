@@ -609,6 +609,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::DropTracked { operand } => {
                 self.compile_drop_tracked(builder, operand)?;
             }
+            Instruction::UnitEndDrop { operand } => {
+                // Precise binding: unconditional drop.
+                self.compile_drop(builder, operand)?;
+            }
+            Instruction::UnitEndDropTracked { operand } => {
+                // Tracked binding: conditional drop (checks tracking byte).
+                self.compile_drop_tracked(builder, operand)?;
+            }
             Instruction::ListNew { dest, elements } => {
                 self.compile_list_new(builder, *dest, elements)?;
             }

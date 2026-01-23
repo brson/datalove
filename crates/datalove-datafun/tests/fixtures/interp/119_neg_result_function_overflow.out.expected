@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const -128i8\n    v1 = call f0(v0)\n    unit_end\n\nfn test_neg(p0):\nblock0:\n    v0, v1 = neg.checked p0\n    branch v1, block1, block2\nblock1:\n    v2 = const \"negation overflow\"\n    v3 = error_from v2\n    v4 = err v3\n    return v4\nblock2:\n    v5 = ok v0\n    return v5\nexports:\n    test_neg = f0\n    output = v1\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const -128i8\n    v1 = call f0(v0)\n    unit_end_drop v1\n    unit_end\n\nfn test_neg(p0):\nblock0:\n    v0, v1 = neg.checked p0\n    branch v1, block1, block2\nblock1:\n    v2 = const \"negation overflow\"\n    v3 = error_from v2\n    v4 = err v3\n    return v4\nblock2:\n    v5 = ok v0\n    return v5\nexports:\n    test_neg = f0\n    output = v1\n",
             ),
             output: "(fragment executed)",
         ),

@@ -413,6 +413,12 @@ impl fmt::Display for Instruction {
             Instruction::DropTracked { operand } => {
                 write!(f, "drop.tracked {}", operand)
             }
+            Instruction::UnitEndDrop { operand } => {
+                write!(f, "unit_end_drop {}", operand)
+            }
+            Instruction::UnitEndDropTracked { operand } => {
+                write!(f, "unit_end_drop.tracked {}", operand)
+            }
             Instruction::DebugLog { operand } => {
                 write!(f, "debuglog {}", operand)
             }

@@ -347,17 +347,14 @@ impl<'db> AnalysisCtx<'db> {
     ///
     /// Precise bindings have deterministic lifecycle:
     /// - In params in functions: always initialized, cannot be reassigned
-    /// - Let bindings in functions: single assignment, predictable scope
+    /// - Let bindings (function or script level): single assignment, predictable
     ///
-    /// Script-level bindings are always Tracked (cross-unit visibility).
+    /// Script-level let bindings are Precise unless conditionally moved.
     fn compute_tracking(&self) -> Vec<TrackingCategory> {
         self.bindings.iter().enumerate().map(|(idx, info)| {
             let id = BindingId(idx as u32);
             if info.ty.is_copy() {
                 TrackingCategory::Copy
-            } else if info.is_script_unit {
-                // Script-level bindings: cross-unit visibility, unpredictable.
-                TrackingCategory::Tracked
             } else if info.is_slot {
                 // Var bindings: reassignable, state varies.
                 TrackingCategory::Tracked
@@ -365,10 +362,10 @@ impl<'db> AnalysisCtx<'db> {
                 // Conditionally moved: state varies by branch taken.
                 TrackingCategory::Tracked
             } else if info.param_mode == Some(ParamMode::In) {
-                // In params in functions: owned, deterministic.
+                // In params: owned, deterministic.
                 TrackingCategory::Precise
             } else if info.param_mode.is_none() {
-                // Let bindings in functions: single assignment, deterministic.
+                // Let bindings (function or script level): single assignment, deterministic.
                 TrackingCategory::Precise
             } else {
                 // Other params (Ref, Mut, Out): borrowed or dynamic state.
@@ -989,39 +986,61 @@ pub struct ScriptAnalysis {
     /// Tracking category for each binding (indexed by BindingId).
     /// Determines whether precise or tracked move/drop instructions are used.
     pub tracking: Vec<TrackingCategory>,
-    /// Bindings to drop at unit end (only populated when for_aot=true).
+    /// Bindings to emit UnitEndDrop for.
+    ///
+    /// These are script-level bindings that are still live at unit end.
+    /// The IR lowering emits UnitEndDrop for each; backend semantics differ:
+    /// - Interpreter: no-op (bindings persist for REPL)
+    /// - AOT: conditional drop (checks tracking byte)
     pub unit_end: Vec<BindingId>,
 }
 
 /// Analyze script-level statements and compute drop schedule.
 ///
 /// Similar to `analyze_function` but for script units. Key differences:
-/// - Enters `ScriptUnit` scope instead of `Function` scope (unless for_aot=true)
-/// - Top-level bindings are NOT scheduled for drops (they're exported) unless for_aot=true
+/// - Enters `ScriptUnit` scope, so bindings are marked as Tracked
+/// - Top-level bindings are NOT scheduled for regular drops (they're exported)
 /// - Nested scopes (if, loop) get normal drop analysis
+/// - Returns live bindings in `unit_end` for UnitEndDrop emission
 ///
-/// When `for_aot` is true:
-/// - Uses `Function` scope so top-level bindings ARE scheduled for drops
-/// - Returns final drops in `unit_end` field for emission before UnitEnd
+/// The `unit_end` field contains bindings that should have UnitEndDrop emitted.
+/// The backend determines the semantics:
+/// - Interpreter: no-op (bindings persist for REPL)
+/// - AOT: conditional drop (checks tracking byte)
 pub fn analyze_script_statements<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     stmts: &[Statement<'db>],
-    for_aot: bool,
 ) -> ScriptAnalysis {
     let mut ctx = AnalysisCtx::new(db, expr_types, call_targets);
 
-    // Enter scope. For AOT, use Function scope so bindings get dropped.
-    // For REPL, use ScriptUnit scope so bindings are exported.
-    let scope_kind = if for_aot { ScopeKind::Function } else { ScopeKind::ScriptUnit };
-    ctx.enter_scope(scope_kind);
+    // Enter ScriptUnit scope so bindings are Tracked.
+    ctx.enter_scope(ScopeKind::ScriptUnit);
 
     // Analyze statements.
     analyze_statements(&mut ctx, stmts);
 
-    // Exit scope. For AOT, capture final drops. For REPL, they're empty.
-    let final_drops = ctx.exit_scope();
+    // Collect bindings for UnitEndDrop before exiting scope.
+    // These are script-level bindings that are still live and non-Copy.
+    let unit_end_bindings: Vec<BindingId> = ctx.scope_stack.last()
+        .map(|frame| {
+            frame.bindings.iter()
+                .filter(|&id| {
+                    let info = &ctx.bindings[id.0 as usize];
+                    let state = frame.current_state.get(id).copied();
+                    // Include if: live, non-Copy, not borrowed.
+                    state == Some(BindingState::Live)
+                        && !info.ty.is_copy()
+                        && !info.is_borrowed()
+                })
+                .copied()
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Exit scope (returns empty for ScriptUnit, but we collected bindings above).
+    let _ = ctx.exit_scope();
 
     // Compute tracking categories.
     let tracking = ctx.compute_tracking();
@@ -1031,7 +1050,7 @@ pub fn analyze_script_statements<'db>(
         schedule: ctx.schedule,
         bindings: ctx.bindings,
         tracking,
-        unit_end: final_drops,
+        unit_end: unit_end_bindings,
     }
 }
 

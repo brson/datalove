@@ -41,11 +41,10 @@ use super::result::{TypecheckResult, LoweringResult, ScriptCompilationResult};
 
 /// Parsed script unit ready for compilation.
 enum ParsedUnit<'db> {
-    /// A fragment (statements) with for_aot flag.
+    /// A fragment (statements).
     Fragment {
         parsed: ParsedStatements<'db>,
         stmts: Vec<Statement<'db>>,
-        for_aot: bool,
     },
     /// A single expression.
     Expr(ExprFun<'db>),
@@ -114,7 +113,10 @@ pub struct ScriptCompiler<'db> {
 impl<'db> ScriptCompiler<'db> {
     /// Compile a script fragment (statements).
     ///
-    /// If `for_aot` is true, emits drops for script-level bindings (for AOT compilation).
+    /// The `for_aot` parameter is deprecated and has no effect. The IR now uses
+    /// `UnitEndDrop` uniformly; the backend determines semantics (interpreter: no-op,
+    /// AOT: conditional drop).
+    #[allow(unused_variables)]
     pub fn compile_fragment(&mut self, source: &str, for_aot: bool) -> ScriptCompilationResult {
         let src = bct::input::Source::new(self.db, source.S());
         self.last_source = Some(src);
@@ -127,7 +129,7 @@ impl<'db> ScriptCompiler<'db> {
         }
 
         let stmts = parsed.statements.to_vec();
-        let unit = ParsedUnit::Fragment { parsed, stmts, for_aot };
+        let unit = ParsedUnit::Fragment { parsed, stmts };
         self.compile_unit_inner(src, unit)
     }
 
@@ -228,12 +230,11 @@ impl<'db> ScriptCompiler<'db> {
 
         // Run ownership analysis and lowering (unit-kind-specific).
         let lower_output = match unit {
-            ParsedUnit::Fragment { stmts, for_aot, .. } => {
+            ParsedUnit::Fragment { stmts, .. } => {
                 let ownership_result = analyze_script_fragment_tracked(
                     self.db,
                     tycheck_result,
                     stmts.clone(),
-                    for_aot,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
                     let error_msg = ownership_result.errors(self.db).join("\n");

@@ -598,9 +598,11 @@ impl<'db> LowerCtx<'db> {
     /// - Tracked bindings stored as values
     /// - All non-binding intermediate values (non-Copy)
     ///
-    /// Precise bindings are NOT included because they have explicit Drop instructions.
+    /// Note: Unit-end bindings are NOT included here - they're handled separately
+    /// via unit_end_values/unit_end_slots fields.
     pub fn compute_tracked_values(&self) -> Vec<ValueId> {
         let mut result = Vec::new();
+        let mut added: std::collections::HashSet<ValueId> = std::collections::HashSet::new();
 
         // Collect tracked bindings.
         let binding_values: std::collections::HashSet<ValueId> = self.binding_to_operand
@@ -614,7 +616,9 @@ impl<'db> LowerCtx<'db> {
         for (id, &operand) in &self.binding_to_operand {
             if self.is_binding_tracked(*id) {
                 if let Operand::Value(value_id) = operand {
-                    result.push(value_id);
+                    if added.insert(value_id) {
+                        result.push(value_id);
+                    }
                 }
             }
         }
@@ -624,7 +628,9 @@ impl<'db> LowerCtx<'db> {
         for (idx, ty) in self.value_types.iter().enumerate() {
             let value_id = ValueId(idx as u32);
             if !ty.is_copy() && !binding_values.contains(&value_id) {
-                result.push(value_id);
+                if added.insert(value_id) {
+                    result.push(value_id);
+                }
             }
         }
 
@@ -634,16 +640,52 @@ impl<'db> LowerCtx<'db> {
     /// Compute tracked_slots for the current unit.
     ///
     /// Returns SlotIds for bindings that are tracked and stored in slots.
+    ///
+    /// Note: Unit-end bindings are NOT included here - they're handled separately
+    /// via unit_end_values/unit_end_slots fields.
     pub fn compute_tracked_slots(&self) -> Vec<SlotId> {
         let mut result = Vec::new();
+        let mut added: std::collections::HashSet<SlotId> = std::collections::HashSet::new();
+
         for (id, &operand) in &self.binding_to_operand {
             if self.is_binding_tracked(*id) {
                 if let Operand::Slot(slot_id) = operand {
-                    result.push(slot_id);
+                    if added.insert(slot_id) {
+                        result.push(slot_id);
+                    }
                 }
             }
         }
+
         result
+    }
+
+    /// Compute unit_end_values for the current unit.
+    ///
+    /// Returns ValueIds for script-level bindings that need cleanup by destroy_all.
+    /// These have UnitEndDrop which is a no-op in the interpreter.
+    pub fn compute_unit_end_values(&self) -> Vec<ValueId> {
+        self.unit_end_drops.iter()
+            .filter_map(|id| self.binding_to_operand.get(id))
+            .filter_map(|op| match op {
+                Operand::Value(v) => Some(*v),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Compute unit_end_slots for the current unit.
+    ///
+    /// Returns SlotIds for script-level bindings that need cleanup by destroy_all.
+    /// These have UnitEndDrop which is a no-op in the interpreter.
+    pub fn compute_unit_end_slots(&self) -> Vec<SlotId> {
+        self.unit_end_drops.iter()
+            .filter_map(|id| self.binding_to_operand.get(id))
+            .filter_map(|op| match op {
+                Operand::Slot(s) => Some(*s),
+                _ => None,
+            })
+            .collect()
     }
 
     /// Allocate and return the next global statement ID.
@@ -764,13 +806,21 @@ impl<'db> LowerCtx<'db> {
             .unwrap_or_default()
     }
 
-    /// Emit drops for unit end (for AOT compilation).
+    /// Emit UnitEndDrop/UnitEndDropTracked instructions for script-level bindings.
     ///
-    /// Uses `emit_binding_drop` to emit `DropTracked` for tracked bindings
-    /// and `Drop` for precise bindings.
+    /// Uses UnitEndDrop for Precise bindings, UnitEndDropTracked for Tracked.
+    /// Backend semantics:
+    /// - Interpreter: both are no-op (bindings persist for REPL)
+    /// - AOT: UnitEndDrop is unconditional, UnitEndDropTracked checks tracking byte
     pub fn emit_unit_end_drops(&mut self) {
         for id in std::mem::take(&mut self.unit_end_drops) {
-            self.emit_binding_drop(id);
+            if let Some(&operand) = self.binding_to_operand.get(&id) {
+                if self.is_binding_tracked(id) {
+                    self.emit(Instruction::UnitEndDropTracked { operand });
+                } else {
+                    self.emit(Instruction::UnitEndDrop { operand });
+                }
+            }
         }
     }
 

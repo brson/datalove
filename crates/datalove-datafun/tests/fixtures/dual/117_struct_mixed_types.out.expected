@@ -7,11 +7,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = const \"test\"\n    v2 = const true\n    v3 = const 100u32\n    v4 = pack Struct0 {v0, v1, v2, v3}\n    v5 = getfieldref v4.0\n    debuglog v5\n    v6 = getfieldref v4.1\n    debuglog v6\n    v7 = getfieldref v4.2\n    debuglog v7\n    v8 = getfieldref v4.3\n    debuglog v8\n    unit_end\nexports:\n    record = v4\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = const \"test\"\n    v2 = const true\n    v3 = const 100u32\n    v4 = pack Struct0 {v0, v1, v2, v3}\n    v5 = getfieldref v4.0\n    debuglog v5\n    v6 = getfieldref v4.1\n    debuglog v6\n    v7 = getfieldref v4.2\n    debuglog v7\n    v8 = getfieldref v4.3\n    debuglog v8\n    unit_end_drop v4\n    unit_end\nexports:\n    record = v4\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = const \"test\"\n    v2 = const true\n    v3 = const 100u32\n    v4 = pack Struct0 {v0, v1, v2, v3}\n    v5 = getfieldref v4.0\n    debuglog v5\n    v6 = getfieldref v4.1\n    debuglog v6\n    v7 = getfieldref v4.2\n    debuglog v7\n    v8 = getfieldref v4.3\n    debuglog v8\n    drop v4\n    unit_end\nexports:\n    record = v4\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const 42u32\n    v1 = const \"test\"\n    v2 = const true\n    v3 = const 100u32\n    v4 = pack Struct0 {v0, v1, v2, v3}\n    v5 = getfieldref v4.0\n    debuglog v5\n    v6 = getfieldref v4.1\n    debuglog v6\n    v7 = getfieldref v4.2\n    debuglog v7\n    v8 = getfieldref v4.3\n    debuglog v8\n    unit_end_drop v4\n    unit_end\nexports:\n    record = v4\n",
             ),
             ir_match: true,
             interp_output: "42\n\"test\"\ntrue\n100\n",

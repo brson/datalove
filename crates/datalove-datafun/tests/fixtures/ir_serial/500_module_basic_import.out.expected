@@ -11,7 +11,7 @@ IrSerialAnalysis(
             ),
             direct_interp_output: "42\n",
             direct_aot_output: "42\n",
-            serialized_ir_size: 1057,
+            serialized_ir_size: 1106,
             serialized_registry_size: 1361,
             deser_success: true,
             deser_interp_output: "42\n",

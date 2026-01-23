@@ -858,6 +858,20 @@ pub enum Instruction {
     /// exported. Checks initialization state at runtime and skips if empty.
     DropTracked { operand: Operand },
 
+    /// Drop a precise script-level binding at unit end.
+    ///
+    /// Backend semantics:
+    /// - Interpreter: no-op (binding persists for REPL)
+    /// - AOT: unconditional drop
+    UnitEndDrop { operand: Operand },
+
+    /// Drop a tracked script-level binding at unit end.
+    ///
+    /// Backend semantics:
+    /// - Interpreter: no-op (binding persists for REPL)
+    /// - AOT: conditional drop (checks tracking byte)
+    UnitEndDropTracked { operand: Operand },
+
     /// Debug log a value (borrows, does not consume).
     DebugLog { operand: Operand },
 
@@ -1007,6 +1021,15 @@ pub struct IrScriptUnit {
     /// Slots that need runtime tracking (may have been moved).
     #[serde(default)]
     pub tracked_slots: Vec<SlotId>,
+    /// Values with UnitEndDrop that need cleanup by interpreter's destroy_all.
+    ///
+    /// Script-level bindings have UnitEndDrop/UnitEndDropTracked which are no-ops
+    /// in the interpreter. These bindings need to be cleaned up when the session ends.
+    #[serde(default)]
+    pub unit_end_values: Vec<ValueId>,
+    /// Slots with UnitEndDrop that need cleanup by interpreter's destroy_all.
+    #[serde(default)]
+    pub unit_end_slots: Vec<SlotId>,
     /// Functions defined in this unit.
     pub functions: Vec<IrFunction>,
     /// Symbol table for this unit.

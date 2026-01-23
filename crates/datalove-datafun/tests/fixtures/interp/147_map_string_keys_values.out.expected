@@ -8,7 +8,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"one\"\n    v1 = const \"first\"\n    v2 = const \"two\"\n    v3 = const \"second\"\n    v4 = map {v0: v1, v2: v3}\n    unit_end\nexports:\n    dict = v4\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const \"one\"\n    v1 = const \"first\"\n    v2 = const \"two\"\n    v3 = const \"second\"\n    v4 = map {v0: v1, v2: v3}\n    unit_end_drop v4\n    unit_end\nexports:\n    dict = v4\n",
             ),
             output: "(fragment executed)",
         ),

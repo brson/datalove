@@ -100,14 +100,13 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
 
 /// Analyze ownership for a script fragment unit.
 ///
-/// Memoized: if typecheck_result, statements, and for_aot match a previous call,
+/// Memoized: if typecheck_result and statements match a previous call,
 /// returns the cached result.
 #[salsa::tracked]
 pub fn analyze_script_fragment_tracked<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: UnitTypecheckResultTracked<'db>,
     statements: Vec<Statement<'db>>,
-    for_aot: bool,
 ) -> ScriptUnitOwnershipResult<'db> {
     let expr_types = typecheck_result.expr_types(db);
     let call_targets = typecheck_result.call_targets(db);
@@ -146,7 +145,7 @@ pub fn analyze_script_fragment_tracked<'db>(
 
     // Analyze script-level statements for drop schedule.
     let script_analysis = ownership_analysis::analyze_script_statements(
-        db, expr_types, call_targets, &statements, for_aot
+        db, expr_types, call_targets, &statements
     );
 
     // Check for script analysis errors.

@@ -7,11 +7,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"hello world\"\n    debuglog v0\n    unit_end\nexports:\n    x = v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const \"hello world\"\n    debuglog v0\n    unit_end_drop v0\n    unit_end\nexports:\n    x = v0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"hello world\"\n    debuglog v0\n    drop v0\n    unit_end\nexports:\n    x = v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const \"hello world\"\n    debuglog v0\n    unit_end_drop v0\n    unit_end\nexports:\n    x = v0\n",
             ),
             ir_match: true,
             interp_output: "\"hello world\"\n",
