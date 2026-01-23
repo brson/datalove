@@ -345,7 +345,7 @@ fn lower_if_option<'db>(
     if let Some(old) = old_binding {
         ctx.bind_var(binding_str, old);
     } else {
-        ctx.variables.remove(binding_str);
+        ctx.body.variables.remove(binding_str);
     }
 
     // Only emit Goto if branch didn't terminate early.
@@ -443,7 +443,7 @@ fn lower_if_result<'db>(
     if let Some(old) = old_ok_binding {
         ctx.bind_var(ok_binding_str, old);
     } else {
-        ctx.variables.remove(ok_binding_str);
+        ctx.body.variables.remove(ok_binding_str);
     }
 
     // Only emit Goto if branch didn't terminate early.
@@ -474,7 +474,7 @@ fn lower_if_result<'db>(
     if let Some(old) = old_err_binding {
         ctx.bind_var(err_binding_str, old);
     } else {
-        ctx.variables.remove(err_binding_str);
+        ctx.body.variables.remove(err_binding_str);
     }
 
     // Only emit Goto if branch didn't terminate early.

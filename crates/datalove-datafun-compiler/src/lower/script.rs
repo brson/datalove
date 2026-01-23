@@ -8,12 +8,12 @@ use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::{TypecheckResult, ResolvedCallTarget};
 use datalove_datafun_ir::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
-    ExportBinding, BlockId, IrModuleId, FuncId,
+    ExportBinding, IrModuleId, FuncId,
 };
 use crate::ownership_analysis::ScriptFunctionAnalyses;
 use crate::tracked_script_ownership::ScriptAnalysisData;
 use crate::ir_ext::IrTypeExt;
-use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
+use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind, FunctionBodyState};
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;
 use super::stmt::collect_field_path;
@@ -83,9 +83,9 @@ pub fn lower_script_unit<'db>(
             // Use pre-computed script analysis from ownership analysis phase.
             let analysis = script_analysis
                 .expect("script_analysis required for Fragment units");
-            ctx.drop_schedule = analysis.schedule;
-            ctx.binding_info = analysis.bindings;
-            ctx.tracking = analysis.tracking;
+            ctx.body.drop_schedule = analysis.schedule;
+            ctx.body.binding_info = analysis.bindings;
+            ctx.body.tracking = analysis.tracking;
             ctx.unit_end_drops = analysis.unit_end;
 
             // Lower all statements with index tracking.
@@ -123,11 +123,11 @@ pub fn lower_script_unit<'db>(
     ctx.renumber_blocks();
 
     Ok(IrScriptUnit {
-        blocks: std::mem::take(&mut ctx.blocks),
-        value_count: ctx.next_value,
-        slot_count: ctx.next_slot,
-        value_types: std::mem::take(&mut ctx.value_types),
-        slot_types: std::mem::take(&mut ctx.slot_types),
+        blocks: std::mem::take(&mut ctx.body.blocks),
+        value_count: ctx.body.next_value,
+        slot_count: ctx.body.next_slot,
+        value_types: std::mem::take(&mut ctx.body.value_types),
+        slot_types: std::mem::take(&mut ctx.body.slot_types),
         tracked_values: ctx.compute_tracked_values(),
         tracked_slots: ctx.compute_tracked_slots(),
         unit_end_values,
@@ -163,9 +163,9 @@ pub fn lower_script_fragment_raw<'db>(
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
     // Use pre-computed script analysis from ownership analysis phase.
-    ctx.drop_schedule = script_analysis.schedule;
-    ctx.binding_info = script_analysis.bindings;
-    ctx.tracking = script_analysis.tracking;
+    ctx.body.drop_schedule = script_analysis.schedule;
+    ctx.body.binding_info = script_analysis.bindings;
+    ctx.body.tracking = script_analysis.tracking;
     ctx.unit_end_drops = script_analysis.unit_end;
 
     // Lower all statements with index tracking.
@@ -192,11 +192,11 @@ pub fn lower_script_fragment_raw<'db>(
     ctx.renumber_blocks();
 
     Ok(IrScriptUnit {
-        blocks: std::mem::take(&mut ctx.blocks),
-        value_count: ctx.next_value,
-        slot_count: ctx.next_slot,
-        value_types: std::mem::take(&mut ctx.value_types),
-        slot_types: std::mem::take(&mut ctx.slot_types),
+        blocks: std::mem::take(&mut ctx.body.blocks),
+        value_count: ctx.body.next_value,
+        slot_count: ctx.body.next_slot,
+        value_types: std::mem::take(&mut ctx.body.value_types),
+        slot_types: std::mem::take(&mut ctx.body.slot_types),
         tracked_values,
         tracked_slots,
         unit_end_values,
@@ -234,11 +234,11 @@ pub fn lower_script_expr<'db>(
 
     // Expression units don't create script-level bindings, so unit_end is empty.
     Ok(IrScriptUnit {
-        blocks: std::mem::take(&mut ctx.blocks),
-        value_count: ctx.next_value,
-        slot_count: ctx.next_slot,
-        value_types: std::mem::take(&mut ctx.value_types),
-        slot_types: std::mem::take(&mut ctx.slot_types),
+        blocks: std::mem::take(&mut ctx.body.blocks),
+        value_count: ctx.body.next_value,
+        slot_count: ctx.body.next_slot,
+        value_types: std::mem::take(&mut ctx.body.value_types),
+        slot_types: std::mem::take(&mut ctx.body.slot_types),
         tracked_values: ctx.compute_tracked_values(),
         tracked_slots: ctx.compute_tracked_slots(),
         unit_end_values: Vec::new(),
@@ -442,35 +442,8 @@ fn lower_statement_for_script<'db>(
             let param_count = fun_stmt.params(ctx.db).len();
             let func_id = ctx.define_func(&func_name, param_count);
 
-            // Save current lowering state.
-            let saved_blocks = std::mem::take(&mut ctx.blocks);
-            let saved_instructions = std::mem::take(&mut ctx.current_instructions);
-            let saved_current_block = ctx.current_block;
-            let saved_next_block = ctx.next_block;
-            let saved_next_value = ctx.next_value;
-            let saved_next_slot = ctx.next_slot;
-            let saved_next_param = ctx.next_param;
-            let saved_variables = std::mem::take(&mut ctx.variables);
-            // Also save binding/type state that gets modified by lower_function_body.
-            let saved_binding_to_operand = std::mem::take(&mut ctx.binding_to_operand);
-            let saved_operand_to_binding = std::mem::take(&mut ctx.operand_to_binding);
-            let saved_next_binding_id = ctx.next_binding_id;
-            let saved_param_types = std::mem::take(&mut ctx.param_types);
-            let saved_param_modes = std::mem::take(&mut ctx.param_modes);
-            let saved_value_types = std::mem::take(&mut ctx.value_types);
-            let saved_slot_types = std::mem::take(&mut ctx.slot_types);
-            // Save tracking state - each function has its own tracking from ownership analysis.
-            let saved_tracking = std::mem::take(&mut ctx.tracking);
-            let saved_binding_info = std::mem::take(&mut ctx.binding_info);
-            let saved_drop_schedule = std::mem::take(&mut ctx.drop_schedule);
-
-            // Reset for function body.
-            ctx.current_block = BlockId(0);
-            ctx.next_block = 1;
-            ctx.next_value = 0;
-            ctx.next_slot = 0;
-            ctx.next_param = 0;
-            ctx.next_binding_id = 0;
+            // Swap in fresh state for function body.
+            let saved = ctx.swap_body_state(FunctionBodyState::new());
 
             // Look up resolved param types for this function.
             let func_name_str = fun_stmt.name(ctx.db).text(ctx.db);
@@ -482,25 +455,7 @@ fn lower_statement_for_script<'db>(
             let func = lower_function_body(ctx, func_id, *fun_stmt, analysis, resolved_params)?;
 
             // Restore parent state.
-            ctx.blocks = saved_blocks;
-            ctx.current_instructions = saved_instructions;
-            ctx.current_block = saved_current_block;
-            ctx.next_block = saved_next_block;
-            ctx.next_value = saved_next_value;
-            ctx.next_slot = saved_next_slot;
-            ctx.next_param = saved_next_param;
-            ctx.variables = saved_variables;
-            ctx.binding_to_operand = saved_binding_to_operand;
-            ctx.operand_to_binding = saved_operand_to_binding;
-            ctx.next_binding_id = saved_next_binding_id;
-            ctx.param_types = saved_param_types;
-            ctx.param_modes = saved_param_modes;
-            ctx.value_types = saved_value_types;
-            ctx.slot_types = saved_slot_types;
-            // Restore tracking state.
-            ctx.tracking = saved_tracking;
-            ctx.binding_info = saved_binding_info;
-            ctx.drop_schedule = saved_drop_schedule;
+            ctx.swap_body_state(saved);
 
             // Add the function to the unit's functions.
             ctx.functions.push(func);

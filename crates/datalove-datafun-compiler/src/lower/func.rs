@@ -58,14 +58,14 @@ pub fn lower_function_body<'db>(
     let name = func.name(ctx.db).text(ctx.db).to_string();
 
     // Set drop schedule and tracking for this function.
-    ctx.drop_schedule = analysis.schedule;
-    ctx.binding_info = analysis.bindings;
-    ctx.tracking = analysis.tracking;
+    ctx.body.drop_schedule = analysis.schedule;
+    ctx.body.binding_info = analysis.bindings;
+    ctx.body.tracking = analysis.tracking;
 
     // Reset counters - each function has its own statement/binding ID space.
     ctx.next_stmt_id = 0;
-    ctx.next_binding_id = 0;
-    ctx.binding_to_operand.clear();
+    ctx.body.next_binding_id = 0;
+    ctx.body.binding_to_operand.clear();
 
     // Save and set function context for try operators.
     let saved_return_type = ctx.return_type.take();
@@ -112,8 +112,8 @@ pub fn lower_function_body<'db>(
 
     // If no explicit return, add implicit return unit.
     // Drop analysis schedules drops at function scope exit.
-    let needs_return = ctx.blocks.is_empty()
-        || !matches!(ctx.blocks.last().unwrap().terminator, Terminator::Return { .. });
+    let needs_return = ctx.body.blocks.is_empty()
+        || !matches!(ctx.body.blocks.last().unwrap().terminator, Terminator::Return { .. });
     if needs_return {
         ctx.finish_block(Terminator::Return { value: None });
     }
@@ -133,13 +133,13 @@ pub fn lower_function_body<'db>(
         name,
         params,
         param_modes,
-        param_types: std::mem::take(&mut ctx.param_types),
+        param_types: std::mem::take(&mut ctx.body.param_types),
         return_type,
-        blocks: std::mem::take(&mut ctx.blocks),
-        value_count: ctx.next_value,
-        slot_count: ctx.next_slot,
-        value_types: std::mem::take(&mut ctx.value_types),
-        slot_types: std::mem::take(&mut ctx.slot_types),
+        blocks: std::mem::take(&mut ctx.body.blocks),
+        value_count: ctx.body.next_value,
+        slot_count: ctx.body.next_slot,
+        value_types: std::mem::take(&mut ctx.body.value_types),
+        slot_types: std::mem::take(&mut ctx.body.slot_types),
         tracked_values: ctx.compute_tracked_values(),
         tracked_slots: ctx.compute_tracked_slots(),
     })

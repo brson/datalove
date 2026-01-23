@@ -16,6 +16,83 @@ use crate::ir_ext::IrTypeExt;
 use crate::ownership_analysis::{BindingId, DropSchedule, BindingInfo, TrackingCategory};
 use super::LowerError;
 
+/// State that is local to a function body during lowering.
+///
+/// When lowering a nested function definition inside a script, this state
+/// is swapped out for a fresh instance, then restored after.
+pub struct FunctionBodyState {
+    /// Blocks being built.
+    pub blocks: Vec<IrBlock>,
+    /// Instructions for current block.
+    pub current_instructions: Vec<Instruction>,
+    /// Current block being built.
+    pub current_block: BlockId,
+    /// Block parameters for current block.
+    pub current_block_params: Vec<ValueId>,
+    /// Next BlockId to allocate.
+    pub next_block: u32,
+    /// Next ValueId to allocate.
+    pub next_value: u32,
+    /// Next SlotId to allocate.
+    pub next_slot: u32,
+    /// Next ParamId to allocate.
+    pub next_param: u32,
+    /// Mapping from variable names to their operands.
+    pub variables: HashMap<String, Operand>,
+    /// Mapping from BindingId to Operand (built during lowering).
+    pub binding_to_operand: HashMap<BindingId, Operand>,
+    /// Reverse mapping from Operand to BindingId (for tracking lookups).
+    pub operand_to_binding: HashMap<Operand, BindingId>,
+    /// Next BindingId to allocate (must match analysis traversal order).
+    pub next_binding_id: u32,
+    /// Type for each ParamId.
+    pub param_types: Vec<IrType>,
+    /// Mode for each ParamId.
+    pub param_modes: Vec<ParamMode>,
+    /// Type for each ValueId.
+    pub value_types: Vec<IrType>,
+    /// Type for each SlotId.
+    pub slot_types: Vec<IrType>,
+    /// Tracking category for each binding (indexed by BindingId).
+    pub tracking: Vec<TrackingCategory>,
+    /// Binding info from analysis (for looking up names).
+    pub binding_info: Vec<BindingInfo>,
+    /// Drop schedule from analysis.
+    pub drop_schedule: DropSchedule,
+}
+
+impl FunctionBodyState {
+    pub fn new() -> Self {
+        Self {
+            blocks: Vec::new(),
+            current_instructions: Vec::new(),
+            current_block: BlockId(0),
+            current_block_params: Vec::new(),
+            next_block: 1, // Block 0 is entry.
+            next_value: 0,
+            next_slot: 0,
+            next_param: 0,
+            variables: HashMap::new(),
+            binding_to_operand: HashMap::new(),
+            operand_to_binding: HashMap::new(),
+            next_binding_id: 0,
+            param_types: Vec::new(),
+            param_modes: Vec::new(),
+            value_types: Vec::new(),
+            slot_types: Vec::new(),
+            tracking: Vec::new(),
+            binding_info: Vec::new(),
+            drop_schedule: DropSchedule::default(),
+        }
+    }
+}
+
+impl Default for FunctionBodyState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Context for a single loop during lowering.
 #[derive(Clone, Debug)]
 pub struct LoopLowerContext {
@@ -101,6 +178,7 @@ pub enum ScriptUnitKind<'db> {
 
 /// Context for lowering a single function or script unit.
 pub struct LowerCtx<'db> {
+    // Shared/immutable context.
     pub(super) db: &'db dyn salsa::Database,
     /// Expression types from typechecker.
     pub(super) expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
@@ -108,24 +186,11 @@ pub struct LowerCtx<'db> {
     pub(super) call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
     pub(super) func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
-    /// Next ParamId to allocate.
-    pub(super) next_param: u32,
-    /// Next ValueId to allocate.
-    pub(super) next_value: u32,
-    /// Next SlotId to allocate.
-    pub(super) next_slot: u32,
-    /// Next BlockId to allocate.
-    pub(super) next_block: u32,
-    /// Blocks being built.
-    pub(super) blocks: Vec<IrBlock>,
-    /// Current block being built.
-    pub(super) current_block: BlockId,
-    /// Block parameters for current block.
-    pub(super) current_block_params: Vec<ValueId>,
-    /// Instructions for current block.
-    pub(super) current_instructions: Vec<Instruction>,
-    /// Mapping from variable names to their operands.
-    pub(super) variables: HashMap<String, Operand>,
+
+    /// Function-local state (swapped when entering nested function).
+    pub(super) body: FunctionBodyState,
+
+    // Unit-level state (persists across nested functions).
     /// Exports from this unit (only used for script units).
     pub(super) exports: Vec<(String, ExportBinding)>,
     /// Functions defined in this script unit.
@@ -135,35 +200,21 @@ pub struct LowerCtx<'db> {
     /// Available functions: name -> FuncRef (for resolving calls).
     /// Used for script-local and external unit functions (not module functions).
     pub(super) func_scope: HashMap<String, FuncRef>,
-    /// Type for each ParamId.
-    pub(super) param_types: Vec<IrType>,
-    /// Mode for each ParamId.
-    pub(super) param_modes: Vec<ParamMode>,
-    /// Type for each ValueId.
-    pub(super) value_types: Vec<IrType>,
-    /// Type for each SlotId.
-    pub(super) slot_types: Vec<IrType>,
+
+    // Control flow.
     /// Loop context stack for each nested loop.
     pub(super) loop_stack: Vec<LoopLowerContext>,
     /// Return type for current function/script (for try operators).
     pub(super) return_type: Option<IrType>,
     /// Whether we're in a script unit (vs function).
     pub(super) is_script_unit: bool,
+    /// Whether current block is unreachable (after return/break/continue).
+    pub(super) in_unreachable: bool,
+
+    // Expression temps and statement tracking.
     /// Temporary values to drop after the current expression is evaluated.
     /// These are created during operand lowering for compound expressions.
     pub(super) expr_temps: Vec<(ValueId, IrType)>,
-    /// Drop schedule from analysis.
-    pub(super) drop_schedule: DropSchedule,
-    /// Binding info from analysis (for looking up names).
-    pub(super) binding_info: Vec<BindingInfo>,
-    /// Tracking category for each binding (indexed by BindingId).
-    pub(super) tracking: Vec<TrackingCategory>,
-    /// Mapping from BindingId to Operand (built during lowering).
-    pub(super) binding_to_operand: HashMap<BindingId, Operand>,
-    /// Reverse mapping from Operand to BindingId (for tracking lookups).
-    pub(super) operand_to_binding: HashMap<Operand, BindingId>,
-    /// Next BindingId to allocate (must match analysis traversal order).
-    pub(super) next_binding_id: u32,
     /// Next global statement ID (must match analysis traversal order).
     pub(super) next_stmt_id: usize,
     /// Current statement index in the parent body (for drop schedule lookup).
@@ -172,8 +223,6 @@ pub struct LowerCtx<'db> {
     pub(super) external_slot_types: HashMap<String, IrType>,
     /// Bindings to drop at unit end (for AOT compilation).
     pub(super) unit_end_drops: Vec<BindingId>,
-    /// Whether current block is unreachable (after return/break/continue).
-    pub(super) in_unreachable: bool,
 }
 
 /// Empty func_id_map for contexts that don't need module function resolution.
@@ -191,38 +240,20 @@ impl<'db> LowerCtx<'db> {
             expr_types,
             call_targets,
             func_id_map: &EMPTY_FUNC_ID_MAP,
-            next_param: 0,
-            next_value: 0,
-            next_slot: 0,
-            next_block: 1, // Block 0 is entry
-            blocks: Vec::new(),
-            current_block: BlockId(0),
-            current_block_params: Vec::new(),
-            current_instructions: Vec::new(),
-            variables: HashMap::new(),
+            body: FunctionBodyState::new(),
             exports: Vec::new(),
             functions: Vec::new(),
             symbols: SymbolTable::new(),
             func_scope: HashMap::new(),
-            param_types: Vec::new(),
-            param_modes: Vec::new(),
-            value_types: Vec::new(),
-            slot_types: Vec::new(),
             loop_stack: Vec::new(),
             return_type: None,
             is_script_unit: false,
+            in_unreachable: false,
             expr_temps: Vec::new(),
-            drop_schedule: DropSchedule::default(),
-            binding_info: Vec::new(),
-            tracking: Vec::new(),
-            binding_to_operand: HashMap::new(),
-            operand_to_binding: HashMap::new(),
-            next_binding_id: 0,
             next_stmt_id: 0,
             current_stmt_idx: None,
             external_slot_types: HashMap::new(),
             unit_end_drops: Vec::new(),
-            in_unreachable: false,
         }
     }
 
@@ -238,38 +269,20 @@ impl<'db> LowerCtx<'db> {
             expr_types,
             call_targets,
             func_id_map,
-            next_param: 0,
-            next_value: 0,
-            next_slot: 0,
-            next_block: 1,
-            blocks: Vec::new(),
-            current_block: BlockId(0),
-            current_block_params: Vec::new(),
-            current_instructions: Vec::new(),
-            variables: HashMap::new(),
+            body: FunctionBodyState::new(),
             exports: Vec::new(),
             functions: Vec::new(),
             symbols: SymbolTable::new(),
             func_scope: HashMap::new(),
-            param_types: Vec::new(),
-            param_modes: Vec::new(),
-            value_types: Vec::new(),
-            slot_types: Vec::new(),
             loop_stack: Vec::new(),
             return_type: None,
             is_script_unit: false,
+            in_unreachable: false,
             expr_temps: Vec::new(),
-            drop_schedule: DropSchedule::default(),
-            binding_info: Vec::new(),
-            tracking: Vec::new(),
-            binding_to_operand: HashMap::new(),
-            operand_to_binding: HashMap::new(),
-            next_binding_id: 0,
             next_stmt_id: 0,
             current_stmt_idx: None,
             external_slot_types: HashMap::new(),
             unit_end_drops: Vec::new(),
-            in_unreachable: false,
         }
     }
 
@@ -318,45 +331,35 @@ impl<'db> LowerCtx<'db> {
             });
         }
 
+        let mut body = FunctionBodyState::new();
+        body.variables = variables;
+
         Self {
             db,
             expr_types,
             call_targets,
             func_id_map,
-            next_param: 0,
-            next_value: 0,
-            next_slot: 0,
-            next_block: 1,
-            blocks: Vec::new(),
-            current_block: BlockId(0),
-            current_block_params: Vec::new(),
-            current_instructions: Vec::new(),
-            variables,
+            body,
             exports: Vec::new(),
             functions: Vec::new(),
             symbols: SymbolTable::new(),
             func_scope,
-            param_types: Vec::new(),
-            param_modes: Vec::new(),
-            value_types: Vec::new(),
-            slot_types: Vec::new(),
             loop_stack: Vec::new(),
             // Script units have Result<()> return type for ! operator.
             return_type: Some(IrType::Result(Box::new(IrType::Unit))),
             is_script_unit: true,
+            in_unreachable: false,
             expr_temps: Vec::new(),
-            drop_schedule: DropSchedule::default(),
-            binding_info: Vec::new(),
-            tracking: Vec::new(),
-            binding_to_operand: HashMap::new(),
-            operand_to_binding: HashMap::new(),
-            next_binding_id: 0,
             next_stmt_id: 0,
             current_stmt_idx: None,
             external_slot_types: script_ctx.slot_types,
             unit_end_drops: Vec::new(),
-            in_unreachable: false,
         }
+    }
+
+    /// Swap function body state for a new function, returning the old state.
+    pub fn swap_body_state(&mut self, new_state: FunctionBodyState) -> FunctionBodyState {
+        std::mem::replace(&mut self.body, new_state)
     }
 
     /// Define a function in the current scope.
@@ -408,74 +411,74 @@ impl<'db> LowerCtx<'db> {
 
     /// Allocate a fresh parameter with known type and mode.
     pub fn fresh_param(&mut self, ty: IrType, mode: ParamMode) -> ParamId {
-        let id = ParamId(self.next_param);
-        self.next_param += 1;
-        self.param_types.push(ty);
-        self.param_modes.push(mode);
+        let id = ParamId(self.body.next_param);
+        self.body.next_param += 1;
+        self.body.param_types.push(ty);
+        self.body.param_modes.push(mode);
         id
     }
 
     /// Get the mode of a parameter.
     pub fn param_mode(&self, id: ParamId) -> Option<ParamMode> {
-        self.param_modes.get(id.0 as usize).copied()
+        self.body.param_modes.get(id.0 as usize).copied()
     }
 
     /// Get the type of a parameter.
     pub fn param_type(&self, id: ParamId) -> Option<&IrType> {
-        self.param_types.get(id.0 as usize)
+        self.body.param_types.get(id.0 as usize)
     }
 
     /// Allocate a fresh SSA value with known type.
     pub fn fresh_value(&mut self, ty: IrType) -> ValueId {
-        let id = ValueId(self.next_value);
-        self.next_value += 1;
-        self.value_types.push(ty);
+        let id = ValueId(self.body.next_value);
+        self.body.next_value += 1;
+        self.body.value_types.push(ty);
         id
     }
 
     /// Allocate a fresh mutable slot with known type.
     pub fn fresh_slot(&mut self, ty: IrType) -> SlotId {
-        let id = SlotId(self.next_slot);
-        self.next_slot += 1;
-        self.slot_types.push(ty);
+        let id = SlotId(self.body.next_slot);
+        self.body.next_slot += 1;
+        self.body.slot_types.push(ty);
         id
     }
 
     /// Allocate a fresh block.
     pub fn fresh_block(&mut self) -> BlockId {
-        let id = BlockId(self.next_block);
-        self.next_block += 1;
+        let id = BlockId(self.body.next_block);
+        self.body.next_block += 1;
         id
     }
 
     /// Emit an instruction to the current block.
     pub fn emit(&mut self, instr: Instruction) {
-        self.current_instructions.push(instr);
+        self.body.current_instructions.push(instr);
     }
 
     /// Finish current block with a terminator, start a new block.
     pub fn finish_block(&mut self, terminator: Terminator) -> BlockId {
         let block = IrBlock {
-            id: self.current_block,
-            params: std::mem::take(&mut self.current_block_params),
-            instructions: std::mem::take(&mut self.current_instructions),
+            id: self.body.current_block,
+            params: std::mem::take(&mut self.body.current_block_params),
+            instructions: std::mem::take(&mut self.body.current_instructions),
             terminator,
         };
-        self.blocks.push(block);
-        self.current_block
+        self.body.blocks.push(block);
+        self.body.current_block
     }
 
     /// Start building a new block.
     pub fn start_block(&mut self, id: BlockId) {
-        self.current_block = id;
-        self.current_instructions.clear();
+        self.body.current_block = id;
+        self.body.current_instructions.clear();
         self.in_unreachable = false;
     }
 
     /// Start building an unreachable block (after return/break/continue).
     pub fn start_unreachable_block(&mut self, id: BlockId) {
-        self.current_block = id;
-        self.current_instructions.clear();
+        self.body.current_block = id;
+        self.body.current_instructions.clear();
         self.in_unreachable = true;
     }
 
@@ -486,12 +489,12 @@ impl<'db> LowerCtx<'db> {
 
     /// Bind a variable name to an operand.
     pub fn bind_var(&mut self, name: &str, operand: Operand) {
-        self.variables.insert(name.to_string(), operand);
+        self.body.variables.insert(name.to_string(), operand);
     }
 
     /// Look up a variable.
     pub fn lookup_var(&self, name: &str) -> Option<Operand> {
-        self.variables.get(name).copied()
+        self.body.variables.get(name).copied()
     }
 
     /// Emit Drop instructions for the given operands.
@@ -518,7 +521,7 @@ impl<'db> LowerCtx<'db> {
 
     /// Get the type for a slot ID.
     pub fn slot_type(&self, id: SlotId) -> Option<&IrType> {
-        self.slot_types.get(id.0 as usize)
+        self.body.slot_types.get(id.0 as usize)
     }
 
     /// Get the type for an external slot by variable name.
@@ -529,9 +532,9 @@ impl<'db> LowerCtx<'db> {
     /// Get the type for a slot by variable name (checks local and external slots).
     pub fn slot_type_by_name(&self, name: &str) -> Option<&IrType> {
         // First check if it's a local slot.
-        if let Some(operand) = self.variables.get(name) {
+        if let Some(operand) = self.body.variables.get(name) {
             if let Operand::Slot(slot_id) = operand {
-                return self.slot_types.get(slot_id.0 as usize);
+                return self.body.slot_types.get(slot_id.0 as usize);
             }
         }
         // Then check external slots.
@@ -541,10 +544,10 @@ impl<'db> LowerCtx<'db> {
     /// Get the type for any variable by name (checks slots, params, and external slots).
     pub fn var_type_by_name(&self, name: &str) -> Option<&IrType> {
         // Check local slots and params.
-        if let Some(operand) = self.variables.get(name) {
+        if let Some(operand) = self.body.variables.get(name) {
             match operand {
-                Operand::Slot(slot_id) => return self.slot_types.get(slot_id.0 as usize),
-                Operand::Param(param_id) => return self.param_types.get(param_id.0 as usize),
+                Operand::Slot(slot_id) => return self.body.slot_types.get(slot_id.0 as usize),
+                Operand::Param(param_id) => return self.body.param_types.get(param_id.0 as usize),
                 _ => {}
             }
         }
@@ -557,16 +560,16 @@ impl<'db> LowerCtx<'db> {
     /// Called when creating bindings during lowering.
     /// The binding ID must match the order from drop analysis.
     pub fn record_binding_operand(&mut self, operand: Operand) -> BindingId {
-        let id = BindingId(self.next_binding_id);
-        self.next_binding_id += 1;
-        self.binding_to_operand.insert(id, operand);
-        self.operand_to_binding.insert(operand, id);
+        let id = BindingId(self.body.next_binding_id);
+        self.body.next_binding_id += 1;
+        self.body.binding_to_operand.insert(id, operand);
+        self.body.operand_to_binding.insert(operand, id);
         id
     }
 
     /// Check if a binding is tracked (needs runtime checks for drops/moves).
     pub fn is_binding_tracked(&self, id: BindingId) -> bool {
-        self.tracking.get(id.0 as usize)
+        self.body.tracking.get(id.0 as usize)
             .map(|cat| *cat == TrackingCategory::Tracked)
             .unwrap_or(true) // Default to tracked if not found (safe fallback).
     }
@@ -575,14 +578,14 @@ impl<'db> LowerCtx<'db> {
     ///
     /// Returns true if the operand's binding is tracked, or true if not found (safe fallback).
     pub fn is_operand_tracked(&self, operand: Operand) -> bool {
-        self.operand_to_binding.get(&operand)
+        self.body.operand_to_binding.get(&operand)
             .map(|id| self.is_binding_tracked(*id))
             .unwrap_or(true) // Default to tracked if not found (safe fallback).
     }
 
     /// Emit a drop for a binding, using DropTracked if tracked, Drop if precise.
     fn emit_binding_drop(&mut self, id: BindingId) {
-        if let Some(&operand) = self.binding_to_operand.get(&id) {
+        if let Some(&operand) = self.body.binding_to_operand.get(&id) {
             if self.is_binding_tracked(id) {
                 self.emit(Instruction::DropTracked { operand });
             } else {
@@ -605,7 +608,7 @@ impl<'db> LowerCtx<'db> {
         let mut added: std::collections::HashSet<ValueId> = std::collections::HashSet::new();
 
         // Collect tracked bindings.
-        let binding_values: std::collections::HashSet<ValueId> = self.binding_to_operand
+        let binding_values: std::collections::HashSet<ValueId> = self.body.binding_to_operand
             .values()
             .filter_map(|op| match op {
                 Operand::Value(v) => Some(*v),
@@ -613,7 +616,7 @@ impl<'db> LowerCtx<'db> {
             })
             .collect();
 
-        for (id, &operand) in &self.binding_to_operand {
+        for (id, &operand) in &self.body.binding_to_operand {
             if self.is_binding_tracked(*id) {
                 if let Operand::Value(value_id) = operand {
                     if added.insert(value_id) {
@@ -625,7 +628,7 @@ impl<'db> LowerCtx<'db> {
 
         // Add all non-Copy non-binding values (intermediates).
         // These don't have explicit Drop instructions, so destroy_all must handle them.
-        for (idx, ty) in self.value_types.iter().enumerate() {
+        for (idx, ty) in self.body.value_types.iter().enumerate() {
             let value_id = ValueId(idx as u32);
             if !ty.is_copy() && !binding_values.contains(&value_id) {
                 if added.insert(value_id) {
@@ -647,7 +650,7 @@ impl<'db> LowerCtx<'db> {
         let mut result = Vec::new();
         let mut added: std::collections::HashSet<SlotId> = std::collections::HashSet::new();
 
-        for (id, &operand) in &self.binding_to_operand {
+        for (id, &operand) in &self.body.binding_to_operand {
             if self.is_binding_tracked(*id) {
                 if let Operand::Slot(slot_id) = operand {
                     if added.insert(slot_id) {
@@ -666,7 +669,7 @@ impl<'db> LowerCtx<'db> {
     /// These have UnitEndDrop which is a no-op in the interpreter.
     pub fn compute_unit_end_values(&self) -> Vec<ValueId> {
         self.unit_end_drops.iter()
-            .filter_map(|id| self.binding_to_operand.get(id))
+            .filter_map(|id| self.body.binding_to_operand.get(id))
             .filter_map(|op| match op {
                 Operand::Value(v) => Some(*v),
                 _ => None,
@@ -680,7 +683,7 @@ impl<'db> LowerCtx<'db> {
     /// These have UnitEndDrop which is a no-op in the interpreter.
     pub fn compute_unit_end_slots(&self) -> Vec<SlotId> {
         self.unit_end_drops.iter()
-            .filter_map(|id| self.binding_to_operand.get(id))
+            .filter_map(|id| self.body.binding_to_operand.get(id))
             .filter_map(|op| match op {
                 Operand::Slot(s) => Some(*s),
                 _ => None,
@@ -735,28 +738,28 @@ impl<'db> LowerCtx<'db> {
 
     /// Get binding IDs to drop for then-branch exit.
     fn get_scheduled_binding_ids_then(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.drop_schedule.then_branch_exit.get(&stmt_idx)
+        self.body.drop_schedule.then_branch_exit.get(&stmt_idx)
             .cloned()
             .unwrap_or_default()
     }
 
     /// Get binding IDs to drop for else-branch exit.
     fn get_scheduled_binding_ids_else(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.drop_schedule.else_branch_exit.get(&stmt_idx)
+        self.body.drop_schedule.else_branch_exit.get(&stmt_idx)
             .cloned()
             .unwrap_or_default()
     }
 
     /// Get binding IDs to drop before return.
     fn get_scheduled_binding_ids_return(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.drop_schedule.before_return.get(&stmt_idx)
+        self.body.drop_schedule.before_return.get(&stmt_idx)
             .cloned()
             .unwrap_or_default()
     }
 
     /// Get binding IDs to drop before TryReturn.
     fn get_scheduled_binding_ids_try(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.drop_schedule.before_try_return.get(&stmt_idx)
+        self.body.drop_schedule.before_try_return.get(&stmt_idx)
             .cloned()
             .unwrap_or_default()
     }
@@ -787,21 +790,21 @@ impl<'db> LowerCtx<'db> {
 
     /// Get binding IDs to drop at loop body end.
     fn get_scheduled_binding_ids_loop(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.drop_schedule.loop_body_end.get(&stmt_idx)
+        self.body.drop_schedule.loop_body_end.get(&stmt_idx)
             .cloned()
             .unwrap_or_default()
     }
 
     /// Get binding IDs to drop before break.
     fn get_scheduled_binding_ids_break(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.drop_schedule.before_break.get(&stmt_idx)
+        self.body.drop_schedule.before_break.get(&stmt_idx)
             .cloned()
             .unwrap_or_default()
     }
 
     /// Get binding IDs to drop before continue.
     fn get_scheduled_binding_ids_continue(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.drop_schedule.before_continue.get(&stmt_idx)
+        self.body.drop_schedule.before_continue.get(&stmt_idx)
             .cloned()
             .unwrap_or_default()
     }
@@ -814,7 +817,7 @@ impl<'db> LowerCtx<'db> {
     /// - AOT: UnitEndDrop is unconditional, UnitEndDropTracked checks tracking byte
     pub fn emit_unit_end_drops(&mut self) {
         for id in std::mem::take(&mut self.unit_end_drops) {
-            if let Some(&operand) = self.binding_to_operand.get(&id) {
+            if let Some(&operand) = self.body.binding_to_operand.get(&id) {
                 if self.is_binding_tracked(id) {
                     self.emit(Instruction::UnitEndDropTracked { operand });
                 } else {
@@ -831,19 +834,19 @@ impl<'db> LowerCtx<'db> {
     /// This renumbers them so `blocks[i].id.0 == i`, enabling O(1) block lookup
     /// in the interpreter.
     pub fn renumber_blocks(&mut self) {
-        if self.blocks.is_empty() {
+        if self.body.blocks.is_empty() {
             return;
         }
 
         // Build mapping from old ID to new ID using Vec for O(1) lookup.
         // Old IDs are sparse but bounded by next_block.
-        let mut id_map = vec![0u32; self.next_block as usize];
-        for (new_id, block) in self.blocks.iter().enumerate() {
+        let mut id_map = vec![0u32; self.body.next_block as usize];
+        for (new_id, block) in self.body.blocks.iter().enumerate() {
             id_map[block.id.0 as usize] = new_id as u32;
         }
 
         // Update block IDs and terminator references.
-        for (new_id, block) in self.blocks.iter_mut().enumerate() {
+        for (new_id, block) in self.body.blocks.iter_mut().enumerate() {
             block.id = BlockId(new_id as u32);
 
             // Update terminator targets.
