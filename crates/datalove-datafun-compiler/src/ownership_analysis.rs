@@ -215,14 +215,10 @@ fn format_single_error(error: &AnalysisError) -> String {
 
 /// Drop schedule computed by analysis.
 ///
-/// Keyed by statement index. During lowering, after processing each AST node,
-/// check if there are drops scheduled for it.
+/// Maps statement indices to bindings that need to be dropped at various
+/// control flow points (branch exits, returns, loops, etc.).
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
 pub struct DropSchedule {
-    /// Drops to emit after processing a statement.
-    /// Key is statement index in the body.
-    pub after_stmt: BTreeMap<usize, Vec<BindingId>>,
-
     /// Drops to emit at the end of a then-branch before jumping to join.
     /// Key is the StmtIf index in the body.
     pub then_branch_exit: BTreeMap<usize, Vec<BindingId>>,
