@@ -13,7 +13,7 @@ use datalove_datafun_ir::{
 use crate::ownership_analysis::ScriptFunctionAnalyses;
 use crate::tracked_script_ownership::ScriptAnalysisData;
 use crate::ir_ext::IrTypeExt;
-use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind, FunctionBodyState};
+use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind, FrameState};
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;
 use super::stmt::collect_field_path;
@@ -443,7 +443,7 @@ fn lower_statement_for_script<'db>(
             let func_id = ctx.define_func(&func_name, param_count);
 
             // Swap in fresh state for function body.
-            let saved = ctx.swap_body_state(FunctionBodyState::new());
+            let saved = ctx.swap_body_state(FrameState::new());
 
             // Look up resolved param types for this function.
             let func_name_str = fun_stmt.name(ctx.db).text(ctx.db);

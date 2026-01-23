@@ -16,11 +16,12 @@ use crate::ir_ext::IrTypeExt;
 use crate::ownership_analysis::{BindingId, DropSchedule, BindingInfo, TrackingCategory};
 use super::LowerError;
 
-/// State that is local to a function body during lowering.
+/// Compile-time state for building a function's IR.
 ///
-/// When lowering a nested function definition inside a script, this state
-/// is swapped out for a fresh instance, then restored after.
-pub struct FunctionBodyState {
+/// Analogous to `Frame` in the interpreter, which holds runtime state.
+/// When lowering a nested function, this state is swapped for a fresh
+/// instance, then restored after.
+pub struct FrameState {
     /// Blocks being built.
     pub blocks: Vec<IrBlock>,
     /// Instructions for current block.
@@ -71,7 +72,7 @@ pub struct FunctionBodyState {
     pub current_stmt_idx: Option<usize>,
 }
 
-impl FunctionBodyState {
+impl FrameState {
     pub fn new() -> Self {
         Self {
             blocks: Vec::new(),
@@ -102,7 +103,7 @@ impl FunctionBodyState {
     }
 }
 
-impl Default for FunctionBodyState {
+impl Default for FrameState {
     fn default() -> Self {
         Self::new()
     }
@@ -203,7 +204,7 @@ pub struct LowerCtx<'db> {
     pub(super) func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
 
     /// Function-local state (swapped when entering nested function).
-    pub(super) body: FunctionBodyState,
+    pub(super) body: FrameState,
 
     // Unit-level state (persists across nested functions).
     /// Exports from this unit (only used for script units).
@@ -242,7 +243,7 @@ impl<'db> LowerCtx<'db> {
             expr_types,
             call_targets,
             func_id_map: &EMPTY_FUNC_ID_MAP,
-            body: FunctionBodyState::new(),
+            body: FrameState::new(),
             exports: Vec::new(),
             functions: Vec::new(),
             symbols: SymbolTable::new(),
@@ -266,7 +267,7 @@ impl<'db> LowerCtx<'db> {
             expr_types,
             call_targets,
             func_id_map,
-            body: FunctionBodyState::new(),
+            body: FrameState::new(),
             exports: Vec::new(),
             functions: Vec::new(),
             symbols: SymbolTable::new(),
@@ -323,7 +324,7 @@ impl<'db> LowerCtx<'db> {
             });
         }
 
-        let mut body = FunctionBodyState::new();
+        let mut body = FrameState::new();
         body.variables = variables;
 
         Self {
@@ -345,7 +346,7 @@ impl<'db> LowerCtx<'db> {
     }
 
     /// Swap function body state for a new function, returning the old state.
-    pub fn swap_body_state(&mut self, new_state: FunctionBodyState) -> FunctionBodyState {
+    pub fn swap_body_state(&mut self, new_state: FrameState) -> FrameState {
         std::mem::replace(&mut self.body, new_state)
     }
 
