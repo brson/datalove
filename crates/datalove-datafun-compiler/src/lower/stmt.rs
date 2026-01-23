@@ -302,13 +302,13 @@ fn lower_if_option<'db>(
     // Lower the Option expression.
     let opt_id = lower_expression(ctx, condition)?;
 
-    // Emit UnwrapOption instruction.
+    // Emit UnwrapOptionTracking instruction.
     // dest: receives inner value (only valid when is_some=true).
     // is_some: boolean flag for branching.
     let inner_dest = ctx.fresh_value(inner_type.clone());
     let is_some = ctx.fresh_value(IrType::Bool);
 
-    ctx.emit(Instruction::UnwrapOption {
+    ctx.emit(Instruction::UnwrapOptionTracking {
         dest: inner_dest,
         is_some,
         src: Operand::Value(opt_id),
@@ -397,7 +397,7 @@ fn lower_if_result<'db>(
     // Lower the Result expression.
     let result_id = lower_expression(ctx, condition)?;
 
-    // Emit UnwrapResult instruction.
+    // Emit UnwrapResultTracking instruction.
     // ok_dest: receives Ok payload (only valid when is_ok=true).
     // err_dest: receives Error (only valid when is_ok=false).
     // is_ok: boolean flag for branching.
@@ -405,7 +405,7 @@ fn lower_if_result<'db>(
     let err_dest = ctx.fresh_value(IrType::Error);
     let is_ok = ctx.fresh_value(IrType::Bool);
 
-    ctx.emit(Instruction::UnwrapResult {
+    ctx.emit(Instruction::UnwrapResultTracking {
         ok_dest,
         err_dest,
         is_ok,

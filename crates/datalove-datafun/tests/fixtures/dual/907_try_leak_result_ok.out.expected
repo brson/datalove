@@ -20,7 +20,7 @@ DualAnalysis(
                         v0 = const 42u32
                         v1 = ok v0
                         v2 = const "hello"
-                        v3, v4, v5 = unwrap_result v1
+                        v3, v4, v5 = unwrap_result.tracking v1
                         branch v5, block2, block1
                     block1:
                         v6 = err v4
@@ -49,7 +49,7 @@ DualAnalysis(
                         v0 = const 42u32
                         v1 = ok v0
                         v2 = const "hello"
-                        v3, v4, v5 = unwrap_result v1
+                        v3, v4, v5 = unwrap_result.tracking v1
                         branch v5, block2, block1
                     block1:
                         v6 = err v4

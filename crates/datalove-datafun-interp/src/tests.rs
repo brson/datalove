@@ -1218,7 +1218,7 @@ fn test_wrap_some_unwrap() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapOption {
+                    Instruction::UnwrapOptionTracking {
                         dest: ValueId(2),
                         is_some: ValueId(3),
                         src: Operand::Value(ValueId(1)),
@@ -1258,7 +1258,7 @@ fn test_is_some() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapOption {
+                    Instruction::UnwrapOptionTracking {
                         dest: ValueId(2),
                         is_some: ValueId(3),
                         src: Operand::Value(ValueId(1)),
@@ -1294,7 +1294,7 @@ fn test_is_none() {
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::WrapNone { dest: ValueId(0) },
-                    Instruction::UnwrapOption {
+                    Instruction::UnwrapOptionTracking {
                         dest: ValueId(1),
                         is_some: ValueId(2),
                         src: Operand::Value(ValueId(0)),
@@ -1339,7 +1339,7 @@ fn test_option_branch() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapOption {
+                    Instruction::UnwrapOptionTracking {
                         dest: ValueId(2),
                         is_some: ValueId(3),
                         src: Operand::Value(ValueId(1)),
@@ -1398,7 +1398,7 @@ fn test_wrap_ok_unwrap() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapResult {
+                    Instruction::UnwrapResultTracking {
                         ok_dest: ValueId(2),
                         err_dest: ValueId(3),
                         is_ok: ValueId(4),
@@ -1439,7 +1439,7 @@ fn test_is_ok() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapResult {
+                    Instruction::UnwrapResultTracking {
                         ok_dest: ValueId(2),
                         err_dest: ValueId(3),
                         is_ok: ValueId(4),
@@ -1482,7 +1482,7 @@ fn test_is_err() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapResult {
+                    Instruction::UnwrapResultTracking {
                         ok_dest: ValueId(2),
                         err_dest: ValueId(3),
                         is_ok: ValueId(4),
@@ -1528,7 +1528,7 @@ fn test_result_branch() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapResult {
+                    Instruction::UnwrapResultTracking {
                         ok_dest: ValueId(2),
                         err_dest: ValueId(3),
                         is_ok: ValueId(4),

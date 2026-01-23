@@ -17,10 +17,10 @@ Analysis(
                         v3 = some v2
                         v4 = const 0int
                         store.move s0, v4
-                        v5, v6 = unwrap_option v1
+                        v5, v6 = unwrap_option.tracking v1
                         branch v6, block1, block5
                     block1:
-                        v7, v8 = unwrap_option v3
+                        v7, v8 = unwrap_option.tracking v3
                         branch v8, block2, block3
                     block2:
                         v9 = add v5, v7

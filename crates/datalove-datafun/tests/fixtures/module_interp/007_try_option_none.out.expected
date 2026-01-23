@@ -8,7 +8,7 @@ ModulesAnalysis(
             fn main():
             block0:
                 v0 = none
-                v1, v2 = unwrap_option v0
+                v1, v2 = unwrap_option.tracking v0
                 branch v2, block2, block1
             block1:
                 v3 = none

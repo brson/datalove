@@ -20,7 +20,7 @@ DualAnalysis(
                         v0 = none
                         v1 = const "outer"
                         v2 = const "inner"
-                        v3, v4 = unwrap_option v0
+                        v3, v4 = unwrap_option.tracking v0
                         branch v4, block2, block1
                     block1:
                         v5 = none
@@ -51,7 +51,7 @@ DualAnalysis(
                         v0 = none
                         v1 = const "outer"
                         v2 = const "inner"
-                        v3, v4 = unwrap_option v0
+                        v3, v4 = unwrap_option.tracking v0
                         branch v4, block2, block1
                     block1:
                         v5 = none

@@ -637,27 +637,73 @@ pub enum ParamMode {
 }
 
 /// Flat instruction - no nesting, 2-3 operands max.
+///
+/// # Tracking Semantics
+///
+/// Instructions come in precise and tracked variants:
+///
+/// - **Precise** variants assume ownership analysis has proven the operand state.
+///   The backend does not read or write tracking bytes for these instructions.
+///
+/// - **Tracked** variants update tracking state at runtime. Use these when:
+///   - A value may have been moved (source tracking)
+///   - A destination needs its tracking byte set to LIVE (dest tracking)
+///
+/// Instructions that produce values (like `Const`, `Call`, `Pack`, etc.) have tracked
+/// variants that mark their destination as LIVE. The tracked variant should be used
+/// when the destination is in the function's `tracked_values` set.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Instruction {
-    /// Load a constant value.
+    // ========================================================================
+    // Constants
+    // ========================================================================
+
+    /// Load a constant value (precise).
+    ///
+    /// **Ownership:** Produces `dest`.
+    /// **Tracking:** None - use `ConstTracked` for tracked destinations.
     Const { dest: ValueId, value: ConstValue },
 
-    /// Copy a value (for Copy types).
+    /// Load a constant value (tracked).
+    ///
+    /// **Ownership:** Produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    ConstTracked { dest: ValueId, value: ConstValue },
+
+    // ========================================================================
+    // Value Movement
+    // ========================================================================
+
+    /// Copy a value (for Copy types only).
+    ///
+    /// **Ownership:** Borrows `src`, produces `dest`.
+    /// **Tracking:** None - Copy types don't need tracking.
     Copy { dest: ValueId, src: Operand },
 
-    /// Move a value (transfers ownership, precise).
+    /// Move a value (precise).
     ///
-    /// Used when ownership analysis guarantees the source exists.
-    /// Does not update tracking state.
+    /// Transfers ownership from `src` to `dest` via shallow copy.
+    ///
+    /// **Ownership:** Consumes `src`, produces `dest`.
+    /// **Tracking:** None - ownership analysis guarantees `src` exists.
     Move { dest: ValueId, src: Operand },
 
-    /// Move a value (transfers ownership, tracked).
+    /// Move a value (tracked).
     ///
-    /// Used when the source may have been moved. Updates tracking state
-    /// to mark the source as consumed.
+    /// Transfers ownership from `src` to `dest` via shallow copy.
+    ///
+    /// **Ownership:** Consumes `src`, produces `dest`.
+    /// **Tracking:** Writes MOVED to `src` tracking byte.
     MoveTracked { dest: ValueId, src: Operand },
 
-    /// Binary operation.
+    // ========================================================================
+    // Arithmetic Operations
+    // ========================================================================
+
+    /// Binary operation (produces Copy result).
+    ///
+    /// **Ownership:** Borrows `lhs` and `rhs`, produces `dest`.
+    /// **Tracking:** None - results are Copy types (bool, int, float).
     BinOp {
         dest: ValueId,
         op: BinOp,
@@ -665,14 +711,20 @@ pub enum Instruction {
         rhs: Operand,
     },
 
-    /// Unary operation.
+    /// Unary operation (produces Copy result).
+    ///
+    /// **Ownership:** Borrows `operand`, produces `dest`.
+    /// **Tracking:** None - results are Copy types.
     UnaryOp {
         dest: ValueId,
         op: UnaryOp,
         operand: Operand,
     },
 
-    /// Checked binary operation (produces value + overflow flag).
+    /// Checked binary operation (produces Copy result + overflow flag).
+    ///
+    /// **Ownership:** Borrows `lhs` and `rhs`, produces `dest` and `overflow`.
+    /// **Tracking:** None - results are Copy types.
     BinOpChecked {
         dest: ValueId,
         overflow: ValueId,
@@ -681,7 +733,10 @@ pub enum Instruction {
         rhs: Operand,
     },
 
-    /// Checked unary operation (produces value + overflow flag).
+    /// Checked unary operation (produces Copy result + overflow flag).
+    ///
+    /// **Ownership:** Borrows `operand`, produces `dest` and `overflow`.
+    /// **Tracking:** None - results are Copy types.
     UnaryOpChecked {
         dest: ValueId,
         overflow: ValueId,
@@ -690,27 +745,94 @@ pub enum Instruction {
     },
 
     /// Widen a fixed-width integer to Int (bigint).
+    ///
+    /// **Ownership:** Borrows `src`, produces `dest` (Int is non-Copy).
+    /// **Tracking:** None - use `WidenTracked` for tracked destinations.
+    /// **Note:** Int is non-Copy but this instruction creates a new Int from
+    /// a Copy source, so the source doesn't need tracking.
     Widen { dest: ValueId, src: Operand },
 
-    /// Function call.
+    /// Widen a fixed-width integer to Int (tracked).
+    ///
+    /// **Ownership:** Borrows `src`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    WidenTracked { dest: ValueId, src: Operand },
+
+    // ========================================================================
+    // Function Calls
+    // ========================================================================
+
+    /// Function call (precise).
+    ///
+    /// **Ownership:** Args consumed per param mode (In consumes, Ref/Mut/Out borrow).
+    /// **Tracking:** None - use `CallTracked` for tracked destinations.
     Call {
         dest: ValueId,
         func: FuncRef,
         args: Vec<Operand>,
     },
 
-    /// Pack fields into a struct/tuple.
+    /// Function call (tracked).
+    ///
+    /// **Ownership:** Args consumed per param mode.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    CallTracked {
+        dest: ValueId,
+        func: FuncRef,
+        args: Vec<Operand>,
+    },
+
+    // ========================================================================
+    // Aggregate Construction
+    // ========================================================================
+
+    /// Pack fields into a struct/tuple (precise).
+    ///
+    /// **Ownership:** Consumes all `fields`, produces `dest`.
+    /// **Tracking:** None - use `PackTracked` for tracked destinations.
     Pack {
         dest: ValueId,
         ty: TypeRef,
         fields: Vec<Operand>,
     },
 
-    /// Unpack struct/tuple into fields.
+    /// Pack fields into a struct/tuple (tracked).
+    ///
+    /// **Ownership:** Consumes all `fields`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    PackTracked {
+        dest: ValueId,
+        ty: TypeRef,
+        fields: Vec<Operand>,
+    },
+
+    /// Unpack struct/tuple into fields (precise).
+    ///
+    /// **Ownership:** Consumes `src`, produces all `dests`.
+    /// **Tracking:** None - use `UnpackTracked` for tracked destinations.
     Unpack { dests: Vec<ValueId>, src: Operand },
 
-    /// Get a single field from a struct/tuple.
+    /// Unpack struct/tuple into fields (tracked).
+    ///
+    /// **Ownership:** Consumes `src`, produces all `dests`.
+    /// **Tracking:** Writes LIVE to all `dests` tracking bytes.
+    UnpackTracked { dests: Vec<ValueId>, src: Operand },
+
+    /// Get a single field from a struct/tuple (precise).
+    ///
+    /// **Ownership:** Consumes `src`, produces `dest` (field moved out).
+    /// **Tracking:** None - use `GetFieldTracked` for tracked destinations.
     GetField {
+        dest: ValueId,
+        src: Operand,
+        field_index: u32,
+    },
+
+    /// Get a single field from a struct/tuple (tracked).
+    ///
+    /// **Ownership:** Consumes `src`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    GetFieldTracked {
         dest: ValueId,
         src: Operand,
         field_index: u32,
@@ -718,168 +840,413 @@ pub enum Instruction {
 
     /// Get a reference (pointer) to a field within an aggregate.
     ///
-    /// Unlike GetField which copies the field value, this returns a pointer
+    /// Unlike GetField which moves the field value, this returns a pointer
     /// to the field. Used when passing field projections to ref/mut/out params.
-    /// The dest is an IrType::Ref wrapping the field type.
+    ///
+    /// **Ownership:** Borrows `src`, produces `dest` (Ref type, always Copy).
+    /// **Tracking:** None - Ref is a Copy type (just a pointer).
     GetFieldRef {
         dest: ValueId,
         src: Operand,
         field_index: u32,
     },
 
-    /// Wrap value in Some.
+    // ========================================================================
+    // Option Construction
+    // ========================================================================
+
+    /// Wrap value in Some (precise).
+    ///
+    /// **Ownership:** Consumes `inner`, produces `dest`.
+    /// **Tracking:** None - use `WrapSomeTracked` for tracked destinations.
     WrapSome { dest: ValueId, inner: Operand },
 
-    /// Wrap value in Ok.
-    WrapOk { dest: ValueId, inner: Operand },
+    /// Wrap value in Some (tracked).
+    ///
+    /// **Ownership:** Consumes `inner`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    WrapSomeTracked { dest: ValueId, inner: Operand },
 
-    /// Wrap value in Err.
-    WrapErr { dest: ValueId, inner: Operand },
-
-    /// Create None.
+    /// Create None (precise).
+    ///
+    /// **Ownership:** Produces `dest`.
+    /// **Tracking:** None - use `WrapNoneTracked` for tracked destinations.
     WrapNone { dest: ValueId },
 
-    /// Create an enum variant.
+    /// Create None (tracked).
+    ///
+    /// **Ownership:** Produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    WrapNoneTracked { dest: ValueId },
+
+    // ========================================================================
+    // Result Construction
+    // ========================================================================
+
+    /// Wrap value in Ok (precise).
+    ///
+    /// **Ownership:** Consumes `inner`, produces `dest`.
+    /// **Tracking:** None - use `WrapOkTracked` for tracked destinations.
+    WrapOk { dest: ValueId, inner: Operand },
+
+    /// Wrap value in Ok (tracked).
+    ///
+    /// **Ownership:** Consumes `inner`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    WrapOkTracked { dest: ValueId, inner: Operand },
+
+    /// Wrap value in Err (precise).
+    ///
+    /// **Ownership:** Consumes `inner`, produces `dest`.
+    /// **Tracking:** None - use `WrapErrTracked` for tracked destinations.
+    WrapErr { dest: ValueId, inner: Operand },
+
+    /// Wrap value in Err (tracked).
+    ///
+    /// **Ownership:** Consumes `inner`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    WrapErrTracked { dest: ValueId, inner: Operand },
+
+    // ========================================================================
+    // Enum Construction
+    // ========================================================================
+
+    /// Create an enum variant (precise).
     ///
     /// The variant_index is the index into the sorted variants of the enum type.
-    /// Payload is provided for variants that have data.
+    ///
+    /// **Ownership:** Consumes `payload` if present, produces `dest`.
+    /// **Tracking:** None - use `EnumVariantTracked` for tracked destinations.
     EnumVariant {
         dest: ValueId,
         variant_index: u32,
         payload: Option<Operand>,
     },
 
-    /// Unwrap Option, producing (inner_value, is_some).
-    UnwrapOption {
+    /// Create an enum variant (tracked).
+    ///
+    /// **Ownership:** Consumes `payload` if present, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    EnumVariantTracked {
+        dest: ValueId,
+        variant_index: u32,
+        payload: Option<Operand>,
+    },
+
+    // ========================================================================
+    // Option/Result Unwrapping
+    // ========================================================================
+
+    /// Unwrap Option with conditional tracking.
+    ///
+    /// Produces (inner_value, is_some). The `dest` is valid only when is_some=true.
+    ///
+    /// **Ownership:** Consumes `src`, conditionally produces `dest`.
+    /// **Tracking:** When dest is tracked:
+    /// - If is_some=true: writes LIVE to `dest` tracking byte
+    /// - If is_some=false: writes UNINIT to `dest` tracking byte
+    ///
+    /// Note: This always includes tracking logic for `dest` when it's in tracked_values,
+    /// because the initialization state depends on runtime discriminant. The `Tracking`
+    /// suffix indicates conditional tracking based on the runtime value.
+    UnwrapOptionTracking {
         dest: ValueId,
         is_some: ValueId,
         src: Operand,
     },
 
-    /// Unwrap Result, producing (ok_value, err_value, is_ok).
+    /// Unwrap Result with conditional tracking.
     ///
-    /// - ok_dest: receives Ok payload when is_ok=true
-    /// - err_dest: receives Error when is_ok=false
-    UnwrapResult {
+    /// Produces (ok_value, err_value, is_ok). Only one of ok_dest/err_dest is valid
+    /// based on is_ok.
+    ///
+    /// **Ownership:** Consumes `src`, conditionally produces `ok_dest` or `err_dest`.
+    /// **Tracking:** When dests are tracked:
+    /// - If is_ok=true: writes LIVE to ok_dest, UNINIT to err_dest
+    /// - If is_ok=false: writes UNINIT to ok_dest, LIVE to err_dest
+    UnwrapResultTracking {
         ok_dest: ValueId,
         err_dest: ValueId,
         is_ok: ValueId,
         src: Operand,
     },
 
-    /// Create Error from any value (consumes inner).
+    // ========================================================================
+    // Boxing Operations
+    // ========================================================================
+
+    /// Create Error from any value (precise).
+    ///
+    /// **Ownership:** Consumes `inner`, produces `dest`.
+    /// **Tracking:** None - use `ErrorFromTracked` for tracked destinations.
     ErrorFrom { dest: ValueId, inner: Operand },
 
-    /// Create Data from any value (consumes inner).
+    /// Create Error from any value (tracked).
+    ///
+    /// **Ownership:** Consumes `inner`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    ErrorFromTracked { dest: ValueId, inner: Operand },
+
+    /// Create Data from any value (precise).
+    ///
+    /// **Ownership:** Consumes `inner`, produces `dest`.
+    /// **Tracking:** None - use `DataFromTracked` for tracked destinations.
     DataFrom { dest: ValueId, inner: Operand },
 
-    /// Create a new list.
+    /// Create Data from any value (tracked).
+    ///
+    /// **Ownership:** Consumes `inner`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    DataFromTracked { dest: ValueId, inner: Operand },
+
+    // ========================================================================
+    // Collection Construction
+    // ========================================================================
+
+    /// Create a new list (precise).
+    ///
+    /// **Ownership:** Consumes all `elements`, produces `dest`.
+    /// **Tracking:** None - use `ListNewTracked` for tracked destinations.
     ListNew {
         dest: ValueId,
         elements: Vec<Operand>,
     },
 
-    /// Create a new set.
+    /// Create a new list (tracked).
+    ///
+    /// **Ownership:** Consumes all `elements`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    ListNewTracked {
+        dest: ValueId,
+        elements: Vec<Operand>,
+    },
+
+    /// Create a new set (precise).
+    ///
+    /// **Ownership:** Consumes all `elements`, produces `dest`.
+    /// **Tracking:** None - use `SetNewTracked` for tracked destinations.
     SetNew {
         dest: ValueId,
         elements: Vec<Operand>,
     },
 
-    /// Create a new map.
+    /// Create a new set (tracked).
+    ///
+    /// **Ownership:** Consumes all `elements`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    SetNewTracked {
+        dest: ValueId,
+        elements: Vec<Operand>,
+    },
+
+    /// Create a new map (precise).
+    ///
+    /// **Ownership:** Consumes all keys and values, produces `dest`.
+    /// **Tracking:** None - use `MapNewTracked` for tracked destinations.
     MapNew {
         dest: ValueId,
         entries: Vec<(Operand, Operand)>,
     },
 
-    /// Create a new tensor.
+    /// Create a new map (tracked).
+    ///
+    /// **Ownership:** Consumes all keys and values, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    MapNewTracked {
+        dest: ValueId,
+        entries: Vec<(Operand, Operand)>,
+    },
+
+    /// Create a new tensor (precise).
+    ///
+    /// **Ownership:** Consumes all `elements`, produces `dest`.
+    /// **Tracking:** None - use `TensorNewTracked` for tracked destinations.
     TensorNew {
         dest: ValueId,
         shape: Vec<u32>,
         elements: Vec<Operand>,
     },
 
-    /// Create a new table from row tuples.
+    /// Create a new tensor (tracked).
+    ///
+    /// **Ownership:** Consumes all `elements`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    TensorNewTracked {
+        dest: ValueId,
+        shape: Vec<u32>,
+        elements: Vec<Operand>,
+    },
+
+    /// Create a new table from row tuples (precise).
+    ///
+    /// **Ownership:** Consumes all `rows`, produces `dest`.
+    /// **Tracking:** None - use `TableNewTracked` for tracked destinations.
     TableNew {
         dest: ValueId,
         rows: Vec<Operand>,
     },
 
-    /// Store value to mutable slot (copy semantics - source remains valid).
+    /// Create a new table from row tuples (tracked).
+    ///
+    /// **Ownership:** Consumes all `rows`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    TableNewTracked {
+        dest: ValueId,
+        rows: Vec<Operand>,
+    },
+
+    // ========================================================================
+    // Slot Operations
+    // ========================================================================
+
+    /// Store value to mutable slot with copy semantics (precise).
+    ///
+    /// **Ownership:** Borrows `value`, writes to `dest` slot.
+    /// **Tracking:** None - use `SlotStoreCopyTracked` for tracked slots.
     SlotStoreCopy { dest: SlotDest, value: Operand },
 
-    /// Store value to mutable slot (move semantics - consumes source).
+    /// Store value to mutable slot with copy semantics (tracked).
+    ///
+    /// **Ownership:** Borrows `value`, writes to `dest` slot.
+    /// **Tracking:** Writes LIVE to slot tracking byte.
+    SlotStoreCopyTracked { dest: SlotDest, value: Operand },
+
+    /// Store value to mutable slot with move semantics (precise).
+    ///
+    /// **Ownership:** Consumes `value`, writes to `dest` slot.
+    /// **Tracking:** None - use `SlotStoreMoveTracked` for tracked slots.
     SlotStoreMove { dest: SlotDest, value: Operand },
 
-    /// Store value to a field within a mutable slot.
+    /// Store value to mutable slot with move semantics (tracked).
+    ///
+    /// **Ownership:** Consumes `value`, writes to `dest` slot.
+    /// **Tracking:** Writes LIVE to slot tracking byte.
+    SlotStoreMoveTracked { dest: SlotDest, value: Operand },
+
+    /// Store value to a field within a mutable slot (precise).
     ///
     /// field_path is the chain of field indices from the slot root
     /// to the target field: `set a.x.0.y = v` becomes field_path [x_idx, 0, y_idx].
+    ///
+    /// **Ownership:** Consumes `value`, writes to field within slot.
+    /// **Tracking:** None - use `SetFieldTracked` for tracked slots.
     SetField {
         slot: SlotDest,
         field_path: Vec<u32>,
         value: Operand,
     },
 
+    /// Store value to a field within a mutable slot (tracked).
+    ///
+    /// **Ownership:** Consumes `value`, writes to field within slot.
+    /// **Tracking:** Writes LIVE to slot tracking byte (slot as a whole is live).
+    SetFieldTracked {
+        slot: SlotDest,
+        field_path: Vec<u32>,
+        value: Operand,
+    },
+
     /// Store value to mutable parameter (writes through to caller's data).
+    ///
+    /// **Ownership:** Consumes `value`, writes to caller's param location.
+    /// **Tracking:** None - params have implicit tracking via call convention.
     ParamStore { param: ParamId, value: Operand },
 
     /// Store value to a field within a mutable parameter.
     ///
     /// Similar to SetField but targets a parameter instead of a slot.
+    ///
+    /// **Ownership:** Consumes `value`, writes to field within param.
+    /// **Tracking:** None - params have implicit tracking.
     ParamSetField {
         param: ParamId,
         field_path: Vec<u32>,
         value: Operand,
     },
 
-    /// Load value from mutable slot (copy semantics - slot remains valid).
+    /// Load value from mutable slot with copy semantics (precise).
+    ///
+    /// **Ownership:** Borrows `slot`, produces `dest`.
+    /// **Tracking:** None - use `SlotLoadCopyTracked` for tracked destinations.
     SlotLoadCopy { dest: ValueId, slot: SlotId },
 
-    /// Load value from mutable slot (move semantics, precise).
+    /// Load value from mutable slot with copy semantics (tracked).
     ///
-    /// Used when ownership analysis guarantees the slot is occupied.
-    /// Does not update tracking state.
+    /// **Ownership:** Borrows `slot`, produces `dest`.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte. Slot unchanged.
+    SlotLoadCopyTracked { dest: ValueId, slot: SlotId },
+
+    /// Load value from mutable slot with move semantics (precise).
+    ///
+    /// **Ownership:** Consumes slot contents, produces `dest`.
+    /// **Tracking:** None - ownership analysis guarantees slot is occupied.
     SlotLoadMove { dest: ValueId, slot: SlotId },
 
-    /// Load value from mutable slot (move semantics, tracked).
+    /// Load value from mutable slot with move semantics (tracked).
     ///
-    /// Used when the slot may have been moved. Updates tracking state
-    /// to mark the slot as empty.
+    /// **Ownership:** Consumes slot contents, produces `dest`.
+    /// **Tracking:** Writes MOVED to slot tracking byte.
     SlotLoadMoveTracked { dest: ValueId, slot: SlotId },
 
-    /// Drop a value (precise - value must exist).
+    // ========================================================================
+    // Drop Operations
+    // ========================================================================
+
+    /// Drop a value unconditionally (precise).
     ///
-    /// Used for drops where ownership analysis guarantees the value is present.
-    /// Unconditionally runs the destructor.
+    /// **Ownership:** Consumes `operand`.
+    /// **Tracking:** None - ownership analysis guarantees value exists.
     Drop { operand: Operand },
 
-    /// Drop a value if initialized (tracked - may have been moved).
+    /// Drop a value if initialized (tracked).
     ///
-    /// Used for script unit_end drops where bindings may have been moved or
-    /// exported. Checks initialization state at runtime and skips if empty.
+    /// Checks tracking byte before dropping. Skips if UNINIT or MOVED.
+    ///
+    /// **Ownership:** Conditionally consumes `operand`.
+    /// **Tracking:** Reads tracking byte; writes MOVED after drop.
     DropTracked { operand: Operand },
 
     /// Drop a precise script-level binding at unit end.
     ///
-    /// Backend semantics:
+    /// **Backend semantics:**
     /// - Interpreter: no-op (binding persists for REPL)
     /// - AOT: unconditional drop
     UnitEndDrop { operand: Operand },
 
     /// Drop a tracked script-level binding at unit end.
     ///
-    /// Backend semantics:
+    /// **Backend semantics:**
     /// - Interpreter: no-op (binding persists for REPL)
     /// - AOT: conditional drop (checks tracking byte)
     UnitEndDropTracked { operand: Operand },
 
+    // ========================================================================
+    // Miscellaneous
+    // ========================================================================
+
     /// Debug log a value (borrows, does not consume).
+    ///
+    /// **Ownership:** Borrows `operand`.
+    /// **Tracking:** None - no ownership transfer.
     DebugLog { operand: Operand },
 
-    /// Execute an intrinsic function.
+    /// Execute an intrinsic function (precise).
     ///
     /// Intrinsics compile directly to machine instructions without function call overhead.
+    ///
+    /// **Ownership:** Args borrowed or consumed per intrinsic definition.
+    /// **Tracking:** None - use `IntrinsicTracked` for tracked destinations.
     Intrinsic {
+        dest: ValueId,
+        intrinsic: datalove_datafun_intrinsics::IntrinsicId,
+        args: Vec<Operand>,
+    },
+
+    /// Execute an intrinsic function (tracked).
+    ///
+    /// **Ownership:** Args borrowed or consumed per intrinsic definition.
+    /// **Tracking:** Writes LIVE to `dest` tracking byte.
+    IntrinsicTracked {
         dest: ValueId,
         intrinsic: datalove_datafun_intrinsics::IntrinsicId,
         args: Vec<Operand>,

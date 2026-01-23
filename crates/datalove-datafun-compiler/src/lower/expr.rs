@@ -1180,7 +1180,7 @@ fn lower_try_option<'db>(
     let result_type = ctx.expr_type(expr);
     let dest = ctx.fresh_value(result_type.clone());
     let is_some = ctx.fresh_value(IrType::Bool);
-    ctx.emit(Instruction::UnwrapOption {
+    ctx.emit(Instruction::UnwrapOptionTracking {
         dest,
         is_some,
         src: Operand::Value(src_id),
@@ -1233,7 +1233,7 @@ fn lower_try_result<'db>(
     let ok_dest = ctx.fresh_value(result_type.clone());
     let err_dest = ctx.fresh_value(IrType::Error);
     let is_ok = ctx.fresh_value(IrType::Bool);
-    ctx.emit(Instruction::UnwrapResult {
+    ctx.emit(Instruction::UnwrapResultTracking {
         ok_dest,
         err_dest,
         is_ok,

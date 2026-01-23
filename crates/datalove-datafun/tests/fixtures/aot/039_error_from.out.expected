@@ -12,7 +12,7 @@ AotAnalysis(
                     scriptunit:
                     block0:
                         v0 = call f0()
-                        v1, v2, v3 = unwrap_result v0
+                        v1, v2, v3 = unwrap_result.tracking v0
                         branch v3, block2, block1
                     block1:
                         v4 = err v2

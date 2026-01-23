@@ -22,7 +22,7 @@ DualAnalysis(
                         v2 = err v1
                         v3 = const "first"
                         v4 = const "second"
-                        v5, v6, v7 = unwrap_result v2
+                        v5, v6, v7 = unwrap_result.tracking v2
                         branch v7, block2, block1
                     block1:
                         v8 = err v6
@@ -54,7 +54,7 @@ DualAnalysis(
                         v2 = err v1
                         v3 = const "first"
                         v4 = const "second"
-                        v5, v6, v7 = unwrap_result v2
+                        v5, v6, v7 = unwrap_result.tracking v2
                         branch v7, block2, block1
                     block1:
                         v8 = err v6

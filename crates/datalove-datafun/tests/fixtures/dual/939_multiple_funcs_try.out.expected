@@ -27,7 +27,7 @@ DualAnalysis(
                     block0:
                         v0 = call f0()
                         v1 = call f1()
-                        v2, v3 = unwrap_option v1
+                        v2, v3 = unwrap_option.tracking v1
                         branch v3, block2, block1
                     block1:
                         v4 = none
@@ -65,7 +65,7 @@ DualAnalysis(
                     block0:
                         v0 = call f0()
                         v1 = call f1()
-                        v2, v3 = unwrap_option v1
+                        v2, v3 = unwrap_option.tracking v1
                         branch v3, block2, block1
                     block1:
                         v4 = none

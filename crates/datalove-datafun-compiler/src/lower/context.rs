@@ -629,20 +629,121 @@ impl<'db> LowerCtx<'db> {
         id
     }
 
-    /// Check if a binding is tracked (needs runtime checks for drops/moves).
+    // ========================================================================
+    // Tracking Helpers
+    // ========================================================================
+    //
+    // IR instructions have precise and tracked variants. The lowering uses these
+    // helpers to decide which variant to emit:
+    //
+    // ## Source Tracking (is_operand_tracked)
+    //
+    // Used for instructions that CONSUME a source operand and need to mark it
+    // as MOVED. Examples:
+    //
+    // - `Move` vs `MoveTracked` - marks source as MOVED
+    // - `SlotLoadMove` vs `SlotLoadMoveTracked` - marks slot as MOVED
+    // - `Drop` vs `DropTracked` - checks if source is LIVE before dropping
+    //
+    // Question: "Does the source need its tracking byte updated to MOVED?"
+    //
+    // ## Destination Tracking (is_dest_tracked)
+    //
+    // Used for instructions that PRODUCE a value and need to mark the destination
+    // as LIVE. Examples:
+    //
+    // - `Const` vs `ConstTracked` - marks dest as LIVE
+    // - `Call` vs `CallTracked` - marks dest as LIVE
+    // - `Pack` vs `PackTracked` - marks dest as LIVE
+    // - `WrapSome` vs `WrapSomeTracked` - marks dest as LIVE
+    // - etc.
+    //
+    // Question: "Does the dest need its tracking byte set to LIVE?"
+    //
+    // ## Slot Tracking (is_slot_tracked)
+    //
+    // Used for instructions that WRITE to a slot and need to mark it as LIVE:
+    //
+    // - `SlotStoreCopy` vs `SlotStoreCopyTracked` - marks slot as LIVE
+    // - `SlotStoreMove` vs `SlotStoreMoveTracked` - marks slot as LIVE
+    // - `SetField` vs `SetFieldTracked` - marks slot as LIVE
+    //
+    // Question: "Does the slot need its tracking byte set to LIVE?"
+    // ========================================================================
+
+    /// Check if a binding is tracked (needs runtime tracking state).
+    ///
+    /// Bindings are tracked when ownership analysis cannot statically prove their
+    /// state at all use points (e.g., exports, values in conditional branches).
     pub fn is_binding_tracked(&self, id: BindingId) -> bool {
         self.body.tracking.get(id.0 as usize)
             .map(|cat| *cat == TrackingCategory::Tracked)
             .unwrap_or(true) // Default to tracked if not found (safe fallback).
     }
 
-    /// Check if an operand is tracked (for emitting Move vs MoveTracked).
+    /// Check if a source operand needs tracking when consumed.
     ///
-    /// Returns true if the operand's binding is tracked, or true if not found (safe fallback).
+    /// Use this to decide between precise vs tracked variants for instructions
+    /// that consume their source:
+    /// - `Move` vs `MoveTracked`
+    /// - `SlotLoadMove` vs `SlotLoadMoveTracked`
+    /// - `Drop` vs `DropTracked`
+    ///
+    /// Returns true if the source's tracking byte should be written to MOVED.
     pub fn is_operand_tracked(&self, operand: Operand) -> bool {
         self.body.operand_to_binding.get(&operand)
             .map(|id| self.is_binding_tracked(*id))
             .unwrap_or(true) // Default to tracked if not found (safe fallback).
+    }
+
+    /// Check if a destination value needs tracking when produced.
+    ///
+    /// Use this to decide between precise vs tracked variants for instructions
+    /// that produce values:
+    /// - `Const` vs `ConstTracked`
+    /// - `Call` vs `CallTracked`
+    /// - `Pack` vs `PackTracked`
+    /// - `WrapSome` vs `WrapSomeTracked`
+    /// - etc.
+    ///
+    /// Returns true if the dest's tracking byte should be written to LIVE.
+    ///
+    /// A destination needs tracking if:
+    /// - It corresponds to a tracked binding (exports, conditional paths)
+    /// - It's a non-Copy intermediate that will be in tracked_values
+    pub fn is_dest_tracked(&self, dest: ValueId) -> bool {
+        // Check if this value corresponds to a tracked binding.
+        let operand = Operand::Value(dest);
+        if let Some(&id) = self.body.operand_to_binding.get(&operand) {
+            return self.is_binding_tracked(id);
+        }
+
+        // For non-binding values (intermediates), check if the type is non-Copy.
+        // Non-Copy intermediates end up in tracked_values and need tracking.
+        if let Some(ty) = self.body.value_types.get(dest.0 as usize) {
+            return !ty.is_copy();
+        }
+
+        // Default to tracked for safety.
+        true
+    }
+
+    /// Check if a slot needs tracking when written.
+    ///
+    /// Use this to decide between precise vs tracked variants for instructions
+    /// that write to slots:
+    /// - `SlotStoreCopy` vs `SlotStoreCopyTracked`
+    /// - `SlotStoreMove` vs `SlotStoreMoveTracked`
+    /// - `SetField` vs `SetFieldTracked`
+    ///
+    /// Returns true if the slot's tracking byte should be written to LIVE.
+    pub fn is_slot_tracked(&self, slot: SlotId) -> bool {
+        let operand = Operand::Slot(slot);
+        if let Some(&id) = self.body.operand_to_binding.get(&operand) {
+            return self.is_binding_tracked(id);
+        }
+        // Default to tracked for safety.
+        true
     }
 
     /// Emit a drop for a binding, using DropTracked if tracked, Drop if precise.

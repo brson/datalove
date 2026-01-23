@@ -36,7 +36,7 @@ DualAnalysis(
                         return v9
                     block4:
                         v10 = call f0(v5)
-                        v11, v12, v13 = unwrap_result v10
+                        v11, v12, v13 = unwrap_result.tracking v10
                         branch v13, block6, block5
                     block5:
                         v14 = err v12
@@ -52,7 +52,7 @@ DualAnalysis(
                         return v20
                     block8:
                         v21 = call f0(v16)
-                        v22, v23, v24 = unwrap_result v21
+                        v22, v23, v24 = unwrap_result.tracking v21
                         branch v24, block10, block9
                     block9:
                         v25 = err v23
@@ -103,7 +103,7 @@ DualAnalysis(
                         return v9
                     block4:
                         v10 = call f0(v5)
-                        v11, v12, v13 = unwrap_result v10
+                        v11, v12, v13 = unwrap_result.tracking v10
                         branch v13, block6, block5
                     block5:
                         v14 = err v12
@@ -119,7 +119,7 @@ DualAnalysis(
                         return v20
                     block8:
                         v21 = call f0(v16)
-                        v22, v23, v24 = unwrap_result v21
+                        v22, v23, v24 = unwrap_result.tracking v21
                         branch v24, block10, block9
                     block9:
                         v25 = err v23

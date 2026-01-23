@@ -52,7 +52,7 @@ DualAnalysis(
                     fn unwrap_result(p0):
                     block0:
                         v0 = move p0
-                        v1, v2, v3 = unwrap_result v0
+                        v1, v2, v3 = unwrap_result.tracking v0
                         branch v3, block1, block2
                     block1:
                         return v1
@@ -63,7 +63,7 @@ DualAnalysis(
                     fn unwrap_opt(p0, p1):
                     block0:
                         v0 = copy p0
-                        v1, v2 = unwrap_option v0
+                        v1, v2 = unwrap_option.tracking v0
                         branch v2, block1, block2
                     block1:
                         return v1
@@ -125,7 +125,7 @@ DualAnalysis(
                     fn unwrap_result(p0):
                     block0:
                         v0 = move p0
-                        v1, v2, v3 = unwrap_result v0
+                        v1, v2, v3 = unwrap_result.tracking v0
                         branch v3, block1, block2
                     block1:
                         return v1
@@ -136,7 +136,7 @@ DualAnalysis(
                     fn unwrap_opt(p0, p1):
                     block0:
                         v0 = copy p0
-                        v1, v2 = unwrap_option v0
+                        v1, v2 = unwrap_option.tracking v0
                         branch v2, block1, block2
                     block1:
                         return v1

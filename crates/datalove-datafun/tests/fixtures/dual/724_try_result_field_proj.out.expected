@@ -21,7 +21,7 @@ DualAnalysis(
                         v1 = const 20u32
                         v2 = pack Tuple2 {v0, v1}
                         v3 = ok v2
-                        v4, v5, v6 = unwrap_result v3
+                        v4, v5, v6 = unwrap_result.tracking v3
                         branch v6, block2, block1
                     block1:
                         v7 = err v5
@@ -50,7 +50,7 @@ DualAnalysis(
                         v1 = const 20u32
                         v2 = pack Tuple2 {v0, v1}
                         v3 = ok v2
-                        v4, v5, v6 = unwrap_result v3
+                        v4, v5, v6 = unwrap_result.tracking v3
                         branch v6, block2, block1
                     block1:
                         v7 = err v5

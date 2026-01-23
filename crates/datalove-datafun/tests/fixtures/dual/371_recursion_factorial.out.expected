@@ -36,7 +36,7 @@ DualAnalysis(
                         return v9
                     block4:
                         v10 = call f0(v5)
-                        v11, v12, v13 = unwrap_result v10
+                        v11, v12, v13 = unwrap_result.tracking v10
                         branch v13, block6, block5
                     block5:
                         v14 = err v12
@@ -87,7 +87,7 @@ DualAnalysis(
                         return v9
                     block4:
                         v10 = call f0(v5)
-                        v11, v12, v13 = unwrap_result v10
+                        v11, v12, v13 = unwrap_result.tracking v10
                         branch v13, block6, block5
                     block5:
                         v14 = err v12

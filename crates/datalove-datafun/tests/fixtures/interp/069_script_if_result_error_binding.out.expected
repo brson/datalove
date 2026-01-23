@@ -16,7 +16,7 @@ Analysis(
                         v2 = err v1
                         v3 = const 0u32
                         store.copy s0, v3
-                        v4, v5, v6 = unwrap_result v2
+                        v4, v5, v6 = unwrap_result.tracking v2
                         branch v6, block1, block2
                     block1:
                         store.copy s0, v4

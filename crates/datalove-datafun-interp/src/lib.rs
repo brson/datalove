@@ -735,7 +735,7 @@ impl IrInterpreter {
                     Self::mark_source_dropped_local(p, frame);
                 }
             }
-            Instruction::UnwrapOption { dest, is_some, src } => {
+            Instruction::UnwrapOptionTracking { dest, is_some, src } => {
                 let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 let is_some_slot = frame.value_dest(*is_some);
@@ -759,7 +759,7 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
-            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
+            Instruction::UnwrapResultTracking { ok_dest, err_dest, is_ok, src } => {
                 let src_val = self.read_operand(src, frame, frames)?;
                 let ok_slot = frame.value_dest(*ok_dest);
                 let err_slot = frame.value_dest(*err_dest);
@@ -1179,6 +1179,383 @@ impl IrInterpreter {
                 }
             }
             Instruction::Intrinsic { dest, intrinsic, args } => {
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_intrinsic(*intrinsic, args, dest_slot, frame, frames)?;
+                frame.mark_value_initialized(*dest);
+            }
+            // Tracked variants - interpreter behavior is identical to non-tracked.
+            Instruction::ConstTracked { dest, value } => {
+                let dest_slot = frame.value_dest(*dest);
+                self.write_const(value, dest_slot);
+                frame.mark_value_initialized(*dest);
+            }
+            Instruction::WidenTracked { dest, src } => {
+                let src_val = self.read_operand(src, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest);
+                unsafe {
+                    let int_buf = &mut *(dest_slot.ptr as *mut datalove_rtdt::Int);
+                    self.widen_to_int(&src_val, int_buf);
+                }
+                frame.mark_value_initialized(*dest);
+            }
+            Instruction::CallTracked { dest, func, args } => {
+                // Same as Call - tracked variant just marks dest LIVE in AOT.
+                let (callee, callee_unit) = ctx.get_function_with_context(func, registry)?;
+                let mut arg_vals: Vec<Value> = Vec::with_capacity(args.len());
+                for (i, op) in args.iter().enumerate() {
+                    let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+                    if mode == ParamMode::Out {
+                        let val = self.get_operand_dest(op, frame);
+                        unsafe {
+                            datalove_rt::c::dtlv_rti_any_destroy_local(
+                                self.runtime.handle(),
+                                val.ptr,
+                                val.tydesc,
+                            );
+                        }
+                        arg_vals.push(val);
+                    } else {
+                        arg_vals.push(self.read_operand(op, frame, frames)?);
+                    }
+                }
+                let dest_slot = frame.value_dest(*dest);
+                for (i, arg) in args.iter().enumerate() {
+                    let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+                    if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
+                        continue;
+                    }
+                    if let Some(param_type) = callee.param_types.get(i) {
+                        if param_type.is_copy() {
+                            continue;
+                        }
+                    }
+                    Self::mark_source_dropped_local(arg, frame);
+                }
+                let mut call_handled = false;
+                {
+                    let dispatcher_opt = self.call_dispatcher.borrow_mut().take();
+                    if let Some(mut dispatcher) = dispatcher_opt {
+                        let rt_handle = self.runtime.handle();
+                        let call_ctx = dispatch::DispatchCallContext {
+                            exec_ctx: ctx,
+                            registry,
+                            frames,
+                            interp: self,
+                        };
+                        match dispatcher.dispatch_call(func, callee, &arg_vals, dest_slot, rt_handle, call_ctx) {
+                            dispatch::DispatchResult::Handled(result) => {
+                                *self.call_dispatcher.borrow_mut() = Some(dispatcher);
+                                result?;
+                                call_handled = true;
+                            }
+                            dispatch::DispatchResult::NotHandled => {
+                                *self.call_dispatcher.borrow_mut() = Some(dispatcher);
+                            }
+                        }
+                    }
+                }
+                if !call_handled {
+                    if let Some(unit) = callee_unit {
+                        let unit_funcs = registry.unit_functions(unit)
+                            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
+                        let callee_ctx = ExecutionContext::new(unit_funcs);
+                        self.call_in_context(callee, arg_vals, dest_slot, &callee_ctx, registry, frames)?;
+                    } else {
+                        self.call_in_context(callee, arg_vals, dest_slot, ctx, registry, frames)?;
+                    }
+                }
+                for (i, arg) in args.iter().enumerate() {
+                    let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+                    if mode == ParamMode::Out {
+                        match arg {
+                            Operand::Slot(id) => frame.mark_slot_initialized(*id),
+                            _ => {}
+                        }
+                    }
+                }
+                frame.mark_value_initialized(*dest);
+            }
+            Instruction::PackTracked { dest, ty: _, fields } => {
+                let field_vals: Vec<Value> = fields.iter()
+                    .map(|op| self.read_operand(op, frame, frames))
+                    .collect::<Result<_, _>>()?;
+                let dest_slot = frame.value_dest(*dest);
+                let tag = unsafe { (*dest_slot.tydesc).type_tag };
+                match tag {
+                    rtdt::TyTag::Tuple => self.execute_pack_tuple(&field_vals, dest_slot),
+                    rtdt::TyTag::Struct => self.execute_pack_struct(&field_vals, dest_slot),
+                    _ => return Err(InterpError::TypeMismatch(
+                        format!("Pack requires tuple or struct type, got {:?}", tag)
+                    )),
+                }
+                frame.mark_value_initialized(*dest);
+                for field in fields {
+                    Self::mark_source_dropped_local(field, frame);
+                }
+            }
+            Instruction::UnpackTracked { dests, src } => {
+                let src_val = self.read_operand(src, frame, frames)?;
+                let tag = unsafe { (*src_val.tydesc).type_tag };
+                match tag {
+                    rtdt::TyTag::Tuple => {
+                        let tuple_info = unsafe { (*src_val.tydesc).type_info.tuple };
+                        for (i, &dest_id) in dests.iter().enumerate() {
+                            let dest_slot = frame.value_dest(dest_id);
+                            let field_info = unsafe { &*tuple_info.fields.add(i) };
+                            let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
+                            let size = unsafe { (*field_info.tydesc).size as usize };
+                            unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, size); }
+                            frame.mark_value_initialized(dest_id);
+                        }
+                    }
+                    rtdt::TyTag::Struct => {
+                        let struct_info = unsafe { (*src_val.tydesc).type_info.struct_ };
+                        for (i, &dest_id) in dests.iter().enumerate() {
+                            let dest_slot = frame.value_dest(dest_id);
+                            let field_info = unsafe { &*struct_info.fields.add(i) };
+                            let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
+                            let size = unsafe { (*field_info.tydesc).size as usize };
+                            unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, size); }
+                            frame.mark_value_initialized(dest_id);
+                        }
+                    }
+                    _ => return Err(InterpError::TypeMismatch(
+                        format!("Unpack requires tuple or struct type, got {:?}", tag)
+                    )),
+                }
+            }
+            Instruction::GetFieldTracked { dest, src, field_index } => {
+                let src_val = self.read_operand(src, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest);
+                let tag = unsafe { (*src_val.tydesc).type_tag };
+                match tag {
+                    rtdt::TyTag::Tuple => {
+                        let tuple_info = unsafe { (*src_val.tydesc).type_info.tuple };
+                        let field_info = unsafe { &*tuple_info.fields.add(*field_index as usize) };
+                        let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
+                        let field_size = unsafe { (*field_info.tydesc).size as usize };
+                        unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, field_size); }
+                        frame.mark_value_initialized(*dest);
+                    }
+                    rtdt::TyTag::Struct => {
+                        let struct_info = unsafe { (*src_val.tydesc).type_info.struct_ };
+                        let field_info = unsafe { &*struct_info.fields.add(*field_index as usize) };
+                        let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
+                        let field_size = unsafe { (*field_info.tydesc).size as usize };
+                        unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, field_size); }
+                        frame.mark_value_initialized(*dest);
+                    }
+                    _ => return Err(InterpError::TypeMismatch(
+                        format!("GetField requires tuple or struct type, got {:?}", tag)
+                    )),
+                }
+            }
+            Instruction::WrapSomeTracked { dest, inner } => {
+                let inner_val = self.read_operand(inner, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_wrap_some(&inner_val, dest_slot);
+                frame.mark_value_initialized(*dest);
+                Self::mark_source_dropped_local(inner, frame);
+            }
+            Instruction::WrapNoneTracked { dest } => {
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_wrap_none(dest_slot);
+                frame.mark_value_initialized(*dest);
+            }
+            Instruction::WrapOkTracked { dest, inner } => {
+                let inner_val = self.read_operand(inner, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_wrap_ok(&inner_val, dest_slot);
+                frame.mark_value_initialized(*dest);
+                Self::mark_source_dropped_local(inner, frame);
+            }
+            Instruction::WrapErrTracked { dest, inner } => {
+                let inner_val = self.read_operand(inner, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_wrap_err(&inner_val, dest_slot);
+                frame.mark_value_initialized(*dest);
+                Self::mark_source_dropped_local(inner, frame);
+            }
+            Instruction::EnumVariantTracked { dest, variant_index, payload } => {
+                let payload_val = payload.as_ref()
+                    .map(|p| self.read_operand(p, frame, frames))
+                    .transpose()?;
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_enum_variant(*variant_index, payload_val.as_ref(), dest_slot);
+                frame.mark_value_initialized(*dest);
+                if let Some(p) = payload {
+                    Self::mark_source_dropped_local(p, frame);
+                }
+            }
+            Instruction::ErrorFromTracked { dest, inner } => {
+                let inner_val = self.read_operand(inner, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_error_from(&inner_val, dest_slot);
+                frame.mark_value_initialized(*dest);
+                Self::mark_source_dropped_local(inner, frame);
+            }
+            Instruction::DataFromTracked { dest, inner } => {
+                let inner_val = self.read_operand(inner, frame, frames)?;
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_data_from(&inner_val, dest_slot);
+                frame.mark_value_initialized(*dest);
+                Self::mark_source_dropped_local(inner, frame);
+            }
+            Instruction::ListNewTracked { dest, elements } => {
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_list_new(elements, dest_slot, frame, frames)?;
+                frame.mark_value_initialized(*dest);
+                for elem in elements {
+                    Self::mark_source_dropped_local(elem, frame);
+                }
+            }
+            Instruction::SetNewTracked { dest, elements } => {
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_set_new(elements, dest_slot, frame, frames)?;
+                frame.mark_value_initialized(*dest);
+                for elem in elements {
+                    Self::mark_source_dropped_local(elem, frame);
+                }
+            }
+            Instruction::MapNewTracked { dest, entries } => {
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_map_new(entries, dest_slot, frame, frames)?;
+                frame.mark_value_initialized(*dest);
+                for (key, val) in entries {
+                    Self::mark_source_dropped_local(key, frame);
+                    Self::mark_source_dropped_local(val, frame);
+                }
+            }
+            Instruction::TensorNewTracked { dest, shape, elements } => {
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_tensor_new(shape, elements, dest_slot, frame, frames)?;
+                frame.mark_value_initialized(*dest);
+                for elem in elements {
+                    Self::mark_source_dropped_local(elem, frame);
+                }
+            }
+            Instruction::TableNewTracked { dest, rows } => {
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_table_new(rows, dest_slot, frame, frames)?;
+                frame.mark_value_initialized(*dest);
+                for row in rows {
+                    Self::mark_source_dropped_local(row, frame);
+                }
+            }
+            Instruction::SlotStoreCopyTracked { dest, value } => {
+                let src_val = self.read_operand(value, frame, frames)?;
+                match dest {
+                    SlotDest::Local(slot_id) => {
+                        if frame.is_slot_initialized(*slot_id) {
+                            let old_val = frame.slot(*slot_id)?;
+                            unsafe {
+                                datalove_rt::c::dtlv_rti_any_destroy_local(
+                                    self.runtime.handle(),
+                                    old_val.ptr,
+                                    old_val.tydesc,
+                                );
+                            }
+                        }
+                        let dest_slot = frame.slot_dest(*slot_id);
+                        unsafe { self.copy_value(&src_val, dest_slot); }
+                        frame.mark_slot_initialized(*slot_id);
+                    }
+                    SlotDest::External { unit, slot } => {
+                        frames.write_external_slot(
+                            self.runtime.handle(),
+                            *unit,
+                            *slot,
+                            &src_val,
+                        )?;
+                    }
+                }
+            }
+            Instruction::SlotStoreMoveTracked { dest, value } => {
+                let src_val = self.read_operand(value, frame, frames)?;
+                match dest {
+                    SlotDest::Local(slot_id) => {
+                        if frame.is_slot_initialized(*slot_id) {
+                            let old_val = frame.slot(*slot_id)?;
+                            unsafe {
+                                datalove_rt::c::dtlv_rti_any_destroy_local(
+                                    self.runtime.handle(),
+                                    old_val.ptr,
+                                    old_val.tydesc,
+                                );
+                            }
+                        }
+                        let dest_slot = frame.slot_dest(*slot_id);
+                        unsafe { self.move_value(&src_val, dest_slot); }
+                        Self::mark_source_dropped_local(value, frame);
+                        frame.mark_slot_initialized(*slot_id);
+                    }
+                    SlotDest::External { unit, slot } => {
+                        frames.write_external_slot(
+                            self.runtime.handle(),
+                            *unit,
+                            *slot,
+                            &src_val,
+                        )?;
+                        Self::mark_source_dropped_local(value, frame);
+                    }
+                }
+            }
+            Instruction::SetFieldTracked { slot, field_path, value } => {
+                let value_val = self.read_operand(value, frame, frames)?;
+                let slot_info = match slot {
+                    SlotDest::Local(id) => frame.slot_dest(*id),
+                    SlotDest::External { unit, slot: ext_slot } => {
+                        return Err(InterpError::RuntimeError(format!(
+                            "SetField on external slot unit={} slot={:?} not yet supported",
+                            unit, ext_slot
+                        )));
+                    }
+                };
+                let mut current_ptr = slot_info.ptr;
+                let mut current_tydesc = slot_info.tydesc;
+                for &field_idx in field_path.iter() {
+                    let tag = unsafe { (*current_tydesc).type_tag };
+                    match tag {
+                        rtdt::TyTag::Tuple => {
+                            let tuple_info = unsafe { (*current_tydesc).type_info.tuple };
+                            let field_info = unsafe { &*tuple_info.fields.add(field_idx as usize) };
+                            current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
+                            current_tydesc = field_info.tydesc;
+                        }
+                        rtdt::TyTag::Struct => {
+                            let struct_info = unsafe { (*current_tydesc).type_info.struct_ };
+                            let field_info = unsafe { &*struct_info.fields.add(field_idx as usize) };
+                            current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
+                            current_tydesc = field_info.tydesc;
+                        }
+                        _ => return Err(InterpError::TypeMismatch(
+                            format!("SetField path element requires tuple or struct type, got {:?}", tag)
+                        )),
+                    }
+                }
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        self.runtime.handle(),
+                        current_ptr,
+                        current_tydesc,
+                    );
+                }
+                let size = unsafe { (*current_tydesc).size as usize };
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        value_val.ptr,
+                        current_ptr,
+                        size,
+                    );
+                }
+            }
+            Instruction::SlotLoadCopyTracked { dest, slot } => {
+                let slot_val = frame.slot(*slot)?;
+                let dest_slot = frame.value_dest(*dest);
+                unsafe { self.copy_value(&slot_val, dest_slot); }
+                frame.mark_value_initialized(*dest);
+            }
+            Instruction::IntrinsicTracked { dest, intrinsic, args } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_intrinsic(*intrinsic, args, dest_slot, frame, frames)?;
                 frame.mark_value_initialized(*dest);

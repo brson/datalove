@@ -19,13 +19,13 @@ DualAnalysis(
                         v0 = const 10u32
                         v1 = some v0
                         v2 = none
-                        v3, v4 = unwrap_option v1
+                        v3, v4 = unwrap_option.tracking v1
                         branch v4, block2, block1
                     block1:
                         v5 = none
                         return v5
                     block2:
-                        v6, v7 = unwrap_option v2
+                        v6, v7 = unwrap_option.tracking v2
                         branch v7, block4, block3
                     block3:
                         v8 = none
@@ -51,13 +51,13 @@ DualAnalysis(
                         v0 = const 10u32
                         v1 = some v0
                         v2 = none
-                        v3, v4 = unwrap_option v1
+                        v3, v4 = unwrap_option.tracking v1
                         branch v4, block2, block1
                     block1:
                         v5 = none
                         return v5
                     block2:
-                        v6, v7 = unwrap_option v2
+                        v6, v7 = unwrap_option.tracking v2
                         branch v7, block4, block3
                     block3:
                         v8 = none

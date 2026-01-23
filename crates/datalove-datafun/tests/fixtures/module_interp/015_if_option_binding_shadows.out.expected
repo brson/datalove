@@ -10,7 +10,7 @@ ModulesAnalysis(
                 v0 = const 100u32
                 v1 = const 42u32
                 v2 = some v1
-                v3, v4 = unwrap_option v2
+                v3, v4 = unwrap_option.tracking v2
                 branch v4, block1, block2
             block1:
                 return v3
