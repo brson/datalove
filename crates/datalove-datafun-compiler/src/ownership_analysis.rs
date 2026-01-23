@@ -342,26 +342,36 @@ impl<'db> AnalysisCtx<'db> {
     ///
     /// Categories:
     /// - Copy: type is copy (no tracking needed)
-    /// - Tracked: exported, all params, slot (var), or conditionally moved
-    /// - Precise: let bindings with statically-known state
+    /// - Tracked: exported, params (except In), slot (var), or conditionally moved
+    /// - Precise: let bindings and In params with statically-known state
     ///
-    /// In params inside functions are precise because:
-    /// - Always initialized at function entry
-    /// - Cannot be reassigned (read-only)
-    /// - Not exported (function-local)
-    /// - Lifecycle fully determined by function scope
+    /// Precise bindings have deterministic lifecycle:
+    /// - In params in functions: always initialized, cannot be reassigned
+    /// - Let bindings in functions: single assignment, predictable scope
     ///
-    /// Other bindings remain tracked for now (conservative).
+    /// Script-level bindings are always Tracked (cross-unit visibility).
     fn compute_tracking(&self) -> Vec<TrackingCategory> {
         self.bindings.iter().enumerate().map(|(idx, info)| {
-            let _id = BindingId(idx as u32);
+            let id = BindingId(idx as u32);
             if info.ty.is_copy() {
                 TrackingCategory::Copy
-            } else if info.param_mode == Some(ParamMode::In) && !info.is_script_unit {
-                // In params in functions are precise.
+            } else if info.is_script_unit {
+                // Script-level bindings: cross-unit visibility, unpredictable.
+                TrackingCategory::Tracked
+            } else if info.is_slot {
+                // Var bindings: reassignable, state varies.
+                TrackingCategory::Tracked
+            } else if self.conditionally_moved.contains(&id) {
+                // Conditionally moved: state varies by branch taken.
+                TrackingCategory::Tracked
+            } else if info.param_mode == Some(ParamMode::In) {
+                // In params in functions: owned, deterministic.
+                TrackingCategory::Precise
+            } else if info.param_mode.is_none() {
+                // Let bindings in functions: single assignment, deterministic.
                 TrackingCategory::Precise
             } else {
-                // Conservative: track everything else.
+                // Other params (Ref, Mut, Out): borrowed or dynamic state.
                 TrackingCategory::Tracked
             }
         }).collect()
@@ -1268,6 +1278,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
     ctx.enter_scope(ScopeKind::IfThen);
 
     // If there's a then-binding (if-let), create it.
+    // Mark it as conditionally initialized since it's only valid in the Some/Ok branch.
     if let Some(binding_name) = stmt.then_binding {
         let name = binding_name.text(ctx.db).S();
         let ty = ctx.expr_type(stmt.condition);
@@ -1277,7 +1288,12 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
             IrType::Result(inner) => (**inner).C(),
             other => other.C(),
         };
-        ctx.alloc_binding(name, inner_ty, false, None);
+        // If-binding is only valid in this branch - needs tracking.
+        let is_copy = inner_ty.is_copy();
+        let id = ctx.alloc_binding(name, inner_ty, false, None);
+        if !is_copy {
+            ctx.conditionally_moved.insert(id);
+        }
     }
 
     analyze_statements(ctx, &stmt.then_body);
@@ -1300,11 +1316,14 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
         ctx.enter_scope(ScopeKind::IfElse);
 
         // If there's an else-binding (if-let with else), create it.
+        // Mark it as conditionally initialized since it's only valid in the Err branch.
         if let Some(binding_name) = stmt.else_binding {
             let name = binding_name.text(ctx.db).S();
             // Else binding gets the error for Result types.
             let ty = IrType::Error;
-            ctx.alloc_binding(name, ty, false, None);
+            let id = ctx.alloc_binding(name, ty, false, None);
+            // Error type is never Copy, so always mark as conditionally initialized.
+            ctx.conditionally_moved.insert(id);
         }
 
         analyze_statements(ctx, else_body);

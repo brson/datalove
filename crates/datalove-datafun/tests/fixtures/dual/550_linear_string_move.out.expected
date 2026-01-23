@@ -7,11 +7,11 @@ DualAnalysis(
             ),
             interp_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"hello\"\n    v1 = call f0(v0)\n    debuglog v1\n    unit_end\n\nfn get_length(p0):\nblock0:\n    v0 = move p0\n    v1 = const 5u32\n    drop.tracked v0\n    return v1\nexports:\n    get_length = f0\n    s = v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const \"hello\"\n    v1 = call f0(v0)\n    debuglog v1\n    unit_end\n\nfn get_length(p0):\nblock0:\n    v0 = move p0\n    v1 = const 5u32\n    drop v0\n    return v1\nexports:\n    get_length = f0\n    s = v0\n",
             ),
             aot_lowering: LoweringResult(
                 status: "Success",
-                ir: "scriptunit:\nblock0:\n    v0 = const \"hello\"\n    v1 = call f0(v0)\n    debuglog v1\n    unit_end\n\nfn get_length(p0):\nblock0:\n    v0 = move p0\n    v1 = const 5u32\n    drop.tracked v0\n    return v1\nexports:\n    get_length = f0\n    s = v0\n",
+                ir: "scriptunit:\nblock0:\n    v0 = const \"hello\"\n    v1 = call f0(v0)\n    debuglog v1\n    unit_end\n\nfn get_length(p0):\nblock0:\n    v0 = move p0\n    v1 = const 5u32\n    drop v0\n    return v1\nexports:\n    get_length = f0\n    s = v0\n",
             ),
             ir_match: true,
             interp_output: "5\n",
