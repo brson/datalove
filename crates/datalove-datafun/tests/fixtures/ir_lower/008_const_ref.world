@@ -1,0 +1,9 @@
+----------
+module local/test/main
+----------
+
+fun main(): i32
+    const A: i32 = 1
+    const B: i32 = A
+    ret B
+end fun

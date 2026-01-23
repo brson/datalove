@@ -18,7 +18,6 @@
 //! - Only primitive types are fully supported for extraction
 //! - Gas limit is fixed (will be configurable later)
 
-use datalove_datafun_ast::ast::ExprFunKind;
 use datalove_datafun_ir::{ConstValue, IrType};
 
 /// Default step limit for const evaluation.
@@ -138,30 +137,4 @@ pub unsafe fn extract_const_value(
         // TODO: Add support for Tuple, Struct, Option, Result, List, etc.
         _ => Err(ConstEvalError::UnsupportedType(format!("{:?}", ir_type))),
     }
-}
-
-/// Check if an expression contains function calls.
-///
-/// Used to reject expressions with function calls until that's supported.
-pub fn contains_function_call<'db>(
-    expr: datalove_datafun_ast::ast::ExprFun<'db>,
-) -> bool {
-    // We need a database to access the expression kind.
-    // For now, just check the kind discriminant which we can do without db.
-    // This is a conservative check - some expressions may appear to have no
-    // function calls but we'll catch them during evaluation.
-
-    // Unfortunately ExprFun requires db access to get the kind.
-    // We'll use a simple workaround: assume function calls are possible
-    // and let the evaluator handle it.
-    //
-    // For now, return false - we'll catch function calls during evaluation
-    // when we see ExprFunKind::FunctionCall.
-    let _ = expr;
-    false
-}
-
-/// Check if an expression kind is a function call (for use during evaluation).
-pub fn is_function_call_kind<'db>(kind: &ExprFunKind<'db>) -> bool {
-    matches!(kind, ExprFunKind::FunctionCall(_))
 }

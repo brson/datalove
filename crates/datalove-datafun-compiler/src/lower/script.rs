@@ -576,10 +576,45 @@ fn eval_const_expr_script<'db>(
             eval_const_binop_script(&lhs_val, &rhs_val, binop.op)
         }
 
+        // Unary operations on constants.
+        ExprFunKind::UnaryOp(unop) => {
+            let operand_val = eval_const_expr_script(ctx, unop.operand)?;
+            eval_const_unaryop_script(&operand_val, unop.op)
+        }
+
         // None literal.
         ExprFunKind::None(_) => Ok(ConstValue::OptionNone),
 
-        // Tuple literal.
+        // Some wrapper.
+        ExprFunKind::Some(some_expr) => {
+            let inner_val = eval_const_expr_script(ctx, some_expr.payload)?;
+            Ok(ConstValue::OptionSome(Box::new(inner_val)))
+        }
+
+        // Ok wrapper.
+        ExprFunKind::Ok(ok_expr) => {
+            let inner_val = eval_const_expr_script(ctx, ok_expr.payload)?;
+            Ok(ConstValue::ResultOk(Box::new(inner_val)))
+        }
+
+        // Err wrapper.
+        ExprFunKind::Er(er_expr) => {
+            let inner_val = eval_const_expr_script(ctx, er_expr.payload)?;
+            Ok(ConstValue::ResultErr(Box::new(inner_val)))
+        }
+
+        // Error wrapper.
+        ExprFunKind::Error(error_expr) => {
+            let inner_val = eval_const_expr_script(ctx, error_expr.value)?;
+            // Convert inner value to string for Error type.
+            let msg = match inner_val {
+                ConstValue::String(s) => s,
+                other => format!("{:?}", other),
+            };
+            Ok(ConstValue::Error(msg))
+        }
+
+        // Tuple literal (datafun style).
         ExprFunKind::Tuple(tuple) => {
             let mut values = Vec::with_capacity(tuple.elements.len());
             for elem in &tuple.elements {
@@ -588,8 +623,27 @@ fn eval_const_expr_script<'db>(
             Ok(ConstValue::Tuple(values))
         }
 
+        // Anonymous tuple literal.
+        ExprFunKind::AnonTuple(tuple) => {
+            let mut values = Vec::with_capacity(tuple.elements.len());
+            for elem in &tuple.elements {
+                values.push(eval_const_expr_script(ctx, *elem)?);
+            }
+            Ok(ConstValue::Tuple(values))
+        }
+
+        // List literal.
+        ExprFunKind::List(list) => {
+            let mut values = Vec::with_capacity(list.elements.len());
+            for elem in &list.elements {
+                values.push(eval_const_expr_script(ctx, *elem)?);
+            }
+            Ok(ConstValue::List(values))
+        }
+
         _ => Err(LowerError::NotImplemented(format!(
-            "const evaluation for expression type not yet supported"
+            "const evaluation for expression type not yet supported: {:?}",
+            std::mem::discriminant(&expr.expr(ctx.db))
         ))),
     }
 }
@@ -638,6 +692,26 @@ fn eval_const_binop_script(
         _ => Err(LowerError::NotImplemented(format!(
             "const binop {:?} on {:?} and {:?}",
             op, lhs, rhs
+        ))),
+    }
+}
+
+/// Evaluate a unary operation on a constant value (script context).
+fn eval_const_unaryop_script(
+    operand: &ConstValue,
+    op: ast::UnaryOp,
+) -> Result<ConstValue, LowerError> {
+    use ast::UnaryOp;
+
+    match (operand, op) {
+        (ConstValue::Bool(b), UnaryOp::Not) => Ok(ConstValue::Bool(!*b)),
+        (ConstValue::I32(n), UnaryOp::Neg) => Ok(ConstValue::I32(-*n)),
+        (ConstValue::I64(n), UnaryOp::Neg) => Ok(ConstValue::I64(-*n)),
+        (ConstValue::F32(n), UnaryOp::Neg) => Ok(ConstValue::F32(-*n)),
+        (ConstValue::F64(n), UnaryOp::Neg) => Ok(ConstValue::F64(-*n)),
+        _ => Err(LowerError::NotImplemented(format!(
+            "const unaryop {:?} on {:?}",
+            op, operand
         ))),
     }
 }

@@ -1,0 +1,8 @@
+----------
+module local/test/main
+----------
+
+fun main(): bool
+    const T: bool = true
+    ret T
+end fun

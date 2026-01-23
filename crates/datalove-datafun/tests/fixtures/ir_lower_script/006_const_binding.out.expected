@@ -1,0 +1,8 @@
+--- script unit 0 (fragment) ---
+scriptunit:
+block0:
+    v0 = const 42u32
+    unit_end
+exports:
+    y = v0
+

@@ -811,6 +811,23 @@ fn eval_const_expr<'db>(
             Ok(ConstValue::ResultOk(Box::new(inner_val)))
         }
 
+        // Err wrapper.
+        ExprFunKind::Er(er_expr) => {
+            let inner_val = eval_const_expr(ctx, er_expr.payload)?;
+            Ok(ConstValue::ResultErr(Box::new(inner_val)))
+        }
+
+        // Error wrapper.
+        ExprFunKind::Error(error_expr) => {
+            let inner_val = eval_const_expr(ctx, error_expr.value)?;
+            // Convert inner value to string for Error type.
+            let msg = match inner_val {
+                ConstValue::String(s) => s,
+                other => format!("{:?}", other),
+            };
+            Ok(ConstValue::Error(msg))
+        }
+
         // Tuple literal (datafun style).
         ExprFunKind::Tuple(tuple) => {
             let mut values = Vec::with_capacity(tuple.elements.len());

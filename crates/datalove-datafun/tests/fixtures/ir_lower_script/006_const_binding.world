@@ -1,0 +1,5 @@
+----------
+scriptunit-fragment
+----------
+const X: u32 = 42
+let y = X

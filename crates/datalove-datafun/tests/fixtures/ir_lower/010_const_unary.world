@@ -1,0 +1,8 @@
+----------
+module local/test/main
+----------
+
+fun main(): i32
+    const X: i32 = -42
+    ret X
+end fun

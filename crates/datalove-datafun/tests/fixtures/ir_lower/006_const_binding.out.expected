@@ -1,0 +1,5 @@
+fn main():
+block0:
+    v0 = const 42u32
+    return v0
+

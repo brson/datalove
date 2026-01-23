@@ -1,0 +1,1 @@
+Typecheck error: line 3, col 20: error[F016]: mismatched types: expected `i32`, found `int`; line 4, col 9: error[F001]: cannot find value `X` in this scope
