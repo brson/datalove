@@ -50,6 +50,19 @@ Overflow must be handled,
 early-return checked operations and widening to ease the burden.
 
 
+## Sigil-logic
+
+Datalove reserves some symbols to strongly mean one thing.
+
+| When you see | it means |
+|--------------|----------|
+| `:`          | type     |
+| `?`          | option   |
+| `!`          | result   |
+| `{|` … `|}`  | table    |
+
+
+
 
 ---
 
