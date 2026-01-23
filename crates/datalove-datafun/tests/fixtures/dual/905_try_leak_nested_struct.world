@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: nested struct with try in inner struct.
+// Outer field created before inner struct's try fails.
+fun test(): ?{outer: string, inner: {x: u32}}
+    let opt: ?u32 = none
+    // "outer_value" created first, then inner struct's opt? returns early.
+    ret some {outer = "outer_value", inner = {x = opt?}}
+end fun
+
+debuglog test()

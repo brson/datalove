@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: tuple literal with try operator on second element - success case.
+fun test(): ?(string, u32)
+    let opt: ?u32 = some 42
+    ret some ("hello", opt?)
+end fun
+
+debuglog test()

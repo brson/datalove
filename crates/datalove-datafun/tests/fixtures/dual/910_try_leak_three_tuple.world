@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: 3-element tuple with try on last element.
+// First two strings should be dropped on early return.
+fun test(): ?(string, string, u32)
+    let opt: ?u32 = none
+    ret some ("first", "second", opt?)
+end fun
+
+debuglog test()

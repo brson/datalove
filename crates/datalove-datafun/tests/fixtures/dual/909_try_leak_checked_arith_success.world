@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: struct with checked arithmetic that succeeds.
+fun test(): ?{label: string, sum: u32}
+    ret some {label = "result", sum = (10 +? 20)}
+end fun
+
+debuglog test()

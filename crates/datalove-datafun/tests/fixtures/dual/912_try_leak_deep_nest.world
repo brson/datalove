@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: deeply nested struct with try at leaf.
+// String field is evaluated BEFORE the try operator.
+fun test(): ?{level1: {name: string, level2: {value: u32}}}
+    let opt: ?u32 = none
+    // "test" is created first, then opt? returns early.
+    ret some {level1 = {name = "test", level2 = {value = opt?}}}
+end fun
+
+debuglog test()

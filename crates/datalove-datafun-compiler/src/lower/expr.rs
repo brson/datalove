@@ -292,19 +292,33 @@ pub fn lower_expression<'db>(
             // Resolve function reference using typechecker's resolved call target.
             let func_ref = ctx.resolve_call(call)?;
 
-            // Get param modes from the resolved call target.
+            // Get param modes and types from the resolved call target.
             let id = call.as_id().index() as usize;
             let target = ctx.call_targets.get(id).and_then(|t| t.as_ref());
             let param_modes: Vec<ParamMode> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter().map(|p| p.mode).collect())
                 .unwrap_or_default();
+            let param_types: Vec<IrType> = target
+                .map(|t| t.func(ctx.db).params(ctx.db).iter()
+                    .map(|p| IrType::from_type_hint(ctx.db, &p.type_hint))
+                    .collect())
+                .unwrap_or_default();
 
-            // Lower each arg, using GetFieldRef for field projections in ref context.
+            // Lower each arg, tracking in-mode args as pending intermediates.
             let call_args = call.args(ctx.db);
             let mut args = Vec::with_capacity(call_args.len());
             for (i, arg) in call_args.iter().enumerate() {
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
                 let operand = lower_call_arg(ctx, *arg, mode)?;
+                // Track in-mode args as pending intermediate.
+                // Ref/mut/out args are tracked via lower_operand's expr_temps.
+                if mode == ParamMode::In {
+                    if let Operand::Value(v) = operand {
+                        if let Some(arg_ty) = param_types.get(i) {
+                            ctx.push_pending_intermediate(v, arg_ty.clone());
+                        }
+                    }
+                }
                 args.push(operand);
             }
 
@@ -316,6 +330,8 @@ pub fn lower_expression<'db>(
                 func: func_ref,
                 args,
             });
+            // Args consumed by Call.
+            ctx.clear_pending_intermediates();
             Ok(dest)
         }
         ExprFunKind::Some(some_expr) => {
@@ -358,76 +374,107 @@ pub fn lower_expression<'db>(
             lower_field_proj(ctx, expr, proj)
         }
         ExprFunKind::Tuple(tuple) => {
-            let elements: Result<Vec<_>, _> = tuple.elements
-                .iter()
-                .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
-                .collect();
-            let fields = elements?;
             let result_type = ctx.expr_type(expr);
+            let element_types: Vec<IrType> = match &result_type {
+                IrType::Tuple(types) => types.clone(),
+                _ => vec![],
+            };
+            // Lower each element and track as pending intermediate.
+            let mut fields = Vec::new();
+            for (i, e) in tuple.elements.iter().enumerate() {
+                let value = lower_expression(ctx, *e)?;
+                if let Some(elem_ty) = element_types.get(i) {
+                    ctx.push_pending_intermediate(value, elem_ty.clone());
+                }
+                fields.push(Operand::Value(value));
+            }
             let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::Pack {
                 dest,
                 ty: TypeRef::Tuple(fields.len() as u32),
                 fields,
             });
+            ctx.clear_pending_intermediates();
             Ok(dest)
         }
         ExprFunKind::AnonTuple(tuple) => {
-            let elements: Result<Vec<_>, _> = tuple.elements
-                .iter()
-                .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
-                .collect();
-            let fields = elements?;
             let result_type = ctx.expr_type(expr);
+            let element_types: Vec<IrType> = match &result_type {
+                IrType::Tuple(types) => types.clone(),
+                _ => vec![],
+            };
+            // Lower each element and track as pending intermediate.
+            let mut fields = Vec::new();
+            for (i, e) in tuple.elements.iter().enumerate() {
+                let value = lower_expression(ctx, *e)?;
+                if let Some(elem_ty) = element_types.get(i) {
+                    ctx.push_pending_intermediate(value, elem_ty.clone());
+                }
+                fields.push(Operand::Value(value));
+            }
             let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::Pack {
                 dest,
                 ty: TypeRef::Tuple(fields.len() as u32),
                 fields,
             });
+            ctx.clear_pending_intermediates();
             Ok(dest)
         }
         ExprFunKind::List(list) => {
-            let elements: Result<Vec<_>, _> = list.elements
-                .iter()
-                .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
-                .collect();
             let result_type = ctx.expr_type(expr);
+            let elem_type = match &result_type {
+                IrType::List(t) => (**t).clone(),
+                _ => IrType::Unit,
+            };
+            // Lower each element and track as pending intermediate.
+            let mut elements = Vec::new();
+            for e in list.elements.iter() {
+                let value = lower_expression(ctx, *e)?;
+                ctx.push_pending_intermediate(value, elem_type.clone());
+                elements.push(Operand::Value(value));
+            }
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::ListNew {
-                dest,
-                elements: elements?,
-            });
+            ctx.emit(Instruction::ListNew { dest, elements });
+            ctx.clear_pending_intermediates();
             Ok(dest)
         }
         ExprFunKind::Set(set) => {
-            let elements: Result<Vec<_>, _> = set.elements
-                .iter()
-                .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
-                .collect();
             let result_type = ctx.expr_type(expr);
+            let elem_type = match &result_type {
+                IrType::Set(t) => (**t).clone(),
+                _ => IrType::Unit,
+            };
+            // Lower each element and track as pending intermediate.
+            let mut elements = Vec::new();
+            for e in set.elements.iter() {
+                let value = lower_expression(ctx, *e)?;
+                ctx.push_pending_intermediate(value, elem_type.clone());
+                elements.push(Operand::Value(value));
+            }
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::SetNew {
-                dest,
-                elements: elements?,
-            });
+            ctx.emit(Instruction::SetNew { dest, elements });
+            ctx.clear_pending_intermediates();
             Ok(dest)
         }
         ExprFunKind::Map(map) => {
-            let entries: Result<Vec<_>, _> = map.entries
-                .iter()
-                .map(|e| {
-                    let k = lower_expression(ctx, e.key)?;
-                    let v = lower_expression(ctx, e.value)?;
-                    Ok((Operand::Value(k), Operand::Value(v)))
-                })
-                .collect();
             let result_type = ctx.expr_type(expr);
+            let (key_type, val_type) = match &result_type {
+                IrType::Map(k, v) => ((**k).clone(), (**v).clone()),
+                _ => (IrType::Unit, IrType::Unit),
+            };
+            // Lower each entry and track keys/values as pending intermediates.
+            let mut entries = Vec::new();
+            for e in map.entries.iter() {
+                let k = lower_expression(ctx, e.key)?;
+                ctx.push_pending_intermediate(k, key_type.clone());
+                let v = lower_expression(ctx, e.value)?;
+                ctx.push_pending_intermediate(v, val_type.clone());
+                entries.push((Operand::Value(k), Operand::Value(v)));
+            }
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::MapNew {
-                dest,
-                entries: entries?,
-            });
+            ctx.emit(Instruction::MapNew { dest, entries });
+            ctx.clear_pending_intermediates();
             Ok(dest)
         }
         ExprFunKind::Error(err_expr) => {
@@ -477,19 +524,28 @@ pub fn lower_expression<'db>(
         ExprFunKind::AnonStruct(struct_expr) => {
             // Get the result type - this is IrType::Struct with sorted fields.
             let result_type = ctx.expr_type(expr);
-            let sorted_field_names: Vec<String> = match &result_type {
-                IrType::Struct(fields) => fields.iter().map(|(n, _)| n.clone()).collect(),
+            let field_types: std::collections::HashMap<String, IrType> = match &result_type {
+                IrType::Struct(fields) => fields.iter().map(|(n, t)| (n.clone(), t.clone())).collect(),
                 _ => return Err(LowerError::NotImplemented(
                     format!("AnonStruct with non-struct type: {:?}", result_type)
                 )),
             };
+            let sorted_field_names: Vec<String> = match &result_type {
+                IrType::Struct(fields) => fields.iter().map(|(n, _)| n.clone()).collect(),
+                _ => unreachable!(),
+            };
 
             // Lower all field expressions and collect by name.
+            // Track each non-Copy field value as pending intermediate.
             let mut field_values: std::collections::HashMap<String, ValueId> =
                 std::collections::HashMap::new();
             for field in struct_expr.fields.iter() {
                 let name = field.name.text(ctx.db).to_string();
                 let value = lower_expression(ctx, field.value)?;
+                // Track as pending intermediate so it's dropped on early return.
+                if let Some(field_ty) = field_types.get(&name) {
+                    ctx.push_pending_intermediate(value, field_ty.clone());
+                }
                 field_values.insert(name, value);
             }
 
@@ -508,6 +564,8 @@ pub fn lower_expression<'db>(
                 ty: TypeRef::AnonStruct(0),
                 fields,
             });
+            // Clear pending - field values are now consumed by Pack.
+            ctx.clear_pending_intermediates();
             Ok(dest)
         }
         ExprFunKind::AnonEnum(enum_expr) => {
@@ -529,11 +587,21 @@ pub fn lower_expression<'db>(
                 )),
             };
 
-            // Lower payload if present.
-            let payload = enum_expr.payload
-                .map(|p| lower_expression(ctx, p))
-                .transpose()?
-                .map(Operand::Value);
+            // Lower payload if present, tracking as pending intermediate.
+            let payload = if let Some(p) = enum_expr.payload {
+                let payload_type = match &result_type {
+                    IrType::Enum(variants) => variants.iter()
+                        .find(|(n, _)| n == &variant_name)
+                        .and_then(|(_, opt_ty)| opt_ty.clone())
+                        .unwrap_or(IrType::Unit),
+                    _ => IrType::Unit,
+                };
+                let value = lower_expression(ctx, p)?;
+                ctx.push_pending_intermediate(value, payload_type);
+                Some(Operand::Value(value))
+            } else {
+                None
+            };
 
             let dest = ctx.fresh_value(result_type);
             ctx.emit(Instruction::EnumVariant {
@@ -541,21 +609,26 @@ pub fn lower_expression<'db>(
                 variant_index: variant_index as u32,
                 payload,
             });
+            ctx.clear_pending_intermediates();
             Ok(dest)
         }
         ExprFunKind::Tensor(tensor) => {
-            let shape = tensor.shape.clone();
-            let elements: Result<Vec<_>, _> = tensor.elements
-                .iter()
-                .map(|e| lower_expression(ctx, *e).map(|v| Operand::Value(v)))
-                .collect();
             let result_type = ctx.expr_type(expr);
+            let elem_type = match &result_type {
+                IrType::Tensor(t, _) => (**t).clone(),
+                _ => IrType::Unit,
+            };
+            let shape = tensor.shape.clone();
+            // Lower each element and track as pending intermediate.
+            let mut elements = Vec::new();
+            for e in tensor.elements.iter() {
+                let value = lower_expression(ctx, *e)?;
+                ctx.push_pending_intermediate(value, elem_type.clone());
+                elements.push(Operand::Value(value));
+            }
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::TensorNew {
-                dest,
-                shape,
-                elements: elements?,
-            });
+            ctx.emit(Instruction::TensorNew { dest, shape, elements });
+            ctx.clear_pending_intermediates();
             Ok(dest)
         }
         ExprFunKind::Table(table) => {
@@ -566,40 +639,42 @@ pub fn lower_expression<'db>(
                 _ => return Err(LowerError::NotImplemented("table type mismatch".to_string())),
             };
 
+            // Build tuple type for row from column types.
+            let tuple_fields: Vec<_> = column_types.iter()
+                .map(|(_, ty)| (**ty).clone())
+                .collect();
+            let row_type = IrType::Tuple(tuple_fields.clone());
+
             // Each row becomes a tuple operand.
-            let rows: Result<Vec<_>, _> = table.rows.iter().map(|row| {
-                // Lower row elements.
-                let elem_values: Result<Vec<_>, _> = row.elements.iter()
-                    .map(|e| lower_expression(ctx, *e))
-                    .collect();
-                let elem_values = elem_values?;
-
-                // Convert to operands.
-                let elem_operands: Vec<_> = elem_values.iter()
-                    .map(|&v| Operand::Value(v))
-                    .collect();
-
-                // Build tuple type for row from column types.
-                let tuple_fields: Vec<_> = column_types.iter()
-                    .map(|(_, ty)| (**ty).clone())
-                    .collect();
-                let row_type = IrType::Tuple(tuple_fields);
+            let mut rows = Vec::new();
+            for row in table.rows.iter() {
+                // Lower row elements, tracking each as pending intermediate.
+                let mut elem_operands = Vec::new();
+                for (i, e) in row.elements.iter().enumerate() {
+                    let value = lower_expression(ctx, *e)?;
+                    if let Some(elem_ty) = tuple_fields.get(i) {
+                        ctx.push_pending_intermediate(value, elem_ty.clone());
+                    }
+                    elem_operands.push(Operand::Value(value));
+                }
 
                 // Create tuple from elements.
-                let tuple_dest = ctx.fresh_value(row_type);
+                let tuple_dest = ctx.fresh_value(row_type.clone());
                 ctx.emit(Instruction::Pack {
                     dest: tuple_dest,
                     ty: TypeRef::Tuple(elem_operands.len() as u32),
                     fields: elem_operands,
                 });
-                Ok(Operand::Value(tuple_dest))
-            }).collect();
+                // Elements consumed by Pack, but tuple itself is now pending.
+                ctx.clear_pending_intermediates();
+                ctx.push_pending_intermediate(tuple_dest, row_type.clone());
+                rows.push(Operand::Value(tuple_dest));
+            }
 
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::TableNew {
-                dest,
-                rows: rows?,
-            });
+            ctx.emit(Instruction::TableNew { dest, rows });
+            // All row tuples consumed by TableNew.
+            ctx.clear_pending_intermediates();
             Ok(dest)
         }
         ExprFunKind::ParseError(_) => {
@@ -824,6 +899,7 @@ fn lower_optional_binop<'db>(
         .expect("optional arithmetic requires return type");
     let none_value = ctx.fresh_value(return_type);
     ctx.emit(Instruction::WrapNone { dest: none_value });
+    ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
         ctx.finish_block(Terminator::UnitEarlyReturn {
@@ -902,6 +978,7 @@ fn lower_checked_result_binop<'db>(
         dest: wrapped_err,
         inner: Operand::Value(err_value),
     });
+    ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
         ctx.finish_block(Terminator::UnitEarlyReturn {
@@ -959,6 +1036,7 @@ fn lower_optional_unaryop<'db>(
         .expect("optional arithmetic requires return type");
     let none_value = ctx.fresh_value(return_type);
     ctx.emit(Instruction::WrapNone { dest: none_value });
+    ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
         ctx.finish_block(Terminator::UnitEarlyReturn {
@@ -1035,6 +1113,7 @@ fn lower_checked_result_unaryop<'db>(
         dest: wrapped_err,
         inner: Operand::Value(err_value),
     });
+    ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
         ctx.finish_block(Terminator::UnitEarlyReturn {
@@ -1086,6 +1165,7 @@ fn lower_try_option<'db>(
         .expect("try operator requires return type");
     let none_value = ctx.fresh_value(return_type);
     ctx.emit(Instruction::WrapNone { dest: none_value });
+    ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
         ctx.finish_block(Terminator::UnitEarlyReturn {
@@ -1142,6 +1222,7 @@ fn lower_try_result<'db>(
         dest: wrapped_err,
         inner: Operand::Value(err_dest),
     });
+    ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
         ctx.finish_block(Terminator::UnitEarlyReturn {

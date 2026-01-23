@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: tuple literal with try operator on second element.
+// If the second element's try returns early, the first element (string) should be dropped.
+fun test(): ?(string, u32)
+    let opt: ?u32 = none
+    // "hello" is created, then opt? returns early.
+    // The string should be dropped, not leaked.
+    ret some ("hello", opt?)
+end fun
+
+debuglog test()

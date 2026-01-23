@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: struct with multiple non-Copy fields before try.
+// All preceding fields should be dropped on early return.
+fun test(): ?{a: string, b: string, c: u32}
+    let opt: ?u32 = none
+    // Both "first" and "second" are created before opt? returns early.
+    // Both strings should be dropped.
+    ret some {a = "first", b = "second", c = opt?}
+end fun
+
+debuglog test()

@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: struct literal with try-result operator on second field.
+// If the second field's try returns early (error), the first field should be dropped.
+fun test(): !{a: string, b: u32}
+    let res: !u32 = er error 1
+    // "hello" is created, then res! propagates the error.
+    // The string should be dropped.
+    ret ok {a = "hello", b = res!}
+end fun
+
+debuglog test()

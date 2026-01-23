@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: struct literal with try-result operator - success case.
+fun test(): !{a: string, b: u32}
+    let res: !u32 = ok 42
+    ret ok {a = "hello", b = res!}
+end fun
+
+debuglog test()

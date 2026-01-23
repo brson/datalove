@@ -68,6 +68,10 @@ pub struct FrameState {
     pub in_unreachable: bool,
     /// Temporary values to drop after the current expression is evaluated.
     pub expr_temps: Vec<(ValueId, IrType)>,
+    /// Intermediate values created during compound expression lowering.
+    /// These need to be dropped on early return before the compound completes.
+    /// Examples: struct field values before Pack, tuple elements before Pack.
+    pub pending_intermediates: Vec<(ValueId, IrType)>,
     /// Next global statement ID (must match analysis traversal order).
     pub next_stmt_id: usize,
     /// Current statement index in the parent body (for drop schedule lookup).
@@ -99,6 +103,7 @@ impl FrameState {
             loop_stack: Vec::new(),
             in_unreachable: false,
             expr_temps: Vec::new(),
+            pending_intermediates: Vec::new(),
             next_stmt_id: 0,
             current_stmt_idx: None,
         }
@@ -513,6 +518,35 @@ impl<'db> LowerCtx<'db> {
         for (value, _ty) in temps {
             self.emit(Instruction::Drop { operand: Operand::Value(value) });
         }
+    }
+
+    /// Push a non-Copy intermediate value to the pending stack.
+    ///
+    /// Call this when lowering compound expressions (struct fields, tuple elements, etc.)
+    /// after evaluating each sub-expression. These values will be dropped if a later
+    /// sub-expression triggers an early return (e.g., via try operator).
+    pub fn push_pending_intermediate(&mut self, value: ValueId, ty: IrType) {
+        if !ty.is_copy() {
+            self.body.pending_intermediates.push((value, ty));
+        }
+    }
+
+    /// Emit Drop instructions for all pending intermediates and clear the list.
+    ///
+    /// Call this on early return paths (try operators) before emitting binding drops.
+    pub fn emit_pending_intermediate_drops(&mut self) {
+        let intermediates = std::mem::take(&mut self.body.pending_intermediates);
+        for (value, _ty) in intermediates {
+            self.emit(Instruction::Drop { operand: Operand::Value(value) });
+        }
+    }
+
+    /// Clear pending intermediates without dropping.
+    ///
+    /// Call this after a compound expression completes (e.g., after Pack instruction)
+    /// because the intermediate values have been consumed by the compound value.
+    pub fn clear_pending_intermediates(&mut self) {
+        self.body.pending_intermediates.clear();
     }
 
     /// Get the type for a slot ID.

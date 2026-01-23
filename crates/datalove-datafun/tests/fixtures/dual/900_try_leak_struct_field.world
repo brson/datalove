@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: struct literal with try operator on second field.
+// If the second field's try returns early, the first field (string) should be dropped.
+fun test(): ?{a: string, b: u32}
+    let opt: ?u32 = none
+    // "hello" is created, then opt? returns early.
+    // The string should be dropped, not leaked.
+    ret some {a = "hello", b = opt?}
+end fun
+
+debuglog test()
