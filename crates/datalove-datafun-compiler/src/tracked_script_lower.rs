@@ -244,7 +244,6 @@ pub fn lower_script_expr_tracked<'db>(
     let script_ctx = accumulated.to_script_lower_context();
 
     // Lower the expression.
-    // Expression units don't have statements, so for_aot doesn't affect them.
     match lower::lower_script_expr(
         db,
         expr_types,
@@ -252,7 +251,6 @@ pub fn lower_script_expr_tracked<'db>(
         &func_id_map,
         script_ctx,
         expr,
-        false, // for_aot has no effect on expressions
     ) {
         Ok(ir_unit) => {
             let exports = ir_unit.exports.clone();

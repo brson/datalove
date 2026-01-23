@@ -128,7 +128,7 @@ pub fn analyze_worldfile(
                     // Clear debug buffer before execution.
                     executor.clear_debug_buffer();
                     // Compile the fragment.
-                    let compiled_unit = compiler.compile_fragment(source, false);
+                    let compiled_unit = compiler.compile_fragment(source);
                     // Execute if compilation succeeded.
                     let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
                         executor.execute_fragment(ir_unit)

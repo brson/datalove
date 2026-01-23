@@ -194,8 +194,7 @@ fn compile_and_run_fragment(
     source: &str,
     registry: &FunctionRegistry,
 ) -> AotSectionResult {
-    // Compile to IR for AOT (for_aot=true emits drops for script-level bindings).
-    let compiled = compiler.compile_fragment(source, true);
+    let compiled = compiler.compile_fragment(source);
 
     // If typecheck or lowering failed, return early.
     if !matches!(&compiled.typecheck, datafun::pipeline::TypecheckResult::Success) {

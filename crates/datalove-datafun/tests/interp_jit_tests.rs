@@ -149,7 +149,7 @@ pub fn analyze_worldfile_with_jit(
             }
             WorldfileSection::ScriptFragment { source } => {
                 executor.clear_debug_buffer();
-                let compiled_unit = compiler.compile_fragment(source, false);
+                let compiled_unit = compiler.compile_fragment(source);
                 let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
                     executor.execute_fragment(ir_unit)
                 } else {

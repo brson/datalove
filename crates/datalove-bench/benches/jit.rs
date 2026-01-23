@@ -52,7 +52,7 @@ fn run_benchmark(call_dispatcher: Option<Box<dyn CallDispatcher>>) {
         call_dispatcher,
     ).unwrap();
 
-    let compiled_unit = compiler.compile_fragment(JITBENCH_SOURCE, false);
+    let compiled_unit = compiler.compile_fragment(JITBENCH_SOURCE);
     if let Some(ir_unit) = &compiled_unit.ir_unit {
         executor.execute_fragment(ir_unit);
     }

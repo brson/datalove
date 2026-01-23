@@ -478,7 +478,7 @@ fn analyze_worldfile_ir_serial(
         });
         return IrSerialAnalysis { sections: results };
     };
-    let compiled_unit = compiler.compile_fragment(fragment_source, true);
+    let compiled_unit = compiler.compile_fragment(fragment_source);
 
     // Get registry for AOT.
     let registry = compiled.module_registry();

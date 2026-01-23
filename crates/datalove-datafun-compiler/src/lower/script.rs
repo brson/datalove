@@ -211,10 +211,6 @@ pub fn lower_script_fragment_raw<'db>(
 /// Lower a script expression unit.
 ///
 /// Like `lower_script_unit` but takes expr_types directly and an expression.
-///
-/// The `for_aot` parameter is accepted for API consistency but has no effect
-/// since expressions don't create script-level bindings that need dropping.
-#[allow(unused_variables)]
 pub fn lower_script_expr<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
@@ -222,7 +218,6 @@ pub fn lower_script_expr<'db>(
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
     expr: ExprFun<'db>,
-    for_aot: bool,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 

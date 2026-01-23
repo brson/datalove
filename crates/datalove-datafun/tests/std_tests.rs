@@ -63,7 +63,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     };
 
     // Compile the script as a fragment.
-    let result = compiler.compile_fragment(&script_text, false);
+    let result = compiler.compile_fragment(&script_text);
 
     // Check for errors.
     if let TypecheckResult::Error { errors } = &result.typecheck {

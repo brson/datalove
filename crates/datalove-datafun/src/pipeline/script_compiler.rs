@@ -13,13 +13,13 @@
 //! let mut compiler = compiled.script_compiler(&db).unwrap();
 //!
 //! // Compile a fragment (statements).
-//! let result = compiler.compile_fragment("let x = 42", false);
+//! let result = compiler.compile_fragment("let x = 42");
 //! if let Some(ir_unit) = result.ir_unit {
 //!     // Pass to executor for execution.
 //! }
 //!
 //! // Later compilation can reference x.
-//! let result2 = compiler.compile_fragment("let y = x + 1", false);
+//! let result2 = compiler.compile_fragment("let y = x + 1");
 //! ```
 
 use rmx::prelude::*;
@@ -112,12 +112,7 @@ pub struct ScriptCompiler<'db> {
 
 impl<'db> ScriptCompiler<'db> {
     /// Compile a script fragment (statements).
-    ///
-    /// The `for_aot` parameter is deprecated and has no effect. The IR now uses
-    /// `UnitEndDrop` uniformly; the backend determines semantics (interpreter: no-op,
-    /// AOT: conditional drop).
-    #[allow(unused_variables)]
-    pub fn compile_fragment(&mut self, source: &str, for_aot: bool) -> ScriptCompilationResult {
+    pub fn compile_fragment(&mut self, source: &str) -> ScriptCompilationResult {
         let src = bct::input::Source::new(self.db, source.S());
         self.last_source = Some(src);
         let parse_result = datalove_datafun_parser::parse(self.db, src);

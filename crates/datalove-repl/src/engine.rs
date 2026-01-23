@@ -183,7 +183,7 @@ impl<'db> Engine<'db> {
 
     fn eval_script_statement(&mut self, source: String) -> Eval {
         // Compile the fragment.
-        let compiled = self.compiler.compile_fragment(&source, false);
+        let compiled = self.compiler.compile_fragment(&source);
 
         // Check for parse errors.
         if let TypecheckResult::ParseError { errors } = &compiled.typecheck {

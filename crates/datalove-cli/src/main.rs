@@ -422,7 +422,7 @@ impl ScriptCommand {
             .with_context(|| format!("Failed to read script file: {}", file_path.display()))?;
 
         // Compile the script as a fragment.
-        let compiled_unit = compiler.compile_fragment(&script_source, false);
+        let compiled_unit = compiler.compile_fragment(&script_source);
 
         // Check for errors and render diagnostics.
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
@@ -495,8 +495,7 @@ impl ScriptIrCommand {
         let script_source = rmx::std::fs::read_to_string(&self.file_path)
             .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
 
-        // Compile to IR for AOT (for_aot=true emits drops for script-level bindings).
-        let compiled_unit = compiler.compile_fragment(&script_source, true);
+        let compiled_unit = compiler.compile_fragment(&script_source);
 
         // Check for errors and render diagnostics.
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
@@ -556,8 +555,7 @@ impl AotCompileCommand {
         let script_source = rmx::std::fs::read_to_string(&self.file_path)
             .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
 
-        // Compile to IR for AOT (for_aot=true emits drops for script-level bindings).
-        let compiled_unit = compiler.compile_fragment(&script_source, true);
+        let compiled_unit = compiler.compile_fragment(&script_source);
 
         // Check for errors and render diagnostics.
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
@@ -698,7 +696,7 @@ impl ScriptWorldCommand {
         let script_section = script_sections[0];
         let (compiled_unit, output) = match script_section {
             WorldfileSection::ScriptFragment { source } => {
-                let compiled_unit = compiler.compile_fragment(source, false);
+                let compiled_unit = compiler.compile_fragment(source);
                 let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
                     executor.execute_fragment(ir_unit)
                 } else {

@@ -24,7 +24,7 @@
 //! let mut compiler = compiled.script_compiler(&db).expect("compilation succeeded");
 //! let mut executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
 //!
-//! let result = compiler.compile_fragment("let x = 42", false);
+//! let result = compiler.compile_fragment("let x = 42");
 //! if let Some(ir_unit) = &result.ir_unit {
 //!     executor.execute_fragment(ir_unit);
 //! }

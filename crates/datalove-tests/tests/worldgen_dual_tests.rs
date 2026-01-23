@@ -133,7 +133,7 @@ fn run_with_chaos_interp(
     for section in &parsed.sections {
         if let WorldfileSection::ScriptFragment { source } = section {
             executor.clear_debug_buffer();
-            let compiled_unit = compiler.compile_fragment(source, false);
+            let compiled_unit = compiler.compile_fragment(source);
             if let Some(ir_unit) = &compiled_unit.ir_unit {
                 executor.execute_fragment(ir_unit);
             }
@@ -243,7 +243,7 @@ fn run_with_aot(
             error: Some("Module compilation failed".to_string()),
         };
     };
-    let compiled_unit = compiler.compile_fragment(fragment_source, true);
+    let compiled_unit = compiler.compile_fragment(fragment_source);
 
     if !matches!(compiled_unit.typecheck, datafun::pipeline::TypecheckResult::Success) {
         return RunResult {

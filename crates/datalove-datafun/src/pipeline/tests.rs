@@ -19,7 +19,7 @@ impl<'db> TestContext<'db> {
     }
 
     fn eval_fragment(&mut self, source: &str) -> ScriptUnitResult {
-        let compiled = self.compiler.compile_fragment(source, false);
+        let compiled = self.compiler.compile_fragment(source);
         let output = if let Some(ir_unit) = &compiled.ir_unit {
             self.executor.execute_fragment(ir_unit)
         } else {
@@ -185,7 +185,7 @@ end fun
                 let mut executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
 
                 // Import and use the shared module function.
-                let compiled_unit = compiler.compile_fragment("require module local/pkg/math\nimport math.square", false);
+                let compiled_unit = compiler.compile_fragment("require module local/pkg/math\nimport math.square");
                 assert!(matches!(compiled_unit.typecheck, TypecheckResult::Success),
                     "import failed: {:?}", compiled_unit.typecheck);
                 if let Some(ir_unit) = &compiled_unit.ir_unit {
@@ -194,11 +194,11 @@ end fun
 
                 // Define local variable and compute.
                 let val = (i + 1) * 10;
-                let compiled_unit = compiler.compile_fragment(&format!("let n: int = {}", val), false);
+                let compiled_unit = compiler.compile_fragment(&format!("let n: int = {}", val));
                 if let Some(ir_unit) = &compiled_unit.ir_unit {
                     executor.execute_fragment(ir_unit);
                 }
-                let compiled_unit = compiler.compile_fragment("let result = square(n)", false);
+                let compiled_unit = compiler.compile_fragment("let result = square(n)");
                 if let Some(ir_unit) = &compiled_unit.ir_unit {
                     executor.execute_fragment(ir_unit);
                 }

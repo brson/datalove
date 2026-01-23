@@ -9,11 +9,10 @@
 //! - No scriptunit-expr sections
 //!
 //! The test:
-//! 1. Lowers via interpreter pipeline (for_aot=false) and executes
-//! 2. Lowers via AOT pipeline (for_aot=true), compiles, links, executes
-//! 3. Normalizes IR to remove for_aot differences (trailing drops)
-//! 4. Compares normalized IRs - fails if different
-//! 5. Compares debuglog outputs - fails if different
+//! 1. Lowers and executes via interpreter
+//! 2. Lowers, compiles, links, and executes via AOT
+//! 3. Compares IRs - fails if different
+//! 4. Compares debuglog outputs - fails if different
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
@@ -285,7 +284,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     };
 
     interp_executor.clear_debug_buffer();
-    let interp_compiled = interp_compiler.compile_fragment(fragment_source, false);
+    let interp_compiled = interp_compiler.compile_fragment(fragment_source);
     let _interp_result_output = if let Some(ir_unit) = &interp_compiled.ir_unit {
         interp_executor.execute_fragment(ir_unit)
     } else {
@@ -319,7 +318,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         });
         return DualAnalysis { sections: results };
     };
-    let aot_compiled = aot_compiler.compile_fragment(fragment_source, true);
+    let aot_compiled = aot_compiler.compile_fragment(fragment_source);
     let registry = compiled2.module_registry();
 
     // If typecheck failed, return early.
