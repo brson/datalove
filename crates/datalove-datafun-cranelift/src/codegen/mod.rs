@@ -392,10 +392,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             self.param_values.insert(param_id, val);
         }
 
-        // Zero-initialize all aggregate slots in the frame.
-        // This ensures that destroy_local is safe on uninitialized slots
-        // (they'll see null pointers and skip freeing).
+        // Zero-initialize aggregate slots and tracking bytes region.
+        // - Aggregate slots: ensures safe cleanup if function exits early
+        // - Tracking bytes: default to UNINIT (0x00), so DropTracked skips them
         if let Some(frame_slot) = self.frame_slot {
+            // Zero-init aggregate slots.
             for (slot_idx, slot_ty) in self.func.slot_types.iter().enumerate() {
                 let repr = types::ir_type_to_cranelift(slot_ty);
                 if let CraneliftRepr::Aggregate(layout) = repr {
@@ -405,6 +406,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     let zero = builder.ins().iconst(cl_types::I8, 0);
                     builder.call_memset(self.isa.frontend_config(), addr, zero, size);
                 }
+            }
+
+            // Zero-init tracking bytes.
+            let tracking_count = self.layout.value_tracking.len() + self.layout.slot_tracking.len();
+            if tracking_count > 0 {
+                let track_addr = builder.ins().stack_addr(
+                    PTR_TYPE,
+                    frame_slot,
+                    self.layout.tracking_offset as i32,
+                );
+                let size = builder.ins().iconst(PTR_TYPE, tracking_count as i64);
+                let zero = builder.ins().iconst(cl_types::I8, 0);
+                builder.call_memset(self.isa.frontend_config(), track_addr, zero, size);
             }
         }
 
