@@ -24,6 +24,7 @@ impl<'db> Parser<'db> {
         let stmt = match self.peek_word() {
             Some("let") => self.parse_let(),
             Some("var") => self.parse_var(),
+            Some("const") => self.parse_const(),
             Some("set") => self.parse_set(),
             Some("fun") => self.parse_fun(remaining_lines),
             Some("ret") => self.parse_ret(),
@@ -40,7 +41,7 @@ impl<'db> Parser<'db> {
                 self.emit_stmt_error(ts,
                     "unexpected statement",
                     "P001",
-                    "expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', or 'type'"
+                    "expected 'let', 'var', 'const', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', or 'type'"
                 )
             }
         };
@@ -147,6 +148,49 @@ impl<'db> Parser<'db> {
         let value = self.parse_expr_full();
 
         ast::Statement::Var(ast::StmtVar {
+            name,
+            type_hint,
+            value,
+        })
+    }
+
+    fn parse_const(&mut self) -> ast::Statement<'db> {
+        self.eat_word("const");
+
+        let name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
+                    "expected name after 'const'",
+                    "P024",
+                    "expected name",
+                );
+            }
+        };
+
+        // Check for type hint: `: type`
+        let type_hint = if self.peek_sigil(Sigil::Colon) {
+            self.eat_sigil(Sigil::Colon);
+            Some(self.parse_type_hint())
+        } else {
+            None
+        };
+
+        // Need `=` sigil.
+        if !self.eat_sigil(Sigil::Equals) {
+            let ts = self.peek_text_span();
+            return self.emit_stmt_error(ts,
+                "expected '=' after const binding",
+                "P025",
+                "expected '='"
+            );
+        }
+
+        // Parse the value expression.
+        let value = self.parse_expr_full();
+
+        ast::Statement::Const(ast::StmtConst {
             name,
             type_hint,
             value,

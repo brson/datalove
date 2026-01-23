@@ -3,6 +3,6 @@
    [38;5;246m│[0m
  [38;5;246m1 │[0m [38;5;201mf[0m[38;5;201mo[0m[38;5;201mo[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249ma[0m[38;5;249mz[0m
  [38;5;240m  │[0m [38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m  
- [38;5;240m  │[0m  [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m expected 'let', 'var', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', or 'type'
+ [38;5;240m  │[0m  [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m expected 'let', 'var', 'const', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', or 'type'
 [38;5;246m───╯[0m
 Error: Parse error

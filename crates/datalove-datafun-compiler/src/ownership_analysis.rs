@@ -1147,6 +1147,9 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>])
             Statement::TypeAlias(_) => {
                 // Type aliases are resolved at typecheck time; nothing to analyze.
             }
+            Statement::Const(_) => {
+                // Const bindings are evaluated at compile time; no runtime ownership tracking.
+            }
             Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
                 // No drops.
             }

@@ -494,8 +494,150 @@ fn lower_statement_for_script<'db>(
             // Type aliases are resolved at typecheck time; nothing to lower.
             Ok(())
         }
+        Statement::Const(const_stmt) => {
+            // Const bindings are evaluated at compile time.
+            // Script-level const bindings work the same as function-level.
+            let name = const_stmt.name.text(ctx.db).to_string();
+            let init_expr = const_stmt.value;
+            let ir_type = ctx.expr_type(init_expr);
+
+            // Try to evaluate the expression as a constant.
+            match eval_const_expr_script(ctx, init_expr) {
+                Ok(value) => {
+                    ctx.add_const(name, ir_type, value);
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            }
+        }
         Statement::ParseError(_) => {
             panic!("parse error node reached lowering - callers should check for parse errors before lowering")
         }
+    }
+}
+
+/// Evaluate a constant expression at compile time (script context).
+///
+/// This is the same as the function-level eval_const_expr but for script units.
+fn eval_const_expr_script<'db>(
+    ctx: &LowerCtx<'db>,
+    expr: ExprFun<'db>,
+) -> Result<ConstValue, LowerError> {
+    match expr.expr(ctx.db) {
+        // Function calls - not yet supported.
+        ExprFunKind::FunctionCall(_) => {
+            Err(LowerError::NotImplemented(
+                "function calls in const expressions not yet supported".to_string()
+            ))
+        }
+
+        // Bool literals.
+        ExprFunKind::True(_) => Ok(ConstValue::Bool(true)),
+        ExprFunKind::False(_) => Ok(ConstValue::Bool(false)),
+
+        // Integer literals.
+        ExprFunKind::Int(int_expr) => {
+            let ir_type = ctx.expr_type(expr);
+            let text = int_expr.value.text(ctx.db);
+            super::literal::parse_int_const(text, &ir_type)
+                .map_err(|_| LowerError::InvalidLiteral(text.to_string()))
+        }
+
+        // Float literals.
+        ExprFunKind::Float(float_expr) => {
+            let ir_type = ctx.expr_type(expr);
+            let text = float_expr.value.text(ctx.db);
+            super::literal::parse_float_const(text, &ir_type)
+                .map_err(|_| LowerError::InvalidLiteral(text.to_string()))
+        }
+
+        // String literals.
+        ExprFunKind::String(s) => {
+            Ok(ConstValue::String(s.value.as_str(ctx.db).to_string()))
+        }
+
+        // Reference to another const binding.
+        ExprFunKind::Name(name) => {
+            let name_str = name.text(ctx.db);
+            if let Some((_, value)) = ctx.lookup_const(name_str) {
+                Ok(value.clone())
+            } else {
+                Err(LowerError::NotImplemented(format!(
+                    "non-const variable '{}' in const expression",
+                    name_str
+                )))
+            }
+        }
+
+        // Binary operations on constants.
+        ExprFunKind::BinOp(binop) => {
+            let lhs_val = eval_const_expr_script(ctx, binop.lhs)?;
+            let rhs_val = eval_const_expr_script(ctx, binop.rhs)?;
+            eval_const_binop_script(&lhs_val, &rhs_val, binop.op)
+        }
+
+        // None literal.
+        ExprFunKind::None(_) => Ok(ConstValue::OptionNone),
+
+        // Tuple literal.
+        ExprFunKind::Tuple(tuple) => {
+            let mut values = Vec::with_capacity(tuple.elements.len());
+            for elem in &tuple.elements {
+                values.push(eval_const_expr_script(ctx, *elem)?);
+            }
+            Ok(ConstValue::Tuple(values))
+        }
+
+        _ => Err(LowerError::NotImplemented(format!(
+            "const evaluation for expression type not yet supported"
+        ))),
+    }
+}
+
+/// Evaluate a binary operation on constant values (script context).
+fn eval_const_binop_script(
+    lhs: &ConstValue,
+    rhs: &ConstValue,
+    op: ast::BinOp,
+) -> Result<ConstValue, LowerError> {
+    use ast::BinOp;
+
+    match (lhs, rhs, op) {
+        // u32 operations.
+        (ConstValue::U32(l), ConstValue::U32(r), BinOp::Add) => Ok(ConstValue::U32(l.wrapping_add(*r))),
+        (ConstValue::U32(l), ConstValue::U32(r), BinOp::AddChecked) => {
+            l.checked_add(*r)
+                .map(ConstValue::U32)
+                .ok_or_else(|| LowerError::InvalidLiteral("u32 overflow in const".to_string()))
+        }
+        (ConstValue::U32(l), ConstValue::U32(r), BinOp::Mul) => Ok(ConstValue::U32(l.wrapping_mul(*r))),
+        (ConstValue::U32(l), ConstValue::U32(r), BinOp::MulChecked) => {
+            l.checked_mul(*r)
+                .map(ConstValue::U32)
+                .ok_or_else(|| LowerError::InvalidLiteral("u32 overflow in const".to_string()))
+        }
+
+        // i32 operations.
+        (ConstValue::I32(l), ConstValue::I32(r), BinOp::Add) => Ok(ConstValue::I32(l.wrapping_add(*r))),
+        (ConstValue::I32(l), ConstValue::I32(r), BinOp::AddChecked) => {
+            l.checked_add(*r)
+                .map(ConstValue::I32)
+                .ok_or_else(|| LowerError::InvalidLiteral("i32 overflow in const".to_string()))
+        }
+        (ConstValue::I32(l), ConstValue::I32(r), BinOp::Mul) => Ok(ConstValue::I32(l.wrapping_mul(*r))),
+        (ConstValue::I32(l), ConstValue::I32(r), BinOp::MulChecked) => {
+            l.checked_mul(*r)
+                .map(ConstValue::I32)
+                .ok_or_else(|| LowerError::InvalidLiteral("i32 overflow in const".to_string()))
+        }
+
+        // Bool operations.
+        (ConstValue::Bool(l), ConstValue::Bool(r), BinOp::And) => Ok(ConstValue::Bool(*l && *r)),
+        (ConstValue::Bool(l), ConstValue::Bool(r), BinOp::Or) => Ok(ConstValue::Bool(*l || *r)),
+
+        _ => Err(LowerError::NotImplemented(format!(
+            "const binop {:?} on {:?} and {:?}",
+            op, lhs, rhs
+        ))),
     }
 }

@@ -506,6 +506,12 @@ pub fn check_statement<'db>(
             // Nothing to do here.
         }
 
+        Statement::Const(stmt) => {
+            // Const bindings are typechecked like let bindings.
+            // The const evaluation happens during lowering.
+            check_variable_decl(ctx, stmt.name, stmt.value, stmt.type_hint.clone());
+        }
+
         Statement::ParseError(_) => {
             // Skip parse errors.
         }

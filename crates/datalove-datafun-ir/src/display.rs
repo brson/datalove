@@ -167,6 +167,74 @@ impl fmt::Display for ConstValue {
             ConstValue::F32(n) => write!(f, "{}f32", n),
             ConstValue::F64(n) => write!(f, "{}f64", n),
             ConstValue::String(s) => write!(f, "{:?}", s),
+            ConstValue::Tuple(elems) => {
+                write!(f, "(")?;
+                for (i, e) in elems.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", e)?;
+                }
+                write!(f, ")")
+            }
+            ConstValue::Struct(fields) => {
+                write!(f, "{{")?;
+                for (i, (name, val)) in fields.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{} = {}", name, val)?;
+                }
+                write!(f, "}}")
+            }
+            ConstValue::Enum { variant, payload } => {
+                write!(f, "enum {}", variant)?;
+                if let Some(p) = payload {
+                    write!(f, "({})", p)?;
+                }
+                Ok(())
+            }
+            ConstValue::OptionSome(v) => write!(f, "some {}", v),
+            ConstValue::OptionNone => write!(f, "none"),
+            ConstValue::ResultOk(v) => write!(f, "ok {}", v),
+            ConstValue::ResultErr(v) => write!(f, "err {}", v),
+            ConstValue::Data(v) => write!(f, "data {}", v),
+            ConstValue::Error(s) => write!(f, "error {:?}", s),
+            ConstValue::List(elems) => {
+                write!(f, "[")?;
+                for (i, e) in elems.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", e)?;
+                }
+                write!(f, "]")
+            }
+            ConstValue::Set(elems) => {
+                write!(f, "set {{")?;
+                for (i, e) in elems.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", e)?;
+                }
+                write!(f, "}}")
+            }
+            ConstValue::Map(entries) => {
+                write!(f, "map {{")?;
+                for (i, (k, v)) in entries.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{} = {}", k, v)?;
+                }
+                write!(f, "}}")
+            }
+            ConstValue::Table { columns, rows } => {
+                write!(f, "{{| ")?;
+                for (i, col) in columns.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", col)?;
+                }
+                for row in rows {
+                    write!(f, "; ")?;
+                    for (i, val) in row.iter().enumerate() {
+                        if i > 0 { write!(f, ", ")?; }
+                        write!(f, "{}", val)?;
+                    }
+                }
+                write!(f, " |}}")
+            }
         }
     }
 }

@@ -52,6 +52,7 @@ pub struct ParseResult<'db> {
 pub enum Statement<'db> {
     Let(StmtLet<'db>),
     Var(StmtVar<'db>),
+    Const(StmtConst<'db>),
     Set(StmtSet<'db>),
     Fun(StmtFun<'db>),
     Ret(StmtRet<'db>),
@@ -78,6 +79,18 @@ pub struct StmtLet<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct StmtVar<'db> {
+    pub name: InternedText<'db>,
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
+    pub value: ExprFun<'db>,
+}
+
+/// Compile-time constant binding.
+///
+/// The value expression is evaluated at compile time via the const evaluator.
+/// The resulting value is inlined at use sites.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct StmtConst<'db> {
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: ExprFun<'db>,

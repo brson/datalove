@@ -17,6 +17,7 @@ pub struct Script {
 pub enum Statement {
     Let(StmtLet),
     Var(StmtVar),
+    Const(StmtConst),
     Set(StmtSet),
     Fun(StmtFun),
     Ret(StmtRet),
@@ -40,6 +41,13 @@ pub struct StmtLet {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtVar {
+    pub name: String,
+    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
+    pub value: ExprFun,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtConst {
     pub name: String,
     pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub value: ExprFun,
@@ -440,6 +448,7 @@ impl Statement {
         match ast {
             crate::ast::Statement::Let(s) => Statement::Let(StmtLet::from_ast(db, s)),
             crate::ast::Statement::Var(s) => Statement::Var(StmtVar::from_ast(db, s)),
+            crate::ast::Statement::Const(s) => Statement::Const(StmtConst::from_ast(db, s)),
             crate::ast::Statement::Set(s) => Statement::Set(StmtSet::from_ast(db, s)),
             crate::ast::Statement::Fun(s) => Statement::Fun(StmtFun::from_ast(db, *s)),
             crate::ast::Statement::Ret(s) => Statement::Ret(StmtRet::from_ast(db, s)),
@@ -486,6 +495,16 @@ impl StmtLet {
 impl StmtVar {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtVar<'db>) -> Self {
         StmtVar {
+            name: ast.name.as_str(db).to_string(),
+            type_hint: ast.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
+            value: ExprFun::from_ast(db, ast.value),
+        }
+    }
+}
+
+impl StmtConst {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtConst<'db>) -> Self {
+        StmtConst {
             name: ast.name.as_str(db).to_string(),
             type_hint: ast.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
             value: ExprFun::from_ast(db, ast.value),

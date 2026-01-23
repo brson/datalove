@@ -6,6 +6,9 @@ pub mod funlit_equiv;
 // IR extension trait (adds from_tycheck conversion).
 pub mod ir_ext;
 
+// Compile-time function evaluation (CTFE).
+pub mod const_eval;
+
 // IR lowering from AST to IR.
 pub mod lower;
 

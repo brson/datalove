@@ -245,6 +245,8 @@ pub struct LowerCtx<'db> {
     pub(super) return_type: Option<IrType>,
     /// Whether we're in a script unit (vs function).
     pub(super) is_script_unit: bool,
+    /// Const bindings evaluated at compile time: name -> (type, value).
+    pub(super) const_bindings: HashMap<String, (IrType, ConstValue)>,
 }
 
 /// Empty func_id_map for contexts that don't need module function resolution.
@@ -271,6 +273,7 @@ impl<'db> LowerCtx<'db> {
             unit_end_drops: Vec::new(),
             return_type: None,
             is_script_unit: false,
+            const_bindings: HashMap::new(),
         }
     }
 
@@ -295,6 +298,7 @@ impl<'db> LowerCtx<'db> {
             unit_end_drops: Vec::new(),
             return_type: None,
             is_script_unit: false,
+            const_bindings: HashMap::new(),
         }
     }
 
@@ -361,6 +365,7 @@ impl<'db> LowerCtx<'db> {
             // Script units have Result<()> return type for ! operator.
             return_type: Some(IrType::Result(Box::new(IrType::Unit))),
             is_script_unit: true,
+            const_bindings: HashMap::new(),
         }
     }
 
@@ -514,6 +519,20 @@ impl<'db> LowerCtx<'db> {
     /// Look up a variable.
     pub fn lookup_var(&self, name: &str) -> Option<Operand> {
         self.body.variables.get(name).copied()
+    }
+
+    /// Look up a const binding by name.
+    ///
+    /// Returns the type and value if found.
+    pub fn lookup_const(&self, name: &str) -> Option<&(IrType, ConstValue)> {
+        self.const_bindings.get(name)
+    }
+
+    /// Add a const binding.
+    ///
+    /// Const bindings are evaluated at compile time and inlined at use sites.
+    pub fn add_const(&mut self, name: String, ir_type: IrType, value: ConstValue) {
+        self.const_bindings.insert(name, (ir_type, value));
     }
 
     /// Emit Drop instructions for the given operands.

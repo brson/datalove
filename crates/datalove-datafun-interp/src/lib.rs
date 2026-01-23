@@ -1692,6 +1692,23 @@ impl IrInterpreter {
                         dest.tydesc,
                     );
                 }
+                // Aggregate and collection ConstValues are not yet supported for direct loading.
+                // These will be used by const evaluation to extract computed values.
+                ConstValue::Tuple(_)
+                | ConstValue::Struct(_)
+                | ConstValue::Enum { .. }
+                | ConstValue::OptionSome(_)
+                | ConstValue::OptionNone
+                | ConstValue::ResultOk(_)
+                | ConstValue::ResultErr(_)
+                | ConstValue::Data(_)
+                | ConstValue::Error(_)
+                | ConstValue::List(_)
+                | ConstValue::Set(_)
+                | ConstValue::Map(_)
+                | ConstValue::Table { .. } => {
+                    todo!("write_const for aggregate/collection types: {:?}", value)
+                }
             }
         }
     }

@@ -179,6 +179,15 @@ pub fn lower_expression<'db>(
     match expr.expr(ctx.db) {
         ExprFunKind::Name(name) => {
             let name_str = name.text(ctx.db);
+            // Check const bindings first - these are compile-time values.
+            if let Some((const_type, const_value)) = ctx.lookup_const(name_str).cloned() {
+                let dest = ctx.fresh_value(const_type);
+                ctx.emit(Instruction::Const {
+                    dest,
+                    value: const_value,
+                });
+                return Ok(dest);
+            }
             let operand = ctx.lookup_var(name_str)
                 .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
             match operand {

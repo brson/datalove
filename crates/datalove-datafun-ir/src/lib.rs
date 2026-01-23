@@ -528,9 +528,12 @@ pub enum SlotDest {
     External { unit: u32, slot: SlotId },
 }
 
-/// Constant value that can be loaded.
+/// Constant value that can be loaded or computed at compile time.
+///
+/// Supports all Datafun types for compile-time function evaluation (CTFE).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ConstValue {
+    // Primitives.
     Unit,
     Bool(bool),
     U8(u8),
@@ -552,6 +555,38 @@ pub enum ConstValue {
     F64(f64),
     /// String literal.
     String(String),
+
+    // Aggregates.
+    /// Anonymous tuple.
+    Tuple(Vec<ConstValue>),
+    /// Anonymous struct with named fields (sorted by name).
+    Struct(Vec<(String, ConstValue)>),
+    /// Anonymous enum variant with optional payload.
+    Enum { variant: String, payload: Option<Box<ConstValue>> },
+
+    // Wrappers.
+    /// Option::Some variant.
+    OptionSome(Box<ConstValue>),
+    /// Option::None variant.
+    OptionNone,
+    /// Result::Ok variant.
+    ResultOk(Box<ConstValue>),
+    /// Result::Err variant (contains error value).
+    ResultErr(Box<ConstValue>),
+    /// Dynamic data wrapper.
+    Data(Box<ConstValue>),
+    /// Error value.
+    Error(String),
+
+    // Collections.
+    /// List with elements.
+    List(Vec<ConstValue>),
+    /// Set with elements (sorted for determinism).
+    Set(Vec<ConstValue>),
+    /// Map with key-value pairs (sorted by key for determinism).
+    Map(Vec<(ConstValue, ConstValue)>),
+    /// Table with column names and row data.
+    Table { columns: Vec<String>, rows: Vec<Vec<ConstValue>> },
 }
 
 impl std::hash::Hash for ConstValue {
@@ -577,6 +612,25 @@ impl std::hash::Hash for ConstValue {
             ConstValue::F32(v) => v.to_bits().hash(state),
             ConstValue::F64(v) => v.to_bits().hash(state),
             ConstValue::String(v) => v.hash(state),
+            ConstValue::Tuple(elems) => elems.hash(state),
+            ConstValue::Struct(fields) => fields.hash(state),
+            ConstValue::Enum { variant, payload } => {
+                variant.hash(state);
+                payload.hash(state);
+            }
+            ConstValue::OptionSome(v) => v.hash(state),
+            ConstValue::OptionNone => {}
+            ConstValue::ResultOk(v) => v.hash(state),
+            ConstValue::ResultErr(v) => v.hash(state),
+            ConstValue::Data(v) => v.hash(state),
+            ConstValue::Error(v) => v.hash(state),
+            ConstValue::List(elems) => elems.hash(state),
+            ConstValue::Set(elems) => elems.hash(state),
+            ConstValue::Map(entries) => entries.hash(state),
+            ConstValue::Table { columns, rows } => {
+                columns.hash(state);
+                rows.hash(state);
+            }
         }
     }
 }
