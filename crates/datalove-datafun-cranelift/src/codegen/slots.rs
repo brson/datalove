@@ -46,44 +46,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().store(MemFlags::new(), val, addr, 0);
             }
             CraneliftRepr::Aggregate(layout) => {
-                // Aggregate: destroy old value in dest, copy from source.
-                // For move semantics (!is_copy), also zero the source.
+                // Aggregate: copy bytes from source to destination.
+                // The old value (if any) is destroyed by explicit drop.tracked in the IR
+                // before this store instruction.
                 let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
-
-                // Destroy the old value in the slot before overwriting.
-                let destroy_func_id = self.runtime.as_ref()
-                    .ok_or_else(|| CraneliftError::Codegen("SlotStore aggregate requires runtime imports".into()))?
-                    .destroy_local;
-
-                let rt_handle = self.rt_handle_param.ok_or_else(|| {
-                    CraneliftError::Codegen("SlotStore aggregate requires runtime handle parameter".into())
-                })?;
-
-                // Get TyDesc for the slot type.
-                let tydesc_id = self.tydesc_emitter.get(slot_ty).ok_or_else(|| {
-                    CraneliftError::Codegen(format!(
-                        "TyDesc not found for slot type {:?}",
-                        slot_ty
-                    ))
-                })?;
-
-                let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
-
-                // Call destroy_local(rt_handle, slot_ptr, tydesc) to free old value.
-                let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
-                builder.ins().call(destroy_ref, &[rt_handle, dest_addr, tydesc_addr]);
-
-                // Copy bytes from source to destination.
                 let src_ptr = self.get_operand_ptr(builder, value)?;
                 let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
                 builder.call_memcpy(self.isa.frontend_config(), dest_addr, src_ptr, size);
 
                 if !is_copy {
                     // Zero out the source to complete the move (prevents double-free).
-                    // Both Slot and Value sources need to be zeroed since they can hold
-                    // allocations that would otherwise be freed when their frame storage
-                    // is destroyed at function cleanup.
                     let zero = builder.ins().iconst(cranelift_codegen::ir::types::I8, 0);
                     builder.call_memset(self.isa.frontend_config(), src_ptr, zero, size);
                 }

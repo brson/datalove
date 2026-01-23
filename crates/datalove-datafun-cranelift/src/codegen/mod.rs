@@ -392,19 +392,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             self.param_values.insert(param_id, val);
         }
 
-        // Zero-initialize aggregate slots and tracking bytes region.
-        // - Aggregate slots: ensures safe cleanup if function exits early
-        // - Tracking bytes: default to UNINIT (0x00), so DropTracked skips them
+        // Initialize aggregate slots and tracking bytes region.
+        // - Aggregate slots: 0xFF poison makes uninitialized reads obvious
+        // - Tracking bytes: 0x00 (UNINIT), so DropTracked skips them
         if let Some(frame_slot) = self.frame_slot {
-            // Zero-init aggregate slots.
+            // Fill aggregate slots with 0xFF poison pattern.
             for (slot_idx, slot_ty) in self.func.slot_types.iter().enumerate() {
                 let repr = types::ir_type_to_cranelift(slot_ty);
                 if let CraneliftRepr::Aggregate(layout) = repr {
                     let slot_offset = self.layout.slot_offset(slot_idx as u32);
                     let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
                     let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                    let zero = builder.ins().iconst(cl_types::I8, 0);
-                    builder.call_memset(self.isa.frontend_config(), addr, zero, size);
+                    let poison = builder.ins().iconst(cl_types::I8, 0xFF_u8 as i64);
+                    builder.call_memset(self.isa.frontend_config(), addr, poison, size);
                 }
             }
 
