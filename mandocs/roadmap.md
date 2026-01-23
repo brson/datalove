@@ -52,7 +52,7 @@
 - rtcalls - waiting for native riders
 - std.string - waiting for rtcalls
 - assert statements - needed for std_tests?
-- fully reactive scripts
+- fully reactive scripts, undo/redo
 - widening coercions
 - match
 - generics
@@ -90,9 +90,15 @@
 
 
 
-## Far future
+## Far future wants
 
+- heap types and global heap
 - named types
 - first-class type variables
 - termination proofs
+- refinement types
 - autodiff
+- zipper heaps
+- virtualized I/O
+- true linear types with explicit dtors
+- bidirectionality, multi-determinism, choice-points ala mercury

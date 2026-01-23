@@ -1,41 +1,116 @@
-## Novelties
+# Novelties
+
+Datalove occassionally has unique designs:
+
+
+
+
+## Matched-brace token-tree lexing
 
 Matched-brace / token-tree lexing:
 all braces are matched (`{ }`, `( )`, `[ ]`, `< >`).
 Statement oriented, with statements that span multiple lines without statement terminators.
 Pascal, Python, and Rust-influenced syntax.
 
-Linear types and argument modes.
-No reference types, no GC.
-Ergonomic coercions.
+Rust has token trees, but not for `< >`.
 
-Structural and nominal typing.
-First-class option and result types (`?T`, `!T`).
+Datalove consequentially has to sacrifice comparison ops and arrows,
+using `.<` and `.>` for comparison.
 
-Pure functions `fun` and I/O procedures (`proc`).
 
-Fully-incremental compilation.
-Whole-world compilation, all modules and other inputs must be known upfront.
-Incremental script execution.
-Interpreter, JIT and AOT.
 
-Optional type-hint prefixes for all expressions:
+
+## Bimodal parsing — line-oriented to expression-oriented
+
+Datalove leverages token trees to create a novel parser
+that can line-break outside of braces while leaving the inside un-line-breaked.
+
+This is what allows statements without separator tokens:
 
 ```datalove
-let foo = {
-  a = : u8 / 100,
-  b = [: int / 200, 300],
-}
+
+let a = 0         // line-break
+
+fun foo (
+  a: int,         // no line-break - inside token branch
+  b: int,
+)                 // line-break
+end fun
 ```
 
-Heap types: `@` and `#`.
 
-- brace-tree and newline-sensitivity
-- reactive repl
-- linear types with explicit destructors
-- undo/redo, rewind/replay
-- virtualized I/O
-- zipper heaps
-- multi-determinism, choice-points, and logic programming
+
+
+## Pervasive prefix type hints
+
+Datalove's type hints have no direct precedent:
+
+```datalove
+let foo = (
+  1,
+  : int / 2,
+  3,
+)
+```
+
+Being a prefix is particularly unusualy.
+We do it this we because it matches the "pull" feel of bidirectional typing,
+where types flow into the goal.
+
+Postfix type annotations are the opposite, less readable.
+
+
+
+
+## Tensors and tables
+
+These two types are pervasive in big niches of modern
+computing but rarely recieve first-class language language support.
+
+```datalove
+todo
+```
+
+
+
+
+## Fully-memoized compilation
+
+This is becoming common for production compilers,
+required for quick iteration and IDE feedback.
+
+Datalove's compilation pipeline is fully memoized
+at the module and script-unit level:
+parsing, typechecking, ownership analysis, lowering.
+
+
+
+
+## Fully-reversible REPL
+
+Datalove's REPL is reimagined for modern compiler pipelines,
+with unified script and REPL compilation and evaluation.
+
+REPL sessions are composed of a sequence of _script units_,
+each of which is a function frame without arguments.
+
+Script units are typechecked in sequence,
+environment carried from previous to next.
+
+Script units can be _undone_,
+reversing the effects of both typechecking and evaluation.
+
+For pure functional environment changes between units
+undo is accomplished with memoization.
+(For side-effecting functions this will be done through virtualized I/O).
+
+
+
+
+## Worldfiles
+
+
+
+
 
 
