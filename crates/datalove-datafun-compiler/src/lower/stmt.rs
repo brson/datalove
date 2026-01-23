@@ -1,7 +1,7 @@
-//! Statement and control flow lowering.
+//! Statement lowering.
 //!
-//! Handles lowering of statements (let, var, set, ret, if, loop, etc.)
-//! and control flow constructs.
+//! Lowers statements (let, var, set, return) and control flow (if, loop, break,
+//! continue). Called from both script and function body lowering.
 
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};

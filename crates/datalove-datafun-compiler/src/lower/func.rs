@@ -1,6 +1,10 @@
 //! Function lowering.
 //!
-//! Handles lowering of function definitions to IR.
+//! Two entry points:
+//! - [`lower_function_for_module`]: Top-level entry for module functions (`.dlm` files).
+//!   Creates a fresh `LowerCtx` and calls `lower_function_body`.
+//! - [`lower_function_body`]: Shared implementation used by both module and script
+//!   function lowering. For script functions, called after `swap_body_state`.
 
 use std::collections::HashMap;
 use datalove_datafun_ast::ast;

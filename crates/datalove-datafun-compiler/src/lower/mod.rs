@@ -1,16 +1,55 @@
 //! Lower AST to SSA IR.
 //!
-//! This module transforms typechecked AST into flat SSA IR suitable for
-//! interpretation and codegen.
+//! Transforms typechecked AST into flat SSA IR suitable for interpretation
+//! and AOT codegen.
 //!
-//! ## Module Structure
+//! # Two Lowering Modes
 //!
-//! - `context`: Lowering context types (`LowerCtx`, `ScriptLowerContext`)
-//! - `literal`: Literal parsing utilities
+//! **Module lowering** (`lower_function_for_module`): Lowers standalone functions
+//! defined in `.dlm` module files. Each function is lowered independently with
+//! its own `LowerCtx`.
+//!
+//! **Script lowering** (`lower_script_unit`): Lowers REPL-style script units,
+//! which are sequences of statements that can define functions, create bindings,
+//! and reference values from previous units. Script units support incremental
+//! execution where bindings persist across units.
+//!
+//! # Script Function Nesting
+//!
+//! When a script unit contains function definitions (`fn foo() { ... }`), those
+//! functions are lowered as nested calls within the script lowering process:
+//!
+//! ```text
+//! lower_script_unit
+//!   -> lower_statement_for_script (for each statement)
+//!        -> Statement::Fun case:
+//!             1. swap_body_state(FrameState::new())  // Save script state
+//!             2. lower_function_body(...)            // Lower the function
+//!             3. swap_body_state(saved)              // Restore script state
+//!             4. Add IrFunction to unit's functions list
+//! ```
+//!
+//! The `FrameState` swap isolates each function's IR (blocks, values, slots)
+//! from the parent script's IR, while `LowerCtx` fields like `symbols` and
+//! `func_scope` are shared so the function can see script-level definitions.
+//!
+//! # Key Types
+//!
+//! - [`LowerCtx`]: Main lowering context, holds both shared state (db, type info)
+//!   and the current [`FrameState`]
+//! - [`FrameState`]: Per-function IR state (blocks, values, slots, variables).
+//!   Swapped when entering/exiting nested functions.
+//! - [`ScriptLowerContext`]: Tracks bindings exported from previous script units
+//!   for cross-unit references
+//!
+//! # Submodules
+//!
+//! - `context`: Context types (`LowerCtx`, `FrameState`, `ScriptLowerContext`)
+//! - `func`: Function lowering (`lower_function_for_module`, `lower_function_body`)
+//! - `script`: Script unit lowering (`lower_script_unit`, `lower_script_fragment_raw`)
+//! - `stmt`: Statement lowering (let, var, set, if, loop, return, etc.)
 //! - `expr`: Expression lowering
-//! - `stmt`: Statement and control flow lowering
-//! - `func`: Function lowering
-//! - `script`: Script unit lowering
+//! - `literal`: Literal parsing (int, float, string constants)
 
 mod context;
 mod literal;
@@ -20,7 +59,7 @@ mod func;
 mod script;
 
 // Re-export public types and functions.
-pub use context::{LowerCtx, ScriptLowerContext, ScriptUnitKind};
+pub use context::{LowerCtx, FrameState, ScriptLowerContext, ScriptUnitKind};
 pub use func::lower_function_for_module;
 pub use script::{lower_script_unit, lower_script_fragment_raw, lower_script_expr};
 

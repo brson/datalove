@@ -1,6 +1,7 @@
 //! Expression lowering.
 //!
-//! Transforms AST expressions into IR instructions.
+//! Transforms AST expressions into IR values and instructions. Handles literals,
+//! operators, function calls, tuples, records, and control flow expressions.
 
 use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind, ParamMode};
 use datalove_datafun_ir::{

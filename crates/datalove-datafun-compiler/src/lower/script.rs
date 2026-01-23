@@ -1,6 +1,15 @@
 //! Script unit lowering.
 //!
-//! Handles lowering of script units (fragments and expressions).
+//! Script units are REPL-style code fragments that can define functions, create
+//! bindings, and reference values from previous units.
+//!
+//! Entry points:
+//! - [`lower_script_unit`]: Main entry, takes `TypecheckResult`
+//! - [`lower_script_fragment_raw`]: Takes raw `expr_types` for non-salsa paths
+//! - [`lower_script_expr`]: For single-expression units
+//!
+//! When a script contains function definitions, they are lowered via
+//! `lower_function_body` after swapping `FrameState` to isolate the function's IR.
 
 use std::collections::HashMap;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};

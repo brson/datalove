@@ -1,7 +1,9 @@
 //! Lowering context types.
 //!
-//! The main `LowerCtx` struct provides the state for lowering AST to IR,
-//! and `ScriptLowerContext` tracks bindings across script units.
+//! - [`FrameState`]: Per-function IR state (blocks, values, slots). Swapped when
+//!   entering nested functions to isolate their IR from the parent.
+//! - [`LowerCtx`]: Main context combining shared state (db, types) with `FrameState`.
+//! - [`ScriptLowerContext`]: Tracks bindings exported from previous script units.
 
 use std::collections::HashMap;
 use salsa::plumbing::AsId;
@@ -192,9 +194,15 @@ pub enum ScriptUnitKind<'db> {
     Expr(ExprFun<'db>),
 }
 
-/// Context for lowering a single function or script unit.
+/// Main lowering context.
+///
+/// Contains shared state (database, type info) plus the current [`FrameState`].
+/// For script lowering, also tracks unit-level state like exports and functions.
+///
+/// When lowering nested functions in scripts, `body` is swapped via
+/// [`swap_body_state`](Self::swap_body_state) to isolate each function's IR.
 pub struct LowerCtx<'db> {
-    // Shared/immutable context.
+    // Shared/immutable context (from typechecker).
     pub(super) db: &'db dyn salsa::Database,
     /// Expression types from typechecker.
     pub(super) expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
