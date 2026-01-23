@@ -209,6 +209,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         is_some: ValueId,
         src: &Operand,
     ) -> Result<(), CraneliftError> {
+        use crate::layout::tracking;
+
         // Get source Option type.
         let src_ty = self.get_operand_type(src)?;
         let inner_ty = match &src_ty {
@@ -257,6 +259,21 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Store pointer to payload.
                 self.values.insert(dest, payload_addr);
             }
+        }
+
+        // Conditionally mark dest as LIVE based on is_some.
+        // Only valid if it was Some.
+        if let Some(track_offset) = self.layout.value_tracking.get(&dest).copied() {
+            let frame_slot = self.frame_slot
+                .expect("tracking requires frame slot");
+            let frame_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, 0);
+
+            let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
+            let uninit_val = builder.ins().iconst(cl_types::I8, tracking::UNINIT as i64);
+
+            let track_addr = builder.ins().iadd_imm(frame_addr, track_offset as i64);
+            let track_val = builder.ins().select(is_some_val, live_val, uninit_val);
+            builder.ins().store(MemFlags::new(), track_val, track_addr, 0);
         }
 
         Ok(())
@@ -337,6 +354,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         is_ok: ValueId,
         src: &Operand,
     ) -> Result<(), CraneliftError> {
+        use crate::layout::tracking;
+
         // Get source Result type.
         let src_ty = self.get_operand_type(src)?;
         let ok_ty = match &src_ty {
@@ -388,6 +407,34 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // For err_dest, always store pointer to payload (Error is aggregate).
         self.values.insert(err_dest, payload_addr);
+
+        // Conditionally mark ok_dest or err_dest as LIVE based on is_ok.
+        // Only one of them is valid at runtime.
+        let ok_track_offset = self.layout.value_tracking.get(&ok_dest).copied();
+        let err_track_offset = self.layout.value_tracking.get(&err_dest).copied();
+
+        if ok_track_offset.is_some() || err_track_offset.is_some() {
+            let frame_slot = self.frame_slot
+                .expect("tracking requires frame slot");
+            let frame_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, 0);
+
+            let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
+            let uninit_val = builder.ins().iconst(cl_types::I8, tracking::UNINIT as i64);
+
+            if let Some(ok_offset) = ok_track_offset {
+                // ok tracking byte = is_ok ? LIVE : UNINIT
+                let ok_track_addr = builder.ins().iadd_imm(frame_addr, ok_offset as i64);
+                let ok_track_val = builder.ins().select(is_ok_val, live_val, uninit_val);
+                builder.ins().store(MemFlags::new(), ok_track_val, ok_track_addr, 0);
+            }
+
+            if let Some(err_offset) = err_track_offset {
+                // err tracking byte = is_ok ? UNINIT : LIVE
+                let err_track_addr = builder.ins().iadd_imm(frame_addr, err_offset as i64);
+                let err_track_val = builder.ins().select(is_ok_val, uninit_val, live_val);
+                builder.ins().store(MemFlags::new(), err_track_val, err_track_addr, 0);
+            }
+        }
 
         Ok(())
     }

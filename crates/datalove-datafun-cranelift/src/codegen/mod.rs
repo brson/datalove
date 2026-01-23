@@ -74,7 +74,7 @@ use cranelift_module::{FuncId, Linkage, Module};
 
 use datalove_datafun_ir::{
     BlockId, FunctionRegistry, IrFunction,
-    IrModuleId, IrType, Instruction, Operand, ParamId, SlotId,
+    IrModuleId, IrType, Instruction, Operand, ParamId, SlotDest, SlotId,
     ValueId,
 };
 
@@ -193,6 +193,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             &func.param_types,
             &func.value_types,
             &func.slot_types,
+            &func.tracked_values,
+            &func.tracked_slots,
         );
 
         Self {
@@ -229,6 +231,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             &func.param_types,
             &func.value_types,
             &func.slot_types,
+            &func.tracked_values,
+            &func.tracked_slots,
         );
 
         Self {
@@ -267,6 +271,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             &func.param_types,
             &func.value_types,
             &func.slot_types,
+            &func.tracked_values,
+            &func.tracked_slots,
         );
 
         Self {
@@ -447,6 +453,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                             // Use local address for this value.
                             self.values.insert(*ir_value_id, dest_addr);
+
+                            // Mark as live if tracked.
+                            self.mark_value_live(&mut builder, *ir_value_id);
                         }
                     }
                 }
@@ -499,6 +508,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match inst {
             Instruction::Const { dest, value } => {
                 self.compile_const(builder, *dest, value)?;
+                self.mark_value_live(builder, *dest);
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
                 self.compile_binop(builder, *dest, *op, lhs, rhs)?;
@@ -523,9 +533,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.compile_copy(builder, *dest, src)?;
             }
             Instruction::MoveTracked { dest, src } => {
-                // Tracked move: same as copy for now. Tracking is handled
-                // by zeroing in consumers (SlotStoreMove) and checked by DropTracked.
+                // Tracked move: copy then mark source as moved.
                 self.compile_copy(builder, *dest, src)?;
+                self.mark_tracking_moved(builder, src);
             }
             Instruction::Pack { dest, ty: _, fields } => {
                 self.compile_pack(builder, *dest, fields)?;
@@ -551,9 +561,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             Instruction::SlotStoreCopy { dest, value } => {
                 self.compile_slot_store(builder, dest, value, true)?;
+                if let SlotDest::Local(sid) = dest {
+                    self.mark_slot_live(builder, *sid);
+                }
             }
             Instruction::SlotStoreMove { dest, value } => {
                 self.compile_slot_store(builder, dest, value, false)?;
+                if let SlotDest::Local(sid) = dest {
+                    self.mark_slot_live(builder, *sid);
+                }
             }
             Instruction::SlotLoadCopy { dest, slot } => {
                 self.compile_slot_load(builder, *dest, *slot, true)?;
@@ -563,9 +579,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.compile_slot_load(builder, *dest, *slot, false)?;
             }
             Instruction::SlotLoadMoveTracked { dest, slot } => {
-                // Tracked slot load: slot may have been moved. For now same behavior,
-                // tracking is handled by zeroing in consumers and checked by DropTracked.
+                // Tracked slot load: copy then mark slot as moved.
                 self.compile_slot_load(builder, *dest, *slot, false)?;
+                self.mark_tracking_moved(builder, &Operand::Slot(*slot));
             }
             Instruction::ParamStore { param, value } => {
                 self.compile_param_store(builder, *param, value)?;
@@ -598,15 +614,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // Option/Result instructions.
             Instruction::WrapSome { dest, inner } => {
                 self.compile_wrap_some(builder, *dest, inner)?;
+                self.mark_value_live(builder, *dest);
             }
             Instruction::WrapNone { dest } => {
                 self.compile_wrap_none(builder, *dest)?;
+                self.mark_value_live(builder, *dest);
             }
             Instruction::WrapOk { dest, inner } => {
                 self.compile_wrap_ok(builder, *dest, inner)?;
+                self.mark_value_live(builder, *dest);
             }
             Instruction::WrapErr { dest, inner } => {
                 self.compile_wrap_err(builder, *dest, inner)?;
+                self.mark_value_live(builder, *dest);
             }
             Instruction::UnwrapOption { dest, is_some, src } => {
                 self.compile_unwrap_option(builder, *dest, *is_some, src)?;
@@ -816,6 +836,59 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let var = Variable::from_u32(self.next_var);
         self.next_var += 1;
         var
+    }
+
+    /// Get the tracking byte offset for an operand, if it's tracked.
+    fn tracking_byte_offset(&self, operand: &Operand) -> Option<u32> {
+        match operand {
+            Operand::Value(vid) => self.layout.value_tracking.get(vid).copied(),
+            Operand::Slot(sid) => self.layout.slot_tracking.get(sid).copied(),
+            _ => None,
+        }
+    }
+
+    /// Mark a tracking byte as LIVE.
+    fn mark_tracking_live(
+        &self,
+        builder: &mut FunctionBuilder,
+        operand: &Operand,
+    ) {
+        use crate::layout::tracking;
+
+        if let Some(track_offset) = self.tracking_byte_offset(operand) {
+            let frame_slot = self.frame_slot
+                .expect("tracking requires frame slot");
+            let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+            let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
+            builder.ins().store(MemFlags::new(), live_val, track_addr, 0);
+        }
+    }
+
+    /// Mark a tracking byte as MOVED.
+    fn mark_tracking_moved(
+        &self,
+        builder: &mut FunctionBuilder,
+        operand: &Operand,
+    ) {
+        use crate::layout::tracking;
+
+        if let Some(track_offset) = self.tracking_byte_offset(operand) {
+            let frame_slot = self.frame_slot
+                .expect("tracking requires frame slot");
+            let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+            let moved_val = builder.ins().iconst(cl_types::I8, tracking::MOVED as i64);
+            builder.ins().store(MemFlags::new(), moved_val, track_addr, 0);
+        }
+    }
+
+    /// Mark a tracked value as LIVE after initialization.
+    fn mark_value_live(&self, builder: &mut FunctionBuilder, vid: ValueId) {
+        self.mark_tracking_live(builder, &Operand::Value(vid));
+    }
+
+    /// Mark a tracked slot as LIVE after store.
+    fn mark_slot_live(&self, builder: &mut FunctionBuilder, sid: SlotId) {
+        self.mark_tracking_live(builder, &Operand::Slot(sid));
     }
 }
 

@@ -6,7 +6,7 @@ use cranelift_module::Module;
 
 use datalove_datafun_ir::{IrType, Operand};
 
-use crate::types::{self, CraneliftRepr, PTR_TYPE};
+use crate::types::PTR_TYPE;
 use crate::CraneliftError;
 
 use super::FunctionCompiler;
@@ -116,18 +116,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile a DropTracked instruction.
     ///
-    /// Unlike `compile_drop`, this checks initialization state and skips if the
-    /// value was moved. Used for script unit_end drops where bindings may have
-    /// been exported or consumed.
-    ///
-    /// For aggregates: checks if the first pointer-sized bytes are zero (frame
-    /// is zero-initialized, so moved/uninitialized values will have null ptrs).
-    /// For scalars: skips unconditionally (scalars are Copy, don't need drops).
+    /// Unlike `compile_drop`, this checks the tracking byte and skips if the
+    /// value was moved or never initialized. Used for script unit_end drops
+    /// where bindings may have been exported or consumed.
     pub(super) fn compile_drop_tracked(
         &mut self,
         builder: &mut FunctionBuilder,
         operand: &Operand,
     ) -> Result<(), CraneliftError> {
+        use crate::layout::tracking;
+
         // Get the type of the operand.
         let ty = self.get_operand_type(operand)?;
 
@@ -136,68 +134,70 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return Ok(());
         }
 
-        let repr = types::ir_type_to_cranelift(&ty);
+        // Get the tracking byte offset. DropTracked should only be emitted for tracked operands.
+        let track_offset = self.tracking_byte_offset(operand).ok_or_else(|| {
+            CraneliftError::Codegen(format!(
+                "DropTracked on untracked operand {:?} - IR lowering bug",
+                operand
+            ))
+        })?;
 
-        match repr {
-            CraneliftRepr::Scalar(_) => {
-                // Scalar non-copy types (shouldn't exist in practice, but handle gracefully).
-                // Just call drop unconditionally.
-                self.compile_drop(builder, operand)?;
-            }
-            CraneliftRepr::Aggregate(_) => {
-                // Aggregate: check if first 8 bytes (pointer) are null.
-                // Frame is zero-initialized, so moved values will have null pointers.
-                let value_ptr = self.get_operand_ptr(builder, operand)?;
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("DropTracked requires frame slot".into())
+        })?;
 
-                // Load the first pointer-sized value.
-                let first_ptr = builder.ins().load(PTR_TYPE, MemFlags::new(), value_ptr, 0);
+        let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+        let track_byte = builder.ins().load(cl_ir::types::I8, MemFlags::new(), track_addr, 0);
 
-                // Create blocks for the conditional.
-                let do_drop_block = builder.create_block();
-                let after_block = builder.create_block();
+        // Check if LIVE (0x01).
+        let live_val = builder.ins().iconst(cl_ir::types::I8, tracking::LIVE as i64);
+        let is_live = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, track_byte, live_val);
 
-                // Check if null (zero).
-                let zero = builder.ins().iconst(PTR_TYPE, 0);
-                let is_null = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, first_ptr, zero);
+        let do_drop_block = builder.create_block();
+        let after_block = builder.create_block();
 
-                // Branch: skip drop if null (was moved), otherwise drop.
-                builder.ins().brif(is_null, after_block, &[], do_drop_block, &[]);
+        // Branch: drop if live, skip otherwise (uninit or moved).
+        builder.ins().brif(is_live, do_drop_block, &[], after_block, &[]);
 
-                // do_drop block: call destroy.
-                builder.switch_to_block(do_drop_block);
-                builder.seal_block(do_drop_block);
+        // do_drop block: call destroy and mark as moved.
+        builder.switch_to_block(do_drop_block);
+        builder.seal_block(do_drop_block);
 
-                // Get runtime imports.
-                let destroy_func_id = self.runtime.as_ref()
-                    .ok_or_else(|| CraneliftError::Codegen("DropTracked requires runtime imports".into()))?
-                    .destroy_local;
+        // Get runtime imports.
+        let destroy_func_id = self.runtime.as_ref()
+            .ok_or_else(|| CraneliftError::Codegen("DropTracked requires runtime imports".into()))?
+            .destroy_local;
 
-                let rt_handle = self.rt_handle_param.ok_or_else(|| {
-                    CraneliftError::Codegen("DropTracked requires runtime handle parameter".into())
-                })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("DropTracked requires runtime handle parameter".into())
+        })?;
 
-                // Look up pre-emitted TyDesc.
-                let tydesc_id = self.tydesc_emitter.get(&ty).ok_or_else(|| {
-                    CraneliftError::Codegen(format!(
-                        "TyDesc not found for type {:?} - should have been emitted upfront",
-                        ty
-                    ))
-                })?;
+        // Look up pre-emitted TyDesc.
+        let tydesc_id = self.tydesc_emitter.get(&ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!(
+                "TyDesc not found for type {:?} - should have been emitted upfront",
+                ty
+            ))
+        })?;
 
-                let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
 
-                let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
-                builder.ins().call(destroy_ref, &[rt_handle, value_ptr, tydesc_addr]);
+        let value_ptr = self.get_operand_ptr(builder, operand)?;
 
-                // Jump to after block.
-                builder.ins().jump(after_block, &[]);
+        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
+        builder.ins().call(destroy_ref, &[rt_handle, value_ptr, tydesc_addr]);
 
-                // Continue in after block.
-                builder.switch_to_block(after_block);
-                builder.seal_block(after_block);
-            }
-        }
+        // Mark as moved after drop.
+        let moved_val = builder.ins().iconst(cl_ir::types::I8, tracking::MOVED as i64);
+        builder.ins().store(MemFlags::new(), moved_val, track_addr, 0);
+
+        // Jump to after block.
+        builder.ins().jump(after_block, &[]);
+
+        // Continue in after block.
+        builder.switch_to_block(after_block);
+        builder.seal_block(after_block);
 
         Ok(())
     }

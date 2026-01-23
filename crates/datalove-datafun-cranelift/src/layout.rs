@@ -3,7 +3,9 @@
 //! Computes stack slot offsets for values and mutable slots within a function frame,
 //! matching the interpreter's layout for ABI compatibility.
 
-use datalove_datafun_ir::IrType;
+use std::collections::HashMap;
+
+use datalove_datafun_ir::{IrType, SlotId, ValueId};
 use crate::types::{self, align_up, TypeLayout, CraneliftRepr};
 
 /// Layout information for a single value or slot.
@@ -17,6 +19,16 @@ pub struct SlotLayout {
     pub align: u32,
     /// Cranelift representation.
     pub repr: CraneliftRepr,
+}
+
+/// Sentinel values for tracking bytes.
+pub mod tracking {
+    /// Pre-initialized / never written.
+    pub const UNINIT: u8 = 0x00;
+    /// Currently holds a valid value.
+    pub const LIVE: u8 = 0x01;
+    /// Was moved out / dropped.
+    pub const MOVED: u8 = 0x02;
 }
 
 /// Layout information for a function/unit frame.
@@ -35,17 +47,25 @@ pub struct FrameLayout {
     pub frame_size: u32,
     /// Frame alignment requirement.
     pub frame_align: u32,
+    /// Offset of tracking bytes region within frame.
+    pub tracking_offset: u32,
+    /// Mapping from tracked ValueId to its tracking byte offset.
+    pub value_tracking: HashMap<ValueId, u32>,
+    /// Mapping from tracked SlotId to its tracking byte offset.
+    pub slot_tracking: HashMap<SlotId, u32>,
 }
 
 impl FrameLayout {
     /// Compute frame layout from IR type arrays.
     ///
-    /// Layout order: params, values, slots.
+    /// Layout order: params, values, slots, tracking bytes.
     /// This matches the interpreter's layout computation.
     pub fn compute(
         param_types: &[IrType],
         value_types: &[IrType],
         slot_types: &[IrType],
+        tracked_values: &[ValueId],
+        tracked_slots: &[SlotId],
     ) -> Self {
         let mut params = Vec::with_capacity(param_types.len());
         let mut values = Vec::with_capacity(value_types.len());
@@ -102,6 +122,22 @@ impl FrameLayout {
             max_align = max_align.max(align);
         }
 
+        // Layout tracking bytes region.
+        // One byte per tracked value/slot, no alignment requirements.
+        let tracking_offset = offset;
+        let mut value_tracking = HashMap::new();
+        let mut slot_tracking = HashMap::new();
+
+        for &vid in tracked_values {
+            value_tracking.insert(vid, offset);
+            offset += 1;
+        }
+
+        for &sid in tracked_slots {
+            slot_tracking.insert(sid, offset);
+            offset += 1;
+        }
+
         // Ensure frame_size is at least 1 so we always have a valid frame slot.
         // This is needed for zero-size types like Unit that still need a valid
         // address for debuglog.
@@ -113,6 +149,9 @@ impl FrameLayout {
             slots,
             frame_size,
             frame_align: max_align,
+            tracking_offset,
+            value_tracking,
+            slot_tracking,
         }
     }
 
@@ -138,7 +177,7 @@ mod tests {
 
     #[test]
     fn test_empty_frame() {
-        let layout = FrameLayout::compute(&[], &[], &[]);
+        let layout = FrameLayout::compute(&[], &[], &[], &[], &[]);
         // Frame size is always at least 1 for debuglog of zero-size types.
         assert_eq!(layout.frame_size, 1);
         assert_eq!(layout.frame_align, 1);
@@ -146,7 +185,7 @@ mod tests {
 
     #[test]
     fn test_single_value() {
-        let layout = FrameLayout::compute(&[], &[IrType::U32], &[]);
+        let layout = FrameLayout::compute(&[], &[IrType::U32], &[], &[], &[]);
         assert_eq!(layout.values.len(), 1);
         assert_eq!(layout.values[0].offset, 0);
         assert_eq!(layout.values[0].size, 4);
@@ -155,19 +194,19 @@ mod tests {
 
     #[test]
     fn test_multiple_values_alignment() {
-        // u8 at 0, u64 needs alignment to 8
-        let layout = FrameLayout::compute(&[], &[IrType::U8, IrType::U64], &[]);
+        // u8 at 0, u64 needs alignment to 8.
+        let layout = FrameLayout::compute(&[], &[IrType::U8, IrType::U64], &[], &[], &[]);
         assert_eq!(layout.values[0].offset, 0);
-        assert_eq!(layout.values[1].offset, 8); // Aligned to 8
+        assert_eq!(layout.values[1].offset, 8); // Aligned to 8.
         assert_eq!(layout.frame_size, 16);
         assert_eq!(layout.frame_align, 8);
     }
 
     #[test]
     fn test_params_are_pointers() {
-        let layout = FrameLayout::compute(&[IrType::U32, IrType::String], &[], &[]);
+        let layout = FrameLayout::compute(&[IrType::U32, IrType::String], &[], &[], &[], &[]);
         assert_eq!(layout.params.len(), 2);
-        // All params are pointers (8 bytes each)
+        // All params are pointers (8 bytes each).
         assert_eq!(layout.params[0].size, 8);
         assert_eq!(layout.params[1].size, 8);
         assert_eq!(layout.params[0].offset, 0);
@@ -180,9 +219,11 @@ mod tests {
             &[],
             &[IrType::U32],
             &[IrType::U64],
+            &[],
+            &[],
         );
         assert_eq!(layout.values[0].offset, 0);
-        assert_eq!(layout.slots[0].offset, 8); // After u32, aligned to 8
+        assert_eq!(layout.slots[0].offset, 8); // After u32, aligned to 8.
     }
 
     #[test]
@@ -194,14 +235,36 @@ mod tests {
             &[],
             &[IrType::String, IrType::U32],
             &[],
+            &[],
+            &[],
         );
-        // String size depends on index-64 feature, u32 is 4 bytes
+        // String size depends on index-64 feature, u32 is 4 bytes.
         assert_eq!(layout.values[0].offset, 0);
         assert_eq!(layout.values[0].size, string_size);
         assert_eq!(layout.values[1].offset, string_size);
         assert_eq!(layout.values[1].size, 4);
-        // Frame size aligned to 8
+        // Frame size aligned to 8.
         let expected_frame_size = ((string_size + 4 + 7) / 8) * 8;
         assert_eq!(layout.frame_size, expected_frame_size);
+    }
+
+    #[test]
+    fn test_tracking_bytes_layout() {
+        // Frame with 2 values and 1 slot, track the first value and the slot.
+        let tracked_values = vec![ValueId(0)];
+        let tracked_slots = vec![SlotId(0)];
+        let layout = FrameLayout::compute(
+            &[],
+            &[IrType::U32, IrType::U32],
+            &[IrType::U64],
+            &tracked_values,
+            &tracked_slots,
+        );
+        // Values: 0..4, 4..8; slot: 8..16; tracking: 16..18.
+        assert_eq!(layout.tracking_offset, 16);
+        assert_eq!(layout.value_tracking.get(&ValueId(0)), Some(&16));
+        assert_eq!(layout.slot_tracking.get(&SlotId(0)), Some(&17));
+        // Frame size should include tracking bytes, aligned to 8.
+        assert_eq!(layout.frame_size, 24);
     }
 }
