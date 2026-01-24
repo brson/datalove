@@ -346,11 +346,12 @@ impl<'db> AnalysisCtx<'db> {
     ///
     /// Categories:
     /// - Copy: type is copy (no tracking needed)
-    /// - Tracked: params (except In), slot (var)
-    /// - Precise: let bindings and In params with statically-known state
+    /// - Tracked: var slots, Out params
+    /// - Precise: let bindings, In/Ref/Mut params
     ///
     /// Precise bindings have deterministic lifecycle:
-    /// - In params: always initialized, cannot be reassigned
+    /// - In params: owned, always initialized
+    /// - Ref/Mut params: borrowed, always initialized, cannot be moved/dropped
     /// - Let bindings: single assignment, drop point statically known
     fn compute_tracking(&self) -> Vec<TrackingCategory> {
         self.bindings.iter().map(|info| {
@@ -359,15 +360,12 @@ impl<'db> AnalysisCtx<'db> {
             } else if info.is_slot {
                 // Var bindings: reassignable, state varies.
                 TrackingCategory::Tracked
-            } else if info.param_mode == Some(ParamMode::In) {
-                // In params: owned, deterministic.
-                TrackingCategory::Precise
-            } else if info.param_mode.is_none() {
-                // Let bindings: single assignment, deterministic.
-                TrackingCategory::Precise
-            } else {
-                // Other params (Ref, Mut, Out): borrowed or dynamic state.
+            } else if info.param_mode == Some(ParamMode::Out) {
+                // Out params: may be uninitialized, dynamic state.
                 TrackingCategory::Tracked
+            } else {
+                // In/Ref/Mut params and let bindings: deterministic state.
+                TrackingCategory::Precise
             }
         }).collect()
     }
