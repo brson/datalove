@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
-use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts, PreResolvedConsts};
+use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts, evaluate_script_function_consts, PreResolvedConsts};
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, build_func_id_map, collect_const_graph,
 };
@@ -291,9 +291,9 @@ impl<'db> ScriptCompiler<'db> {
                     tycheck_result,
                 );
 
-                // Phase 2: Evaluate consts (not memoized - needs evaluator).
+                // Phase 2a: Evaluate script-level consts (not memoized - needs evaluator).
+                let expr_types = tycheck_result.expr_types(self.db);
                 let resolved_consts = if !const_graph.is_empty() {
-                    let expr_types = tycheck_result.expr_types(self.db);
                     match evaluate_consts(
                         self.db,
                         &const_graph,
@@ -319,8 +319,29 @@ impl<'db> ScriptCompiler<'db> {
                     ResolvedConsts::new()
                 };
 
+                // Phase 2b: Evaluate function-level consts.
+                // Build script-level consts map for lookup during function const evaluation.
+                let script_level_consts: HashMap<String, (IrType, datalove_datafun_ir::ConstValue)> =
+                    resolved_consts.iter()
+                        .map(|(name, value)| {
+                            // Get the type from the const graph.
+                            let ir_type = const_graph.bindings.iter()
+                                .find(|b| &b.name == name)
+                                .map(|b| b.ir_type.clone())
+                                .unwrap_or(IrType::Unit);
+                            (name.to_string(), (ir_type, value.clone()))
+                        })
+                        .collect();
+
+                let func_consts = evaluate_script_function_consts(
+                    self.db,
+                    &stmts,
+                    expr_types,
+                    &script_level_consts,
+                    evaluator.clone(),
+                );
+
                 // Phase 3: Lower with pre-resolved consts.
-                let expr_types = tycheck_result.expr_types(self.db);
                 let call_targets = tycheck_result.call_targets(self.db);
                 let func_id_map = build_func_id_map(self.db, &self.module_specs);
                 let script_ctx = self.accumulated_lower_bindings.to_script_lower_context();
@@ -340,10 +361,11 @@ impl<'db> ScriptCompiler<'db> {
                 let script_analysis = ownership_result.script_analysis(self.db).clone()
                     .expect("script_analysis required for fragment units");
 
-                let pre_resolved = if !const_graph.is_empty() {
+                let pre_resolved = if !const_graph.is_empty() || !func_consts.is_empty() {
                     Some(PreResolvedConsts {
                         graph: &const_graph,
                         values: &resolved_consts,
+                        func_consts: &func_consts,
                     })
                 } else {
                     None
@@ -359,7 +381,6 @@ impl<'db> ScriptCompiler<'db> {
                     func_analyses,
                     script_analysis,
                     Some(&func_param_types),
-                    Some(evaluator.clone()),
                     pre_resolved,
                 ) {
                     Ok(ir_unit) => {
@@ -410,7 +431,6 @@ impl<'db> ScriptCompiler<'db> {
                     &func_id_map,
                     script_ctx,
                     expr,
-                    Some(evaluator.clone()),
                 ) {
                     Ok(ir_unit) => {
                         let exports = ir_unit.exports.clone();

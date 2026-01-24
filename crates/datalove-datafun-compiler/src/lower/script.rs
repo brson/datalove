@@ -11,15 +11,13 @@
 //! When a script contains function definitions, they are lowered via
 //! `lower_function_body` after swapping `FrameState` to isolate the function's IR.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::{TypecheckResult, ResolvedCallTarget};
 use datalove_datafun_ir::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
-    ExportBinding, IrModuleId, FuncId, CtfeEvaluator,
+    ExportBinding, IrModuleId, FuncId,
     ConstBindingGraph, ResolvedConsts,
 };
 use crate::ownership_analysis::ScriptFunctionAnalyses;
@@ -101,9 +99,10 @@ pub fn lower_script_unit<'db>(
             ctx.unit_end_drops = analysis.unit_end;
 
             // Lower all statements with index tracking.
+            // Note: func_consts is None here - this older API doesn't support pre-resolution.
             for (idx, stmt) in stmts.iter().enumerate() {
                 ctx.body.current_stmt_idx = Some(idx);
-                lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, Some(&func_param_types))?;
+                lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, Some(&func_param_types), None)?;
             }
             ctx.body.current_stmt_idx = None;
 
@@ -162,14 +161,15 @@ pub fn lower_script_unit<'db>(
 /// If `func_param_types` is provided, use those resolved param types for function parameters
 /// instead of deriving from AST type hints. This is needed for type alias support.
 ///
-/// If `ctfe_evaluator` is provided, it will be used to evaluate complex const expressions.
 /// Pre-resolved const values from Phase 2 of CTFE pipeline.
-///
-/// When provided, lowering will use these values instead of
-/// evaluating const expressions inline.
+/// When provided, lowering will use these values for const bindings.
 pub struct PreResolvedConsts<'a> {
+    /// Script-level const binding graph.
     pub graph: &'a ConstBindingGraph,
+    /// Script-level resolved const values.
     pub values: &'a ResolvedConsts,
+    /// Function-level consts with qualified names (`func_name::const_name`).
+    pub func_consts: &'a HashMap<String, (IrType, ConstValue)>,
 }
 
 pub fn lower_script_fragment_raw<'db>(
@@ -182,7 +182,6 @@ pub fn lower_script_fragment_raw<'db>(
     func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: ScriptAnalysisData,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
-    ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
     resolved_consts: Option<PreResolvedConsts<'_>>,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
@@ -192,21 +191,19 @@ pub fn lower_script_fragment_raw<'db>(
         ctx.add_resolved_consts(pre_resolved.graph, pre_resolved.values);
     }
 
-    // Set up CTFE evaluator if provided (fallback for any consts not pre-resolved).
-    if let Some(evaluator) = ctfe_evaluator {
-        ctx.set_ctfe_evaluator(evaluator);
-    }
-
     // Use pre-computed script analysis from ownership analysis phase.
     ctx.body.drop_schedule = script_analysis.schedule;
     ctx.body.binding_info = script_analysis.bindings;
     ctx.body.tracking = script_analysis.tracking;
     ctx.unit_end_drops = script_analysis.unit_end;
 
+    // Get function-level consts from pre-resolved data.
+    let func_consts = resolved_consts.map(|r| r.func_consts);
+
     // Lower all statements with index tracking.
     for (idx, stmt) in stmts.iter().enumerate() {
         ctx.body.current_stmt_idx = Some(idx);
-        lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, func_param_types)?;
+        lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, func_param_types, func_consts)?;
     }
     ctx.body.current_stmt_idx = None;
 
@@ -246,8 +243,7 @@ pub fn lower_script_fragment_raw<'db>(
 /// Lower a script expression unit.
 ///
 /// Like `lower_script_unit` but takes expr_types directly and an expression.
-///
-/// If `ctfe_evaluator` is provided, it will be used to evaluate complex const expressions.
+/// Expression units don't have const bindings, so no pre-resolution is needed.
 pub fn lower_script_expr<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
@@ -255,14 +251,8 @@ pub fn lower_script_expr<'db>(
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
     expr: ExprFun<'db>,
-    ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
-
-    // Set up CTFE evaluator if provided.
-    if let Some(evaluator) = ctfe_evaluator {
-        ctx.set_ctfe_evaluator(evaluator);
-    }
 
     // Lower the expression and capture the result.
     let value_id = lower_expression(&mut ctx, expr)?;
@@ -300,12 +290,16 @@ pub fn lower_script_expr<'db>(
 ///
 /// If `func_param_types` is provided, use those resolved param types for function parameters
 /// instead of deriving from AST type hints. This is needed for type alias support.
+///
+/// If `func_consts` is provided, function-level consts are looked up by qualified name
+/// (`func_name::const_name`) and added to the context before lowering function bodies.
 fn lower_statement_for_script<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &Statement<'db>,
     stmt_idx: usize,
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+    func_consts: Option<&HashMap<String, (IrType, ConstValue)>>,
 ) -> Result<(), LowerError> {
     match stmt {
         Statement::Let(let_stmt) => {
@@ -454,6 +448,17 @@ fn lower_statement_for_script<'db>(
             // Swap in fresh state for function body.
             let saved = ctx.swap_body_state(FrameState::new());
 
+            // Add function-level consts for this function to the context.
+            // They are stored with qualified names (`func_name::const_name`).
+            if let Some(consts) = func_consts {
+                let prefix = format!("{}::", func_name);
+                for (name, (ir_type, value)) in consts {
+                    if let Some(local_name) = name.strip_prefix(&prefix) {
+                        ctx.add_const(local_name.to_string(), ir_type.clone(), value.clone());
+                    }
+                }
+            }
+
             // Look up resolved param types for this function.
             let func_name_str = fun_stmt.name(ctx.db).text(ctx.db);
             let resolved_params = func_param_types
@@ -532,22 +537,17 @@ fn lower_statement_for_script<'db>(
             // Const bindings are evaluated at compile time.
             let name = const_stmt.name.text(ctx.db).to_string();
 
+            // Check if already pre-resolved (from Phase 2).
             if ctx.lookup_const(&name).is_some() {
-                // Already pre-resolved in Phase 2 - nothing to do.
-                Ok(())
-            } else {
-                // Fallback: evaluate using CTFE evaluator if available.
-                let init_expr = const_stmt.value;
-                let ir_type = ctx.expr_type(init_expr);
-
-                match super::const_expr::eval_const_expr(ctx, init_expr) {
-                    Ok(value) => {
-                        ctx.add_const(name, ir_type, value);
-                        Ok(())
-                    }
-                    Err(e) => Err(e),
-                }
+                return Ok(());
             }
+
+            // Evaluate the const expression using CTFE.
+            let init_expr = const_stmt.value;
+            let ir_type = ctx.expr_type(init_expr);
+            let value = super::const_expr::eval_const_expr(ctx, init_expr)?;
+            ctx.add_const(name, ir_type, value);
+            Ok(())
         }
         Statement::ParseError(_) => {
             panic!("parse error node reached lowering - callers should check for parse errors before lowering")

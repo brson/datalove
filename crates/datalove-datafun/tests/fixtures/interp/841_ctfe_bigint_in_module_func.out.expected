@@ -10,8 +10,13 @@ Analysis(
                 status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Error",
-                message: "Lowering error in compute_big: not implemented: complex const expressions require a CTFE evaluator",
+                status: "Success",
+                ir: """
+                    fn compute_big():
+                    block0:
+                        v0 = const 1000int
+                        return v0
+                """,
             ),
             output: "",
         ),
@@ -19,15 +24,24 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Skipped",
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call.tracked m0.f0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
+            debug_output: Some("1000\n"),
         ),
     ],
 )

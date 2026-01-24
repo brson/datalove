@@ -249,7 +249,7 @@ pub struct LowerCtx<'db> {
     pub(super) is_script_unit: bool,
     /// Const bindings evaluated at compile time: name -> (type, value).
     pub(super) const_bindings: HashMap<String, (IrType, ConstValue)>,
-    /// Optional CTFE evaluator for complex const expressions.
+    /// CTFE evaluator for const expressions.
     pub(super) ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
 }
 
@@ -547,7 +547,7 @@ impl<'db> LowerCtx<'db> {
         self.ctfe_evaluator.as_ref()
     }
 
-    /// Set the CTFE evaluator for complex const expressions.
+    /// Set the CTFE evaluator for const expressions.
     pub fn set_ctfe_evaluator(&mut self, evaluator: Rc<RefCell<dyn CtfeEvaluator>>) {
         self.ctfe_evaluator = Some(evaluator);
     }

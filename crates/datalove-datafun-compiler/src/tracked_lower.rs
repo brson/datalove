@@ -316,6 +316,8 @@ pub fn lower_module<'db>(
             };
 
             // Lower to IR with module-level consts.
+            // Note: ctfe_evaluator is None because tracked functions can't take trait objects.
+            // Function-level consts in modules only support simple literals.
             match lower::lower_function_for_module(
                 db,
                 expr_types,
@@ -325,7 +327,7 @@ pub fn lower_module<'db>(
                 func_id,
                 analysis,
                 resolved_params,
-                None, // ctfe_evaluator - functions don't need it (consts pre-resolved)
+                None, // ctfe_evaluator
                 module_consts_ref,
             ) {
                 Ok(ir_func) => {
@@ -504,9 +506,10 @@ pub fn lower_module_graph_parallel<'db>(
     lower_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis)
 }
 
-/// Evaluate module-level const bindings using the CTFE evaluator.
+/// Evaluate module-level and function-level const bindings using the CTFE evaluator.
 ///
 /// Pre-evaluates all const bindings across all modules before lowering.
+/// This includes both module-level consts and consts inside function bodies.
 /// Returns a map of module_id -> pre-resolved consts.
 ///
 /// This function accesses tracked struct fields but does NOT create tracked structs,
@@ -529,40 +532,47 @@ pub fn evaluate_all_module_consts<'db>(
         let mut consts = Vec::new();
         let mut resolved_so_far: HashMap<String, (IrType, ConstValue)> = HashMap::new();
 
+        // First pass: evaluate module-level consts.
         for statement in &parsed.statements {
             if let Statement::Const(const_stmt) = statement {
-                let name = const_stmt.name.text(db).S();
-                let init_expr = const_stmt.value;
+                if let Some((name, ir_type, value)) = evaluate_single_const(
+                    db, const_stmt, expr_types, &resolved_so_far, &evaluator
+                ) {
+                    resolved_so_far.insert(name.clone(), (ir_type.clone(), value.clone()));
+                    consts.push((name, ir_type, value));
+                }
+            }
+        }
 
-                // Get the type from the typechecker.
-                let expr_id = init_expr.as_id();
-                let index = expr_id.index() as usize;
-                let ir_type = match expr_types.get(index).cloned().flatten() {
-                    Some(ty) => IrType::from_tycheck(db, &ty),
-                    None => continue, // Skip if no type info
-                };
+        // Second pass: evaluate function-level consts.
+        // Function-level consts can reference module-level consts and other
+        // consts within the same function.
+        for statement in &parsed.statements {
+            if let Statement::Fun(func_stmt) = statement {
+                let func_name = func_stmt.name(db).text(db);
+                // Track local consts for this function so later consts can reference earlier ones.
+                let mut func_local_consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
 
-                // Try simple evaluation first.
-                let value = match lower::const_expr::eval_const_expr_simple(db, init_expr, &ir_type, &resolved_so_far) {
-                    Ok(v) => v,
-                    Err(_) => {
-                        // Fall back to CTFE evaluator for complex expressions.
-                        match lower::const_expr::eval_const_expr_with_evaluator(
-                            db,
-                            init_expr,
-                            &ir_type,
-                            expr_types,
-                            &resolved_so_far,
-                            evaluator.clone(),
+                for func_body_stmt in func_stmt.body(db).iter() {
+                    if let Statement::Const(const_stmt) = func_body_stmt {
+                        // Merge function-local consts with module-level for lookup.
+                        let mut lookup_map = resolved_so_far.clone();
+                        for (name, (ty, val)) in &func_local_consts {
+                            lookup_map.insert(name.clone(), (ty.clone(), val.clone()));
+                        }
+
+                        if let Some((name, ir_type, value)) = evaluate_single_const(
+                            db, const_stmt, expr_types, &lookup_map, &evaluator
                         ) {
-                            Ok(v) => v,
-                            Err(_) => continue, // Skip on error
+                            // Store locally for other consts in this function.
+                            func_local_consts.insert(name.clone(), (ir_type.clone(), value.clone()));
+
+                            // Use qualified name for storage: func_name::const_name
+                            let qualified_name = format!("{}::{}", func_name, name);
+                            consts.push((qualified_name, ir_type, value));
                         }
                     }
-                };
-
-                resolved_so_far.insert(name.clone(), (ir_type.clone(), value.clone()));
-                consts.push((name, ir_type, value));
+                }
             }
         }
 
@@ -572,6 +582,47 @@ pub fn evaluate_all_module_consts<'db>(
     }
 
     result
+}
+
+/// Evaluate a single const statement.
+fn evaluate_single_const<'db>(
+    db: &'db dyn salsa::Database,
+    const_stmt: &datalove_datafun_ast::ast::StmtConst<'db>,
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    resolved_so_far: &HashMap<String, (IrType, ConstValue)>,
+    evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
+) -> Option<(String, IrType, ConstValue)> {
+    let name = const_stmt.name.text(db).S();
+    let init_expr = const_stmt.value;
+
+    // Get the type from the typechecker.
+    let expr_id = init_expr.as_id();
+    let index = expr_id.index() as usize;
+    let ir_type = match expr_types.get(index).cloned().flatten() {
+        Some(ty) => IrType::from_tycheck(db, &ty),
+        None => return None, // Skip if no type info
+    };
+
+    // Try simple evaluation first.
+    let value = match lower::const_expr::eval_const_expr_simple(db, init_expr, &ir_type, resolved_so_far) {
+        Ok(v) => v,
+        Err(_) => {
+            // Fall back to CTFE evaluator for complex expressions.
+            match lower::const_expr::eval_const_expr_with_evaluator(
+                db,
+                init_expr,
+                &ir_type,
+                expr_types,
+                resolved_so_far,
+                evaluator.clone(),
+            ) {
+                Ok(v) => v,
+                Err(_) => return None, // Skip on error
+            }
+        }
+    };
+
+    Some((name, ir_type, value))
 }
 
 /// Lower module graph with CTFE evaluator for complex const expressions.

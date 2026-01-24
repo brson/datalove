@@ -168,17 +168,18 @@ fn lower_statement_impl<'db>(
         Statement::Const(const_stmt) => {
             // Const bindings are evaluated at compile time.
             let name = const_stmt.name.text(ctx.db).to_string();
+
+            // Check if already pre-resolved (script/module level consts).
+            if ctx.lookup_const(&name).is_some() {
+                return Ok(());
+            }
+
+            // Evaluate the const expression using CTFE.
             let init_expr = const_stmt.value;
             let ir_type = ctx.expr_type(init_expr);
-
-            // Try to evaluate the expression as a constant.
-            match eval_const_expr(ctx, init_expr) {
-                Ok(value) => {
-                    ctx.add_const(name, ir_type, value);
-                    Ok(())
-                }
-                Err(e) => Err(e),
-            }
+            let value = eval_const_expr(ctx, init_expr)?;
+            ctx.add_const(name, ir_type, value);
+            Ok(())
         }
         Statement::ParseError(_) => {
             panic!("parse error node reached lowering - callers should check for parse errors before lowering")

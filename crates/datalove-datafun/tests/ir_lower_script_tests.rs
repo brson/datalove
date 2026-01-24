@@ -152,12 +152,15 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     None
                 };
 
+                // Empty map for function-level consts (this test doesn't use them).
+                let empty_func_consts = std::collections::HashMap::new();
                 let pre_resolved = resolved_consts.as_ref().map(|values| PreResolvedConsts {
                     graph: &const_graph,
                     values,
+                    func_consts: &empty_func_consts,
                 });
 
-                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), None, pre_resolved) {
+                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), pre_resolved) {
                     Ok(ir_unit) => {
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

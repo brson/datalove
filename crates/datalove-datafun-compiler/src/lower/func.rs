@@ -28,8 +28,7 @@ use super::LowerError;
 /// deriving from AST type hints. This is necessary when type aliases are used.
 ///
 /// If `ctfe_evaluator` is provided, it will be used to evaluate complex const
-/// expressions at compile time. Without an evaluator, only simple literals are
-/// supported for const bindings.
+/// expressions at compile time.
 ///
 /// If `module_consts` is provided, those pre-evaluated const bindings will be
 /// available for use within the function body.
@@ -52,10 +51,21 @@ pub fn lower_function_for_module<'db>(
         ctx.set_ctfe_evaluator(evaluator);
     }
 
-    // Pre-populate module-level const bindings.
+    // Pre-populate const bindings from module-level and function-level consts.
     if let Some(consts) = module_consts {
+        let func_name = func.name(db).text(db);
+        let prefix = format!("{}::", func_name);
+
         for (name, (ir_type, value)) in consts {
-            ctx.add_const(name.clone(), ir_type.clone(), value.clone());
+            // Check if this is a function-level const for this function.
+            if let Some(local_name) = name.strip_prefix(&prefix) {
+                // Function-level const: add as local name.
+                ctx.add_const(local_name.to_string(), ir_type.clone(), value.clone());
+            } else if !name.contains("::") {
+                // Module-level const: add as-is.
+                ctx.add_const(name.clone(), ir_type.clone(), value.clone());
+            }
+            // Skip function-level consts from other functions.
         }
     }
 

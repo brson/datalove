@@ -1,40 +1,40 @@
 //! Compile-time constant expression evaluation.
 //!
-//! Evaluates expressions at compile time. Simple literals are extracted directly.
-//! Complex expressions are lowered to IR using the real lowering pipeline and
-//! evaluated via a pluggable `CtfeEvaluator`.
+//! Evaluates const expressions at compile time via the 3-phase CTFE pipeline:
+//! 1. Collect const bindings into ConstBindingGraph (Phase 1, memoized)
+//! 2. Evaluate using CtfeEvaluator (Phase 2, not memoized)
+//! 3. Use pre-resolved values during lowering (Phase 3, memoized)
 //!
 //! This module uses "isolated lowering" - creating a fresh `LowerCtx` that reuses
 //! type information but has independent IR state. This ensures CTFE gets all the
-//! same lowering behavior as runtime code (widening, checked ops, etc.) without
-//! code duplication.
+//! same lowering behavior as runtime code (widening, checked ops, etc.).
 
+use std::cell::RefCell;
 use std::collections::HashMap;
-use datalove_datafun_ast::ast::{ExprFun, ExprFunKind};
+use std::rc::Rc;
+use salsa::plumbing::AsId;
+use datalove_datafun_ast::ast::{ExprFun, ExprFunKind, Statement};
 use datalove_datafun_ir::{
-    ConstValue, IrType, IrScriptUnit,
+    ConstValue, IrType, IrScriptUnit, ConstBindingGraph, ResolvedConsts,
+    ConstEvalError, CtfeEvaluator, CtfeError,
     Operand, Terminator, SymbolTable,
 };
+use datalove_datafun_tycheck::Type;
+use crate::ir_ext::IrTypeExt;
 use super::context::LowerCtx;
 use super::LowerError;
 
 // Empty arrays for isolated contexts that don't need call resolution.
 static EMPTY_CALL_TARGETS: Vec<Option<datalove_datafun_tycheck::ResolvedCallTarget<'static>>> = Vec::new();
 
-/// Evaluate a constant expression at compile time.
+/// Evaluate a constant expression at compile time using the LowerCtx's evaluator.
 ///
-/// - Simple literals are extracted directly without needing an evaluator.
-/// - Const name references look up previously computed values.
-/// - Complex expressions require a `CtfeEvaluator` to be configured.
+/// This is the inline evaluation path used for function-level consts.
+/// Requires a CTFE evaluator to be configured in the context.
 pub fn eval_const_expr<'db>(
     ctx: &LowerCtx<'db>,
     expr: ExprFun<'db>,
 ) -> Result<ConstValue, LowerError> {
-    // For simple literals, extract directly.
-    if let Some(value) = try_eval_literal(ctx, expr) {
-        return value;
-    }
-
     // For const references, look up the previously computed value.
     if let ExprFunKind::Name(name) = expr.expr(ctx.db) {
         let name_str = name.text(ctx.db);
@@ -47,7 +47,7 @@ pub fn eval_const_expr<'db>(
         )));
     }
 
-    // For complex expressions, lower to IR and use the evaluator.
+    // Lower to IR and use the evaluator.
     let ir_type = ctx.expr_type(expr);
     let unit = lower_const_expr_to_unit(ctx, expr)?;
 
@@ -60,6 +60,53 @@ pub fn eval_const_expr<'db>(
     evaluator.borrow_mut()
         .evaluate(&unit, &ir_type)
         .map_err(|e| LowerError::NotImplemented(format!("CTFE error: {}", e)))
+}
+
+/// Lower a const expression to a minimal IrScriptUnit for execution.
+///
+/// Uses isolated lowering: creates a fresh `LowerCtx` with independent IR state
+/// but reuses type information from the parent context.
+fn lower_const_expr_to_unit<'db>(
+    parent_ctx: &LowerCtx<'db>,
+    expr: ExprFun<'db>,
+) -> Result<IrScriptUnit, LowerError> {
+    // Create isolated LowerCtx that reuses type info but has fresh IR state.
+    let mut isolated_ctx = LowerCtx::new(
+        parent_ctx.db,
+        parent_ctx.expr_types,
+        &EMPTY_CALL_TARGETS,
+    );
+
+    // Copy const bindings from parent so we can reference previously evaluated consts.
+    isolated_ctx.const_bindings = parent_ctx.const_bindings.clone();
+
+    // Use the real lowering pipeline.
+    let result_value = super::expr::lower_expression(&mut isolated_ctx, expr)?;
+
+    // Finish the block with a UnitEnd terminator.
+    isolated_ctx.finish_block(Terminator::UnitEnd {
+        result: Some(Operand::Value(result_value)),
+    });
+
+    // Renumber blocks for sequential IDs.
+    isolated_ctx.renumber_blocks();
+
+    // Extract IR into an IrScriptUnit.
+    Ok(IrScriptUnit {
+        blocks: isolated_ctx.body.blocks,
+        value_count: isolated_ctx.body.next_value,
+        slot_count: isolated_ctx.body.next_slot,
+        value_types: isolated_ctx.body.value_types,
+        slot_types: isolated_ctx.body.slot_types,
+        tracked_values: Vec::new(),
+        tracked_slots: Vec::new(),
+        unit_end_values: Vec::new(),
+        unit_end_slots: Vec::new(),
+        functions: Vec::new(),
+        symbols: SymbolTable::new(),
+        result: Some(result_value),
+        exports: Vec::new(),
+    })
 }
 
 /// Evaluate a constant expression without a full LowerCtx.
@@ -126,9 +173,9 @@ pub fn eval_const_expr_with_evaluator<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
     ir_type: &IrType,
-    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    expr_types: &'db [Option<Type<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
-    evaluator: std::rc::Rc<std::cell::RefCell<dyn datalove_datafun_ir::CtfeEvaluator>>,
+    evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
 ) -> Result<ConstValue, LowerError> {
     // Lower the expression to a minimal IR unit using isolated lowering.
     let unit = lower_const_expr_to_unit_standalone(db, expr, expr_types, resolved_consts)?;
@@ -139,101 +186,13 @@ pub fn eval_const_expr_with_evaluator<'db>(
         .map_err(|e| LowerError::NotImplemented(format!("CTFE error: {}", e)))
 }
 
-/// Try to evaluate a literal expression directly without the interpreter.
-fn try_eval_literal<'db>(
-    ctx: &LowerCtx<'db>,
-    expr: ExprFun<'db>,
-) -> Option<Result<ConstValue, LowerError>> {
-    match expr.expr(ctx.db) {
-        ExprFunKind::True(_) => Some(Ok(ConstValue::Bool(true))),
-        ExprFunKind::False(_) => Some(Ok(ConstValue::Bool(false))),
-        ExprFunKind::None(_) => Some(Ok(ConstValue::OptionNone)),
-
-        ExprFunKind::Int(int_expr) => {
-            let ir_type = ctx.expr_type(expr);
-            let text = int_expr.value.text(ctx.db);
-            Some(
-                super::literal::parse_int_const(text, &ir_type)
-                    .map_err(|_| LowerError::InvalidLiteral(text.to_string()))
-            )
-        }
-
-        ExprFunKind::Float(float_expr) => {
-            let ir_type = ctx.expr_type(expr);
-            let text = float_expr.value.text(ctx.db);
-            Some(
-                super::literal::parse_float_const(text, &ir_type)
-                    .map_err(|_| LowerError::InvalidLiteral(text.to_string()))
-            )
-        }
-
-        ExprFunKind::String(s) => {
-            Some(Ok(ConstValue::String(s.value.as_str(ctx.db).to_string())))
-        }
-
-        _ => None, // Not a simple literal.
-    }
-}
-
-/// Lower a const expression to a minimal IrScriptUnit for execution.
-///
-/// Uses isolated lowering: creates a fresh `LowerCtx` with independent IR state
-/// but reuses type information from the parent context. This ensures CTFE
-/// expressions get the same lowering behavior as runtime code (widening, etc.).
-fn lower_const_expr_to_unit<'db>(
-    parent_ctx: &LowerCtx<'db>,
-    expr: ExprFun<'db>,
-) -> Result<IrScriptUnit, LowerError> {
-    // Create isolated LowerCtx that reuses type info but has fresh IR state.
-    // We pass empty call_targets since const expressions don't support function calls yet.
-    let mut isolated_ctx = LowerCtx::new(
-        parent_ctx.db,
-        parent_ctx.expr_types,
-        // SAFETY: We're creating a temporary context. The empty slice is fine
-        // because const expressions shouldn't contain function calls.
-        // If they do, we'll get a panic which is appropriate.
-        &EMPTY_CALL_TARGETS,
-    );
-
-    // Copy const bindings from parent so we can reference previously evaluated consts.
-    isolated_ctx.const_bindings = parent_ctx.const_bindings.clone();
-
-    // Use the real lowering pipeline.
-    let result_value = super::expr::lower_expression(&mut isolated_ctx, expr)?;
-
-    // Finish the block with a UnitEnd terminator.
-    isolated_ctx.finish_block(Terminator::UnitEnd {
-        result: Some(Operand::Value(result_value)),
-    });
-
-    // Renumber blocks for sequential IDs.
-    isolated_ctx.renumber_blocks();
-
-    // Extract IR into an IrScriptUnit.
-    Ok(IrScriptUnit {
-        blocks: isolated_ctx.body.blocks,
-        value_count: isolated_ctx.body.next_value,
-        slot_count: isolated_ctx.body.next_slot,
-        value_types: isolated_ctx.body.value_types,
-        slot_types: isolated_ctx.body.slot_types,
-        tracked_values: Vec::new(), // No tracking needed for CTFE.
-        tracked_slots: Vec::new(),
-        unit_end_values: Vec::new(),
-        unit_end_slots: Vec::new(),
-        functions: Vec::new(),
-        symbols: SymbolTable::new(),
-        result: Some(result_value),
-        exports: Vec::new(),
-    })
-}
-
 /// Lower a const expression to IrScriptUnit without needing a parent LowerCtx.
 ///
 /// Used for module-level const evaluation and Phase 2 of the memoized pipeline.
 fn lower_const_expr_to_unit_standalone<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
-    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    expr_types: &'db [Option<Type<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
 ) -> Result<IrScriptUnit, LowerError> {
     // Create a fresh LowerCtx with the provided type information.
@@ -278,16 +237,6 @@ fn lower_const_expr_to_unit_standalone<'db>(
 // ============================================================================
 // Phase 2: Evaluate Consts (Not Memoized)
 // ============================================================================
-
-use std::cell::RefCell;
-use std::rc::Rc;
-use salsa::plumbing::AsId;
-use datalove_datafun_ast::ast::Statement;
-use datalove_datafun_ir::{
-    ConstBindingGraph, ResolvedConsts,
-    ConstEvalError, CtfeEvaluator, CtfeError,
-};
-use datalove_datafun_tycheck::Type;
 
 /// Evaluate all const bindings from a ConstBindingGraph.
 ///
@@ -366,6 +315,81 @@ pub fn evaluate_consts<'db>(
     }
 
     Ok(resolved)
+}
+
+/// Evaluate function-level consts in script functions.
+///
+/// This extends Phase 2 to also evaluate consts defined inside function bodies.
+/// Returns a map of qualified names (`func_name::const_name`) to values.
+///
+/// Function-level consts can reference:
+/// - Script-level consts (from `script_level_consts`)
+/// - Earlier function-level consts in the same function
+pub fn evaluate_script_function_consts<'db>(
+    db: &'db dyn salsa::Database,
+    statements: &[Statement<'db>],
+    expr_types: &'db [Option<Type<'db>>],
+    script_level_consts: &HashMap<String, (IrType, ConstValue)>,
+    evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+) -> HashMap<String, (IrType, ConstValue)> {
+    let mut result = HashMap::new();
+
+    for statement in statements {
+        if let Statement::Fun(func_stmt) = statement {
+            let func_name = func_stmt.name(db).text(db);
+            // Track local consts for this function.
+            let mut func_local_consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
+
+            for func_body_stmt in func_stmt.body(db).iter() {
+                if let Statement::Const(const_stmt) = func_body_stmt {
+                    let name = const_stmt.name.text(db).to_string();
+                    let init_expr = const_stmt.value;
+
+                    // Get the type from the typechecker.
+                    let expr_id = init_expr.as_id();
+                    let index = expr_id.index() as usize;
+                    let ir_type = match expr_types.get(index).cloned().flatten() {
+                        Some(ty) => IrType::from_tycheck(db, &ty),
+                        None => continue, // Skip if no type info
+                    };
+
+                    // Build lookup map: script-level + function-local consts.
+                    let mut lookup_map = script_level_consts.clone();
+                    for (local_name, (ty, val)) in &func_local_consts {
+                        lookup_map.insert(local_name.clone(), (ty.clone(), val.clone()));
+                    }
+
+                    // Try simple evaluation first.
+                    let value = match eval_const_expr_simple(db, init_expr, &ir_type, &lookup_map) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            // Fall back to CTFE evaluator for complex expressions.
+                            match eval_const_expr_with_evaluator(
+                                db,
+                                init_expr,
+                                &ir_type,
+                                expr_types,
+                                &lookup_map,
+                                evaluator.clone(),
+                            ) {
+                                Ok(v) => v,
+                                Err(_) => continue, // Skip on error
+                            }
+                        }
+                    };
+
+                    // Store locally for other consts in this function.
+                    func_local_consts.insert(name.clone(), (ir_type.clone(), value.clone()));
+
+                    // Store with qualified name for the result.
+                    let qualified_name = format!("{}::{}", func_name, name);
+                    result.insert(qualified_name, (ir_type, value));
+                }
+            }
+        }
+    }
+
+    result
 }
 
 /// Try to extract a literal value directly without interpreter.
