@@ -17,13 +17,10 @@
 use datalove_datafun_ir::expand_ir_strings;
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
-use std::cell::RefCell;
 use std::path::Path;
 use std::process::Command;
-use std::rc::Rc;
 
 use datalove_datafun as datafun;
-use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_interp::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
@@ -271,8 +268,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     }
 
     // Run interpreter pipeline.
-    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-    let Some(mut interp_compiler) = compiled.script_compiler(&db, evaluator) else {
+    let Some(mut interp_compiler) = compiled.script_compiler_default(&db) else {
         // Module compilation failed, script execution skipped.
         // Both lowerings are Skipped, so they match.
         results.push(DualSectionResult {
@@ -312,8 +308,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     let compiled2 = pipeline2.compile_fresh(&db);
 
     // Run AOT pipeline.
-    let aot_evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-    let Some(mut aot_compiler) = compiled2.script_compiler(&db, aot_evaluator) else {
+    let Some(mut aot_compiler) = compiled2.script_compiler_default(&db) else {
         // Module compilation failed for AOT, but interp succeeded.
         // This shouldn't happen if both use the same input, but handle it.
         results.push(DualSectionResult {

@@ -11,7 +11,6 @@ bct.workspace = true
 salsa.workspace = true
 datalove-datalit.path = "../datalove-datalit"
 datalove-datafun.path = "../datalove-datafun"
-datalove-datafun-interp.path = "../datalove-datafun-interp"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 

@@ -4,16 +4,13 @@
 //! to IR. It maintains accumulated state across compilations to support REPL-style
 //! workflows where later units can reference bindings from earlier ones.
 //!
-//! Create a compiler via [`CompiledModules::script_compiler()`]. For execution,
+//! Create a compiler via [`CompiledModules::script_compiler_default()`]. For execution,
 //! use a separate [`ScriptExecutor`](super::ScriptExecutor).
 //!
 //! # Example
 //!
 //! ```ignore
-//! use datalove_datafun_interp::InterpCtfeEvaluator;
-//!
-//! let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-//! let mut compiler = compiled.script_compiler(&db, evaluator).unwrap();
+//! let mut compiler = compiled.script_compiler_default(&db).unwrap();
 //!
 //! // Compile a fragment (statements).
 //! let result = compiler.compile_fragment("let x = 42");
@@ -39,6 +36,7 @@ use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked,
 };
 use datalove_datafun_ir::{CtfeEvaluator, IrScriptUnit, IrType, ResolvedConsts};
+use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
     type_check_script_units, create_batch_spec,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
@@ -111,6 +109,20 @@ impl<'db> CompiledModules<'db> {
             last_batch_spec: None,
             ctfe_evaluator,
         })
+    }
+
+    /// Create a script compiler with the default interpreter-based CTFE evaluator.
+    ///
+    /// This is the recommended way to create a script compiler. It uses the
+    /// interpreter for compile-time evaluation of const expressions.
+    ///
+    /// Returns `None` if module compilation failed (has errors).
+    pub fn script_compiler_default(
+        &self,
+        db: &'db dyn salsa::Database,
+    ) -> Option<ScriptCompiler<'db>> {
+        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+        self.script_compiler(db, evaluator)
     }
 }
 

@@ -10,13 +10,10 @@
 
 use rmx::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
 use std::path::Path;
 use std::process::Command;
-use std::rc::Rc;
 
 use datalove_datafun as datafun;
-use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_interp::{Destination, IrInterpreter, ScriptEnvironment};
 use datalove_datafun_ir::{expand_ir_strings, FunctionRegistry, IrScriptUnit, IrType};
@@ -458,8 +455,7 @@ fn analyze_worldfile_ir_serial(
     }
 
     // Compile for AOT (includes drops).
-    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-    let Some(mut compiler) = compiled.script_compiler(&db, evaluator) else {
+    let Some(mut compiler) = compiled.script_compiler_default(&db) else {
         // Module compilation failed (typecheck or ownership errors).
         results.push(IrSerialSectionResult {
             section_type: "scriptunit-fragment".to_string(),

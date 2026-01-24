@@ -8,12 +8,9 @@
 //! to reference values, slots, and functions from earlier units.
 
 use rmx::prelude::*;
-use std::cell::RefCell;
-use std::rc::Rc;
 use serde::{Serialize, Deserialize};
 
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
-use datalove_datafun_interp::InterpCtfeEvaluator;
 
 use crate::pipeline::{
     ModuleCompilationPipeline, TypecheckResult, OwnershipResult, LoweringResult,
@@ -117,8 +114,7 @@ pub fn analyze_worldfile(
     }
 
     // Create script compiler and executor with Buffer mode for capturing debuglog output.
-    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-    let mut compiler = compiled.script_compiler(db, evaluator);
+    let mut compiler = compiled.script_compiler_default(db);
     let mut executor = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, None);
 
     // Process script units using the compiler and executor.

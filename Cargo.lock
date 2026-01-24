@@ -1316,7 +1316,6 @@ dependencies = [
  "bcts",
  "console_error_panic_hook",
  "datalove-datafun",
- "datalove-datafun-interp",
  "datalove-datalit",
  "datalove-exampletest",
  "js-sys",

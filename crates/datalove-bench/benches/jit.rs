@@ -1,11 +1,8 @@
 //! Benchmarks comparing interpreter execution with and without JIT.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use datalove_datafun as datafun;
 use datalove_datafun_cranelift_jit::JitEngine;
-use datalove_datafun_interp::{CallDispatcher, InterpCtfeEvaluator};
+use datalove_datafun_interp::CallDispatcher;
 use datafun::pipeline::ModuleCompilationPipeline;
 
 fn main() {
@@ -49,8 +46,7 @@ fn run_benchmark(call_dispatcher: Option<Box<dyn CallDispatcher>>) {
     let mut pipeline = ModuleCompilationPipeline::new();
     let compiled = pipeline.compile_fresh(&db);
 
-    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-    let mut compiler = compiled.script_compiler(&db, evaluator).unwrap();
+    let mut compiler = compiled.script_compiler_default(&db).unwrap();
     let mut executor = compiled.script_executor(
         datafun::DebugOutputMode::Disabled,
         call_dispatcher,

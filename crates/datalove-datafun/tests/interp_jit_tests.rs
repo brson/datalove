@@ -6,14 +6,11 @@
 use datalove_datafun_ir::expand_ir_strings;
 use rmx::prelude::*;
 use std::path::Path;
-use std::cell::RefCell;
-use std::rc::Rc;
 use serde::{Serialize, Deserialize};
 
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection, ParsedWorldfile};
 use datalove_datafun_cranelift_jit::JitEngine;
-use datalove_datafun_interp::InterpCtfeEvaluator;
 use datafun::pipeline::{
     ModuleCompilationPipeline, TypecheckResult, OwnershipResult, LoweringResult,
     format_ownership_result, format_lowering_result,
@@ -111,8 +108,7 @@ pub fn analyze_worldfile_with_jit(
     let jit = JitEngine::new(1).expect("JitEngine creation failed");
 
     // Create script compiler and executor with Buffer mode and JIT enabled.
-    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-    let Some(mut compiler) = compiled.script_compiler(db, evaluator) else {
+    let Some(mut compiler) = compiled.script_compiler_default(db) else {
         // Module compilation failed, return skipped results for script sections.
         for section in &parsed.sections {
             match section {

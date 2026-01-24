@@ -1,8 +1,5 @@
 use super::*;
-use std::cell::RefCell;
-use std::rc::Rc;
 use datalove_rt::c::DebugOutputMode;
-use datalove_datafun_interp::InterpCtfeEvaluator;
 
 fn make_db() -> crate::Database {
     crate::Database::default()
@@ -16,8 +13,7 @@ struct TestContext<'db> {
 
 impl<'db> TestContext<'db> {
     fn new(compiled: &CompiledModules<'db>, db: &'db dyn salsa::Database) -> Self {
-        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-        let compiler = compiled.script_compiler(db, evaluator).unwrap();
+        let compiler = compiled.script_compiler_default(db).unwrap();
         let executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
         Self { compiler, executor }
     }
@@ -187,8 +183,7 @@ end fun
                 let db_ref = db_clone.as_salsa_db();
 
                 // Create compiler and executor from the shared compiled modules.
-                let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-                let mut compiler = compiled.script_compiler(db_ref, evaluator).unwrap();
+                let mut compiler = compiled.script_compiler_default(db_ref).unwrap();
                 let mut executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
 
                 // Import and use the shared module function.

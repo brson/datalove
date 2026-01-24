@@ -6,14 +6,11 @@
 //! The random seed is derived from file contents for reproducibility.
 //! Tests verify chaos JIT produces same results as pure interpreter.
 
-use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
-use std::rc::Rc;
 
 use datalove_datafun as datafun;
-use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection, ParsedWorldfile};
 use datalove_datafun_cranelift_jit::{JitEngine, ChaosDispatcher};
 use datalove_datafun_interp::CallDispatcher;
@@ -47,8 +44,7 @@ fn run_worldfile(
         return results;
     }
 
-    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-    let Some(mut compiler) = compiled.script_compiler(db, evaluator) else {
+    let Some(mut compiler) = compiled.script_compiler_default(db) else {
         results.push(UnitOutput {
             section_type: "compilation".into(),
             output: "error".into(),

@@ -1,10 +1,7 @@
 use rmx::prelude::*;
 
-use std::cell::RefCell;
-use std::rc::Rc;
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
-use datalove_datafun_interp::InterpCtfeEvaluator;
 
 mod feed;
 mod render;
@@ -415,8 +412,7 @@ impl ScriptCommand {
 
         // Create script compiler and executor with Stderr mode for debuglog output.
         // Safe to unwrap since we checked has_errors() above.
-        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-        let mut compiler = compiled.script_compiler(&db, evaluator)
+        let mut compiler = compiled.script_compiler_default(&db)
             .expect("script_compiler should succeed after error check");
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, call_dispatcher)
             .expect("script_executor should succeed after error check");
@@ -492,8 +488,7 @@ impl ScriptIrCommand {
 
         // Create script compiler.
         // Safe to unwrap since we checked has_errors() above.
-        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-        let mut compiler = compiled.script_compiler(&db, evaluator)
+        let mut compiler = compiled.script_compiler_default(&db)
             .expect("script_compiler should succeed after error check");
 
         // Read the script file.
@@ -552,8 +547,7 @@ impl AotCompileCommand {
 
         // Create script compiler and get registry for AOT.
         // Safe to unwrap since we checked has_errors() above.
-        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-        let mut compiler = compiled.script_compiler(&db, evaluator)
+        let mut compiler = compiled.script_compiler_default(&db)
             .expect("script_compiler should succeed after error check");
         let registry = compiled.module_registry();
 
@@ -693,8 +687,7 @@ impl ScriptWorldCommand {
 
         // Create script compiler and executor.
         // Safe to unwrap since we checked has_errors() above.
-        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-        let mut compiler = compiled.script_compiler(&db, evaluator)
+        let mut compiler = compiled.script_compiler_default(&db)
             .expect("script_compiler should succeed after error check");
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, None)
             .expect("script_executor should succeed after error check");

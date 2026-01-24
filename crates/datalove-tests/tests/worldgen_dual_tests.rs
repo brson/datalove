@@ -12,10 +12,8 @@
 //! Run manually with: WORLDGEN_DUAL_TEST=1 cargo test -p datalove-tests --test worldgen_dual_tests
 //! To reproduce a failure: WORLDGEN_DUAL_TEST=1 WORLDGEN_DUAL_SEED=<seed> cargo test -p datalove-tests --test worldgen_dual_tests
 
-use std::cell::RefCell;
 use std::process::Command;
 use std::path::Path;
-use std::rc::Rc;
 
 use rand::Rng;
 
@@ -25,7 +23,6 @@ use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_cranelift_jit::ChaosDispatcher;
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_ir::FunctionRegistry;
-use datalove_datafun_interp::InterpCtfeEvaluator;
 use datafun::pipeline::ModuleCompilationPipeline;
 
 /// Number of worldfiles to generate and test per run.
@@ -108,8 +105,7 @@ fn run_with_chaos_interp(
         }
     };
 
-    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-    let Some(mut compiler) = compiled.script_compiler(db, evaluator) else {
+    let Some(mut compiler) = compiled.script_compiler_default(db) else {
         return RunResult {
             compiled: true,
             debuglog: String::new(),
@@ -239,8 +235,7 @@ fn run_with_aot(
     };
 
     // Compile for AOT.
-    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-    let Some(mut compiler) = compiled.script_compiler(db, evaluator) else {
+    let Some(mut compiler) = compiled.script_compiler_default(db) else {
         return RunResult {
             compiled: true,
             debuglog: String::new(),
