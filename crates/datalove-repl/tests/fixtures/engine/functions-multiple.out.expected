@@ -31,7 +31,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: inc"
+      "Error": "UnresolvedName(\"inc\")"
     },
     "environment": []
   },
@@ -43,7 +43,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: double"
+      "Error": "UnresolvedName(\"double\")"
     },
     "environment": []
   },
@@ -55,7 +55,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: double"
+      "Error": "UnresolvedName(\"double\")"
     },
     "environment": []
   },
@@ -67,7 +67,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: inc"
+      "Error": "UnresolvedName(\"inc\")"
     },
     "environment": []
   },
@@ -103,7 +103,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: add"
+      "Error": "UnresolvedName(\"add\"); UnresolvedName(\"multiply\"); UnresolvedName(\"b\")"
     },
     "environment": []
   },
@@ -115,7 +115,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: compute"
+      "Error": "UnresolvedName(\"compute\")"
     },
     "environment": []
   }

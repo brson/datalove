@@ -66,15 +66,12 @@ pub use script::{lower_script_unit, lower_script_fragment_raw, lower_script_expr
 /// Errors that can occur during lowering.
 ///
 /// Most semantic errors are caught by the typechecker before lowering runs.
-/// These errors represent conditions that the typechecker does not validate,
-/// or that arise from cross-unit dependencies when previous units fail to lower.
+/// These represent edge cases that lowering cannot handle.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LowerError {
-    /// Variable not found. Can occur when a previous script unit failed to lower
-    /// and didn't export the binding that this unit references.
-    VariableNotFound(String),
-    /// Function not found. Can occur when a previous script unit failed to lower
-    /// and didn't export the function that this unit references.
+    /// Function not found in scope. Occurs for mutual recursion in script units
+    /// where functions are lowered sequentially and a function references another
+    /// that hasn't been lowered yet.
     FunctionNotFound(String),
     /// Invalid literal value (e.g., integer out of range for target type).
     InvalidLiteral(String),
@@ -83,7 +80,6 @@ pub enum LowerError {
 impl std::fmt::Display for LowerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LowerError::VariableNotFound(name) => write!(f, "variable not found: {}", name),
             LowerError::FunctionNotFound(name) => write!(f, "function not found: {}", name),
             LowerError::InvalidLiteral(lit) => write!(f, "invalid literal: {}", lit),
         }

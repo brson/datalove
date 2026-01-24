@@ -25,12 +25,9 @@ pub fn lower_operand<'db>(
     match expr.expr(ctx.db) {
         ExprFunKind::Name(name) => {
             let name_str = name.text(ctx.db);
-            if let Some(operand) = ctx.lookup_var(name_str) {
-                Ok(operand)
-            } else {
-                // Can occur when a previous script unit failed to lower.
-                Err(LowerError::VariableNotFound(name_str.to_string()))
-            }
+            let operand = ctx.lookup_var(name_str)
+                .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
+            Ok(operand)
         }
         _ => {
             // Compound expression: lower to a value.
@@ -70,12 +67,9 @@ fn lower_call_arg<'db>(
         ExprFunKind::Name(name) => {
             // Return the operand directly (Value, Slot, or Param).
             let name_str = name.text(ctx.db);
-            if let Some(operand) = ctx.lookup_var(name_str) {
-                Ok(operand)
-            } else {
-                // Can occur when a previous script unit failed to lower.
-                Err(LowerError::VariableNotFound(name_str.to_string()))
-            }
+            let operand = ctx.lookup_var(name_str)
+                .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
+            Ok(operand)
         }
         _ => {
             // Compound expression: lower to a value without recording temps.
@@ -103,24 +97,21 @@ pub fn lower_field_proj_as_ref<'db>(
     let src = match proj.base.expr(ctx.db) {
         ExprFunKind::Name(name) => {
             let name_str = name.text(ctx.db);
-            if let Some(operand) = ctx.lookup_var(name_str) {
-                match operand {
-                    Operand::Slot(_) | Operand::Param(_) => {
-                        // Use the slot/param directly - no copy needed.
-                        operand
-                    }
-                    Operand::Value(v) => {
-                        // SSA value - use as-is.
-                        Operand::Value(v)
-                    }
-                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
-                        // External references - use as-is.
-                        operand
-                    }
+            let operand = ctx.lookup_var(name_str)
+                .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
+            match operand {
+                Operand::Slot(_) | Operand::Param(_) => {
+                    // Use the slot/param directly - no copy needed.
+                    operand
                 }
-            } else {
-                // Can occur when a previous script unit failed to lower.
-                return Err(LowerError::VariableNotFound(name_str.to_string()));
+                Operand::Value(v) => {
+                    // SSA value - use as-is.
+                    Operand::Value(v)
+                }
+                Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
+                    // External references - use as-is.
+                    operand
+                }
             }
         }
         _ => {
@@ -166,12 +157,9 @@ pub fn lower_expression_for_ref<'db>(
             // This avoids the Move that lower_expression would emit for Params,
             // which would transfer ownership and leave the Param empty.
             let name_str = name.text(ctx.db);
-            if let Some(operand) = ctx.lookup_var(name_str) {
-                Ok(operand)
-            } else {
-                // Can occur when a previous script unit failed to lower.
-                Err(LowerError::VariableNotFound(name_str.to_string()))
-            }
+            let operand = ctx.lookup_var(name_str)
+                .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
+            Ok(operand)
         }
         _ => {
             // All other expressions: use standard lowering.
@@ -191,57 +179,54 @@ pub fn lower_expression<'db>(
     match expr.expr(ctx.db) {
         ExprFunKind::Name(name) => {
             let name_str = name.text(ctx.db);
-            if let Some(operand) = ctx.lookup_var(name_str) {
-                match operand {
-                    Operand::Value(v) => {
-                        // For SSA values, just return the existing ValueId.
-                        Ok(v)
-                    }
-                    Operand::Slot(s) => {
-                        // For slots, emit a load.
-                        let slot_type = ctx.expr_type(expr);
-                        let is_copy = slot_type.is_copy();
-                        let dest = ctx.fresh_value(slot_type);
-                        if is_copy {
-                            ctx.emit_slot_load_copy(dest, s);
-                        } else if ctx.is_operand_tracked(operand) {
-                            ctx.emit(Instruction::SlotLoadMoveTracked { dest, slot: s });
-                        } else {
-                            ctx.emit(Instruction::SlotLoadMove { dest, slot: s });
-                        }
-                        Ok(dest)
-                    }
-                    Operand::Param(_) => {
-                        // For params, emit Copy or Move from the param.
-                        // The interpreter will read through the param pointer.
-                        let param_type = ctx.expr_type(expr);
-                        let dest = ctx.fresh_value(param_type.clone());
-                        if param_type.is_copy() {
-                            ctx.emit(Instruction::Copy { dest, src: operand });
-                        } else if ctx.is_operand_tracked(operand) {
-                            ctx.emit(Instruction::MoveTracked { dest, src: operand });
-                        } else {
-                            ctx.emit(Instruction::Move { dest, src: operand });
-                        }
-                        Ok(dest)
-                    }
-                    Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
-                        // External operands from previous script units.
-                        // Copy types use Copy, non-copy types use Move.
-                        // External operands are always tracked (script-level state).
-                        let ext_type = ctx.expr_type(expr);
-                        let dest = ctx.fresh_value(ext_type.clone());
-                        if ext_type.is_copy() {
-                            ctx.emit(Instruction::Copy { dest, src: operand });
-                        } else {
-                            ctx.emit(Instruction::MoveTracked { dest, src: operand });
-                        }
-                        Ok(dest)
-                    }
+            let operand = ctx.lookup_var(name_str)
+                .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
+            match operand {
+                Operand::Value(v) => {
+                    // For SSA values, just return the existing ValueId.
+                    Ok(v)
                 }
-            } else {
-                // Can occur when a previous script unit failed to lower.
-                return Err(LowerError::VariableNotFound(name_str.to_string()));
+                Operand::Slot(s) => {
+                    // For slots, emit a load.
+                    let slot_type = ctx.expr_type(expr);
+                    let is_copy = slot_type.is_copy();
+                    let dest = ctx.fresh_value(slot_type);
+                    if is_copy {
+                        ctx.emit_slot_load_copy(dest, s);
+                    } else if ctx.is_operand_tracked(operand) {
+                        ctx.emit(Instruction::SlotLoadMoveTracked { dest, slot: s });
+                    } else {
+                        ctx.emit(Instruction::SlotLoadMove { dest, slot: s });
+                    }
+                    Ok(dest)
+                }
+                Operand::Param(_) => {
+                    // For params, emit Copy or Move from the param.
+                    // The interpreter will read through the param pointer.
+                    let param_type = ctx.expr_type(expr);
+                    let dest = ctx.fresh_value(param_type.clone());
+                    if param_type.is_copy() {
+                        ctx.emit(Instruction::Copy { dest, src: operand });
+                    } else if ctx.is_operand_tracked(operand) {
+                        ctx.emit(Instruction::MoveTracked { dest, src: operand });
+                    } else {
+                        ctx.emit(Instruction::Move { dest, src: operand });
+                    }
+                    Ok(dest)
+                }
+                Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
+                    // External operands from previous script units.
+                    // Copy types use Copy, non-copy types use Move.
+                    // External operands are always tracked (script-level state).
+                    let ext_type = ctx.expr_type(expr);
+                    let dest = ctx.fresh_value(ext_type.clone());
+                    if ext_type.is_copy() {
+                        ctx.emit(Instruction::Copy { dest, src: operand });
+                    } else {
+                        ctx.emit(Instruction::MoveTracked { dest, src: operand });
+                    }
+                    Ok(dest)
+                }
             }
         }
         ExprFunKind::True(_) => {

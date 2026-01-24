@@ -19,7 +19,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: compute"
+      "Error": "UnresolvedName(\"compute\")"
     },
     "environment": []
   },
@@ -43,7 +43,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: fib"
+      "Error": "UnresolvedName(\"fib\")"
     },
     "environment": []
   },
@@ -67,7 +67,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: shadow"
+      "Error": "UnresolvedName(\"shadow\")"
     },
     "environment": []
   }

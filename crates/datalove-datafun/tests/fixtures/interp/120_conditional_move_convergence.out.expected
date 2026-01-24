@@ -19,14 +19,16 @@ Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "UnresolvedName(\"output\")",
+                ],
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Error",
-                message: "variable not found: output",
+                status: "Skipped",
             ),
             output: "",
         ),

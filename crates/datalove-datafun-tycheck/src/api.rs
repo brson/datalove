@@ -232,10 +232,13 @@ pub fn type_check_script_units<'db>(
 
         results.push(output.result(db));
 
-        // Merge new bindings for next unit.
-        accumulated.vars.extend(output.new_vars(db).iter().cloned());
-        accumulated.fns.extend(output.new_fns(db).iter().cloned());
-        accumulated.fn_asts.extend(output.new_fn_asts(db).iter().cloned());
+        // Only accumulate bindings from successful units.
+        // Failed units shouldn't export bindings to subsequent units.
+        if output.result(db).errors(db).is_empty() {
+            accumulated.vars.extend(output.new_vars(db).iter().cloned());
+            accumulated.fns.extend(output.new_fns(db).iter().cloned());
+            accumulated.fn_asts.extend(output.new_fn_asts(db).iter().cloned());
+        }
     }
 
     ScriptUnitsTypecheckResultTracked::new(db, results)

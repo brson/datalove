@@ -19,7 +19,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: abs"
+      "Error": "UnresolvedName(\"abs\")"
     },
     "environment": []
   },
@@ -31,7 +31,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: abs"
+      "Error": "UnresolvedName(\"abs\")"
     },
     "environment": []
   },

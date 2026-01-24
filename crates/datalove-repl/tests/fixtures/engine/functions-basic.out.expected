@@ -19,7 +19,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: double"
+      "Error": "UnresolvedName(\"double\")"
     },
     "environment": []
   },
@@ -43,7 +43,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: add"
+      "Error": "UnresolvedName(\"add\")"
     },
     "environment": []
   },

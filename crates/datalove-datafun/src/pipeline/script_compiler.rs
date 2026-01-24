@@ -217,6 +217,8 @@ impl<'db> ScriptCompiler<'db> {
             .map(|e| format!("{:?}", e.error(self.db)))
             .collect();
         if !tycheck_errors.is_empty() {
+            // Remove failed unit so subsequent units don't see its bindings.
+            self.accumulated_unit_specs.pop();
             return ScriptCompilationResult {
                 typecheck: TypecheckResult::Error { errors: tycheck_errors },
                 ownership: OwnershipResult::Skipped,
@@ -235,6 +237,8 @@ impl<'db> ScriptCompiler<'db> {
                 );
                 if !ownership_result.errors(self.db).is_empty() {
                     let error_msg = ownership_result.errors(self.db).join("\n");
+                    // Remove failed unit so subsequent units don't see its bindings.
+                    self.accumulated_unit_specs.pop();
                     return ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
                         ownership: OwnershipResult::Error { message: error_msg },
@@ -259,6 +263,8 @@ impl<'db> ScriptCompiler<'db> {
                 );
                 if !ownership_result.errors(self.db).is_empty() {
                     let error_msg = ownership_result.errors(self.db).join("\n");
+                    // Remove failed unit so subsequent units don't see its bindings.
+                    self.accumulated_unit_specs.pop();
                     return ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
                         ownership: OwnershipResult::Error { message: error_msg },
@@ -279,6 +285,8 @@ impl<'db> ScriptCompiler<'db> {
 
         // Check for lowering errors.
         if let Some(error) = lower_output.error(self.db).as_ref() {
+            // Remove failed unit so subsequent units don't see its bindings.
+            self.accumulated_unit_specs.pop();
             return ScriptCompilationResult {
                 typecheck: TypecheckResult::Success,
                 ownership: OwnershipResult::Success,

@@ -19,7 +19,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: factorial"
+      "Error": "UnresolvedName(\"factorial\")"
     },
     "environment": []
   },
@@ -31,7 +31,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: factorial"
+      "Error": "UnresolvedName(\"factorial\")"
     },
     "environment": []
   },
@@ -43,7 +43,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: factorial"
+      "Error": "UnresolvedName(\"factorial\")"
     },
     "environment": []
   },
@@ -55,7 +55,7 @@
       }
     },
     "eval": {
-      "Error": "function not found: factorial"
+      "Error": "UnresolvedName(\"factorial\")"
     },
     "environment": []
   }

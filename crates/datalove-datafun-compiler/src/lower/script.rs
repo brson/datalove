@@ -321,48 +321,45 @@ fn lower_statement_for_script<'db>(
                     }
 
                     let value_id = lower_expression(ctx, set_stmt.value)?;
-                    if let Some(operand) = ctx.lookup_var(&name) {
-                        match operand {
-                            Operand::Slot(slot) => {
-                                // Drop old value before storing new one.
-                                let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);
-                                if !is_copy {
-                                    // Use DropTracked for tracked slots, Drop for precise.
-                                    let operand = Operand::Slot(slot);
-                                    if ctx.is_operand_tracked(operand) {
-                                        ctx.emit(Instruction::DropTracked { operand });
-                                    } else {
-                                        ctx.emit(Instruction::Drop { operand });
-                                    }
-                                }
-                                if is_copy {
-                                    ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
+                    let operand = ctx.lookup_var(&name)
+                        .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name));
+                    match operand {
+                        Operand::Slot(slot) => {
+                            // Drop old value before storing new one.
+                            let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);
+                            if !is_copy {
+                                // Use DropTracked for tracked slots, Drop for precise.
+                                let operand = Operand::Slot(slot);
+                                if ctx.is_operand_tracked(operand) {
+                                    ctx.emit(Instruction::DropTracked { operand });
                                 } else {
-                                    ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
+                                    ctx.emit(Instruction::Drop { operand });
                                 }
-                                Ok(())
                             }
-                            Operand::ExternalSlot { unit, slot } => {
-                                // Drop old value before storing new one.
-                                // Use DropTracked: external slots are script-level bindings, always tracked.
-                                let is_copy = ctx.external_slot_type(&name).map(|t| t.is_copy()).unwrap_or(false);
-                                if !is_copy {
-                                    ctx.emit(Instruction::DropTracked {
-                                        operand: Operand::ExternalSlot { unit, slot },
-                                    });
-                                }
-                                if is_copy {
-                                    ctx.emit_slot_store_copy(SlotDest::External { unit, slot }, Operand::Value(value_id));
-                                } else {
-                                    ctx.emit_slot_store_move(SlotDest::External { unit, slot }, Operand::Value(value_id));
-                                }
-                                Ok(())
+                            if is_copy {
+                                ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
+                            } else {
+                                ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
                             }
-                            _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", name),
+                            Ok(())
                         }
-                    } else {
-                        // Can occur when a previous script unit failed to lower.
-                        Err(LowerError::VariableNotFound(name))
+                        Operand::ExternalSlot { unit, slot } => {
+                            // Drop old value before storing new one.
+                            // Use DropTracked: external slots are script-level bindings, always tracked.
+                            let is_copy = ctx.external_slot_type(&name).map(|t| t.is_copy()).unwrap_or(false);
+                            if !is_copy {
+                                ctx.emit(Instruction::DropTracked {
+                                    operand: Operand::ExternalSlot { unit, slot },
+                                });
+                            }
+                            if is_copy {
+                                ctx.emit_slot_store_copy(SlotDest::External { unit, slot }, Operand::Value(value_id));
+                            } else {
+                                ctx.emit_slot_store_move(SlotDest::External { unit, slot }, Operand::Value(value_id));
+                            }
+                            Ok(())
+                        }
+                        _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", name),
                     }
                 }
                 ast::SetTarget::Proj(proj) => {

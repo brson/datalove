@@ -659,7 +659,7 @@ pub(super) fn collect_field_path<'db>(
     // Look up the root variable's type (works for slots and params).
     let root_name_str = root_name.text(ctx.db).to_string();
     let root_type = ctx.var_type_by_name(&root_name_str)
-        .ok_or_else(|| LowerError::VariableNotFound(root_name_str.clone()))?;
+        .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
 
     // Now resolve each selector to a field index by walking through the types.
     // Typechecker validates all field accesses.

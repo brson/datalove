@@ -19,14 +19,16 @@ Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "UnresolvedName(\"is_even\")",
+                ],
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Error",
-                message: "function not found: is_even",
+                status: "Skipped",
             ),
             output: "",
         ),
