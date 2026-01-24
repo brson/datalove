@@ -77,10 +77,10 @@ fn lower_call_arg<'db>(
         // The caller retains ownership and must drop after the call.
         let operand = lower_operand(ctx, arg)?;
         // For out params, destroy existing value before call.
-        // Use DropTracked since the operand might be uninitialized (e.g., an Out param).
+        // Use precise Drop for values/temps, DropTracked for tracked bindings (slots, Out params).
         if mode == ParamMode::Out {
             if let Some(ty) = arg_type {
-                ctx.emit_drop_tracked_for_type(&operand, ty);
+                ctx.emit_drop_for_operand(&operand, ty);
             }
         }
         return Ok(operand);

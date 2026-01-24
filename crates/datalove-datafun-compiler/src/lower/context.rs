@@ -585,12 +585,18 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
-    /// Emit a DropTracked instruction for a single operand if its type requires it.
+    /// Emit drop for an operand, choosing precise or tracked based on binding.
     ///
-    /// Used for operands that might be uninitialized (e.g., Out params, uninitialized slots).
-    pub fn emit_drop_tracked_for_type(&mut self, operand: &Operand, ty: &IrType) {
-        if !ty.is_copy() {
+    /// Uses Drop for precise bindings (values, temps) and DropTracked for tracked
+    /// bindings (slots in control flow, Out params).
+    pub fn emit_drop_for_operand(&mut self, operand: &Operand, ty: &IrType) {
+        if ty.is_copy() {
+            return;
+        }
+        if self.is_operand_tracked(operand.clone()) {
             self.emit(Instruction::DropTracked { operand: operand.clone() });
+        } else {
+            self.emit(Instruction::Drop { operand: operand.clone() });
         }
     }
 
