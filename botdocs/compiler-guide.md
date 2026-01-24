@@ -225,6 +225,109 @@ pub struct ModuleCompilationOutput<'db> {
 
 Modules with typecheck errors skip ownership analysis and lowering.
 
+## Ownership Analysis
+
+Ownership analysis (`ownership_analysis.rs`) runs after typechecking and before IR lowering. It performs:
+
+1. **Ownership tracking**: Values are Live or Moved
+2. **Borrow checking**: `ref`/`mut`/`out` params cannot be moved
+3. **Initialization tracking**: `out` params must be initialized before return
+4. **Drop scheduling**: Computes where Drop instructions should be emitted
+
+### Analysis Errors
+
+| Code | Error | Trigger |
+|------|-------|---------|
+| D001 | UseAfterMove | Using value after move |
+| D002 | DoubleMove | Moving value twice |
+| D003 | CannotMoveBorrowed | Moving `ref`/`mut`/`out` param |
+| D004 | CannotMutFromRef | Passing `ref` to `mut` param |
+| D005 | ReadUninitializedOutParam | Reading `out` before `set` |
+| D006 | OutParamNotInitialized | Return without initializing `out` |
+| D007 | MoveInLoop | Moving outer-scoped value in loop |
+| D008 | InconsistentBranchMove | Value moved in one branch only |
+| D009 | OutParamPartialWrite | Field write to `out` param |
+
+### Tracking Categories
+
+```rust
+pub enum TrackingCategory {
+    Copy,    // Copy type - no tracking/drops needed
+    Precise, // State statically known at every point
+    Tracked, // State may vary at runtime (needs tracking byte)
+}
+```
+
+**Tracked bindings**: Exports, `out` params, conditional moves, mutable slots.
+
+### Drop Schedule
+
+`DropSchedule` tells lowering where to emit drops:
+
+```rust
+pub struct DropSchedule {
+    pub then_branch_exit: BTreeMap<usize, Vec<BindingId>>,
+    pub else_branch_exit: BTreeMap<usize, Vec<BindingId>>,
+    pub before_return: BTreeMap<usize, Vec<BindingId>>,
+    pub before_try_return: BTreeMap<usize, Vec<BindingId>>,
+    pub loop_body_end: BTreeMap<usize, Vec<BindingId>>,
+    pub before_break: BTreeMap<usize, Vec<BindingId>>,
+    pub before_continue: BTreeMap<usize, Vec<BindingId>>,
+}
+```
+
+## Parameter Modes in IR
+
+### ParamMode
+
+```rust
+pub enum ParamMode {
+    In,  // Ownership transfers to callee
+    Ref, // Read-only borrow
+    Mut, // Read-write borrow
+    Out, // Write-only, callee must initialize
+}
+```
+
+### IR Instructions for Parameters
+
+**Reading params:**
+- `ParamLoad { param, value }` - Load value from param slot
+
+**Writing to `mut`/`out` params:**
+- `ParamStore { param, value }` - Store to Mut param (always destroys old value)
+- `ParamStoreTracked { param, value }` - Store to Out param (checks tracking byte)
+- `ParamSetField { param, field_path, value }` - Set field in Mut param
+- `ParamSetFieldTracked { param, field_path, value }` - Set field in Out param
+
+**Tracking field:**
+- `IrFunction.tracked_params: Vec<ParamId>` - Params needing runtime tracking
+
+### Call Site Semantics
+
+For `out` params, the **caller** destroys the existing value before the call:
+
+```rust
+// Lowering emits DropViaRef before passing field projection to out param
+Instruction::DropViaRef { ref_value }
+```
+
+The callee sees an uninitialized slot and uses tracked instructions that skip destroy on first write.
+
+### AOT Frame Layout
+
+Out params get tracking bytes in the frame:
+
+```rust
+// FrameLayout::compute
+let param_tracking_base = tracking_offset + tracked_values.len() + tracked_slots.len();
+for (i, &pid) in tracked_params.iter().enumerate() {
+    params[pid.0 as usize].tracking_byte = Some(param_tracking_base + i as u32);
+}
+```
+
+Tracking bytes: `UNINIT = 0x00`, `LIVE = 0x01`, `MOVED = 0x02`
+
 ## Test Patterns
 
 ### Exampletest Framework
@@ -289,7 +392,7 @@ fun bar() end fun
 | `compiler/src/lib.rs` | `Database`, module exports |
 | `compiler/src/compile.rs` | `compile_modules()`, `ModuleCompilationOutput` |
 | `compiler/src/module_graph.rs` | `IncrementalModuleWorld`, parsing pipeline |
-| `compiler/src/ownership_analysis.rs` | Drop/ownership analysis |
+| `compiler/src/ownership_analysis.rs` | Drop/ownership analysis (see Ownership Analysis section) |
 | `compiler/src/tracked_ownership_analysis.rs` | Salsa-tracked ownership analysis |
 | `compiler/src/tracked_lower.rs` | Salsa-tracked IR lowering |
 | `compiler/src/lower/` | IR lowering implementation |
