@@ -1,4 +1,21 @@
-# task-critical-review
+## task-critical-comment-review
+
+Review comments and doc comments for
+correctness,
+completeness,
+conciseness.
+
+Write straightforward docs like I would,
+or my hero Hemmingway would.
+Not too listy.
+
+Module crate docs should provide a sufficient architectural overview,
+with entry points and examples if appropriate.
+
+
+
+
+## task-critical-review
 
 Review the code in question carefully as a subject expert.
 Look for:
