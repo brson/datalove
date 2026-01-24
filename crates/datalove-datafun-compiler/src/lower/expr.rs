@@ -157,6 +157,16 @@ pub fn lower_expression_for_ref<'db>(
             // This avoids the Move that lower_expression would emit for Params,
             // which would transfer ownership and leave the Param empty.
             let name_str = name.text(ctx.db);
+            // Check const bindings first - these are compile-time values.
+            if let Some((const_type, const_value)) = ctx.lookup_const(name_str).cloned() {
+                let dest = ctx.fresh_value(const_type.clone());
+                ctx.emit(Instruction::Const {
+                    dest,
+                    value: const_value,
+                });
+                ctx.record_expr_temp(dest, const_type);
+                return Ok(Operand::Value(dest));
+            }
             let operand = ctx.lookup_var(name_str)
                 .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
             Ok(operand)

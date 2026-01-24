@@ -127,6 +127,22 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 let val = *(ptr as *const f64);
                 Ok(ConstValue::F64(val))
             }
+            IrType::Int => {
+                // Bigint is stored as: data pointer, size_and_sign, capacity.
+                let int_ptr = ptr as *const datalove_rtdt::Int;
+                let int_val = &*int_ptr;
+
+                let num_limbs = int_val.size_and_sign.unsigned_abs() as usize;
+                let negative = int_val.size_and_sign < 0;
+
+                let limbs = if num_limbs == 0 {
+                    Vec::new()
+                } else {
+                    std::slice::from_raw_parts(int_val.data, num_limbs).to_vec()
+                };
+
+                Ok(ConstValue::Int { limbs, negative })
+            }
             // TODO: Add support for aggregates and collections.
             _ => Err(CtfeError::UnsupportedType(format!("{:?}", ir_type))),
         }

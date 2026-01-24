@@ -1733,6 +1733,8 @@ pub enum ConstEvalError {
     GasExpired { binding_name: String },
     /// Dependency on a const that failed to evaluate.
     DependencyFailed { binding_name: String, dependency: String },
+    /// Lowering the const expression to IR failed.
+    LoweringFailed { binding_name: String, message: String },
 }
 
 impl std::fmt::Display for ConstEvalError {
@@ -1743,6 +1745,9 @@ impl std::fmt::Display for ConstEvalError {
             }
             ConstEvalError::DependencyFailed { binding_name, dependency } => {
                 write!(f, "const '{}' depends on failed const '{}'", binding_name, dependency)
+            }
+            ConstEvalError::LoweringFailed { binding_name, message } => {
+                write!(f, "failed to lower const '{}': {}", binding_name, message)
             }
         }
     }

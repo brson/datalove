@@ -529,18 +529,24 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Const(const_stmt) => {
-            // Const bindings must be pre-resolved in Phase 2.
+            // Const bindings are evaluated at compile time.
             let name = const_stmt.name.text(ctx.db).to_string();
 
             if ctx.lookup_const(&name).is_some() {
-                // Already pre-resolved - nothing to do.
+                // Already pre-resolved in Phase 2 - nothing to do.
                 Ok(())
             } else {
-                // Not pre-resolved - this is an error in the compilation pipeline.
-                Err(LowerError::NotImplemented(format!(
-                    "const '{}' was not pre-resolved; ensure CTFE evaluator is configured",
-                    name
-                )))
+                // Fallback: evaluate using CTFE evaluator if available.
+                let init_expr = const_stmt.value;
+                let ir_type = ctx.expr_type(init_expr);
+
+                match super::const_expr::eval_const_expr(ctx, init_expr) {
+                    Ok(value) => {
+                        ctx.add_const(name, ir_type, value);
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                }
             }
         }
         Statement::ParseError(_) => {

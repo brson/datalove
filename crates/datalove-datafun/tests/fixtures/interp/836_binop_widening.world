@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+fun calc(): int
+    let a = 10 + 20 + 12
+    ret a
+end fun
+
+debuglog calc()

@@ -1,16 +1,25 @@
 //! Compile-time constant expression evaluation.
 //!
 //! Evaluates expressions at compile time. Simple literals are extracted directly.
-//! Complex expressions are lowered to IR and evaluated via a pluggable `CtfeEvaluator`.
+//! Complex expressions are lowered to IR using the real lowering pipeline and
+//! evaluated via a pluggable `CtfeEvaluator`.
+//!
+//! This module uses "isolated lowering" - creating a fresh `LowerCtx` that reuses
+//! type information but has independent IR state. This ensures CTFE gets all the
+//! same lowering behavior as runtime code (widening, checked ops, etc.) without
+//! code duplication.
 
 use std::collections::HashMap;
-use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind};
+use datalove_datafun_ast::ast::{ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
-    ConstValue, IrType, IrScriptUnit, IrBlock, BlockId, ValueId,
-    Operand, Terminator, Instruction, SymbolTable, BinOp, UnaryOp,
+    ConstValue, IrType, IrScriptUnit,
+    Operand, Terminator, SymbolTable,
 };
 use super::context::LowerCtx;
 use super::LowerError;
+
+// Empty arrays for isolated contexts that don't need call resolution.
+static EMPTY_CALL_TARGETS: Vec<Option<datalove_datafun_tycheck::ResolvedCallTarget<'static>>> = Vec::new();
 
 /// Evaluate a constant expression at compile time.
 ///
@@ -117,180 +126,17 @@ pub fn eval_const_expr_with_evaluator<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
     ir_type: &IrType,
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     evaluator: std::rc::Rc<std::cell::RefCell<dyn datalove_datafun_ir::CtfeEvaluator>>,
 ) -> Result<ConstValue, LowerError> {
-    // Lower the expression to a minimal IR unit.
-    let unit = lower_const_expr_to_unit_standalone(db, expr, ir_type, resolved_consts)?;
+    // Lower the expression to a minimal IR unit using isolated lowering.
+    let unit = lower_const_expr_to_unit_standalone(db, expr, expr_types, resolved_consts)?;
 
     // Evaluate using the CTFE evaluator.
     evaluator.borrow_mut()
         .evaluate(&unit, ir_type)
         .map_err(|e| LowerError::NotImplemented(format!("CTFE error: {}", e)))
-}
-
-/// Lower a const expression to a minimal IrScriptUnit without needing LowerCtx.
-///
-/// Used for module-level const evaluation outside of tracked functions.
-fn lower_const_expr_to_unit_standalone<'db>(
-    db: &'db dyn salsa::Database,
-    expr: ExprFun<'db>,
-    ir_type: &IrType,
-    resolved_consts: &HashMap<String, (IrType, ConstValue)>,
-) -> Result<IrScriptUnit, LowerError> {
-    let mut mini_ctx = StandaloneMiniLowerCtx::new(db, ir_type.clone(), resolved_consts);
-    let result_value = mini_ctx.lower_expr(expr)?;
-    mini_ctx.finish(result_value, ir_type.clone())
-}
-
-/// Minimal lowering context for standalone const expression evaluation.
-struct StandaloneMiniLowerCtx<'a, 'db> {
-    db: &'db dyn salsa::Database,
-    result_type: IrType,
-    resolved_consts: &'a HashMap<String, (IrType, ConstValue)>,
-    instructions: Vec<Instruction>,
-    next_value: u32,
-    value_types: Vec<IrType>,
-}
-
-impl<'a, 'db> StandaloneMiniLowerCtx<'a, 'db> {
-    fn new(db: &'db dyn salsa::Database, result_type: IrType, resolved_consts: &'a HashMap<String, (IrType, ConstValue)>) -> Self {
-        Self {
-            db,
-            result_type,
-            resolved_consts,
-            instructions: Vec::new(),
-            next_value: 0,
-            value_types: Vec::new(),
-        }
-    }
-
-    fn fresh_value(&mut self, ir_type: IrType) -> ValueId {
-        let id = ValueId(self.next_value);
-        self.next_value += 1;
-        self.value_types.push(ir_type);
-        id
-    }
-
-    fn emit(&mut self, instr: Instruction) {
-        self.instructions.push(instr);
-    }
-
-    fn lower_expr(&mut self, expr: ExprFun<'db>) -> Result<ValueId, LowerError> {
-        // Use result_type for type context when needed.
-        let expr_type = self.result_type.clone();
-
-        match expr.expr(self.db) {
-            ExprFunKind::True(_) => {
-                let dest = self.fresh_value(IrType::Bool);
-                self.emit(Instruction::Const { dest, value: ConstValue::Bool(true) });
-                Ok(dest)
-            }
-            ExprFunKind::False(_) => {
-                let dest = self.fresh_value(IrType::Bool);
-                self.emit(Instruction::Const { dest, value: ConstValue::Bool(false) });
-                Ok(dest)
-            }
-            ExprFunKind::None(_) => {
-                let dest = self.fresh_value(expr_type);
-                self.emit(Instruction::Const { dest, value: ConstValue::OptionNone });
-                Ok(dest)
-            }
-            ExprFunKind::Int(int_expr) => {
-                let text = int_expr.value.text(self.db);
-                let value = super::literal::parse_int_const(text, &expr_type)
-                    .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
-                let dest = self.fresh_value(expr_type);
-                self.emit(Instruction::Const { dest, value });
-                Ok(dest)
-            }
-            ExprFunKind::Float(float_expr) => {
-                let text = float_expr.value.text(self.db);
-                let value = super::literal::parse_float_const(text, &expr_type)
-                    .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
-                let dest = self.fresh_value(expr_type);
-                self.emit(Instruction::Const { dest, value });
-                Ok(dest)
-            }
-            ExprFunKind::String(s) => {
-                let value = ConstValue::String(s.value.as_str(self.db).to_string());
-                let dest = self.fresh_value(expr_type);
-                self.emit(Instruction::Const { dest, value });
-                Ok(dest)
-            }
-            ExprFunKind::Name(name) => {
-                let name_str = name.text(self.db);
-                if let Some((ty, value)) = self.resolved_consts.get(name_str) {
-                    let dest = self.fresh_value(ty.clone());
-                    self.emit(Instruction::Const { dest, value: value.clone() });
-                    Ok(dest)
-                } else {
-                    Err(LowerError::NotImplemented(format!(
-                        "non-const variable '{}' in const expression",
-                        name_str
-                    )))
-                }
-            }
-            ExprFunKind::BinOp(binop) => {
-                let lhs = self.lower_expr(binop.lhs)?;
-                let rhs = self.lower_expr(binop.rhs)?;
-                let lhs_type = self.value_types[lhs.0 as usize].clone();
-                let dest = self.fresh_value(lhs_type);
-
-                let ir_op = convert_binop(binop.op)?;
-                self.emit(Instruction::BinOp {
-                    dest,
-                    op: ir_op,
-                    lhs: Operand::Value(lhs),
-                    rhs: Operand::Value(rhs),
-                });
-                Ok(dest)
-            }
-            ExprFunKind::UnaryOp(unop) => {
-                let operand = self.lower_expr(unop.operand)?;
-                let operand_type = self.value_types[operand.0 as usize].clone();
-                let dest = self.fresh_value(operand_type);
-
-                let ir_op = convert_unaryop(unop.op)?;
-                self.emit(Instruction::UnaryOp {
-                    dest,
-                    op: ir_op,
-                    operand: Operand::Value(operand),
-                });
-                Ok(dest)
-            }
-            _ => Err(LowerError::NotImplemented(
-                "unsupported expression in const evaluation".to_string()
-            )),
-        }
-    }
-
-    fn finish(self, result: ValueId, _result_type: IrType) -> Result<IrScriptUnit, LowerError> {
-        let block = IrBlock {
-            id: BlockId(0),
-            params: Vec::new(),
-            instructions: self.instructions,
-            terminator: Terminator::UnitEnd {
-                result: Some(Operand::Value(result)),
-            },
-        };
-
-        Ok(IrScriptUnit {
-            blocks: vec![block],
-            value_count: self.next_value,
-            slot_count: 0,
-            value_types: self.value_types,
-            slot_types: Vec::new(),
-            tracked_values: Vec::new(),
-            tracked_slots: Vec::new(),
-            unit_end_values: Vec::new(),
-            unit_end_slots: Vec::new(),
-            functions: Vec::new(),
-            symbols: SymbolTable::new(),
-            result: Some(result),
-            exports: Vec::new(),
-        })
-    }
 }
 
 /// Try to evaluate a literal expression directly without the interpreter.
@@ -330,220 +176,103 @@ fn try_eval_literal<'db>(
 }
 
 /// Lower a const expression to a minimal IrScriptUnit for execution.
+///
+/// Uses isolated lowering: creates a fresh `LowerCtx` with independent IR state
+/// but reuses type information from the parent context. This ensures CTFE
+/// expressions get the same lowering behavior as runtime code (widening, etc.).
 fn lower_const_expr_to_unit<'db>(
-    ctx: &LowerCtx<'db>,
+    parent_ctx: &LowerCtx<'db>,
     expr: ExprFun<'db>,
 ) -> Result<IrScriptUnit, LowerError> {
-    let result_type = ctx.expr_type(expr);
+    // Create isolated LowerCtx that reuses type info but has fresh IR state.
+    // We pass empty call_targets since const expressions don't support function calls yet.
+    let mut isolated_ctx = LowerCtx::new(
+        parent_ctx.db,
+        parent_ctx.expr_types,
+        // SAFETY: We're creating a temporary context. The empty slice is fine
+        // because const expressions shouldn't contain function calls.
+        // If they do, we'll get a panic which is appropriate.
+        &EMPTY_CALL_TARGETS,
+    );
 
-    // Create a mini lowering context for this expression.
-    let mut mini_ctx = MiniLowerCtx::new(ctx);
+    // Copy const bindings from parent so we can reference previously evaluated consts.
+    isolated_ctx.const_bindings = parent_ctx.const_bindings.clone();
 
-    // Lower the expression.
-    let result_value = mini_ctx.lower_expr(expr)?;
+    // Use the real lowering pipeline.
+    let result_value = super::expr::lower_expression(&mut isolated_ctx, expr)?;
 
-    // Build the script unit.
-    mini_ctx.finish(result_value, result_type)
+    // Finish the block with a UnitEnd terminator.
+    isolated_ctx.finish_block(Terminator::UnitEnd {
+        result: Some(Operand::Value(result_value)),
+    });
+
+    // Renumber blocks for sequential IDs.
+    isolated_ctx.renumber_blocks();
+
+    // Extract IR into an IrScriptUnit.
+    Ok(IrScriptUnit {
+        blocks: isolated_ctx.body.blocks,
+        value_count: isolated_ctx.body.next_value,
+        slot_count: isolated_ctx.body.next_slot,
+        value_types: isolated_ctx.body.value_types,
+        slot_types: isolated_ctx.body.slot_types,
+        tracked_values: Vec::new(), // No tracking needed for CTFE.
+        tracked_slots: Vec::new(),
+        unit_end_values: Vec::new(),
+        unit_end_slots: Vec::new(),
+        functions: Vec::new(),
+        symbols: SymbolTable::new(),
+        result: Some(result_value),
+        exports: Vec::new(),
+    })
 }
 
-/// Minimal lowering context for const expression evaluation.
-struct MiniLowerCtx<'a, 'db> {
-    parent: &'a LowerCtx<'db>,
-    value_types: Vec<IrType>,
-    instructions: Vec<Instruction>,
-    next_value: u32,
-}
+/// Lower a const expression to IrScriptUnit without needing a parent LowerCtx.
+///
+/// Used for module-level const evaluation and Phase 2 of the memoized pipeline.
+fn lower_const_expr_to_unit_standalone<'db>(
+    db: &'db dyn salsa::Database,
+    expr: ExprFun<'db>,
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    resolved_consts: &HashMap<String, (IrType, ConstValue)>,
+) -> Result<IrScriptUnit, LowerError> {
+    // Create a fresh LowerCtx with the provided type information.
+    let mut ctx = LowerCtx::new(
+        db,
+        expr_types,
+        &EMPTY_CALL_TARGETS,
+    );
 
-impl<'a, 'db> MiniLowerCtx<'a, 'db> {
-    fn new(parent: &'a LowerCtx<'db>) -> Self {
-        Self {
-            parent,
-            value_types: Vec::new(),
-            instructions: Vec::new(),
-            next_value: 0,
-        }
-    }
+    // Pre-populate const bindings from previously resolved values.
+    ctx.const_bindings = resolved_consts.clone();
 
-    fn fresh_value(&mut self, ty: IrType) -> ValueId {
-        let id = ValueId(self.next_value);
-        self.next_value += 1;
-        self.value_types.push(ty);
-        id
-    }
+    // Use the real lowering pipeline.
+    let result_value = super::expr::lower_expression(&mut ctx, expr)?;
 
-    fn emit(&mut self, instr: Instruction) {
-        self.instructions.push(instr);
-    }
+    // Finish the block with a UnitEnd terminator.
+    ctx.finish_block(Terminator::UnitEnd {
+        result: Some(Operand::Value(result_value)),
+    });
 
-    fn lower_expr(&mut self, expr: ExprFun<'db>) -> Result<ValueId, LowerError> {
-        let expr_type = self.parent.expr_type(expr);
+    // Renumber blocks for sequential IDs.
+    ctx.renumber_blocks();
 
-        match expr.expr(self.parent.db) {
-            // Literals - emit Const instructions.
-            ExprFunKind::True(_) => {
-                let dest = self.fresh_value(IrType::Bool);
-                self.emit(Instruction::Const { dest, value: ConstValue::Bool(true) });
-                Ok(dest)
-            }
-            ExprFunKind::False(_) => {
-                let dest = self.fresh_value(IrType::Bool);
-                self.emit(Instruction::Const { dest, value: ConstValue::Bool(false) });
-                Ok(dest)
-            }
-            ExprFunKind::None(_) => {
-                let dest = self.fresh_value(expr_type);
-                self.emit(Instruction::Const { dest, value: ConstValue::OptionNone });
-                Ok(dest)
-            }
-            ExprFunKind::Int(int_expr) => {
-                let text = int_expr.value.text(self.parent.db);
-                let value = super::literal::parse_int_const(text, &expr_type)
-                    .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
-                let dest = self.fresh_value(expr_type);
-                self.emit(Instruction::Const { dest, value });
-                Ok(dest)
-            }
-            ExprFunKind::Float(float_expr) => {
-                let text = float_expr.value.text(self.parent.db);
-                let value = super::literal::parse_float_const(text, &expr_type)
-                    .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
-                let dest = self.fresh_value(expr_type);
-                self.emit(Instruction::Const { dest, value });
-                Ok(dest)
-            }
-            ExprFunKind::String(s) => {
-                let value = ConstValue::String(s.value.as_str(self.parent.db).to_string());
-                let dest = self.fresh_value(expr_type);
-                self.emit(Instruction::Const { dest, value });
-                Ok(dest)
-            }
-
-            // Const reference - substitute with the previously computed value.
-            ExprFunKind::Name(name) => {
-                let name_str = name.text(self.parent.db);
-                if let Some((_, value)) = self.parent.lookup_const(name_str) {
-                    let dest = self.fresh_value(expr_type);
-                    self.emit(Instruction::Const { dest, value: value.clone() });
-                    Ok(dest)
-                } else {
-                    Err(LowerError::NotImplemented(format!(
-                        "non-const variable '{}' in const expression",
-                        name_str
-                    )))
-                }
-            }
-
-            // Binary operation.
-            ExprFunKind::BinOp(binop) => {
-                let lhs = self.lower_expr(binop.lhs)?;
-                let rhs = self.lower_expr(binop.rhs)?;
-                let dest = self.fresh_value(expr_type);
-
-                let ir_op = convert_binop(binop.op)?;
-                self.emit(Instruction::BinOp {
-                    dest,
-                    op: ir_op,
-                    lhs: Operand::Value(lhs),
-                    rhs: Operand::Value(rhs),
-                });
-                Ok(dest)
-            }
-
-            // Unary operation.
-            ExprFunKind::UnaryOp(unop) => {
-                let operand = self.lower_expr(unop.operand)?;
-                let dest = self.fresh_value(expr_type);
-
-                let ir_op = convert_unaryop(unop.op)?;
-                self.emit(Instruction::UnaryOp {
-                    dest,
-                    op: ir_op,
-                    operand: Operand::Value(operand),
-                });
-                Ok(dest)
-            }
-
-            // Function calls not supported yet.
-            ExprFunKind::FunctionCall(_) => {
-                Err(LowerError::NotImplemented(
-                    "function calls in const expressions not yet supported".to_string()
-                ))
-            }
-
-            _ => Err(LowerError::NotImplemented(format!(
-                "const evaluation for expression type not yet supported: {:?}",
-                std::mem::discriminant(&expr.expr(self.parent.db))
-            ))),
-        }
-    }
-
-    fn finish(self, result: ValueId, result_type: IrType) -> Result<IrScriptUnit, LowerError> {
-        let block = IrBlock {
-            id: BlockId(0),
-            params: Vec::new(),
-            instructions: self.instructions,
-            terminator: Terminator::UnitEnd {
-                result: Some(Operand::Value(result)),
-            },
-        };
-
-        Ok(IrScriptUnit {
-            blocks: vec![block],
-            value_count: self.next_value,
-            slot_count: 0,
-            value_types: self.value_types,
-            slot_types: Vec::new(),
-            tracked_values: Vec::new(),
-            tracked_slots: Vec::new(),
-            unit_end_values: Vec::new(),
-            unit_end_slots: Vec::new(),
-            functions: Vec::new(),
-            symbols: SymbolTable::new(),
-            result: Some(result),
-            exports: Vec::new(),
-        })
-    }
-}
-
-/// Convert AST BinOp to IR BinOp.
-fn convert_binop(ast_op: ast::BinOp) -> Result<BinOp, LowerError> {
-    match ast_op {
-        ast::BinOp::Add => Ok(BinOp::Add),
-        ast::BinOp::Sub => Ok(BinOp::Sub),
-        ast::BinOp::Mul => Ok(BinOp::Mul),
-        ast::BinOp::Div => Ok(BinOp::Div),
-        ast::BinOp::Eq => Ok(BinOp::Eq),
-        ast::BinOp::Ne => Ok(BinOp::Ne),
-        ast::BinOp::Lt => Ok(BinOp::Lt),
-        ast::BinOp::Le => Ok(BinOp::Le),
-        ast::BinOp::Gt => Ok(BinOp::Gt),
-        ast::BinOp::Ge => Ok(BinOp::Ge),
-        ast::BinOp::And => Ok(BinOp::LogicAnd),
-        ast::BinOp::Or => Ok(BinOp::LogicOr),
-        ast::BinOp::Xor => Ok(BinOp::LogicXor),
-        // Checked/optional ops not yet supported in simple CTFE.
-        ast::BinOp::AddChecked | ast::BinOp::SubChecked |
-        ast::BinOp::MulChecked | ast::BinOp::DivChecked |
-        ast::BinOp::AddOptional | ast::BinOp::SubOptional |
-        ast::BinOp::MulOptional | ast::BinOp::DivOptional => {
-            Err(LowerError::NotImplemented(
-                "checked/optional arithmetic in const expressions not yet supported".to_string()
-            ))
-        }
-    }
-}
-
-/// Convert AST UnaryOp to IR UnaryOp.
-fn convert_unaryop(ast_op: ast::UnaryOp) -> Result<UnaryOp, LowerError> {
-    match ast_op {
-        ast::UnaryOp::Neg => Ok(UnaryOp::Neg),
-        ast::UnaryOp::Not => Ok(UnaryOp::Not),
-        ast::UnaryOp::NegOptional | ast::UnaryOp::NegResult => {
-            Err(LowerError::NotImplemented(
-                "optional/result negation in const expressions not yet supported".to_string()
-            ))
-        }
-    }
+    // Extract IR into an IrScriptUnit.
+    Ok(IrScriptUnit {
+        blocks: ctx.body.blocks,
+        value_count: ctx.body.next_value,
+        slot_count: ctx.body.next_slot,
+        value_types: ctx.body.value_types,
+        slot_types: ctx.body.slot_types,
+        tracked_values: Vec::new(),
+        tracked_slots: Vec::new(),
+        unit_end_values: Vec::new(),
+        unit_end_slots: Vec::new(),
+        functions: Vec::new(),
+        symbols: SymbolTable::new(),
+        result: Some(result_value),
+        exports: Vec::new(),
+    })
 }
 
 // ============================================================================
@@ -571,7 +300,7 @@ pub fn evaluate_consts<'db>(
     db: &'db dyn salsa::Database,
     graph: &ConstBindingGraph,
     statements: &[Statement<'db>],
-    expr_types: &[Option<Type<'db>>],
+    expr_types: &'db [Option<Type<'db>>],
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
 ) -> Result<ResolvedConsts, ConstEvalError> {
     let mut resolved = ResolvedConsts::new();
@@ -608,8 +337,18 @@ pub fn evaluate_consts<'db>(
             // Not a const reference we've evaluated - fall through to CTFE.
         }
 
-        // Lower to mini-unit and evaluate.
-        let unit = lower_const_expr_standalone(db, expr, &binding.ir_type, &resolved)?;
+        // Build resolved_consts HashMap for the lowering context.
+        let resolved_consts_map: HashMap<String, (IrType, ConstValue)> = resolved
+            .iter()
+            .map(|(name, value)| (name.to_string(), (binding.ir_type.clone(), value.clone())))
+            .collect();
+
+        // Lower to IR unit using isolated lowering (gets widening, etc.).
+        let unit = lower_const_expr_to_unit_standalone(db, expr, expr_types, &resolved_consts_map)
+            .map_err(|e| ConstEvalError::LoweringFailed {
+                binding_name: binding.name.clone(),
+                message: e.to_string(),
+            })?;
 
         let value = evaluator.borrow_mut()
             .evaluate(&unit, &binding.ir_type)
@@ -655,187 +394,5 @@ fn try_extract_literal<'db>(
         }
 
         _ => None,
-    }
-}
-
-/// Lower a const expression to IrScriptUnit without needing LowerCtx.
-///
-/// Uses pre-resolved const values for name references.
-fn lower_const_expr_standalone<'db>(
-    db: &'db dyn salsa::Database,
-    expr: ExprFun<'db>,
-    result_type: &IrType,
-    resolved: &ResolvedConsts,
-) -> Result<IrScriptUnit, ConstEvalError> {
-    let mut ctx = StandaloneLowerCtx::new(db, resolved);
-    let result_value = ctx.lower_expr(expr, result_type)?;
-    Ok(ctx.finish(result_value))
-}
-
-/// Standalone lowering context for Phase 2 const evaluation.
-///
-/// Unlike MiniLowerCtx, this doesn't depend on LowerCtx.
-struct StandaloneLowerCtx<'a, 'db> {
-    db: &'db dyn salsa::Database,
-    resolved: &'a ResolvedConsts,
-    value_types: Vec<IrType>,
-    instructions: Vec<Instruction>,
-    next_value: u32,
-}
-
-impl<'a, 'db> StandaloneLowerCtx<'a, 'db> {
-    fn new(db: &'db dyn salsa::Database, resolved: &'a ResolvedConsts) -> Self {
-        Self {
-            db,
-            resolved,
-            value_types: Vec::new(),
-            instructions: Vec::new(),
-            next_value: 0,
-        }
-    }
-
-    fn fresh_value(&mut self, ty: IrType) -> ValueId {
-        let id = ValueId(self.next_value);
-        self.next_value += 1;
-        self.value_types.push(ty);
-        id
-    }
-
-    fn emit(&mut self, instr: Instruction) {
-        self.instructions.push(instr);
-    }
-
-    fn lower_expr(&mut self, expr: ExprFun<'db>, expected_type: &IrType) -> Result<ValueId, ConstEvalError> {
-        match expr.expr(self.db) {
-            // Literals.
-            ExprFunKind::True(_) => {
-                let dest = self.fresh_value(IrType::Bool);
-                self.emit(Instruction::Const { dest, value: ConstValue::Bool(true) });
-                Ok(dest)
-            }
-            ExprFunKind::False(_) => {
-                let dest = self.fresh_value(IrType::Bool);
-                self.emit(Instruction::Const { dest, value: ConstValue::Bool(false) });
-                Ok(dest)
-            }
-            ExprFunKind::None(_) => {
-                let dest = self.fresh_value(expected_type.clone());
-                self.emit(Instruction::Const { dest, value: ConstValue::OptionNone });
-                Ok(dest)
-            }
-            ExprFunKind::Int(int_expr) => {
-                let text = int_expr.value.text(self.db);
-                let value = super::literal::parse_int_const(text, expected_type)
-                    .map_err(|_| ConstEvalError::GasExpired {
-                        binding_name: format!("invalid literal: {}", text),
-                    })?;
-                let dest = self.fresh_value(expected_type.clone());
-                self.emit(Instruction::Const { dest, value });
-                Ok(dest)
-            }
-            ExprFunKind::Float(float_expr) => {
-                let text = float_expr.value.text(self.db);
-                let value = super::literal::parse_float_const(text, expected_type)
-                    .map_err(|_| ConstEvalError::GasExpired {
-                        binding_name: format!("invalid literal: {}", text),
-                    })?;
-                let dest = self.fresh_value(expected_type.clone());
-                self.emit(Instruction::Const { dest, value });
-                Ok(dest)
-            }
-            ExprFunKind::String(s) => {
-                let value = ConstValue::String(s.value.as_str(self.db).to_string());
-                let dest = self.fresh_value(expected_type.clone());
-                self.emit(Instruction::Const { dest, value });
-                Ok(dest)
-            }
-
-            // Const reference.
-            ExprFunKind::Name(name) => {
-                let name_str = name.text(self.db);
-                if let Some(value) = self.resolved.get_by_name(name_str) {
-                    let dest = self.fresh_value(expected_type.clone());
-                    self.emit(Instruction::Const { dest, value: value.clone() });
-                    Ok(dest)
-                } else {
-                    Err(ConstEvalError::DependencyFailed {
-                        binding_name: name_str.to_string(),
-                        dependency: name_str.to_string(),
-                    })
-                }
-            }
-
-            // Binary operation.
-            ExprFunKind::BinOp(binop) => {
-                // For standalone lowering, we don't have type info for subexpressions.
-                // Use the expected type for both operands as a simplification.
-                // This works for homogeneous ops but may fail for others.
-                let lhs = self.lower_expr(binop.lhs, expected_type)?;
-                let rhs = self.lower_expr(binop.rhs, expected_type)?;
-                let dest = self.fresh_value(expected_type.clone());
-
-                let ir_op = convert_binop(binop.op).map_err(|_| {
-                    ConstEvalError::GasExpired {
-                        binding_name: "unsupported binop".to_string(),
-                    }
-                })?;
-                self.emit(Instruction::BinOp {
-                    dest,
-                    op: ir_op,
-                    lhs: Operand::Value(lhs),
-                    rhs: Operand::Value(rhs),
-                });
-                Ok(dest)
-            }
-
-            // Unary operation.
-            ExprFunKind::UnaryOp(unop) => {
-                let operand = self.lower_expr(unop.operand, expected_type)?;
-                let dest = self.fresh_value(expected_type.clone());
-
-                let ir_op = convert_unaryop(unop.op).map_err(|_| {
-                    ConstEvalError::GasExpired {
-                        binding_name: "unsupported unaryop".to_string(),
-                    }
-                })?;
-                self.emit(Instruction::UnaryOp {
-                    dest,
-                    op: ir_op,
-                    operand: Operand::Value(operand),
-                });
-                Ok(dest)
-            }
-
-            _ => Err(ConstEvalError::GasExpired {
-                binding_name: "unsupported expression type".to_string(),
-            }),
-        }
-    }
-
-    fn finish(self, result: ValueId) -> IrScriptUnit {
-        let block = IrBlock {
-            id: BlockId(0),
-            params: Vec::new(),
-            instructions: self.instructions,
-            terminator: Terminator::UnitEnd {
-                result: Some(Operand::Value(result)),
-            },
-        };
-
-        IrScriptUnit {
-            blocks: vec![block],
-            value_count: self.next_value,
-            slot_count: 0,
-            value_types: self.value_types,
-            slot_types: Vec::new(),
-            tracked_values: Vec::new(),
-            tracked_slots: Vec::new(),
-            unit_end_values: Vec::new(),
-            unit_end_slots: Vec::new(),
-            functions: Vec::new(),
-            symbols: SymbolTable::new(),
-            result: Some(result),
-            exports: Vec::new(),
-        }
     }
 }

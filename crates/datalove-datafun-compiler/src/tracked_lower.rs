@@ -551,6 +551,7 @@ pub fn evaluate_all_module_consts<'db>(
                             db,
                             init_expr,
                             &ir_type,
+                            expr_types,
                             &resolved_so_far,
                             evaluator.clone(),
                         ) {

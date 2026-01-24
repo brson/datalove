@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+const A: u32 = 42
+debuglog A
