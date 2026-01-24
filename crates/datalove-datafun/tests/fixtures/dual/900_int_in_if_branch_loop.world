@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+loop while true
+  if true
+    let x: int = 42
+  else
+    let y: string = "hi"
+  end if
+  break
+end loop
+
+debuglog 99

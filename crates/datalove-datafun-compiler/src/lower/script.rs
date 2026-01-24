@@ -269,10 +269,14 @@ pub fn lower_script_expr<'db>(
 fn lower_statement_for_script<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &Statement<'db>,
-    stmt_idx: usize,
+    _stmt_idx: usize,
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
 ) -> Result<(), LowerError> {
+    // Allocate a globally-unique statement ID that matches ownership analysis.
+    // This is critical: ownership analysis uses alloc_stmt_id() for ALL statements,
+    // so lowering must do the same to ensure drop schedule lookups match.
+    let stmt_idx = ctx.alloc_stmt_id();
     match stmt {
         Statement::Let(let_stmt) => {
             let name = let_stmt.name.text(ctx.db).to_string();
