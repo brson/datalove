@@ -1,0 +1,17 @@
+----------
+module local/test/inner
+----------
+
+fun test_inner_const(): u32
+    const X: u32 = 42
+    ret X
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/inner
+import inner.test_inner_const
+
+debuglog test_inner_const()
