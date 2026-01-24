@@ -182,6 +182,8 @@ pub fn lower_script_fragment_tracked<'db>(
     let script_ctx = accumulated.to_script_lower_context();
 
     // Lower the fragment.
+    // Note: tracked functions pass None for ctfe_evaluator since trait objects
+    // can't be part of salsa memoization keys. Use raw functions directly for CTFE.
     match lower::lower_script_fragment_raw(
         db,
         expr_types,
@@ -192,6 +194,7 @@ pub fn lower_script_fragment_tracked<'db>(
         func_analyses,
         script_analysis,
         Some(&func_param_types),
+        None, // ctfe_evaluator - not available in tracked context
     ) {
         Ok(ir_unit) => {
             let exports = ir_unit.exports.clone();
@@ -244,6 +247,8 @@ pub fn lower_script_expr_tracked<'db>(
     let script_ctx = accumulated.to_script_lower_context();
 
     // Lower the expression.
+    // Note: tracked functions pass None for ctfe_evaluator since trait objects
+    // can't be part of salsa memoization keys. Use raw functions directly for CTFE.
     match lower::lower_script_expr(
         db,
         expr_types,
@@ -251,6 +256,7 @@ pub fn lower_script_expr_tracked<'db>(
         &func_id_map,
         script_ctx,
         expr,
+        None, // ctfe_evaluator - not available in tracked context
     ) {
         Ok(ir_unit) => {
             let exports = ir_unit.exports.clone();
@@ -265,7 +271,7 @@ pub fn lower_script_expr_tracked<'db>(
 }
 
 /// Build func_id_map from module specs for cross-module call resolution.
-fn build_func_id_map<'db>(
+pub fn build_func_id_map<'db>(
     db: &'db dyn salsa::Database,
     module_specs: &[ModuleSpec<'db>],
 ) -> HashMap<(ModuleId, String), (IrModuleId, FuncId)> {

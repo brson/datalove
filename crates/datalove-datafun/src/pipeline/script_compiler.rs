@@ -23,18 +23,25 @@
 //! ```
 
 use rmx::prelude::*;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
+use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr};
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, lower_script_fragment_tracked, lower_script_expr_tracked,
+    build_func_id_map,
 };
 use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked,
 };
+use datalove_datafun_ir::{CtfeEvaluator, IrScriptUnit, IrType};
 use datalove_datafun_tycheck::{
     type_check_script_units, create_batch_spec,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
 };
+use datalove_datafun_compiler::ir_ext::IrTypeExt;
 
 use super::compiled_modules::CompiledModules;
 use super::result::{TypecheckResult, OwnershipResult, LoweringResult, ScriptCompilationResult};
@@ -93,6 +100,7 @@ impl<'db> CompiledModules<'db> {
             module_specs,
             last_source: None,
             last_batch_spec: None,
+            ctfe_evaluator: None,
         })
     }
 }
@@ -101,6 +109,10 @@ impl<'db> CompiledModules<'db> {
 ///
 /// Handles compilation only. No interpreter dependency.
 /// Use `compile_fragment()` or `compile_expr()` to compile units.
+///
+/// For compile-time evaluation of complex const expressions (CTFE), use
+/// `set_ctfe_evaluator()` to provide an evaluator (e.g., `InterpCtfeEvaluator`
+/// from the interpreter crate).
 pub struct ScriptCompiler<'db> {
     db: &'db dyn salsa::Database,
     accumulated_unit_specs: Vec<ScriptUnitSpec<'db>>,
@@ -108,6 +120,8 @@ pub struct ScriptCompiler<'db> {
     module_specs: Vec<ModuleSpec<'db>>,
     last_source: Option<bct::input::Source>,
     last_batch_spec: Option<ScriptBatchSpec<'db>>,
+    /// Optional CTFE evaluator for complex const expressions.
+    ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
 }
 
 impl<'db> ScriptCompiler<'db> {
@@ -164,6 +178,29 @@ impl<'db> ScriptCompiler<'db> {
     /// Get the database reference.
     pub fn db(&self) -> &'db dyn salsa::Database {
         self.db
+    }
+
+    /// Set a CTFE evaluator for complex const expressions.
+    ///
+    /// When set, the compiler can evaluate const expressions that involve
+    /// operations (like `const X = 1 + 2` or `const Y = -42`) at compile time.
+    /// Without an evaluator, only simple literals are supported for const bindings.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use datalove_datafun_interp::InterpCtfeEvaluator;
+    ///
+    /// let mut compiler = compiled.script_compiler(&db).unwrap();
+    /// compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
+    /// ```
+    pub fn set_ctfe_evaluator(&mut self, evaluator: Rc<RefCell<dyn CtfeEvaluator>>) {
+        self.ctfe_evaluator = Some(evaluator);
+    }
+
+    /// Get a clone of the CTFE evaluator if one is set.
+    pub fn ctfe_evaluator(&self) -> Option<Rc<RefCell<dyn CtfeEvaluator>>> {
+        self.ctfe_evaluator.clone()
     }
 
     /// Check for parse errors and return early result if any.
@@ -228,7 +265,14 @@ impl<'db> ScriptCompiler<'db> {
         }
 
         // Run ownership analysis and lowering (unit-kind-specific).
-        let lower_output = match unit {
+        // If CTFE evaluator is set, use raw lowering functions to pass it through.
+        // Otherwise, use tracked functions for salsa memoization.
+        let (ir_unit, new_exports, value_types, slot_types): (
+            IrScriptUnit,
+            Vec<(String, datalove_datafun_ir::ExportBinding)>,
+            Vec<IrType>,
+            Vec<IrType>,
+        ) = match unit {
             ParsedUnit::Fragment { stmts, .. } => {
                 let ownership_result = analyze_script_fragment_tracked(
                     self.db,
@@ -246,14 +290,89 @@ impl<'db> ScriptCompiler<'db> {
                         ir_unit: None,
                     };
                 }
-                lower_script_fragment_tracked(
-                    self.db,
-                    tycheck_result,
-                    self.module_specs.clone(),
-                    self.accumulated_lower_bindings.clone(),
-                    stmts,
-                    ownership_result,
-                )
+
+                if self.ctfe_evaluator.is_some() {
+                    // Use raw lowering with CTFE evaluator.
+                    let expr_types = tycheck_result.expr_types(self.db);
+                    let call_targets = tycheck_result.call_targets(self.db);
+                    let func_id_map = build_func_id_map(self.db, &self.module_specs);
+                    let script_ctx = self.accumulated_lower_bindings.to_script_lower_context();
+
+                    // Build func_param_types for type alias support.
+                    let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+                    for (name, func_type) in tycheck_result.function_types(self.db) {
+                        let param_types: Vec<IrType> = func_type.param_types(self.db)
+                            .iter()
+                            .map(|ty| IrType::from_tycheck(self.db, ty))
+                            .collect();
+                        func_param_types.insert(name.text(self.db).S(), param_types);
+                    }
+
+                    // Get function and script analyses from ownership result.
+                    let func_analyses = ownership_result.to_function_analyses_map(self.db, &stmts);
+                    let script_analysis = ownership_result.script_analysis(self.db).clone()
+                        .expect("script_analysis required for fragment units");
+
+                    match lower_script_fragment_raw(
+                        self.db,
+                        expr_types,
+                        call_targets,
+                        &func_id_map,
+                        script_ctx,
+                        stmts,
+                        func_analyses,
+                        script_analysis,
+                        Some(&func_param_types),
+                        self.ctfe_evaluator.clone(),
+                    ) {
+                        Ok(ir_unit) => {
+                            let exports = ir_unit.exports.clone();
+                            let value_types = ir_unit.value_types.clone();
+                            let slot_types = ir_unit.slot_types.clone();
+                            (ir_unit, exports, value_types, slot_types)
+                        }
+                        Err(e) => {
+                            // Remove failed unit so subsequent units don't see its bindings.
+                            self.accumulated_unit_specs.pop();
+                            return ScriptCompilationResult {
+                                typecheck: TypecheckResult::Success,
+                                ownership: OwnershipResult::Success,
+                                lowering: LoweringResult::Error { message: format!("{}", e) },
+                                ir_unit: None,
+                            };
+                        }
+                    }
+                } else {
+                    // Use tracked lowering (salsa memoization, no CTFE).
+                    let lower_output = lower_script_fragment_tracked(
+                        self.db,
+                        tycheck_result,
+                        self.module_specs.clone(),
+                        self.accumulated_lower_bindings.clone(),
+                        stmts,
+                        ownership_result,
+                    );
+
+                    if let Some(error) = lower_output.error(self.db).as_ref() {
+                        // Remove failed unit so subsequent units don't see its bindings.
+                        self.accumulated_unit_specs.pop();
+                        return ScriptCompilationResult {
+                            typecheck: TypecheckResult::Success,
+                            ownership: OwnershipResult::Success,
+                            lowering: LoweringResult::Error { message: error.clone() },
+                            ir_unit: None,
+                        };
+                    }
+
+                    let ir_unit = lower_output.ir_unit(self.db).clone()
+                        .expect("ir_unit should be Some when error is None");
+                    (
+                        ir_unit,
+                        lower_output.new_exports(self.db).clone(),
+                        lower_output.value_types(self.db).clone(),
+                        lower_output.slot_types(self.db).clone(),
+                    )
+                }
             }
             ParsedUnit::Expr(expr) => {
                 let ownership_result = analyze_script_expr_tracked(
@@ -272,39 +391,83 @@ impl<'db> ScriptCompiler<'db> {
                         ir_unit: None,
                     };
                 }
-                lower_script_expr_tracked(
-                    self.db,
-                    tycheck_result,
-                    self.module_specs.clone(),
-                    self.accumulated_lower_bindings.clone(),
-                    expr,
-                    ownership_result,
-                )
+
+                if self.ctfe_evaluator.is_some() {
+                    // Use raw lowering with CTFE evaluator.
+                    let expr_types = tycheck_result.expr_types(self.db);
+                    let call_targets = tycheck_result.call_targets(self.db);
+                    let func_id_map = build_func_id_map(self.db, &self.module_specs);
+                    let script_ctx = self.accumulated_lower_bindings.to_script_lower_context();
+
+                    match lower_script_expr(
+                        self.db,
+                        expr_types,
+                        call_targets,
+                        &func_id_map,
+                        script_ctx,
+                        expr,
+                        self.ctfe_evaluator.clone(),
+                    ) {
+                        Ok(ir_unit) => {
+                            let exports = ir_unit.exports.clone();
+                            let value_types = ir_unit.value_types.clone();
+                            let slot_types = ir_unit.slot_types.clone();
+                            (ir_unit, exports, value_types, slot_types)
+                        }
+                        Err(e) => {
+                            // Remove failed unit so subsequent units don't see its bindings.
+                            self.accumulated_unit_specs.pop();
+                            return ScriptCompilationResult {
+                                typecheck: TypecheckResult::Success,
+                                ownership: OwnershipResult::Success,
+                                lowering: LoweringResult::Error { message: format!("{}", e) },
+                                ir_unit: None,
+                            };
+                        }
+                    }
+                } else {
+                    // Use tracked lowering (salsa memoization, no CTFE).
+                    let lower_output = lower_script_expr_tracked(
+                        self.db,
+                        tycheck_result,
+                        self.module_specs.clone(),
+                        self.accumulated_lower_bindings.clone(),
+                        expr,
+                        ownership_result,
+                    );
+
+                    if let Some(error) = lower_output.error(self.db).as_ref() {
+                        // Remove failed unit so subsequent units don't see its bindings.
+                        self.accumulated_unit_specs.pop();
+                        return ScriptCompilationResult {
+                            typecheck: TypecheckResult::Success,
+                            ownership: OwnershipResult::Success,
+                            lowering: LoweringResult::Error { message: error.clone() },
+                            ir_unit: None,
+                        };
+                    }
+
+                    let ir_unit = lower_output.ir_unit(self.db).clone()
+                        .expect("ir_unit should be Some when error is None");
+                    (
+                        ir_unit,
+                        lower_output.new_exports(self.db).clone(),
+                        lower_output.value_types(self.db).clone(),
+                        lower_output.slot_types(self.db).clone(),
+                    )
+                }
             }
         };
 
-        // Check for lowering errors.
-        if let Some(error) = lower_output.error(self.db).as_ref() {
-            // Remove failed unit so subsequent units don't see its bindings.
-            self.accumulated_unit_specs.pop();
-            return ScriptCompilationResult {
-                typecheck: TypecheckResult::Success,
-                ownership: OwnershipResult::Success,
-                lowering: LoweringResult::Error { message: error.clone() },
-                ir_unit: None,
-            };
-        }
-
-        let ir_unit = lower_output.ir_unit(self.db).clone().expect("ir_unit should be Some when error is None");
         let ir_dump = format!("{}", ir_unit);
 
         // Update accumulated state for next unit.
         let unit_index = self.accumulated_lower_bindings.current_unit;
         self.accumulated_lower_bindings.add_exports(
             unit_index,
-            lower_output.new_exports(self.db),
-            lower_output.value_types(self.db),
-            lower_output.slot_types(self.db),
+            &new_exports,
+            &value_types,
+            &slot_types,
         );
 
         ScriptCompilationResult {

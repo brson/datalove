@@ -11,13 +11,15 @@
 //! When a script contains function definitions, they are lowered via
 //! `lower_function_body` after swapping `FrameState` to isolate the function's IR.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::{TypecheckResult, ResolvedCallTarget};
 use datalove_datafun_ir::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
-    ExportBinding, IrModuleId, FuncId,
+    ExportBinding, IrModuleId, FuncId, CtfeEvaluator,
 };
 use crate::ownership_analysis::ScriptFunctionAnalyses;
 use crate::tracked_script_ownership::ScriptAnalysisData;
@@ -159,6 +161,8 @@ pub fn lower_script_unit<'db>(
 ///
 /// If `func_param_types` is provided, use those resolved param types for function parameters
 /// instead of deriving from AST type hints. This is needed for type alias support.
+///
+/// If `ctfe_evaluator` is provided, it will be used to evaluate complex const expressions.
 pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
@@ -169,8 +173,14 @@ pub fn lower_script_fragment_raw<'db>(
     func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: ScriptAnalysisData,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+    ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
+
+    // Set up CTFE evaluator if provided.
+    if let Some(evaluator) = ctfe_evaluator {
+        ctx.set_ctfe_evaluator(evaluator);
+    }
 
     // Use pre-computed script analysis from ownership analysis phase.
     ctx.body.drop_schedule = script_analysis.schedule;
@@ -221,6 +231,8 @@ pub fn lower_script_fragment_raw<'db>(
 /// Lower a script expression unit.
 ///
 /// Like `lower_script_unit` but takes expr_types directly and an expression.
+///
+/// If `ctfe_evaluator` is provided, it will be used to evaluate complex const expressions.
 pub fn lower_script_expr<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
@@ -228,8 +240,14 @@ pub fn lower_script_expr<'db>(
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
     expr: ExprFun<'db>,
+    ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
+
+    // Set up CTFE evaluator if provided.
+    if let Some(evaluator) = ctfe_evaluator {
+        ctx.set_ctfe_evaluator(evaluator);
+    }
 
     // Lower the expression and capture the result.
     let value_id = lower_expression(&mut ctx, expr)?;
