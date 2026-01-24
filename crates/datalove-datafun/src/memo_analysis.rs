@@ -10,12 +10,16 @@ use rmx::std::hash::{Hash, Hasher};
 use rmx::std::collections::hash_map::DefaultHasher;
 use serde::{Serialize, Deserialize};
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use datalove_datafun_compiler::Database;
 use datalove_datafun_compiler::module_graph::parse_module_graph;
 use datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph;
-use datalove_datafun_compiler::tracked_lower::lower_module_graph;
+use datalove_datafun_compiler::tracked_lower::lower_module_graph_with_evaluator;
 use datalove_ct::query_log::{enable_query_logging, disable_query_logging, get_executed_modules};
-use datalove_datafun_tycheck::typecheck_module_graph;
+use datalove_datafun_interp::InterpCtfeEvaluator;
+use datalove_datafun_tycheck::{typecheck_module_graph, ParallelMode};
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 
 use crate::incremental::{IncrementalModuleWorld, extract_dependencies};
@@ -328,7 +332,11 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             .into_iter().collect();
 
         enable_query_logging();
-        let lowering_result = lower_module_graph(&db, parsed_graph, typecheck_result, ownership_analysis);
+        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+        let lowering_result = lower_module_graph_with_evaluator(
+            &db, parsed_graph, typecheck_result, ownership_analysis,
+            ParallelMode::Sequential, evaluator,
+        );
         let lower_log = disable_query_logging();
         let lowered_modules: BTreeSet<String> = get_executed_modules(&lower_log, "lower")
             .into_iter().collect();
