@@ -39,7 +39,7 @@
 
 ## On deck
 
-- uninitialized lets and sets - unify with out params
+- uninitialized lets and vars - unify with out params
 - fix rt error/alloc semantics
 - clone and coerce
 - updates feed
