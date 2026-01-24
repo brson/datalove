@@ -333,13 +333,27 @@ impl<'db> ScriptCompiler<'db> {
                         })
                         .collect();
 
-                let func_consts = evaluate_script_function_consts(
+                let func_consts_result = evaluate_script_function_consts(
                     self.db,
                     &stmts,
                     expr_types,
                     &script_level_consts,
                     evaluator.clone(),
                 );
+
+                // Abort on function-level const evaluation errors.
+                if !func_consts_result.errors.is_empty() {
+                    self.accumulated_unit_specs.pop();
+                    return ScriptCompilationResult {
+                        typecheck: TypecheckResult::Success,
+                        ownership: OwnershipResult::Success,
+                        lowering: LoweringResult::Error {
+                            message: format!("const evaluation errors:\n  {}", func_consts_result.errors.join("\n  ")),
+                        },
+                        ir_unit: None,
+                    };
+                }
+                let func_consts = func_consts_result.consts;
 
                 // Phase 3: Lower with pre-resolved consts.
                 let call_targets = tycheck_result.call_targets(self.db);

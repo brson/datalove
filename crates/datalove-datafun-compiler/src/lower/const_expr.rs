@@ -317,10 +317,19 @@ pub fn evaluate_consts<'db>(
     Ok(resolved)
 }
 
+/// Result of evaluating function-level consts in script functions.
+pub struct ScriptFunctionConstsResult {
+    /// Successfully evaluated consts: qualified name -> (type, value).
+    pub consts: HashMap<String, (IrType, ConstValue)>,
+    /// Errors encountered during evaluation.
+    pub errors: Vec<String>,
+}
+
 /// Evaluate function-level consts in script functions.
 ///
 /// This extends Phase 2 to also evaluate consts defined inside function bodies.
-/// Returns a map of qualified names (`func_name::const_name`) to values.
+/// Returns a map of qualified names (`func_name::const_name`) to values,
+/// along with any errors encountered.
 ///
 /// Function-level consts can reference:
 /// - Script-level consts (from `script_level_consts`)
@@ -331,8 +340,9 @@ pub fn evaluate_script_function_consts<'db>(
     expr_types: &'db [Option<Type<'db>>],
     script_level_consts: &HashMap<String, (IrType, ConstValue)>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
-) -> HashMap<String, (IrType, ConstValue)> {
-    let mut result = HashMap::new();
+) -> ScriptFunctionConstsResult {
+    let mut consts = HashMap::new();
+    let mut errors = Vec::new();
 
     for statement in statements {
         if let Statement::Fun(func_stmt) = statement {
@@ -350,7 +360,10 @@ pub fn evaluate_script_function_consts<'db>(
                     let index = expr_id.index() as usize;
                     let ir_type = match expr_types.get(index).cloned().flatten() {
                         Some(ty) => IrType::from_tycheck(db, &ty),
-                        None => continue, // Skip if no type info
+                        None => {
+                            errors.push(format!("{}::{}: missing type information", func_name, name));
+                            continue;
+                        }
                     };
 
                     // Build lookup map: script-level + function-local consts.
@@ -373,7 +386,10 @@ pub fn evaluate_script_function_consts<'db>(
                                 evaluator.clone(),
                             ) {
                                 Ok(v) => v,
-                                Err(_) => continue, // Skip on error
+                                Err(e) => {
+                                    errors.push(format!("{}::{}: {}", func_name, name, e));
+                                    continue;
+                                }
                             }
                         }
                     };
@@ -383,13 +399,13 @@ pub fn evaluate_script_function_consts<'db>(
 
                     // Store with qualified name for the result.
                     let qualified_name = format!("{}::{}", func_name, name);
-                    result.insert(qualified_name, (ir_type, value));
+                    consts.insert(qualified_name, (ir_type, value));
                 }
             }
         }
     }
 
-    result
+    ScriptFunctionConstsResult { consts, errors }
 }
 
 /// Try to extract a literal value directly without interpreter.

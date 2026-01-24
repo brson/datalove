@@ -97,12 +97,20 @@ pub struct ModulePreResolvedConsts {
 
     /// Evaluated const bindings: name -> (type, value).
     pub consts: Vec<(String, IrType, ConstValue)>,
+
+    /// Errors encountered during const evaluation.
+    pub errors: Vec<String>,
 }
 
 impl ModulePreResolvedConsts {
     /// Create a new pre-resolved consts container.
     pub fn new(module_id: ModuleId, consts: Vec<(String, IrType, ConstValue)>) -> Self {
-        Self { module_id, consts }
+        Self { module_id, consts, errors: Vec::new() }
+    }
+
+    /// Create with errors.
+    pub fn with_errors(module_id: ModuleId, consts: Vec<(String, IrType, ConstValue)>, errors: Vec<String>) -> Self {
+        Self { module_id, consts, errors }
     }
 
     /// Convert to a HashMap for efficient lookup.
@@ -376,16 +384,20 @@ pub fn evaluate_all_module_consts<'db>(
         let expr_types = single_typecheck.expr_types(db);
 
         let mut consts = Vec::new();
+        let mut errors = Vec::new();
         let mut resolved_so_far: HashMap<String, (IrType, ConstValue)> = HashMap::new();
 
         // First pass: evaluate module-level consts.
         for statement in &parsed.statements {
             if let Statement::Const(const_stmt) = statement {
-                if let Some((name, ir_type, value)) = evaluate_single_const(
+                match evaluate_single_const(
                     db, const_stmt, expr_types, &resolved_so_far, &evaluator
                 ) {
-                    resolved_so_far.insert(name.clone(), (ir_type.clone(), value.clone()));
-                    consts.push((name, ir_type, value));
+                    Ok((name, ir_type, value)) => {
+                        resolved_so_far.insert(name.clone(), (ir_type.clone(), value.clone()));
+                        consts.push((name, ir_type, value));
+                    }
+                    Err(e) => errors.push(e),
                 }
             }
         }
@@ -407,23 +419,26 @@ pub fn evaluate_all_module_consts<'db>(
                             lookup_map.insert(name.clone(), (ty.clone(), val.clone()));
                         }
 
-                        if let Some((name, ir_type, value)) = evaluate_single_const(
+                        match evaluate_single_const(
                             db, const_stmt, expr_types, &lookup_map, &evaluator
                         ) {
-                            // Store locally for other consts in this function.
-                            func_local_consts.insert(name.clone(), (ir_type.clone(), value.clone()));
+                            Ok((name, ir_type, value)) => {
+                                // Store locally for other consts in this function.
+                                func_local_consts.insert(name.clone(), (ir_type.clone(), value.clone()));
 
-                            // Use qualified name for storage: func_name::const_name
-                            let qualified_name = format!("{}::{}", func_name, name);
-                            consts.push((qualified_name, ir_type, value));
+                                // Use qualified name for storage: func_name::const_name
+                                let qualified_name = format!("{}::{}", func_name, name);
+                                consts.push((qualified_name, ir_type, value));
+                            }
+                            Err(e) => errors.push(format!("{}::{}", func_name, e)),
                         }
                     }
                 }
             }
         }
 
-        if !consts.is_empty() {
-            result.insert(*module_id, ModulePreResolvedConsts::new(*module_id, consts));
+        if !consts.is_empty() || !errors.is_empty() {
+            result.insert(*module_id, ModulePreResolvedConsts::with_errors(*module_id, consts, errors));
         }
     }
 
@@ -431,13 +446,15 @@ pub fn evaluate_all_module_consts<'db>(
 }
 
 /// Evaluate a single const statement.
+///
+/// Returns the evaluated const or an error message describing what went wrong.
 fn evaluate_single_const<'db>(
     db: &'db dyn salsa::Database,
     const_stmt: &datalove_datafun_ast::ast::StmtConst<'db>,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
     resolved_so_far: &HashMap<String, (IrType, ConstValue)>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
-) -> Option<(String, IrType, ConstValue)> {
+) -> Result<(String, IrType, ConstValue), String> {
     let name = const_stmt.name.text(db).S();
     let init_expr = const_stmt.value;
 
@@ -446,13 +463,13 @@ fn evaluate_single_const<'db>(
     let index = expr_id.index() as usize;
     let ir_type = match expr_types.get(index).cloned().flatten() {
         Some(ty) => IrType::from_tycheck(db, &ty),
-        None => return None, // Skip if no type info
+        None => return Err(format!("const '{}': missing type information", name)),
     };
 
     // Try simple evaluation first.
     let value = match lower::const_expr::eval_const_expr_simple(db, init_expr, &ir_type, resolved_so_far) {
         Ok(v) => v,
-        Err(_) => {
+        Err(simple_err) => {
             // Fall back to CTFE evaluator for complex expressions.
             match lower::const_expr::eval_const_expr_with_evaluator(
                 db,
@@ -463,12 +480,14 @@ fn evaluate_single_const<'db>(
                 evaluator.clone(),
             ) {
                 Ok(v) => v,
-                Err(_) => return None, // Skip on error
+                Err(ctfe_err) => {
+                    return Err(format!("const '{}': {}", name, ctfe_err));
+                }
             }
         }
     };
 
-    Some((name, ir_type, value))
+    Ok((name, ir_type, value))
 }
 
 /// Lower module graph with CTFE evaluator for complex const expressions.
@@ -476,6 +495,9 @@ fn evaluate_single_const<'db>(
 /// This is the entry point that supports full const expression evaluation.
 /// It pre-evaluates all module consts using the CTFE evaluator, then lowers
 /// modules (optionally in parallel) with the pre-resolved const values.
+///
+/// CTFE errors are collected and included in the lowering result, causing
+/// the overall lowering to fail.
 pub fn lower_module_graph_with_evaluator<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
@@ -489,15 +511,54 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // Phase 1: Pre-evaluate all module consts using the CTFE evaluator.
     let pre_resolved_consts = evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator);
 
+    // Collect CTFE errors from all modules.
+    let ctfe_errors: Vec<(ModuleId, Vec<String>)> = pre_resolved_consts.iter()
+        .filter(|(_, v)| !v.errors.is_empty())
+        .map(|(k, v)| (*k, v.errors.clone()))
+        .collect();
+
     // Phase 2: Lower modules with pre-resolved consts.
-    match mode {
+    let mut result = match mode {
         ParallelMode::Sequential => {
             lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts)
         }
         ParallelMode::Parallel => {
             lower_module_graph_parallel_with_pre_resolved(db, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts)
         }
+    };
+
+    // If there were CTFE errors, create a new result with those errors included.
+    if !ctfe_errors.is_empty() {
+        let mut module_results = result.module_results(db_salsa).clone();
+
+        for (module_id, errors) in ctfe_errors {
+            if let Some(existing) = module_results.get(&module_id) {
+                // Prepend CTFE errors to existing module errors.
+                let mut all_errors = errors;
+                all_errors.extend(existing.errors(db_salsa).iter().cloned());
+
+                // Create updated result with CTFE errors.
+                let updated = SingleModuleLoweringResult::new(
+                    db_salsa,
+                    module_id,
+                    existing.ir_module_id(db_salsa),
+                    existing.functions(db_salsa).clone(),
+                    all_errors,
+                    existing.func_ids(db_salsa).clone(),
+                );
+                module_results.insert(module_id, updated);
+            }
+        }
+
+        result = ModuleGraphLoweringResult::new(
+            db_salsa,
+            module_results,
+            result.func_id_map(db_salsa),
+            false, // all_success = false due to CTFE errors
+        );
     }
+
+    result
 }
 
 /// Lower module graph sequentially with pre-resolved const bindings.
