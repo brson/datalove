@@ -16,7 +16,7 @@ pub struct Frame {
     data: AlignedBuffer,
     /// Layout information.
     layout: IrLayout,
-    /// Track which values are initialized.
+    /// Track which values are initialized (for destroy_all).
     value_initialized: Vec<bool>,
     /// Track which slots are initialized.
     slot_initialized: Vec<bool>,
@@ -119,14 +119,6 @@ impl Frame {
         }
     }
 
-    /// Mark value as initialized.
-    pub fn mark_value_initialized(&mut self, id: ValueId) {
-        let idx = id.0 as usize;
-        if idx < self.value_initialized.len() {
-            self.value_initialized[idx] = true;
-        }
-    }
-
     /// Get destination for a slot.
     ///
     /// Panics if slot ID is out of bounds (compiler bug).
@@ -165,6 +157,20 @@ impl Frame {
     pub fn is_slot_initialized(&self, id: SlotId) -> bool {
         let idx = id.0 as usize;
         idx < self.slot_initialized.len() && self.slot_initialized[idx]
+    }
+
+    /// Mark value as initialized (for destroy_all tracking).
+    pub fn mark_value_initialized(&mut self, id: ValueId) {
+        let idx = id.0 as usize;
+        if idx < self.value_initialized.len() {
+            self.value_initialized[idx] = true;
+        }
+    }
+
+    /// Check if value is initialized (for DropTracked).
+    pub fn is_value_initialized(&self, id: ValueId) -> bool {
+        let idx = id.0 as usize;
+        idx < self.value_initialized.len() && self.value_initialized[idx]
     }
 
     /// Mark value as dropped to prevent double-destroy.
@@ -387,6 +393,20 @@ impl FrameStore {
         if let Some(frame) = self.frames.get_mut(unit as usize) {
             frame.mark_slot_dropped(slot);
         }
+    }
+
+    /// Check if an external value is initialized.
+    pub fn is_external_value_initialized(&self, unit: u32, value: ValueId) -> bool {
+        self.frames.get(unit as usize)
+            .map(|frame| frame.is_value_initialized(value))
+            .unwrap_or(false)
+    }
+
+    /// Check if an external slot is initialized.
+    pub fn is_external_slot_initialized(&self, unit: u32, slot: SlotId) -> bool {
+        self.frames.get(unit as usize)
+            .map(|frame| frame.is_slot_initialized(slot))
+            .unwrap_or(false)
     }
 
     /// Destroy persistent bindings in all frames.

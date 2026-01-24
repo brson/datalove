@@ -883,19 +883,20 @@ impl IrInterpreter {
                     }
                 }
 
+                // After call returns, mark dest as initialized.
+                frame.mark_value_initialized(*dest);
                 // After call returns, Out param slots are now initialized.
                 for (i, arg) in args.iter().enumerate() {
                     let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
                     if mode == ParamMode::Out {
                         match arg {
                             Operand::Slot(id) => frame.mark_slot_initialized(*id),
-                            // Value destinations don't need marking - they're SSA.
+                            // Value destinations need marking for destroy_all.
+                            Operand::Value(id) => frame.mark_value_initialized(*id),
                             _ => {}
                         }
                     }
                 }
-
-                frame.mark_value_initialized(*dest);
             }
             Instruction::ListNew { dest, elements } => {
                 let dest_slot = frame.value_dest(*dest);
@@ -952,16 +953,23 @@ impl IrInterpreter {
             Instruction::DropTracked { operand } => {
                 // Tracked drop: check initialization first, skip if not present.
                 // Used for script unit_end drops where bindings may have been moved.
-                let val = match self.read_operand(operand, frame, frames) {
-                    Ok(v) => v,
-                    Err(InterpError::UninitializedValue(_))
-                    | Err(InterpError::UninitializedSlot(_))
-                    | Err(InterpError::UninitializedParam(_)) => {
-                        // Already dropped or moved, skip.
-                        return Ok(());
+                // Check if the operand is initialized before reading.
+                let is_initialized = match operand {
+                    Operand::Value(id) => frame.is_value_initialized(*id),
+                    Operand::Slot(id) => frame.is_slot_initialized(*id),
+                    Operand::Param(id) => frame.is_param_initialized(*id),
+                    Operand::ExternalValue { unit, value } => {
+                        frames.is_external_value_initialized(*unit, *value)
                     }
-                    Err(e) => return Err(e),
+                    Operand::ExternalSlot { unit, slot } => {
+                        frames.is_external_slot_initialized(*unit, *slot)
+                    }
                 };
+                if !is_initialized {
+                    // Already dropped or moved, skip.
+                    return Ok(());
+                }
+                let val = self.read_operand(operand, frame, frames)?;
                 self.execute_drop(&val);
                 Self::mark_source_dropped_local(operand, frame);
             }
@@ -1032,7 +1040,6 @@ impl IrInterpreter {
                         unsafe {
                             std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, field_size);
                         }
-                        frame.mark_value_initialized(*dest);
                     }
                     rtdt::TyTag::Struct => {
                         let struct_info = unsafe { (*src_val.tydesc).type_info.struct_ };
@@ -1043,12 +1050,12 @@ impl IrInterpreter {
                         unsafe {
                             std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, field_size);
                         }
-                        frame.mark_value_initialized(*dest);
                     }
                     _ => return Err(InterpError::TypeMismatch(
                         format!("GetField requires tuple or struct type, got {:?}", tag)
                     )),
                 }
+                frame.mark_value_initialized(*dest);
             }
             Instruction::GetFieldRef { dest, src, field_index } => {
                 // Get a reference (pointer) to a field within an aggregate.
