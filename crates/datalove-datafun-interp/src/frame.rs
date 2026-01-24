@@ -3,7 +3,6 @@
 //! A `Frame` holds all values and slots for a single function/unit execution.
 //! `FrameStore` accumulates frames from script units for cross-unit value access.
 
-use std::collections::HashSet;
 use datalove_rt::rust::AlignedBuffer;
 use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::{ValueId, SlotId, ParamId};
@@ -25,17 +24,6 @@ pub struct Frame {
     value_borrowed: Vec<bool>,
     /// Track which values are references (store pointers, dereference on read).
     value_is_ref: Vec<bool>,
-    /// Values that need runtime tracking (checked in destroy_all).
-    /// Precise values (not in this set) are skipped in destroy_all.
-    value_tracked: HashSet<u32>,
-    /// Slots that need runtime tracking (checked in destroy_all).
-    /// Precise slots (not in this set) are skipped in destroy_all.
-    slot_tracked: HashSet<u32>,
-    /// Values with UnitEndDrop (script-level bindings needing cleanup).
-    /// These have UnitEndDrop which is a no-op during execution.
-    unit_end_values: HashSet<u32>,
-    /// Slots with UnitEndDrop (script-level bindings needing cleanup).
-    unit_end_slots: HashSet<u32>,
     /// Pointers to caller's data for each parameter.
     param_ptrs: Vec<*mut u8>,
     /// Type descriptors for each parameter.
@@ -47,20 +35,8 @@ pub struct Frame {
 }
 
 impl Frame {
-    /// Create a new frame from layout and tracking info.
-    ///
-    /// `tracked_values`: ValueIds that need runtime tracking (checked in destroy_all).
-    /// `tracked_slots`: SlotIds that need runtime tracking (checked in destroy_all).
-    /// `unit_end_values`: ValueIds with UnitEndDrop (script-level bindings).
-    /// `unit_end_slots`: SlotIds with UnitEndDrop (script-level bindings).
-    pub fn new(
-        layout: IrLayout,
-        param_count: usize,
-        tracked_values: &[ValueId],
-        tracked_slots: &[SlotId],
-        unit_end_values: &[ValueId],
-        unit_end_slots: &[SlotId],
-    ) -> Self {
+    /// Create a new frame from layout.
+    pub fn new(layout: IrLayout, param_count: usize) -> Self {
         let value_count = layout.value_offsets.len();
         let slot_count = layout.slot_offsets.len();
         let data = AlignedBuffer::with_align(
@@ -75,10 +51,6 @@ impl Frame {
             slot_initialized: vec![false; slot_count],
             value_borrowed: vec![false; value_count],
             value_is_ref: vec![false; value_count],
-            value_tracked: tracked_values.iter().map(|v| v.0).collect(),
-            slot_tracked: tracked_slots.iter().map(|s| s.0).collect(),
-            unit_end_values: unit_end_values.iter().map(|v| v.0).collect(),
-            unit_end_slots: unit_end_slots.iter().map(|s| s.0).collect(),
             param_ptrs: vec![std::ptr::null_mut(); param_count],
             param_tydescs: vec![std::ptr::null(); param_count],
             param_borrowed: vec![false; param_count],
@@ -195,16 +167,6 @@ impl Frame {
         idx < self.slot_initialized.len() && self.slot_initialized[idx]
     }
 
-    /// Check if value is tracked (needs runtime initialized check in destroy_all).
-    pub fn is_value_tracked(&self, id: ValueId) -> bool {
-        self.value_tracked.contains(&id.0)
-    }
-
-    /// Check if slot is tracked (needs runtime initialized check in destroy_all).
-    pub fn is_slot_tracked(&self, id: SlotId) -> bool {
-        self.slot_tracked.contains(&id.0)
-    }
-
     /// Mark value as dropped to prevent double-destroy.
     pub fn mark_value_dropped(&mut self, id: ValueId) {
         let idx = id.0 as usize;
@@ -282,17 +244,17 @@ impl Frame {
         }
     }
 
-    /// Destroy all initialized tracked values, slots, and owned params.
+    /// Destroy all initialized values, slots, and owned params.
     ///
-    /// Calls the runtime destructor for each initialized tracked value/slot.
-    /// Also destroys unit-end values/slots (script-level bindings).
+    /// Calls the runtime destructor for each initialized value/slot.
     /// Skips:
     /// - Borrowed values (not owned by this frame)
     /// - Borrowed params (caller retains ownership)
-    /// - Untracked (precise) values/slots (handled explicitly by Drop instructions)
+    ///
+    /// Values/slots that were explicitly dropped by Drop instructions during
+    /// execution will have initialized=false and be skipped automatically.
     pub fn destroy_all(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
         // Destroy In params (not borrowed, and initialized - callee owns through pointer).
-        // Note: params are always tracked since their state depends on call patterns.
         for idx in 0..self.param_ptrs.len() {
             let ptr = self.param_ptrs[idx];
             if !ptr.is_null() && !self.param_borrowed[idx] && self.param_initialized[idx] {
@@ -305,11 +267,9 @@ impl Frame {
             }
         }
 
-        // Destroy initialized tracked values (skip borrowed and untracked).
-        // Untracked (precise) values are handled by explicit Drop instructions.
+        // Destroy initialized values (skip borrowed).
         for idx in 0..self.value_initialized.len() {
-            let is_tracked = self.value_tracked.contains(&(idx as u32));
-            if self.value_initialized[idx] && !self.value_borrowed[idx] && is_tracked {
+            if self.value_initialized[idx] && !self.value_borrowed[idx] {
                 let offset = self.layout.value_offsets[idx] as usize;
                 let tydesc = self.layout.value_tydescs[idx];
                 let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
@@ -320,44 +280,9 @@ impl Frame {
             }
         }
 
-        // Destroy initialized tracked slots (skip untracked).
-        // Untracked (precise) slots are handled by explicit Drop instructions.
+        // Destroy initialized slots.
         for idx in 0..self.slot_initialized.len() {
-            let is_tracked = self.slot_tracked.contains(&(idx as u32));
-            if self.slot_initialized[idx] && is_tracked {
-                let offset = self.layout.slot_offsets[idx] as usize;
-                let tydesc = self.layout.slot_tydescs[idx];
-                let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
-                }
-                self.slot_initialized[idx] = false;
-            }
-        }
-
-        // Destroy unit-end values (script-level bindings with UnitEndDrop).
-        // These have UnitEndDrop instructions which are no-ops in the interpreter,
-        // so destroy_all must clean them up. Only destroy if initialized.
-        for &idx in &self.unit_end_values {
-            let idx = idx as usize;
-            if idx < self.value_initialized.len()
-                && self.value_initialized[idx]
-                && !self.value_borrowed[idx]
-            {
-                let offset = self.layout.value_offsets[idx] as usize;
-                let tydesc = self.layout.value_tydescs[idx];
-                let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
-                }
-                self.value_initialized[idx] = false;
-            }
-        }
-
-        // Destroy unit-end slots (script-level bindings with UnitEndDrop).
-        for &idx in &self.unit_end_slots {
-            let idx = idx as usize;
-            if idx < self.slot_initialized.len() && self.slot_initialized[idx] {
+            if self.slot_initialized[idx] {
                 let offset = self.layout.slot_offsets[idx] as usize;
                 let tydesc = self.layout.slot_tydescs[idx];
                 let ptr = unsafe { self.data.as_mut_ptr().add(offset) };

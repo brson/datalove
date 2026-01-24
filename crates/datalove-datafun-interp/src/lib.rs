@@ -256,16 +256,8 @@ impl IrInterpreter {
             &mut self.tydesc_table,
         );
 
-        // Create frame with param storage and tracking info.
-        // Functions don't have UnitEndDrop, so unit_end is empty.
-        let mut frame = Frame::new(
-            layout,
-            func.params.len(),
-            &func.tracked_values,
-            &func.tracked_slots,
-            &[],  // unit_end_values: functions don't have UnitEndDrop
-            &[],  // unit_end_slots: functions don't have UnitEndDrop
-        );
+        // Create frame with param storage.
+        let mut frame = Frame::new(layout, func.params.len());
 
         // Set up parameters as pointers to caller's data.
         // All params store pointers - mode determines ownership semantics.
@@ -325,15 +317,8 @@ impl IrInterpreter {
             &mut self.tydesc_table,
         );
 
-        // Create frame with tracking info (script units have no function params).
-        let mut frame = Frame::new(
-            layout,
-            0,
-            &unit.tracked_values,
-            &unit.tracked_slots,
-            &unit.unit_end_values,
-            &unit.unit_end_slots,
-        );
+        // Create frame (script units have no function params).
+        let mut frame = Frame::new(layout, 0);
 
         // Create execution context with local functions.
         let ctx = ExecutionContext::new(&unit.functions);
