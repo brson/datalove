@@ -6,6 +6,9 @@ AotAnalysis(
             typecheck: TypecheckResult(
                 status: "Success",
             ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
             lowering: LoweringResult(
                 status: "Success",
                 ir: """
@@ -60,6 +63,9 @@ AotAnalysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
                 status: "Success",
             ),
             lowering: LoweringResult(

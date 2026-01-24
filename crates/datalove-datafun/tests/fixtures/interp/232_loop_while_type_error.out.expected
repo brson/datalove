@@ -9,6 +9,9 @@ Analysis(
                     "TypeMismatch { expected: \"bool\", actual: \"int\" }",
                 ],
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             lowering: LoweringResult(
                 status: "Skipped",
             ),

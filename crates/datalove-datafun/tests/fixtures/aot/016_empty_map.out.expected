@@ -12,6 +12,9 @@ AotAnalysis(
                     "expected \'=\' after let binding",
                 ],
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             lowering: LoweringResult(
                 status: "Skipped",
             ),

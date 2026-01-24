@@ -18,7 +18,7 @@ use serde::{Serialize, Deserialize};
 use std::path::Path;
 
 use datalove_datafun as datafun;
-use datafun::pipeline::{aot as pipeline_aot, ScriptCompiler, TypecheckResult, LoweringResult};
+use datafun::pipeline::{aot as pipeline_aot, ScriptCompiler, TypecheckResult, OwnershipResult, LoweringResult};
 use datalove_datafun_interp::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 
@@ -38,6 +38,8 @@ pub struct AotSectionResult {
     pub name: Option<String>,
     /// Typecheck result.
     pub typecheck: datafun::pipeline::TypecheckResult,
+    /// Ownership analysis result.
+    pub ownership: datafun::pipeline::OwnershipResult,
     /// Lowering result.
     pub lowering: datafun::pipeline::LoweringResult,
     /// AOT compilation result.
@@ -97,6 +99,7 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
             section_type: "resolution".to_string(),
             name: None,
             typecheck: datafun::pipeline::TypecheckResult::Error { errors: vec![err.clone()] },
+            ownership: datafun::pipeline::OwnershipResult::Skipped,
             lowering: datafun::pipeline::LoweringResult::Skipped,
             aot_compile: None,
             link: None,
@@ -122,12 +125,15 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
             let ir_dumps = compiled.module_ir_dumps.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
             let ownership_errs = compiled.ownership_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
             let lowering_errs = compiled.lowering_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
-            let lowering = datafun::pipeline::format_lowering_result(ir_dumps, ownership_errs, lowering_errs, has_typecheck_errors);
+            let ownership = datafun::pipeline::format_ownership_result(ownership_errs, has_typecheck_errors);
+            let has_ownership_errors = matches!(&ownership, datafun::pipeline::OwnershipResult::Error { .. });
+            let lowering = datafun::pipeline::format_lowering_result(ir_dumps, lowering_errs, has_typecheck_errors || has_ownership_errors);
 
             results.push(AotSectionResult {
                 section_type: "module".to_string(),
                 name: Some(module_path),
                 typecheck,
+                ownership,
                 lowering,
                 aot_compile: None,
                 link: None,
@@ -150,6 +156,7 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
                     },
                     name: None,
                     typecheck: TypecheckResult::Skipped,
+                    ownership: OwnershipResult::Skipped,
                     lowering: LoweringResult::Skipped,
                     aot_compile: None,
                     link: None,
@@ -197,12 +204,13 @@ fn compile_and_run_fragment(
 ) -> AotSectionResult {
     let compiled = compiler.compile_fragment(source);
 
-    // If typecheck or lowering failed, return early.
+    // If typecheck failed, return early.
     if !matches!(&compiled.typecheck, datafun::pipeline::TypecheckResult::Success) {
         return AotSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
             typecheck: compiled.typecheck,
+            ownership: compiled.ownership,
             lowering: compiled.lowering,
             aot_compile: None,
             link: None,
@@ -211,11 +219,28 @@ fn compile_and_run_fragment(
         };
     }
 
+    // If ownership analysis failed, return early.
+    if !matches!(&compiled.ownership, datafun::pipeline::OwnershipResult::Success) {
+        return AotSectionResult {
+            section_type: "scriptunit-fragment".to_string(),
+            name: None,
+            typecheck: compiled.typecheck,
+            ownership: compiled.ownership,
+            lowering: compiled.lowering,
+            aot_compile: None,
+            link: None,
+            execution: None,
+            output: String::new(),
+        };
+    }
+
+    // If lowering failed, return early.
     if !matches!(&compiled.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
         return AotSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
             typecheck: compiled.typecheck,
+            ownership: compiled.ownership,
             lowering: compiled.lowering,
             aot_compile: None,
             link: None,
@@ -232,6 +257,7 @@ fn compile_and_run_fragment(
                 section_type: "scriptunit-fragment".to_string(),
                 name: None,
                 typecheck: compiled.typecheck,
+                ownership: compiled.ownership,
                 lowering: compiled.lowering,
                 aot_compile: Some(AotCompileResult::Error {
                     message: "IR unit not available".to_string(),
@@ -247,6 +273,7 @@ fn compile_and_run_fragment(
     aot_compile_link_run(
         "scriptunit-fragment",
         compiled.typecheck,
+        compiled.ownership,
         compiled.lowering,
         ir_unit,
         registry,
@@ -262,12 +289,13 @@ fn compile_and_run_expr(
     // Compile to IR for AOT.
     let compiled = compiler.compile_expr(source);
 
-    // If typecheck or lowering failed, return early.
+    // If typecheck failed, return early.
     if !matches!(&compiled.typecheck, datafun::pipeline::TypecheckResult::Success) {
         return AotSectionResult {
             section_type: "scriptunit-expr".to_string(),
             name: None,
             typecheck: compiled.typecheck,
+            ownership: compiled.ownership,
             lowering: compiled.lowering,
             aot_compile: None,
             link: None,
@@ -276,11 +304,28 @@ fn compile_and_run_expr(
         };
     }
 
+    // If ownership analysis failed, return early.
+    if !matches!(&compiled.ownership, datafun::pipeline::OwnershipResult::Success) {
+        return AotSectionResult {
+            section_type: "scriptunit-expr".to_string(),
+            name: None,
+            typecheck: compiled.typecheck,
+            ownership: compiled.ownership,
+            lowering: compiled.lowering,
+            aot_compile: None,
+            link: None,
+            execution: None,
+            output: String::new(),
+        };
+    }
+
+    // If lowering failed, return early.
     if !matches!(&compiled.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
         return AotSectionResult {
             section_type: "scriptunit-expr".to_string(),
             name: None,
             typecheck: compiled.typecheck,
+            ownership: compiled.ownership,
             lowering: compiled.lowering,
             aot_compile: None,
             link: None,
@@ -297,6 +342,7 @@ fn compile_and_run_expr(
                 section_type: "scriptunit-expr".to_string(),
                 name: None,
                 typecheck: compiled.typecheck,
+                ownership: compiled.ownership,
                 lowering: compiled.lowering,
                 aot_compile: Some(AotCompileResult::Error {
                     message: "IR unit not available".to_string(),
@@ -312,6 +358,7 @@ fn compile_and_run_expr(
     aot_compile_link_run(
         "scriptunit-expr",
         compiled.typecheck,
+        compiled.ownership,
         compiled.lowering,
         ir_unit,
         registry,
@@ -322,6 +369,7 @@ fn compile_and_run_expr(
 fn aot_compile_link_run(
     section_type: &str,
     typecheck: datafun::pipeline::TypecheckResult,
+    ownership: datafun::pipeline::OwnershipResult,
     lowering: datafun::pipeline::LoweringResult,
     ir_unit: datalove_datafun_ir::IrScriptUnit,
     registry: &FunctionRegistry,
@@ -338,6 +386,7 @@ fn aot_compile_link_run(
                 section_type: section_type.to_string(),
                 name: None,
                 typecheck,
+                ownership,
                 lowering,
                 aot_compile: Some(AotCompileResult::Error {
                     message: format!("{}", e),
@@ -357,6 +406,7 @@ fn aot_compile_link_run(
                 section_type: section_type.to_string(),
                 name: None,
                 typecheck,
+                ownership,
                 lowering,
                 aot_compile: Some(AotCompileResult::Success),
                 link: Some(LinkResult::Error {
@@ -374,6 +424,7 @@ fn aot_compile_link_run(
             section_type: section_type.to_string(),
             name: None,
             typecheck,
+            ownership,
             lowering,
             aot_compile: Some(AotCompileResult::Success),
             link: Some(LinkResult::Success),
@@ -384,6 +435,7 @@ fn aot_compile_link_run(
             section_type: section_type.to_string(),
             name: None,
             typecheck,
+            ownership,
             lowering,
             aot_compile: Some(AotCompileResult::Success),
             link: Some(LinkResult::Success),
@@ -397,6 +449,7 @@ fn aot_compile_link_run(
             section_type: section_type.to_string(),
             name: None,
             typecheck,
+            ownership,
             lowering,
             aot_compile: Some(AotCompileResult::Success),
             link: Some(LinkResult::Success),

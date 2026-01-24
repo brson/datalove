@@ -13,7 +13,8 @@ use serde::{Serialize, Deserialize};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 
 use crate::pipeline::{
-    ModuleCompilationPipeline, TypecheckResult, LoweringResult, format_lowering_result,
+    ModuleCompilationPipeline, TypecheckResult, OwnershipResult, LoweringResult,
+    format_ownership_result, format_lowering_result,
 };
 
 /// Result of analyzing a worldfile with IR interpreter.
@@ -32,6 +33,8 @@ pub struct SectionResult {
     pub name: Option<String>,
     /// Typecheck result.
     pub typecheck: TypecheckResult,
+    /// Ownership analysis result.
+    pub ownership: OwnershipResult,
     /// Lowering result.
     pub lowering: LoweringResult,
     /// Output value (for expression units) or function call result.
@@ -68,6 +71,7 @@ pub fn analyze_worldfile(
             section_type: "resolution".S(),
             name: None,
             typecheck: TypecheckResult::Error { errors: vec![err.clone()] },
+            ownership: OwnershipResult::Skipped,
             lowering: LoweringResult::Skipped,
             output: String::new(),
             debug_output: None,
@@ -88,17 +92,20 @@ pub fn analyze_worldfile(
                 _ => TypecheckResult::Success,
             };
 
-            // Look up lowering results for this module.
+            // Look up analysis results for this module.
             let has_typecheck_errors = matches!(&typecheck, TypecheckResult::Error { .. });
             let ir_dumps = compiled.module_ir_dumps.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
             let ownership_errs = compiled.ownership_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
             let lowering_errs = compiled.lowering_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
-            let lowering = format_lowering_result(ir_dumps, ownership_errs, lowering_errs, has_typecheck_errors);
+            let ownership = format_ownership_result(ownership_errs, has_typecheck_errors);
+            let has_ownership_errors = matches!(&ownership, OwnershipResult::Error { .. });
+            let lowering = format_lowering_result(ir_dumps, lowering_errs, has_typecheck_errors || has_ownership_errors);
 
             results.push(SectionResult {
                 section_type: "module".S(),
                 name: Some(module_path),
                 typecheck,
+                ownership,
                 lowering,
                 output: String::new(),
                 debug_output: None,
@@ -141,6 +148,7 @@ pub fn analyze_worldfile(
                         section_type: "scriptunit-fragment".S(),
                         name: None,
                         typecheck: compiled_unit.typecheck,
+                        ownership: compiled_unit.ownership,
                         lowering: compiled_unit.lowering,
                         output,
                         debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
@@ -151,6 +159,7 @@ pub fn analyze_worldfile(
                         section_type: "scriptunit-fragment".S(),
                         name: None,
                         typecheck: TypecheckResult::Skipped,
+                        ownership: OwnershipResult::Skipped,
                         lowering: LoweringResult::Skipped,
                         output: String::new(),
                         debug_output: None,
@@ -176,6 +185,7 @@ pub fn analyze_worldfile(
                         section_type: "scriptunit-expr".S(),
                         name: None,
                         typecheck: compiled_unit.typecheck,
+                        ownership: compiled_unit.ownership,
                         lowering: compiled_unit.lowering,
                         output,
                         debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
@@ -186,6 +196,7 @@ pub fn analyze_worldfile(
                         section_type: "scriptunit-expr".S(),
                         name: None,
                         typecheck: TypecheckResult::Skipped,
+                        ownership: OwnershipResult::Skipped,
                         lowering: LoweringResult::Skipped,
                         output: String::new(),
                         debug_output: None,

@@ -10,6 +10,9 @@ Analysis(
                     "UnresolvedName(\"t\")",
                 ],
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             lowering: LoweringResult(
                 status: "Skipped",
             ),

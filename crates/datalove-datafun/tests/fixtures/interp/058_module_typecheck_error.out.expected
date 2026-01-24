@@ -9,6 +9,9 @@ Analysis(
                     "line 4, col 9: error[F016]: mismatched types: expected `u32`, found `int`",
                 ],
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             lowering: LoweringResult(
                 status: "Skipped",
             ),
@@ -20,6 +23,9 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Skipped",
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             lowering: LoweringResult(
                 status: "Skipped",
             ),
@@ -29,6 +35,9 @@ Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
                 status: "Skipped",
             ),
             lowering: LoweringResult(

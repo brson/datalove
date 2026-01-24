@@ -6,9 +6,12 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Success",
             ),
-            lowering: LoweringResult(
+            ownership: OwnershipResult(
                 status: "Error",
                 message: "error[D001]: use of moved value: `x`",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
             ),
             output: "",
         ),

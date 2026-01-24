@@ -27,6 +27,7 @@ impl<'db> TestContext<'db> {
         };
         ScriptUnitResult {
             typecheck: compiled.typecheck,
+            ownership: compiled.ownership,
             lowering: compiled.lowering,
             ty: None,
             output,
@@ -42,6 +43,7 @@ impl<'db> TestContext<'db> {
         };
         ScriptUnitResult {
             typecheck: compiled.typecheck,
+            ownership: compiled.ownership,
             lowering: compiled.lowering,
             ty,
             output,

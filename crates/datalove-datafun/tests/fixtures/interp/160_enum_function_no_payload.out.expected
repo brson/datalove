@@ -9,6 +9,9 @@ Analysis(
                     "unexpected token after expression",
                 ],
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             lowering: LoweringResult(
                 status: "Skipped",
             ),
@@ -22,6 +25,9 @@ Analysis(
                 errors: [
                     "UnresolvedName(\"get_status\")",
                 ],
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

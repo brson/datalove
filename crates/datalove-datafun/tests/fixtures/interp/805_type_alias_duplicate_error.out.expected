@@ -9,6 +9,9 @@ Analysis(
                     "DuplicateTypeAlias(\"MyInt\")",
                 ],
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             lowering: LoweringResult(
                 status: "Skipped",
             ),

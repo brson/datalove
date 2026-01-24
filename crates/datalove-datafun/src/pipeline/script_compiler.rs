@@ -37,7 +37,7 @@ use datalove_datafun_tycheck::{
 };
 
 use super::compiled_modules::CompiledModules;
-use super::result::{TypecheckResult, LoweringResult, ScriptCompilationResult};
+use super::result::{TypecheckResult, OwnershipResult, LoweringResult, ScriptCompilationResult};
 
 /// Parsed script unit ready for compilation.
 enum ParsedUnit<'db> {
@@ -179,6 +179,7 @@ impl<'db> ScriptCompiler<'db> {
             .collect();
         Some(ScriptCompilationResult {
             typecheck: TypecheckResult::ParseError { errors: parse_errors },
+            ownership: OwnershipResult::Skipped,
             lowering: LoweringResult::Skipped,
             ir_unit: None,
         })
@@ -218,6 +219,7 @@ impl<'db> ScriptCompiler<'db> {
         if !tycheck_errors.is_empty() {
             return ScriptCompilationResult {
                 typecheck: TypecheckResult::Error { errors: tycheck_errors },
+                ownership: OwnershipResult::Skipped,
                 lowering: LoweringResult::Skipped,
                 ir_unit: None,
             };
@@ -235,7 +237,8 @@ impl<'db> ScriptCompiler<'db> {
                     let error_msg = ownership_result.errors(self.db).join("\n");
                     return ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
-                        lowering: LoweringResult::Error { message: error_msg },
+                        ownership: OwnershipResult::Error { message: error_msg },
+                        lowering: LoweringResult::Skipped,
                         ir_unit: None,
                     };
                 }
@@ -258,7 +261,8 @@ impl<'db> ScriptCompiler<'db> {
                     let error_msg = ownership_result.errors(self.db).join("\n");
                     return ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
-                        lowering: LoweringResult::Error { message: error_msg },
+                        ownership: OwnershipResult::Error { message: error_msg },
+                        lowering: LoweringResult::Skipped,
                         ir_unit: None,
                     };
                 }
@@ -277,6 +281,7 @@ impl<'db> ScriptCompiler<'db> {
         if let Some(error) = lower_output.error(self.db).as_ref() {
             return ScriptCompilationResult {
                 typecheck: TypecheckResult::Success,
+                ownership: OwnershipResult::Success,
                 lowering: LoweringResult::Error { message: error.clone() },
                 ir_unit: None,
             };
@@ -296,6 +301,7 @@ impl<'db> ScriptCompiler<'db> {
 
         ScriptCompilationResult {
             typecheck: TypecheckResult::Success,
+            ownership: OwnershipResult::Success,
             lowering: LoweringResult::Success { ir: ir_dump },
             ir_unit: Some(ir_unit),
         }

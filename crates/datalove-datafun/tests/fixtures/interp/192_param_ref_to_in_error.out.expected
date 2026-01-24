@@ -6,9 +6,12 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Success",
             ),
-            lowering: LoweringResult(
+            ownership: OwnershipResult(
                 status: "Error",
                 message: "Ownership error in outer: CannotMoveBorrowed { local_index: 0, name: \"y\" }",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
             ),
             output: "",
         ),
@@ -16,6 +19,9 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
                 status: "Skipped",
             ),
             lowering: LoweringResult(
@@ -27,6 +33,9 @@ Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
                 status: "Skipped",
             ),
             lowering: LoweringResult(

@@ -1,7 +1,7 @@
 //! Result types for script compilation and execution.
 //!
 //! These types represent the outcomes of compilation and execution phases:
-//! - [`TypecheckResult`] and [`LoweringResult`]: Phase-specific status.
+//! - [`TypecheckResult`], [`OwnershipResult`], [`LoweringResult`]: Phase-specific status.
 //! - [`ScriptCompilationResult`]: Output of script compilation (no execution).
 //! - [`ScriptUnitResult`]: Combined compile+execute result for tests.
 
@@ -17,6 +17,15 @@ pub enum TypecheckResult {
     Skipped,
 }
 
+/// Ownership analysis result summary (serializable).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "status")]
+pub enum OwnershipResult {
+    Success,
+    Error { message: String },
+    Skipped,
+}
+
 /// Lowering result summary (serializable).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "status")]
@@ -26,24 +35,34 @@ pub enum LoweringResult {
     Skipped,
 }
 
+/// Format ownership result for display.
+pub fn format_ownership_result(
+    ownership_errors: &[String],
+    has_typecheck_errors: bool,
+) -> OwnershipResult {
+    if has_typecheck_errors {
+        return OwnershipResult::Skipped;
+    }
+
+    if !ownership_errors.is_empty() {
+        OwnershipResult::Error { message: ownership_errors.join("\n") }
+    } else {
+        OwnershipResult::Success
+    }
+}
+
 /// Format lowering result for display.
 pub fn format_lowering_result(
     ir_dumps: &[String],
-    ownership_errors: &[String],
     lowering_errors: &[String],
-    has_typecheck_errors: bool,
+    has_prior_errors: bool,
 ) -> LoweringResult {
-    if has_typecheck_errors {
+    if has_prior_errors {
         return LoweringResult::Skipped;
     }
 
-    let all_errors: Vec<_> = ownership_errors.iter()
-        .chain(lowering_errors.iter())
-        .cloned()
-        .collect();
-
-    if !all_errors.is_empty() {
-        LoweringResult::Error { message: all_errors.join("\n") }
+    if !lowering_errors.is_empty() {
+        LoweringResult::Error { message: lowering_errors.join("\n") }
     } else if ir_dumps.is_empty() {
         LoweringResult::Skipped
     } else {
@@ -56,6 +75,7 @@ pub fn format_lowering_result(
 /// Used primarily in tests to capture both compilation status and execution output.
 pub struct ScriptUnitResult {
     pub typecheck: TypecheckResult,
+    pub ownership: OwnershipResult,
     pub lowering: LoweringResult,
     /// Type of the result expression, if any.
     pub ty: Option<String>,
@@ -69,6 +89,7 @@ pub struct ScriptUnitResult {
 /// and [`ScriptCompiler::compile_expr`](super::ScriptCompiler::compile_expr).
 pub struct ScriptCompilationResult {
     pub typecheck: TypecheckResult,
+    pub ownership: OwnershipResult,
     pub lowering: LoweringResult,
     /// The lowered IR unit, if compilation succeeded.
     pub ir_unit: Option<IrScriptUnit>,

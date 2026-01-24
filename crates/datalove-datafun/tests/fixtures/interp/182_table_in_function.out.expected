@@ -10,6 +10,9 @@ Analysis(
                     "unexpected statement",
                 ],
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             lowering: LoweringResult(
                 status: "Skipped",
             ),

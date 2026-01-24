@@ -6,6 +6,9 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Success",
             ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
             lowering: LoweringResult(
                 status: "Error",
                 message: "function not found: is_odd",
@@ -16,6 +19,9 @@ Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
                 status: "Success",
             ),
             lowering: LoweringResult(

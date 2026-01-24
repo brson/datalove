@@ -9,6 +9,9 @@ Analysis(
                     "TryReturnTypeMismatch { operator: \"?\", return_type: \"!()\" }",
                 ],
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             lowering: LoweringResult(
                 status: "Skipped",
             ),

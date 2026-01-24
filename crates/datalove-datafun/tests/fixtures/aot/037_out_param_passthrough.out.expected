@@ -6,9 +6,12 @@ AotAnalysis(
             typecheck: TypecheckResult(
                 status: "Success",
             ),
-            lowering: LoweringResult(
+            ownership: OwnershipResult(
                 status: "Error",
                 message: "outer: error[D006]: out parameter not initialized: `y`\nerror[D005]: read of uninitialized out parameter: `y`",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
             ),
             output: "",
         ),

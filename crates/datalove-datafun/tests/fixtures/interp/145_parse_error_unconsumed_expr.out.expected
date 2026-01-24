@@ -10,6 +10,9 @@ Analysis(
                     "unexpected token after expression",
                 ],
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             lowering: LoweringResult(
                 status: "Skipped",
             ),

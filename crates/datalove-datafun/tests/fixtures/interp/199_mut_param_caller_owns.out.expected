@@ -6,6 +6,9 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Success",
             ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
             lowering: LoweringResult(
                 status: "Success",
                 ir: """
@@ -36,6 +39,9 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Success",
             ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
             lowering: LoweringResult(
                 status: "Success",
                 ir: """
@@ -50,6 +56,9 @@ Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
                 status: "Success",
             ),
             lowering: LoweringResult(

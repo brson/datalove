@@ -6,6 +6,9 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Success",
             ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
             lowering: LoweringResult(
                 status: "Success",
                 ir: """

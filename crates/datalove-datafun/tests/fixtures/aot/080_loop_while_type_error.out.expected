@@ -9,6 +9,9 @@ AotAnalysis(
                     "TypeMismatch { expected: \"bool\", actual: \"u32\" }",
                 ],
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             lowering: LoweringResult(
                 status: "Skipped",
             ),

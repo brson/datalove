@@ -6,6 +6,9 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Success",
             ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
             lowering: LoweringResult(
                 status: "Error",
                 message: "Lowering error in try_set_ref: variable not mutable: x",
@@ -18,6 +21,9 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Skipped",
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             lowering: LoweringResult(
                 status: "Skipped",
             ),
@@ -27,6 +33,9 @@ Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
                 status: "Skipped",
             ),
             lowering: LoweringResult(

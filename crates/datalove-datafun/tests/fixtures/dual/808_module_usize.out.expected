@@ -10,6 +10,9 @@ DualAnalysis(
                     "local/test/usize_math: CannotSynthesize",
                 ],
             ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
             interp_lowering: LoweringResult(
                 status: "Skipped",
             ),
@@ -24,6 +27,9 @@ DualAnalysis(
         DualSectionResult(
             section_type: "scriptunit-fragment",
             typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
                 status: "Skipped",
             ),
             interp_lowering: LoweringResult(

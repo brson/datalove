@@ -6,6 +6,9 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Success",
             ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
             lowering: LoweringResult(
                 status: "Success",
                 ir: """
@@ -36,6 +39,9 @@ Analysis(
                 errors: [
                     "TryReturnTypeMismatch { operator: \"-?\", return_type: \"!()\" }",
                 ],
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

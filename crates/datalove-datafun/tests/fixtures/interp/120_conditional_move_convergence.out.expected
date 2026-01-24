@@ -6,9 +6,12 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Success",
             ),
-            lowering: LoweringResult(
+            ownership: OwnershipResult(
                 status: "Error",
                 message: "test: error[D008]: `x` moved in then branch but not the other",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
             ),
             output: "",
         ),
@@ -16,6 +19,9 @@ Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
                 status: "Success",
             ),
             lowering: LoweringResult(

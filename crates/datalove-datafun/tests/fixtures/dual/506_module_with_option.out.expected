@@ -6,6 +6,9 @@ DualAnalysis(
             typecheck: TypecheckResult(
                 status: "Success",
             ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
             interp_lowering: LoweringResult(
                 status: "Success",
                 ir: """
@@ -44,6 +47,9 @@ DualAnalysis(
         DualSectionResult(
             section_type: "scriptunit-fragment",
             typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
                 status: "Success",
             ),
             interp_lowering: LoweringResult(

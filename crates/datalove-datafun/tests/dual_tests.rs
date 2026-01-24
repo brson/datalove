@@ -42,6 +42,8 @@ pub struct DualSectionResult {
     pub name: Option<String>,
     /// Typecheck result (shared).
     pub typecheck: datafun::pipeline::TypecheckResult,
+    /// Ownership analysis result (shared).
+    pub ownership: datafun::pipeline::OwnershipResult,
     /// Interpreter lowering result.
     pub interp_lowering: datafun::pipeline::LoweringResult,
     /// AOT lowering result.
@@ -156,6 +158,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
             typecheck: datafun::pipeline::TypecheckResult::Error {
                 errors: vec![format!("Expected exactly 1 scriptunit-fragment, found {}", fragment_count)],
             },
+            ownership: datafun::pipeline::OwnershipResult::Skipped,
             interp_lowering: datafun::pipeline::LoweringResult::Skipped,
             aot_lowering: datafun::pipeline::LoweringResult::Skipped,
             ir_match: false,
@@ -177,6 +180,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
             typecheck: datafun::pipeline::TypecheckResult::Error {
                 errors: vec![format!("scriptunit-expr sections not allowed, found {}", expr_count)],
             },
+            ownership: datafun::pipeline::OwnershipResult::Skipped,
             interp_lowering: datafun::pipeline::LoweringResult::Skipped,
             aot_lowering: datafun::pipeline::LoweringResult::Skipped,
             ir_match: false,
@@ -209,6 +213,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
             section_type: "resolution".to_string(),
             name: None,
             typecheck: datafun::pipeline::TypecheckResult::Error { errors: vec![err.clone()] },
+            ownership: datafun::pipeline::OwnershipResult::Skipped,
             interp_lowering: datafun::pipeline::LoweringResult::Skipped,
             aot_lowering: datafun::pipeline::LoweringResult::Skipped,
             ir_match: false,
@@ -239,12 +244,15 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
             let ir_dumps = compiled.module_ir_dumps.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
             let ownership_errs = compiled.ownership_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
             let lowering_errs = compiled.lowering_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
-            let lowering = datafun::pipeline::format_lowering_result(ir_dumps, ownership_errs, lowering_errs, has_typecheck_errors);
+            let ownership = datafun::pipeline::format_ownership_result(ownership_errs, has_typecheck_errors);
+            let has_ownership_errors = matches!(&ownership, datafun::pipeline::OwnershipResult::Error { .. });
+            let lowering = datafun::pipeline::format_lowering_result(ir_dumps, lowering_errs, has_typecheck_errors || has_ownership_errors);
 
             results.push(DualSectionResult {
                 section_type: "module".to_string(),
                 name: Some(module_path),
                 typecheck,
+                ownership,
                 interp_lowering: lowering.clone(),
                 aot_lowering: lowering,
                 ir_match: true,
@@ -267,6 +275,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
             section_type: "scriptunit-fragment".to_string(),
             name: None,
             typecheck: datafun::pipeline::TypecheckResult::Skipped,
+            ownership: datafun::pipeline::OwnershipResult::Skipped,
             interp_lowering: datafun::pipeline::LoweringResult::Skipped,
             aot_lowering: datafun::pipeline::LoweringResult::Skipped,
             ir_match: true,
@@ -306,6 +315,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
             section_type: "scriptunit-fragment".to_string(),
             name: None,
             typecheck: datafun::pipeline::TypecheckResult::Skipped,
+            ownership: datafun::pipeline::OwnershipResult::Skipped,
             interp_lowering: interp_compiled.lowering,
             aot_lowering: datafun::pipeline::LoweringResult::Skipped,
             ir_match: false,
@@ -328,6 +338,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
             section_type: "scriptunit-fragment".to_string(),
             name: None,
             typecheck: aot_compiled.typecheck,
+            ownership: aot_compiled.ownership,
             interp_lowering: interp_compiled.lowering,
             aot_lowering: aot_compiled.lowering,
             ir_match: false,
@@ -335,6 +346,37 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
             interp_output,
             aot_output: String::new(),
             output_match: false,
+            aot_compile: None,
+            link: None,
+            execution: None,
+        });
+        return DualAnalysis { sections: results };
+    }
+
+    // If ownership analysis failed, return early.
+    // Check if both errors match (same error message = ir_match: true).
+    if !matches!(&aot_compiled.ownership, datafun::pipeline::OwnershipResult::Success) {
+        let ir_match = match (&interp_compiled.ownership, &aot_compiled.ownership) {
+            (
+                datafun::pipeline::OwnershipResult::Error { message: m1 },
+                datafun::pipeline::OwnershipResult::Error { message: m2 },
+            ) => m1 == m2,
+            _ => false,
+        };
+        // If both errors match, consider output_match true (no output to compare).
+        let output_match = ir_match;
+        results.push(DualSectionResult {
+            section_type: "scriptunit-fragment".to_string(),
+            name: None,
+            typecheck: aot_compiled.typecheck,
+            ownership: aot_compiled.ownership,
+            interp_lowering: interp_compiled.lowering,
+            aot_lowering: aot_compiled.lowering,
+            ir_match,
+            ir_diff: None,
+            interp_output,
+            aot_output: String::new(),
+            output_match,
             aot_compile: None,
             link: None,
             execution: None,
@@ -358,6 +400,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
             section_type: "scriptunit-fragment".to_string(),
             name: None,
             typecheck: aot_compiled.typecheck,
+            ownership: aot_compiled.ownership,
             interp_lowering: interp_compiled.lowering,
             aot_lowering: aot_compiled.lowering,
             ir_match,
@@ -402,6 +445,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
                 section_type: "scriptunit-fragment".to_string(),
                 name: None,
                 typecheck: aot_compiled.typecheck,
+                ownership: aot_compiled.ownership,
                 interp_lowering: interp_compiled.lowering,
                 aot_lowering: aot_compiled.lowering,
                 ir_match,
@@ -428,6 +472,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         section_type: "scriptunit-fragment".to_string(),
         name: None,
         typecheck: aot_compiled.typecheck,
+        ownership: aot_compiled.ownership,
         interp_lowering: interp_compiled.lowering,
         aot_lowering: aot_compiled.lowering,
         ir_match,
