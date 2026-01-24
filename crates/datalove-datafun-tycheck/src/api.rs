@@ -129,12 +129,9 @@ pub fn typecheck_script_unit<'db>(
             // Pass 0: collect type aliases.
             collect_type_aliases(&mut ctx, &script.statements);
 
-            // Pass 1: collect function signatures from this unit.
-            for statement in &script.statements {
-                if let Statement::Fun(stmt) = statement {
-                    collect_function_signature(&mut ctx, stmt, None);
-                }
-            }
+            // Note: Unlike modules, scripts do NOT pre-collect function signatures.
+            // Functions are processed sequentially so they can only reference
+            // functions defined earlier (no mutual recursion in scripts).
 
             // Resolve imports using shared helper.
             let (resolved_imports, import_errors) = resolve_script_imports(

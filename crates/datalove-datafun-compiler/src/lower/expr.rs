@@ -275,7 +275,7 @@ pub fn lower_expression<'db>(
             ctx.push_pending_scope();
 
             // Resolve function reference using typechecker's resolved call target.
-            let func_ref = ctx.resolve_call(call)?;
+            let func_ref = ctx.resolve_call(call);
 
             // Get param modes and types from the resolved call target.
             let id = call.as_id().index() as usize;
