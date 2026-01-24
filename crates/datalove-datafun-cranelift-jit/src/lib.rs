@@ -274,7 +274,6 @@ mod tests {
             slot_count: 0,
             value_types: vec![IrType::I32],
             slot_types: vec![],
-            tracked_values: vec![],
             tracked_slots: vec![],
         }
     }
@@ -389,7 +388,6 @@ mod tests {
             slot_count: 0,
             value_types: vec![],
             slot_types: vec![],
-            tracked_values: vec![],
             tracked_slots: vec![],
         };
 
@@ -422,7 +420,6 @@ mod tests {
             slot_count: 0,
             value_types: vec![IrType::I32, IrType::I32],
             slot_types: vec![],
-            tracked_values: vec![],
             tracked_slots: vec![],
         };
 
@@ -489,7 +486,6 @@ mod tests {
             slot_count: 0,
             value_types: vec![],
             slot_types: vec![],
-            tracked_values: vec![],
             tracked_slots: vec![],
         };
 
@@ -522,7 +518,6 @@ mod tests {
             slot_count: 0,
             value_types: vec![IrType::I32, IrType::I32],
             slot_types: vec![],
-            tracked_values: vec![],
             tracked_slots: vec![],
         };
 

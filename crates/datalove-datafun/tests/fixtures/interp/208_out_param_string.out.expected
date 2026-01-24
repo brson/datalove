@@ -14,14 +14,14 @@ Analysis(
                 ir: """
                     fn init_string(p0):
                     block0:
-                        v0 = const.tracked "hello"
+                        v0 = const "hello"
                         store p0, v0
                         v1 = const true
                         return v1
                     
                     fn test():
                     block0:
-                        v0 = const.tracked ""
+                        v0 = const ""
                         store.move.tracked s0, v0
                         v1 = call m0.f0(s0)
                         v2 = load.move.tracked s0
@@ -63,7 +63,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked m0.f1()
+                        v0 = call m0.f1()
                         unit_end v0
                 """,
             ),

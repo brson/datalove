@@ -18,10 +18,10 @@ Analysis(
                     
                     fn make_list():
                     block0:
-                        v0 = const.tracked "a"
-                        v1 = const.tracked "b"
-                        v2 = const.tracked "c"
-                        v3 = list.tracked [v0, v1, v2]
+                        v0 = const "a"
+                        v1 = const "b"
+                        v2 = const "c"
+                        v3 = list [v0, v1, v2]
                         return v3
                     exports:
                         make_list = f0
@@ -43,7 +43,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked unit0.f0()
+                        v0 = call unit0.f0()
                         unit_end v0
                 """,
             ),

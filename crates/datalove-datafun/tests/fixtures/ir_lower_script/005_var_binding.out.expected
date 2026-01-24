@@ -4,8 +4,8 @@ block0:
     v0 = const 1u32
     store.copy.tracked s0, v0
     v1 = const 1u32
-    v2 = widen.tracked s0
-    v3 = widen.tracked v1
+    v2 = widen s0
+    v3 = widen v1
     v4 = add v2, v3
     drop v2
     drop v3

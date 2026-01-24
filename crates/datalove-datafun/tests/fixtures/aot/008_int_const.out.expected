@@ -14,10 +14,10 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked 42int
+                        v0 = const 42int
                         store.move.tracked s0, v0
                         debuglog s0
-                        v1 = const.tracked 100int
+                        v1 = const 100int
                         drop.tracked s0
                         store.move.tracked s0, v1
                         debuglog s0

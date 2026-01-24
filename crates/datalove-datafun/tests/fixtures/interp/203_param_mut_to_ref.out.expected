@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     fn inner(p0):
                     block0:
-                        v0 = const.tracked 100int
+                        v0 = const 100int
                         v1 = eq p0, v0
                         drop v0
                         return v1
@@ -26,7 +26,7 @@ Analysis(
                     
                     fn test():
                     block0:
-                        v0 = const.tracked 100int
+                        v0 = const 100int
                         store.move.tracked s0, v0
                         v1 = call m0.f1(s0)
                         drop.tracked s0

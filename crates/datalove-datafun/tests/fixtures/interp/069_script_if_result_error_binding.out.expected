@@ -14,12 +14,12 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "failed"
-                        v1 = error_from.tracked v0
-                        v2 = err.tracked v1
+                        v0 = const "failed"
+                        v1 = error_from v0
+                        v2 = err v1
                         v3 = const 0u32
                         store.copy.tracked s0, v3
-                        v4, v5, v6 = unwrap_result.tracking v2
+                        v4, v5, v6 = unwrap_result v2
                         branch v6, block1, block2
                     block1:
                         store.copy s0, v4

@@ -15,7 +15,7 @@ Analysis(
                     fn wrap():
                     block0:
                         v0 = const true
-                        v1 = data_from.tracked v0
+                        v1 = data_from v0
                         return v1
                 """,
             ),
@@ -54,7 +54,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked m0.f0()
+                        v0 = call m0.f0()
                         unit_end v0
                 """,
             ),

@@ -13,7 +13,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked f0()
+                        v0 = call f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -21,20 +21,20 @@ DualAnalysis(
                     fn test():
                     block0:
                         v0 = none
-                        v1 = const.tracked "level1"
-                        v2 = const.tracked "level2"
-                        v3, v4 = unwrap_option.tracking v0
+                        v1 = const "level1"
+                        v2 = const "level2"
+                        v3, v4 = unwrap_option v0
                         branch v4, block2, block1
                     block1:
-                        v5 = none.tracked
+                        v5 = none
                         drop v2
                         drop v1
                         return v5
                     block2:
                         v6 = pack Struct0 {v3}
-                        v7 = pack.tracked Struct0 {v2, v6}
-                        v8 = pack.tracked Struct0 {v1, v7}
-                        v9 = some.tracked v8
+                        v7 = pack Struct0 {v2, v6}
+                        v8 = pack Struct0 {v1, v7}
+                        v9 = some v8
                         return v9
                     exports:
                         test = f0
@@ -45,7 +45,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked f0()
+                        v0 = call f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -53,20 +53,20 @@ DualAnalysis(
                     fn test():
                     block0:
                         v0 = none
-                        v1 = const.tracked "level1"
-                        v2 = const.tracked "level2"
-                        v3, v4 = unwrap_option.tracking v0
+                        v1 = const "level1"
+                        v2 = const "level2"
+                        v3, v4 = unwrap_option v0
                         branch v4, block2, block1
                     block1:
-                        v5 = none.tracked
+                        v5 = none
                         drop v2
                         drop v1
                         return v5
                     block2:
                         v6 = pack Struct0 {v3}
-                        v7 = pack.tracked Struct0 {v2, v6}
-                        v8 = pack.tracked Struct0 {v1, v7}
-                        v9 = some.tracked v8
+                        v7 = pack Struct0 {v2, v6}
+                        v8 = pack Struct0 {v1, v7}
+                        v9 = some v8
                         return v9
                     exports:
                         test = f0

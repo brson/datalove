@@ -137,7 +137,6 @@ pub fn lower_script_unit<'db>(
         slot_count: ctx.body.next_slot,
         value_types: std::mem::take(&mut ctx.body.value_types),
         slot_types: std::mem::take(&mut ctx.body.slot_types),
-        tracked_values: ctx.compute_tracked_values(),
         tracked_slots: ctx.compute_tracked_slots(),
         unit_end_values,
         unit_end_slots,
@@ -184,11 +183,10 @@ pub fn lower_script_fragment_raw<'db>(
     }
     ctx.body.current_stmt_idx = None;
 
-    // Compute unit_end and tracked values/slots BEFORE emit_unit_end_drops,
+    // Compute unit_end and tracked slots BEFORE emit_unit_end_drops,
     // because that method consumes unit_end_drops which we need.
     let unit_end_values = ctx.compute_unit_end_values();
     let unit_end_slots = ctx.compute_unit_end_slots();
-    let tracked_values = ctx.compute_tracked_values();
     let tracked_slots = ctx.compute_tracked_slots();
 
     // Emit drops for script-level bindings at unit end (for AOT).
@@ -206,7 +204,6 @@ pub fn lower_script_fragment_raw<'db>(
         slot_count: ctx.body.next_slot,
         value_types: std::mem::take(&mut ctx.body.value_types),
         slot_types: std::mem::take(&mut ctx.body.slot_types),
-        tracked_values,
         tracked_slots,
         unit_end_values,
         unit_end_slots,
@@ -248,7 +245,6 @@ pub fn lower_script_expr<'db>(
         slot_count: ctx.body.next_slot,
         value_types: std::mem::take(&mut ctx.body.value_types),
         slot_types: std::mem::take(&mut ctx.body.slot_types),
-        tracked_values: ctx.compute_tracked_values(),
         tracked_slots: ctx.compute_tracked_slots(),
         unit_end_values: Vec::new(),
         unit_end_slots: Vec::new(),

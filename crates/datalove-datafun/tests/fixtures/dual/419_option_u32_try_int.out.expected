@@ -13,7 +13,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked f0()
+                        v0 = call f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -22,19 +22,19 @@ DualAnalysis(
                     block0:
                         v0 = const 10u32
                         v1 = some v0
-                        v2, v3 = unwrap_option.tracking v1
+                        v2, v3 = unwrap_option v1
                         branch v3, block2, block1
                     block1:
-                        v4 = none.tracked
+                        v4 = none
                         return v4
                     block2:
                         v5 = const 0u32
-                        v6 = widen.tracked v2
-                        v7 = widen.tracked v5
+                        v6 = widen v2
+                        v7 = widen v5
                         v8 = add v6, v7
                         drop v6
                         drop v7
-                        v9 = some.tracked v8
+                        v9 = some v8
                         return v9
                     exports:
                         test = f0
@@ -45,7 +45,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked f0()
+                        v0 = call f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -54,19 +54,19 @@ DualAnalysis(
                     block0:
                         v0 = const 10u32
                         v1 = some v0
-                        v2, v3 = unwrap_option.tracking v1
+                        v2, v3 = unwrap_option v1
                         branch v3, block2, block1
                     block1:
-                        v4 = none.tracked
+                        v4 = none
                         return v4
                     block2:
                         v5 = const 0u32
-                        v6 = widen.tracked v2
-                        v7 = widen.tracked v5
+                        v6 = widen v2
+                        v7 = widen v5
                         v8 = add v6, v7
                         drop v6
                         drop v7
-                        v9 = some.tracked v8
+                        v9 = some v8
                         return v9
                     exports:
                         test = f0

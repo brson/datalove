@@ -490,15 +490,6 @@ impl IrInterpreter {
             }
             Instruction::Move { dest, src } => {
                 // Precise move: ownership analysis guarantees source exists.
-                // Source is not marked dropped - destroy_all skips untracked values,
-                // and precise values are explicitly dropped via Drop instructions.
-                let src_val = self.read_operand(src, frame, frames)?;
-                let dest_slot = frame.value_dest(*dest);
-                unsafe { self.move_value(&src_val, dest_slot); }
-                frame.mark_value_initialized(*dest);
-            }
-            Instruction::MoveTracked { dest, src } => {
-                // Tracked move: source may have been moved, updates tracking.
                 // Mark source dropped so destroy_all skips it.
                 let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
@@ -647,6 +638,8 @@ impl IrInterpreter {
                 }
             }
             Instruction::Unpack { dests, src } => {
+                // Unpack moves all fields from container into destinations.
+                // Mark source dropped so destroy_all skips it.
                 let src_val = self.read_operand(src, frame, frames)?;
                 let tag = unsafe { (*src_val.tydesc).type_tag };
                 match tag {
@@ -676,6 +669,7 @@ impl IrInterpreter {
                         format!("Unpack requires tuple or struct type, got {:?}", tag)
                     )),
                 }
+                Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
                 // Execute checked arithmetic and set overflow flag.
@@ -720,14 +714,14 @@ impl IrInterpreter {
                     Self::mark_source_dropped_local(p, frame);
                 }
             }
-            Instruction::UnwrapOptionTracking { dest, is_some, src } => {
+            Instruction::UnwrapOption { dest, is_some, src } => {
+                // Unwraps Option, marking source as dropped.
                 let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 let is_some_slot = frame.value_dest(*is_some);
                 self.execute_unwrap_option(&src_val, dest_slot, is_some_slot);
                 frame.mark_value_initialized(*dest);
                 frame.mark_value_initialized(*is_some);
-                // Unwrap is destructive - source is consumed.
                 Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::WrapOk { dest, inner } => {
@@ -744,7 +738,8 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
-            Instruction::UnwrapResultTracking { ok_dest, err_dest, is_ok, src } => {
+            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
+                // Unwraps Result, marking source as dropped.
                 let src_val = self.read_operand(src, frame, frames)?;
                 let ok_slot = frame.value_dest(*ok_dest);
                 let err_slot = frame.value_dest(*err_dest);
@@ -753,7 +748,6 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*ok_dest);
                 frame.mark_value_initialized(*err_dest);
                 frame.mark_value_initialized(*is_ok);
-                // Unwrap is destructive - source is consumed.
                 Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::ErrorFrom { dest, inner } => {
@@ -1168,265 +1162,7 @@ impl IrInterpreter {
                 self.execute_intrinsic(*intrinsic, args, dest_slot, frame, frames)?;
                 frame.mark_value_initialized(*dest);
             }
-            // Tracked variants - interpreter behavior is identical to non-tracked.
-            Instruction::ConstTracked { dest, value } => {
-                let dest_slot = frame.value_dest(*dest);
-                self.write_const(value, dest_slot);
-                frame.mark_value_initialized(*dest);
-            }
-            Instruction::WidenTracked { dest, src } => {
-                let src_val = self.read_operand(src, frame, frames)?;
-                let dest_slot = frame.value_dest(*dest);
-                unsafe {
-                    let int_buf = &mut *(dest_slot.ptr as *mut datalove_rtdt::Int);
-                    self.widen_to_int(&src_val, int_buf);
-                }
-                frame.mark_value_initialized(*dest);
-            }
-            Instruction::CallTracked { dest, func, args } => {
-                // Same as Call - tracked variant just marks dest LIVE in AOT.
-                let (callee, callee_unit) = ctx.get_function_with_context(func, registry)?;
-                let mut arg_vals: Vec<Value> = Vec::with_capacity(args.len());
-                for (i, op) in args.iter().enumerate() {
-                    let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                    if mode == ParamMode::Out {
-                        let val = self.get_operand_dest(op, frame);
-                        unsafe {
-                            datalove_rt::c::dtlv_rti_any_destroy_local(
-                                self.runtime.handle(),
-                                val.ptr,
-                                val.tydesc,
-                            );
-                        }
-                        arg_vals.push(val);
-                    } else {
-                        arg_vals.push(self.read_operand(op, frame, frames)?);
-                    }
-                }
-                let dest_slot = frame.value_dest(*dest);
-                for (i, arg) in args.iter().enumerate() {
-                    let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                    if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
-                        continue;
-                    }
-                    if let Some(param_type) = callee.param_types.get(i) {
-                        if param_type.is_copy() {
-                            continue;
-                        }
-                    }
-                    Self::mark_source_dropped_local(arg, frame);
-                }
-                let mut call_handled = false;
-                {
-                    let dispatcher_opt = self.call_dispatcher.borrow_mut().take();
-                    if let Some(mut dispatcher) = dispatcher_opt {
-                        let rt_handle = self.runtime.handle();
-                        let call_ctx = dispatch::DispatchCallContext {
-                            exec_ctx: ctx,
-                            registry,
-                            frames,
-                            interp: self,
-                        };
-                        match dispatcher.dispatch_call(func, callee, &arg_vals, dest_slot, rt_handle, call_ctx) {
-                            dispatch::DispatchResult::Handled(result) => {
-                                *self.call_dispatcher.borrow_mut() = Some(dispatcher);
-                                result?;
-                                call_handled = true;
-                            }
-                            dispatch::DispatchResult::NotHandled => {
-                                *self.call_dispatcher.borrow_mut() = Some(dispatcher);
-                            }
-                        }
-                    }
-                }
-                if !call_handled {
-                    if let Some(unit) = callee_unit {
-                        let unit_funcs = registry.unit_functions(unit)
-                            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
-                        let callee_ctx = ExecutionContext::new(unit_funcs);
-                        self.call_in_context(callee, arg_vals, dest_slot, &callee_ctx, registry, frames)?;
-                    } else {
-                        self.call_in_context(callee, arg_vals, dest_slot, ctx, registry, frames)?;
-                    }
-                }
-                for (i, arg) in args.iter().enumerate() {
-                    let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                    if mode == ParamMode::Out {
-                        match arg {
-                            Operand::Slot(id) => frame.mark_slot_initialized(*id),
-                            _ => {}
-                        }
-                    }
-                }
-                frame.mark_value_initialized(*dest);
-            }
-            Instruction::PackTracked { dest, ty: _, fields } => {
-                let field_vals: Vec<Value> = fields.iter()
-                    .map(|op| self.read_operand(op, frame, frames))
-                    .collect::<Result<_, _>>()?;
-                let dest_slot = frame.value_dest(*dest);
-                let tag = unsafe { (*dest_slot.tydesc).type_tag };
-                match tag {
-                    rtdt::TyTag::Tuple => self.execute_pack_tuple(&field_vals, dest_slot),
-                    rtdt::TyTag::Struct => self.execute_pack_struct(&field_vals, dest_slot),
-                    _ => return Err(InterpError::TypeMismatch(
-                        format!("Pack requires tuple or struct type, got {:?}", tag)
-                    )),
-                }
-                frame.mark_value_initialized(*dest);
-                for field in fields {
-                    Self::mark_source_dropped_local(field, frame);
-                }
-            }
-            Instruction::UnpackTracked { dests, src } => {
-                let src_val = self.read_operand(src, frame, frames)?;
-                let tag = unsafe { (*src_val.tydesc).type_tag };
-                match tag {
-                    rtdt::TyTag::Tuple => {
-                        let tuple_info = unsafe { (*src_val.tydesc).type_info.tuple };
-                        for (i, &dest_id) in dests.iter().enumerate() {
-                            let dest_slot = frame.value_dest(dest_id);
-                            let field_info = unsafe { &*tuple_info.fields.add(i) };
-                            let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
-                            let size = unsafe { (*field_info.tydesc).size as usize };
-                            unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, size); }
-                            frame.mark_value_initialized(dest_id);
-                        }
-                    }
-                    rtdt::TyTag::Struct => {
-                        let struct_info = unsafe { (*src_val.tydesc).type_info.struct_ };
-                        for (i, &dest_id) in dests.iter().enumerate() {
-                            let dest_slot = frame.value_dest(dest_id);
-                            let field_info = unsafe { &*struct_info.fields.add(i) };
-                            let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
-                            let size = unsafe { (*field_info.tydesc).size as usize };
-                            unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, size); }
-                            frame.mark_value_initialized(dest_id);
-                        }
-                    }
-                    _ => return Err(InterpError::TypeMismatch(
-                        format!("Unpack requires tuple or struct type, got {:?}", tag)
-                    )),
-                }
-            }
-            Instruction::GetFieldTracked { dest, src, field_index } => {
-                let src_val = self.read_operand(src, frame, frames)?;
-                let dest_slot = frame.value_dest(*dest);
-                let tag = unsafe { (*src_val.tydesc).type_tag };
-                match tag {
-                    rtdt::TyTag::Tuple => {
-                        let tuple_info = unsafe { (*src_val.tydesc).type_info.tuple };
-                        let field_info = unsafe { &*tuple_info.fields.add(*field_index as usize) };
-                        let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
-                        let field_size = unsafe { (*field_info.tydesc).size as usize };
-                        unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, field_size); }
-                        frame.mark_value_initialized(*dest);
-                    }
-                    rtdt::TyTag::Struct => {
-                        let struct_info = unsafe { (*src_val.tydesc).type_info.struct_ };
-                        let field_info = unsafe { &*struct_info.fields.add(*field_index as usize) };
-                        let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
-                        let field_size = unsafe { (*field_info.tydesc).size as usize };
-                        unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, field_size); }
-                        frame.mark_value_initialized(*dest);
-                    }
-                    _ => return Err(InterpError::TypeMismatch(
-                        format!("GetField requires tuple or struct type, got {:?}", tag)
-                    )),
-                }
-            }
-            Instruction::WrapSomeTracked { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, frames)?;
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_wrap_some(&inner_val, dest_slot);
-                frame.mark_value_initialized(*dest);
-                Self::mark_source_dropped_local(inner, frame);
-            }
-            Instruction::WrapNoneTracked { dest } => {
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_wrap_none(dest_slot);
-                frame.mark_value_initialized(*dest);
-            }
-            Instruction::WrapOkTracked { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, frames)?;
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_wrap_ok(&inner_val, dest_slot);
-                frame.mark_value_initialized(*dest);
-                Self::mark_source_dropped_local(inner, frame);
-            }
-            Instruction::WrapErrTracked { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, frames)?;
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_wrap_err(&inner_val, dest_slot);
-                frame.mark_value_initialized(*dest);
-                Self::mark_source_dropped_local(inner, frame);
-            }
-            Instruction::EnumVariantTracked { dest, variant_index, payload } => {
-                let payload_val = payload.as_ref()
-                    .map(|p| self.read_operand(p, frame, frames))
-                    .transpose()?;
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_enum_variant(*variant_index, payload_val.as_ref(), dest_slot);
-                frame.mark_value_initialized(*dest);
-                if let Some(p) = payload {
-                    Self::mark_source_dropped_local(p, frame);
-                }
-            }
-            Instruction::ErrorFromTracked { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, frames)?;
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_error_from(&inner_val, dest_slot);
-                frame.mark_value_initialized(*dest);
-                Self::mark_source_dropped_local(inner, frame);
-            }
-            Instruction::DataFromTracked { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, frames)?;
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_data_from(&inner_val, dest_slot);
-                frame.mark_value_initialized(*dest);
-                Self::mark_source_dropped_local(inner, frame);
-            }
-            Instruction::ListNewTracked { dest, elements } => {
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_list_new(elements, dest_slot, frame, frames)?;
-                frame.mark_value_initialized(*dest);
-                for elem in elements {
-                    Self::mark_source_dropped_local(elem, frame);
-                }
-            }
-            Instruction::SetNewTracked { dest, elements } => {
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_set_new(elements, dest_slot, frame, frames)?;
-                frame.mark_value_initialized(*dest);
-                for elem in elements {
-                    Self::mark_source_dropped_local(elem, frame);
-                }
-            }
-            Instruction::MapNewTracked { dest, entries } => {
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_map_new(entries, dest_slot, frame, frames)?;
-                frame.mark_value_initialized(*dest);
-                for (key, val) in entries {
-                    Self::mark_source_dropped_local(key, frame);
-                    Self::mark_source_dropped_local(val, frame);
-                }
-            }
-            Instruction::TensorNewTracked { dest, shape, elements } => {
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_tensor_new(shape, elements, dest_slot, frame, frames)?;
-                frame.mark_value_initialized(*dest);
-                for elem in elements {
-                    Self::mark_source_dropped_local(elem, frame);
-                }
-            }
-            Instruction::TableNewTracked { dest, rows } => {
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_table_new(rows, dest_slot, frame, frames)?;
-                frame.mark_value_initialized(*dest);
-                for row in rows {
-                    Self::mark_source_dropped_local(row, frame);
-                }
-            }
+            // Slot tracking variants - these track SLOT state, not value state.
             Instruction::SlotStoreCopyTracked { dest, value } => {
                 let src_val = self.read_operand(value, frame, frames)?;
                 match dest {
@@ -1533,17 +1269,6 @@ impl IrInterpreter {
                         size,
                     );
                 }
-            }
-            Instruction::SlotLoadCopyTracked { dest, slot } => {
-                let slot_val = frame.slot(*slot)?;
-                let dest_slot = frame.value_dest(*dest);
-                unsafe { self.copy_value(&slot_val, dest_slot); }
-                frame.mark_value_initialized(*dest);
-            }
-            Instruction::IntrinsicTracked { dest, intrinsic, args } => {
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_intrinsic(*intrinsic, args, dest_slot, frame, frames)?;
-                frame.mark_value_initialized(*dest);
             }
         }
         Ok(())

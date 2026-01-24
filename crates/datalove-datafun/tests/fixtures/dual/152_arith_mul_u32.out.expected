@@ -13,8 +13,8 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked 7int
-                        v1 = const.tracked 6int
+                        v0 = const 7int
+                        v1 = const 6int
                         v2 = mul v0, v1
                         debuglog v2
                         drop v2
@@ -31,8 +31,8 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked 7int
-                        v1 = const.tracked 6int
+                        v0 = const 7int
+                        v1 = const 6int
                         v2 = mul v0, v1
                         debuglog v2
                         drop v2

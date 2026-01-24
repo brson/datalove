@@ -14,20 +14,20 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked f1()
+                        v0 = call f1()
                         debuglog v0
                         drop v0
                         unit_end
                     
                     fn init_int(p0):
                     block0:
-                        v0 = const.tracked 100int
+                        v0 = const 100int
                         store p0, v0
                         v1 = const true
                         return v1
                     fn test():
                     block0:
-                        v0 = const.tracked 0int
+                        v0 = const 0int
                         store.move.tracked s0, v0
                         v1 = call f0(s0)
                         v2 = load.move.tracked s0

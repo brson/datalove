@@ -23,19 +23,19 @@ Analysis(
                         branch v1, block1, block2
                     block1:
                         v2 = const 0u32
-                        v3 = widen.tracked p0
-                        v4 = widen.tracked v2
+                        v3 = widen p0
+                        v4 = widen v2
                         v5 = add v3, v4
                         drop v3
                         drop v4
-                        v6 = ok.tracked v5
+                        v6 = ok v5
                         return v6
                     block2:
                         goto block3
                     block3:
-                        v7 = const.tracked 0int
+                        v7 = const 0int
                         store.move.tracked s0, v7
-                        v8 = const.tracked 1int
+                        v8 = const 1int
                         store.move.tracked s1, v8
                         v9 = const 2u32
                         store.copy.tracked s2, v9
@@ -54,16 +54,16 @@ Analysis(
                         v14, v15 = add.checked s2, v13
                         branch v15, block6, block7
                     block6:
-                        v16 = const.tracked "arithmetic overflow"
-                        v17 = error_from.tracked v16
-                        v18 = err.tracked v17
+                        v16 = const "arithmetic overflow"
+                        v17 = error_from v16
+                        v18 = err v17
                         return v18
                     block7:
                         store.copy s2, v14
                         goto block4
                     block8:
                         v19 = load.move.tracked s1
-                        v20 = ok.tracked v19
+                        v20 = ok v19
                         drop.tracked s0
                         return v20
                     exports:
@@ -87,7 +87,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 10u32
-                        v1 = call.tracked unit0.f0(v0)
+                        v1 = call unit0.f0(v0)
                         unit_end v1
                 """,
             ),

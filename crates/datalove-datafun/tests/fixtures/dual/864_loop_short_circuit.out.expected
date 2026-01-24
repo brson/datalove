@@ -26,7 +26,7 @@ DualAnalysis(
                     block3:
                         goto block4
                     block4:
-                        v3 = const.tracked "in_loop"
+                        v3 = const "in_loop"
                         debuglog v3
                         drop v3
                         v4 = const 5u32
@@ -60,7 +60,7 @@ DualAnalysis(
                     block3:
                         goto block4
                     block4:
-                        v3 = const.tracked "in_loop"
+                        v3 = const "in_loop"
                         debuglog v3
                         drop v3
                         v4 = const 5u32

@@ -14,22 +14,22 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked 10int
-                        v1 = const.tracked 32int
+                        v0 = const 10int
+                        v1 = const 32int
                         v2 = add v0, v1
                         debuglog v2
                         drop v2
-                        v3 = const.tracked 100int
-                        v4 = const.tracked 42int
+                        v3 = const 100int
+                        v4 = const 42int
                         v5 = sub v3, v4
                         debuglog v5
                         drop v5
-                        v6 = const.tracked 7int
-                        v7 = const.tracked 6int
+                        v6 = const 7int
+                        v7 = const 6int
                         v8 = mul v6, v7
                         debuglog v8
                         drop v8
-                        v9 = const.tracked 42int
+                        v9 = const 42int
                         v10 = neg v9
                         debuglog v10
                         drop v10

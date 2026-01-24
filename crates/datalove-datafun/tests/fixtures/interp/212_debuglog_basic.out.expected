@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const 42u32
                         debuglog v0
-                        v1 = const.tracked "hello"
+                        v1 = const "hello"
                         debuglog v1
                         unit_end_drop v1
                         unit_end

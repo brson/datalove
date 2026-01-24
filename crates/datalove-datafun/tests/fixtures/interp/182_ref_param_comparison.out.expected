@@ -34,9 +34,9 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked 10int
-                        v1 = const.tracked 20int
-                        v2 = const.tracked 10int
+                        v0 = const 10int
+                        v1 = const 20int
+                        v2 = const 10int
                         v3 = call m0.f0(v0, v2)
                         v4 = call m0.f0(v0, v1)
                         v5 = call m0.f0(v0, v0)

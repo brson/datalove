@@ -20,7 +20,7 @@ DualAnalysis(
                     fn extract(p0):
                     block0:
                         v0 = copy p0
-                        v1, v2 = unwrap_option.tracking v0
+                        v1, v2 = unwrap_option v0
                         branch v2, block2, block1
                     block1:
                         v3 = none
@@ -50,7 +50,7 @@ DualAnalysis(
                     fn extract(p0):
                     block0:
                         v0 = copy p0
-                        v1, v2 = unwrap_option.tracking v0
+                        v1, v2 = unwrap_option v0
                         branch v2, block2, block1
                     block1:
                         v3 = none

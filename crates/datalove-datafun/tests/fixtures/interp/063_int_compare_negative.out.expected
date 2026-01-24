@@ -16,15 +16,15 @@ Analysis(
                     block0:
                         v0 = const 0u32
                         v1 = const 5u32
-                        v2 = widen.tracked v0
-                        v3 = widen.tracked v1
+                        v2 = widen v0
+                        v3 = widen v1
                         v4 = sub v2, v3
                         drop v2
                         drop v3
                         v5 = const 10u32
                         v6 = const 0u32
-                        v7 = widen.tracked v5
-                        v8 = widen.tracked v6
+                        v7 = widen v5
+                        v8 = widen v6
                         v9 = sub v7, v8
                         drop v7
                         drop v8

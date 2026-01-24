@@ -14,8 +14,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "hello"
-                        v1 = enum_variant.tracked 1 v0
+                        v0 = const "hello"
+                        v1 = enum_variant 1 v0
                         unit_end_drop v1
                         unit_end
                     exports:
@@ -38,7 +38,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = move.tracked unit0.v1
+                        v0 = move unit0.v1
                         unit_end v0
                 """,
             ),

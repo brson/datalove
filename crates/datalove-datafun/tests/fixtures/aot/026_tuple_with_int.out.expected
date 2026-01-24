@@ -14,9 +14,9 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "label"
-                        v1 = const.tracked 123456789012345678901234567890int
-                        v2 = pack.tracked Tuple2 {v0, v1}
+                        v0 = const "label"
+                        v1 = const 123456789012345678901234567890int
+                        v2 = pack Tuple2 {v0, v1}
                         debuglog v2
                         unit_end_drop v2
                         unit_end

@@ -14,17 +14,17 @@ Analysis(
                 ir: """
                     fn set_to_int100(p0):
                     block0:
-                        v0 = const.tracked 100int
+                        v0 = const 100int
                         store p0, v0
                         v1 = const true
                         return v1
                     
                     fn test():
                     block0:
-                        v0 = const.tracked 5int
+                        v0 = const 5int
                         store.move.tracked s0, v0
                         v1 = call m0.f0(s0)
-                        v2 = const.tracked 100int
+                        v2 = const 100int
                         v3 = eq s0, v2
                         drop v2
                         drop.tracked s0

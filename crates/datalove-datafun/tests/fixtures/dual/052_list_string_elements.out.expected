@@ -13,9 +13,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "hello"
-                        v1 = const.tracked "world"
-                        v2 = list.tracked [v0, v1]
+                        v0 = const "hello"
+                        v1 = const "world"
+                        v2 = list [v0, v1]
                         debuglog v2
                         unit_end_drop v2
                         unit_end
@@ -28,9 +28,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "hello"
-                        v1 = const.tracked "world"
-                        v2 = list.tracked [v0, v1]
+                        v0 = const "hello"
+                        v1 = const "world"
+                        v2 = list [v0, v1]
                         debuglog v2
                         unit_end_drop v2
                         unit_end

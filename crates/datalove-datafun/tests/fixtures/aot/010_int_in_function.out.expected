@@ -20,7 +20,7 @@ AotAnalysis(
                     
                     fn test_int():
                     block0:
-                        v0 = const.tracked 42int
+                        v0 = const 42int
                         debuglog v0
                         v1 = const 0u32
                         drop v0

@@ -21,11 +21,11 @@ DualAnalysis(
                         v1 = const true
                         branch v1, block3, block4
                     block3:
-                        v2 = const.tracked 42int
+                        v2 = const 42int
                         drop v2
                         goto block5
                     block4:
-                        v3 = const.tracked "hi"
+                        v3 = const "hi"
                         drop v3
                         goto block5
                     block5:
@@ -49,11 +49,11 @@ DualAnalysis(
                         v1 = const true
                         branch v1, block3, block4
                     block3:
-                        v2 = const.tracked 42int
+                        v2 = const 42int
                         drop v2
                         goto block5
                     block4:
-                        v3 = const.tracked "hi"
+                        v3 = const "hi"
                         drop v3
                         goto block5
                     block5:

@@ -13,8 +13,8 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "Alice"
-                        v1 = pack.tracked Struct0 {v0}
+                        v0 = const "Alice"
+                        v1 = pack Struct0 {v0}
                         debuglog v1
                         drop v1
                         unit_end
@@ -25,8 +25,8 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "Alice"
-                        v1 = pack.tracked Struct0 {v0}
+                        v0 = const "Alice"
+                        v1 = pack Struct0 {v0}
                         debuglog v1
                         drop v1
                         unit_end

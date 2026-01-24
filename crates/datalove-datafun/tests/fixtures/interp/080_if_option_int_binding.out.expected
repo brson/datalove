@@ -14,11 +14,11 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked 12345678901234567890int
-                        v1 = some.tracked v0
-                        v2 = const.tracked 0int
+                        v0 = const 12345678901234567890int
+                        v1 = some v0
+                        v2 = const 0int
                         store.move.tracked s0, v2
-                        v3, v4 = unwrap_option.tracking v1
+                        v3, v4 = unwrap_option v1
                         branch v4, block1, block2
                     block1:
                         drop.tracked s0
@@ -50,7 +50,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = move.tracked unit0.s0
+                        v0 = move unit0.s0
                         unit_end v0
                 """,
             ),

@@ -18,7 +18,7 @@ Analysis(
                         v1 = const 100u32
                         v2 = const 2u32
                         v3 = const 200u32
-                        v4 = map.tracked {v0: v1, v2: v3}
+                        v4 = map {v0: v1, v2: v3}
                         unit_end v4
                 """,
             ),

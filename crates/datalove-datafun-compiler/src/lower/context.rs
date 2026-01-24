@@ -715,27 +715,9 @@ impl<'db> LowerCtx<'db> {
     /// - `WrapSome` vs `WrapSomeTracked`
     /// - etc.
     ///
-    /// Returns true if the dest's tracking byte should be written to LIVE.
-    ///
-    /// A destination needs tracking if:
-    /// - It corresponds to a tracked binding (exports, conditional paths)
-    /// - It's a non-Copy intermediate that will be in tracked_values
-    pub fn is_dest_tracked(&self, dest: ValueId) -> bool {
-        // Check if this value corresponds to a tracked binding.
-        let operand = Operand::Value(dest);
-        if let Some(&id) = self.body.operand_to_binding.get(&operand) {
-            return self.is_binding_tracked(id);
-        }
-
-        // For non-binding values (intermediates), check if the type is non-Copy.
-        // Non-Copy intermediates end up in tracked_values and need tracking.
-        if let Some(ty) = self.body.value_types.get(dest.0 as usize) {
-            return !ty.is_copy();
-        }
-
-        // Default to tracked for safety.
-        true
-    }
+    // Note: is_dest_tracked was removed because all values are now precise.
+    // Values are always dropped at known points via explicit Drop instructions.
+    // Only slots (var bindings) need runtime tracking.
 
     /// Check if a slot needs tracking when written.
     ///
@@ -770,181 +752,102 @@ impl<'db> LowerCtx<'db> {
     // Instruction Emission Helpers
     // ========================================================================
     //
-    // These helpers emit the correct instruction variant (precise or tracked)
-    // based on whether the destination needs tracking.
+    // All values are precise - they're always dropped at known points.
+    // Only slots (var bindings) need runtime tracking.
 
-    /// Emit Const or ConstTracked based on destination tracking.
+    /// Emit Const.
     pub fn emit_const(&mut self, dest: ValueId, value: ConstValue) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::ConstTracked { dest, value });
-        } else {
-            self.emit(Instruction::Const { dest, value });
-        }
+        self.emit(Instruction::Const { dest, value });
     }
 
-    /// Emit Widen or WidenTracked based on destination tracking.
+    /// Emit Widen.
     pub fn emit_widen(&mut self, dest: ValueId, src: Operand) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::WidenTracked { dest, src });
-        } else {
-            self.emit(Instruction::Widen { dest, src });
-        }
+        self.emit(Instruction::Widen { dest, src });
     }
 
-    /// Emit Call or CallTracked based on destination tracking.
+    /// Emit Call.
     pub fn emit_call(&mut self, dest: ValueId, func: FuncRef, args: Vec<Operand>) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::CallTracked { dest, func, args });
-        } else {
-            self.emit(Instruction::Call { dest, func, args });
-        }
+        self.emit(Instruction::Call { dest, func, args });
     }
 
-    /// Emit Pack or PackTracked based on destination tracking.
+    /// Emit Pack.
     pub fn emit_pack(&mut self, dest: ValueId, ty: TypeRef, fields: Vec<Operand>) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::PackTracked { dest, ty, fields });
-        } else {
-            self.emit(Instruction::Pack { dest, ty, fields });
-        }
+        self.emit(Instruction::Pack { dest, ty, fields });
     }
 
-    /// Emit Unpack or UnpackTracked based on destination tracking.
-    ///
-    /// Uses the first dest to determine tracking (all dests should have same tracking).
+    /// Emit Unpack.
     pub fn emit_unpack(&mut self, dests: Vec<ValueId>, src: Operand) {
-        let tracked = dests.first().map(|d| self.is_dest_tracked(*d)).unwrap_or(false);
-        if tracked {
-            self.emit(Instruction::UnpackTracked { dests, src });
-        } else {
-            self.emit(Instruction::Unpack { dests, src });
-        }
+        self.emit(Instruction::Unpack { dests, src });
     }
 
-    /// Emit GetField or GetFieldTracked based on destination tracking.
+    /// Emit GetField.
     pub fn emit_get_field(&mut self, dest: ValueId, src: Operand, field_index: u32) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::GetFieldTracked { dest, src, field_index });
-        } else {
-            self.emit(Instruction::GetField { dest, src, field_index });
-        }
+        self.emit(Instruction::GetField { dest, src, field_index });
     }
 
-    /// Emit WrapSome or WrapSomeTracked based on destination tracking.
+    /// Emit WrapSome.
     pub fn emit_wrap_some(&mut self, dest: ValueId, inner: Operand) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::WrapSomeTracked { dest, inner });
-        } else {
-            self.emit(Instruction::WrapSome { dest, inner });
-        }
+        self.emit(Instruction::WrapSome { dest, inner });
     }
 
-    /// Emit WrapNone or WrapNoneTracked based on destination tracking.
+    /// Emit WrapNone.
     pub fn emit_wrap_none(&mut self, dest: ValueId) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::WrapNoneTracked { dest });
-        } else {
-            self.emit(Instruction::WrapNone { dest });
-        }
+        self.emit(Instruction::WrapNone { dest });
     }
 
-    /// Emit WrapOk or WrapOkTracked based on destination tracking.
+    /// Emit WrapOk.
     pub fn emit_wrap_ok(&mut self, dest: ValueId, inner: Operand) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::WrapOkTracked { dest, inner });
-        } else {
-            self.emit(Instruction::WrapOk { dest, inner });
-        }
+        self.emit(Instruction::WrapOk { dest, inner });
     }
 
-    /// Emit WrapErr or WrapErrTracked based on destination tracking.
+    /// Emit WrapErr.
     pub fn emit_wrap_err(&mut self, dest: ValueId, inner: Operand) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::WrapErrTracked { dest, inner });
-        } else {
-            self.emit(Instruction::WrapErr { dest, inner });
-        }
+        self.emit(Instruction::WrapErr { dest, inner });
     }
 
-    /// Emit EnumVariant or EnumVariantTracked based on destination tracking.
+    /// Emit EnumVariant.
     pub fn emit_enum_variant(&mut self, dest: ValueId, variant_index: u32, payload: Option<Operand>) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::EnumVariantTracked { dest, variant_index, payload });
-        } else {
-            self.emit(Instruction::EnumVariant { dest, variant_index, payload });
-        }
+        self.emit(Instruction::EnumVariant { dest, variant_index, payload });
     }
 
-    /// Emit ErrorFrom or ErrorFromTracked based on destination tracking.
+    /// Emit ErrorFrom.
     pub fn emit_error_from(&mut self, dest: ValueId, inner: Operand) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::ErrorFromTracked { dest, inner });
-        } else {
-            self.emit(Instruction::ErrorFrom { dest, inner });
-        }
+        self.emit(Instruction::ErrorFrom { dest, inner });
     }
 
-    /// Emit DataFrom or DataFromTracked based on destination tracking.
+    /// Emit DataFrom.
     pub fn emit_data_from(&mut self, dest: ValueId, inner: Operand) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::DataFromTracked { dest, inner });
-        } else {
-            self.emit(Instruction::DataFrom { dest, inner });
-        }
+        self.emit(Instruction::DataFrom { dest, inner });
     }
 
-    /// Emit ListNew or ListNewTracked based on destination tracking.
+    /// Emit ListNew.
     pub fn emit_list_new(&mut self, dest: ValueId, elements: Vec<Operand>) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::ListNewTracked { dest, elements });
-        } else {
-            self.emit(Instruction::ListNew { dest, elements });
-        }
+        self.emit(Instruction::ListNew { dest, elements });
     }
 
-    /// Emit SetNew or SetNewTracked based on destination tracking.
+    /// Emit SetNew.
     pub fn emit_set_new(&mut self, dest: ValueId, elements: Vec<Operand>) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::SetNewTracked { dest, elements });
-        } else {
-            self.emit(Instruction::SetNew { dest, elements });
-        }
+        self.emit(Instruction::SetNew { dest, elements });
     }
 
-    /// Emit MapNew or MapNewTracked based on destination tracking.
+    /// Emit MapNew.
     pub fn emit_map_new(&mut self, dest: ValueId, entries: Vec<(Operand, Operand)>) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::MapNewTracked { dest, entries });
-        } else {
-            self.emit(Instruction::MapNew { dest, entries });
-        }
+        self.emit(Instruction::MapNew { dest, entries });
     }
 
-    /// Emit TensorNew or TensorNewTracked based on destination tracking.
+    /// Emit TensorNew.
     pub fn emit_tensor_new(&mut self, dest: ValueId, shape: Vec<u32>, elements: Vec<Operand>) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::TensorNewTracked { dest, shape, elements });
-        } else {
-            self.emit(Instruction::TensorNew { dest, shape, elements });
-        }
+        self.emit(Instruction::TensorNew { dest, shape, elements });
     }
 
-    /// Emit TableNew or TableNewTracked based on destination tracking.
+    /// Emit TableNew.
     pub fn emit_table_new(&mut self, dest: ValueId, rows: Vec<Operand>) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::TableNewTracked { dest, rows });
-        } else {
-            self.emit(Instruction::TableNew { dest, rows });
-        }
+        self.emit(Instruction::TableNew { dest, rows });
     }
 
-    /// Emit Intrinsic or IntrinsicTracked based on destination tracking.
+    /// Emit Intrinsic.
     pub fn emit_intrinsic(&mut self, dest: ValueId, intrinsic: datalove_datafun_intrinsics::IntrinsicId, args: Vec<Operand>) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::IntrinsicTracked { dest, intrinsic, args });
-        } else {
-            self.emit(Instruction::Intrinsic { dest, intrinsic, args });
-        }
+        self.emit(Instruction::Intrinsic { dest, intrinsic, args });
     }
 
     /// Emit SlotStoreCopy or SlotStoreCopyTracked based on slot tracking.
@@ -1002,60 +905,13 @@ impl<'db> LowerCtx<'db> {
         self.emit(Instruction::ParamSetField { param, field_path, value });
     }
 
-    /// Emit SlotLoadCopy or SlotLoadCopyTracked based on destination tracking.
+    /// Emit SlotLoadCopy.
     pub fn emit_slot_load_copy(&mut self, dest: ValueId, slot: SlotId) {
-        if self.is_dest_tracked(dest) {
-            self.emit(Instruction::SlotLoadCopyTracked { dest, slot });
-        } else {
-            self.emit(Instruction::SlotLoadCopy { dest, slot });
-        }
+        self.emit(Instruction::SlotLoadCopy { dest, slot });
     }
 
-    /// Compute tracked_values for the current unit.
-    ///
-    /// Returns all non-Copy ValueIds that need runtime tracking for destroy_all.
-    /// This includes:
-    /// - Tracked bindings stored as values
-    /// - All non-binding intermediate values (non-Copy)
-    ///
-    /// Note: Unit-end bindings are NOT included here - they're handled separately
-    /// via unit_end_values/unit_end_slots fields.
-    pub fn compute_tracked_values(&self) -> Vec<ValueId> {
-        let mut result = Vec::new();
-        let mut added: std::collections::HashSet<ValueId> = std::collections::HashSet::new();
-
-        // Collect tracked bindings.
-        let binding_values: std::collections::HashSet<ValueId> = self.body.binding_to_operand
-            .values()
-            .filter_map(|op| match op {
-                Operand::Value(v) => Some(*v),
-                _ => None,
-            })
-            .collect();
-
-        for (id, &operand) in &self.body.binding_to_operand {
-            if self.is_binding_tracked(*id) {
-                if let Operand::Value(value_id) = operand {
-                    if added.insert(value_id) {
-                        result.push(value_id);
-                    }
-                }
-            }
-        }
-
-        // Add all non-Copy non-binding values (intermediates).
-        // These don't have explicit Drop instructions, so destroy_all must handle them.
-        for (idx, ty) in self.body.value_types.iter().enumerate() {
-            let value_id = ValueId(idx as u32);
-            if !ty.is_copy() && !binding_values.contains(&value_id) {
-                if added.insert(value_id) {
-                    result.push(value_id);
-                }
-            }
-        }
-
-        result
-    }
+    // Note: compute_tracked_values was removed because all values are now precise.
+    // Values don't need runtime tracking - they're always dropped at known points.
 
     /// Compute tracked_slots for the current unit.
     ///

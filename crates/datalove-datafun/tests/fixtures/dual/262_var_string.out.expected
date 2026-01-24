@@ -13,9 +13,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "first"
+                        v0 = const "first"
                         store.move.tracked s0, v0
-                        v1 = const.tracked "second"
+                        v1 = const "second"
                         drop.tracked s0
                         store.move.tracked s0, v1
                         debuglog s0
@@ -30,9 +30,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "first"
+                        v0 = const "first"
                         store.move.tracked s0, v0
-                        v1 = const.tracked "second"
+                        v1 = const "second"
                         drop.tracked s0
                         store.move.tracked s0, v1
                         debuglog s0

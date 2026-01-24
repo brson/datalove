@@ -24,14 +24,14 @@ DualAnalysis(
                     block3:
                         goto block4
                     block4:
-                        v2 = const.tracked "loop_iteration"
+                        v2 = const "loop_iteration"
                         debuglog v2
                         drop v2
                         v3 = const true
                         store.copy s0, v3
                         goto block1
                     block5:
-                        v4 = const.tracked "done"
+                        v4 = const "done"
                         debuglog v4
                         drop v4
                         unit_end
@@ -55,14 +55,14 @@ DualAnalysis(
                     block3:
                         goto block4
                     block4:
-                        v2 = const.tracked "loop_iteration"
+                        v2 = const "loop_iteration"
                         debuglog v2
                         drop v2
                         v3 = const true
                         store.copy s0, v3
                         goto block1
                     block5:
-                        v4 = const.tracked "done"
+                        v4 = const "done"
                         debuglog v4
                         drop v4
                         unit_end

@@ -23,7 +23,7 @@ DualAnalysis(
                     
                     fn test_branch(p0):
                     block0:
-                        v0 = const.tracked "test string"
+                        v0 = const "test string"
                         v1 = copy p0
                         branch v1, block1, block2
                     block1:
@@ -53,7 +53,7 @@ DualAnalysis(
                     
                     fn test_branch(p0):
                     block0:
-                        v0 = const.tracked "test string"
+                        v0 = const "test string"
                         v1 = copy p0
                         branch v1, block1, block2
                     block1:

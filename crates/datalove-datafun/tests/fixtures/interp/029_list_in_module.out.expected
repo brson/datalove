@@ -17,7 +17,7 @@ Analysis(
                         v0 = const 10u32
                         v1 = const 20u32
                         v2 = const 30u32
-                        v3 = list.tracked [v0, v1, v2]
+                        v3 = list [v0, v1, v2]
                         return v3
                 """,
             ),
@@ -56,7 +56,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked m0.f0()
+                        v0 = call m0.f0()
                         unit_end v0
                 """,
             ),
