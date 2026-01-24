@@ -24,8 +24,6 @@ pub struct Frame {
     live_values: HashSet<ValueId>,
     /// Track which slots are initialized.
     slot_initialized: Vec<bool>,
-    /// Track which values are borrowed (not owned, skip destruction).
-    value_borrowed: Vec<bool>,
     /// Track which values are references (store pointers, dereference on read).
     value_is_ref: Vec<bool>,
     /// Pointers to caller's data for each parameter.
@@ -53,7 +51,6 @@ impl Frame {
             layout,
             live_values: HashSet::new(),
             slot_initialized: vec![false; slot_count],
-            value_borrowed: vec![false; value_count],
             value_is_ref: vec![false; value_count],
             param_ptrs: vec![std::ptr::null_mut(); param_count],
             param_tydescs: vec![std::ptr::null(); param_count],
@@ -68,14 +65,6 @@ impl Frame {
     /// values need cleanup in destroy_live_values.
     pub fn mark_value_live(&mut self, id: ValueId) {
         self.live_values.insert(id);
-    }
-
-    /// Mark a value as borrowed (not owned, skip destruction).
-    pub fn mark_value_borrowed(&mut self, id: ValueId) {
-        let idx = id.0 as usize;
-        if idx < self.value_borrowed.len() {
-            self.value_borrowed[idx] = true;
-        }
     }
 
     /// Mark a value as a reference (stores pointer, dereference on read).

@@ -1083,7 +1083,6 @@ impl IrInterpreter {
                     *(dest_slot.ptr as *mut *mut u8) = field_ptr;
                 }
                 frame.mark_value_live(*dest);
-                frame.mark_value_borrowed(*dest);  // Ref doesn't own the data.
                 frame.mark_value_is_ref(*dest);    // Mark as ref for proper reading.
             }
             Instruction::SetField { slot, field_path, value } => {
