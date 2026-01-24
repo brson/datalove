@@ -54,9 +54,13 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
             .execute_script_unit_in_env(unit, &mut env, ret_dest, Some(result_dest))
             .map_err(|e| CtfeError::InterpError(format!("{:?}", e)))?;
 
-        match completion {
+        // Clean up the environment (frames from executed units).
+        // This must happen before env is dropped to free any heap allocations.
+        env.destroy_all(self.interp.runtime_handle());
+
+        let result = match completion {
             UnitCompletion::Normal => {
-                // Extract the result.
+                // Extract the result value into a ConstValue.
                 extract_const_value(result_buffer.as_ptr(), result_type)
             }
             UnitCompletion::EarlyReturn => {
@@ -64,7 +68,19 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
                     "const expression returned early via ! or ?".to_string()
                 ))
             }
+        };
+
+        // Destroy the result value in the buffer to free heap allocations (e.g., bigint limbs).
+        // This must happen after extract_const_value since it reads from the buffer.
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(
+                self.interp.runtime_handle(),
+                result_buffer.as_mut_ptr(),
+                result_tydesc,
+            );
         }
+
+        result
     }
 }
 

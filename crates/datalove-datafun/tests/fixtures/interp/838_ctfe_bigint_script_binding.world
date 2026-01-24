@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+const A: int = 10 + 20
+debuglog A

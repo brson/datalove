@@ -1,0 +1,17 @@
+----------
+module local/test/biginner
+----------
+
+fun compute_big(): int
+    const LOCAL: int = 500 + 500
+    ret LOCAL
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/biginner
+import biginner.compute_big
+
+debuglog compute_big()

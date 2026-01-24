@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+fun get_value(): int
+    const X: int = 100 + 200
+    ret X
+end fun
+
+debuglog get_value()
