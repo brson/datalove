@@ -276,7 +276,7 @@ fn lower_statement_for_script<'db>(
     // Allocate a globally-unique statement ID that matches ownership analysis.
     // This is critical: ownership analysis uses alloc_stmt_id() for ALL statements,
     // so lowering must do the same to ensure drop schedule lookups match.
-    let stmt_idx = ctx.alloc_stmt_id();
+    let stmt_idx = ctx.alloc_stmt_id(stmt);
     match stmt {
         Statement::Let(let_stmt) => {
             let name = let_stmt.name.text(ctx.db).to_string();

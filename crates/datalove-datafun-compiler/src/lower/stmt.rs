@@ -59,7 +59,7 @@ fn lower_statement_impl<'db>(
     stmt: &Statement<'db>,
 ) -> Result<(), LowerError> {
     // Allocate a globally-unique statement ID that matches ownership analysis.
-    let stmt_idx = ctx.alloc_stmt_id();
+    let stmt_idx = ctx.alloc_stmt_id(stmt);
     match stmt {
         Statement::Let(let_stmt) => {
             let name = let_stmt.name.text(ctx.db).to_string();

@@ -16,7 +16,7 @@ use datalove_datafun_ir::{
     ConstValue, TypeRef, SlotDest,
 };
 use crate::ir_ext::IrTypeExt;
-use crate::ownership_analysis::{BindingId, DropSchedule, BindingInfo, TrackingCategory};
+use crate::ownership_analysis::{BindingId, DropSchedule, BindingInfo, TrackingCategory, StmtKey};
 
 /// Compile-time state for building a function's IR.
 ///
@@ -1095,8 +1095,26 @@ impl<'db> LowerCtx<'db> {
     /// Allocate and return the next global statement ID.
     ///
     /// Must be called in the same order as during ownership analysis.
-    pub fn alloc_stmt_id(&mut self) -> usize {
+    /// In debug builds, verifies that the statement matches what ownership
+    /// analysis recorded at this index.
+    pub fn alloc_stmt_id(&mut self, stmt: &Statement<'_>) -> usize {
         let id = self.body.next_stmt_id;
+        #[cfg(debug_assertions)]
+        {
+            let actual = StmtKey::from_stmt(self.db, stmt);
+            if let Some(expected) = self.body.drop_schedule.stmt_order.get(id) {
+                assert_eq!(
+                    *expected, actual,
+                    "stmt_id mismatch at index {}: ownership analysis saw {} (local_index={:?}), \
+                     lowering saw {} (local_index={:?})",
+                    id,
+                    expected.kind_name(),
+                    expected.local_index,
+                    actual.kind_name(),
+                    actual.local_index,
+                );
+            }
+        }
         self.body.next_stmt_id += 1;
         id
     }

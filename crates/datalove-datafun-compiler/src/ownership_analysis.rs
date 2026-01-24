@@ -49,6 +49,66 @@ use datalove_datafun_ir::IrType;
 use crate::ir_ext::IrTypeExt;
 
 // ============================================================================
+// Statement identity for debug verification
+// ============================================================================
+
+/// Key identifying a statement for debug verification.
+///
+/// Used to verify that lowering processes statements in the same order as
+/// ownership analysis. This catches bugs where statement IDs get out of sync.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct StmtKey {
+    /// Discriminant of the Statement enum.
+    pub kind: u8,
+    /// local_index if the statement type has one, for additional discrimination.
+    pub local_index: Option<u32>,
+}
+
+impl StmtKey {
+    /// Extract a key from a statement.
+    pub fn from_stmt(db: &dyn salsa::Database, stmt: &Statement<'_>) -> Self {
+        let (kind, local_index) = match stmt {
+            Statement::Let(_) => (0, None),
+            Statement::Var(_) => (1, None),
+            Statement::Set(s) => (2, Some(s.local_index)),
+            Statement::Fun(s) => (3, Some(s.local_index(db))),
+            Statement::Ret(s) => (4, Some(s.local_index)),
+            Statement::Require(_) => (5, None),
+            Statement::Import(_) => (6, None),
+            Statement::If(_) => (7, None),
+            Statement::Loop(_) => (8, None),
+            Statement::Break(s) => (9, Some(s.local_index)),
+            Statement::Continue(s) => (10, Some(s.local_index)),
+            Statement::DebugLog(_) => (11, None),
+            Statement::TypeAlias(s) => (12, Some(s.local_index)),
+            Statement::ParseError(_) => (13, None),
+        };
+        Self { kind, local_index }
+    }
+
+    /// Get a human-readable name for the statement kind.
+    pub fn kind_name(&self) -> &'static str {
+        match self.kind {
+            0 => "Let",
+            1 => "Var",
+            2 => "Set",
+            3 => "Fun",
+            4 => "Ret",
+            5 => "Require",
+            6 => "Import",
+            7 => "If",
+            8 => "Loop",
+            9 => "Break",
+            10 => "Continue",
+            11 => "DebugLog",
+            12 => "TypeAlias",
+            13 => "ParseError",
+            _ => "Unknown",
+        }
+    }
+}
+
+// ============================================================================
 // Core types
 // ============================================================================
 
@@ -255,6 +315,11 @@ pub struct DropSchedule {
 
     /// Drops to emit before continue.
     pub before_continue: BTreeMap<usize, Vec<BindingId>>,
+
+    /// Statement keys in allocation order, for verifying lowering traversal.
+    /// Only present in debug builds.
+    #[cfg(debug_assertions)]
+    pub stmt_order: Vec<StmtKey>,
 }
 
 /// Result of analyzing a function.
@@ -538,9 +603,14 @@ impl<'db> AnalysisCtx<'db> {
     }
 
     /// Allocate and return the next global statement ID.
-    fn alloc_stmt_id(&mut self) -> usize {
+    ///
+    /// Records the statement key for debug verification that lowering
+    /// processes statements in the same order.
+    fn alloc_stmt_id(&mut self, stmt: &Statement<'db>) -> usize {
         let id = self.next_stmt_id;
         self.next_stmt_id += 1;
+        #[cfg(debug_assertions)]
+        self.schedule.stmt_order.push(StmtKey::from_stmt(self.db, stmt));
         id
     }
 
@@ -1101,7 +1171,7 @@ pub fn analyze_expr<'db>(
 fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>]) {
     for stmt in stmts.iter() {
         // Allocate a globally-unique statement ID.
-        let stmt_id = ctx.alloc_stmt_id();
+        let stmt_id = ctx.alloc_stmt_id(stmt);
         match stmt {
             Statement::Let(let_stmt) => {
                 analyze_let(ctx, let_stmt, stmt_id);
