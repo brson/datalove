@@ -26,9 +26,9 @@ pub fn lower_operand<'db>(
         ExprFunKind::Name(name) => {
             let name_str = name.text(ctx.db);
             if let Some(operand) = ctx.lookup_var(name_str) {
-                // Return the operand directly - no load needed for borrowing.
                 Ok(operand)
             } else {
+                // Can occur when a previous script unit failed to lower.
                 Err(LowerError::VariableNotFound(name_str.to_string()))
             }
         }
@@ -73,6 +73,7 @@ fn lower_call_arg<'db>(
             if let Some(operand) = ctx.lookup_var(name_str) {
                 Ok(operand)
             } else {
+                // Can occur when a previous script unit failed to lower.
                 Err(LowerError::VariableNotFound(name_str.to_string()))
             }
         }
@@ -118,6 +119,7 @@ pub fn lower_field_proj_as_ref<'db>(
                     }
                 }
             } else {
+                // Can occur when a previous script unit failed to lower.
                 return Err(LowerError::VariableNotFound(name_str.to_string()));
             }
         }
@@ -167,6 +169,7 @@ pub fn lower_expression_for_ref<'db>(
             if let Some(operand) = ctx.lookup_var(name_str) {
                 Ok(operand)
             } else {
+                // Can occur when a previous script unit failed to lower.
                 Err(LowerError::VariableNotFound(name_str.to_string()))
             }
         }
@@ -237,7 +240,8 @@ pub fn lower_expression<'db>(
                     }
                 }
             } else {
-                Err(LowerError::VariableNotFound(name_str.to_string()))
+                // Can occur when a previous script unit failed to lower.
+                return Err(LowerError::VariableNotFound(name_str.to_string()));
             }
         }
         ExprFunKind::True(_) => {
@@ -513,13 +517,13 @@ pub fn lower_expression<'db>(
             ctx.push_pending_scope();
 
             // Get the result type - this is IrType::Struct with sorted fields.
+            // Typechecker ensures struct literals have struct types.
             let result_type = ctx.expr_type(expr);
-            let field_types: std::collections::HashMap<String, IrType> = match &result_type {
-                IrType::Struct(fields) => fields.iter().map(|(n, t)| (n.clone(), t.clone())).collect(),
-                _ => return Err(LowerError::NotImplemented(
-                    format!("AnonStruct with non-struct type: {:?}", result_type)
-                )),
+            let IrType::Struct(fields) = &result_type else {
+                panic!("AnonStruct with non-struct type {:?} - typechecker should catch this", result_type);
             };
+            let field_types: std::collections::HashMap<String, IrType> =
+                fields.iter().map(|(n, t)| (n.clone(), t.clone())).collect();
             let sorted_field_names: Vec<String> = match &result_type {
                 IrType::Struct(fields) => fields.iter().map(|(n, _)| n.clone()).collect(),
                 _ => unreachable!(),
@@ -564,18 +568,13 @@ pub fn lower_expression<'db>(
             let variant_name = enum_expr.variant_name.text(ctx.db).to_string();
 
             // Find the variant index in the sorted list.
-            let variant_index = match &result_type {
-                IrType::Enum(variants) => {
-                    variants.iter()
-                        .position(|(n, _)| n == &variant_name)
-                        .ok_or_else(|| LowerError::NotImplemented(
-                            format!("enum variant {} not found", variant_name)
-                        ))?
-                }
-                _ => return Err(LowerError::NotImplemented(
-                    format!("AnonEnum with non-enum type: {:?}", result_type)
-                )),
+            // Typechecker validates enum literals and variant names.
+            let IrType::Enum(variants) = &result_type else {
+                panic!("AnonEnum with non-enum type {:?} - typechecker should catch this", result_type);
             };
+            let variant_index = variants.iter()
+                .position(|(n, _)| n == &variant_name)
+                .unwrap_or_else(|| panic!("enum variant '{}' not found - typechecker should catch this", variant_name));
 
             // Lower payload if present, tracking as pending intermediate.
             let payload = if let Some(p) = enum_expr.payload {
@@ -627,11 +626,12 @@ pub fn lower_expression<'db>(
             ctx.push_pending_scope();
 
             // Get the table type to determine column types.
+            // Typechecker validates table literals have table types.
             let result_type = ctx.expr_type(expr);
-            let column_types = match &result_type {
-                IrType::Table(cols) => cols.clone(),
-                _ => return Err(LowerError::NotImplemented("table type mismatch".to_string())),
+            let IrType::Table(column_types) = &result_type else {
+                panic!("table literal with non-table type {:?} - typechecker should catch this", result_type);
             };
+            let column_types = column_types.clone();
 
             // Build tuple type for row from column types.
             let tuple_fields: Vec<_> = column_types.iter()
@@ -669,13 +669,15 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::ParseError(_) => {
-            Err(LowerError::NotImplemented("ParseError".to_string()))
+            // Parse error nodes can reach lowering via error recovery.
+            Err(LowerError::ParseError)
         }
         ExprFunKind::IntrinsicCall(icall) => {
             // Look up the intrinsic by name.
+            // Typechecker validates intrinsic names.
             let name_str = icall.name.as_str(ctx.db);
             let (intrinsic_id, _def) = datalove_datafun_intrinsics::lookup_intrinsic(name_str)
-                .ok_or_else(|| LowerError::NotImplemented(format!("unknown intrinsic: {}", name_str)))?;
+                .unwrap_or_else(|| panic!("unknown intrinsic '{}' - typechecker should catch this", name_str));
 
             // Lower arguments.
             let args: Result<Vec<_>, _> = icall.args
@@ -1227,6 +1229,9 @@ fn lower_field_proj<'db>(
 }
 
 /// Resolve a field selector to a field index.
+///
+/// Panics if the field is not found or the base type is not a struct,
+/// since the typechecker validates all field accesses.
 fn resolve_field_index<'db>(
     selector: &ast::FieldSelector<'db>,
     base_type: &IrType,
@@ -1237,24 +1242,17 @@ fn resolve_field_index<'db>(
         ast::FieldSelector::Name(name) => {
             // For struct types, find the field by name.
             // Struct fields are sorted by name.
+            // Typechecker validates all field accesses.
             let name_str = name.text(db);
-            match base_type {
-                IrType::Struct(fields) => {
-                    for (i, (field_name, _)) in fields.iter().enumerate() {
-                        if field_name == name_str {
-                            return Ok(i as u32);
-                        }
-                    }
-                    Err(LowerError::InvalidLiteral(format!(
-                        "field '{}' not found in struct",
-                        name_str
-                    )))
+            let IrType::Struct(fields) = base_type else {
+                panic!("named field projection on non-struct type {:?} - typechecker should catch this", base_type);
+            };
+            for (i, (field_name, _)) in fields.iter().enumerate() {
+                if field_name == name_str {
+                    return Ok(i as u32);
                 }
-                _ => Err(LowerError::InvalidLiteral(format!(
-                    "named field projection on non-struct type: {:?}",
-                    base_type
-                ))),
             }
+            panic!("field '{}' not found in struct - typechecker should catch this", name_str);
         }
     }
 }

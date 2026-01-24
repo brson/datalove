@@ -115,8 +115,9 @@ fn lower_statement_impl<'db>(
             lower_loop(ctx, loop_stmt, stmt_idx)
         }
         Statement::Break(_) => {
+            // Typechecker validates break is inside a loop (F050).
             let loop_ctx = ctx.body.loop_stack.last()
-                .ok_or(LowerError::BreakOutsideLoop)?;
+                .unwrap_or_else(|| panic!("break outside loop - typechecker should catch this"));
             let break_target = loop_ctx.exit;
 
             // Emit drops for all scopes up to the loop.
@@ -129,8 +130,9 @@ fn lower_statement_impl<'db>(
             Ok(())
         }
         Statement::Continue(_) => {
+            // Typechecker validates continue is inside a loop (F051).
             let loop_ctx = ctx.body.loop_stack.last()
-                .ok_or(LowerError::ContinueOutsideLoop)?;
+                .unwrap_or_else(|| panic!("continue outside loop - typechecker should catch this"));
             let continue_target = loop_ctx.header;
 
             // Emit drops for current loop iteration.
@@ -164,6 +166,7 @@ fn lower_statement_impl<'db>(
             Ok(())
         }
         Statement::ParseError(_) => {
+            // Parse error nodes can reach lowering via error recovery.
             Err(LowerError::ParseError)
         }
     }
@@ -195,9 +198,7 @@ pub fn lower_if<'db>(
         (IrType::Result(ok_type), Some(binding_name)) => {
             // Typechecker enforces else_binding for Result (F046).
             let err_binding = else_binding
-                .ok_or_else(|| LowerError::NotImplemented(
-                    "Result if-binding without else binding".to_string()
-                ))?;
+                .unwrap_or_else(|| panic!("Result if-binding without else binding - typechecker F046 should catch this"));
             lower_if_result(ctx, if_stmt, condition, ok_type, binding_name, err_binding, stmt_idx)
         }
 
@@ -206,20 +207,12 @@ pub fn lower_if<'db>(
             lower_if_bool(ctx, if_stmt, condition, stmt_idx)
         }
 
-        // Invalid combinations.
+        // Invalid combinations - typechecker should catch these.
         (_, Some(_)) => {
-            // Binding on non-Option/non-Result type.
-            Err(LowerError::NotImplemented(format!(
-                "if-binding requires Option or Result type, got {:?}",
-                cond_type
-            )))
+            panic!("if-binding requires Option or Result type, got {:?} - typechecker should catch this", cond_type);
         }
         (_, None) => {
-            // Non-bool without binding - typechecker should catch this.
-            Err(LowerError::NotImplemented(format!(
-                "if condition must be Bool without binding, got {:?}",
-                cond_type
-            )))
+            panic!("if condition must be Bool without binding, got {:?} - typechecker should catch this", cond_type);
         }
     }
 }
@@ -671,6 +664,7 @@ pub(super) fn collect_field_path<'db>(
         .ok_or_else(|| LowerError::VariableNotFound(root_name_str.clone()))?;
 
     // Now resolve each selector to a field index by walking through the types.
+    // Typechecker validates all field accesses.
     let mut path = Vec::new();
     let mut current_type = root_type.clone();
 
@@ -678,42 +672,26 @@ pub(super) fn collect_field_path<'db>(
         match selector {
             ast::FieldSelector::Index(idx) => {
                 // Verify the index is valid and get the field type.
-                match &current_type {
-                    IrType::Tuple(fields) => {
-                        if (idx as usize) >= fields.len() {
-                            return Err(LowerError::InvalidLiteral(
-                                format!("tuple index {} out of bounds (tuple has {} fields)", idx, fields.len())
-                            ));
-                        }
-                        current_type = fields[idx as usize].clone();
-                        path.push(idx);
-                    }
-                    _ => {
-                        return Err(LowerError::InvalidLiteral(
-                            format!("cannot index into non-tuple type: {:?}", current_type)
-                        ));
-                    }
+                let IrType::Tuple(fields) = &current_type else {
+                    panic!("tuple index on non-tuple type {:?} - typechecker should catch this", current_type);
+                };
+                if (idx as usize) >= fields.len() {
+                    panic!("tuple index {} out of bounds (tuple has {} fields) - typechecker should catch this", idx, fields.len());
                 }
+                current_type = fields[idx as usize].clone();
+                path.push(idx);
             }
             ast::FieldSelector::Name(name) => {
                 let name_str = name.text(ctx.db);
-                match &current_type {
-                    IrType::Struct(fields) => {
-                        // Find the field by name.
-                        let field_idx = fields.iter()
-                            .position(|(n, _)| n == name_str)
-                            .ok_or_else(|| LowerError::InvalidLiteral(
-                                format!("field '{}' not found in struct", name_str)
-                            ))?;
-                        current_type = fields[field_idx].1.clone();
-                        path.push(field_idx as u32);
-                    }
-                    _ => {
-                        return Err(LowerError::InvalidLiteral(
-                            format!("cannot access field '{}' on non-struct type: {:?}", name_str, current_type)
-                        ));
-                    }
-                }
+                let IrType::Struct(fields) = &current_type else {
+                    panic!("field access on non-struct type {:?} - typechecker should catch this", current_type);
+                };
+                // Find the field by name.
+                let field_idx = fields.iter()
+                    .position(|(n, _)| n == name_str)
+                    .unwrap_or_else(|| panic!("field '{}' not found in struct - typechecker should catch this", name_str));
+                current_type = fields[field_idx].1.clone();
+                path.push(field_idx as u32);
             }
         }
     }

@@ -361,6 +361,7 @@ fn lower_statement_for_script<'db>(
                             _ => Err(LowerError::VariableNotMutable(name)),
                         }
                     } else {
+                        // Can occur when a previous script unit failed to lower.
                         Err(LowerError::VariableNotFound(name))
                     }
                 }
@@ -448,8 +449,9 @@ fn lower_statement_for_script<'db>(
             super::stmt::lower_loop(ctx, loop_stmt, stmt_idx)
         }
         Statement::Break(_) => {
+            // Typechecker validates break is inside a loop (F050).
             let loop_ctx = ctx.body.loop_stack.last()
-                .ok_or(LowerError::BreakOutsideLoop)?;
+                .unwrap_or_else(|| panic!("break outside loop - typechecker should catch this"));
             let break_target = loop_ctx.exit;
 
             // Emit drops for all scopes up to the loop.
@@ -462,8 +464,9 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Continue(_) => {
+            // Typechecker validates continue is inside a loop (F051).
             let loop_ctx = ctx.body.loop_stack.last()
-                .ok_or(LowerError::ContinueOutsideLoop)?;
+                .unwrap_or_else(|| panic!("continue outside loop - typechecker should catch this"));
             let continue_target = loop_ctx.header;
 
             // Emit drops for current loop iteration.
@@ -495,6 +498,7 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::ParseError(_) => {
+            // Parse error nodes can reach lowering via error recovery.
             Err(LowerError::ParseError)
         }
     }

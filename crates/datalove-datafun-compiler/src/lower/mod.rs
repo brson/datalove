@@ -64,18 +64,26 @@ pub use func::lower_function_for_module;
 pub use script::{lower_script_unit, lower_script_fragment_raw, lower_script_expr};
 
 /// Errors that can occur during lowering.
+///
+/// Most semantic errors are caught by the typechecker before lowering runs.
+/// These errors represent conditions that the typechecker does not validate,
+/// or that arise from cross-unit dependencies when previous units fail to lower.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LowerError {
+    /// Variable not found. Can occur when a previous script unit failed to lower
+    /// and didn't export the binding that this unit references.
     VariableNotFound(String),
+    /// Assignment to an immutable variable (let binding, not var).
     VariableNotMutable(String),
+    /// Function not found. Can occur when a previous script unit failed to lower
+    /// and didn't export the function that this unit references.
     FunctionNotFound(String),
+    /// Invalid literal value (e.g., integer out of range for target type).
     InvalidLiteral(String),
+    /// Feature not yet implemented in the lowering pass.
     NotImplemented(String),
+    /// Parse error node encountered during lowering (from error recovery).
     ParseError,
-    BreakOutsideLoop,
-    ContinueOutsideLoop,
-    /// Drop analysis error (use-after-move, move-in-loop, etc.)
-    DropAnalysisError(String),
 }
 
 impl std::fmt::Display for LowerError {
@@ -87,9 +95,6 @@ impl std::fmt::Display for LowerError {
             LowerError::InvalidLiteral(lit) => write!(f, "invalid literal: {}", lit),
             LowerError::NotImplemented(what) => write!(f, "not implemented: {}", what),
             LowerError::ParseError => write!(f, "parse error in source"),
-            LowerError::BreakOutsideLoop => write!(f, "break outside of loop"),
-            LowerError::ContinueOutsideLoop => write!(f, "continue outside of loop"),
-            LowerError::DropAnalysisError(msg) => write!(f, "{}", msg),
         }
     }
 }

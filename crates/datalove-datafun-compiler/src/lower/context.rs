@@ -410,6 +410,7 @@ impl<'db> LowerCtx<'db> {
             }
             None => {
                 // Local function resolved by typechecker - use func_scope lookup.
+                // Can fail if a previous unit that defined the function failed to lower.
                 let resolved_func_name = target.func(self.db).name(self.db).text(self.db).to_string();
                 self.lookup_func(&resolved_func_name)
                     .ok_or_else(|| LowerError::FunctionNotFound(resolved_func_name))
