@@ -10,7 +10,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = list []
+                        v0 = list.tracked []
                         debuglog v0
                         unit_end_drop v0
                         unit_end
@@ -23,7 +23,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = list []
+                        v0 = list.tracked []
                         debuglog v0
                         unit_end_drop v0
                         unit_end

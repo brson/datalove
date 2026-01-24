@@ -13,7 +13,7 @@ AotAnalysis(
                     block0:
                         v0 = const 42u32
                         v1 = const 0u32
-                        v2 = call f0(v0, v1)
+                        v2 = call.tracked f0(v0, v1)
                         v3 = const 999u32
                         v4 = call f1(v2, v3)
                         debuglog v4
@@ -24,12 +24,12 @@ AotAnalysis(
                         v0, v1 = div.checked p0, p1
                         branch v1, block1, block2
                     block1:
-                        v2 = const "arithmetic overflow"
-                        v3 = error_from v2
-                        v4 = err v3
+                        v2 = const.tracked "arithmetic overflow"
+                        v3 = error_from.tracked v2
+                        v4 = err.tracked v3
                         return v4
                     block2:
-                        v5 = ok v0
+                        v5 = ok.tracked v0
                         return v5
                     fn unwrap_or_default(p0, p1):
                     block0:

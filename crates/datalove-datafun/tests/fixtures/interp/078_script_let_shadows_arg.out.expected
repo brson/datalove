@@ -15,7 +15,7 @@ Analysis(
                     
                     fn shadow(p0):
                     block0:
-                        v0 = const 10int
+                        v0 = const.tracked 10int
                         v1 = add p0, v0
                         drop v0
                         drop p0
@@ -37,8 +37,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 5int
-                        v1 = call unit0.f0(v0)
+                        v0 = const.tracked 5int
+                        v1 = call.tracked unit0.f0(v0)
                         unit_end v1
                 """,
             ),

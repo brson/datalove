@@ -1,7 +1,7 @@
 fn add(p0, p1):
 block0:
-    v0 = widen p0
-    v1 = widen p1
+    v0 = widen.tracked p0
+    v1 = widen.tracked p1
     v2 = add v0, v1
     drop v0
     drop v1
@@ -11,6 +11,6 @@ fn main():
 block0:
     v0 = const 1i64
     v1 = const 2i64
-    v2 = call m0.f0(v0, v1)
+    v2 = call.tracked m0.f0(v0, v1)
     return v2
 

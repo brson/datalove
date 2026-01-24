@@ -15,7 +15,7 @@ Analysis(
                         v1 = const 1000u32
                         v2 = const 2u32
                         v3 = const 2000u32
-                        v4 = map {v0: v1, v2: v3}
+                        v4 = map.tracked {v0: v1, v2: v3}
                         return v4
                 """,
             ),
@@ -48,7 +48,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call m0.f0()
+                        v0 = call.tracked m0.f0()
                         unit_end v0
                 """,
             ),

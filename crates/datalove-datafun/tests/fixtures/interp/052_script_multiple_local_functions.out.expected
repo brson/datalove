@@ -15,20 +15,20 @@ Analysis(
                     
                     fn add_one(p0):
                     block0:
-                        v0 = const 1int
+                        v0 = const.tracked 1int
                         v1 = add p0, v0
                         drop v0
                         drop p0
                         return v1
                     fn add_two(p0):
                     block0:
-                        v0 = call f0(p0)
-                        v1 = call f0(v0)
+                        v0 = call.tracked f0(p0)
+                        v1 = call.tracked f0(v0)
                         return v1
                     fn add_four(p0):
                     block0:
-                        v0 = call f1(p0)
-                        v1 = call f1(v0)
+                        v0 = call.tracked f1(p0)
+                        v1 = call.tracked f1(v0)
                         return v1
                     exports:
                         add_one = f0
@@ -49,8 +49,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 3int
-                        v1 = call unit0.f2(v0)
+                        v0 = const.tracked 3int
+                        v1 = call.tracked unit0.f2(v0)
                         unit_end v1
                 """,
             ),

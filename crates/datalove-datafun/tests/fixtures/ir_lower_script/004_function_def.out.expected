@@ -5,8 +5,8 @@ block0:
 
 fn double(p0):
 block0:
-    v0 = widen p0
-    v1 = widen p0
+    v0 = widen.tracked p0
+    v1 = widen.tracked p0
     v2 = add v0, v1
     drop v0
     drop v1

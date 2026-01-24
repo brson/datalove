@@ -11,7 +11,7 @@ DualAnalysis(
                 ir: """
                     fn init_42(p0):
                     block0:
-                        v0 = const 42int
+                        v0 = const.tracked 42int
                         store p0, v0
                         v1 = const true
                         return v1
@@ -22,7 +22,7 @@ DualAnalysis(
                 ir: """
                     fn init_42(p0):
                     block0:
-                        v0 = const 42int
+                        v0 = const.tracked 42int
                         store p0, v0
                         v1 = const true
                         return v1
@@ -43,10 +43,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 100int
-                        v1 = const 200int
-                        v2 = pack Struct0 {v0, v1}
-                        store.move s0, v2
+                        v0 = const.tracked 100int
+                        v1 = const.tracked 200int
+                        v2 = pack.tracked Struct0 {v0, v1}
+                        store.move.tracked s0, v2
                         v3 = getfieldref s0.0
                         v4 = call m0.f0(v3)
                         v5 = getfieldref s0.0
@@ -63,10 +63,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 100int
-                        v1 = const 200int
-                        v2 = pack Struct0 {v0, v1}
-                        store.move s0, v2
+                        v0 = const.tracked 100int
+                        v1 = const.tracked 200int
+                        v2 = pack.tracked Struct0 {v0, v1}
+                        store.move.tracked s0, v2
                         v3 = getfieldref s0.0
                         v4 = call m0.f0(v3)
                         v5 = getfieldref s0.0

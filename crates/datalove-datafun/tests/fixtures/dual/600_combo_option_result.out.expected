@@ -12,14 +12,14 @@ DualAnalysis(
                     block0:
                         v0 = const 100u32
                         v1 = const 5u32
-                        v2 = call f0(v0, v1)
+                        v2 = call.tracked f0(v0, v1)
                         v3 = call f1(v2)
                         v4 = const 999u32
                         v5 = call f2(v3, v4)
                         debuglog v5
                         v6 = const 100u32
                         v7 = const 0u32
-                        v8 = call f0(v6, v7)
+                        v8 = call.tracked f0(v6, v7)
                         v9 = call f1(v8)
                         v10 = const 999u32
                         v11 = call f2(v9, v10)
@@ -33,7 +33,7 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        v3 = ok v2
+                        v3 = ok.tracked v2
                         return v3
                     block2:
                         goto block3
@@ -41,13 +41,13 @@ DualAnalysis(
                         v4, v5 = div.checked p0, p1
                         branch v5, block4, block5
                     block4:
-                        v6 = const "arithmetic overflow"
-                        v7 = error_from v6
-                        v8 = err v7
+                        v6 = const.tracked "arithmetic overflow"
+                        v7 = error_from.tracked v6
+                        v8 = err.tracked v7
                         return v8
                     block5:
                         v9 = some v4
-                        v10 = ok v9
+                        v10 = ok.tracked v9
                         return v10
                     fn unwrap_result(p0):
                     block0:
@@ -85,14 +85,14 @@ DualAnalysis(
                     block0:
                         v0 = const 100u32
                         v1 = const 5u32
-                        v2 = call f0(v0, v1)
+                        v2 = call.tracked f0(v0, v1)
                         v3 = call f1(v2)
                         v4 = const 999u32
                         v5 = call f2(v3, v4)
                         debuglog v5
                         v6 = const 100u32
                         v7 = const 0u32
-                        v8 = call f0(v6, v7)
+                        v8 = call.tracked f0(v6, v7)
                         v9 = call f1(v8)
                         v10 = const 999u32
                         v11 = call f2(v9, v10)
@@ -106,7 +106,7 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        v3 = ok v2
+                        v3 = ok.tracked v2
                         return v3
                     block2:
                         goto block3
@@ -114,13 +114,13 @@ DualAnalysis(
                         v4, v5 = div.checked p0, p1
                         branch v5, block4, block5
                     block4:
-                        v6 = const "arithmetic overflow"
-                        v7 = error_from v6
-                        v8 = err v7
+                        v6 = const.tracked "arithmetic overflow"
+                        v7 = error_from.tracked v6
+                        v8 = err.tracked v7
                         return v8
                     block5:
                         v9 = some v4
-                        v10 = ok v9
+                        v10 = ok.tracked v9
                         return v10
                     fn unwrap_result(p0):
                     block0:

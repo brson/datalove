@@ -11,7 +11,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 18446744073709551615int
+                        v0 = const.tracked 18446744073709551615int
                         unit_end v0
                 """,
             ),

@@ -11,7 +11,7 @@ DualAnalysis(
                 ir: """
                     fn greeting():
                     block0:
-                        v0 = const "hello world"
+                        v0 = const.tracked "hello world"
                         return v0
                 """,
             ),
@@ -20,7 +20,7 @@ DualAnalysis(
                 ir: """
                     fn greeting():
                     block0:
-                        v0 = const "hello world"
+                        v0 = const.tracked "hello world"
                         return v0
                 """,
             ),
@@ -39,7 +39,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call m0.f0()
+                        v0 = call.tracked m0.f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -50,7 +50,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call m0.f0()
+                        v0 = call.tracked m0.f0()
                         debuglog v0
                         drop v0
                         unit_end

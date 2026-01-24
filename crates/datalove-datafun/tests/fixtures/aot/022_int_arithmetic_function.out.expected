@@ -11,23 +11,23 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 10int
-                        v1 = const 32int
-                        v2 = call f0(v0, v1)
+                        v0 = const.tracked 10int
+                        v1 = const.tracked 32int
+                        v2 = call.tracked f0(v0, v1)
                         debuglog v2
                         drop v2
-                        v3 = const 100int
-                        v4 = const 42int
-                        v5 = call f1(v3, v4)
+                        v3 = const.tracked 100int
+                        v4 = const.tracked 42int
+                        v5 = call.tracked f1(v3, v4)
                         debuglog v5
                         drop v5
-                        v6 = const 7int
-                        v7 = const 6int
-                        v8 = call f2(v6, v7)
+                        v6 = const.tracked 7int
+                        v7 = const.tracked 6int
+                        v8 = call.tracked f2(v6, v7)
                         debuglog v8
                         drop v8
-                        v9 = const 42int
-                        v10 = call f3(v9)
+                        v9 = const.tracked 42int
+                        v10 = call.tracked f3(v9)
                         debuglog v10
                         drop v10
                         unit_end

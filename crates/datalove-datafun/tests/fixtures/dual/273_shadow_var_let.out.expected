@@ -11,7 +11,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 10u32
-                        store.copy s0, v0
+                        store.copy.tracked s0, v0
                         v1 = const 15u32
                         store.copy s0, v1
                         debuglog s0
@@ -29,7 +29,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 10u32
-                        store.copy s0, v0
+                        store.copy.tracked s0, v0
                         v1 = const 15u32
                         store.copy s0, v1
                         debuglog s0

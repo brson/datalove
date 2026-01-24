@@ -10,14 +10,14 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const "items"
+                        v0 = const.tracked "items"
                         v1 = const 1u32
                         v2 = const 2u32
                         v3 = const 3u32
                         v4 = const 4u32
                         v5 = const 5u32
-                        v6 = list [v1, v2, v3, v4, v5]
-                        v7 = pack Struct0 {v0, v6}
+                        v6 = list.tracked [v1, v2, v3, v4, v5]
+                        v7 = pack.tracked Struct0 {v0, v6}
                         v8 = getfieldref v7.0
                         debuglog v8
                         v9 = getfieldref v7.1
@@ -33,14 +33,14 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const "items"
+                        v0 = const.tracked "items"
                         v1 = const 1u32
                         v2 = const 2u32
                         v3 = const 3u32
                         v4 = const 4u32
                         v5 = const 5u32
-                        v6 = list [v1, v2, v3, v4, v5]
-                        v7 = pack Struct0 {v0, v6}
+                        v6 = list.tracked [v1, v2, v3, v4, v5]
+                        v7 = pack.tracked Struct0 {v0, v6}
                         v8 = getfieldref v7.0
                         debuglog v8
                         v9 = getfieldref v7.1

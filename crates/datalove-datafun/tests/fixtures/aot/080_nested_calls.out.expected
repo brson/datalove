@@ -11,8 +11,8 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 5int
-                        v1 = call f1(v0)
+                        v0 = const.tracked 5int
+                        v1 = call.tracked f1(v0)
                         debuglog v1
                         drop v1
                         unit_end
@@ -24,8 +24,8 @@ AotAnalysis(
                         return v0
                     fn quadruple(p0):
                     block0:
-                        v0 = call f0(p0)
-                        v1 = call f0(v0)
+                        v0 = call.tracked f0(p0)
+                        v1 = call.tracked f0(v0)
                         return v1
                     exports:
                         double = f0

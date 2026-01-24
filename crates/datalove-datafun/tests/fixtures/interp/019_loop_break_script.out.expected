@@ -11,16 +11,16 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 0int
-                        store.move s0, v0
+                        v0 = const.tracked 0int
+                        store.move.tracked s0, v0
                         goto block1
                     block1:
-                        v1 = const 1int
+                        v1 = const.tracked 1int
                         v2 = add s0, v1
                         drop v1
                         drop.tracked s0
-                        store.move s0, v2
-                        v3 = const 5int
+                        store.move.tracked s0, v2
+                        v3 = const.tracked 5int
                         v4 = eq s0, v3
                         drop v3
                         branch v4, block2, block3

@@ -11,7 +11,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 10u32
-                        v1 = call f0(v0)
+                        v1 = call.tracked f0(v0)
                         debuglog v1
                         drop v1
                         unit_end
@@ -23,50 +23,50 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = copy p0
-                        v3 = ok v2
+                        v3 = ok.tracked v2
                         return v3
                     block2:
                         v4 = const 1u32
                         v5, v6 = sub.checked p0, v4
                         branch v6, block3, block4
                     block3:
-                        v7 = const "arithmetic overflow"
-                        v8 = error_from v7
-                        v9 = err v8
+                        v7 = const.tracked "arithmetic overflow"
+                        v8 = error_from.tracked v7
+                        v9 = err.tracked v8
                         return v9
                     block4:
-                        v10 = call f0(v5)
+                        v10 = call.tracked f0(v5)
                         v11, v12, v13 = unwrap_result.tracking v10
                         branch v13, block6, block5
                     block5:
-                        v14 = err v12
+                        v14 = err.tracked v12
                         return v14
                     block6:
                         v15 = const 2u32
                         v16, v17 = sub.checked p0, v15
                         branch v17, block7, block8
                     block7:
-                        v18 = const "arithmetic overflow"
-                        v19 = error_from v18
-                        v20 = err v19
+                        v18 = const.tracked "arithmetic overflow"
+                        v19 = error_from.tracked v18
+                        v20 = err.tracked v19
                         return v20
                     block8:
-                        v21 = call f0(v16)
+                        v21 = call.tracked f0(v16)
                         v22, v23, v24 = unwrap_result.tracking v21
                         branch v24, block10, block9
                     block9:
-                        v25 = err v23
+                        v25 = err.tracked v23
                         return v25
                     block10:
                         v26, v27 = add.checked v11, v22
                         branch v27, block11, block12
                     block11:
-                        v28 = const "arithmetic overflow"
-                        v29 = error_from v28
-                        v30 = err v29
+                        v28 = const.tracked "arithmetic overflow"
+                        v29 = error_from.tracked v28
+                        v30 = err.tracked v29
                         return v30
                     block12:
-                        v31 = ok v26
+                        v31 = ok.tracked v26
                         return v31
                     exports:
                         fib = f0
@@ -78,7 +78,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 10u32
-                        v1 = call f0(v0)
+                        v1 = call.tracked f0(v0)
                         debuglog v1
                         drop v1
                         unit_end
@@ -90,50 +90,50 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = copy p0
-                        v3 = ok v2
+                        v3 = ok.tracked v2
                         return v3
                     block2:
                         v4 = const 1u32
                         v5, v6 = sub.checked p0, v4
                         branch v6, block3, block4
                     block3:
-                        v7 = const "arithmetic overflow"
-                        v8 = error_from v7
-                        v9 = err v8
+                        v7 = const.tracked "arithmetic overflow"
+                        v8 = error_from.tracked v7
+                        v9 = err.tracked v8
                         return v9
                     block4:
-                        v10 = call f0(v5)
+                        v10 = call.tracked f0(v5)
                         v11, v12, v13 = unwrap_result.tracking v10
                         branch v13, block6, block5
                     block5:
-                        v14 = err v12
+                        v14 = err.tracked v12
                         return v14
                     block6:
                         v15 = const 2u32
                         v16, v17 = sub.checked p0, v15
                         branch v17, block7, block8
                     block7:
-                        v18 = const "arithmetic overflow"
-                        v19 = error_from v18
-                        v20 = err v19
+                        v18 = const.tracked "arithmetic overflow"
+                        v19 = error_from.tracked v18
+                        v20 = err.tracked v19
                         return v20
                     block8:
-                        v21 = call f0(v16)
+                        v21 = call.tracked f0(v16)
                         v22, v23, v24 = unwrap_result.tracking v21
                         branch v24, block10, block9
                     block9:
-                        v25 = err v23
+                        v25 = err.tracked v23
                         return v25
                     block10:
                         v26, v27 = add.checked v11, v22
                         branch v27, block11, block12
                     block11:
-                        v28 = const "arithmetic overflow"
-                        v29 = error_from v28
-                        v30 = err v29
+                        v28 = const.tracked "arithmetic overflow"
+                        v29 = error_from.tracked v28
+                        v30 = err.tracked v29
                         return v30
                     block12:
-                        v31 = ok v26
+                        v31 = ok.tracked v26
                         return v31
                     exports:
                         fib = f0

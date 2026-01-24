@@ -16,8 +16,8 @@ Analysis(
                     fn get_err():
                     block0:
                         v0 = const 41u32
-                        v1 = error_from v0
-                        v2 = err v1
+                        v1 = error_from.tracked v0
+                        v2 = err.tracked v1
                         return v2
                     exports:
                         get_err = f0
@@ -36,11 +36,11 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call unit0.f0()
+                        v0 = call.tracked unit0.f0()
                         v1, v2, v3 = unwrap_result.tracking v0
                         branch v3, block2, block1
                     block1:
-                        v4 = err v2
+                        v4 = err.tracked v2
                         unit_early_return v4
                     block2:
                         unit_end v1

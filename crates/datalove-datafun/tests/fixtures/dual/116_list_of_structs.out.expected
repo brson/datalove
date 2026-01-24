@@ -19,7 +19,7 @@ DualAnalysis(
                         v6 = const 5u32
                         v7 = const 6u32
                         v8 = pack Struct0 {v6, v7}
-                        v9 = list [v2, v5, v8]
+                        v9 = list.tracked [v2, v5, v8]
                         debuglog v9
                         unit_end_drop v9
                         unit_end
@@ -41,7 +41,7 @@ DualAnalysis(
                         v6 = const 5u32
                         v7 = const 6u32
                         v8 = pack Struct0 {v6, v7}
-                        v9 = list [v2, v5, v8]
+                        v9 = list.tracked [v2, v5, v8]
                         debuglog v9
                         unit_end_drop v9
                         unit_end

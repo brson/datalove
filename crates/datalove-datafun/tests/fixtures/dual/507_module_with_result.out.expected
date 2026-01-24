@@ -14,12 +14,12 @@ DualAnalysis(
                         v0, v1 = add.checked p0, p1
                         branch v1, block1, block2
                     block1:
-                        v2 = const "arithmetic overflow"
-                        v3 = error_from v2
-                        v4 = err v3
+                        v2 = const.tracked "arithmetic overflow"
+                        v3 = error_from.tracked v2
+                        v4 = err.tracked v3
                         return v4
                     block2:
-                        v5 = ok v0
+                        v5 = ok.tracked v0
                         return v5
                 """,
             ),
@@ -31,12 +31,12 @@ DualAnalysis(
                         v0, v1 = add.checked p0, p1
                         branch v1, block1, block2
                     block1:
-                        v2 = const "arithmetic overflow"
-                        v3 = error_from v2
-                        v4 = err v3
+                        v2 = const.tracked "arithmetic overflow"
+                        v3 = error_from.tracked v2
+                        v4 = err.tracked v3
                         return v4
                     block2:
-                        v5 = ok v0
+                        v5 = ok.tracked v0
                         return v5
                 """,
             ),
@@ -57,12 +57,12 @@ DualAnalysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 20u32
-                        v2 = call m0.f0(v0, v1)
+                        v2 = call.tracked m0.f0(v0, v1)
                         debuglog v2
                         drop v2
                         v3 = const 4294967295u32
                         v4 = const 1u32
-                        v5 = call m0.f0(v3, v4)
+                        v5 = call.tracked m0.f0(v3, v4)
                         debuglog v5
                         drop v5
                         unit_end
@@ -75,12 +75,12 @@ DualAnalysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 20u32
-                        v2 = call m0.f0(v0, v1)
+                        v2 = call.tracked m0.f0(v0, v1)
                         debuglog v2
                         drop v2
                         v3 = const 4294967295u32
                         v4 = const 1u32
-                        v5 = call m0.f0(v3, v4)
+                        v5 = call.tracked m0.f0(v3, v4)
                         debuglog v5
                         drop v5
                         unit_end

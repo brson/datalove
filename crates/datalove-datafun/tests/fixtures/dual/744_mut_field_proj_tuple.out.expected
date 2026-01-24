@@ -13,7 +13,7 @@ DualAnalysis(
                         v0 = const 100u32
                         v1 = const 200u32
                         v2 = pack Tuple2 {v0, v1}
-                        store.copy s0, v2
+                        store.copy.tracked s0, v2
                         v3 = getfieldref s0.0
                         v4 = call f0(v3)
                         v5 = getfieldref s0.0
@@ -42,7 +42,7 @@ DualAnalysis(
                         v0 = const 100u32
                         v1 = const 200u32
                         v2 = pack Tuple2 {v0, v1}
-                        store.copy s0, v2
+                        store.copy.tracked s0, v2
                         v3 = getfieldref s0.0
                         v4 = call f0(v3)
                         v5 = getfieldref s0.0

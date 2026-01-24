@@ -19,7 +19,7 @@ DualAnalysis(
                     block0:
                         v0 = const 1u32
                         v1 = const 2u32
-                        v2 = list [v0, v1]
+                        v2 = list.tracked [v0, v1]
                         v3 = copy p0
                         branch v3, block1, block2
                     block1:
@@ -49,7 +49,7 @@ DualAnalysis(
                     block0:
                         v0 = const 1u32
                         v1 = const 2u32
-                        v2 = list [v0, v1]
+                        v2 = list.tracked [v0, v1]
                         v3 = copy p0
                         branch v3, block1, block2
                     block1:

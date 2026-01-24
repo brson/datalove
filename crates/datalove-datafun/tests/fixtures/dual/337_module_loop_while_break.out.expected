@@ -16,7 +16,7 @@ DualAnalysis(
                         v0 = const true
                         branch v0, block2, block6
                     block2:
-                        v1 = const ""
+                        v1 = const.tracked ""
                         v2 = const true
                         branch v2, block3, block4
                     block3:
@@ -59,7 +59,7 @@ DualAnalysis(
                         v0 = const true
                         branch v0, block2, block6
                     block2:
-                        v1 = const ""
+                        v1 = const.tracked ""
                         v2 = const true
                         branch v2, block3, block4
                     block3:

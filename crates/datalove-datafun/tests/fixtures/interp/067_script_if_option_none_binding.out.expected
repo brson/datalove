@@ -13,7 +13,7 @@ Analysis(
                     block0:
                         v0 = none
                         v1 = const 999u32
-                        store.copy s0, v1
+                        store.copy.tracked s0, v1
                         v2, v3 = unwrap_option.tracking v0
                         branch v3, block1, block2
                     block1:

@@ -11,7 +11,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 42u32
-                        v1 = data_from v0
+                        v1 = data_from.tracked v0
                         debuglog v1
                         unit_end_drop v1
                         unit_end
@@ -25,7 +25,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 42u32
-                        v1 = data_from v0
+                        v1 = data_from.tracked v0
                         debuglog v1
                         unit_end_drop v1
                         unit_end

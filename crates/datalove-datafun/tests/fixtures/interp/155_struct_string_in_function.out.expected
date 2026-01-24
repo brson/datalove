@@ -15,9 +15,9 @@ Analysis(
                     
                     fn make_person():
                     block0:
-                        v0 = const "Bob"
+                        v0 = const.tracked "Bob"
                         v1 = const 42u32
-                        v2 = pack Struct0 {v0, v1}
+                        v2 = pack.tracked Struct0 {v0, v1}
                         return v2
                     exports:
                         make_person = f0
@@ -36,7 +36,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call unit0.f0()
+                        v0 = call.tracked unit0.f0()
                         unit_end v0
                 """,
             ),

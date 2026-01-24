@@ -79,18 +79,11 @@ fn lower_statement_impl<'db>(
             let is_copy = slot_type.is_copy();
             let slot = ctx.fresh_slot(slot_type);
             let value_id = lower_expression(ctx, init_expr)?;
-            let instr = if is_copy {
-                Instruction::SlotStoreCopy {
-                    dest: SlotDest::Local(slot),
-                    value: Operand::Value(value_id),
-                }
+            if is_copy {
+                ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
             } else {
-                Instruction::SlotStoreMove {
-                    dest: SlotDest::Local(slot),
-                    value: Operand::Value(value_id),
-                }
-            };
-            ctx.emit(instr);
+                ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
+            }
             let operand = Operand::Slot(slot);
             ctx.bind_var(&name, operand);
             // Record binding operand for drop schedule.
@@ -602,18 +595,11 @@ fn lower_set<'db>(
                             ctx.emit(Instruction::Drop { operand });
                         }
                     }
-                    let instr = if is_copy {
-                        Instruction::SlotStoreCopy {
-                            dest: SlotDest::Local(slot),
-                            value: Operand::Value(value_id),
-                        }
+                    if is_copy {
+                        ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
                     } else {
-                        Instruction::SlotStoreMove {
-                            dest: SlotDest::Local(slot),
-                            value: Operand::Value(value_id),
-                        }
-                    };
-                    ctx.emit(instr);
+                        ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
+                    }
                     Ok(())
                 }
                 Some(Operand::Param(param)) => {
@@ -645,11 +631,7 @@ fn lower_set<'db>(
             match ctx.lookup_var(&root_name_str) {
                 Some(Operand::Slot(slot)) => {
                     // Emit SetField instruction.
-                    ctx.emit(Instruction::SetField {
-                        slot: SlotDest::Local(slot),
-                        field_path,
-                        value: Operand::Value(value_id),
-                    });
+                    ctx.emit_set_field(SlotDest::Local(slot), field_path, Operand::Value(value_id));
                     Ok(())
                 }
                 Some(Operand::Param(param)) => {

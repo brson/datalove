@@ -10,7 +10,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
+                        v0 = call.tracked f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -18,14 +18,14 @@ DualAnalysis(
                     fn get_value():
                     block0:
                         v0 = const 99u32
-                        v1 = ok v0
+                        v1 = ok.tracked v0
                         v2, v3, v4 = unwrap_result.tracking v1
                         branch v4, block2, block1
                     block1:
-                        v5 = err v3
+                        v5 = err.tracked v3
                         return v5
                     block2:
-                        v6 = ok v2
+                        v6 = ok.tracked v2
                         return v6
                     exports:
                         get_value = f0
@@ -36,7 +36,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
+                        v0 = call.tracked f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -44,14 +44,14 @@ DualAnalysis(
                     fn get_value():
                     block0:
                         v0 = const 99u32
-                        v1 = ok v0
+                        v1 = ok.tracked v0
                         v2, v3, v4 = unwrap_result.tracking v1
                         branch v4, block2, block1
                     block1:
-                        v5 = err v3
+                        v5 = err.tracked v3
                         return v5
                     block2:
-                        v6 = ok v2
+                        v6 = ok.tracked v2
                         return v6
                     exports:
                         get_value = f0

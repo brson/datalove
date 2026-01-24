@@ -522,7 +522,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match inst {
             Instruction::Const { dest, value } => {
                 self.compile_const(builder, *dest, value)?;
-                self.mark_value_live(builder, *dest);
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
                 self.compile_binop(builder, *dest, *op, lhs, rhs)?;
@@ -575,15 +574,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             Instruction::SlotStoreCopy { dest, value } => {
                 self.compile_slot_store(builder, dest, value, true)?;
-                if let SlotDest::Local(sid) = dest {
-                    self.mark_slot_live(builder, *sid);
-                }
             }
             Instruction::SlotStoreMove { dest, value } => {
                 self.compile_slot_store(builder, dest, value, false)?;
-                if let SlotDest::Local(sid) = dest {
-                    self.mark_slot_live(builder, *sid);
-                }
             }
             Instruction::SlotLoadCopy { dest, slot } => {
                 self.compile_slot_load(builder, *dest, *slot, true)?;
@@ -636,19 +629,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // Option/Result instructions.
             Instruction::WrapSome { dest, inner } => {
                 self.compile_wrap_some(builder, *dest, inner)?;
-                self.mark_value_live(builder, *dest);
             }
             Instruction::WrapNone { dest } => {
                 self.compile_wrap_none(builder, *dest)?;
-                self.mark_value_live(builder, *dest);
             }
             Instruction::WrapOk { dest, inner } => {
                 self.compile_wrap_ok(builder, *dest, inner)?;
-                self.mark_value_live(builder, *dest);
             }
             Instruction::WrapErr { dest, inner } => {
                 self.compile_wrap_err(builder, *dest, inner)?;
-                self.mark_value_live(builder, *dest);
             }
             Instruction::UnwrapOptionTracking { dest, is_some, src } => {
                 self.compile_unwrap_option(builder, *dest, *is_some, src)?;

@@ -10,7 +10,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
+                        v0 = call.tracked f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -19,12 +19,12 @@ DualAnalysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 0u32
-                        v2 = widen v0
-                        v3 = widen v1
+                        v2 = widen.tracked v0
+                        v3 = widen.tracked v1
                         v4 = add v2, v3
                         drop v2
                         drop v3
-                        v5 = some v4
+                        v5 = some.tracked v4
                         return v5
                     exports:
                         test = f0
@@ -35,7 +35,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
+                        v0 = call.tracked f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -44,12 +44,12 @@ DualAnalysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 0u32
-                        v2 = widen v0
-                        v3 = widen v1
+                        v2 = widen.tracked v0
+                        v3 = widen.tracked v1
                         v4 = add v2, v3
                         drop v2
                         drop v3
-                        v5 = some v4
+                        v5 = some.tracked v4
                         return v5
                     exports:
                         test = f0

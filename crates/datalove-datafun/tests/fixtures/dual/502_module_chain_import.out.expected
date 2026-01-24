@@ -42,8 +42,8 @@ DualAnalysis(
                 ir: """
                     fn quadruple(p0):
                     block0:
-                        v0 = call m0.f0(p0)
-                        v1 = call m0.f0(v0)
+                        v0 = call.tracked m0.f0(p0)
+                        v1 = call.tracked m0.f0(v0)
                         return v1
                 """,
             ),
@@ -52,8 +52,8 @@ DualAnalysis(
                 ir: """
                     fn quadruple(p0):
                     block0:
-                        v0 = call m0.f0(p0)
-                        v1 = call m0.f0(v0)
+                        v0 = call.tracked m0.f0(p0)
+                        v1 = call.tracked m0.f0(v0)
                         return v1
                 """,
             ),
@@ -72,8 +72,8 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 10int
-                        v1 = call m1.f0(v0)
+                        v0 = const.tracked 10int
+                        v1 = call.tracked m1.f0(v0)
                         debuglog v1
                         drop v1
                         unit_end
@@ -84,8 +84,8 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 10int
-                        v1 = call m1.f0(v0)
+                        v0 = const.tracked 10int
+                        v1 = call.tracked m1.f0(v0)
                         debuglog v1
                         drop v1
                         unit_end

@@ -16,7 +16,7 @@ DualAnalysis(
                         v3 = const 10u32
                         v4 = const 20u32
                         v5 = pack Struct0 {v3, v4}
-                        v6 = call f0(v2, v5)
+                        v6 = call.tracked f0(v2, v5)
                         debuglog v6
                         drop v6
                         unit_end
@@ -27,8 +27,8 @@ DualAnalysis(
                         v1 = getfield v0.0
                         v2 = copy p1
                         v3 = getfield v2.0
-                        v4 = widen v1
-                        v5 = widen v3
+                        v4 = widen.tracked v1
+                        v5 = widen.tracked v3
                         v6 = add v4, v5
                         drop v4
                         drop v5
@@ -50,7 +50,7 @@ DualAnalysis(
                         v3 = const 10u32
                         v4 = const 20u32
                         v5 = pack Struct0 {v3, v4}
-                        v6 = call f0(v2, v5)
+                        v6 = call.tracked f0(v2, v5)
                         debuglog v6
                         drop v6
                         unit_end
@@ -61,8 +61,8 @@ DualAnalysis(
                         v1 = getfield v0.0
                         v2 = copy p1
                         v3 = getfield v2.0
-                        v4 = widen v1
-                        v5 = widen v3
+                        v4 = widen.tracked v1
+                        v5 = widen.tracked v3
                         v6 = add v4, v5
                         drop v4
                         drop v5

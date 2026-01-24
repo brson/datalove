@@ -15,8 +15,8 @@ Analysis(
                     
                     fn get_data():
                     block0:
-                        v0 = const "wrapped string"
-                        v1 = data_from v0
+                        v0 = const.tracked "wrapped string"
+                        v1 = data_from.tracked v0
                         return v1
                     exports:
                         get_data = f0
@@ -35,7 +35,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call unit0.f0()
+                        v0 = call.tracked unit0.f0()
                         unit_end v0
                 """,
             ),

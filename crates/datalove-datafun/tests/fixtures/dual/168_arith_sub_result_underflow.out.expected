@@ -12,7 +12,7 @@ DualAnalysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 20u32
-                        v2 = call f0(v0, v1)
+                        v2 = call.tracked f0(v0, v1)
                         debuglog v2
                         drop v2
                         unit_end
@@ -22,12 +22,12 @@ DualAnalysis(
                         v0, v1 = sub.checked p0, p1
                         branch v1, block1, block2
                     block1:
-                        v2 = const "arithmetic overflow"
-                        v3 = error_from v2
-                        v4 = err v3
+                        v2 = const.tracked "arithmetic overflow"
+                        v3 = error_from.tracked v2
+                        v4 = err.tracked v3
                         return v4
                     block2:
-                        v5 = ok v0
+                        v5 = ok.tracked v0
                         return v5
                     exports:
                         sub_checked = f0
@@ -40,7 +40,7 @@ DualAnalysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 20u32
-                        v2 = call f0(v0, v1)
+                        v2 = call.tracked f0(v0, v1)
                         debuglog v2
                         drop v2
                         unit_end
@@ -50,12 +50,12 @@ DualAnalysis(
                         v0, v1 = sub.checked p0, p1
                         branch v1, block1, block2
                     block1:
-                        v2 = const "arithmetic overflow"
-                        v3 = error_from v2
-                        v4 = err v3
+                        v2 = const.tracked "arithmetic overflow"
+                        v3 = error_from.tracked v2
+                        v4 = err.tracked v3
                         return v4
                     block2:
-                        v5 = ok v0
+                        v5 = ok.tracked v0
                         return v5
                     exports:
                         sub_checked = f0

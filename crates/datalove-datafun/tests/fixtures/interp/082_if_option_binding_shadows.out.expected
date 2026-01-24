@@ -15,7 +15,7 @@ Analysis(
                         v1 = const 42u32
                         v2 = some v1
                         v3 = const 0u32
-                        store.copy s0, v3
+                        store.copy.tracked s0, v3
                         v4, v5 = unwrap_option.tracking v2
                         branch v5, block1, block2
                     block1:

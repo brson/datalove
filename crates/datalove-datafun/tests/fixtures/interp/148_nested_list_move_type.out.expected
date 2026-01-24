@@ -13,14 +13,14 @@ Analysis(
                     block0:
                         v0 = const 1u32
                         v1 = const 2u32
-                        v2 = list [v0, v1]
+                        v2 = list.tracked [v0, v1]
                         v3 = const 3u32
                         v4 = const 4u32
-                        v5 = list [v3, v4]
+                        v5 = list.tracked [v3, v4]
                         v6 = const 5u32
                         v7 = const 6u32
-                        v8 = list [v6, v7]
-                        v9 = list [v2, v5, v8]
+                        v8 = list.tracked [v6, v7]
+                        v9 = list.tracked [v2, v5, v8]
                         unit_end_drop v9
                         unit_end
                     exports:

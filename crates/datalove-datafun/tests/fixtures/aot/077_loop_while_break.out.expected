@@ -11,18 +11,18 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 0int
-                        store.move s0, v0
-                        v1 = const 0int
-                        store.move s1, v1
+                        v0 = const.tracked 0int
+                        store.move.tracked s0, v0
+                        v1 = const.tracked 0int
+                        store.move.tracked s1, v1
                         goto block1
                     block1:
-                        v2 = const 100int
+                        v2 = const.tracked 100int
                         v3 = lt s1, v2
                         drop v2
                         branch v3, block2, block6
                     block2:
-                        v4 = const 5int
+                        v4 = const.tracked 5int
                         v5 = ge s1, v4
                         drop v4
                         branch v5, block3, block4
@@ -33,12 +33,12 @@ AotAnalysis(
                     block5:
                         v6 = add s0, s1
                         drop.tracked s0
-                        store.move s0, v6
-                        v7 = const 1int
+                        store.move.tracked s0, v6
+                        v7 = const.tracked 1int
                         v8 = add s1, v7
                         drop v7
                         drop.tracked s1
-                        store.move s1, v8
+                        store.move.tracked s1, v8
                         goto block1
                     block6:
                         debuglog s0

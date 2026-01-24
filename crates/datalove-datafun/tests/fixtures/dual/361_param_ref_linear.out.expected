@@ -10,11 +10,11 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 42int
-                        v1 = call f0(v0)
+                        v0 = const.tracked 42int
+                        v1 = call.tracked f0(v0)
                         debuglog v1
                         drop v1
-                        v2 = call f0(v0)
+                        v2 = call.tracked f0(v0)
                         debuglog v2
                         drop v2
                         unit_end_drop v0
@@ -22,7 +22,7 @@ DualAnalysis(
                     
                     fn read_int(p0):
                     block0:
-                        v0 = const 0int
+                        v0 = const.tracked 0int
                         v1 = add p0, v0
                         drop v0
                         return v1
@@ -36,11 +36,11 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 42int
-                        v1 = call f0(v0)
+                        v0 = const.tracked 42int
+                        v1 = call.tracked f0(v0)
                         debuglog v1
                         drop v1
-                        v2 = call f0(v0)
+                        v2 = call.tracked f0(v0)
                         debuglog v2
                         drop v2
                         unit_end_drop v0
@@ -48,7 +48,7 @@ DualAnalysis(
                     
                     fn read_int(p0):
                     block0:
-                        v0 = const 0int
+                        v0 = const.tracked 0int
                         v1 = add p0, v0
                         drop v0
                         return v1

@@ -11,8 +11,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const "oops something went wrong"
-                        v1 = error_from v0
+                        v0 = const.tracked "oops something went wrong"
+                        v1 = error_from.tracked v0
                         unit_end v1
                 """,
             ),

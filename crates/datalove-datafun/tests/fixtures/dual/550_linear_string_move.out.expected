@@ -10,7 +10,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const "hello"
+                        v0 = const.tracked "hello"
                         v1 = call f0(v0)
                         debuglog v1
                         unit_end
@@ -31,7 +31,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const "hello"
+                        v0 = const.tracked "hello"
                         v1 = call f0(v0)
                         debuglog v1
                         unit_end

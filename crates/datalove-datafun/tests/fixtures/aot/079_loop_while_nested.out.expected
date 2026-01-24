@@ -11,43 +11,43 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 0int
-                        store.move s0, v0
-                        v1 = const 0int
-                        store.move s1, v1
+                        v0 = const.tracked 0int
+                        store.move.tracked s0, v0
+                        v1 = const.tracked 0int
+                        store.move.tracked s1, v1
                         goto block1
                     block1:
-                        v2 = const 3int
+                        v2 = const.tracked 3int
                         v3 = lt s1, v2
                         drop v2
                         branch v3, block2, block6
                     block2:
-                        v4 = const 0int
-                        store.move s2, v4
+                        v4 = const.tracked 0int
+                        store.move.tracked s2, v4
                         goto block3
                     block3:
-                        v5 = const 3int
+                        v5 = const.tracked 3int
                         v6 = lt s2, v5
                         drop v5
                         branch v6, block4, block5
                     block4:
-                        v7 = const 1int
+                        v7 = const.tracked 1int
                         v8 = add s0, v7
                         drop v7
                         drop.tracked s0
-                        store.move s0, v8
-                        v9 = const 1int
+                        store.move.tracked s0, v8
+                        v9 = const.tracked 1int
                         v10 = add s2, v9
                         drop v9
                         drop.tracked s2
-                        store.move s2, v10
+                        store.move.tracked s2, v10
                         goto block3
                     block5:
-                        v11 = const 1int
+                        v11 = const.tracked 1int
                         v12 = add s1, v11
                         drop v11
                         drop.tracked s1
-                        store.move s1, v12
+                        store.move.tracked s1, v12
                         drop.tracked s2
                         goto block1
                     block6:

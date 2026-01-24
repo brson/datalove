@@ -12,7 +12,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 10u32
-                        store.copy s0, v0
+                        store.copy.tracked s0, v0
                         v1 = const 20u32
                         store.copy s0, v1
                         unit_end

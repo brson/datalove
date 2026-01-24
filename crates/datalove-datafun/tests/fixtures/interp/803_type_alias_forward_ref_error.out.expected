@@ -11,7 +11,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 42int
+                        v0 = const.tracked 42int
                         unit_end_drop v0
                         unit_end
                     exports:

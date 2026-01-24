@@ -11,12 +11,12 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 10int
-                        v1 = some v0
-                        v2 = const 20int
-                        v3 = some v2
-                        v4 = const 0int
-                        store.move s0, v4
+                        v0 = const.tracked 10int
+                        v1 = some.tracked v0
+                        v2 = const.tracked 20int
+                        v3 = some.tracked v2
+                        v4 = const.tracked 0int
+                        store.move.tracked s0, v4
                         v5, v6 = unwrap_option.tracking v1
                         branch v6, block1, block5
                     block1:
@@ -25,7 +25,7 @@ Analysis(
                     block2:
                         v9 = add v5, v7
                         drop.tracked s0
-                        store.move s0, v9
+                        store.move.tracked s0, v9
                         goto block4
                     block3:
                         goto block4

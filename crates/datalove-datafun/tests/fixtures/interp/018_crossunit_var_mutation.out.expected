@@ -12,7 +12,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 10u32
-                        store.copy s0, v0
+                        store.copy.tracked s0, v0
                         unit_end
                     exports:
                         x = s0
@@ -32,7 +32,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 20u32
-                        store.copy unit0.s0, v0
+                        store.copy.tracked unit0.s0, v0
                         unit_end
                 """,
             ),

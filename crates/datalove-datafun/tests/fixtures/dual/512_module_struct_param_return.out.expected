@@ -18,9 +18,9 @@ DualAnalysis(
                         v4, v5 = add.checked v1, v3
                         branch v5, block1, block2
                     block1:
-                        v6 = const "arithmetic overflow"
-                        v7 = error_from v6
-                        v8 = err v7
+                        v6 = const.tracked "arithmetic overflow"
+                        v7 = error_from.tracked v6
+                        v8 = err.tracked v7
                         return v8
                     block2:
                         v9 = copy p0
@@ -30,13 +30,13 @@ DualAnalysis(
                         v13, v14 = add.checked v10, v12
                         branch v14, block3, block4
                     block3:
-                        v15 = const "arithmetic overflow"
-                        v16 = error_from v15
-                        v17 = err v16
+                        v15 = const.tracked "arithmetic overflow"
+                        v16 = error_from.tracked v15
+                        v17 = err.tracked v16
                         return v17
                     block4:
                         v18 = pack Struct0 {v4, v13}
-                        v19 = ok v18
+                        v19 = ok.tracked v18
                         return v19
                 """,
             ),
@@ -52,9 +52,9 @@ DualAnalysis(
                         v4, v5 = add.checked v1, v3
                         branch v5, block1, block2
                     block1:
-                        v6 = const "arithmetic overflow"
-                        v7 = error_from v6
-                        v8 = err v7
+                        v6 = const.tracked "arithmetic overflow"
+                        v7 = error_from.tracked v6
+                        v8 = err.tracked v7
                         return v8
                     block2:
                         v9 = copy p0
@@ -64,13 +64,13 @@ DualAnalysis(
                         v13, v14 = add.checked v10, v12
                         branch v14, block3, block4
                     block3:
-                        v15 = const "arithmetic overflow"
-                        v16 = error_from v15
-                        v17 = err v16
+                        v15 = const.tracked "arithmetic overflow"
+                        v16 = error_from.tracked v15
+                        v17 = err.tracked v16
                         return v17
                     block4:
                         v18 = pack Struct0 {v4, v13}
-                        v19 = ok v18
+                        v19 = ok.tracked v18
                         return v19
                 """,
             ),
@@ -92,7 +92,7 @@ DualAnalysis(
                         v0 = const 5u32
                         v1 = const 10u32
                         v2 = pack Struct0 {v0, v1}
-                        v3 = call m0.f0(v2)
+                        v3 = call.tracked m0.f0(v2)
                         debuglog v3
                         drop v3
                         unit_end
@@ -108,7 +108,7 @@ DualAnalysis(
                         v0 = const 5u32
                         v1 = const 10u32
                         v2 = pack Struct0 {v0, v1}
-                        v3 = call m0.f0(v2)
+                        v3 = call.tracked m0.f0(v2)
                         debuglog v3
                         drop v3
                         unit_end

@@ -11,14 +11,14 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const "a"
-                        v1 = const "b"
-                        v2 = list [v0, v1]
-                        v3 = const "c"
-                        v4 = const "d"
-                        v5 = const "e"
-                        v6 = list [v3, v4, v5]
-                        v7 = list [v2, v6]
+                        v0 = const.tracked "a"
+                        v1 = const.tracked "b"
+                        v2 = list.tracked [v0, v1]
+                        v3 = const.tracked "c"
+                        v4 = const.tracked "d"
+                        v5 = const.tracked "e"
+                        v6 = list.tracked [v3, v4, v5]
+                        v7 = list.tracked [v2, v6]
                         unit_end_drop v7
                         unit_end
                     exports:

@@ -7,7 +7,7 @@ ModulesAnalysis(
         ir: """
             fn add_one(p0):
             block0:
-                v0 = const 1int
+                v0 = const.tracked 1int
                 v1 = add p0, v0
                 drop v0
                 drop p0
@@ -15,14 +15,14 @@ ModulesAnalysis(
             
             fn main():
             block0:
-                v0 = const 10int
-                v1 = call m1.f0(v0)
+                v0 = const.tracked 10int
+                v1 = call.tracked m1.f0(v0)
                 return v1
             
             fn add_two(p0):
             block0:
-                v0 = call m0.f0(p0)
-                v1 = call m0.f0(v0)
+                v0 = call.tracked m0.f0(p0)
+                v1 = call.tracked m0.f0(v0)
                 return v1
         """,
     ),

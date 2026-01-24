@@ -12,7 +12,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const true
-                        v1 = data_from v0
+                        v1 = data_from.tracked v0
                         unit_end v1
                 """,
             ),

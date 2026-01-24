@@ -10,7 +10,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 42int
+                        v0 = const.tracked 42int
                         v1 = neg v0
                         debuglog v1
                         drop v1
@@ -25,7 +25,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 42int
+                        v0 = const.tracked 42int
                         v1 = neg v0
                         debuglog v1
                         drop v1

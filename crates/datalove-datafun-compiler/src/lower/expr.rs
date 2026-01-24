@@ -199,14 +199,13 @@ pub fn lower_expression<'db>(
                         let slot_type = ctx.expr_type(expr);
                         let is_copy = slot_type.is_copy();
                         let dest = ctx.fresh_value(slot_type);
-                        let instr = if is_copy {
-                            Instruction::SlotLoadCopy { dest, slot: s }
+                        if is_copy {
+                            ctx.emit_slot_load_copy(dest, s);
                         } else if ctx.is_operand_tracked(operand) {
-                            Instruction::SlotLoadMoveTracked { dest, slot: s }
+                            ctx.emit(Instruction::SlotLoadMoveTracked { dest, slot: s });
                         } else {
-                            Instruction::SlotLoadMove { dest, slot: s }
-                        };
-                        ctx.emit(instr);
+                            ctx.emit(Instruction::SlotLoadMove { dest, slot: s });
+                        }
                         Ok(dest)
                     }
                     Operand::Param(_) => {
@@ -243,24 +242,18 @@ pub fn lower_expression<'db>(
         }
         ExprFunKind::True(_) => {
             let dest = ctx.fresh_value(IrType::Bool);
-            ctx.emit(Instruction::Const {
-                dest,
-                value: ConstValue::Bool(true),
-            });
+            ctx.emit_const(dest, ConstValue::Bool(true));
             Ok(dest)
         }
         ExprFunKind::False(_) => {
             let dest = ctx.fresh_value(IrType::Bool);
-            ctx.emit(Instruction::Const {
-                dest,
-                value: ConstValue::Bool(false),
-            });
+            ctx.emit_const(dest, ConstValue::Bool(false));
             Ok(dest)
         }
         ExprFunKind::None(_) => {
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::WrapNone { dest });
+            ctx.emit_wrap_none(dest);
             Ok(dest)
         }
         ExprFunKind::Int(lit) => {
@@ -269,7 +262,7 @@ pub fn lower_expression<'db>(
             let text = lit.value.text(ctx.db);
             let const_value = parse_int_const(text, &result_type)
                 .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
-            ctx.emit(Instruction::Const { dest, value: const_value });
+            ctx.emit_const(dest, const_value);
             Ok(dest)
         }
         ExprFunKind::Hex(lit) => {
@@ -279,7 +272,7 @@ pub fn lower_expression<'db>(
             let hex_str = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")).unwrap_or(text);
             let const_value = parse_hex_const(hex_str, &result_type)
                 .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
-            ctx.emit(Instruction::Const { dest, value: const_value });
+            ctx.emit_const(dest, const_value);
             Ok(dest)
         }
         ExprFunKind::BinOp(binop) => {
@@ -328,11 +321,7 @@ pub fn lower_expression<'db>(
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
 
-            ctx.emit(Instruction::Call {
-                dest,
-                func: func_ref,
-                args,
-            });
+            ctx.emit_call(dest, func_ref, args);
             // Args consumed by Call; pop scope.
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
@@ -342,30 +331,21 @@ pub fn lower_expression<'db>(
             let inner_id = lower_expression(ctx, some_expr.payload)?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::WrapSome {
-                dest,
-                inner: Operand::Value(inner_id),
-            });
+            ctx.emit_wrap_some(dest, Operand::Value(inner_id));
             Ok(dest)
         }
         ExprFunKind::Ok(ok_expr) => {
             let inner_id = lower_expression(ctx, ok_expr.payload)?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::WrapOk {
-                dest,
-                inner: Operand::Value(inner_id),
-            });
+            ctx.emit_wrap_ok(dest, Operand::Value(inner_id));
             Ok(dest)
         }
         ExprFunKind::Er(er_expr) => {
             let inner_id = lower_expression(ctx, er_expr.payload)?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::WrapErr {
-                dest,
-                inner: Operand::Value(inner_id),
-            });
+            ctx.emit_wrap_err(dest, Operand::Value(inner_id));
             Ok(dest)
         }
         ExprFunKind::TryOption(try_expr) => {
@@ -396,11 +376,7 @@ pub fn lower_expression<'db>(
                 fields.push(Operand::Value(value));
             }
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::Pack {
-                dest,
-                ty: TypeRef::Tuple(fields.len() as u32),
-                fields,
-            });
+            ctx.emit_pack(dest, TypeRef::Tuple(fields.len() as u32), fields);
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)
@@ -424,11 +400,7 @@ pub fn lower_expression<'db>(
                 fields.push(Operand::Value(value));
             }
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::Pack {
-                dest,
-                ty: TypeRef::Tuple(fields.len() as u32),
-                fields,
-            });
+            ctx.emit_pack(dest, TypeRef::Tuple(fields.len() as u32), fields);
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)
@@ -450,7 +422,7 @@ pub fn lower_expression<'db>(
                 elements.push(Operand::Value(value));
             }
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::ListNew { dest, elements });
+            ctx.emit_list_new(dest, elements);
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)
@@ -472,7 +444,7 @@ pub fn lower_expression<'db>(
                 elements.push(Operand::Value(value));
             }
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::SetNew { dest, elements });
+            ctx.emit_set_new(dest, elements);
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)
@@ -496,7 +468,7 @@ pub fn lower_expression<'db>(
                 entries.push((Operand::Value(k), Operand::Value(v)));
             }
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::MapNew { dest, entries });
+            ctx.emit_map_new(dest, entries);
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)
@@ -505,20 +477,14 @@ pub fn lower_expression<'db>(
             let inner_id = lower_expression(ctx, err_expr.value)?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::ErrorFrom {
-                dest,
-                inner: Operand::Value(inner_id),
-            });
+            ctx.emit_error_from(dest, Operand::Value(inner_id));
             Ok(dest)
         }
         ExprFunKind::Data(data_expr) => {
             let inner_id = lower_expression(ctx, data_expr.value)?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::DataFrom {
-                dest,
-                inner: Operand::Value(inner_id),
-            });
+            ctx.emit_data_from(dest, Operand::Value(inner_id));
             Ok(dest)
         }
         ExprFunKind::Float(lit) => {
@@ -527,7 +493,7 @@ pub fn lower_expression<'db>(
             let text = lit.value.text(ctx.db);
             let const_value = parse_float_const(text, &result_type)
                 .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
-            ctx.emit(Instruction::Const { dest, value: const_value });
+            ctx.emit_const(dest, const_value);
             Ok(dest)
         }
         ExprFunKind::String(string_expr) => {
@@ -539,10 +505,7 @@ pub fn lower_expression<'db>(
                 raw
             };
             let dest = ctx.fresh_value(IrType::String);
-            ctx.emit(Instruction::Const {
-                dest,
-                value: ConstValue::String(content.to_string()),
-            });
+            ctx.emit_const(dest, ConstValue::String(content.to_string()));
             Ok(dest)
         }
         ExprFunKind::AnonStruct(struct_expr) => {
@@ -586,11 +549,7 @@ pub fn lower_expression<'db>(
                 .collect();
 
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::Pack {
-                dest,
-                ty: TypeRef::AnonStruct(0),
-                fields,
-            });
+            ctx.emit_pack(dest, TypeRef::AnonStruct(0), fields);
             // Clear pending - field values are now consumed by Pack.
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
@@ -635,11 +594,7 @@ pub fn lower_expression<'db>(
             };
 
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::EnumVariant {
-                dest,
-                variant_index: variant_index as u32,
-                payload,
-            });
+            ctx.emit_enum_variant(dest, variant_index as u32, payload);
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)
@@ -662,7 +617,7 @@ pub fn lower_expression<'db>(
                 elements.push(Operand::Value(value));
             }
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::TensorNew { dest, shape, elements });
+            ctx.emit_tensor_new(dest, shape, elements);
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)
@@ -699,11 +654,7 @@ pub fn lower_expression<'db>(
 
                 // Create tuple from elements.
                 let tuple_dest = ctx.fresh_value(row_type.clone());
-                ctx.emit(Instruction::Pack {
-                    dest: tuple_dest,
-                    ty: TypeRef::Tuple(elem_operands.len() as u32),
-                    fields: elem_operands,
-                });
+                ctx.emit_pack(tuple_dest, TypeRef::Tuple(elem_operands.len() as u32), elem_operands);
                 // Elements consumed by Pack, but tuple itself is now pending.
                 ctx.clear_pending_intermediates();
                 ctx.push_pending_intermediate(tuple_dest, &row_type);
@@ -711,7 +662,7 @@ pub fn lower_expression<'db>(
             }
 
             let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::TableNew { dest, rows });
+            ctx.emit_table_new(dest, rows);
             // All row tuples consumed by TableNew.
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
@@ -736,11 +687,7 @@ pub fn lower_expression<'db>(
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
 
-            ctx.emit(Instruction::Intrinsic {
-                dest,
-                intrinsic: intrinsic_id,
-                args,
-            });
+            ctx.emit_intrinsic(dest, intrinsic_id, args);
 
             // Drop expression temporaries after the intrinsic completes.
             ctx.emit_expr_temp_drops();
@@ -775,12 +722,12 @@ fn lower_binop<'db>(
     if needs_widening {
         // Emit Widen instructions for both operands.
         let lhs_widened = ctx.fresh_value(IrType::Int);
-        ctx.emit(Instruction::Widen { dest: lhs_widened, src: lhs });
+        ctx.emit_widen(lhs_widened, lhs);
         ctx.record_expr_temp(lhs_widened, IrType::Int);
         lhs = Operand::Value(lhs_widened);
 
         let rhs_widened = ctx.fresh_value(IrType::Int);
-        ctx.emit(Instruction::Widen { dest: rhs_widened, src: rhs });
+        ctx.emit_widen(rhs_widened, rhs);
         ctx.record_expr_temp(rhs_widened, IrType::Int);
         rhs = Operand::Value(rhs_widened);
     }
@@ -857,7 +804,7 @@ fn lower_unaryop<'db>(
             let text = lit.value.text(ctx.db);
             if let Some(const_value) = try_parse_negated_int_const(text, &result_type) {
                 let dest = ctx.fresh_value(result_type);
-                ctx.emit(Instruction::Const { dest, value: const_value });
+                ctx.emit_const(dest, const_value);
                 return Ok(dest);
             }
         }
@@ -938,7 +885,7 @@ fn lower_optional_binop<'db>(
     let return_type = ctx.return_type.clone()
         .expect("optional arithmetic requires return type");
     let none_value = ctx.fresh_value(return_type);
-    ctx.emit(Instruction::WrapNone { dest: none_value });
+    ctx.emit_wrap_none(none_value);
     ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
@@ -998,26 +945,17 @@ fn lower_checked_result_binop<'db>(
 
     // Create error message constant.
     let err_msg = ctx.fresh_value(IrType::String);
-    ctx.emit(Instruction::Const {
-        dest: err_msg,
-        value: ConstValue::String("arithmetic overflow".to_string()),
-    });
+    ctx.emit_const(err_msg, ConstValue::String("arithmetic overflow".to_string()));
 
     // Create Error from string.
     let err_value = ctx.fresh_value(IrType::Error);
-    ctx.emit(Instruction::ErrorFrom {
-        dest: err_value,
-        inner: Operand::Value(err_msg),
-    });
+    ctx.emit_error_from(err_value, Operand::Value(err_msg));
 
     // Wrap in Err.
     let return_type = ctx.return_type.clone()
         .expect("checked result arithmetic requires return type");
     let wrapped_err = ctx.fresh_value(return_type);
-    ctx.emit(Instruction::WrapErr {
-        dest: wrapped_err,
-        inner: Operand::Value(err_value),
-    });
+    ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
     ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
@@ -1075,7 +1013,7 @@ fn lower_optional_unaryop<'db>(
     let return_type = ctx.return_type.clone()
         .expect("optional arithmetic requires return type");
     let none_value = ctx.fresh_value(return_type);
-    ctx.emit(Instruction::WrapNone { dest: none_value });
+    ctx.emit_wrap_none(none_value);
     ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
@@ -1133,26 +1071,17 @@ fn lower_checked_result_unaryop<'db>(
 
     // Create error message constant.
     let err_msg = ctx.fresh_value(IrType::String);
-    ctx.emit(Instruction::Const {
-        dest: err_msg,
-        value: ConstValue::String("negation overflow".to_string()),
-    });
+    ctx.emit_const(err_msg, ConstValue::String("negation overflow".to_string()));
 
     // Create Error from string.
     let err_value = ctx.fresh_value(IrType::Error);
-    ctx.emit(Instruction::ErrorFrom {
-        dest: err_value,
-        inner: Operand::Value(err_msg),
-    });
+    ctx.emit_error_from(err_value, Operand::Value(err_msg));
 
     // Wrap in Err.
     let return_type = ctx.return_type.clone()
         .expect("checked result arithmetic requires return type");
     let wrapped_err = ctx.fresh_value(return_type);
-    ctx.emit(Instruction::WrapErr {
-        dest: wrapped_err,
-        inner: Operand::Value(err_value),
-    });
+    ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
     ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
@@ -1204,7 +1133,7 @@ fn lower_try_option<'db>(
     let return_type = ctx.return_type.clone()
         .expect("try operator requires return type");
     let none_value = ctx.fresh_value(return_type);
-    ctx.emit(Instruction::WrapNone { dest: none_value });
+    ctx.emit_wrap_none(none_value);
     ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
@@ -1258,10 +1187,7 @@ fn lower_try_result<'db>(
     let return_type = ctx.return_type.clone()
         .expect("try operator requires return type");
     let wrapped_err = ctx.fresh_value(return_type);
-    ctx.emit(Instruction::WrapErr {
-        dest: wrapped_err,
-        inner: Operand::Value(err_dest),
-    });
+    ctx.emit_wrap_err(wrapped_err, Operand::Value(err_dest));
     ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
@@ -1296,11 +1222,7 @@ fn lower_field_proj<'db>(
     let result_type = ctx.expr_type(expr);
     let dest = ctx.fresh_value(result_type);
 
-    ctx.emit(Instruction::GetField {
-        dest,
-        src: Operand::Value(base_id),
-        field_index,
-    });
+    ctx.emit_get_field(dest, Operand::Value(base_id), field_index);
     Ok(dest)
 }
 

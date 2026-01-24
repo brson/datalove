@@ -13,6 +13,7 @@ use datalove_datafun_tycheck::ResolvedCallTarget;
 use datalove_datafun_ir::{
     IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
+    ConstValue, TypeRef, SlotDest,
 };
 use crate::ir_ext::IrTypeExt;
 use crate::ownership_analysis::{BindingId, DropSchedule, BindingInfo, TrackingCategory};
@@ -754,6 +755,235 @@ impl<'db> LowerCtx<'db> {
             } else {
                 self.emit(Instruction::Drop { operand });
             }
+        }
+    }
+
+    // ========================================================================
+    // Instruction Emission Helpers
+    // ========================================================================
+    //
+    // These helpers emit the correct instruction variant (precise or tracked)
+    // based on whether the destination needs tracking.
+
+    /// Emit Const or ConstTracked based on destination tracking.
+    pub fn emit_const(&mut self, dest: ValueId, value: ConstValue) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::ConstTracked { dest, value });
+        } else {
+            self.emit(Instruction::Const { dest, value });
+        }
+    }
+
+    /// Emit Widen or WidenTracked based on destination tracking.
+    pub fn emit_widen(&mut self, dest: ValueId, src: Operand) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::WidenTracked { dest, src });
+        } else {
+            self.emit(Instruction::Widen { dest, src });
+        }
+    }
+
+    /// Emit Call or CallTracked based on destination tracking.
+    pub fn emit_call(&mut self, dest: ValueId, func: FuncRef, args: Vec<Operand>) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::CallTracked { dest, func, args });
+        } else {
+            self.emit(Instruction::Call { dest, func, args });
+        }
+    }
+
+    /// Emit Pack or PackTracked based on destination tracking.
+    pub fn emit_pack(&mut self, dest: ValueId, ty: TypeRef, fields: Vec<Operand>) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::PackTracked { dest, ty, fields });
+        } else {
+            self.emit(Instruction::Pack { dest, ty, fields });
+        }
+    }
+
+    /// Emit Unpack or UnpackTracked based on destination tracking.
+    ///
+    /// Uses the first dest to determine tracking (all dests should have same tracking).
+    pub fn emit_unpack(&mut self, dests: Vec<ValueId>, src: Operand) {
+        let tracked = dests.first().map(|d| self.is_dest_tracked(*d)).unwrap_or(false);
+        if tracked {
+            self.emit(Instruction::UnpackTracked { dests, src });
+        } else {
+            self.emit(Instruction::Unpack { dests, src });
+        }
+    }
+
+    /// Emit GetField or GetFieldTracked based on destination tracking.
+    pub fn emit_get_field(&mut self, dest: ValueId, src: Operand, field_index: u32) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::GetFieldTracked { dest, src, field_index });
+        } else {
+            self.emit(Instruction::GetField { dest, src, field_index });
+        }
+    }
+
+    /// Emit WrapSome or WrapSomeTracked based on destination tracking.
+    pub fn emit_wrap_some(&mut self, dest: ValueId, inner: Operand) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::WrapSomeTracked { dest, inner });
+        } else {
+            self.emit(Instruction::WrapSome { dest, inner });
+        }
+    }
+
+    /// Emit WrapNone or WrapNoneTracked based on destination tracking.
+    pub fn emit_wrap_none(&mut self, dest: ValueId) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::WrapNoneTracked { dest });
+        } else {
+            self.emit(Instruction::WrapNone { dest });
+        }
+    }
+
+    /// Emit WrapOk or WrapOkTracked based on destination tracking.
+    pub fn emit_wrap_ok(&mut self, dest: ValueId, inner: Operand) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::WrapOkTracked { dest, inner });
+        } else {
+            self.emit(Instruction::WrapOk { dest, inner });
+        }
+    }
+
+    /// Emit WrapErr or WrapErrTracked based on destination tracking.
+    pub fn emit_wrap_err(&mut self, dest: ValueId, inner: Operand) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::WrapErrTracked { dest, inner });
+        } else {
+            self.emit(Instruction::WrapErr { dest, inner });
+        }
+    }
+
+    /// Emit EnumVariant or EnumVariantTracked based on destination tracking.
+    pub fn emit_enum_variant(&mut self, dest: ValueId, variant_index: u32, payload: Option<Operand>) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::EnumVariantTracked { dest, variant_index, payload });
+        } else {
+            self.emit(Instruction::EnumVariant { dest, variant_index, payload });
+        }
+    }
+
+    /// Emit ErrorFrom or ErrorFromTracked based on destination tracking.
+    pub fn emit_error_from(&mut self, dest: ValueId, inner: Operand) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::ErrorFromTracked { dest, inner });
+        } else {
+            self.emit(Instruction::ErrorFrom { dest, inner });
+        }
+    }
+
+    /// Emit DataFrom or DataFromTracked based on destination tracking.
+    pub fn emit_data_from(&mut self, dest: ValueId, inner: Operand) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::DataFromTracked { dest, inner });
+        } else {
+            self.emit(Instruction::DataFrom { dest, inner });
+        }
+    }
+
+    /// Emit ListNew or ListNewTracked based on destination tracking.
+    pub fn emit_list_new(&mut self, dest: ValueId, elements: Vec<Operand>) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::ListNewTracked { dest, elements });
+        } else {
+            self.emit(Instruction::ListNew { dest, elements });
+        }
+    }
+
+    /// Emit SetNew or SetNewTracked based on destination tracking.
+    pub fn emit_set_new(&mut self, dest: ValueId, elements: Vec<Operand>) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::SetNewTracked { dest, elements });
+        } else {
+            self.emit(Instruction::SetNew { dest, elements });
+        }
+    }
+
+    /// Emit MapNew or MapNewTracked based on destination tracking.
+    pub fn emit_map_new(&mut self, dest: ValueId, entries: Vec<(Operand, Operand)>) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::MapNewTracked { dest, entries });
+        } else {
+            self.emit(Instruction::MapNew { dest, entries });
+        }
+    }
+
+    /// Emit TensorNew or TensorNewTracked based on destination tracking.
+    pub fn emit_tensor_new(&mut self, dest: ValueId, shape: Vec<u32>, elements: Vec<Operand>) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::TensorNewTracked { dest, shape, elements });
+        } else {
+            self.emit(Instruction::TensorNew { dest, shape, elements });
+        }
+    }
+
+    /// Emit TableNew or TableNewTracked based on destination tracking.
+    pub fn emit_table_new(&mut self, dest: ValueId, rows: Vec<Operand>) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::TableNewTracked { dest, rows });
+        } else {
+            self.emit(Instruction::TableNew { dest, rows });
+        }
+    }
+
+    /// Emit Intrinsic or IntrinsicTracked based on destination tracking.
+    pub fn emit_intrinsic(&mut self, dest: ValueId, intrinsic: datalove_datafun_intrinsics::IntrinsicId, args: Vec<Operand>) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::IntrinsicTracked { dest, intrinsic, args });
+        } else {
+            self.emit(Instruction::Intrinsic { dest, intrinsic, args });
+        }
+    }
+
+    /// Emit SlotStoreCopy or SlotStoreCopyTracked based on slot tracking.
+    pub fn emit_slot_store_copy(&mut self, dest: SlotDest, value: Operand) {
+        let tracked = match &dest {
+            SlotDest::Local(sid) => self.is_slot_tracked(*sid),
+            SlotDest::External { .. } => true, // External slots always tracked.
+        };
+        if tracked {
+            self.emit(Instruction::SlotStoreCopyTracked { dest, value });
+        } else {
+            self.emit(Instruction::SlotStoreCopy { dest, value });
+        }
+    }
+
+    /// Emit SlotStoreMove or SlotStoreMoveTracked based on slot tracking.
+    pub fn emit_slot_store_move(&mut self, dest: SlotDest, value: Operand) {
+        let tracked = match &dest {
+            SlotDest::Local(sid) => self.is_slot_tracked(*sid),
+            SlotDest::External { .. } => true, // External slots always tracked.
+        };
+        if tracked {
+            self.emit(Instruction::SlotStoreMoveTracked { dest, value });
+        } else {
+            self.emit(Instruction::SlotStoreMove { dest, value });
+        }
+    }
+
+    /// Emit SetField or SetFieldTracked based on slot tracking.
+    pub fn emit_set_field(&mut self, slot: SlotDest, field_path: Vec<u32>, value: Operand) {
+        let tracked = match &slot {
+            SlotDest::Local(sid) => self.is_slot_tracked(*sid),
+            SlotDest::External { .. } => true, // External slots always tracked.
+        };
+        if tracked {
+            self.emit(Instruction::SetFieldTracked { slot, field_path, value });
+        } else {
+            self.emit(Instruction::SetField { slot, field_path, value });
+        }
+    }
+
+    /// Emit SlotLoadCopy or SlotLoadCopyTracked based on destination tracking.
+    pub fn emit_slot_load_copy(&mut self, dest: ValueId, slot: SlotId) {
+        if self.is_dest_tracked(dest) {
+            self.emit(Instruction::SlotLoadCopyTracked { dest, slot });
+        } else {
+            self.emit(Instruction::SlotLoadCopy { dest, slot });
         }
     }
 

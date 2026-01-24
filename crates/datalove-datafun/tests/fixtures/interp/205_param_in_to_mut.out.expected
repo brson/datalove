@@ -19,7 +19,7 @@ Analysis(
                     fn outer(p0):
                     block0:
                         v0 = copy p0
-                        store.copy s0, v0
+                        store.copy.tracked s0, v0
                         v1 = call m0.f0(s0)
                         return v1
                 """,

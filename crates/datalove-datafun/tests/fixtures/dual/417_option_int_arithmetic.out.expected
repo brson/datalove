@@ -10,7 +10,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
+                        v0 = call.tracked f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -24,21 +24,21 @@ DualAnalysis(
                         v4, v5 = unwrap_option.tracking v1
                         branch v5, block2, block1
                     block1:
-                        v6 = none
+                        v6 = none.tracked
                         return v6
                     block2:
                         v7, v8 = unwrap_option.tracking v3
                         branch v8, block4, block3
                     block3:
-                        v9 = none
+                        v9 = none.tracked
                         return v9
                     block4:
-                        v10 = widen v4
-                        v11 = widen v7
+                        v10 = widen.tracked v4
+                        v11 = widen.tracked v7
                         v12 = add v10, v11
                         drop v10
                         drop v11
-                        v13 = some v12
+                        v13 = some.tracked v12
                         return v13
                     exports:
                         test = f0
@@ -49,7 +49,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
+                        v0 = call.tracked f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -63,21 +63,21 @@ DualAnalysis(
                         v4, v5 = unwrap_option.tracking v1
                         branch v5, block2, block1
                     block1:
-                        v6 = none
+                        v6 = none.tracked
                         return v6
                     block2:
                         v7, v8 = unwrap_option.tracking v3
                         branch v8, block4, block3
                     block3:
-                        v9 = none
+                        v9 = none.tracked
                         return v9
                     block4:
-                        v10 = widen v4
-                        v11 = widen v7
+                        v10 = widen.tracked v4
+                        v11 = widen.tracked v7
                         v12 = add v10, v11
                         drop v10
                         drop v11
-                        v13 = some v12
+                        v13 = some.tracked v12
                         return v13
                     exports:
                         test = f0

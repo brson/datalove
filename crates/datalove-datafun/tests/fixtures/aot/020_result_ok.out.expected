@@ -11,11 +11,11 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
+                        v0 = call.tracked f0()
                         v1, v2, v3 = unwrap_result.tracking v0
                         branch v3, block2, block1
                     block1:
-                        v4 = err v2
+                        v4 = err.tracked v2
                         unit_early_return v4
                     block2:
                         debuglog v1
@@ -24,7 +24,7 @@ AotAnalysis(
                     fn get_ok():
                     block0:
                         v0 = const 42u32
-                        v1 = ok v0
+                        v1 = ok.tracked v0
                         return v1
                     exports:
                         get_ok = f0

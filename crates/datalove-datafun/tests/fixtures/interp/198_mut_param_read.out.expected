@@ -11,10 +11,10 @@ Analysis(
                 ir: """
                     fn read_twice(p0):
                     block0:
-                        v0 = const 100int
+                        v0 = const.tracked 100int
                         v1 = eq p0, v0
                         drop v0
-                        v2 = const 100int
+                        v2 = const.tracked 100int
                         v3 = eq p0, v2
                         drop v2
                         branch v1, block1, block2
@@ -26,8 +26,8 @@ Analysis(
                     
                     fn test():
                     block0:
-                        v0 = const 100int
-                        store.move s0, v0
+                        v0 = const.tracked 100int
+                        store.move.tracked s0, v0
                         v1 = call m0.f0(s0)
                         drop.tracked s0
                         return v1

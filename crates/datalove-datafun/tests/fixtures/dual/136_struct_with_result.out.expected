@@ -11,9 +11,9 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 42u32
-                        v1 = ok v0
-                        v2 = const "success"
-                        v3 = pack Struct0 {v1, v2}
+                        v1 = ok.tracked v0
+                        v2 = const.tracked "success"
+                        v3 = pack.tracked Struct0 {v1, v2}
                         v4 = getfieldref v3.0
                         debuglog v4
                         v5 = getfieldref v3.1
@@ -30,9 +30,9 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 42u32
-                        v1 = ok v0
-                        v2 = const "success"
-                        v3 = pack Struct0 {v1, v2}
+                        v1 = ok.tracked v0
+                        v2 = const.tracked "success"
+                        v3 = pack.tracked Struct0 {v1, v2}
                         v4 = getfieldref v3.0
                         debuglog v4
                         v5 = getfieldref v3.1

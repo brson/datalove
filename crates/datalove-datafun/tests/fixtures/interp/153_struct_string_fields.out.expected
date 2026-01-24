@@ -11,9 +11,9 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const "Alice"
-                        v1 = const "Boston"
-                        v2 = pack Struct0 {v0, v1}
+                        v0 = const.tracked "Alice"
+                        v1 = const.tracked "Boston"
+                        v2 = pack.tracked Struct0 {v0, v1}
                         unit_end_drop v2
                         unit_end
                     exports:

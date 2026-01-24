@@ -15,13 +15,13 @@ Analysis(
                     
                     fn make_map():
                     block0:
-                        v0 = const 1int
-                        v1 = const "one"
-                        v2 = const 2int
-                        v3 = const "two"
-                        v4 = const 3int
-                        v5 = const "three"
-                        v6 = map {v0: v1, v2: v3, v4: v5}
+                        v0 = const.tracked 1int
+                        v1 = const.tracked "one"
+                        v2 = const.tracked 2int
+                        v3 = const.tracked "two"
+                        v4 = const.tracked 3int
+                        v5 = const.tracked "three"
+                        v6 = map.tracked {v0: v1, v2: v3, v4: v5}
                         return v6
                     exports:
                         make_map = f0
@@ -40,7 +40,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call unit0.f0()
+                        v0 = call.tracked unit0.f0()
                         unit_end v0
                 """,
             ),

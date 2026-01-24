@@ -7,13 +7,13 @@ ModulesAnalysis(
         ir: """
             fn make_error():
             block0:
-                v0 = const "something went wrong"
-                v1 = error_from v0
+                v0 = const.tracked "something went wrong"
+                v1 = error_from.tracked v0
                 return v1
             
             fn main():
             block0:
-                v0 = call m0.f0()
+                v0 = call.tracked m0.f0()
                 return v0
         """,
     ),

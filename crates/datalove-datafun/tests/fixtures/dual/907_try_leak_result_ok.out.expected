@@ -10,7 +10,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
+                        v0 = call.tracked f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -18,17 +18,17 @@ DualAnalysis(
                     fn test():
                     block0:
                         v0 = const 42u32
-                        v1 = ok v0
-                        v2 = const "hello"
+                        v1 = ok.tracked v0
+                        v2 = const.tracked "hello"
                         v3, v4, v5 = unwrap_result.tracking v1
                         branch v5, block2, block1
                     block1:
-                        v6 = err v4
+                        v6 = err.tracked v4
                         drop v2
                         return v6
                     block2:
-                        v7 = pack Struct0 {v2, v3}
-                        v8 = ok v7
+                        v7 = pack.tracked Struct0 {v2, v3}
+                        v8 = ok.tracked v7
                         return v8
                     exports:
                         test = f0
@@ -39,7 +39,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
+                        v0 = call.tracked f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -47,17 +47,17 @@ DualAnalysis(
                     fn test():
                     block0:
                         v0 = const 42u32
-                        v1 = ok v0
-                        v2 = const "hello"
+                        v1 = ok.tracked v0
+                        v2 = const.tracked "hello"
                         v3, v4, v5 = unwrap_result.tracking v1
                         branch v5, block2, block1
                     block1:
-                        v6 = err v4
+                        v6 = err.tracked v4
                         drop v2
                         return v6
                     block2:
-                        v7 = pack Struct0 {v2, v3}
-                        v8 = ok v7
+                        v7 = pack.tracked Struct0 {v2, v3}
+                        v8 = ok.tracked v7
                         return v8
                     exports:
                         test = f0
