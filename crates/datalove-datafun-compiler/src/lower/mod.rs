@@ -78,6 +78,8 @@ pub enum LowerError {
     FunctionNotFound(String),
     /// Invalid literal value (e.g., integer out of range for target type).
     InvalidLiteral(String),
+    /// Feature not implemented for CTFE or const expressions.
+    NotImplemented(String),
 }
 
 impl std::fmt::Display for LowerError {
@@ -85,6 +87,7 @@ impl std::fmt::Display for LowerError {
         match self {
             LowerError::FunctionNotFound(name) => write!(f, "function not found: {}", name),
             LowerError::InvalidLiteral(lit) => write!(f, "invalid literal: {}", lit),
+            LowerError::NotImplemented(msg) => write!(f, "not implemented: {}", msg),
         }
     }
 }
