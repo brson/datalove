@@ -29,7 +29,7 @@ pub struct ModuleCompilationInput {
 /// Output of module compilation - analysis results without lowering.
 ///
 /// Contains parsing, typechecking, and ownership analysis results.
-/// Callers who need IR lowering should call `lower_module_graph_with_mode`
+/// Callers who need IR lowering should call `lower_module_graph_with_evaluator`
 /// after checking for errors.
 pub struct ModuleCompilationOutput<'db> {
     /// The input module graph.
@@ -60,7 +60,7 @@ impl<'db> ModuleCompilationOutput<'db> {
 /// Analyze modules from pre-resolved input.
 ///
 /// Runs parsing, typechecking, and ownership analysis. Does NOT run IR lowering.
-/// Callers who need IR should call `lower_module_graph_with_mode` after checking
+/// Callers who need IR should call `lower_module_graph_with_evaluator` after checking
 /// that `is_successful()` returns true.
 ///
 /// This separation allows callers to skip lowering entirely when analysis fails,

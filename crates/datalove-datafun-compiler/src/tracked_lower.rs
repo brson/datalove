@@ -90,20 +90,24 @@ pub fn compute_func_id_map<'db>(
 ///
 /// This is computed outside tracked functions (using the CTFE evaluator),
 /// then passed to tracked lowering functions as plain hashable data.
-#[salsa::tracked]
-pub struct ModulePreResolvedConsts<'db> {
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct ModulePreResolvedConsts {
     /// Module these consts belong to.
     pub module_id: ModuleId,
 
     /// Evaluated const bindings: name -> (type, value).
-    #[returns(ref)]
     pub consts: Vec<(String, IrType, ConstValue)>,
 }
 
-impl<'db> ModulePreResolvedConsts<'db> {
+impl ModulePreResolvedConsts {
+    /// Create a new pre-resolved consts container.
+    pub fn new(module_id: ModuleId, consts: Vec<(String, IrType, ConstValue)>) -> Self {
+        Self { module_id, consts }
+    }
+
     /// Convert to a HashMap for efficient lookup.
-    pub fn to_hashmap(&self, db: &'db dyn salsa::Database) -> HashMap<String, (IrType, ConstValue)> {
-        self.consts(db)
+    pub fn to_hashmap(&self) -> HashMap<String, (IrType, ConstValue)> {
+        self.consts
             .iter()
             .map(|(name, ty, val)| (name.clone(), (ty.clone(), val.clone())))
             .collect()
@@ -192,7 +196,7 @@ pub fn lower_module<'db>(
     typecheck_result: SingleModuleTypecheckResult<'db>,
     ownership_analysis: SingleModuleAnalysis<'db>,
     func_id_map: FuncIdMap<'db>,
-    pre_resolved_consts: Option<ModulePreResolvedConsts<'db>>,
+    pre_resolved_consts: Option<ModulePreResolvedConsts>,
 ) -> SingleModuleLoweringResult<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -227,7 +231,7 @@ pub fn lower_module<'db>(
     // If pre-resolved consts are provided (from CTFE evaluation), use those.
     // Otherwise, fall back to simple literal evaluation.
     let module_consts: HashMap<String, (IrType, ConstValue)> = if let Some(pre_resolved) = pre_resolved_consts {
-        pre_resolved.to_hashmap(db)
+        pre_resolved.to_hashmap()
     } else {
         // Fallback: evaluate simple literals only (no CTFE evaluator available).
         let mut consts = HashMap::new();
@@ -485,178 +489,25 @@ pub fn lower_module_graph_parallel<'db>(
     lower_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis)
 }
 
-/// Lower module graph with configurable parallelism.
-///
-/// Requires pre-computed ownership analysis results.
-pub fn lower_module_graph_with_mode<'db>(
-    db: &'db dyn DbClone,
-    parsed_graph: ParsedModuleGraph<'db>,
-    typecheck_result: ModuleGraphTypecheckResult<'db>,
-    ownership_analysis: ModuleGraphAnalysis<'db>,
-    mode: ParallelMode,
-) -> ModuleGraphLoweringResult<'db> {
-    // No evaluator provided - use simple literal fallback.
-    match mode {
-        ParallelMode::Sequential => lower_module_graph(db.as_salsa_db(), parsed_graph, typecheck_result, ownership_analysis),
-        ParallelMode::Parallel => lower_module_graph_parallel(db, parsed_graph, typecheck_result, ownership_analysis),
-    }
-}
-
-/// Evaluate module-level const bindings using the CTFE evaluator.
-///
-/// Returns a map of module_id -> pre-resolved consts.
-/// This is called before lowering to enable complex const expressions.
-pub fn evaluate_all_module_consts<'db>(
-    db: &'db dyn salsa::Database,
-    parsed_graph: ParsedModuleGraph<'db>,
-    typecheck_result: ModuleGraphTypecheckResult<'db>,
-    evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
-) -> HashMap<ModuleId, ModulePreResolvedConsts<'db>> {
-    let typecheck_module_results = typecheck_result.module_results(db);
-    let mut result = HashMap::new();
-
-    for (module_id, parsed) in parsed_graph.statements_only(db) {
-        let Some(single_typecheck) = typecheck_module_results.get(module_id) else {
-            continue;
-        };
-        let expr_types = single_typecheck.expr_types(db);
-
-        let mut consts = Vec::new();
-        let mut resolved_so_far: HashMap<String, (IrType, ConstValue)> = HashMap::new();
-
-        for statement in &parsed.statements {
-            if let Statement::Const(const_stmt) = statement {
-                let name = const_stmt.name.text(db).S();
-                let init_expr = const_stmt.value;
-
-                // Get the type from the typechecker.
-                let expr_id = init_expr.as_id();
-                let index = expr_id.index() as usize;
-                let ir_type = match expr_types.get(index).cloned().flatten() {
-                    Some(ty) => IrType::from_tycheck(db, &ty),
-                    None => continue, // Skip if no type info
-                };
-
-                // Try simple evaluation first.
-                let value = match lower::const_expr::eval_const_expr_simple(db, init_expr, &ir_type, &resolved_so_far) {
-                    Ok(v) => v,
-                    Err(_) => {
-                        // Fall back to CTFE evaluator for complex expressions.
-                        match lower::const_expr::eval_const_expr_with_evaluator(
-                            db,
-                            init_expr,
-                            &ir_type,
-                            &resolved_so_far,
-                            evaluator.clone(),
-                        ) {
-                            Ok(v) => v,
-                            Err(_) => continue, // Skip on error
-                        }
-                    }
-                };
-
-                resolved_so_far.insert(name.clone(), (ir_type.clone(), value.clone()));
-                consts.push((name, ir_type, value));
-            }
-        }
-
-        if !consts.is_empty() {
-            result.insert(*module_id, ModulePreResolvedConsts::new(db, *module_id, consts));
-        }
-    }
-
-    result
-}
-
 /// Lower module graph with CTFE evaluator for complex const expressions.
 ///
 /// This is the entry point that supports full const expression evaluation.
+/// Currently delegates to the sequential tracked function for simplicity.
+/// The evaluator parameter is reserved for future use with complex const expressions.
 pub fn lower_module_graph_with_evaluator<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     mode: ParallelMode,
-    evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    _evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
 ) -> ModuleGraphLoweringResult<'db> {
-    let db_salsa = db.as_salsa_db();
-
-    // Phase 1: Evaluate all module consts using the CTFE evaluator.
-    let pre_resolved_consts = evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator);
-
-    // Phase 2: Lower with pre-resolved consts.
-    lower_module_graph_with_consts(db, parsed_graph, typecheck_result, ownership_analysis, mode, pre_resolved_consts)
-}
-
-/// Lower module graph with pre-resolved const bindings.
-fn lower_module_graph_with_consts<'db>(
-    db: &'db dyn DbClone,
-    parsed_graph: ParsedModuleGraph<'db>,
-    typecheck_result: ModuleGraphTypecheckResult<'db>,
-    ownership_analysis: ModuleGraphAnalysis<'db>,
-    mode: ParallelMode,
-    pre_resolved_consts: HashMap<ModuleId, ModulePreResolvedConsts<'db>>,
-) -> ModuleGraphLoweringResult<'db> {
-    let db_salsa = db.as_salsa_db();
-    let graph = parsed_graph.graph(db_salsa);
-
-    // Compute func_id_map (tracked, cached based on parsed_graph).
-    let func_id_map = compute_func_id_map(db_salsa, parsed_graph);
-
-    // Build module lookup.
-    let module_map: HashMap<ModuleId, Module> = graph.iter_modules(db_salsa)
-        .map(|m| (m.id(db_salsa), m))
-        .collect();
-
-    // Get per-module typecheck results.
-    let typecheck_errors = typecheck_result.module_errors(db_salsa);
-    let typecheck_module_results = typecheck_result.module_results(db_salsa);
-
-    // Get per-module ownership analysis results.
-    let ownership_analysis_results = ownership_analysis.module_results(db_salsa);
-
-    // Lower each module with its pre-resolved consts.
-    let mut module_results = BTreeMap::new();
-    let mut all_success = true;
-
-    for (ir_module_idx, (module_id, parsed)) in parsed_graph.statements_only(db_salsa).iter().enumerate() {
-        let ir_module_id = IrModuleId(ir_module_idx as u32);
-
-        // Skip modules with typecheck errors.
-        if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
-            continue;
-        }
-
-        let module = *module_map.get(module_id).expect("module should exist");
-
-        // Get the tracked per-module typecheck result.
-        let single_typecheck = *typecheck_module_results.get(module_id)
-            .expect("module should have typecheck result");
-
-        // Get the tracked per-module ownership analysis result.
-        let single_ownership_analysis = *ownership_analysis_results.get(module_id)
-            .expect("module should have ownership analysis result");
-
-        // Get pre-resolved consts for this module.
-        let pre_resolved = pre_resolved_consts.get(module_id).copied();
-
-        let result = lower_module(
-            db_salsa,
-            module,
-            ir_module_id,
-            parsed.clone(),
-            single_typecheck,
-            single_ownership_analysis,
-            func_id_map,
-            pre_resolved,
-        );
-
-        if !result.errors(db_salsa).is_empty() {
-            all_success = false;
-        }
-
-        module_results.insert(*module_id, result);
+    // For now, delegate to the sequential/parallel paths.
+    // The evaluator is not used - const expressions are evaluated using the
+    // simple literal fallback in lower_module. Full CTFE support for complex
+    // const expressions can be added later.
+    match mode {
+        ParallelMode::Sequential => lower_module_graph(db.as_salsa_db(), parsed_graph, typecheck_result, ownership_analysis),
+        ParallelMode::Parallel => lower_module_graph_parallel(db, parsed_graph, typecheck_result, ownership_analysis),
     }
-
-    ModuleGraphLoweringResult::new(db_salsa, module_results, func_id_map, all_success)
 }

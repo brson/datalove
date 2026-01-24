@@ -3,12 +3,15 @@
 use std::collections::BTreeMap;
 use bct::input::Source;
 use bct::module_graph::ModuleGraphBuilder;
+use std::cell::RefCell;
+use std::rc::Rc;
 use datalove_datafun_compiler::{
     Database,
     module_graph::{ModuleGraph, parse_module_graph, parse_module_graph_with_mode, ParallelMode},
     tracked_ownership_analysis::analyze_module_graph_with_mode,
-    tracked_lower::lower_module_graph_with_mode,
+    tracked_lower::lower_module_graph_with_evaluator,
 };
+use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
     typecheck_module_graph, typecheck_module_graph_with_mode,
     ParallelMode as TypecheckParallelMode,
@@ -271,7 +274,8 @@ fn lower_sequential(bencher: divan::Bencher) {
             let parsed = parse_module_graph(&db, graph, BTreeMap::new());
             let typechecked = typecheck_module_graph(&db, parsed);
             let ownership = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential);
-            let result = lower_module_graph_with_mode(&db, parsed, typechecked, ownership, ParallelMode::Sequential);
+            let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+            let result = lower_module_graph_with_evaluator(&db, parsed, typechecked, ownership, ParallelMode::Sequential, evaluator);
             let _ = divan::black_box(result);
         });
 }
@@ -292,7 +296,8 @@ fn lower_parallel(bencher: divan::Bencher) {
             let parsed = parse_module_graph(&db, graph, BTreeMap::new());
             let typechecked = typecheck_module_graph(&db, parsed);
             let ownership = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential);
-            let result = lower_module_graph_with_mode(&db, parsed, typechecked, ownership, ParallelMode::Parallel);
+            let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+            let result = lower_module_graph_with_evaluator(&db, parsed, typechecked, ownership, ParallelMode::Parallel, evaluator);
             let _ = divan::black_box(result);
         });
 }

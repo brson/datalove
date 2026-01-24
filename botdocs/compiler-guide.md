@@ -48,7 +48,7 @@ Source Text
     |                          - Per-module: analyze_module [tracked]
     v                          - Output: ModuleGraphAnalysis
     |
-[Phase 4: IR Lowering]  lower_module_graph_with_mode
+[Phase 4: IR Lowering]  lower_module_graph_with_evaluator
     |                   - Per-module: lower_module [tracked]
     v                   - Output: ModuleGraphLoweringResult
     |

@@ -29,7 +29,7 @@ use datalove_datafun_compiler::compile::{
     compile_modules as compiler_compile_modules,
 };
 use datalove_datafun_compiler::tracked_lower::{
-    lower_module_graph_with_mode, lower_module_graph_with_evaluator, ModuleGraphLoweringResult,
+    lower_module_graph_with_evaluator, ModuleGraphLoweringResult,
 };
 use datalove_datafun_ir::CtfeEvaluator;
 use datalove_datafun_interp::InterpCtfeEvaluator;
@@ -170,35 +170,12 @@ impl ModuleCompilationPipeline {
         db: &'db dyn DbClone,
         mode: ParallelMode,
     ) -> CompiledModules<'db> {
-        let path_deps = extract_dependencies(&self.world, db.as_salsa_db());
-        let (module_graph, resolved_requires) = self.world.build_fresh(db.as_salsa_db(), &path_deps);
-        self.compile_impl_with_mode(db, module_graph, resolved_requires, mode)
-    }
-
-    /// Compile all modules with CTFE support.
-    ///
-    /// Uses the provided evaluator for compile-time evaluation of const expressions
-    /// that require more than simple literal evaluation.
-    pub fn compile_fresh_with_ctfe<'db>(
-        &mut self,
-        db: &'db dyn DbClone,
-        evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
-    ) -> CompiledModules<'db> {
-        let mode = parallel_mode_from_env();
-        self.compile_fresh_with_mode_and_ctfe(db, mode, evaluator)
-    }
-
-    /// Compile all modules with CTFE support using default interpreter evaluator.
-    pub fn compile_fresh_with_ctfe_default<'db>(
-        &mut self,
-        db: &'db dyn DbClone,
-    ) -> CompiledModules<'db> {
         let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-        self.compile_fresh_with_ctfe(db, evaluator)
+        self.compile_fresh_with_mode_and_evaluator(db, mode, evaluator)
     }
 
-    /// Compile all modules with explicit parallelism mode and CTFE support.
-    pub fn compile_fresh_with_mode_and_ctfe<'db>(
+    /// Compile all modules with explicit parallelism mode and custom CTFE evaluator.
+    pub fn compile_fresh_with_mode_and_evaluator<'db>(
         &mut self,
         db: &'db dyn DbClone,
         mode: ParallelMode,
@@ -206,7 +183,7 @@ impl ModuleCompilationPipeline {
     ) -> CompiledModules<'db> {
         let path_deps = extract_dependencies(&self.world, db.as_salsa_db());
         let (module_graph, resolved_requires) = self.world.build_fresh(db.as_salsa_db(), &path_deps);
-        self.compile_impl_with_ctfe(db, module_graph, resolved_requires, mode, evaluator)
+        self.compile_impl(db, module_graph, resolved_requires, mode, evaluator)
     }
 
     /// Compile all modules (incremental, needs `&mut db`).
@@ -227,38 +204,12 @@ impl ModuleCompilationPipeline {
         db: &'db mut D,
         mode: ParallelMode,
     ) -> (CompiledModules<'db>, &'db D) {
-        // Extract dependencies first (reads from db).
-        let path_deps = extract_dependencies(&self.world, db);
-        let (module_graph, resolved_requires) = self.world.prepare_for_compile(db, &path_deps);
-
-        // Reborrow as immutable for the rest of compilation.
-        let db_ref: &'db D = &*db;
-
-        let compiled = self.compile_impl_with_mode(db_ref, module_graph, resolved_requires, mode);
-        (compiled, db_ref)
-    }
-
-    /// Compile all modules with CTFE support (incremental).
-    pub fn compile_with_ctfe<'db, D: DbClone>(
-        &mut self,
-        db: &'db mut D,
-        evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
-    ) -> (CompiledModules<'db>, &'db D) {
-        let mode = parallel_mode_from_env();
-        self.compile_with_mode_and_ctfe(db, mode, evaluator)
-    }
-
-    /// Compile all modules with CTFE support using default interpreter evaluator (incremental).
-    pub fn compile_with_ctfe_default<'db, D: DbClone>(
-        &mut self,
-        db: &'db mut D,
-    ) -> (CompiledModules<'db>, &'db D) {
         let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-        self.compile_with_ctfe(db, evaluator)
+        self.compile_with_mode_and_evaluator(db, mode, evaluator)
     }
 
-    /// Compile all modules with explicit parallelism mode and CTFE support (incremental).
-    pub fn compile_with_mode_and_ctfe<'db, D: DbClone>(
+    /// Compile all modules with explicit parallelism mode and custom CTFE evaluator (incremental).
+    pub fn compile_with_mode_and_evaluator<'db, D: DbClone>(
         &mut self,
         db: &'db mut D,
         mode: ParallelMode,
@@ -271,44 +222,12 @@ impl ModuleCompilationPipeline {
         // Reborrow as immutable for the rest of compilation.
         let db_ref: &'db D = &*db;
 
-        let compiled = self.compile_impl_with_ctfe(db_ref, module_graph, resolved_requires, mode, evaluator);
+        let compiled = self.compile_impl(db_ref, module_graph, resolved_requires, mode, evaluator);
         (compiled, db_ref)
     }
 
-    /// Internal compilation implementation with configurable parallelism.
-    fn compile_impl_with_mode<'db>(
-        &self,
-        db: &'db dyn DbClone,
-        module_graph: ModuleGraph,
-        resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
-        mode: ParallelMode,
-    ) -> CompiledModules<'db> {
-        // Run parsing, typechecking, and ownership analysis.
-        let input = ModuleCompilationInput {
-            graph: module_graph,
-            resolved_requires,
-        };
-        let output = compiler_compile_modules(db, input, mode);
-
-        // Only run lowering if analysis succeeded.
-        let lowering_result = if output.is_successful() {
-            Some(lower_module_graph_with_mode(
-                db,
-                output.parsed_graph,
-                output.typecheck_result,
-                output.ownership_analysis,
-                mode,
-            ))
-        } else {
-            None
-        };
-
-        // Build interpreter structures from results.
-        self.wrap_compiler_output(db, output, lowering_result)
-    }
-
-    /// Internal compilation implementation with CTFE support.
-    fn compile_impl_with_ctfe<'db>(
+    /// Internal compilation implementation.
+    fn compile_impl<'db>(
         &self,
         db: &'db dyn DbClone,
         module_graph: ModuleGraph,
