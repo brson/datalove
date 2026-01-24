@@ -1,0 +1,19 @@
+----------
+module local/test/binopmod
+----------
+
+// CTFE binop as module item.
+const RESULT: int = 20 + 30
+
+fun get_result(): int
+    ret RESULT
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/binopmod
+import binopmod.get_result
+
+debuglog get_result()

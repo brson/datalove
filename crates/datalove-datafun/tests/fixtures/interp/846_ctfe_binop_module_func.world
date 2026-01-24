@@ -1,0 +1,18 @@
+----------
+module local/test/binopfunc
+----------
+
+// CTFE binop in module function.
+fun calculate(): int
+    const A: int = 8 + 2
+    ret A
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/binopfunc
+import binopfunc.calculate
+
+debuglog calculate()

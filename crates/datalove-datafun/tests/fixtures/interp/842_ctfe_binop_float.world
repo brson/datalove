@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE binop with floats.
+const A: f32 = 10.0 + 5.0
+debuglog A

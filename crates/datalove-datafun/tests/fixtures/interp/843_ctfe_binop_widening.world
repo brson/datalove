@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE binop that widens fixed-width to int.
+// 10 + 5 -> both u32 literals, widens to int result.
+const A: int = 10 + 5
+debuglog A

@@ -25,6 +25,20 @@ pub fn lower_operand<'db>(
     match expr.expr(ctx.db) {
         ExprFunKind::Name(name) => {
             let name_str = name.text(ctx.db);
+            // Check for const binding first.
+            if let Some((const_type, const_value)) = ctx.lookup_const(name_str) {
+                // Clone to release borrow on ctx.
+                let const_type = const_type.clone();
+                let const_value = const_value.clone();
+                // Emit a Const instruction with the evaluated value.
+                let dest = ctx.fresh_value(const_type.clone());
+                ctx.emit(Instruction::Const {
+                    dest,
+                    value: const_value,
+                });
+                ctx.record_expr_temp(dest, const_type);
+                return Ok(Operand::Value(dest));
+            }
             let operand = ctx.lookup_var(name_str)
                 .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
             Ok(operand)

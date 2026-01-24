@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE binop in script function.
+fun compute(): int
+    const X: int = 7 + 3
+    ret X
+end fun
+
+debuglog compute()
