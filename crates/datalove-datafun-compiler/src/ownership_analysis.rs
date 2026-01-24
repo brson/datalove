@@ -173,6 +173,15 @@ pub enum AnalysisError {
         local_index: u32,
         name: String,
     },
+    /// Value moved in one branch but not another.
+    /// D008
+    InconsistentBranchMove {
+        /// Statement index of the if statement.
+        stmt_idx: usize,
+        name: String,
+        /// Which branch has the move (for error message).
+        moved_in: &'static str,
+    },
 }
 
 /// Format analysis errors for display.
@@ -205,6 +214,9 @@ fn format_single_error(error: &AnalysisError) -> String {
         }
         AnalysisError::MoveInLoop { local_index: _, name } => {
             format!("error[D007]: cannot move `{}` in loop", name)
+        }
+        AnalysisError::InconsistentBranchMove { stmt_idx: _, name, moved_in } => {
+            format!("error[D008]: `{}` moved in {} branch but not the other", name, moved_in)
         }
     }
 }
@@ -283,9 +295,6 @@ struct AnalysisCtx<'db> {
     errors: Vec<AnalysisError>,
     /// Computed drop schedule.
     schedule: DropSchedule,
-    /// Bindings that were conditionally moved (moved in one branch, not the other).
-    /// These need tracked semantics since their state varies at runtime.
-    conditionally_moved: std::collections::HashSet<BindingId>,
 }
 
 /// A scope frame for tracking bindings.
@@ -330,7 +339,6 @@ impl<'db> AnalysisCtx<'db> {
             scope_stack: Vec::new(),
             errors: Vec::new(),
             schedule: DropSchedule::default(),
-            conditionally_moved: std::collections::HashSet::new(),
         }
     }
 
@@ -338,30 +346,24 @@ impl<'db> AnalysisCtx<'db> {
     ///
     /// Categories:
     /// - Copy: type is copy (no tracking needed)
-    /// - Tracked: exported, params (except In), slot (var), or conditionally moved
+    /// - Tracked: params (except In), slot (var)
     /// - Precise: let bindings and In params with statically-known state
     ///
     /// Precise bindings have deterministic lifecycle:
-    /// - In params in functions: always initialized, cannot be reassigned
-    /// - Let bindings (function or script level): single assignment, predictable
-    ///
-    /// Script-level let bindings are Precise unless conditionally moved.
+    /// - In params: always initialized, cannot be reassigned
+    /// - Let bindings: single assignment, drop point statically known
     fn compute_tracking(&self) -> Vec<TrackingCategory> {
-        self.bindings.iter().enumerate().map(|(idx, info)| {
-            let id = BindingId(idx as u32);
+        self.bindings.iter().map(|info| {
             if info.ty.is_copy() {
                 TrackingCategory::Copy
             } else if info.is_slot {
                 // Var bindings: reassignable, state varies.
                 TrackingCategory::Tracked
-            } else if self.conditionally_moved.contains(&id) {
-                // Conditionally moved: state varies by branch taken.
-                TrackingCategory::Tracked
             } else if info.param_mode == Some(ParamMode::In) {
                 // In params: owned, deterministic.
                 TrackingCategory::Precise
             } else if info.param_mode.is_none() {
-                // Let bindings (function or script level): single assignment, deterministic.
+                // Let bindings: single assignment, deterministic.
                 TrackingCategory::Precise
             } else {
                 // Other params (Ref, Mut, Out): borrowed or dynamic state.
@@ -1293,7 +1295,6 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
     ctx.enter_scope(ScopeKind::IfThen);
 
     // If there's a then-binding (if-let), create it.
-    // Mark it as conditionally initialized since it's only valid in the Some/Ok branch.
     if let Some(binding_name) = stmt.then_binding {
         let name = binding_name.text(ctx.db).S();
         let ty = ctx.expr_type(stmt.condition);
@@ -1303,12 +1304,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
             IrType::Result(inner) => (**inner).C(),
             other => other.C(),
         };
-        // If-binding is only valid in this branch - needs tracking.
-        let is_copy = inner_ty.is_copy();
-        let id = ctx.alloc_binding(name, inner_ty, false, None);
-        if !is_copy {
-            ctx.conditionally_moved.insert(id);
-        }
+        ctx.alloc_binding(name, inner_ty, false, None);
     }
 
     analyze_statements(ctx, &stmt.then_body);
@@ -1331,14 +1327,11 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
         ctx.enter_scope(ScopeKind::IfElse);
 
         // If there's an else-binding (if-let with else), create it.
-        // Mark it as conditionally initialized since it's only valid in the Err branch.
         if let Some(binding_name) = stmt.else_binding {
             let name = binding_name.text(ctx.db).S();
             // Else binding gets the error for Result types.
             let ty = IrType::Error;
-            let id = ctx.alloc_binding(name, ty, false, None);
-            // Error type is never Copy, so always mark as conditionally initialized.
-            ctx.conditionally_moved.insert(id);
+            ctx.alloc_binding(name, ty, false, None);
         }
 
         analyze_statements(ctx, else_body);
@@ -1360,59 +1353,33 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
         (state_before.C(), out_param_init_before.C())
     };
 
-    // Compute convergence drops.
-    // For each binding that is Live in one branch but Moved in another,
-    // schedule a drop on the Live branch and mark as conditionally moved.
-    let mut then_extra_drops = Vec::new();
-    let mut else_extra_drops = Vec::new();
-
+    // Check for inconsistent moves between branches.
+    // If a binding is moved in one branch but not the other, that's an error.
+    // This ensures drop points are precise - no runtime tracking needed.
     for (&id, &then_state) in &state_after_then {
         let else_state = state_after_else.get(&id).copied().unwrap_or(BindingState::Live);
 
-        if then_state != else_state {
-            // Mark as conditionally moved - needs tracked semantics.
-            if !ctx.bindings[id.0 as usize].ty.is_copy() {
-                ctx.conditionally_moved.insert(id);
-            }
-
-            if then_state == BindingState::Live {
-                // Live in then, moved in else -> drop in then.
-                if !ctx.bindings[id.0 as usize].ty.is_copy() {
-                    then_extra_drops.push(id);
-                }
-            } else {
-                // Moved in then, live in else -> drop in else.
-                if !ctx.bindings[id.0 as usize].ty.is_copy() {
-                    else_extra_drops.push(id);
-                }
-            }
+        if then_state != else_state && !ctx.bindings[id.0 as usize].ty.is_copy() {
+            let name = ctx.bindings[id.0 as usize].name.C();
+            let moved_in = if then_state == BindingState::Moved { "then" } else { "else" };
+            ctx.errors.push(AnalysisError::InconsistentBranchMove {
+                stmt_idx,
+                name,
+                moved_in,
+            });
         }
     }
 
-    // Combine with scope exit drops.
-    let mut all_then_drops = then_drops;
-    all_then_drops.extend(then_extra_drops);
-    if !all_then_drops.is_empty() {
-        ctx.schedule.then_branch_exit.insert(stmt_idx, all_then_drops);
+    // Schedule scope exit drops for bindings created in the branches.
+    if !then_drops.is_empty() {
+        ctx.schedule.then_branch_exit.insert(stmt_idx, then_drops);
     }
 
-    if !else_extra_drops.is_empty() {
-        // Add to existing else drops if any.
-        let existing = ctx.schedule.else_branch_exit.entry(stmt_idx).or_default();
-        existing.extend(else_extra_drops);
-    }
-
-    // After convergence, all bindings that were live in either branch but moved
-    // in one should now be considered moved.
+    // Update state after convergence.
+    // Both branches must have the same state for each binding (or error was reported).
     if let Some(frame) = ctx.scope_stack.last_mut() {
         for (&id, &then_state) in &state_after_then {
-            let else_state = state_after_else.get(&id).copied().unwrap_or(BindingState::Live);
-            // If moved in either branch, it's now moved.
-            if then_state == BindingState::Moved || else_state == BindingState::Moved {
-                frame.current_state.insert(id, BindingState::Moved);
-            } else {
-                frame.current_state.insert(id, BindingState::Live);
-            }
+            frame.current_state.insert(id, then_state);
         }
 
         // Out param convergence: must be initialized in both branches or neither.

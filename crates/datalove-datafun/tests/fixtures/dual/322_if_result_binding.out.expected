@@ -25,7 +25,7 @@ DualAnalysis(
                         return v3
                     block2:
                         v6 = const 888u32
-                        drop.tracked v4
+                        drop v4
                         return v6
                     exports:
                         test = f0
@@ -51,7 +51,7 @@ DualAnalysis(
                         return v3
                     block2:
                         v6 = const 888u32
-                        drop.tracked v4
+                        drop v4
                         return v6
                     exports:
                         test = f0

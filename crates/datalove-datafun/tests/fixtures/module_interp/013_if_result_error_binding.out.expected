@@ -21,7 +21,7 @@ ModulesAnalysis(
                 return v1
             block2:
                 v4 = const 999u32
-                drop.tracked v2
+                drop v2
                 return v4
         """,
     ),

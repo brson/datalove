@@ -6,79 +6,17 @@ DualAnalysis(
                 status: "Success",
             ),
             interp_lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        v0 = const true
-                        v1 = call f0(v0)
-                        debuglog v1
-                        unit_end
-                    
-                    fn test_cond(p0):
-                    block0:
-                        v0 = const 1u32
-                        v1 = const 2u32
-                        v2 = list.tracked [v0, v1]
-                        v3 = copy p0
-                        branch v3, block1, block2
-                    block1:
-                        drop v2
-                        goto block3
-                    block2:
-                        drop.tracked v2
-                        goto block3
-                    block3:
-                        v4 = const 0u32
-                        return v4
-                    exports:
-                        test_cond = f0
-                """,
+                status: "Error",
+                message: "test_cond: error[D008]: `x` moved in then branch but not the other",
             ),
             aot_lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        v0 = const true
-                        v1 = call f0(v0)
-                        debuglog v1
-                        unit_end
-                    
-                    fn test_cond(p0):
-                    block0:
-                        v0 = const 1u32
-                        v1 = const 2u32
-                        v2 = list.tracked [v0, v1]
-                        v3 = copy p0
-                        branch v3, block1, block2
-                    block1:
-                        drop v2
-                        goto block3
-                    block2:
-                        drop.tracked v2
-                        goto block3
-                    block3:
-                        v4 = const 0u32
-                        return v4
-                    exports:
-                        test_cond = f0
-                """,
+                status: "Error",
+                message: "test_cond: error[D008]: `x` moved in then branch but not the other",
             ),
             ir_match: true,
-            interp_output: "0\n",
-            aot_output: "0\n",
+            interp_output: "",
+            aot_output: "",
             output_match: true,
-            aot_compile: Some(AotCompileResult(
-                status: "Success",
-            )),
-            link: Some(LinkResult(
-                status: "Success",
-            )),
-            execution: Some(ExecutionResult(
-                status: "Success",
-                exit_code: 0,
-            )),
         ),
     ],
 )

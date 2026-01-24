@@ -40,7 +40,7 @@ AotAnalysis(
                         return v1
                     block2:
                         v4 = copy p1
-                        drop.tracked v2
+                        drop v2
                         return v4
                     exports:
                         checked_mul = f0

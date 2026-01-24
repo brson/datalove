@@ -7,36 +7,10 @@ Analysis(
                 status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        v0 = const true
-                        v1 = call f0(v0)
-                        unit_end
-                    
-                    fn test(p0):
-                    block0:
-                        v0 = const 1u32
-                        v1 = const 2u32
-                        v2 = list.tracked [v0, v1]
-                        v3 = copy p0
-                        branch v3, block1, block2
-                    block1:
-                        drop v2
-                        goto block3
-                    block2:
-                        drop.tracked v2
-                        goto block3
-                    block3:
-                        v4 = const 0u32
-                        return v4
-                    exports:
-                        test = f0
-                        output = v1
-                """,
+                status: "Error",
+                message: "test: error[D008]: `x` moved in then branch but not the other",
             ),
-            output: "(fragment executed)",
+            output: "",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
@@ -45,15 +19,10 @@ Analysis(
                 status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        v0 = copy unit0.v1
-                        unit_end v0
-                """,
+                status: "Error",
+                message: "variable not found: output",
             ),
-            output: "0",
+            output: "",
         ),
     ],
 )

@@ -343,18 +343,28 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     }
 
     // If lowering failed, return early.
+    // Check if both errors match (same error message = ir_match: true).
     if !matches!(&aot_compiled.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
+        let ir_match = match (&interp_compiled.lowering, &aot_compiled.lowering) {
+            (
+                datafun::pipeline::LoweringResult::Error { message: m1 },
+                datafun::pipeline::LoweringResult::Error { message: m2 },
+            ) => m1 == m2,
+            _ => false,
+        };
+        // If both errors match, consider output_match true (no output to compare).
+        let output_match = ir_match;
         results.push(DualSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
             typecheck: aot_compiled.typecheck,
             interp_lowering: interp_compiled.lowering,
             aot_lowering: aot_compiled.lowering,
-            ir_match: false,
+            ir_match,
             ir_diff: None,
             interp_output,
             aot_output: String::new(),
-            output_match: false,
+            output_match,
             aot_compile: None,
             link: None,
             execution: None,

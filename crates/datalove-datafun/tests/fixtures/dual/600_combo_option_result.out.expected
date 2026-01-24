@@ -58,7 +58,7 @@ DualAnalysis(
                         return v1
                     block2:
                         v4 = none
-                        drop.tracked v2
+                        drop v2
                         return v4
                     fn unwrap_opt(p0, p1):
                     block0:
@@ -131,7 +131,7 @@ DualAnalysis(
                         return v1
                     block2:
                         v4 = none
-                        drop.tracked v2
+                        drop v2
                         return v4
                     fn unwrap_opt(p0, p1):
                     block0:

@@ -24,7 +24,7 @@ Analysis(
                     block2:
                         v7 = const 999u32
                         store.copy s0, v7
-                        drop.tracked v5
+                        drop v5
                         goto block3
                     block3:
                         unit_end
