@@ -2115,8 +2115,8 @@ fn test_list_with_explicit_drop() {
     let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
-    // destroy_all won't touch the list (not tracked), but explicit Drop already handled it.
-    env.destroy_all(interp.runtime_handle());
+    // destroy_live_values won't touch the list (not tracked), but explicit Drop already handled it.
+    env.destroy_live_values(interp.runtime_handle());
 }
 
 /// Test script with a function and explicit list drop.
@@ -2208,7 +2208,7 @@ fn test_script_with_function_and_list_drop() {
     let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
-    env.destroy_all(interp.runtime_handle());
+    env.destroy_live_values(interp.runtime_handle());
 }
 
 /// Test that multiple values with explicit Drops are properly destroyed.
@@ -2274,5 +2274,5 @@ fn test_multiple_explicit_drops() {
     let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
-    env.destroy_all(interp.runtime_handle());
+    env.destroy_live_values(interp.runtime_handle());
 }

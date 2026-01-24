@@ -167,7 +167,7 @@ pub fn analyze_modules_worldfile(
     };
 
     // Cleanup: destroy all values in frames to prevent memory leaks.
-    env.destroy_all(interp.runtime_handle());
+    env.destroy_live_values(interp.runtime_handle());
 
     Ok(ModulesAnalysis {
         typecheck: TypecheckResult::Success,

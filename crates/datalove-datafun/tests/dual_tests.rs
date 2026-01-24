@@ -301,7 +301,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         String::new()
     };
     let interp_output = interp_executor.get_debug_buffer();
-    interp_executor.destroy_all();
+    interp_executor.destroy_live_values();
 
     // Build pipeline again for AOT context (necessary because script_compiler borrows compiled).
     let mut pipeline2 = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections);

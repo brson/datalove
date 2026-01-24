@@ -104,7 +104,7 @@ fn run_worldfile(
         }
     }
 
-    executor.destroy_all();
+    executor.destroy_live_values();
     results
 }
 

@@ -159,7 +159,7 @@ fn run_with_chaos_interp(
         }
     }
 
-    executor.destroy_all();
+    executor.destroy_live_values();
 
     RunResult {
         compiled: true,

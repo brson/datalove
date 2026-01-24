@@ -68,7 +68,7 @@ impl<'db> Engine<'db> {
     fn reset(&mut self) {
         self.history = ReplHistory::new();
         // Cleanup the current executor.
-        self.executor.destroy_all();
+        self.executor.destroy_live_values();
         // Create new compiler and executor (empty pipeline always succeeds).
         let mut pipeline = ModuleCompilationPipeline::new();
         let compiled = pipeline.compile_fresh(self.db);
@@ -331,6 +331,6 @@ impl<'db> Engine<'db> {
 
 impl<'db> Drop for Engine<'db> {
     fn drop(&mut self) {
-        self.executor.destroy_all();
+        self.executor.destroy_live_values();
     }
 }

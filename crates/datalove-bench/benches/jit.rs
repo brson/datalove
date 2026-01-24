@@ -56,7 +56,7 @@ fn run_benchmark(call_dispatcher: Option<Box<dyn CallDispatcher>>) {
     if let Some(ir_unit) = &compiled_unit.ir_unit {
         executor.execute_fragment(ir_unit);
     }
-    executor.destroy_all();
+    executor.destroy_live_values();
 }
 
 /// Run the benchmark without JIT (interpreter only).

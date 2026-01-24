@@ -67,11 +67,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Check for errors.
     if let TypecheckResult::Error { errors } = &result.typecheck {
-        executor.destroy_all();
+        executor.destroy_live_values();
         return Err(format!("Script typecheck errors: {:?}", errors));
     }
     if let LoweringResult::Error { message } = &result.lowering {
-        executor.destroy_all();
+        executor.destroy_live_values();
         return Err(format!("Script lowering error: {}", message));
     }
 
@@ -79,7 +79,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     if let Some(ir_unit) = &result.ir_unit {
         let output = executor.execute_fragment(ir_unit);
         if output.starts_with("Error:") {
-            executor.destroy_all();
+            executor.destroy_live_values();
             return Err(output);
         }
     }
@@ -89,11 +89,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Check for errors.
     if let TypecheckResult::Error { errors } = &output_compiled.typecheck {
-        executor.destroy_all();
+        executor.destroy_live_values();
         return Err(format!("Output typecheck errors: {:?}", errors));
     }
     if let LoweringResult::Error { message } = &output_compiled.lowering {
-        executor.destroy_all();
+        executor.destroy_live_values();
         return Err(format!("Output lowering error: {}", message));
     }
 
@@ -104,7 +104,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     } else {
         String::new()
     };
-    executor.destroy_all();
+    executor.destroy_live_values();
 
     if output.starts_with("Error:") {
         return Err(output);

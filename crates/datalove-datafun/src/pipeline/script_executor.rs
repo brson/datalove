@@ -21,7 +21,7 @@
 //! }
 //!
 //! // Clean up when done.
-//! executor.destroy_all();
+//! executor.destroy_live_values();
 //! ```
 
 use rmx::prelude::*;
@@ -261,8 +261,8 @@ impl ScriptExecutor {
         self.interp.clear_debug_buffer();
     }
 
-    /// Destroy all allocated runtime values.
-    pub fn destroy_all(&mut self) {
-        self.env.destroy_all(self.interp.runtime_handle());
+    /// Destroy live values in all frames.
+    pub fn destroy_live_values(&mut self) {
+        self.env.destroy_live_values(self.interp.runtime_handle());
     }
 }

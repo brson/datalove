@@ -50,8 +50,8 @@ impl<'db> TestContext<'db> {
         }
     }
 
-    fn destroy_all(&mut self) {
-        self.executor.destroy_all();
+    fn destroy_live_values(&mut self) {
+        self.executor.destroy_live_values();
     }
 }
 
@@ -89,8 +89,8 @@ fn test_multiple_script_contexts() {
     let bad2 = ctx2.eval_expr("x");
     assert!(matches!(bad2.typecheck, TypecheckResult::Error { .. }), "ctx2 should not see x");
 
-    ctx1.destroy_all();
-    ctx2.destroy_all();
+    ctx1.destroy_live_values();
+    ctx2.destroy_live_values();
 }
 
 /// Test interleaved execution of script units from multiple contexts.
@@ -134,8 +134,8 @@ fn test_interleaved_execution() {
     let bad_b = ctx_b.eval_expr("id_a(1)");
     assert!(matches!(bad_b.typecheck, TypecheckResult::Error { .. }), "ctx_b should not see id_a");
 
-    ctx_a.destroy_all();
-    ctx_b.destroy_all();
+    ctx_a.destroy_live_values();
+    ctx_b.destroy_live_values();
 }
 
 /// Test running scripts in parallel using threads with shared compiled modules.
@@ -212,7 +212,7 @@ end fun
                 } else {
                     String::new()
                 };
-                executor.destroy_all();
+                executor.destroy_live_values();
 
                 let expected = val * val;
                 assert_eq!(output, format!("{}", expected),
@@ -252,7 +252,7 @@ end fun
         assert!(matches!(r.typecheck, TypecheckResult::Success), "import failed: {:?}", r.typecheck);
         let result = ctx.eval_expr("value(100)");
         assert_eq!(result.output, "100");
-        ctx.destroy_all();
+        ctx.destroy_live_values();
     }
 
     // Create a second context from the same compilation.
@@ -262,7 +262,7 @@ end fun
         assert!(matches!(r.typecheck, TypecheckResult::Success), "second import failed: {:?}", r.typecheck);
         let result = ctx2.eval_expr("value(200)");
         assert_eq!(result.output, "200");
-        ctx2.destroy_all();
+        ctx2.destroy_live_values();
     }
 }
 
@@ -294,8 +294,8 @@ fn test_isolated_unit_functions() {
     assert!(matches!(r2_local.typecheck, TypecheckResult::Success), "ctx2 fn call failed: {:?}", r2_local.typecheck);
     assert_eq!(r2_local.output, "20");
 
-    ctx1.destroy_all();
-    ctx2.destroy_all();
+    ctx1.destroy_live_values();
+    ctx2.destroy_live_values();
 }
 
 /// Test creating many script contexts doesn't cause issues.
@@ -314,7 +314,7 @@ fn test_many_script_contexts() {
         assert!(matches!(r.typecheck, TypecheckResult::Success), "fn def failed: {:?}", r.typecheck);
         let result = ctx.eval_expr(&format!("id({})", i));
         assert_eq!(result.output, format!("{}", i));
-        ctx.destroy_all();
+        ctx.destroy_live_values();
     }
 }
 
@@ -349,8 +349,8 @@ end fun
     let r2 = ctx2.eval_expr("id(20)");
     assert_eq!(r2.output, "20");
 
-    ctx1.destroy_all();
-    ctx2.destroy_all();
+    ctx1.destroy_live_values();
+    ctx2.destroy_live_values();
 }
 
 /// Verify per-unit memoization: prior units are cached when adding new units.
@@ -390,7 +390,7 @@ fn test_per_unit_memoization_behavior() {
     let rz = ctx.eval_expr("z");
     assert_eq!(rz.output, "10");
 
-    ctx.destroy_all();
+    ctx.destroy_live_values();
 }
 
 /// Test that functions defined in earlier units are available in later units.
@@ -423,7 +423,7 @@ fn test_per_unit_function_propagation() {
     let ri2 = ctx.eval_expr("id2(99)");
     assert_eq!(ri2.output, "99");
 
-    ctx.destroy_all();
+    ctx.destroy_live_values();
 }
 
 /// Test per-unit lowering memoization with cross-unit function calls.
@@ -460,7 +460,7 @@ fn test_per_unit_lowering_memoization() {
     let rd = ctx.eval_expr("make_double(10)");
     assert_eq!(rd.output, "[10, 10]");
 
-    ctx.destroy_all();
+    ctx.destroy_live_values();
 }
 
 /// Regression test: function lowering must not corrupt script tracking state.
@@ -502,7 +502,7 @@ debuglog process(get_value(), 10)
         "fragment failed: {:?}", r.typecheck);
 
     // This will panic with a leak if my_list wasn't properly tracked.
-    ctx.destroy_all();
+    ctx.destroy_live_values();
 }
 
 /// Similar regression test with Option<String> to ensure wrapper types are tracked.
@@ -536,5 +536,5 @@ debuglog my_string
         "fragment failed: {:?}", r.typecheck);
 
     // This will panic with a leak if my_string wasn't properly tracked.
-    ctx.destroy_all();
+    ctx.destroy_live_values();
 }

@@ -458,7 +458,7 @@ impl ScriptCommand {
         // No output binding found - this is okay, just don't print anything.
 
         // Cleanup.
-        executor.destroy_all();
+        executor.destroy_live_values();
 
         Ok(())
     }
@@ -741,7 +741,7 @@ impl ScriptWorldCommand {
         }
 
         // Cleanup.
-        executor.destroy_all();
+        executor.destroy_live_values();
 
         Ok(())
     }

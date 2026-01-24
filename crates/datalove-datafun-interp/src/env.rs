@@ -55,9 +55,9 @@ impl ScriptEnvironment {
         self.registry.add_unit_functions(functions);
     }
 
-    /// Destroy all values in all frames.
-    pub fn destroy_all(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
-        self.frames.destroy_all(rt_handle);
+    /// Destroy live values in all frames.
+    pub fn destroy_live_values(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
+        self.frames.destroy_live_values(rt_handle);
     }
 }
 

@@ -200,7 +200,7 @@ pub fn analyze_worldfile_with_jit(
     }
 
     // Cleanup.
-    executor.destroy_all();
+    executor.destroy_live_values();
 
     Ok(Analysis { sections: results })
 }

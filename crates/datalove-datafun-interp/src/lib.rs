@@ -338,7 +338,7 @@ impl IrInterpreter {
 
         // On error, destroy the frame and propagate the error.
         if let Err(e) = result {
-            frame.destroy_all(
+            frame.destroy_live_values(
                 self.runtime.handle(),
                 &unit.unit_end_values,
                 &unit.unit_end_slots,
@@ -472,7 +472,7 @@ impl IrInterpreter {
             let dest_slot = frame.value_dest(*param_id);
             // Block args use move semantics.
             unsafe { self.move_value(&src_val, dest_slot); }
-            frame.mark_value_initialized(*param_id);
+            frame.mark_value_live(*param_id);
             Self::mark_source_dropped_all(arg, frame, frames);
         }
         Ok(())
@@ -491,22 +491,22 @@ impl IrInterpreter {
             Instruction::Const { dest, value } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.write_const(value, dest_slot);
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
             }
             Instruction::Copy { dest, src } => {
                 let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.copy_value(&src_val, dest_slot); }
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
             }
             Instruction::Move { dest, src } => {
                 // Precise move: ownership analysis guarantees source exists.
-                // Mark external sources dropped so destroy_all skips them.
+                // Mark external sources dropped so destroy_live_values skips them.
                 // (Local sources don't need marking - they're not in unit_end_values.)
                 let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&src_val, dest_slot); }
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 if let Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } = src {
                     Self::mark_source_dropped_all(src, frame, frames);
                 }
@@ -516,13 +516,13 @@ impl IrInterpreter {
                 let rhs_val = self.read_operand(rhs, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_binop(*op, &lhs_val, &rhs_val, dest_slot);
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
             }
             Instruction::UnaryOp { dest, op, operand } => {
                 let src_val = self.read_operand(operand, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_unaryop(*op, &src_val, dest_slot);
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
             }
             Instruction::SlotStoreCopy { dest, value } => {
                 let src_val = self.read_operand(value, frame, frames)?;
@@ -622,25 +622,25 @@ impl IrInterpreter {
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.copy_value(&slot_val, dest_slot); }
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
             }
             Instruction::SlotLoadMove { dest, slot } => {
                 // Precise slot load: ownership analysis guarantees slot is occupied.
-                // Slot is not marked dropped - destroy_all skips untracked slots,
+                // Slot is not marked dropped - destroy_live_values skips untracked slots,
                 // and precise slots are explicitly dropped via Drop instructions.
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&slot_val, dest_slot); }
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
             }
             Instruction::SlotLoadMoveTracked { dest, slot } => {
                 // Tracked slot load: slot may have been moved, updates tracking.
-                // Mark slot dropped so destroy_all skips it.
+                // Mark slot dropped so destroy_live_values skips it.
                 let slot_val = frame.slot(*slot)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&slot_val, dest_slot); }
                 frame.mark_slot_dropped(*slot);
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
             }
             Instruction::Pack { dest, ty: _, fields } => {
                 let field_vals: Vec<Value> = fields.iter()
@@ -656,7 +656,7 @@ impl IrInterpreter {
                         format!("Pack requires tuple or struct type, got {:?}", tag)
                     )),
                 }
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 // Mark source fields as moved (linear semantics - consumes fields).
                 for field in fields {
                     Self::mark_source_dropped_local(field, frame);
@@ -674,7 +674,7 @@ impl IrInterpreter {
                             let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
                             let size = unsafe { (*field_info.tydesc).size as usize };
                             unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, size); }
-                            frame.mark_value_initialized(dest_id);
+                            frame.mark_value_live(dest_id);
                         }
                     }
                     rtdt::TyTag::Struct => {
@@ -685,7 +685,7 @@ impl IrInterpreter {
                             let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
                             let size = unsafe { (*field_info.tydesc).size as usize };
                             unsafe { std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, size); }
-                            frame.mark_value_initialized(dest_id);
+                            frame.mark_value_live(dest_id);
                         }
                     }
                     _ => return Err(InterpError::TypeMismatch(
@@ -700,8 +700,8 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest);
                 let overflow_slot = frame.value_dest(*overflow);
                 self.execute_binop_checked(*op, &lhs_val, &rhs_val, dest_slot, overflow_slot);
-                frame.mark_value_initialized(*dest);
-                frame.mark_value_initialized(*overflow);
+                frame.mark_value_live(*dest);
+                frame.mark_value_live(*overflow);
             }
             Instruction::UnaryOpChecked { dest, overflow, op, operand } => {
                 // Execute checked unary op and set overflow flag.
@@ -709,20 +709,20 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest);
                 let overflow_slot = frame.value_dest(*overflow);
                 self.execute_unaryop_checked(*op, &operand_val, dest_slot, overflow_slot);
-                frame.mark_value_initialized(*dest);
-                frame.mark_value_initialized(*overflow);
+                frame.mark_value_live(*dest);
+                frame.mark_value_live(*overflow);
             }
             Instruction::WrapSome { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_wrap_some(&inner_val, dest_slot);
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::WrapNone { dest } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_wrap_none(dest_slot);
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
             }
             Instruction::EnumVariant { dest, variant_index, payload } => {
                 let payload_val = payload.as_ref()
@@ -730,7 +730,7 @@ impl IrInterpreter {
                     .transpose()?;
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_enum_variant(*variant_index, payload_val.as_ref(), dest_slot);
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 // Mark payload source as moved if present.
                 if let Some(p) = payload {
                     Self::mark_source_dropped_local(p, frame);
@@ -741,21 +741,21 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest);
                 let is_some_slot = frame.value_dest(*is_some);
                 self.execute_unwrap_option(&src_val, dest_slot, is_some_slot);
-                frame.mark_value_initialized(*dest);
-                frame.mark_value_initialized(*is_some);
+                frame.mark_value_live(*dest);
+                frame.mark_value_live(*is_some);
             }
             Instruction::WrapOk { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_wrap_ok(&inner_val, dest_slot);
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::WrapErr { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_wrap_err(&inner_val, dest_slot);
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
@@ -764,22 +764,22 @@ impl IrInterpreter {
                 let err_slot = frame.value_dest(*err_dest);
                 let is_ok_slot = frame.value_dest(*is_ok);
                 self.execute_unwrap_result(&src_val, ok_slot, err_slot, is_ok_slot);
-                frame.mark_value_initialized(*ok_dest);
-                frame.mark_value_initialized(*err_dest);
-                frame.mark_value_initialized(*is_ok);
+                frame.mark_value_live(*ok_dest);
+                frame.mark_value_live(*err_dest);
+                frame.mark_value_live(*is_ok);
             }
             Instruction::ErrorFrom { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_error_from(&inner_val, dest_slot);
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::DataFrom { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_data_from(&inner_val, dest_slot);
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::Call { dest, func, args } => {
@@ -883,16 +883,14 @@ impl IrInterpreter {
                     }
                 }
 
-                // After call returns, mark dest as initialized.
-                frame.mark_value_initialized(*dest);
-                // After call returns, Out param slots are now initialized.
+                // After call returns, mark dest and Out param slots as initialized.
+                frame.mark_value_live(*dest);
                 for (i, arg) in args.iter().enumerate() {
                     let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
                     if mode == ParamMode::Out {
                         match arg {
                             Operand::Slot(id) => frame.mark_slot_initialized(*id),
-                            // Value destinations need marking for destroy_all.
-                            Operand::Value(id) => frame.mark_value_initialized(*id),
+                            Operand::Value(id) => frame.mark_value_live(*id),
                             _ => {}
                         }
                     }
@@ -901,7 +899,7 @@ impl IrInterpreter {
             Instruction::ListNew { dest, elements } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_list_new(elements, dest_slot, frame, frames)?;
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
                     Self::mark_source_dropped_local(elem, frame);
@@ -910,7 +908,7 @@ impl IrInterpreter {
             Instruction::SetNew { dest, elements } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_set_new(elements, dest_slot, frame, frames)?;
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
                     Self::mark_source_dropped_local(elem, frame);
@@ -919,7 +917,7 @@ impl IrInterpreter {
             Instruction::MapNew { dest, entries } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_map_new(entries, dest_slot, frame, frames)?;
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 // Mark source entries as moved (linear semantics - consumes entries).
                 for (key, val) in entries {
                     Self::mark_source_dropped_local(key, frame);
@@ -929,7 +927,7 @@ impl IrInterpreter {
             Instruction::TensorNew { dest, shape, elements } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_tensor_new(shape, elements, dest_slot, frame, frames)?;
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
                     Self::mark_source_dropped_local(elem, frame);
@@ -938,7 +936,7 @@ impl IrInterpreter {
             Instruction::TableNew { dest, rows } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_table_new(rows, dest_slot, frame, frames)?;
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 // Mark source rows as moved (linear semantics - consumes rows).
                 for row in rows {
                     Self::mark_source_dropped_local(row, frame);
@@ -1021,7 +1019,7 @@ impl IrInterpreter {
                     let int_buf = &mut *(dest_slot.ptr as *mut datalove_rtdt::Int);
                     self.widen_to_int(&src_val, int_buf);
                 }
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 // Source is borrowed (read), not consumed.
             }
             Instruction::Nop => {}
@@ -1055,7 +1053,7 @@ impl IrInterpreter {
                         format!("GetField requires tuple or struct type, got {:?}", tag)
                     )),
                 }
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
             }
             Instruction::GetFieldRef { dest, src, field_index } => {
                 // Get a reference (pointer) to a field within an aggregate.
@@ -1084,7 +1082,7 @@ impl IrInterpreter {
                 unsafe {
                     *(dest_slot.ptr as *mut *mut u8) = field_ptr;
                 }
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
                 frame.mark_value_borrowed(*dest);  // Ref doesn't own the data.
                 frame.mark_value_is_ref(*dest);    // Mark as ref for proper reading.
             }
@@ -1193,7 +1191,7 @@ impl IrInterpreter {
             Instruction::Intrinsic { dest, intrinsic, args } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_intrinsic(*intrinsic, args, dest_slot, frame, frames)?;
-                frame.mark_value_initialized(*dest);
+                frame.mark_value_live(*dest);
             }
             // Slot tracking variants - these track SLOT state, not value state.
             Instruction::SlotStoreCopyTracked { dest, value } => {

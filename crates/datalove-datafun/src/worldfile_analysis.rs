@@ -208,7 +208,7 @@ pub fn analyze_worldfile(
 
     // Cleanup.
     if let Some(ref mut executor) = executor {
-        executor.destroy_all();
+        executor.destroy_live_values();
     }
 
     Ok(Analysis { sections: results })

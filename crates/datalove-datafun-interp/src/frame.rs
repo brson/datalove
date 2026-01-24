@@ -3,6 +3,7 @@
 //! A `Frame` holds all values and slots for a single function/unit execution.
 //! `FrameStore` accumulates frames from script units for cross-unit value access.
 
+use std::collections::HashSet;
 use datalove_rt::rust::AlignedBuffer;
 use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::{ValueId, SlotId, ParamId};
@@ -16,8 +17,11 @@ pub struct Frame {
     data: AlignedBuffer,
     /// Layout information.
     layout: IrLayout,
-    /// Track which values are initialized (for destroy_all).
-    value_initialized: Vec<bool>,
+    /// Track which values are live (written but not dropped).
+    ///
+    /// Values are added on write and removed on drop. Used by destroy_live_values
+    /// to know which unit_end values need cleanup.
+    live_values: HashSet<ValueId>,
     /// Track which slots are initialized.
     slot_initialized: Vec<bool>,
     /// Track which values are borrowed (not owned, skip destruction).
@@ -47,7 +51,7 @@ impl Frame {
         Self {
             data,
             layout,
-            value_initialized: vec![false; value_count],
+            live_values: HashSet::new(),
             slot_initialized: vec![false; slot_count],
             value_borrowed: vec![false; value_count],
             value_is_ref: vec![false; value_count],
@@ -56,6 +60,14 @@ impl Frame {
             param_borrowed: vec![false; param_count],
             param_initialized: vec![false; param_count],
         }
+    }
+
+    /// Mark a value as live (written).
+    ///
+    /// Called when a value is written to. Used to track which unit_end
+    /// values need cleanup in destroy_live_values.
+    pub fn mark_value_live(&mut self, id: ValueId) {
+        self.live_values.insert(id);
     }
 
     /// Mark a value as borrowed (not owned, skip destruction).
@@ -94,10 +106,10 @@ impl Frame {
     /// Get value (for reading).
     ///
     /// Panics if value ID is out of bounds (compiler bug).
-    /// Returns error if value is uninitialized (may happen during Drop).
+    /// Returns error if value is not live (not written or already dropped).
     pub fn value(&self, id: ValueId) -> Result<Value, InterpError> {
         let idx = id.0 as usize;
-        if !self.value_initialized[idx] {
+        if !self.live_values.contains(&id) {
             return Err(InterpError::UninitializedValue(id));
         }
         let offset = self.layout.value_offsets[idx] as usize;
@@ -159,26 +171,16 @@ impl Frame {
         idx < self.slot_initialized.len() && self.slot_initialized[idx]
     }
 
-    /// Mark value as initialized (for destroy_all tracking).
-    pub fn mark_value_initialized(&mut self, id: ValueId) {
-        let idx = id.0 as usize;
-        if idx < self.value_initialized.len() {
-            self.value_initialized[idx] = true;
-        }
-    }
-
-    /// Check if value is initialized (for DropTracked).
+    /// Check if value is initialized (live).
+    ///
+    /// Returns true if the value has been written and not yet dropped.
     pub fn is_value_initialized(&self, id: ValueId) -> bool {
-        let idx = id.0 as usize;
-        idx < self.value_initialized.len() && self.value_initialized[idx]
+        self.live_values.contains(&id)
     }
 
     /// Mark value as dropped to prevent double-destroy.
     pub fn mark_value_dropped(&mut self, id: ValueId) {
-        let idx = id.0 as usize;
-        if idx < self.value_initialized.len() {
-            self.value_initialized[idx] = false;
-        }
+        self.live_values.remove(&id);
     }
 
     /// Mark slot as dropped to prevent double-destroy.
@@ -250,7 +252,7 @@ impl Frame {
         }
     }
 
-    /// Destroy persistent bindings (unit_end values/slots) in this frame.
+    /// Destroy live unit_end bindings (values/slots) in this frame.
     ///
     /// Called during REPL cleanup to free persistent bindings.
     /// Only destroys values/slots listed in unit_end_values/slots - these are
@@ -260,8 +262,8 @@ impl Frame {
     ///
     /// Skips:
     /// - Borrowed values (not owned by this frame)
-    /// - Uninitialized values (already dropped/moved)
-    pub fn destroy_all(
+    /// - Values not in live_values (not written or already dropped)
+    pub fn destroy_live_values(
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
         unit_end_values: &[ValueId],
@@ -269,19 +271,18 @@ impl Frame {
     ) {
         // Destroy unit_end values (persistent let bindings).
         for &vid in unit_end_values {
-            let idx = vid.0 as usize;
-            if idx < self.value_initialized.len()
-                && self.value_initialized[idx]
-                && !self.value_borrowed[idx]
-            {
-                let offset = self.layout.value_offsets[idx] as usize;
-                let tydesc = self.layout.value_tydescs[idx];
-                let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
-                }
-                self.value_initialized[idx] = false;
+            // Skip if not live (not written or already dropped).
+            if !self.live_values.contains(&vid) {
+                continue;
             }
+            let idx = vid.0 as usize;
+            let offset = self.layout.value_offsets[idx] as usize;
+            let tydesc = self.layout.value_tydescs[idx];
+            let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
+            unsafe {
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
+            }
+            self.live_values.remove(&vid);
         }
 
         // Destroy unit_end slots (persistent var bindings).
@@ -409,12 +410,12 @@ impl FrameStore {
             .unwrap_or(false)
     }
 
-    /// Destroy persistent bindings in all frames.
-    pub fn destroy_all(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
+    /// Destroy live bindings in all frames.
+    pub fn destroy_live_values(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
         for i in 0..self.frames.len() {
             let values = &self.unit_end_values[i];
             let slots = &self.unit_end_slots[i];
-            self.frames[i].destroy_all(rt_handle, values, slots);
+            self.frames[i].destroy_live_values(rt_handle, values, slots);
         }
     }
 }

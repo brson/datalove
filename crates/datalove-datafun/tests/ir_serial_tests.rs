@@ -136,7 +136,7 @@ fn execute_ir_interp(ir_unit: &IrScriptUnit, registry: &FunctionRegistry) -> Str
     let _ = interp.execute_script_unit_in_env(ir_unit, &mut env, ret_dest, None);
 
     let output = interp.get_debug_buffer();
-    env.destroy_all(interp.runtime_handle());
+    env.destroy_live_values(interp.runtime_handle());
     output
 }
 

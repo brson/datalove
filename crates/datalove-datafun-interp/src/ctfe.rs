@@ -56,7 +56,7 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
 
         // Clean up the environment (frames from executed units).
         // This must happen before env is dropped to free any heap allocations.
-        env.destroy_all(self.interp.runtime_handle());
+        env.destroy_live_values(self.interp.runtime_handle());
 
         let result = match completion {
             UnitCompletion::Normal => {
