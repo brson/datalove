@@ -15,7 +15,7 @@ use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
-use crate::module_graph::parse_module_graph_with_mode;
+use crate::module_graph::{parse_module_graph_with_mode, parse_module_full};
 use crate::tracked_ownership_analysis::{analyze_module_graph_with_mode, ModuleGraphAnalysis};
 
 /// Input for module compilation - the output of package resolution.
@@ -40,6 +40,8 @@ pub struct ModuleCompilationOutput<'db> {
     pub typecheck_result: ModuleGraphTypecheckResult<'db>,
     /// Ownership analysis results per module.
     pub ownership_analysis: ModuleGraphAnalysis<'db>,
+    /// Parse errors by module path.
+    pub parse_errors: BTreeMap<String, Vec<String>>,
     /// Typecheck errors by module path.
     pub typecheck_errors: BTreeMap<String, Vec<String>>,
     /// Ownership analysis errors by module path.
@@ -49,7 +51,8 @@ pub struct ModuleCompilationOutput<'db> {
 impl<'db> ModuleCompilationOutput<'db> {
     /// Check if analysis succeeded (no errors).
     pub fn is_successful(&self) -> bool {
-        self.typecheck_errors.values().all(|e| e.is_empty())
+        self.parse_errors.values().all(|e| e.is_empty())
+            && self.typecheck_errors.values().all(|e| e.is_empty())
             && self.ownership_errors.values().all(|e| e.is_empty())
     }
 }
@@ -87,6 +90,22 @@ fn collect_results<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
 ) -> ModuleCompilationOutput<'db> {
+    // Collect parse errors from accumulated diagnostics.
+    let mut parse_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for module in module_graph.iter_modules(db.as_salsa_db()) {
+        let diags = parse_module_full::accumulated::<datalove_diagnostic::ParseDiagnostic>(db.as_salsa_db(), module);
+        if !diags.is_empty() {
+            let path = module.id(db.as_salsa_db()).path(db.as_salsa_db()).clone();
+            let error_strings: Vec<String> = diags.iter()
+                .map(|d| {
+                    let diag = d.to_diagnostic(db.as_salsa_db());
+                    diag.message.as_str(db.as_salsa_db()).S()
+                })
+                .collect();
+            parse_errors.insert(path, error_strings);
+        }
+    }
+
     // Collect typecheck errors with location info from pending diagnostics.
     let module_results = typecheck_result.module_results(db.as_salsa_db());
     let mut typecheck_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -129,6 +148,7 @@ fn collect_results<'db>(
         parsed_graph,
         typecheck_result,
         ownership_analysis,
+        parse_errors,
         typecheck_errors,
         ownership_errors,
     }

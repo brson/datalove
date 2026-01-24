@@ -78,8 +78,6 @@ pub enum LowerError {
     FunctionNotFound(String),
     /// Invalid literal value (e.g., integer out of range for target type).
     InvalidLiteral(String),
-    /// Parse error node encountered during lowering (from error recovery).
-    ParseError,
 }
 
 impl std::fmt::Display for LowerError {
@@ -88,7 +86,6 @@ impl std::fmt::Display for LowerError {
             LowerError::VariableNotFound(name) => write!(f, "variable not found: {}", name),
             LowerError::FunctionNotFound(name) => write!(f, "function not found: {}", name),
             LowerError::InvalidLiteral(lit) => write!(f, "invalid literal: {}", lit),
-            LowerError::ParseError => write!(f, "parse error in source"),
         }
     }
 }

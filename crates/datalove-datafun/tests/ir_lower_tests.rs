@@ -37,6 +37,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         return Ok(format!("Resolution error: {}\n", err));
     }
 
+    let all_parse_errors = compiled.all_parse_errors();
+    if !all_parse_errors.is_empty() {
+        return Ok(format!("Parse error: {}\n", all_parse_errors.join("; ")));
+    }
+
     let all_typecheck_errors = compiled.all_typecheck_errors();
     if !all_typecheck_errors.is_empty() {
         return Ok(format!("Typecheck error: {}\n", all_typecheck_errors.join("; ")));

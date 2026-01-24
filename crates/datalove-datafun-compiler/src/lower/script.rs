@@ -498,8 +498,7 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::ParseError(_) => {
-            // Parse error nodes can reach lowering via error recovery.
-            Err(LowerError::ParseError)
+            panic!("parse error node reached lowering - callers should check for parse errors before lowering")
         }
     }
 }

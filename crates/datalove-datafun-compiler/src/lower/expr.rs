@@ -669,8 +669,7 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::ParseError(_) => {
-            // Parse error nodes can reach lowering via error recovery.
-            Err(LowerError::ParseError)
+            panic!("parse error node reached lowering - callers should check for parse errors before lowering")
         }
         ExprFunKind::IntrinsicCall(icall) => {
             // Look up the intrinsic by name.

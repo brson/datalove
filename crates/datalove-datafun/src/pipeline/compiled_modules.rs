@@ -36,6 +36,7 @@ pub struct SharedModuleContext<'db> {
 pub struct CompiledModules<'db> {
     pub shared: Arc<SharedModuleContext<'db>>,
     pub resolution_error: Option<String>,
+    pub parse_errors: BTreeMap<String, Vec<String>>,
     pub path_to_errors: BTreeMap<String, Vec<String>>,
     pub ownership_errors: BTreeMap<String, Vec<String>>,
     pub lowering_errors: BTreeMap<String, Vec<String>>,
@@ -46,6 +47,7 @@ impl<'db> CompiledModules<'db> {
     /// Check if compilation succeeded.
     pub fn is_successful(&self) -> bool {
         self.resolution_error.is_none()
+            && self.parse_errors.values().all(|errors| errors.is_empty())
             && self.path_to_errors.values().all(|errors| errors.is_empty())
             && self.ownership_errors.values().all(|errors| errors.is_empty())
             && self.lowering_errors.values().all(|errors| errors.is_empty())
@@ -64,6 +66,10 @@ impl<'db> CompiledModules<'db> {
             errors.push(format!("Resolution error: {}", err));
         }
 
+        for error_list in self.parse_errors.values() {
+            errors.extend(error_list.iter().cloned());
+        }
+
         for error_list in self.path_to_errors.values() {
             errors.extend(error_list.iter().cloned());
         }
@@ -77,6 +83,14 @@ impl<'db> CompiledModules<'db> {
         }
 
         errors
+    }
+
+    /// Get all parse errors.
+    pub fn all_parse_errors(&self) -> Vec<String> {
+        self.parse_errors.values()
+            .flatten()
+            .cloned()
+            .collect()
     }
 
     /// Get all typecheck errors.
