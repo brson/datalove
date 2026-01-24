@@ -12,6 +12,10 @@ Not too listy.
 Module crate docs should provide a sufficient architectural overview,
 with entry points and examples if appropriate.
 
+Non-doc-comments should be minimial and concise,
+explaining non-obviousness and invariants,
+and not restating what is clear from the code and its clear naming and style.
+
 
 
 
