@@ -45,6 +45,7 @@
 //! # Submodules
 //!
 //! - `context`: Context types (`LowerCtx`, `FrameState`, `ScriptLowerContext`)
+//! - `const_expr`: Compile-time constant expression evaluation
 //! - `func`: Function lowering (`lower_function_for_module`, `lower_function_body`)
 //! - `script`: Script unit lowering (`lower_script_unit`, `lower_script_fragment_raw`)
 //! - `stmt`: Statement lowering (let, var, set, if, loop, return, etc.)
@@ -53,6 +54,7 @@
 
 mod context;
 mod literal;
+mod const_expr;
 mod expr;
 mod stmt;
 mod func;
