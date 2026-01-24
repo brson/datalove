@@ -585,6 +585,15 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// Emit a DropTracked instruction for a single operand if its type requires it.
+    ///
+    /// Used for operands that might be uninitialized (e.g., Out params, uninitialized slots).
+    pub fn emit_drop_tracked_for_type(&mut self, operand: &Operand, ty: &IrType) {
+        if !ty.is_copy() {
+            self.emit(Instruction::DropTracked { operand: operand.clone() });
+        }
+    }
+
     /// Record an expression temporary that needs dropping after the operation.
     pub fn record_expr_temp(&mut self, value: ValueId, ty: IrType) {
         if !ty.is_copy() {

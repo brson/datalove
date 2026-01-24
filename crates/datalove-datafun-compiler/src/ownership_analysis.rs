@@ -854,6 +854,24 @@ impl<'db> AnalysisCtx<'db> {
                         }
                     }
 
+                    // For Out params: the callee writes to the arg, so this is NOT a read.
+                    // Skip the uninitialized Out param check and mark as initialized after.
+                    if callee_mode == Some(ParamMode::Out) {
+                        // For Out args, we only need to check use-after-move, not uninitialized.
+                        if let Some(binding_id) = self.expr_to_binding(*arg) {
+                            if self.get_state(binding_id) == Some(BindingState::Moved) {
+                                let name = self.bindings[binding_id.0 as usize].name.C();
+                                let local_index = arg.local_index(self.db);
+                                self.errors.push(AnalysisError::UseAfterMove { local_index, name });
+                            }
+                            // Mark the binding as initialized after the call writes to it.
+                            if self.bindings[binding_id.0 as usize].param_mode == Some(ParamMode::Out) {
+                                self.set_out_param_init(binding_id, OutParamInitState::Initialized);
+                            }
+                        }
+                        continue;
+                    }
+
                     // Ref, Mut, and Out params don't consume (caller retains ownership).
                     let is_consumed = callee_mode
                         .map(|mode| !matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out))

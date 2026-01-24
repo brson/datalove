@@ -8,7 +8,7 @@ AotAnalysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "outer: error[D006]: out parameter not initialized: `y`\nerror[D005]: read of uninitialized out parameter: `y`",
+                message: "outer: error[D006]: out parameter not initialized: `y`",
             ),
             lowering: LoweringResult(
                 status: "Skipped",
