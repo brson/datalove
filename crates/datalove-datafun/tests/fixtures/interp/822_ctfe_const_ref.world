@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+const A: i64 = 10
+const B: i64 = A
+let y = B
+
+----------
+scriptunit-expr
+----------
+
+y

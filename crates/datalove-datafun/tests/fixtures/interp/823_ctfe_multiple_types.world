@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+const I: i32 = -42
+const U: u64 = 100
+const B: bool = true
+let i = I
+let u = U
+let b = B
+
+----------
+scriptunit-expr
+----------
+
+i

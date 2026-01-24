@@ -1,0 +1,50 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const -42i32
+                        v1 = const 100u64
+                        v2 = const true
+                        unit_end
+                    exports:
+                        i = v0
+                        u = v1
+                        b = v2
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = copy unit0.v0
+                        unit_end v0
+                """,
+            ),
+            output: "-42",
+        ),
+    ],
+)
