@@ -13,8 +13,8 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "hello data"
-                        v1 = data_from.tracked v0
+                        v0 = const "hello data"
+                        v1 = data_from v0
                         debuglog v1
                         unit_end_drop v1
                         unit_end
@@ -27,8 +27,8 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "hello data"
-                        v1 = data_from.tracked v0
+                        v0 = const "hello data"
+                        v1 = data_from v0
                         debuglog v1
                         unit_end_drop v1
                         unit_end

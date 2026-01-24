@@ -19,7 +19,7 @@ Analysis(
                     fn get_error():
                     block0:
                         v0 = const 42u32
-                        v1 = error_from.tracked v0
+                        v1 = error_from v0
                         return v1
                     exports:
                         get_error = f0
@@ -41,7 +41,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked unit0.f0()
+                        v0 = call unit0.f0()
                         unit_end v0
                 """,
             ),

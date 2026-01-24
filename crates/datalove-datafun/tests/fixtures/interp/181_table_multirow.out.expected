@@ -26,7 +26,7 @@ Analysis(
                         v9 = const 8u32
                         v10 = const 9u32
                         v11 = pack Tuple3 {v8, v9, v10}
-                        v12 = table.tracked [v3, v7, v11]
+                        v12 = table [v3, v7, v11]
                         unit_end v12
                 """,
             ),

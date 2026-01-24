@@ -9,8 +9,8 @@ ModulesAnalysis(
             block0:
                 v0 = const 100i64
                 v1 = const 25i64
-                v2 = widen.tracked v0
-                v3 = widen.tracked v1
+                v2 = widen v0
+                v3 = widen v1
                 v4 = sub v2, v3
                 drop v2
                 drop v3

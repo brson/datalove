@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked f0()
+                        v0 = call f0()
                         unit_end_drop v0
                         unit_end
                     
@@ -25,12 +25,12 @@ Analysis(
                         v2, v3 = sub.checked v0, v1
                         branch v3, block1, block2
                     block1:
-                        v4 = const.tracked "arithmetic overflow"
-                        v5 = error_from.tracked v4
-                        v6 = err.tracked v5
+                        v4 = const "arithmetic overflow"
+                        v5 = error_from v4
+                        v6 = err v5
                         return v6
                     block2:
-                        v7 = ok.tracked v2
+                        v7 = ok v2
                         return v7
                     exports:
                         sub = f0

@@ -49,6 +49,68 @@ use datalove_datafun_ir::IrType;
 use crate::ir_ext::IrTypeExt;
 
 // ============================================================================
+// Statement identity for debug verification
+// ============================================================================
+
+/// Key identifying a statement for debug verification.
+///
+/// Used to verify that lowering processes statements in the same order as
+/// ownership analysis. This catches bugs where statement IDs get out of sync.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct StmtKey {
+    /// Discriminant of the Statement enum.
+    pub kind: u8,
+    /// local_index if the statement type has one, for additional discrimination.
+    pub local_index: Option<u32>,
+}
+
+impl StmtKey {
+    /// Extract a key from a statement.
+    pub fn from_stmt(db: &dyn salsa::Database, stmt: &Statement<'_>) -> Self {
+        let (kind, local_index) = match stmt {
+            Statement::Let(_) => (0, None),
+            Statement::Var(_) => (1, None),
+            Statement::Set(s) => (2, Some(s.local_index)),
+            Statement::Fun(s) => (3, Some(s.local_index(db))),
+            Statement::Ret(s) => (4, Some(s.local_index)),
+            Statement::Require(_) => (5, None),
+            Statement::Import(_) => (6, None),
+            Statement::If(_) => (7, None),
+            Statement::Loop(_) => (8, None),
+            Statement::Break(s) => (9, Some(s.local_index)),
+            Statement::Continue(s) => (10, Some(s.local_index)),
+            Statement::DebugLog(_) => (11, None),
+            Statement::TypeAlias(s) => (12, Some(s.local_index)),
+            Statement::ParseError(_) => (13, None),
+            Statement::Const(_) => (14, None),
+        };
+        Self { kind, local_index }
+    }
+
+    /// Get a human-readable name for the statement kind.
+    pub fn kind_name(&self) -> &'static str {
+        match self.kind {
+            0 => "Let",
+            1 => "Var",
+            2 => "Set",
+            3 => "Fun",
+            4 => "Ret",
+            5 => "Require",
+            6 => "Import",
+            7 => "If",
+            8 => "Loop",
+            9 => "Break",
+            10 => "Continue",
+            11 => "DebugLog",
+            12 => "TypeAlias",
+            13 => "ParseError",
+            14 => "Const",
+            _ => "Unknown",
+        }
+    }
+}
+
+// ============================================================================
 // Core types
 // ============================================================================
 
@@ -182,6 +244,12 @@ pub enum AnalysisError {
         /// Which branch has the move (for error message).
         moved_in: &'static str,
     },
+    /// Partial field write to out param (must write whole value).
+    /// D009
+    OutParamPartialWrite {
+        local_index: u32,
+        name: String,
+    },
 }
 
 /// Format analysis errors for display.
@@ -217,6 +285,9 @@ fn format_single_error(error: &AnalysisError) -> String {
         }
         AnalysisError::InconsistentBranchMove { stmt_idx: _, name, moved_in } => {
             format!("error[D008]: `{}` moved in {} branch but not the other", name, moved_in)
+        }
+        AnalysisError::OutParamPartialWrite { local_index: _, name } => {
+            format!("error[D009]: cannot partially write to out parameter: `{}`", name)
         }
     }
 }
@@ -255,6 +326,11 @@ pub struct DropSchedule {
 
     /// Drops to emit before continue.
     pub before_continue: BTreeMap<usize, Vec<BindingId>>,
+
+    /// Statement keys in allocation order, for verifying lowering traversal.
+    /// Only present in debug builds.
+    #[cfg(debug_assertions)]
+    pub stmt_order: Vec<StmtKey>,
 }
 
 /// Result of analyzing a function.
@@ -346,11 +422,12 @@ impl<'db> AnalysisCtx<'db> {
     ///
     /// Categories:
     /// - Copy: type is copy (no tracking needed)
-    /// - Tracked: params (except In), slot (var)
-    /// - Precise: let bindings and In params with statically-known state
+    /// - Tracked: var slots, Out params
+    /// - Precise: let bindings, In/Ref/Mut params
     ///
     /// Precise bindings have deterministic lifecycle:
-    /// - In params: always initialized, cannot be reassigned
+    /// - In params: owned, always initialized
+    /// - Ref/Mut params: borrowed, always initialized, cannot be moved/dropped
     /// - Let bindings: single assignment, drop point statically known
     fn compute_tracking(&self) -> Vec<TrackingCategory> {
         self.bindings.iter().map(|info| {
@@ -359,15 +436,12 @@ impl<'db> AnalysisCtx<'db> {
             } else if info.is_slot {
                 // Var bindings: reassignable, state varies.
                 TrackingCategory::Tracked
-            } else if info.param_mode == Some(ParamMode::In) {
-                // In params: owned, deterministic.
-                TrackingCategory::Precise
-            } else if info.param_mode.is_none() {
-                // Let bindings: single assignment, deterministic.
-                TrackingCategory::Precise
-            } else {
-                // Other params (Ref, Mut, Out): borrowed or dynamic state.
+            } else if info.param_mode == Some(ParamMode::Out) {
+                // Out params: may be uninitialized, dynamic state.
                 TrackingCategory::Tracked
+            } else {
+                // In/Ref/Mut params and let bindings: deterministic state.
+                TrackingCategory::Precise
             }
         }).collect()
     }
@@ -540,9 +614,14 @@ impl<'db> AnalysisCtx<'db> {
     }
 
     /// Allocate and return the next global statement ID.
-    fn alloc_stmt_id(&mut self) -> usize {
+    ///
+    /// Records the statement key for debug verification that lowering
+    /// processes statements in the same order.
+    fn alloc_stmt_id(&mut self, stmt: &Statement<'db>) -> usize {
         let id = self.next_stmt_id;
         self.next_stmt_id += 1;
+        #[cfg(debug_assertions)]
+        self.schedule.stmt_order.push(StmtKey::from_stmt(self.db, stmt));
         id
     }
 
@@ -1103,7 +1182,7 @@ pub fn analyze_expr<'db>(
 fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>]) {
     for stmt in stmts.iter() {
         // Allocate a globally-unique statement ID.
-        let stmt_id = ctx.alloc_stmt_id();
+        let stmt_id = ctx.alloc_stmt_id(stmt);
         match stmt {
             Statement::Let(let_stmt) => {
                 analyze_let(ctx, let_stmt, stmt_id);
@@ -1221,7 +1300,19 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
     let name = match &stmt.target {
         SetTarget::Name(n) => n.text(ctx.db),
         SetTarget::Proj(_) => {
-            // TODO: Handle field projection in drop analysis.
+            // Find root name of projection chain.
+            let root_name = set_target_root_name(ctx.db, &stmt.target);
+            if let Some(root) = root_name {
+                if let Some(id) = ctx.lookup(root) {
+                    // Disallow partial field writes to Out params.
+                    if ctx.bindings[id.0 as usize].param_mode == Some(ParamMode::Out) {
+                        ctx.errors.push(AnalysisError::OutParamPartialWrite {
+                            local_index: stmt.local_index,
+                            name: root.to_string(),
+                        });
+                    }
+                }
+            }
             return;
         }
     };
@@ -1232,6 +1323,14 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
         if ctx.bindings[id.0 as usize].param_mode == Some(ParamMode::Out) {
             ctx.set_out_param_init(id, OutParamInitState::Initialized);
         }
+    }
+}
+
+/// Extract the root name from a set target projection chain.
+fn set_target_root_name<'a, 'db>(db: &'db dyn salsa::Database, target: &'a SetTarget<'db>) -> Option<&'a str> {
+    match target {
+        SetTarget::Name(n) => Some(n.text(db)),
+        SetTarget::Proj(proj) => set_target_root_name(db, &proj.base),
     }
 }
 

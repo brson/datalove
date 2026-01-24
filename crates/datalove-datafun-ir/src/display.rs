@@ -339,17 +339,11 @@ impl fmt::Display for Instruction {
             Instruction::Const { dest, value } => {
                 write!(f, "{} = const {}", dest, value)
             }
-            Instruction::ConstTracked { dest, value } => {
-                write!(f, "{} = const.tracked {}", dest, value)
-            }
             Instruction::Copy { dest, src } => {
                 write!(f, "{} = copy {}", dest, src)
             }
             Instruction::Move { dest, src } => {
                 write!(f, "{} = move {}", dest, src)
-            }
-            Instruction::MoveTracked { dest, src } => {
-                write!(f, "{} = move.tracked {}", dest, src)
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
                 write!(f, "{} = {} {}, {}", dest, op, lhs, rhs)
@@ -366,21 +360,8 @@ impl fmt::Display for Instruction {
             Instruction::Widen { dest, src } => {
                 write!(f, "{} = widen {}", dest, src)
             }
-            Instruction::WidenTracked { dest, src } => {
-                write!(f, "{} = widen.tracked {}", dest, src)
-            }
             Instruction::Call { dest, func, args } => {
                 write!(f, "{} = call {}(", dest, func)?;
-                for (i, arg) in args.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", arg)?;
-                }
-                write!(f, ")")
-            }
-            Instruction::CallTracked { dest, func, args } => {
-                write!(f, "{} = call.tracked {}(", dest, func)?;
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -399,16 +380,6 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, "}}")
             }
-            Instruction::PackTracked { dest, ty, fields } => {
-                write!(f, "{} = pack.tracked {} {{", dest, ty)?;
-                for (i, field) in fields.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", field)?;
-                }
-                write!(f, "}}")
-            }
             Instruction::Unpack { dests, src } => {
                 write!(f, "(")?;
                 for (i, dest) in dests.iter().enumerate() {
@@ -419,21 +390,8 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, ") = unpack {}", src)
             }
-            Instruction::UnpackTracked { dests, src } => {
-                write!(f, "(")?;
-                for (i, dest) in dests.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", dest)?;
-                }
-                write!(f, ") = unpack.tracked {}", src)
-            }
             Instruction::GetField { dest, src, field_index } => {
                 write!(f, "{} = getfield {}.{}", dest, src, field_index)
-            }
-            Instruction::GetFieldTracked { dest, src, field_index } => {
-                write!(f, "{} = getfield.tracked {}.{}", dest, src, field_index)
             }
             Instruction::GetFieldRef { dest, src, field_index } => {
                 write!(f, "{} = getfieldref {}.{}", dest, src, field_index)
@@ -441,26 +399,14 @@ impl fmt::Display for Instruction {
             Instruction::WrapSome { dest, inner } => {
                 write!(f, "{} = some {}", dest, inner)
             }
-            Instruction::WrapSomeTracked { dest, inner } => {
-                write!(f, "{} = some.tracked {}", dest, inner)
-            }
             Instruction::WrapOk { dest, inner } => {
                 write!(f, "{} = ok {}", dest, inner)
-            }
-            Instruction::WrapOkTracked { dest, inner } => {
-                write!(f, "{} = ok.tracked {}", dest, inner)
             }
             Instruction::WrapErr { dest, inner } => {
                 write!(f, "{} = err {}", dest, inner)
             }
-            Instruction::WrapErrTracked { dest, inner } => {
-                write!(f, "{} = err.tracked {}", dest, inner)
-            }
             Instruction::WrapNone { dest } => {
                 write!(f, "{} = none", dest)
-            }
-            Instruction::WrapNoneTracked { dest } => {
-                write!(f, "{} = none.tracked", dest)
             }
             Instruction::EnumVariant { dest, variant_index, payload } => {
                 if let Some(p) = payload {
@@ -469,43 +415,20 @@ impl fmt::Display for Instruction {
                     write!(f, "{} = enum_variant {}", dest, variant_index)
                 }
             }
-            Instruction::EnumVariantTracked { dest, variant_index, payload } => {
-                if let Some(p) = payload {
-                    write!(f, "{} = enum_variant.tracked {} {}", dest, variant_index, p)
-                } else {
-                    write!(f, "{} = enum_variant.tracked {}", dest, variant_index)
-                }
+            Instruction::UnwrapOption { dest, is_some, src } => {
+                write!(f, "{}, {} = unwrap_option {}", dest, is_some, src)
             }
-            Instruction::UnwrapOptionTracking { dest, is_some, src } => {
-                write!(f, "{}, {} = unwrap_option.tracking {}", dest, is_some, src)
-            }
-            Instruction::UnwrapResultTracking { ok_dest, err_dest, is_ok, src } => {
-                write!(f, "{}, {}, {} = unwrap_result.tracking {}", ok_dest, err_dest, is_ok, src)
+            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
+                write!(f, "{}, {}, {} = unwrap_result {}", ok_dest, err_dest, is_ok, src)
             }
             Instruction::ErrorFrom { dest, inner } => {
                 write!(f, "{} = error_from {}", dest, inner)
             }
-            Instruction::ErrorFromTracked { dest, inner } => {
-                write!(f, "{} = error_from.tracked {}", dest, inner)
-            }
             Instruction::DataFrom { dest, inner } => {
                 write!(f, "{} = data_from {}", dest, inner)
             }
-            Instruction::DataFromTracked { dest, inner } => {
-                write!(f, "{} = data_from.tracked {}", dest, inner)
-            }
             Instruction::ListNew { dest, elements } => {
                 write!(f, "{} = list [", dest)?;
-                for (i, elem) in elements.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", elem)?;
-                }
-                write!(f, "]")
-            }
-            Instruction::ListNewTracked { dest, elements } => {
-                write!(f, "{} = list.tracked [", dest)?;
                 for (i, elem) in elements.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -524,28 +447,8 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, "}}")
             }
-            Instruction::SetNewTracked { dest, elements } => {
-                write!(f, "{} = set.tracked {{", dest)?;
-                for (i, elem) in elements.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", elem)?;
-                }
-                write!(f, "}}")
-            }
             Instruction::MapNew { dest, entries } => {
                 write!(f, "{} = map {{", dest)?;
-                for (i, (k, v)) in entries.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}: {}", k, v)?;
-                }
-                write!(f, "}}")
-            }
-            Instruction::MapNewTracked { dest, entries } => {
-                write!(f, "{} = map.tracked {{", dest)?;
                 for (i, (k, v)) in entries.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -571,35 +474,8 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, "]")
             }
-            Instruction::TensorNewTracked { dest, shape, elements } => {
-                write!(f, "{} = tensor.tracked [", dest)?;
-                for (i, dim) in shape.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", dim)?;
-                }
-                write!(f, "] [")?;
-                for (i, elem) in elements.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", elem)?;
-                }
-                write!(f, "]")
-            }
             Instruction::TableNew { dest, rows } => {
                 write!(f, "{} = table [", dest)?;
-                for (i, row) in rows.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", row)?;
-                }
-                write!(f, "]")
-            }
-            Instruction::TableNewTracked { dest, rows } => {
-                write!(f, "{} = table.tracked [", dest)?;
                 for (i, row) in rows.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -637,6 +513,9 @@ impl fmt::Display for Instruction {
             Instruction::ParamStore { param, value } => {
                 write!(f, "store {}, {}", param, value)
             }
+            Instruction::ParamStoreTracked { param, value } => {
+                write!(f, "store.tracked {}, {}", param, value)
+            }
             Instruction::ParamSetField { param, field_path, value } => {
                 write!(f, "setfield {}", param)?;
                 for idx in field_path {
@@ -644,11 +523,15 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, ", {}", value)
             }
+            Instruction::ParamSetFieldTracked { param, field_path, value } => {
+                write!(f, "setfield.tracked {}", param)?;
+                for idx in field_path {
+                    write!(f, ".{}", idx)?;
+                }
+                write!(f, ", {}", value)
+            }
             Instruction::SlotLoadCopy { dest, slot } => {
                 write!(f, "{} = load.copy {}", dest, slot)
-            }
-            Instruction::SlotLoadCopyTracked { dest, slot } => {
-                write!(f, "{} = load.copy.tracked {}", dest, slot)
             }
             Instruction::SlotLoadMove { dest, slot } => {
                 write!(f, "{} = load.move {}", dest, slot)
@@ -662,6 +545,9 @@ impl fmt::Display for Instruction {
             Instruction::DropTracked { operand } => {
                 write!(f, "drop.tracked {}", operand)
             }
+            Instruction::DropViaRef { ref_value } => {
+                write!(f, "drop.ref {}", ref_value)
+            }
             Instruction::UnitEndDrop { operand } => {
                 write!(f, "unit_end_drop {}", operand)
             }
@@ -673,14 +559,6 @@ impl fmt::Display for Instruction {
             }
             Instruction::Intrinsic { dest, intrinsic, args } => {
                 write!(f, "{} = intrinsic {:?}(", dest, intrinsic)?;
-                for (i, arg) in args.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
-                    write!(f, "{}", arg)?;
-                }
-                write!(f, ")")
-            }
-            Instruction::IntrinsicTracked { dest, intrinsic, args } => {
-                write!(f, "{} = intrinsic.tracked {:?}(", dest, intrinsic)?;
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 { write!(f, ", ")?; }
                     write!(f, "{}", arg)?;

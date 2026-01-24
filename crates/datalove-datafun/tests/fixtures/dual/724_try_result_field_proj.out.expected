@@ -13,7 +13,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked f0()
+                        v0 = call f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -23,15 +23,15 @@ DualAnalysis(
                         v0 = const 10u32
                         v1 = const 20u32
                         v2 = pack Tuple2 {v0, v1}
-                        v3 = ok.tracked v2
-                        v4, v5, v6 = unwrap_result.tracking v3
+                        v3 = ok v2
+                        v4, v5, v6 = unwrap_result v3
                         branch v6, block2, block1
                     block1:
-                        v7 = err.tracked v5
+                        v7 = err v5
                         return v7
                     block2:
                         v8 = getfield v4.0
-                        v9 = ok.tracked v8
+                        v9 = ok v8
                         return v9
                     exports:
                         test = f0
@@ -42,7 +42,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked f0()
+                        v0 = call f0()
                         debuglog v0
                         drop v0
                         unit_end
@@ -52,15 +52,15 @@ DualAnalysis(
                         v0 = const 10u32
                         v1 = const 20u32
                         v2 = pack Tuple2 {v0, v1}
-                        v3 = ok.tracked v2
-                        v4, v5, v6 = unwrap_result.tracking v3
+                        v3 = ok v2
+                        v4, v5, v6 = unwrap_result v3
                         branch v6, block2, block1
                     block1:
-                        v7 = err.tracked v5
+                        v7 = err v5
                         return v7
                     block2:
                         v8 = getfield v4.0
-                        v9 = ok.tracked v8
+                        v9 = ok v8
                         return v9
                     exports:
                         test = f0

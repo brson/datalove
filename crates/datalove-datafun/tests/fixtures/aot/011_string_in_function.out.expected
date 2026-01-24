@@ -20,7 +20,7 @@ AotAnalysis(
                     
                     fn test_string():
                     block0:
-                        v0 = const.tracked "hello"
+                        v0 = const "hello"
                         debuglog v0
                         v1 = const 0u32
                         drop v0

@@ -61,8 +61,8 @@ fn make_identity_function() -> IrFunction {
         slot_count: 0,
         value_types: vec![],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     }
 }
 
@@ -109,8 +109,8 @@ fn test_simple_function_call() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     // Create context with both functions.
@@ -155,8 +155,8 @@ fn test_nested_function_calls() {
         slot_count: 0,
         value_types: vec![],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     // fn nested(x: i64) -> i64 { passthrough(passthrough(x)) }
@@ -192,8 +192,8 @@ fn test_nested_function_calls() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     // Create context with both functions.
@@ -306,8 +306,8 @@ fn test_const_u8() {
         slot_count: 0,
         value_types: vec![IrType::U8],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     let functions = [func.clone()];
@@ -351,8 +351,8 @@ fn test_const_i32() {
         slot_count: 0,
         value_types: vec![IrType::I32],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     let functions = [func.clone()];
@@ -396,8 +396,8 @@ fn test_const_bool() {
         slot_count: 0,
         value_types: vec![IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -440,8 +440,8 @@ fn test_binop_eq() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -476,8 +476,8 @@ fn test_binop_ne() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -512,8 +512,8 @@ fn test_binop_lt() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -548,8 +548,8 @@ fn test_binop_bitand() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 8);
@@ -584,8 +584,8 @@ fn test_binop_bitor() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 14);
@@ -620,8 +620,8 @@ fn test_binop_shl() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 16);
@@ -662,8 +662,8 @@ fn test_binop_checked_no_overflow() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 30);
@@ -700,8 +700,8 @@ fn test_binop_checked_overflow() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -738,8 +738,8 @@ fn test_unaryop_neg() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), -42);
@@ -772,8 +772,8 @@ fn test_unaryop_not() {
         slot_count: 0,
         value_types: vec![IrType::Bool, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert!(!run_bool_function(&func));
@@ -806,8 +806,8 @@ fn test_unaryop_bitnot() {
         slot_count: 0,
         value_types: vec![IrType::U32, IrType::U32],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_u32_function(&func), 0xFFFFFFFF);
@@ -846,8 +846,8 @@ fn test_slot_store_load() {
         slot_count: 1,
         value_types: vec![IrType::I64, IrType::I64, IrType::I64],
         slot_types: vec![IrType::I64],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -887,8 +887,8 @@ fn test_slot_multiple_updates() {
         slot_count: 1,
         value_types: vec![IrType::I64; 5],
         slot_types: vec![IrType::I64],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 8);
@@ -935,8 +935,8 @@ fn test_branch_true() {
         slot_count: 0,
         value_types: vec![IrType::Bool, IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 1);
@@ -979,8 +979,8 @@ fn test_branch_false() {
         slot_count: 0,
         value_types: vec![IrType::Bool, IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 2);
@@ -1029,8 +1029,8 @@ fn test_goto_chain() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     // Returns 2 from block1, proving control flow worked.
@@ -1064,8 +1064,8 @@ fn test_copy() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -1094,8 +1094,8 @@ fn test_move() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -1140,8 +1140,8 @@ fn test_pack_tuple() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, tuple_ty, IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 10);
@@ -1187,8 +1187,8 @@ fn test_unpack_tuple() {
             IrType::I64, IrType::I64
         ],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 20);
@@ -1218,7 +1218,7 @@ fn test_wrap_some_unwrap() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapOptionTracking {
+                    Instruction::UnwrapOption {
                         dest: ValueId(2),
                         is_some: ValueId(3),
                         src: Operand::Value(ValueId(1)),
@@ -1231,8 +1231,8 @@ fn test_wrap_some_unwrap() {
         slot_count: 0,
         value_types: vec![IrType::I64, opt_ty, IrType::I64, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -1258,7 +1258,7 @@ fn test_is_some() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapOptionTracking {
+                    Instruction::UnwrapOption {
                         dest: ValueId(2),
                         is_some: ValueId(3),
                         src: Operand::Value(ValueId(1)),
@@ -1271,8 +1271,8 @@ fn test_is_some() {
         slot_count: 0,
         value_types: vec![IrType::I64, opt_ty, IrType::I64, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -1294,7 +1294,7 @@ fn test_is_none() {
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::WrapNone { dest: ValueId(0) },
-                    Instruction::UnwrapOptionTracking {
+                    Instruction::UnwrapOption {
                         dest: ValueId(1),
                         is_some: ValueId(2),
                         src: Operand::Value(ValueId(0)),
@@ -1312,8 +1312,8 @@ fn test_is_none() {
         slot_count: 0,
         value_types: vec![opt_ty, IrType::I64, IrType::Bool, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -1339,7 +1339,7 @@ fn test_option_branch() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapOptionTracking {
+                    Instruction::UnwrapOption {
                         dest: ValueId(2),
                         is_some: ValueId(3),
                         src: Operand::Value(ValueId(1)),
@@ -1367,8 +1367,8 @@ fn test_option_branch() {
         slot_count: 0,
         value_types: vec![IrType::I64, opt_ty, IrType::I64, IrType::Bool, IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 1);
@@ -1398,7 +1398,7 @@ fn test_wrap_ok_unwrap() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapResultTracking {
+                    Instruction::UnwrapResult {
                         ok_dest: ValueId(2),
                         err_dest: ValueId(3),
                         is_ok: ValueId(4),
@@ -1412,8 +1412,8 @@ fn test_wrap_ok_unwrap() {
         slot_count: 0,
         value_types: vec![IrType::I64, res_ty, IrType::I64, IrType::Error, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -1439,7 +1439,7 @@ fn test_is_ok() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapResultTracking {
+                    Instruction::UnwrapResult {
                         ok_dest: ValueId(2),
                         err_dest: ValueId(3),
                         is_ok: ValueId(4),
@@ -1453,8 +1453,8 @@ fn test_is_ok() {
         slot_count: 0,
         value_types: vec![IrType::I64, res_ty, IrType::I64, IrType::Error, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -1482,7 +1482,7 @@ fn test_is_err() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapResultTracking {
+                    Instruction::UnwrapResult {
                         ok_dest: ValueId(2),
                         err_dest: ValueId(3),
                         is_ok: ValueId(4),
@@ -1501,8 +1501,8 @@ fn test_is_err() {
         slot_count: 0,
         value_types: vec![IrType::Unit, res_ty, IrType::I64, IrType::Error, IrType::Bool, IrType::Bool],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -1528,7 +1528,7 @@ fn test_result_branch() {
                         dest: ValueId(1),
                         inner: Operand::Value(ValueId(0)),
                     },
-                    Instruction::UnwrapResultTracking {
+                    Instruction::UnwrapResult {
                         ok_dest: ValueId(2),
                         err_dest: ValueId(3),
                         is_ok: ValueId(4),
@@ -1557,8 +1557,8 @@ fn test_result_branch() {
         slot_count: 0,
         value_types: vec![IrType::I64, res_ty, IrType::I64, IrType::Error, IrType::Bool, IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 1);
@@ -1606,8 +1606,8 @@ fn test_pack_struct() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64, struct_ty, IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 10);
@@ -1656,8 +1656,8 @@ fn test_unpack_struct() {
             IrType::I64, IrType::I64
         ],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 20);
@@ -1686,7 +1686,6 @@ fn test_crossunit_external_value() {
         slot_count: 0,
         value_types: vec![IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
         unit_end_values: vec![],
         unit_end_slots: vec![],
@@ -1714,7 +1713,6 @@ fn test_crossunit_external_value() {
         slot_count: 0,
         value_types: vec![IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
         unit_end_values: vec![],
         unit_end_slots: vec![],
@@ -1775,7 +1773,6 @@ fn test_crossunit_external_slot() {
         slot_count: 1,
         value_types: vec![IrType::I64],
         slot_types: vec![IrType::I64],
-        tracked_values: vec![],
         tracked_slots: vec![],
         unit_end_values: vec![],
         unit_end_slots: vec![],
@@ -1803,7 +1800,6 @@ fn test_crossunit_external_slot() {
         slot_count: 0,
         value_types: vec![IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
         unit_end_values: vec![],
         unit_end_slots: vec![],
@@ -1863,8 +1859,8 @@ fn test_crossunit_external_function() {
         slot_count: 0,
         value_types: vec![],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
     let unit0 = IrScriptUnit {
@@ -1878,7 +1874,6 @@ fn test_crossunit_external_function() {
         slot_count: 0,
         value_types: vec![],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
         unit_end_values: vec![],
         unit_end_slots: vec![],
@@ -1910,7 +1905,6 @@ fn test_crossunit_external_function() {
         slot_count: 0,
         value_types: vec![IrType::I64, IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
         unit_end_values: vec![],
         unit_end_slots: vec![],
@@ -1967,7 +1961,6 @@ fn test_crossunit_chain() {
         slot_count: 0,
         value_types: vec![IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
         unit_end_values: vec![],
         unit_end_slots: vec![],
@@ -1995,7 +1988,6 @@ fn test_crossunit_chain() {
         slot_count: 0,
         value_types: vec![IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
         unit_end_values: vec![],
         unit_end_slots: vec![],
@@ -2023,7 +2015,6 @@ fn test_crossunit_chain() {
         slot_count: 0,
         value_types: vec![IrType::I64],
         slot_types: vec![],
-        tracked_values: vec![],
         tracked_slots: vec![],
         unit_end_values: vec![],
         unit_end_slots: vec![],
@@ -2066,83 +2057,17 @@ fn test_crossunit_chain() {
 // NOTE: Phi tests removed - Phi instruction has been replaced by block parameters.
 
 // =============================================================================
-// Tracking Tests
+// Precise Drop Tests
 //
-// These tests verify the interpreter's contract around tracked_values:
-// - Values in tracked_values are destroyed by destroy_all
-// - Values NOT in tracked_values are expected to have explicit Drop instructions
+// These tests verify that values with explicit Drop instructions are properly destroyed.
+// All values are now precise - they require explicit Drop instructions at known points.
+// Only slots (var bindings) use runtime tracking.
 // =============================================================================
 
-/// Test that a list value in tracked_values is properly destroyed by destroy_all.
-///
-/// This test creates a list, marks it as tracked, and verifies that destroy_all
-/// cleans it up without leaking memory.
+/// Test that a list with explicit Drop is properly destroyed.
 #[test]
-fn test_tracked_list_destroyed_by_destroy_all() {
-    // Script unit that creates a list [1, 2, 3] and stores it in a value.
-    // The list IS in tracked_values, so destroy_all should handle it.
-    let unit = IrScriptUnit {
-        blocks: vec![
-            IrBlock { id: BlockId(0), params: vec![],
-                instructions: vec![
-                    // Create element values.
-                    Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
-                    Instruction::Const { dest: ValueId(1), value: ConstValue::I64(2) },
-                    Instruction::Const { dest: ValueId(2), value: ConstValue::I64(3) },
-                    // Create list from elements.
-                    Instruction::ListNew {
-                        dest: ValueId(3),
-                        elements: vec![
-                            Operand::Value(ValueId(0)),
-                            Operand::Value(ValueId(1)),
-                            Operand::Value(ValueId(2)),
-                        ],
-                    },
-                    // No explicit drop - tracked_values will handle it.
-                ],
-                terminator: Terminator::UnitEnd { result: None },
-            },
-        ],
-        value_count: 4,
-        slot_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::I64, IrType::List(Box::new(IrType::I64))],
-        slot_types: vec![],
-        // Key: the list (ValueId(3)) IS tracked.
-        tracked_values: vec![ValueId(3)],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-    };
-
-    let mut interp = IrInterpreter::new();
-    let mut env = ScriptEnvironment::new();
-
-    let ret_type = IrType::Result(Box::new(IrType::Unit));
-    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
-    let ret_size = unsafe { (*ret_tydesc).size };
-    let mut ret_buffer = vec![0u8; ret_size as usize];
-    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
-
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
-    assert_eq!(completion, super::UnitCompletion::Normal);
-
-    // destroy_all should clean up the tracked list.
-    // If this panics with a leak, the tracking isn't working.
-    env.destroy_all(interp.runtime_handle());
-}
-
-/// Test that an untracked list with explicit Drop is properly destroyed.
-///
-/// This simulates a "precise" value where ownership analysis determined
-/// the exact drop point, so it's not in tracked_values.
-#[test]
-fn test_untracked_list_with_explicit_drop() {
+fn test_list_with_explicit_drop() {
     // Script unit that creates a list and explicitly drops it.
-    // The list is NOT in tracked_values (precise tracking).
     let unit = IrScriptUnit {
         blocks: vec![
             IrBlock { id: BlockId(0), params: vec![],
@@ -2169,7 +2094,6 @@ fn test_untracked_list_with_explicit_drop() {
         value_types: vec![IrType::I64, IrType::I64, IrType::List(Box::new(IrType::I64))],
         slot_types: vec![],
         // Key: the list is NOT tracked (precise).
-        tracked_values: vec![],
         tracked_slots: vec![],
         unit_end_values: vec![],
         unit_end_slots: vec![],
@@ -2195,16 +2119,9 @@ fn test_untracked_list_with_explicit_drop() {
     env.destroy_all(interp.runtime_handle());
 }
 
-/// Test tracking with a function that has parameters followed by a script binding.
-///
-/// This is the scenario that triggered the bug: a script unit with:
-/// 1. A function definition (with parameters that create tracking entries)
-/// 2. A let binding of a non-Copy type
-///
-/// The bug was that the function's tracking state would overwrite the script's,
-/// causing the script binding to not be tracked.
+/// Test script with a function and explicit list drop.
 #[test]
-fn test_script_with_function_and_tracked_list() {
+fn test_script_with_function_and_list_drop() {
     // A function with two i64 parameters that just returns the first one.
     let identity_fn = IrFunction {
         id: FuncId(0),
@@ -2225,12 +2142,11 @@ fn test_script_with_function_and_tracked_list() {
         slot_count: 0,
         value_types: vec![],
         slot_types: vec![],
-        // Function has its own tracked_values (empty here, params are Copy).
-        tracked_values: vec![],
         tracked_slots: vec![],
+    tracked_params: vec![],
     };
 
-    // Script unit that defines the function and creates a list binding.
+    // Script unit that defines the function and creates a list binding with explicit drop.
     let unit = IrScriptUnit {
         blocks: vec![
             IrBlock { id: BlockId(0), params: vec![],
@@ -2257,7 +2173,8 @@ fn test_script_with_function_and_tracked_list() {
                         func: FuncRef::Local(FuncId(0)),
                         args: vec![Operand::Value(ValueId(5)), Operand::Value(ValueId(6))],
                     },
-                    // No explicit drop of list - it's tracked.
+                    // Explicit drop of list (values are precise).
+                    Instruction::Drop { operand: Operand::Value(ValueId(4)) },
                 ],
                 terminator: Terminator::UnitEnd { result: None },
             },
@@ -2270,9 +2187,6 @@ fn test_script_with_function_and_tracked_list() {
             IrType::I64, IrType::I64, IrType::I64,                // call args and result
         ],
         slot_types: vec![],
-        // Critical: the list (ValueId(4)) must be tracked.
-        // If compiler lowering corrupts tracking, this would be empty.
-        tracked_values: vec![ValueId(4)],
         tracked_slots: vec![],
         unit_end_values: vec![],
         unit_end_slots: vec![],
@@ -2294,16 +2208,13 @@ fn test_script_with_function_and_tracked_list() {
     let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
-    // destroy_all should clean up the tracked list.
-    // The bug would have caused tracked_values to be empty (or wrong),
-    // and this would leak.
     env.destroy_all(interp.runtime_handle());
 }
 
-/// Test that multiple tracked values are all destroyed.
+/// Test that multiple values with explicit Drops are properly destroyed.
 #[test]
-fn test_multiple_tracked_values() {
-    // Create two separate lists, both tracked.
+fn test_multiple_explicit_drops() {
+    // Create two separate lists with explicit drops.
     let unit = IrScriptUnit {
         blocks: vec![
             IrBlock { id: BlockId(0), params: vec![],
@@ -2328,6 +2239,9 @@ fn test_multiple_tracked_values() {
                             Operand::Value(ValueId(4)),
                         ],
                     },
+                    // Explicit drops for both lists.
+                    Instruction::Drop { operand: Operand::Value(ValueId(2)) },
+                    Instruction::Drop { operand: Operand::Value(ValueId(5)) },
                 ],
                 terminator: Terminator::UnitEnd { result: None },
             },
@@ -2339,8 +2253,6 @@ fn test_multiple_tracked_values() {
             IrType::I64, IrType::I64, IrType::List(Box::new(IrType::I64)),
         ],
         slot_types: vec![],
-        // Both lists are tracked.
-        tracked_values: vec![ValueId(2), ValueId(5)],
         tracked_slots: vec![],
         unit_end_values: vec![],
         unit_end_slots: vec![],
@@ -2362,6 +2274,5 @@ fn test_multiple_tracked_values() {
     let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
-    // Both lists should be destroyed.
     env.destroy_all(interp.runtime_handle());
 }

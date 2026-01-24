@@ -7,7 +7,7 @@
 //! - `ScriptEnvironment`: Combines registry with `FrameStore` for script execution.
 
 use std::sync::Arc;
-use datalove_datafun_ir::{IrFunction, FuncId, FuncRef, IrModuleId};
+use datalove_datafun_ir::{IrFunction, FuncId, FuncRef, IrModuleId, ValueId, SlotId};
 use crate::error::InterpError;
 use crate::frame::{Frame, FrameStore};
 
@@ -44,8 +44,14 @@ impl ScriptEnvironment {
     }
 
     /// Add a completed unit's frame and functions.
-    pub fn add_unit(&mut self, frame: Frame, functions: Vec<IrFunction>) {
-        self.frames.add_frame(frame);
+    pub fn add_unit(
+        &mut self,
+        frame: Frame,
+        functions: Vec<IrFunction>,
+        unit_end_values: Vec<ValueId>,
+        unit_end_slots: Vec<SlotId>,
+    ) {
+        self.frames.add_frame(frame, unit_end_values, unit_end_slots);
         self.registry.add_unit_functions(functions);
     }
 

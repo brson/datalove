@@ -267,11 +267,14 @@ pub fn check_expr<'db>(
         }
 
         // Handle integer literals specially - they can coerce to expected integer types.
-        ExprFunKind::Int(_int_expr) => {
+        ExprFunKind::Int(int_expr) => {
             match expected {
                 Type::Datalit(expected_datalit_ty) => {
                     // Check if expected type is a numeric type.
                     if is_numeric_type(expected) {
+                        // Validate the literal value fits in the expected type.
+                        let value_str = int_expr.value.as_str(db);
+                        check_int_fits_wrapped_type(value_str, expected_datalit_ty, db)?;
                         ctx.store_expr_type(expr, &expected);
                         return Ok(());
                     }
@@ -332,11 +335,54 @@ pub fn check_expr<'db>(
             }
         }
 
+        // Handle hex literals specially - they can coerce to expected integer types.
+        ExprFunKind::Hex(hex_expr) => {
+            match expected {
+                Type::Datalit(expected_datalit_ty) => {
+                    // Check if expected type is a numeric type.
+                    if is_numeric_type(expected) {
+                        // Validate the hex value fits in the expected type.
+                        let value_str = hex_expr.value.as_str(db);
+                        check_hex_fits_wrapped_type(value_str, expected_datalit_ty, db)?;
+                        ctx.store_expr_type(expr, &expected);
+                        return Ok(());
+                    }
+                    // Otherwise, synthesize and compare.
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    if types_equivalent(db, &synthesized, expected) {
+                        Ok(())
+                    } else {
+                        let expected_str = type_to_string(db, expected);
+                        let actual_str = type_to_string(db, &synthesized);
+                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                    }
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
         // Handle unary negation on signed fixed integers.
         // When expected type is a signed fixed int (i8, i16, i32, i64), check operand against it.
         ExprFunKind::UnaryOp(unary) if unary.op == UnaryOp::Neg => {
             if is_signed_fixed_int_type(expected) {
-                // Check operand against expected type.
+                // Special case: integer literal operand needs negated value validation.
+                // e.g., -2147483648 is valid i32 even though 2147483648 isn't.
+                if let ExprFunKind::Int(int_expr) = unary.operand.expr(db) {
+                    if let Type::Datalit(expected_datalit_ty) = expected {
+                        let value_str = int_expr.value.as_str(db);
+                        let negated = format!("-{}", value_str);
+                        check_int_fits_wrapped_type(&negated, expected_datalit_ty, db)?;
+                        ctx.store_expr_type(unary.operand, expected);
+                        ctx.store_expr_type(expr, expected);
+                        return Ok(());
+                    }
+                }
+                // For other operands, check normally.
                 check_expr(ctx, unary.operand, expected)?;
                 ctx.store_expr_type(expr, &expected);
                 return Ok(());

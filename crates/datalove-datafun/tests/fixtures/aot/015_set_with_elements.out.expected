@@ -17,7 +17,7 @@ AotAnalysis(
                         v0 = const 10u32
                         v1 = const 20u32
                         v2 = const 30u32
-                        v3 = set.tracked {v0, v1, v2}
+                        v3 = set {v0, v1, v2}
                         debuglog v3
                         unit_end_drop v3
                         unit_end

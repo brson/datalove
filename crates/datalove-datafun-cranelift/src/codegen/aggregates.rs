@@ -4,7 +4,7 @@ use cranelift_codegen::ir::{InstBuilder, MemFlags};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
-use datalove_datafun_ir::{IrType, Operand, ValueId};
+use datalove_datafun_ir::{IrType, Operand, ParamId, ValueId};
 
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::CraneliftError;
@@ -500,6 +500,134 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, current_addr]);
             }
         }
+
+        Ok(())
+    }
+
+    /// Compile a ParamSetFieldTracked instruction.
+    ///
+    /// For Out params: caller destroys before call, so first write sees
+    /// uninitialized memory. Check tracking byte before destroying.
+    pub(super) fn compile_param_set_field_tracked(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        param: &ParamId,
+        field_path: &[u32],
+        value: &Operand,
+    ) -> Result<(), CraneliftError> {
+        use crate::layout::tracking;
+        use cranelift_codegen::ir::types as cl_types;
+
+        // Get base address and type from param.
+        let addr = self.param_values.get(param).copied().ok_or_else(|| {
+            CraneliftError::Codegen(format!("param {:?} not found in param_values", param))
+        })?;
+        let ty = self.func.param_types.get(param.0 as usize)
+            .cloned()
+            .ok_or_else(|| CraneliftError::Codegen(format!("param {:?} type not found", param)))?;
+
+        // Navigate field path to find target.
+        let mut current_addr = addr;
+        let mut current_ty = ty;
+
+        for &field_idx in field_path.iter() {
+            let field_types: Vec<_> = match &current_ty {
+                IrType::Tuple(tys) => tys.clone(),
+                IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                _ => {
+                    return Err(CraneliftError::Codegen(format!(
+                        "param_set_field_tracked path through non-aggregate type: {:?}",
+                        current_ty
+                    )));
+                }
+            };
+
+            if field_idx as usize >= field_types.len() {
+                return Err(CraneliftError::Codegen(format!(
+                    "field index {} out of bounds",
+                    field_idx
+                )));
+            }
+
+            let offsets = types::compute_tuple_field_offsets(&field_types);
+            current_addr = builder.ins().iadd_imm(current_addr, offsets[field_idx as usize] as i64);
+            current_ty = field_types[field_idx as usize].clone();
+        }
+
+        // Get tracking byte offset (should exist for tracked params).
+        let track_offset = self.param_tracking_byte_offset(*param)
+            .ok_or_else(|| CraneliftError::Codegen(format!(
+                "ParamSetFieldTracked: param {:?} has no tracking byte", param
+            )))?;
+
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("ParamSetFieldTracked requires frame slot".into())
+        })?;
+
+        // Load tracking byte.
+        let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+        let track_val = builder.ins().load(cl_types::I8, MemFlags::new(), track_addr, 0);
+
+        // Check if initialized (LIVE).
+        let live_const = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
+        let is_init = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            track_val,
+            live_const,
+        );
+
+        // Create blocks for conditional destroy.
+        let destroy_block = builder.create_block();
+        let store_block = builder.create_block();
+
+        builder.ins().brif(is_init, destroy_block, &[], store_block, &[]);
+
+        // Destroy block: destroy old field value, then jump to store.
+        builder.switch_to_block(destroy_block);
+        builder.seal_block(destroy_block);
+
+        let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!(
+                "TyDesc not found for type {:?}",
+                current_ty
+            ))
+        })?;
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+        let destroy_func_id = self.runtime.as_ref()
+            .ok_or_else(|| CraneliftError::Codegen("ParamSetFieldTracked requires runtime imports".into()))?
+            .destroy_local;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("ParamSetFieldTracked requires runtime handle parameter".into())
+        })?;
+        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
+        builder.ins().call(destroy_ref, &[rt_handle, current_addr, tydesc_ptr]);
+
+        builder.ins().jump(store_block, &[]);
+
+        // Store block: store new value at target address.
+        builder.switch_to_block(store_block);
+        builder.seal_block(store_block);
+
+        let val = self.get_operand_value(builder, value)?;
+        let field_repr = types::ir_type_to_cranelift(&current_ty);
+
+        match field_repr {
+            CraneliftRepr::Scalar(_) => {
+                builder.ins().store(MemFlags::new(), val, current_addr, 0);
+            }
+            CraneliftRepr::Aggregate(_) => {
+                let move_func_id = self.runtime.as_ref()
+                    .ok_or_else(|| CraneliftError::Codegen("ParamSetFieldTracked aggregate requires runtime imports".into()))?
+                    .move_value;
+                let move_ref = self.module.declare_func_in_func(move_func_id, builder.func);
+                builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, current_addr]);
+            }
+        }
+
+        // Mark param as LIVE.
+        self.mark_param_live(builder, *param);
 
         Ok(())
     }

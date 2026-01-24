@@ -24,19 +24,19 @@ DualAnalysis(
                         v2 = none
                         v3 = const 30u32
                         v4 = some v3
-                        v5, v6 = unwrap_option.tracking v1
+                        v5, v6 = unwrap_option v1
                         branch v6, block2, block1
                     block1:
                         v7 = none
                         return v7
                     block2:
-                        v8, v9 = unwrap_option.tracking v2
+                        v8, v9 = unwrap_option v2
                         branch v9, block4, block3
                     block3:
                         v10 = none
                         return v10
                     block4:
-                        v11, v12 = unwrap_option.tracking v4
+                        v11, v12 = unwrap_option v4
                         branch v12, block6, block5
                     block5:
                         v13 = none
@@ -65,19 +65,19 @@ DualAnalysis(
                         v2 = none
                         v3 = const 30u32
                         v4 = some v3
-                        v5, v6 = unwrap_option.tracking v1
+                        v5, v6 = unwrap_option v1
                         branch v6, block2, block1
                     block1:
                         v7 = none
                         return v7
                     block2:
-                        v8, v9 = unwrap_option.tracking v2
+                        v8, v9 = unwrap_option v2
                         branch v9, block4, block3
                     block3:
                         v10 = none
                         return v10
                     block4:
-                        v11, v12 = unwrap_option.tracking v4
+                        v11, v12 = unwrap_option v4
                         branch v12, block6, block5
                     block5:
                         v13 = none

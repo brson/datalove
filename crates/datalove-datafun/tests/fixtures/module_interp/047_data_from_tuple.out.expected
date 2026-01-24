@@ -11,12 +11,12 @@ ModulesAnalysis(
                 v1 = const 2u32
                 v2 = const 3u32
                 v3 = pack Tuple3 {v0, v1, v2}
-                v4 = data_from.tracked v3
+                v4 = data_from v3
                 return v4
             
             fn main():
             block0:
-                v0 = call.tracked m0.f0()
+                v0 = call m0.f0()
                 return v0
         """,
     ),

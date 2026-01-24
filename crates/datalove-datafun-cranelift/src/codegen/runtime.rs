@@ -4,7 +4,7 @@ use cranelift_codegen::ir::{self as cl_ir, InstBuilder, MemFlags};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
-use datalove_datafun_ir::{IrType, Operand};
+use datalove_datafun_ir::{IrType, Operand, ValueId};
 
 use crate::types::PTR_TYPE;
 use crate::CraneliftError;
@@ -198,6 +198,58 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Continue in after block.
         builder.switch_to_block(after_block);
         builder.seal_block(after_block);
+
+        Ok(())
+    }
+
+    /// Compile a DropViaRef instruction.
+    ///
+    /// Destroys the value pointed to by a reference value (from GetFieldRef).
+    /// Used to destroy field values before passing a reference as an out param.
+    pub(super) fn compile_drop_via_ref(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        ref_value: ValueId,
+    ) -> Result<(), CraneliftError> {
+        // Get the type of the ref value (should be Ref(inner_type)).
+        let ref_ty = &self.func.value_types[ref_value.0 as usize];
+        let inner_ty = match ref_ty {
+            IrType::Ref(inner) => inner.as_ref(),
+            _ => return Err(CraneliftError::Codegen(format!(
+                "DropViaRef: expected Ref type, got {:?}", ref_ty
+            ))),
+        };
+
+        // Copy types don't need drops.
+        if inner_ty.is_copy() {
+            return Ok(());
+        }
+
+        // Get runtime imports.
+        let destroy_func_id = self.runtime.as_ref()
+            .ok_or_else(|| CraneliftError::Codegen("DropViaRef requires runtime imports".into()))?
+            .destroy_local;
+
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("DropViaRef requires runtime handle parameter".into())
+        })?;
+
+        // Get the ref value (pointer to field).
+        let ref_ptr = self.get_value_as_ref_ptr(builder, ref_value)?;
+
+        // Get tydesc for inner type.
+        let tydesc_id = self.tydesc_emitter.get(inner_ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!(
+                "TyDesc not found for inner type {:?}", inner_ty
+            ))
+        })?;
+
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+        // Declare destroy function and call it.
+        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
+        builder.ins().call(destroy_ref, &[rt_handle, ref_ptr, tydesc_addr]);
 
         Ok(())
     }

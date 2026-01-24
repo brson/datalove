@@ -17,8 +17,8 @@ DualAnalysis(
                         v1 = const 2u32
                         v2 = const 3u32
                         v3 = pack Tuple3 {v0, v1, v2}
-                        v4 = const.tracked "tuple holder"
-                        v5 = pack.tracked Struct0 {v3, v4}
+                        v4 = const "tuple holder"
+                        v5 = pack Struct0 {v3, v4}
                         v6 = getfield v5.0
                         v7 = getfieldref v6.0
                         debuglog v7
@@ -45,8 +45,8 @@ DualAnalysis(
                         v1 = const 2u32
                         v2 = const 3u32
                         v3 = pack Tuple3 {v0, v1, v2}
-                        v4 = const.tracked "tuple holder"
-                        v5 = pack.tracked Struct0 {v3, v4}
+                        v4 = const "tuple holder"
+                        v5 = pack Struct0 {v3, v4}
                         v6 = getfield v5.0
                         v7 = getfieldref v6.0
                         debuglog v7

@@ -139,7 +139,6 @@ pub fn lower_script_unit<'db>(
         slot_count: ctx.body.next_slot,
         value_types: std::mem::take(&mut ctx.body.value_types),
         slot_types: std::mem::take(&mut ctx.body.slot_types),
-        tracked_values: ctx.compute_tracked_values(),
         tracked_slots: ctx.compute_tracked_slots(),
         unit_end_values,
         unit_end_slots,
@@ -207,11 +206,10 @@ pub fn lower_script_fragment_raw<'db>(
     }
     ctx.body.current_stmt_idx = None;
 
-    // Compute unit_end and tracked values/slots BEFORE emit_unit_end_drops,
+    // Compute unit_end and tracked slots BEFORE emit_unit_end_drops,
     // because that method consumes unit_end_drops which we need.
     let unit_end_values = ctx.compute_unit_end_values();
     let unit_end_slots = ctx.compute_unit_end_slots();
-    let tracked_values = ctx.compute_tracked_values();
     let tracked_slots = ctx.compute_tracked_slots();
 
     // Emit drops for script-level bindings at unit end (for AOT).
@@ -229,7 +227,6 @@ pub fn lower_script_fragment_raw<'db>(
         slot_count: ctx.body.next_slot,
         value_types: std::mem::take(&mut ctx.body.value_types),
         slot_types: std::mem::take(&mut ctx.body.slot_types),
-        tracked_values,
         tracked_slots,
         unit_end_values,
         unit_end_slots,
@@ -272,7 +269,6 @@ pub fn lower_script_expr<'db>(
         slot_count: ctx.body.next_slot,
         value_types: std::mem::take(&mut ctx.body.value_types),
         slot_types: std::mem::take(&mut ctx.body.slot_types),
-        tracked_values: ctx.compute_tracked_values(),
         tracked_slots: ctx.compute_tracked_slots(),
         unit_end_values: Vec::new(),
         unit_end_slots: Vec::new(),
@@ -296,11 +292,15 @@ pub fn lower_script_expr<'db>(
 fn lower_statement_for_script<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &Statement<'db>,
-    stmt_idx: usize,
+    _stmt_idx: usize,
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
     func_consts: Option<&HashMap<String, (IrType, ConstValue)>>,
 ) -> Result<(), LowerError> {
+    // Allocate a globally-unique statement ID that matches ownership analysis.
+    // This is critical: ownership analysis uses alloc_stmt_id() for ALL statements,
+    // so lowering must do the same to ensure drop schedule lookups match.
+    let stmt_idx = ctx.alloc_stmt_id(stmt);
     match stmt {
         Statement::Let(let_stmt) => {
             let name = let_stmt.name.text(ctx.db).to_string();

@@ -54,8 +54,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked 7int
-                        v1 = call.tracked m0.f0(v0)
+                        v0 = const 7int
+                        v1 = call m0.f0(v0)
                         unit_end v1
                 """,
             ),

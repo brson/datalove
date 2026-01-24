@@ -13,22 +13,22 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked f0()
+                        v0 = call f0()
                         debuglog v0
                         drop v0
                         unit_end
                     
                     fn test():
                     block0:
-                        v0 = const.tracked 10int
-                        v1 = some.tracked v0
-                        v2, v3 = unwrap_option.tracking v1
+                        v0 = const 10int
+                        v1 = some v0
+                        v2, v3 = unwrap_option v1
                         branch v3, block2, block1
                     block1:
-                        v4 = none.tracked
+                        v4 = none
                         return v4
                     block2:
-                        v5 = some.tracked v2
+                        v5 = some v2
                         return v5
                     exports:
                         test = f0
@@ -39,22 +39,22 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked f0()
+                        v0 = call f0()
                         debuglog v0
                         drop v0
                         unit_end
                     
                     fn test():
                     block0:
-                        v0 = const.tracked 10int
-                        v1 = some.tracked v0
-                        v2, v3 = unwrap_option.tracking v1
+                        v0 = const 10int
+                        v1 = some v0
+                        v2, v3 = unwrap_option v1
                         branch v3, block2, block1
                     block1:
-                        v4 = none.tracked
+                        v4 = none
                         return v4
                     block2:
-                        v5 = some.tracked v2
+                        v5 = some v2
                         return v5
                     exports:
                         test = f0

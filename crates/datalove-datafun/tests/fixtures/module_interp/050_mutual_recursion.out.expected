@@ -12,19 +12,19 @@ ModulesAnalysis(
                 branch v1, block1, block2
             block1:
                 v2 = const true
-                v3 = ok.tracked v2
+                v3 = ok v2
                 return v3
             block2:
                 v4 = const 1u32
                 v5, v6 = sub.checked p0, v4
                 branch v6, block3, block4
             block3:
-                v7 = const.tracked "arithmetic overflow"
-                v8 = error_from.tracked v7
-                v9 = err.tracked v8
+                v7 = const "arithmetic overflow"
+                v8 = error_from v7
+                v9 = err v8
                 return v9
             block4:
-                v10 = call.tracked m0.f1(v5)
+                v10 = call m0.f1(v5)
                 return v10
             
             fn is_odd(p0):
@@ -34,25 +34,25 @@ ModulesAnalysis(
                 branch v1, block1, block2
             block1:
                 v2 = const false
-                v3 = ok.tracked v2
+                v3 = ok v2
                 return v3
             block2:
                 v4 = const 1u32
                 v5, v6 = sub.checked p0, v4
                 branch v6, block3, block4
             block3:
-                v7 = const.tracked "arithmetic overflow"
-                v8 = error_from.tracked v7
-                v9 = err.tracked v8
+                v7 = const "arithmetic overflow"
+                v8 = error_from v7
+                v9 = err v8
                 return v9
             block4:
-                v10 = call.tracked m0.f0(v5)
+                v10 = call m0.f0(v5)
                 return v10
             
             fn main():
             block0:
                 v0 = const 6u32
-                v1 = call.tracked m0.f0(v0)
+                v1 = call m0.f0(v0)
                 return v1
         """,
     ),

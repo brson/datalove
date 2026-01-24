@@ -14,11 +14,11 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "one"
-                        v1 = const.tracked "first"
-                        v2 = const.tracked "two"
-                        v3 = const.tracked "second"
-                        v4 = map.tracked {v0: v1, v2: v3}
+                        v0 = const "one"
+                        v1 = const "first"
+                        v2 = const "two"
+                        v3 = const "second"
+                        v4 = map {v0: v1, v2: v3}
                         unit_end_drop v4
                         unit_end
                     exports:
@@ -41,7 +41,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = move.tracked unit0.v4
+                        v0 = move unit0.v4
                         unit_end v0
                 """,
             ),

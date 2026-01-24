@@ -33,12 +33,13 @@
 - worldfile generator
 - human docs
 - precise drops
-
+- ctfe
 
 
 
 ## On deck
 
+- uninitialized lets and vars - unify with out params
 - fix rt error/alloc semantics
 - clone and coerce
 - updates feed

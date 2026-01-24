@@ -8,13 +8,13 @@ ModulesAnalysis(
             fn test():
             block0:
                 v0 = const 42u32
-                v1 = ok.tracked v0
+                v1 = ok v0
                 return v1
             
             fn main():
             block0:
-                v0 = call.tracked m0.f0()
-                v1, v2, v3 = unwrap_result.tracking v0
+                v0 = call m0.f0()
+                v1, v2, v3 = unwrap_result v0
                 branch v3, block1, block2
             block1:
                 return v1

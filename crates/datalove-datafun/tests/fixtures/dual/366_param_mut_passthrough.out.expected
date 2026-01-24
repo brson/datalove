@@ -13,7 +13,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked 5int
+                        v0 = const 5int
                         store.move.tracked s0, v0
                         v1 = call f1(s0)
                         debuglog s0
@@ -22,7 +22,7 @@ DualAnalysis(
                     
                     fn inner(p0):
                     block0:
-                        v0 = const.tracked 10int
+                        v0 = const 10int
                         v1 = add p0, v0
                         store p0, v1
                         v2 = const true
@@ -44,7 +44,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked 5int
+                        v0 = const 5int
                         store.move.tracked s0, v0
                         v1 = call f1(s0)
                         debuglog s0
@@ -53,7 +53,7 @@ DualAnalysis(
                     
                     fn inner(p0):
                     block0:
-                        v0 = const.tracked 10int
+                        v0 = const 10int
                         v1 = add p0, v0
                         store p0, v1
                         v2 = const true

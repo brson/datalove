@@ -16,8 +16,8 @@ DualAnalysis(
                         v0 = const 10u32
                         v1 = const 20u32
                         v2 = pack Struct0 {v0, v1}
-                        v3 = const.tracked "nested"
-                        v4 = pack.tracked Struct0 {v2, v3}
+                        v3 = const "nested"
+                        v4 = pack Struct0 {v2, v3}
                         v5 = getfield v4.0
                         v6 = getfieldref v5.0
                         debuglog v6
@@ -40,8 +40,8 @@ DualAnalysis(
                         v0 = const 10u32
                         v1 = const 20u32
                         v2 = pack Struct0 {v0, v1}
-                        v3 = const.tracked "nested"
-                        v4 = pack.tracked Struct0 {v2, v3}
+                        v3 = const "nested"
+                        v4 = pack Struct0 {v2, v3}
                         v5 = getfield v4.0
                         v6 = getfieldref v5.0
                         debuglog v6

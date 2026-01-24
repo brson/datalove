@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2026-01-22
+Last verified: 2026-01-24
 
 ## Overview
 
@@ -277,6 +277,46 @@ All parameters are passed by reference (pointer to caller's data). The mode dete
 - `ref`/`mut`/`out` params cannot be moved (caller owns them)
 - `out` params must be initialized before reading or returning
 - `ref` params cannot be passed to `mut` parameters
+- `out` params cannot be partially written (must write whole value, not fields)
+
+#### Out Parameter Semantics
+
+Out parameters enable functions to write results to caller-provided locations. The caller destroys any existing value before the call; the callee writes to an uninitialized slot.
+
+**Call site behavior:**
+```
+var result: (u32, u32) = (0, 0)
+init_pair(result)      // caller destroys (0, 0), callee writes new value
+```
+
+**Callee behavior:**
+```
+fun init_pair(out p: (u32, u32))
+    set p = (42, 100)  // OK: writes whole value
+end fun
+```
+
+**Partial writes disallowed:**
+```
+fun bad(out p: (u32, u32))
+    set p.0 = 42       // ERROR D009: cannot partially write to out parameter
+    set p.1 = 100      // ERROR D009
+end fun
+```
+
+This restriction exists because runtime tracking is per-parameter, not per-field. The first field write would mark the parameter as initialized, causing the second write to incorrectly try to destroy an uninitialized field.
+
+#### Field Projections as Arguments
+
+Field projections can be passed to `ref`, `mut`, or `out` parameters:
+
+```
+var t: (u32, u32) = (100, 200)
+write_42(t.0)          // pass t.0 as out param
+debuglog t.0           // prints 42
+```
+
+For `out` params, the caller destroys the field value before the call. The callee sees an uninitialized slot and must write to it.
 
 ### 2.6 Loop Statements
 
@@ -584,6 +624,53 @@ end loop
 **Exceptions:**
 - Copy types (fixed-width integers, bool, f32, f64) can be used freely in loops
 - Binary operators borrow their operands (don't consume), so `a + b` doesn't move `a` or `b`
+
+### 3.6 Ownership Analysis
+
+Ownership analysis runs after typechecking and before IR lowering. It performs static analysis of value ownership, detecting errors and computing drop schedules.
+
+#### Analysis Errors
+
+| Code | Error | Description |
+|------|-------|-------------|
+| D001 | UseAfterMove | Using a value after ownership was transferred |
+| D002 | DoubleMove | Transferring ownership twice in sequence |
+| D003 | CannotMoveBorrowed | Attempting to move a `ref`/`mut`/`out` parameter |
+| D004 | CannotMutFromRef | Passing immutable `ref` where `mut` is required |
+| D005 | ReadUninitializedOutParam | Reading `out` param before initialization |
+| D006 | OutParamNotInitialized | Returning without initializing `out` param |
+| D007 | MoveInLoop | Moving outer-scoped value inside loop body |
+| D008 | InconsistentBranchMove | Value moved in one branch but not another |
+| D009 | OutParamPartialWrite | Partial field write to `out` param |
+
+#### Tracking Categories
+
+Each binding is assigned a tracking category that determines how moves and drops are handled:
+
+| Category | Description | Instructions Used |
+|----------|-------------|-------------------|
+| Copy | Copy type, no tracking needed | No drops emitted |
+| Precise | State statically known at every program point | Precise move/drop (no runtime checks) |
+| Tracked | State may vary at runtime | Tracked move/drop (with runtime checks) |
+
+**Tracked bindings include:**
+- Exported script bindings
+- Out parameters
+- Values with conditional moves (moved in one branch, not another)
+- Mutable slots that may or may not be initialized
+
+#### Drop Scheduling
+
+The analysis computes when Drop instructions should be emitted:
+
+| Drop Point | Description |
+|------------|-------------|
+| Scope exit | When bindings go out of scope |
+| Branch exit | For convergence when branches have different ownership states |
+| Before return | Cleanup all live bindings |
+| Before break/continue | Cleanup bindings before control flow transfer |
+| Loop body end | Drop iteration-scoped bindings |
+| Before try-return | Cleanup before early return from `?` or `!` operators |
 
 ---
 

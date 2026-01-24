@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     fn read_int(p0):
                     block0:
-                        v0 = const.tracked 0int
+                        v0 = const 0int
                         v1 = add p0, v0
                         drop v0
                         return v1
@@ -36,10 +36,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked 42int
-                        v1 = call.tracked m0.f0(v0)
-                        v2 = call.tracked m0.f0(v0)
-                        v3 = pack.tracked Tuple2 {v1, v2}
+                        v0 = const 42int
+                        v1 = call m0.f0(v0)
+                        v2 = call m0.f0(v0)
+                        v3 = pack Tuple2 {v1, v2}
                         unit_end_drop v0
                         unit_end_drop v3
                         unit_end
@@ -66,7 +66,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = move.tracked unit0.v3
+                        v0 = move unit0.v3
                         unit_end v0
                 """,
             ),

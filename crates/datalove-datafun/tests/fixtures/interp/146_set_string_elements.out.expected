@@ -14,10 +14,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "alice"
-                        v1 = const.tracked "bob"
-                        v2 = const.tracked "charlie"
-                        v3 = set.tracked {v0, v1, v2}
+                        v0 = const "alice"
+                        v1 = const "bob"
+                        v2 = const "charlie"
+                        v3 = set {v0, v1, v2}
                         unit_end_drop v3
                         unit_end
                     exports:
@@ -40,7 +40,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = move.tracked unit0.v3
+                        v0 = move unit0.v3
                         unit_end v0
                 """,
             ),

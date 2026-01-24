@@ -23,7 +23,7 @@ DualAnalysis(
                         v1 = const 6u32
                         v2 = pack Struct0 {v0, v1}
                         v3 = some v2
-                        v4, v5 = unwrap_option.tracking v3
+                        v4, v5 = unwrap_option v3
                         branch v5, block2, block1
                     block1:
                         v6 = none
@@ -51,7 +51,7 @@ DualAnalysis(
                         v1 = const 6u32
                         v2 = pack Struct0 {v0, v1}
                         v3 = some v2
-                        v4, v5 = unwrap_option.tracking v3
+                        v4, v5 = unwrap_option v3
                         branch v5, block2, block1
                     block1:
                         v6 = none

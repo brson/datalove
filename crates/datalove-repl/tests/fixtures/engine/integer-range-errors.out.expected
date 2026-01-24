@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "invalid literal: 256"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -31,7 +31,7 @@
       }
     },
     "eval": {
-      "Error": "invalid literal: 128"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -43,7 +43,7 @@
       }
     },
     "eval": {
-      "Error": "invalid literal: 129"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -55,7 +55,7 @@
       }
     },
     "eval": {
-      "Error": "invalid literal: 65536"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -79,7 +79,7 @@
       }
     },
     "eval": {
-      "Error": "invalid literal: 32768"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -91,7 +91,7 @@
       }
     },
     "eval": {
-      "Error": "invalid literal: 32769"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -103,7 +103,7 @@
       }
     },
     "eval": {
-      "Error": "invalid literal: 4294967296"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -127,7 +127,7 @@
       }
     },
     "eval": {
-      "Error": "invalid literal: 2147483648"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -139,7 +139,7 @@
       }
     },
     "eval": {
-      "Error": "invalid literal: 2147483649"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -151,7 +151,7 @@
       }
     },
     "eval": {
-      "Error": "invalid literal: 18446744073709551616"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -175,7 +175,7 @@
       }
     },
     "eval": {
-      "Error": "invalid literal: 9223372036854775808"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -187,7 +187,7 @@
       }
     },
     "eval": {
-      "Error": "invalid literal: 9223372036854775809"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   }

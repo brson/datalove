@@ -14,11 +14,11 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked 0int
+                        v0 = const 0int
                         store.move.tracked s0, v0
                         goto block1
                     block1:
-                        v1 = const.tracked 5int
+                        v1 = const 5int
                         v2 = eq s0, v1
                         drop v1
                         branch v2, block2, block3
@@ -27,7 +27,7 @@ Analysis(
                     block3:
                         goto block4
                     block4:
-                        v3 = const.tracked 1int
+                        v3 = const 1int
                         v4 = add s0, v3
                         drop v3
                         drop.tracked s0
@@ -56,7 +56,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = move.tracked unit0.s0
+                        v0 = move unit0.s0
                         unit_end v0
                 """,
             ),

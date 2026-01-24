@@ -13,27 +13,27 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked f0()
+                        v0 = call f0()
                         debuglog v0
                         drop v0
                         unit_end
                     
                     fn test():
                     block0:
-                        v0 = const.tracked "first"
-                        v1 = const.tracked "second"
+                        v0 = const "first"
+                        v1 = const "second"
                         v2 = const 0u32
                         v3 = const 1u32
                         v4, v5 = sub.checked v2, v3
                         branch v5, block1, block2
                     block1:
-                        v6 = none.tracked
+                        v6 = none
                         drop v1
                         drop v0
                         return v6
                     block2:
-                        v7 = pack.tracked Tuple3 {v0, v1, v4}
-                        v8 = some.tracked v7
+                        v7 = pack Tuple3 {v0, v1, v4}
+                        v8 = some v7
                         return v8
                     exports:
                         test = f0
@@ -44,27 +44,27 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call.tracked f0()
+                        v0 = call f0()
                         debuglog v0
                         drop v0
                         unit_end
                     
                     fn test():
                     block0:
-                        v0 = const.tracked "first"
-                        v1 = const.tracked "second"
+                        v0 = const "first"
+                        v1 = const "second"
                         v2 = const 0u32
                         v3 = const 1u32
                         v4, v5 = sub.checked v2, v3
                         branch v5, block1, block2
                     block1:
-                        v6 = none.tracked
+                        v6 = none
                         drop v1
                         drop v0
                         return v6
                     block2:
-                        v7 = pack.tracked Tuple3 {v0, v1, v4}
-                        v8 = some.tracked v7
+                        v7 = pack Tuple3 {v0, v1, v4}
+                        v8 = some v7
                         return v8
                     exports:
                         test = f0

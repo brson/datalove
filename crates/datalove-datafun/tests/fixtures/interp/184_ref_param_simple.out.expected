@@ -34,7 +34,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked 100int
+                        v0 = const 100int
                         v1 = call m0.f0(v0)
                         unit_end_drop v0
                         unit_end

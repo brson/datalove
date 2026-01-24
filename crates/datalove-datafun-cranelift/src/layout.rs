@@ -3,7 +3,7 @@
 //! Computes stack slot offsets for values and mutable slots within a function frame,
 //! matching the interpreter's layout for ABI compatibility.
 
-use datalove_datafun_ir::{IrType, SlotId, ValueId};
+use datalove_datafun_ir::{IrType, ParamId, SlotId};
 use crate::types::{self, align_up, TypeLayout, CraneliftRepr};
 
 /// Layout information for a single value or slot.
@@ -57,13 +57,13 @@ impl FrameLayout {
     /// Compute frame layout from IR type arrays.
     ///
     /// Layout order: params, values, slots, tracking bytes.
-    /// This matches the interpreter's layout computation.
+    /// Tracked slots and Out params need tracking bytes.
     pub fn compute(
         param_types: &[IrType],
         value_types: &[IrType],
         slot_types: &[IrType],
-        tracked_values: &[ValueId],
         tracked_slots: &[SlotId],
+        tracked_params: &[ParamId],
     ) -> Self {
         let mut params = Vec::with_capacity(param_types.len());
         let mut values = Vec::with_capacity(value_types.len());
@@ -89,7 +89,7 @@ impl FrameLayout {
             max_align = max_align.max(types::PTR_ALIGN);
         }
 
-        // Layout values.
+        // Layout values (no tracking bytes - all values are precise).
         for ty in value_types {
             let repr = types::ir_type_to_cranelift(ty);
             let TypeLayout { size, align } = repr.layout();
@@ -124,19 +124,21 @@ impl FrameLayout {
         }
 
         // Layout tracking bytes region.
-        // One byte per tracked value/slot, no alignment requirements.
+        // Tracked slots and Out params need tracking bytes.
         let tracking_offset = offset;
-        let tracking_count = (tracked_values.len() + tracked_slots.len()) as u32;
-
-        // Assign tracking byte offsets to tracked values.
-        for (i, &vid) in tracked_values.iter().enumerate() {
-            values[vid.0 as usize].tracking_byte = Some(tracking_offset + i as u32);
-        }
+        let slot_tracking_count = tracked_slots.len() as u32;
+        let param_tracking_count = tracked_params.len() as u32;
+        let tracking_count = slot_tracking_count + param_tracking_count;
 
         // Assign tracking byte offsets to tracked slots.
-        let slot_tracking_base = tracking_offset + tracked_values.len() as u32;
         for (i, &sid) in tracked_slots.iter().enumerate() {
-            slots[sid.0 as usize].tracking_byte = Some(slot_tracking_base + i as u32);
+            slots[sid.0 as usize].tracking_byte = Some(tracking_offset + i as u32);
+        }
+
+        // Assign tracking byte offsets to tracked params (after slots).
+        let param_tracking_base = tracking_offset + slot_tracking_count;
+        for (i, &pid) in tracked_params.iter().enumerate() {
+            params[pid.0 as usize].tracking_byte = Some(param_tracking_base + i as u32);
         }
 
         offset += tracking_count;
@@ -252,22 +254,22 @@ mod tests {
 
     #[test]
     fn test_tracking_bytes_layout() {
-        // Frame with 2 values and 1 slot, track the first value and the slot.
-        let tracked_values = vec![ValueId(0)];
+        // Frame with 2 values and 1 slot, track the slot.
+        // Values are always precise - no tracking bytes for values.
         let tracked_slots = vec![SlotId(0)];
         let layout = FrameLayout::compute(
             &[],
             &[IrType::U32, IrType::U32],
             &[IrType::U64],
-            &tracked_values,
             &tracked_slots,
+            &[],
         );
-        // Values: 0..4, 4..8; slot: 8..16; tracking: 16..18.
+        // Values: 0..4, 4..8; slot: 8..16; tracking: 16..17.
         assert_eq!(layout.tracking_offset, 16);
-        assert_eq!(layout.tracking_count, 2);
-        assert_eq!(layout.values[0].tracking_byte, Some(16));
+        assert_eq!(layout.tracking_count, 1);
+        assert_eq!(layout.values[0].tracking_byte, None);
         assert_eq!(layout.values[1].tracking_byte, None);
-        assert_eq!(layout.slots[0].tracking_byte, Some(17));
+        assert_eq!(layout.slots[0].tracking_byte, Some(16));
         // Frame size should include tracking bytes, aligned to 8.
         assert_eq!(layout.frame_size, 24);
     }

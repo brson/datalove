@@ -45,21 +45,44 @@ pub fn lower_operand<'db>(
 /// For ref/mut/out params with field projection args, emits GetFieldRef instead
 /// of GetField to pass a reference to the field without copying.
 ///
+/// For 'out' mode params, the callee expects uninitialized memory, so we emit
+/// a Drop for the existing value before passing the reference.
+///
 /// For 'in' mode params, the function CONSUMES the argument (takes ownership).
 /// So we don't record temps - the value is transferred to the callee.
 fn lower_call_arg<'db>(
     ctx: &mut LowerCtx<'db>,
     arg: ExprFun<'db>,
     mode: ParamMode,
+    arg_type: Option<&IrType>,
 ) -> Result<Operand, LowerError> {
     // Check if this is a ref context AND the arg is a field projection.
     if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
         if let ExprFunKind::FieldProj(proj) = arg.expr(ctx.db) {
-            return lower_field_proj_as_ref(ctx, arg, proj);
+            let operand = lower_field_proj_as_ref(ctx, arg, proj)?;
+            // For out params, destroy existing field value before call.
+            // Use DropViaRef since we have a reference, not the value itself.
+            if mode == ParamMode::Out {
+                if let Operand::Value(ref_value) = operand {
+                    if let Some(ty) = arg_type {
+                        if !ty.is_copy() {
+                            ctx.emit(Instruction::DropViaRef { ref_value });
+                        }
+                    }
+                }
+            }
+            return Ok(operand);
         }
         // For ref/mut/out modes, use lower_operand which records temps.
         // The caller retains ownership and must drop after the call.
-        return lower_operand(ctx, arg);
+        let operand = lower_operand(ctx, arg)?;
+        // For out params, destroy existing value before call.
+        if mode == ParamMode::Out {
+            if let Some(ty) = arg_type {
+                ctx.emit_drop_for_type(&operand, ty);
+            }
+        }
+        return Ok(operand);
     }
 
     // For 'in' mode: function consumes the argument, so don't record temps.
@@ -226,8 +249,6 @@ pub fn lower_expression<'db>(
                     let dest = ctx.fresh_value(param_type.clone());
                     if param_type.is_copy() {
                         ctx.emit(Instruction::Copy { dest, src: operand });
-                    } else if ctx.is_operand_tracked(operand) {
-                        ctx.emit(Instruction::MoveTracked { dest, src: operand });
                     } else {
                         ctx.emit(Instruction::Move { dest, src: operand });
                     }
@@ -236,13 +257,12 @@ pub fn lower_expression<'db>(
                 Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
                     // External operands from previous script units.
                     // Copy types use Copy, non-copy types use Move.
-                    // External operands are always tracked (script-level state).
                     let ext_type = ctx.expr_type(expr);
                     let dest = ctx.fresh_value(ext_type.clone());
                     if ext_type.is_copy() {
                         ctx.emit(Instruction::Copy { dest, src: operand });
                     } else {
-                        ctx.emit(Instruction::MoveTracked { dest, src: operand });
+                        ctx.emit(Instruction::Move { dest, src: operand });
                     }
                     Ok(dest)
                 }
@@ -269,7 +289,7 @@ pub fn lower_expression<'db>(
             let dest = ctx.fresh_value(result_type.clone());
             let text = lit.value.text(ctx.db);
             let const_value = parse_int_const(text, &result_type)
-                .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
+                .unwrap_or_else(|_| panic!("invalid integer literal '{}' for type {:?} - typechecker should catch this", text, result_type));
             ctx.emit_const(dest, const_value);
             Ok(dest)
         }
@@ -279,7 +299,7 @@ pub fn lower_expression<'db>(
             let text = lit.value.text(ctx.db);
             let hex_str = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")).unwrap_or(text);
             let const_value = parse_hex_const(hex_str, &result_type)
-                .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
+                .unwrap_or_else(|_| panic!("invalid hex literal '{}' for type {:?} - typechecker should catch this", text, result_type));
             ctx.emit_const(dest, const_value);
             Ok(dest)
         }
@@ -294,7 +314,7 @@ pub fn lower_expression<'db>(
             ctx.push_pending_scope();
 
             // Resolve function reference using typechecker's resolved call target.
-            let func_ref = ctx.resolve_call(call)?;
+            let func_ref = ctx.resolve_call(call);
 
             // Get param modes and types from the resolved call target.
             let id = call.as_id().index() as usize;
@@ -313,7 +333,8 @@ pub fn lower_expression<'db>(
             let mut args = Vec::with_capacity(call_args.len());
             for (i, arg) in call_args.iter().enumerate() {
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                let operand = lower_call_arg(ctx, *arg, mode)?;
+                let arg_type = param_types.get(i);
+                let operand = lower_call_arg(ctx, *arg, mode, arg_type)?;
                 // Track in-mode args as pending intermediate.
                 // Ref/mut/out args are tracked via lower_operand's expr_temps.
                 if mode == ParamMode::In {
@@ -500,7 +521,7 @@ pub fn lower_expression<'db>(
             let dest = ctx.fresh_value(result_type.clone());
             let text = lit.value.text(ctx.db);
             let const_value = parse_float_const(text, &result_type)
-                .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
+                .unwrap_or_else(|_| panic!("invalid float literal '{}' for type {:?} - typechecker should catch this", text, result_type));
             ctx.emit_const(dest, const_value);
             Ok(dest)
         }
@@ -1114,7 +1135,7 @@ fn lower_try_option<'db>(
     let result_type = ctx.expr_type(expr);
     let dest = ctx.fresh_value(result_type.clone());
     let is_some = ctx.fresh_value(IrType::Bool);
-    ctx.emit(Instruction::UnwrapOptionTracking {
+    ctx.emit(Instruction::UnwrapOption {
         dest,
         is_some,
         src: Operand::Value(src_id),
@@ -1167,7 +1188,7 @@ fn lower_try_result<'db>(
     let ok_dest = ctx.fresh_value(result_type.clone());
     let err_dest = ctx.fresh_value(IrType::Error);
     let is_ok = ctx.fresh_value(IrType::Bool);
-    ctx.emit(Instruction::UnwrapResultTracking {
+    ctx.emit(Instruction::UnwrapResult {
         ok_dest,
         err_dest,
         is_ok,

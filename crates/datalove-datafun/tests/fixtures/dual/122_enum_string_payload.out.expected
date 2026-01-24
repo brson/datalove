@@ -13,8 +13,8 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "hello world"
-                        v1 = enum_variant.tracked 1 v0
+                        v0 = const "hello world"
+                        v1 = enum_variant 1 v0
                         debuglog v1
                         unit_end_drop v1
                         unit_end
@@ -27,8 +27,8 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const.tracked "hello world"
-                        v1 = enum_variant.tracked 1 v0
+                        v0 = const "hello world"
+                        v1 = enum_variant 1 v0
                         debuglog v1
                         unit_end_drop v1
                         unit_end

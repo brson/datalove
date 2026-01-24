@@ -60,7 +60,7 @@ fn lower_statement_impl<'db>(
     stmt: &Statement<'db>,
 ) -> Result<(), LowerError> {
     // Allocate a globally-unique statement ID that matches ownership analysis.
-    let stmt_idx = ctx.alloc_stmt_id();
+    let stmt_idx = ctx.alloc_stmt_id(stmt);
     match stmt {
         Statement::Let(let_stmt) => {
             let name = let_stmt.name.text(ctx.db).to_string();
@@ -303,13 +303,13 @@ fn lower_if_option<'db>(
     // Lower the Option expression.
     let opt_id = lower_expression(ctx, condition)?;
 
-    // Emit UnwrapOptionTracking instruction.
+    // Emit UnwrapOption instruction.
     // dest: receives inner value (only valid when is_some=true).
     // is_some: boolean flag for branching.
     let inner_dest = ctx.fresh_value(inner_type.clone());
     let is_some = ctx.fresh_value(IrType::Bool);
 
-    ctx.emit(Instruction::UnwrapOptionTracking {
+    ctx.emit(Instruction::UnwrapOption {
         dest: inner_dest,
         is_some,
         src: Operand::Value(opt_id),
@@ -398,7 +398,7 @@ fn lower_if_result<'db>(
     // Lower the Result expression.
     let result_id = lower_expression(ctx, condition)?;
 
-    // Emit UnwrapResultTracking instruction.
+    // Emit UnwrapResult instruction.
     // ok_dest: receives Ok payload (only valid when is_ok=true).
     // err_dest: receives Error (only valid when is_ok=false).
     // is_ok: boolean flag for branching.
@@ -406,7 +406,7 @@ fn lower_if_result<'db>(
     let err_dest = ctx.fresh_value(IrType::Error);
     let is_ok = ctx.fresh_value(IrType::Bool);
 
-    ctx.emit(Instruction::UnwrapResultTracking {
+    ctx.emit(Instruction::UnwrapResult {
         ok_dest,
         err_dest,
         is_ok,
@@ -614,11 +614,7 @@ fn lower_set<'db>(
                     // Only Mut/Out params can be assigned.
                     let mode = ctx.param_mode(param);
                     if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
-                        // ParamStore handles destroying the old value internally.
-                        ctx.emit(Instruction::ParamStore {
-                            param,
-                            value: Operand::Value(value_id),
-                        });
+                        ctx.emit_param_store(param, Operand::Value(value_id));
                         Ok(())
                     } else {
                         panic!("assignment to immutable param '{}' - typechecker should catch this", name_str)
@@ -643,14 +639,10 @@ fn lower_set<'db>(
                     Ok(())
                 }
                 Some(Operand::Param(param)) => {
-                    // Only Mut params can have field projections set.
+                    // Mut/Out params can have field projections set.
                     let mode = ctx.param_mode(param);
-                    if mode == Some(ParamMode::Mut) {
-                        ctx.emit(Instruction::ParamSetField {
-                            param,
-                            field_path,
-                            value: Operand::Value(value_id),
-                        });
+                    if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
+                        ctx.emit_param_set_field(param, field_path, Operand::Value(value_id));
                         Ok(())
                     } else {
                         panic!("assignment to field of immutable param '{}' - typechecker should catch this", root_name_str)

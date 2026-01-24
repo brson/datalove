@@ -28,7 +28,7 @@ DualAnalysis(
                     fn init_42(p0):
                     block0:
                         v0 = const 42u32
-                        store p0, v0
+                        store.tracked p0, v0
                         v1 = const true
                         return v1
                     exports:
@@ -57,7 +57,7 @@ DualAnalysis(
                     fn init_42(p0):
                     block0:
                         v0 = const 42u32
-                        store p0, v0
+                        store.tracked p0, v0
                         v1 = const true
                         return v1
                     exports:

@@ -193,8 +193,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             &func.param_types,
             &func.value_types,
             &func.slot_types,
-            &func.tracked_values,
             &func.tracked_slots,
+            &func.tracked_params,
         );
 
         Self {
@@ -231,8 +231,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             &func.param_types,
             &func.value_types,
             &func.slot_types,
-            &func.tracked_values,
             &func.tracked_slots,
+            &func.tracked_params,
         );
 
         Self {
@@ -271,8 +271,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             &func.param_types,
             &func.value_types,
             &func.slot_types,
-            &func.tracked_values,
             &func.tracked_slots,
+            &func.tracked_params,
         );
 
         Self {
@@ -541,13 +541,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.compile_copy(builder, *dest, src)?;
             }
             Instruction::Move { dest, src } => {
-                // Precise move: same as copy, no tracking update needed.
                 self.compile_copy(builder, *dest, src)?;
-            }
-            Instruction::MoveTracked { dest, src } => {
-                // Tracked move: copy then mark source as moved.
-                self.compile_copy(builder, *dest, src)?;
-                self.mark_tracking_moved(builder, src);
             }
             Instruction::Pack { dest, ty: _, fields } => {
                 self.compile_pack(builder, *dest, fields)?;
@@ -592,14 +586,23 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::ParamStore { param, value } => {
                 self.compile_param_store(builder, *param, value)?;
             }
+            Instruction::ParamStoreTracked { param, value } => {
+                self.compile_param_store_tracked(builder, *param, value)?;
+            }
             Instruction::ParamSetField { param, field_path, value } => {
                 self.compile_param_set_field(builder, param, field_path, value)?;
+            }
+            Instruction::ParamSetFieldTracked { param, field_path, value } => {
+                self.compile_param_set_field_tracked(builder, param, field_path, value)?;
             }
             Instruction::Drop { operand } => {
                 self.compile_drop(builder, operand)?;
             }
             Instruction::DropTracked { operand } => {
                 self.compile_drop_tracked(builder, operand)?;
+            }
+            Instruction::DropViaRef { ref_value } => {
+                self.compile_drop_via_ref(builder, *ref_value)?;
             }
             Instruction::UnitEndDrop { operand } => {
                 // Precise binding: unconditional drop.
@@ -638,10 +641,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::WrapErr { dest, inner } => {
                 self.compile_wrap_err(builder, *dest, inner)?;
             }
-            Instruction::UnwrapOptionTracking { dest, is_some, src } => {
+            Instruction::UnwrapOption { dest, is_some, src } => {
                 self.compile_unwrap_option(builder, *dest, *is_some, src)?;
             }
-            Instruction::UnwrapResultTracking { ok_dest, err_dest, is_ok, src } => {
+            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
                 self.compile_unwrap_result(builder, *ok_dest, *err_dest, *is_ok, src)?;
             }
             Instruction::EnumVariant { dest, variant_index, payload } => {
@@ -658,82 +661,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
 
             // ================================================================
-            // Tracked variants - write tracking bytes
+            // Slot tracking variants - write slot tracking bytes
             // ================================================================
-            Instruction::ConstTracked { dest, value } => {
-                self.compile_const(builder, *dest, value)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::WidenTracked { dest, src } => {
-                self.compile_widen(builder, *dest, src)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::CallTracked { dest, func, args } => {
-                self.compile_call(builder, *dest, func, args)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::PackTracked { dest, ty: _, fields } => {
-                self.compile_pack(builder, *dest, fields)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::UnpackTracked { dests, src } => {
-                self.compile_unpack(builder, dests, src)?;
-                for dest in dests {
-                    self.mark_value_live(builder, *dest);
-                }
-            }
-            Instruction::GetFieldTracked { dest, src, field_index } => {
-                self.compile_get_field(builder, *dest, src, *field_index)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::WrapSomeTracked { dest, inner } => {
-                self.compile_wrap_some(builder, *dest, inner)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::WrapNoneTracked { dest } => {
-                self.compile_wrap_none(builder, *dest)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::WrapOkTracked { dest, inner } => {
-                self.compile_wrap_ok(builder, *dest, inner)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::WrapErrTracked { dest, inner } => {
-                self.compile_wrap_err(builder, *dest, inner)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::EnumVariantTracked { dest, variant_index, payload } => {
-                self.compile_enum_variant(builder, *dest, *variant_index, payload.as_ref())?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::ErrorFromTracked { dest, inner } => {
-                self.compile_error_from(builder, *dest, inner)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::DataFromTracked { dest, inner } => {
-                self.compile_data_from(builder, *dest, inner)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::ListNewTracked { dest, elements } => {
-                self.compile_list_new(builder, *dest, elements)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::SetNewTracked { dest, elements } => {
-                self.compile_set_new(builder, *dest, elements)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::MapNewTracked { dest, entries } => {
-                self.compile_map_new(builder, *dest, entries)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::TensorNewTracked { dest, shape, elements } => {
-                self.compile_tensor_new(builder, *dest, shape, elements)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::TableNewTracked { dest, rows } => {
-                self.compile_table_new(builder, *dest, rows)?;
-                self.mark_value_live(builder, *dest);
-            }
             Instruction::SlotStoreCopyTracked { dest, value } => {
                 self.compile_slot_store(builder, dest, value, true)?;
                 if let SlotDest::Local(sid) = dest {
@@ -751,14 +680,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 if let SlotDest::Local(sid) = slot {
                     self.mark_slot_live(builder, *sid);
                 }
-            }
-            Instruction::SlotLoadCopyTracked { dest, slot } => {
-                self.compile_slot_load(builder, *dest, *slot, true)?;
-                self.mark_value_live(builder, *dest);
-            }
-            Instruction::IntrinsicTracked { dest, intrinsic, args } => {
-                self.compile_intrinsic(builder, *dest, *intrinsic, args)?;
-                self.mark_value_live(builder, *dest);
             }
         }
         Ok(())
@@ -1004,6 +925,38 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     fn mark_slot_live(&self, builder: &mut FunctionBuilder, sid: SlotId) {
         self.mark_tracking_live(builder, &Operand::Slot(sid));
     }
+
+    /// Get tracking byte offset for a param, if tracked.
+    fn param_tracking_byte_offset(&self, pid: ParamId) -> Option<u32> {
+        self.layout.params[pid.0 as usize].tracking_byte
+    }
+
+    /// Mark a tracked param as LIVE after store.
+    fn mark_param_live(&self, builder: &mut FunctionBuilder, pid: ParamId) {
+        use crate::layout::tracking;
+
+        if let Some(track_offset) = self.param_tracking_byte_offset(pid) {
+            let frame_slot = self.frame_slot
+                .expect("tracking requires frame slot");
+            let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+            let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
+            builder.ins().store(MemFlags::new(), live_val, track_addr, 0);
+        }
+    }
+
+    /// Get the pointer stored in a ref value (from GetFieldRef).
+    ///
+    /// For ref values, the stored cranelift value IS the pointer.
+    fn get_value_as_ref_ptr(
+        &self,
+        _builder: &mut FunctionBuilder,
+        vid: ValueId,
+    ) -> Result<cl_ir::Value, CraneliftError> {
+        // GetFieldRef stores the pointer directly in self.values.
+        self.values.get(&vid).copied().ok_or_else(|| {
+            CraneliftError::Codegen(format!("ref value {:?} not found", vid))
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1065,8 +1018,8 @@ mod tests {
             slot_count: 0,
             value_types: vec![IrType::I32],
             slot_types: vec![],
-            tracked_values: vec![],
             tracked_slots: vec![],
+            tracked_params: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
@@ -1116,8 +1069,8 @@ mod tests {
             slot_count: 0,
             value_types: vec![IrType::I32, IrType::I32, IrType::Bool],
             slot_types: vec![],
-            tracked_values: vec![],
             tracked_slots: vec![],
+            tracked_params: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
@@ -1159,8 +1112,8 @@ mod tests {
             slot_count: 0,
             value_types: vec![IrType::I32, IrType::I32],
             slot_types: vec![],
-            tracked_values: vec![],
             tracked_slots: vec![],
+            tracked_params: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
@@ -1233,8 +1186,8 @@ mod tests {
             slot_count: 0,
             value_types: vec![IrType::Bool, IrType::I32, IrType::I32],
             slot_types: vec![],
-            tracked_values: vec![],
             tracked_slots: vec![],
+            tracked_params: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
