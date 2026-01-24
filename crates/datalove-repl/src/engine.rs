@@ -2,9 +2,12 @@
 
 use rmx::prelude::*;
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, EvalFun, InputParse, Input};
 use datalove_datafun as datafun;
 use datafun::pipeline::{ModuleCompilationPipeline, ScriptCompiler, ScriptExecutor, TypecheckResult, LoweringResult};
+use datalove_datafun_interp::InterpCtfeEvaluator;
 
 pub struct Engine<'db> {
     db: &'db datafun::Database,
@@ -52,8 +55,9 @@ impl<'db> Engine<'db> {
         }
 
         // Create compiler and executor (safe to unwrap since we checked for errors above).
-        let compiler = compiled.script_compiler(db)
+        let mut compiler = compiled.script_compiler(db)
             .expect("script_compiler should succeed after is_successful check");
+        compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
         let executor = compiled.script_executor(datalove_datafun::DebugOutputMode::Disabled, None)
             .expect("script_executor should succeed after is_successful check");
 
@@ -72,8 +76,10 @@ impl<'db> Engine<'db> {
         // Create new compiler and executor (empty pipeline always succeeds).
         let mut pipeline = ModuleCompilationPipeline::new();
         let compiled = pipeline.compile_fresh(self.db);
-        self.compiler = compiled.script_compiler(self.db)
+        let mut compiler = compiled.script_compiler(self.db)
             .expect("empty pipeline compilation should succeed");
+        compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
+        self.compiler = compiler;
         self.executor = compiled.script_executor(datalove_datafun::DebugOutputMode::Disabled, None)
             .expect("empty pipeline compilation should succeed");
     }
