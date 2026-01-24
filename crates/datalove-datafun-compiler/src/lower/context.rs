@@ -986,6 +986,22 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// Emit ParamStore to write a value to a mutable parameter.
+    ///
+    /// All params are precise (always initialized by caller), so always
+    /// destroys old value before writing.
+    pub fn emit_param_store(&mut self, param: ParamId, value: Operand) {
+        self.emit(Instruction::ParamStore { param, value });
+    }
+
+    /// Emit ParamSetField to write a value to a field within a mutable parameter.
+    ///
+    /// All params are precise (always initialized by caller), so always
+    /// destroys old field value before writing.
+    pub fn emit_param_set_field(&mut self, param: ParamId, field_path: Vec<u32>, value: Operand) {
+        self.emit(Instruction::ParamSetField { param, field_path, value });
+    }
+
     /// Emit SlotLoadCopy or SlotLoadCopyTracked based on destination tracking.
     pub fn emit_slot_load_copy(&mut self, dest: ValueId, slot: SlotId) {
         if self.is_dest_tracked(dest) {

@@ -597,11 +597,7 @@ fn lower_set<'db>(
                     // Only Mut/Out params can be assigned.
                     let mode = ctx.param_mode(param);
                     if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
-                        // ParamStore handles destroying the old value internally.
-                        ctx.emit(Instruction::ParamStore {
-                            param,
-                            value: Operand::Value(value_id),
-                        });
+                        ctx.emit_param_store(param, Operand::Value(value_id));
                         Ok(())
                     } else {
                         panic!("assignment to immutable param '{}' - typechecker should catch this", name_str)
@@ -626,14 +622,10 @@ fn lower_set<'db>(
                     Ok(())
                 }
                 Some(Operand::Param(param)) => {
-                    // Only Mut params can have field projections set.
+                    // Mut/Out params can have field projections set.
                     let mode = ctx.param_mode(param);
-                    if mode == Some(ParamMode::Mut) {
-                        ctx.emit(Instruction::ParamSetField {
-                            param,
-                            field_path,
-                            value: Operand::Value(value_id),
-                        });
+                    if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
+                        ctx.emit_param_set_field(param, field_path, Operand::Value(value_id));
                         Ok(())
                     } else {
                         panic!("assignment to field of immutable param '{}' - typechecker should catch this", root_name_str)

@@ -1146,18 +1146,21 @@ pub enum Instruction {
         value: Operand,
     },
 
-    /// Store value to mutable parameter (writes through to caller's data).
+    /// Store value to mutable parameter (Mut or Out).
+    ///
+    /// All params are precise - caller always provides initialized memory.
+    /// Always destroys the old value before storing.
     ///
     /// **Ownership:** Consumes `value`, writes to caller's param location.
-    /// **Tracking:** None - params have implicit tracking via call convention.
+    /// **Tracking:** None - all params are precise.
     ParamStore { param: ParamId, value: Operand },
 
-    /// Store value to a field within a mutable parameter.
+    /// Store value to a field within mutable parameter.
     ///
-    /// Similar to SetField but targets a parameter instead of a slot.
+    /// All params are precise - always destroys the old field value.
     ///
     /// **Ownership:** Consumes `value`, writes to field within param.
-    /// **Tracking:** None - params have implicit tracking.
+    /// **Tracking:** None - all params are precise.
     ParamSetField {
         param: ParamId,
         field_path: Vec<u32>,
