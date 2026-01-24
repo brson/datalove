@@ -55,9 +55,9 @@ impl<'db> Engine<'db> {
         }
 
         // Create compiler and executor (safe to unwrap since we checked for errors above).
-        let mut compiler = compiled.script_compiler(db)
+        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+        let compiler = compiled.script_compiler(db, evaluator)
             .expect("script_compiler should succeed after is_successful check");
-        compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
         let executor = compiled.script_executor(datalove_datafun::DebugOutputMode::Disabled, None)
             .expect("script_executor should succeed after is_successful check");
 
@@ -76,10 +76,9 @@ impl<'db> Engine<'db> {
         // Create new compiler and executor (empty pipeline always succeeds).
         let mut pipeline = ModuleCompilationPipeline::new();
         let compiled = pipeline.compile_fresh(self.db);
-        let mut compiler = compiled.script_compiler(self.db)
+        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+        self.compiler = compiled.script_compiler(self.db, evaluator)
             .expect("empty pipeline compilation should succeed");
-        compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
-        self.compiler = compiler;
         self.executor = compiled.script_executor(datalove_datafun::DebugOutputMode::Disabled, None)
             .expect("empty pipeline compilation should succeed");
     }

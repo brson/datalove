@@ -15,13 +15,16 @@
 //! # Example
 //!
 //! ```ignore
+//! use datalove_datafun_interp::InterpCtfeEvaluator;
+//!
 //! // Stage 1: compile modules.
 //! let mut pipeline = ModuleCompilationPipeline::new();
 //! pipeline.add_module(&db, "local", "mypackage", "main", source);
 //! let compiled = pipeline.compile_fresh(&db);
 //!
 //! // Stage 2: compile and run scripts (only if compilation succeeded).
-//! let mut compiler = compiled.script_compiler(&db).expect("compilation succeeded");
+//! let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+//! let mut compiler = compiled.script_compiler(&db, evaluator).expect("compilation succeeded");
 //! let mut executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
 //!
 //! let result = compiler.compile_fragment("let x = 42");

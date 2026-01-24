@@ -146,7 +146,8 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
     }
 
     // Create script compiler (we don't need executor for AOT).
-    let Some(mut compiler) = compiled.script_compiler(&db) else {
+    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+    let Some(mut compiler) = compiled.script_compiler(&db, evaluator) else {
         // Module compilation failed, return skipped results for all script sections.
         for section in &parsed.sections {
             if matches!(section, WorldfileSection::ScriptFragment { .. } | WorldfileSection::ScriptExpr { .. }) {
@@ -169,7 +170,6 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
         }
         return AotAnalysis { sections: results };
     };
-    compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
 
     // Get the module registry for world types.
     let registry = compiled.module_registry();

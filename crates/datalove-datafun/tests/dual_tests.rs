@@ -271,7 +271,8 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     }
 
     // Run interpreter pipeline.
-    let Some(mut interp_compiler) = compiled.script_compiler(&db) else {
+    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+    let Some(mut interp_compiler) = compiled.script_compiler(&db, evaluator) else {
         // Module compilation failed, script execution skipped.
         // Both lowerings are Skipped, so they match.
         results.push(DualSectionResult {
@@ -292,7 +293,6 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         });
         return DualAnalysis { sections: results };
     };
-    interp_compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
     let Some(mut interp_executor) = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, None) else {
         return DualAnalysis { sections: results };
     };
@@ -312,7 +312,8 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     let compiled2 = pipeline2.compile_fresh(&db);
 
     // Run AOT pipeline.
-    let Some(mut aot_compiler) = compiled2.script_compiler(&db) else {
+    let aot_evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+    let Some(mut aot_compiler) = compiled2.script_compiler(&db, aot_evaluator) else {
         // Module compilation failed for AOT, but interp succeeded.
         // This shouldn't happen if both use the same input, but handle it.
         results.push(DualSectionResult {
@@ -333,7 +334,6 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         });
         return DualAnalysis { sections: results };
     };
-    aot_compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
     let aot_compiled = aot_compiler.compile_fragment(fragment_source);
     let registry = compiled2.module_registry();
 

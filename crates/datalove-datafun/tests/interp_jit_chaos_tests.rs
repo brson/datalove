@@ -47,7 +47,8 @@ fn run_worldfile(
         return results;
     }
 
-    let Some(mut compiler) = compiled.script_compiler(db) else {
+    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+    let Some(mut compiler) = compiled.script_compiler(db, evaluator) else {
         results.push(UnitOutput {
             section_type: "compilation".into(),
             output: "error".into(),
@@ -55,7 +56,6 @@ fn run_worldfile(
         });
         return results;
     };
-    compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
 
     let Some(mut executor) = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, call_dispatcher) else {
         results.push(UnitOutput {

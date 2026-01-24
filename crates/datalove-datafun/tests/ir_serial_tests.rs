@@ -458,7 +458,8 @@ fn analyze_worldfile_ir_serial(
     }
 
     // Compile for AOT (includes drops).
-    let Some(mut compiler) = compiled.script_compiler(&db) else {
+    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+    let Some(mut compiler) = compiled.script_compiler(&db, evaluator) else {
         // Module compilation failed (typecheck or ownership errors).
         results.push(IrSerialSectionResult {
             section_type: "scriptunit-fragment".to_string(),
@@ -481,7 +482,6 @@ fn analyze_worldfile_ir_serial(
         });
         return IrSerialAnalysis { sections: results };
     };
-    compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
     let compiled_unit = compiler.compile_fragment(fragment_source);
 
     // Get registry for AOT.

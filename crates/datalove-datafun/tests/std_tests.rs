@@ -58,10 +58,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     }
 
     // Create script compiler and executor (module specs are built internally from module graph).
-    let Some(mut compiler) = compiled.script_compiler(&db) else {
+    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+    let Some(mut compiler) = compiled.script_compiler(&db, evaluator) else {
         return Err("Module compilation failed".to_string());
     };
-    compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
     let Some(mut executor) = compiled.script_executor(datafun::DebugOutputMode::Disabled, None) else {
         return Err("Module compilation failed".to_string());
     };

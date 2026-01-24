@@ -111,7 +111,8 @@ pub fn analyze_worldfile_with_jit(
     let jit = JitEngine::new(1).expect("JitEngine creation failed");
 
     // Create script compiler and executor with Buffer mode and JIT enabled.
-    let Some(mut compiler) = compiled.script_compiler(db) else {
+    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+    let Some(mut compiler) = compiled.script_compiler(db, evaluator) else {
         // Module compilation failed, return skipped results for script sections.
         for section in &parsed.sections {
             match section {
@@ -142,7 +143,6 @@ pub fn analyze_worldfile_with_jit(
         }
         return Ok(Analysis { sections: results });
     };
-    compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
 
     let Some(mut executor) = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, Some(Box::new(jit))) else {
         return Ok(Analysis { sections: results });

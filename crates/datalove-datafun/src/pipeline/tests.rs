@@ -16,8 +16,8 @@ struct TestContext<'db> {
 
 impl<'db> TestContext<'db> {
     fn new(compiled: &CompiledModules<'db>, db: &'db dyn salsa::Database) -> Self {
-        let mut compiler = compiled.script_compiler(db).unwrap();
-        compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
+        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+        let compiler = compiled.script_compiler(db, evaluator).unwrap();
         let executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
         Self { compiler, executor }
     }
@@ -187,8 +187,8 @@ end fun
                 let db_ref = db_clone.as_salsa_db();
 
                 // Create compiler and executor from the shared compiled modules.
-                let mut compiler = compiled.script_compiler(db_ref).unwrap();
-                compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
+                let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+                let mut compiler = compiled.script_compiler(db_ref, evaluator).unwrap();
                 let mut executor = compiled.script_executor(DebugOutputMode::Disabled, None).unwrap();
 
                 // Import and use the shared module function.

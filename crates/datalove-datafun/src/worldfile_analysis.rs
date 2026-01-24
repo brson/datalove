@@ -117,10 +117,8 @@ pub fn analyze_worldfile(
     }
 
     // Create script compiler and executor with Buffer mode for capturing debuglog output.
-    let mut compiler = compiled.script_compiler(db);
-    if let Some(ref mut c) = compiler {
-        c.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
-    }
+    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+    let mut compiler = compiled.script_compiler(db, evaluator);
     let mut executor = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, None);
 
     // Process script units using the compiler and executor.

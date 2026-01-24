@@ -10,7 +10,10 @@
 //! # Example
 //!
 //! ```ignore
-//! let mut compiler = compiled.script_compiler(&db).unwrap();
+//! use datalove_datafun_interp::InterpCtfeEvaluator;
+//!
+//! let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+//! let mut compiler = compiled.script_compiler(&db, evaluator).unwrap();
 //!
 //! // Compile a fragment (statements).
 //! let result = compiler.compile_fragment("let x = 42");
@@ -60,9 +63,16 @@ enum ParsedUnit<'db> {
 impl<'db> CompiledModules<'db> {
     /// Create a script compiler for compiling script units.
     ///
+    /// The `ctfe_evaluator` is used for compile-time evaluation of const expressions.
+    /// Use `InterpCtfeEvaluator` from the interpreter crate.
+    ///
     /// Returns `None` if module compilation failed (has errors).
     /// The compiler handles only compilation; use `script_executor()` for execution.
-    pub fn script_compiler(&self, db: &'db dyn salsa::Database) -> Option<ScriptCompiler<'db>> {
+    pub fn script_compiler(
+        &self,
+        db: &'db dyn salsa::Database,
+        ctfe_evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    ) -> Option<ScriptCompiler<'db>> {
         if self.has_errors() {
             return None;
         }
@@ -99,7 +109,7 @@ impl<'db> CompiledModules<'db> {
             module_specs,
             last_source: None,
             last_batch_spec: None,
-            ctfe_evaluator: None,
+            ctfe_evaluator,
         })
     }
 }
@@ -108,10 +118,6 @@ impl<'db> CompiledModules<'db> {
 ///
 /// Handles compilation only. No interpreter dependency.
 /// Use `compile_fragment()` or `compile_expr()` to compile units.
-///
-/// For compile-time evaluation of complex const expressions (CTFE), use
-/// `set_ctfe_evaluator()` to provide an evaluator (e.g., `InterpCtfeEvaluator`
-/// from the interpreter crate).
 pub struct ScriptCompiler<'db> {
     db: &'db dyn salsa::Database,
     accumulated_unit_specs: Vec<ScriptUnitSpec<'db>>,
@@ -119,8 +125,8 @@ pub struct ScriptCompiler<'db> {
     module_specs: Vec<ModuleSpec<'db>>,
     last_source: Option<bct::input::Source>,
     last_batch_spec: Option<ScriptBatchSpec<'db>>,
-    /// Optional CTFE evaluator for complex const expressions.
-    ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
+    /// CTFE evaluator for const expression evaluation.
+    ctfe_evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
 }
 
 impl<'db> ScriptCompiler<'db> {
@@ -177,29 +183,6 @@ impl<'db> ScriptCompiler<'db> {
     /// Get the database reference.
     pub fn db(&self) -> &'db dyn salsa::Database {
         self.db
-    }
-
-    /// Set a CTFE evaluator for complex const expressions.
-    ///
-    /// When set, the compiler can evaluate const expressions that involve
-    /// operations (like `const X = 1 + 2` or `const Y = -42`) at compile time.
-    /// Without an evaluator, only simple literals are supported for const bindings.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// use datalove_datafun_interp::InterpCtfeEvaluator;
-    ///
-    /// let mut compiler = compiled.script_compiler(&db).unwrap();
-    /// compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
-    /// ```
-    pub fn set_ctfe_evaluator(&mut self, evaluator: Rc<RefCell<dyn CtfeEvaluator>>) {
-        self.ctfe_evaluator = Some(evaluator);
-    }
-
-    /// Get a clone of the CTFE evaluator if one is set.
-    pub fn ctfe_evaluator(&self) -> Option<Rc<RefCell<dyn CtfeEvaluator>>> {
-        self.ctfe_evaluator.clone()
     }
 
     /// Check for parse errors and return early result if any.
@@ -263,22 +246,8 @@ impl<'db> ScriptCompiler<'db> {
             };
         }
 
-        // CTFE evaluator is required for script compilation.
-        let evaluator = match &self.ctfe_evaluator {
-            Some(e) => e.clone(),
-            None => {
-                return ScriptCompilationResult {
-                    typecheck: TypecheckResult::Success,
-                    ownership: OwnershipResult::Skipped,
-                    lowering: LoweringResult::Error {
-                        message: "CTFE evaluator required for script compilation".to_string(),
-                    },
-                    ir_unit: None,
-                };
-            }
-        };
-
         // Run ownership analysis and lowering (unit-kind-specific).
+        let evaluator = self.ctfe_evaluator.clone();
         let (ir_unit, new_exports, value_types, slot_types): (
             IrScriptUnit,
             Vec<(String, datalove_datafun_ir::ExportBinding)>,
