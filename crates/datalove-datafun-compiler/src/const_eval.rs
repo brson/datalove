@@ -79,62 +79,65 @@ pub unsafe fn extract_const_value(
     ptr: *const u8,
     ir_type: &IrType,
 ) -> Result<ConstValue, ConstEvalError> {
-    match ir_type {
-        IrType::Unit => Ok(ConstValue::Unit),
-        IrType::Bool => {
-            let val = *(ptr as *const bool);
-            Ok(ConstValue::Bool(val))
+    // SAFETY: Caller guarantees ptr is valid and type matches.
+    unsafe {
+        match ir_type {
+            IrType::Unit => Ok(ConstValue::Unit),
+            IrType::Bool => {
+                let val = *(ptr as *const bool);
+                Ok(ConstValue::Bool(val))
+            }
+            IrType::U8 => {
+                let val = *(ptr as *const u8);
+                Ok(ConstValue::U8(val))
+            }
+            IrType::U16 => {
+                let val = *(ptr as *const u16);
+                Ok(ConstValue::U16(val))
+            }
+            IrType::U32 => {
+                let val = *(ptr as *const u32);
+                Ok(ConstValue::U32(val))
+            }
+            IrType::U64 => {
+                let val = *(ptr as *const u64);
+                Ok(ConstValue::U64(val))
+            }
+            IrType::I8 => {
+                let val = *(ptr as *const i8);
+                Ok(ConstValue::I8(val))
+            }
+            IrType::I16 => {
+                let val = *(ptr as *const i16);
+                Ok(ConstValue::I16(val))
+            }
+            IrType::I32 => {
+                let val = *(ptr as *const i32);
+                Ok(ConstValue::I32(val))
+            }
+            IrType::I64 => {
+                let val = *(ptr as *const i64);
+                Ok(ConstValue::I64(val))
+            }
+            IrType::Usize => {
+                let val = *(ptr as *const datalove_rtdt::UsizeRepr);
+                Ok(ConstValue::Usize(val))
+            }
+            IrType::Isize => {
+                let val = *(ptr as *const datalove_rtdt::IsizeRepr);
+                Ok(ConstValue::Isize(val))
+            }
+            IrType::F32 => {
+                let val = *(ptr as *const f32);
+                Ok(ConstValue::F32(val))
+            }
+            IrType::F64 => {
+                let val = *(ptr as *const f64);
+                Ok(ConstValue::F64(val))
+            }
+            // Aggregate and collection types not yet supported for extraction.
+            // TODO: Add support for Tuple, Struct, Option, Result, List, etc.
+            _ => Err(ConstEvalError::UnsupportedType(format!("{:?}", ir_type))),
         }
-        IrType::U8 => {
-            let val = *(ptr as *const u8);
-            Ok(ConstValue::U8(val))
-        }
-        IrType::U16 => {
-            let val = *(ptr as *const u16);
-            Ok(ConstValue::U16(val))
-        }
-        IrType::U32 => {
-            let val = *(ptr as *const u32);
-            Ok(ConstValue::U32(val))
-        }
-        IrType::U64 => {
-            let val = *(ptr as *const u64);
-            Ok(ConstValue::U64(val))
-        }
-        IrType::I8 => {
-            let val = *(ptr as *const i8);
-            Ok(ConstValue::I8(val))
-        }
-        IrType::I16 => {
-            let val = *(ptr as *const i16);
-            Ok(ConstValue::I16(val))
-        }
-        IrType::I32 => {
-            let val = *(ptr as *const i32);
-            Ok(ConstValue::I32(val))
-        }
-        IrType::I64 => {
-            let val = *(ptr as *const i64);
-            Ok(ConstValue::I64(val))
-        }
-        IrType::Usize => {
-            let val = *(ptr as *const datalove_rtdt::UsizeRepr);
-            Ok(ConstValue::Usize(val))
-        }
-        IrType::Isize => {
-            let val = *(ptr as *const datalove_rtdt::IsizeRepr);
-            Ok(ConstValue::Isize(val))
-        }
-        IrType::F32 => {
-            let val = *(ptr as *const f32);
-            Ok(ConstValue::F32(val))
-        }
-        IrType::F64 => {
-            let val = *(ptr as *const f64);
-            Ok(ConstValue::F64(val))
-        }
-        // Aggregate and collection types not yet supported for extraction.
-        // TODO: Add support for Tuple, Struct, Option, Result, List, etc.
-        _ => Err(ConstEvalError::UnsupportedType(format!("{:?}", ir_type))),
     }
 }

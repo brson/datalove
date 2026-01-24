@@ -469,7 +469,7 @@ fn evaluate_single_const<'db>(
     // Try simple evaluation first.
     let value = match lower::const_expr::eval_const_expr_simple(db, init_expr, &ir_type, resolved_so_far) {
         Ok(v) => v,
-        Err(simple_err) => {
+        Err(_simple_err) => {
             // Fall back to CTFE evaluator for complex expressions.
             match lower::const_expr::eval_const_expr_with_evaluator(
                 db,
