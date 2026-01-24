@@ -6,11 +6,13 @@
 //! - [`lower_function_body`]: Shared implementation used by both module and script
 //!   function lowering. For script functions, called after `swap_body_state`.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use datalove_datafun_ast::ast;
 use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::ResolvedCallTarget;
-use datalove_datafun_ir::{IrType, IrFunction, Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId};
+use datalove_datafun_ir::{ConstValue, CtfeEvaluator, IrType, IrFunction, Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId};
 use crate::ownership_analysis::FunctionAnalysis;
 use super::context::LowerCtx;
 use super::stmt::lower_statement_indexed;
@@ -24,6 +26,13 @@ use super::LowerError;
 ///
 /// If `resolved_param_types` is provided, use those types for parameters instead of
 /// deriving from AST type hints. This is necessary when type aliases are used.
+///
+/// If `ctfe_evaluator` is provided, it will be used to evaluate complex const
+/// expressions at compile time. Without an evaluator, only simple literals are
+/// supported for const bindings.
+///
+/// If `module_consts` is provided, those pre-evaluated const bindings will be
+/// available for use within the function body.
 pub fn lower_function_for_module<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
@@ -33,8 +42,22 @@ pub fn lower_function_for_module<'db>(
     func_id: FuncId,
     analysis: FunctionAnalysis,
     resolved_param_types: Option<&[IrType]>,
+    ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
+    module_consts: Option<&HashMap<String, (IrType, ConstValue)>>,
 ) -> Result<IrFunction, LowerError> {
     let mut ctx = LowerCtx::new_for_module(db, expr_types, call_targets, func_id_map);
+
+    // Set up CTFE evaluator if provided.
+    if let Some(evaluator) = ctfe_evaluator {
+        ctx.set_ctfe_evaluator(evaluator);
+    }
+
+    // Pre-populate module-level const bindings.
+    if let Some(consts) = module_consts {
+        for (name, (ir_type, value)) in consts {
+            ctx.add_const(name.clone(), ir_type.clone(), value.clone());
+        }
+    }
 
     lower_function_body(&mut ctx, func_id, func, analysis, resolved_param_types)
 }

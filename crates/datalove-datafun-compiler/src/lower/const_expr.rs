@@ -3,6 +3,7 @@
 //! Evaluates expressions at compile time. Simple literals are extracted directly.
 //! Complex expressions are lowered to IR and evaluated via a pluggable `CtfeEvaluator`.
 
+use std::collections::HashMap;
 use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
     ConstValue, IrType, IrScriptUnit, IrBlock, BlockId, ValueId,
@@ -50,6 +51,246 @@ pub fn eval_const_expr<'db>(
     evaluator.borrow_mut()
         .evaluate(&unit, &ir_type)
         .map_err(|e| LowerError::NotImplemented(format!("CTFE error: {}", e)))
+}
+
+/// Evaluate a constant expression without a full LowerCtx.
+///
+/// This is used for module-level const evaluation where we don't have access
+/// to a CTFE evaluator (tracked functions can't take trait objects).
+///
+/// Supports:
+/// - Simple literals (int, float, bool, string, none)
+/// - References to previously evaluated consts
+///
+/// Does NOT support complex expressions (binary ops, function calls, etc.).
+pub fn eval_const_expr_simple<'db>(
+    db: &'db dyn salsa::Database,
+    expr: ExprFun<'db>,
+    ir_type: &IrType,
+    resolved_consts: &HashMap<String, (IrType, ConstValue)>,
+) -> Result<ConstValue, LowerError> {
+    match expr.expr(db) {
+        ExprFunKind::True(_) => Ok(ConstValue::Bool(true)),
+        ExprFunKind::False(_) => Ok(ConstValue::Bool(false)),
+        ExprFunKind::None(_) => Ok(ConstValue::OptionNone),
+
+        ExprFunKind::Int(int_expr) => {
+            let text = int_expr.value.text(db);
+            super::literal::parse_int_const(text, ir_type)
+                .map_err(|_| LowerError::InvalidLiteral(text.to_string()))
+        }
+
+        ExprFunKind::Float(float_expr) => {
+            let text = float_expr.value.text(db);
+            super::literal::parse_float_const(text, ir_type)
+                .map_err(|_| LowerError::InvalidLiteral(text.to_string()))
+        }
+
+        ExprFunKind::String(s) => {
+            Ok(ConstValue::String(s.value.as_str(db).to_string()))
+        }
+
+        ExprFunKind::Name(name) => {
+            let name_str = name.text(db);
+            if let Some((_, value)) = resolved_consts.get(name_str) {
+                Ok(value.clone())
+            } else {
+                Err(LowerError::NotImplemented(format!(
+                    "non-const variable '{}' in const expression",
+                    name_str
+                )))
+            }
+        }
+
+        _ => Err(LowerError::NotImplemented(
+            "complex const expressions not supported in modules (no CTFE evaluator)".to_string()
+        )),
+    }
+}
+
+/// Evaluate a constant expression using the CTFE evaluator.
+///
+/// This handles complex expressions that can't be evaluated as simple literals.
+/// Used for module-level const evaluation where we have access to the evaluator
+/// outside of tracked salsa functions.
+pub fn eval_const_expr_with_evaluator<'db>(
+    db: &'db dyn salsa::Database,
+    expr: ExprFun<'db>,
+    ir_type: &IrType,
+    resolved_consts: &HashMap<String, (IrType, ConstValue)>,
+    evaluator: std::rc::Rc<std::cell::RefCell<dyn datalove_datafun_ir::CtfeEvaluator>>,
+) -> Result<ConstValue, LowerError> {
+    // Lower the expression to a minimal IR unit.
+    let unit = lower_const_expr_to_unit_standalone(db, expr, ir_type, resolved_consts)?;
+
+    // Evaluate using the CTFE evaluator.
+    evaluator.borrow_mut()
+        .evaluate(&unit, ir_type)
+        .map_err(|e| LowerError::NotImplemented(format!("CTFE error: {}", e)))
+}
+
+/// Lower a const expression to a minimal IrScriptUnit without needing LowerCtx.
+///
+/// Used for module-level const evaluation outside of tracked functions.
+fn lower_const_expr_to_unit_standalone<'db>(
+    db: &'db dyn salsa::Database,
+    expr: ExprFun<'db>,
+    ir_type: &IrType,
+    resolved_consts: &HashMap<String, (IrType, ConstValue)>,
+) -> Result<IrScriptUnit, LowerError> {
+    let mut mini_ctx = StandaloneMiniLowerCtx::new(db, ir_type.clone(), resolved_consts);
+    let result_value = mini_ctx.lower_expr(expr)?;
+    mini_ctx.finish(result_value, ir_type.clone())
+}
+
+/// Minimal lowering context for standalone const expression evaluation.
+struct StandaloneMiniLowerCtx<'a, 'db> {
+    db: &'db dyn salsa::Database,
+    result_type: IrType,
+    resolved_consts: &'a HashMap<String, (IrType, ConstValue)>,
+    instructions: Vec<Instruction>,
+    next_value: u32,
+    value_types: Vec<IrType>,
+}
+
+impl<'a, 'db> StandaloneMiniLowerCtx<'a, 'db> {
+    fn new(db: &'db dyn salsa::Database, result_type: IrType, resolved_consts: &'a HashMap<String, (IrType, ConstValue)>) -> Self {
+        Self {
+            db,
+            result_type,
+            resolved_consts,
+            instructions: Vec::new(),
+            next_value: 0,
+            value_types: Vec::new(),
+        }
+    }
+
+    fn fresh_value(&mut self, ir_type: IrType) -> ValueId {
+        let id = ValueId(self.next_value);
+        self.next_value += 1;
+        self.value_types.push(ir_type);
+        id
+    }
+
+    fn emit(&mut self, instr: Instruction) {
+        self.instructions.push(instr);
+    }
+
+    fn lower_expr(&mut self, expr: ExprFun<'db>) -> Result<ValueId, LowerError> {
+        // Use result_type for type context when needed.
+        let expr_type = self.result_type.clone();
+
+        match expr.expr(self.db) {
+            ExprFunKind::True(_) => {
+                let dest = self.fresh_value(IrType::Bool);
+                self.emit(Instruction::Const { dest, value: ConstValue::Bool(true) });
+                Ok(dest)
+            }
+            ExprFunKind::False(_) => {
+                let dest = self.fresh_value(IrType::Bool);
+                self.emit(Instruction::Const { dest, value: ConstValue::Bool(false) });
+                Ok(dest)
+            }
+            ExprFunKind::None(_) => {
+                let dest = self.fresh_value(expr_type);
+                self.emit(Instruction::Const { dest, value: ConstValue::OptionNone });
+                Ok(dest)
+            }
+            ExprFunKind::Int(int_expr) => {
+                let text = int_expr.value.text(self.db);
+                let value = super::literal::parse_int_const(text, &expr_type)
+                    .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
+                let dest = self.fresh_value(expr_type);
+                self.emit(Instruction::Const { dest, value });
+                Ok(dest)
+            }
+            ExprFunKind::Float(float_expr) => {
+                let text = float_expr.value.text(self.db);
+                let value = super::literal::parse_float_const(text, &expr_type)
+                    .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
+                let dest = self.fresh_value(expr_type);
+                self.emit(Instruction::Const { dest, value });
+                Ok(dest)
+            }
+            ExprFunKind::String(s) => {
+                let value = ConstValue::String(s.value.as_str(self.db).to_string());
+                let dest = self.fresh_value(expr_type);
+                self.emit(Instruction::Const { dest, value });
+                Ok(dest)
+            }
+            ExprFunKind::Name(name) => {
+                let name_str = name.text(self.db);
+                if let Some((ty, value)) = self.resolved_consts.get(name_str) {
+                    let dest = self.fresh_value(ty.clone());
+                    self.emit(Instruction::Const { dest, value: value.clone() });
+                    Ok(dest)
+                } else {
+                    Err(LowerError::NotImplemented(format!(
+                        "non-const variable '{}' in const expression",
+                        name_str
+                    )))
+                }
+            }
+            ExprFunKind::BinOp(binop) => {
+                let lhs = self.lower_expr(binop.lhs)?;
+                let rhs = self.lower_expr(binop.rhs)?;
+                let lhs_type = self.value_types[lhs.0 as usize].clone();
+                let dest = self.fresh_value(lhs_type);
+
+                let ir_op = convert_binop(binop.op)?;
+                self.emit(Instruction::BinOp {
+                    dest,
+                    op: ir_op,
+                    lhs: Operand::Value(lhs),
+                    rhs: Operand::Value(rhs),
+                });
+                Ok(dest)
+            }
+            ExprFunKind::UnaryOp(unop) => {
+                let operand = self.lower_expr(unop.operand)?;
+                let operand_type = self.value_types[operand.0 as usize].clone();
+                let dest = self.fresh_value(operand_type);
+
+                let ir_op = convert_unaryop(unop.op)?;
+                self.emit(Instruction::UnaryOp {
+                    dest,
+                    op: ir_op,
+                    operand: Operand::Value(operand),
+                });
+                Ok(dest)
+            }
+            _ => Err(LowerError::NotImplemented(
+                "unsupported expression in const evaluation".to_string()
+            )),
+        }
+    }
+
+    fn finish(self, result: ValueId, _result_type: IrType) -> Result<IrScriptUnit, LowerError> {
+        let block = IrBlock {
+            id: BlockId(0),
+            params: Vec::new(),
+            instructions: self.instructions,
+            terminator: Terminator::UnitEnd {
+                result: Some(Operand::Value(result)),
+            },
+        };
+
+        Ok(IrScriptUnit {
+            blocks: vec![block],
+            value_count: self.next_value,
+            slot_count: 0,
+            value_types: self.value_types,
+            slot_types: Vec::new(),
+            tracked_values: Vec::new(),
+            tracked_slots: Vec::new(),
+            unit_end_values: Vec::new(),
+            unit_end_slots: Vec::new(),
+            functions: Vec::new(),
+            symbols: SymbolTable::new(),
+            result: Some(result),
+            exports: Vec::new(),
+        })
+    }
 }
 
 /// Try to evaluate a literal expression directly without the interpreter.

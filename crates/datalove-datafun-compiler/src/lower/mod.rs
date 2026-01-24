@@ -53,8 +53,8 @@
 //! - `literal`: Literal parsing (int, float, string constants)
 
 mod context;
-mod literal;
-mod const_expr;
+pub(crate) mod literal;
+pub mod const_expr;
 mod expr;
 mod stmt;
 mod func;

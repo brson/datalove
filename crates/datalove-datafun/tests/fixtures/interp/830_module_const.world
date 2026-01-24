@@ -1,0 +1,25 @@
+----------
+module local/test/consts
+----------
+
+const ANSWER: u32 = 42
+const FLAG: bool = true
+
+fun get_answer(): u32
+    ret ANSWER
+end fun
+
+fun get_flag(): bool
+    ret FLAG
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/consts
+import consts.get_answer
+import consts.get_flag
+
+debuglog get_answer()
+debuglog get_flag()

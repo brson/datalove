@@ -1,0 +1,53 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/consts"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn get_answer():
+                    block0:
+                        v0 = const 42u32
+                        return v0
+                    
+                    fn get_flag():
+                    block0:
+                        v0 = const true
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.f0()
+                        debuglog v0
+                        v1 = call m0.f1()
+                        debuglog v1
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("42\ntrue\n"),
+        ),
+    ],
+)
