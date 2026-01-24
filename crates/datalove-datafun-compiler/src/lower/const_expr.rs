@@ -304,3 +304,297 @@ fn convert_unaryop(ast_op: ast::UnaryOp) -> Result<UnaryOp, LowerError> {
         }
     }
 }
+
+// ============================================================================
+// Phase 2: Evaluate Consts (Not Memoized)
+// ============================================================================
+
+use std::cell::RefCell;
+use std::rc::Rc;
+use salsa::plumbing::AsId;
+use datalove_datafun_ast::ast::Statement;
+use datalove_datafun_ir::{
+    ConstBindingGraph, ResolvedConsts,
+    ConstEvalError, CtfeEvaluator, CtfeError,
+};
+use datalove_datafun_tycheck::Type;
+
+/// Evaluate all const bindings from a ConstBindingGraph.
+///
+/// This is Phase 2 of the 3-phase CTFE memoization pipeline.
+/// NOT memoized because it requires a trait object (CtfeEvaluator).
+///
+/// Evaluates consts in topological order (dependencies before dependents).
+/// Simple literals are extracted directly; complex expressions use the evaluator.
+pub fn evaluate_consts<'db>(
+    db: &'db dyn salsa::Database,
+    graph: &ConstBindingGraph,
+    statements: &[Statement<'db>],
+    expr_types: &[Option<Type<'db>>],
+    evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+) -> Result<ResolvedConsts, ConstEvalError> {
+    let mut resolved = ResolvedConsts::new();
+
+    for binding in &graph.bindings {
+        // Find the expression for this binding.
+        let expr = statements.iter()
+            .find_map(|s| match s {
+                Statement::Const(c) if c.value.as_id() == binding.stmt_id => Some(c.value),
+                _ => None,
+            });
+
+        let expr = match expr {
+            Some(e) => e,
+            None => {
+                // This shouldn't happen if the graph was built correctly.
+                panic!("const binding expression not found: {}", binding.name);
+            }
+        };
+
+        // Try simple literal extraction first.
+        if let Some(value) = try_extract_literal(db, expr, &binding.ir_type) {
+            resolved.insert(binding.stmt_id, binding.name.clone(), value);
+            continue;
+        }
+
+        // Check for const references - substitute with already-evaluated values.
+        if let ExprFunKind::Name(name) = expr.expr(db) {
+            let name_str = name.text(db);
+            if let Some(value) = resolved.get_by_name(name_str) {
+                resolved.insert(binding.stmt_id, binding.name.clone(), value.clone());
+                continue;
+            }
+            // Not a const reference we've evaluated - fall through to CTFE.
+        }
+
+        // Lower to mini-unit and evaluate.
+        let unit = lower_const_expr_standalone(db, expr, &binding.ir_type, &resolved)?;
+
+        let value = evaluator.borrow_mut()
+            .evaluate(&unit, &binding.ir_type)
+            .map_err(|e| match e {
+                CtfeError::InterpError(msg) if msg.contains("gas") => {
+                    ConstEvalError::GasExpired { binding_name: binding.name.clone() }
+                }
+                _ => {
+                    // Other interpreter errors are unexpected.
+                    panic!("unexpected CTFE error evaluating const '{}': {}", binding.name, e);
+                }
+            })?;
+
+        resolved.insert(binding.stmt_id, binding.name.clone(), value);
+    }
+
+    Ok(resolved)
+}
+
+/// Try to extract a literal value directly without interpreter.
+fn try_extract_literal<'db>(
+    db: &'db dyn salsa::Database,
+    expr: ExprFun<'db>,
+    ir_type: &IrType,
+) -> Option<ConstValue> {
+    match expr.expr(db) {
+        ExprFunKind::True(_) => Some(ConstValue::Bool(true)),
+        ExprFunKind::False(_) => Some(ConstValue::Bool(false)),
+        ExprFunKind::None(_) => Some(ConstValue::OptionNone),
+
+        ExprFunKind::Int(int_expr) => {
+            let text = int_expr.value.text(db);
+            super::literal::parse_int_const(text, ir_type).ok()
+        }
+
+        ExprFunKind::Float(float_expr) => {
+            let text = float_expr.value.text(db);
+            super::literal::parse_float_const(text, ir_type).ok()
+        }
+
+        ExprFunKind::String(s) => {
+            Some(ConstValue::String(s.value.as_str(db).to_string()))
+        }
+
+        _ => None,
+    }
+}
+
+/// Lower a const expression to IrScriptUnit without needing LowerCtx.
+///
+/// Uses pre-resolved const values for name references.
+fn lower_const_expr_standalone<'db>(
+    db: &'db dyn salsa::Database,
+    expr: ExprFun<'db>,
+    result_type: &IrType,
+    resolved: &ResolvedConsts,
+) -> Result<IrScriptUnit, ConstEvalError> {
+    let mut ctx = StandaloneLowerCtx::new(db, resolved);
+    let result_value = ctx.lower_expr(expr, result_type)?;
+    Ok(ctx.finish(result_value))
+}
+
+/// Standalone lowering context for Phase 2 const evaluation.
+///
+/// Unlike MiniLowerCtx, this doesn't depend on LowerCtx.
+struct StandaloneLowerCtx<'a, 'db> {
+    db: &'db dyn salsa::Database,
+    resolved: &'a ResolvedConsts,
+    value_types: Vec<IrType>,
+    instructions: Vec<Instruction>,
+    next_value: u32,
+}
+
+impl<'a, 'db> StandaloneLowerCtx<'a, 'db> {
+    fn new(db: &'db dyn salsa::Database, resolved: &'a ResolvedConsts) -> Self {
+        Self {
+            db,
+            resolved,
+            value_types: Vec::new(),
+            instructions: Vec::new(),
+            next_value: 0,
+        }
+    }
+
+    fn fresh_value(&mut self, ty: IrType) -> ValueId {
+        let id = ValueId(self.next_value);
+        self.next_value += 1;
+        self.value_types.push(ty);
+        id
+    }
+
+    fn emit(&mut self, instr: Instruction) {
+        self.instructions.push(instr);
+    }
+
+    fn lower_expr(&mut self, expr: ExprFun<'db>, expected_type: &IrType) -> Result<ValueId, ConstEvalError> {
+        match expr.expr(self.db) {
+            // Literals.
+            ExprFunKind::True(_) => {
+                let dest = self.fresh_value(IrType::Bool);
+                self.emit(Instruction::Const { dest, value: ConstValue::Bool(true) });
+                Ok(dest)
+            }
+            ExprFunKind::False(_) => {
+                let dest = self.fresh_value(IrType::Bool);
+                self.emit(Instruction::Const { dest, value: ConstValue::Bool(false) });
+                Ok(dest)
+            }
+            ExprFunKind::None(_) => {
+                let dest = self.fresh_value(expected_type.clone());
+                self.emit(Instruction::Const { dest, value: ConstValue::OptionNone });
+                Ok(dest)
+            }
+            ExprFunKind::Int(int_expr) => {
+                let text = int_expr.value.text(self.db);
+                let value = super::literal::parse_int_const(text, expected_type)
+                    .map_err(|_| ConstEvalError::GasExpired {
+                        binding_name: format!("invalid literal: {}", text),
+                    })?;
+                let dest = self.fresh_value(expected_type.clone());
+                self.emit(Instruction::Const { dest, value });
+                Ok(dest)
+            }
+            ExprFunKind::Float(float_expr) => {
+                let text = float_expr.value.text(self.db);
+                let value = super::literal::parse_float_const(text, expected_type)
+                    .map_err(|_| ConstEvalError::GasExpired {
+                        binding_name: format!("invalid literal: {}", text),
+                    })?;
+                let dest = self.fresh_value(expected_type.clone());
+                self.emit(Instruction::Const { dest, value });
+                Ok(dest)
+            }
+            ExprFunKind::String(s) => {
+                let value = ConstValue::String(s.value.as_str(self.db).to_string());
+                let dest = self.fresh_value(expected_type.clone());
+                self.emit(Instruction::Const { dest, value });
+                Ok(dest)
+            }
+
+            // Const reference.
+            ExprFunKind::Name(name) => {
+                let name_str = name.text(self.db);
+                if let Some(value) = self.resolved.get_by_name(name_str) {
+                    let dest = self.fresh_value(expected_type.clone());
+                    self.emit(Instruction::Const { dest, value: value.clone() });
+                    Ok(dest)
+                } else {
+                    Err(ConstEvalError::DependencyFailed {
+                        binding_name: name_str.to_string(),
+                        dependency: name_str.to_string(),
+                    })
+                }
+            }
+
+            // Binary operation.
+            ExprFunKind::BinOp(binop) => {
+                // For standalone lowering, we don't have type info for subexpressions.
+                // Use the expected type for both operands as a simplification.
+                // This works for homogeneous ops but may fail for others.
+                let lhs = self.lower_expr(binop.lhs, expected_type)?;
+                let rhs = self.lower_expr(binop.rhs, expected_type)?;
+                let dest = self.fresh_value(expected_type.clone());
+
+                let ir_op = convert_binop(binop.op).map_err(|_| {
+                    ConstEvalError::GasExpired {
+                        binding_name: "unsupported binop".to_string(),
+                    }
+                })?;
+                self.emit(Instruction::BinOp {
+                    dest,
+                    op: ir_op,
+                    lhs: Operand::Value(lhs),
+                    rhs: Operand::Value(rhs),
+                });
+                Ok(dest)
+            }
+
+            // Unary operation.
+            ExprFunKind::UnaryOp(unop) => {
+                let operand = self.lower_expr(unop.operand, expected_type)?;
+                let dest = self.fresh_value(expected_type.clone());
+
+                let ir_op = convert_unaryop(unop.op).map_err(|_| {
+                    ConstEvalError::GasExpired {
+                        binding_name: "unsupported unaryop".to_string(),
+                    }
+                })?;
+                self.emit(Instruction::UnaryOp {
+                    dest,
+                    op: ir_op,
+                    operand: Operand::Value(operand),
+                });
+                Ok(dest)
+            }
+
+            _ => Err(ConstEvalError::GasExpired {
+                binding_name: "unsupported expression type".to_string(),
+            }),
+        }
+    }
+
+    fn finish(self, result: ValueId) -> IrScriptUnit {
+        let block = IrBlock {
+            id: BlockId(0),
+            params: Vec::new(),
+            instructions: self.instructions,
+            terminator: Terminator::UnitEnd {
+                result: Some(Operand::Value(result)),
+            },
+        };
+
+        IrScriptUnit {
+            blocks: vec![block],
+            value_count: self.next_value,
+            slot_count: 0,
+            value_types: self.value_types,
+            slot_types: Vec::new(),
+            tracked_values: Vec::new(),
+            tracked_slots: Vec::new(),
+            unit_end_values: Vec::new(),
+            unit_end_slots: Vec::new(),
+            functions: Vec::new(),
+            symbols: SymbolTable::new(),
+            result: Some(result),
+            exports: Vec::new(),
+        }
+    }
+}

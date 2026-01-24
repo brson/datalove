@@ -5,9 +5,13 @@
 //! incremental recompilation when new units are added to a batch.
 
 use rmx::prelude::*;
-use std::collections::HashMap;
-use datalove_datafun_ast::ast::Statement;
-use datalove_datafun_ir::{IrScriptUnit, IrType, IrModuleId, FuncId, ValueId, SlotId, ExportBinding};
+use std::collections::{HashMap, HashSet};
+use salsa::plumbing::AsId;
+use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunKind};
+use datalove_datafun_ir::{
+    IrScriptUnit, IrType, IrModuleId, FuncId, ValueId, SlotId, ExportBinding,
+    ConstBindingInfo, ConstBindingGraph, ConstStmtId,
+};
 use datalove_datafun_tycheck::{
     UnitTypecheckResultTracked, ModuleSpec,
 };
@@ -292,4 +296,225 @@ pub fn build_func_id_map<'db>(
     }
 
     func_id_map
+}
+
+// ============================================================================
+// Phase 1: Collect Const Graph (Memoized)
+// ============================================================================
+
+/// Collect const bindings from statements and return them in dependency order.
+///
+/// This is Phase 1 of the 3-phase CTFE memoization pipeline:
+/// 1. collect_const_graph (memoized) - pure data extraction
+/// 2. evaluate_consts (not memoized) - needs interpreter
+/// 3. lower_with_consts (memoized) - uses resolved values
+///
+/// The returned graph is hashable, enabling salsa memoization.
+#[salsa::tracked]
+pub fn collect_const_graph<'db>(
+    db: &'db dyn salsa::Database,
+    statements: Vec<Statement<'db>>,
+    typecheck_result: UnitTypecheckResultTracked<'db>,
+) -> ConstBindingGraph {
+    // First pass: collect all const bindings.
+    let mut bindings = Vec::new();
+    let mut const_names: HashSet<String> = HashSet::new();
+    let mut name_to_stmt: HashMap<String, ConstStmtId> = HashMap::new();
+
+    let expr_types = typecheck_result.expr_types(db);
+
+    for stmt in &statements {
+        if let Statement::Const(const_stmt) = stmt {
+            let expr = const_stmt.value;
+            // Use the expression's salsa ID as the const's ID (unique per const).
+            let stmt_id = expr.as_id();
+            let name = const_stmt.name.text(db).to_string();
+            let expr_id = expr.as_id();
+
+            // Get the type from typechecker using expression ID index.
+            let ir_type = expr_types.get(expr_id.index() as usize)
+                .cloned()
+                .flatten()
+                .map(|ty| IrType::from_tycheck(db, &ty))
+                .unwrap_or(IrType::Unit);
+
+            const_names.insert(name.clone());
+            name_to_stmt.insert(name.clone(), stmt_id);
+            bindings.push(ConstBindingInfo {
+                stmt_id,
+                name,
+                expr_id,
+                ir_type,
+                depends_on: Vec::new(), // Filled in second pass.
+            });
+        }
+    }
+
+    // Second pass: analyze dependencies.
+    for binding in &mut bindings {
+        // Find the expression for this binding.
+        let expr = statements.iter()
+            .find_map(|s| match s {
+                Statement::Const(c) if c.value.as_id() == binding.stmt_id => Some(c.value),
+                _ => None,
+            });
+
+        if let Some(expr) = expr {
+            let deps = find_const_refs(db, expr, &const_names, &name_to_stmt);
+            binding.depends_on = deps;
+        }
+    }
+
+    // Topological sort (dependencies before dependents).
+    let sorted = topological_sort_consts(&bindings);
+
+    ConstBindingGraph::new(sorted)
+}
+
+/// Find const name references in an expression.
+fn find_const_refs<'db>(
+    db: &'db dyn salsa::Database,
+    expr: ExprFun<'db>,
+    const_names: &HashSet<String>,
+    name_to_stmt: &HashMap<String, ConstStmtId>,
+) -> Vec<ConstStmtId> {
+    let mut refs = Vec::new();
+    find_const_refs_inner(db, expr, const_names, name_to_stmt, &mut refs);
+    refs.sort();
+    refs.dedup();
+    refs
+}
+
+fn find_const_refs_inner<'db>(
+    db: &'db dyn salsa::Database,
+    expr: ExprFun<'db>,
+    const_names: &HashSet<String>,
+    name_to_stmt: &HashMap<String, ConstStmtId>,
+    refs: &mut Vec<ConstStmtId>,
+) {
+    match expr.expr(db) {
+        ExprFunKind::Name(name) => {
+            let name_str = name.text(db);
+            if const_names.contains(name_str) {
+                if let Some(stmt_id) = name_to_stmt.get(name_str) {
+                    refs.push(*stmt_id);
+                }
+            }
+        }
+        ExprFunKind::BinOp(binop) => {
+            find_const_refs_inner(db, binop.lhs, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, binop.rhs, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::UnaryOp(unop) => {
+            find_const_refs_inner(db, unop.operand, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::Tuple(t) => {
+            for elem in &t.elements {
+                find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
+            }
+        }
+        ExprFunKind::List(l) => {
+            for elem in &l.elements {
+                find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
+            }
+        }
+        ExprFunKind::FunctionCall(call) => {
+            for arg in call.args(db) {
+                find_const_refs_inner(db, *arg, const_names, name_to_stmt, refs);
+            }
+        }
+        ExprFunKind::TryOption(t) => {
+            find_const_refs_inner(db, t.operand, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::TryResult(t) => {
+            find_const_refs_inner(db, t.operand, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::FieldProj(p) => {
+            find_const_refs_inner(db, p.base, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::Some(s) => {
+            find_const_refs_inner(db, s.payload, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::Ok(o) => {
+            find_const_refs_inner(db, o.payload, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::Er(e) => {
+            find_const_refs_inner(db, e.payload, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::Data(d) => {
+            find_const_refs_inner(db, d.value, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::AnonTuple(t) => {
+            for elem in &t.elements {
+                find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
+            }
+        }
+        ExprFunKind::AnonStruct(s) => {
+            for field in &s.fields {
+                find_const_refs_inner(db, field.value, const_names, name_to_stmt, refs);
+            }
+        }
+        ExprFunKind::AnonEnum(e) => {
+            if let Some(payload) = e.payload {
+                find_const_refs_inner(db, payload, const_names, name_to_stmt, refs);
+            }
+        }
+        // Literals and other simple expressions have no references.
+        _ => {}
+    }
+}
+
+/// Topological sort of const bindings.
+///
+/// Returns bindings in order where dependencies come before dependents.
+/// Panics on cycles (user error should be caught earlier by typechecker).
+fn topological_sort_consts(bindings: &[ConstBindingInfo]) -> Vec<ConstBindingInfo> {
+    let n = bindings.len();
+    if n == 0 {
+        return Vec::new();
+    }
+
+    // Build index map: stmt_id -> index.
+    let stmt_to_idx: HashMap<ConstStmtId, usize> = bindings.iter()
+        .enumerate()
+        .map(|(i, b)| (b.stmt_id, i))
+        .collect();
+
+    // Build in-degree counts and adjacency list.
+    let mut in_degree = vec![0usize; n];
+    let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); n];
+
+    for (idx, binding) in bindings.iter().enumerate() {
+        for dep_stmt in &binding.depends_on {
+            if let Some(&dep_idx) = stmt_to_idx.get(dep_stmt) {
+                in_degree[idx] += 1;
+                dependents[dep_idx].push(idx);
+            }
+        }
+    }
+
+    // Kahn's algorithm.
+    let mut queue: Vec<usize> = in_degree.iter()
+        .enumerate()
+        .filter(|(_, deg)| **deg == 0)
+        .map(|(i, _)| i)
+        .collect();
+
+    let mut result = Vec::with_capacity(n);
+
+    while let Some(idx) = queue.pop() {
+        result.push(bindings[idx].clone());
+        for &dep_idx in &dependents[idx] {
+            in_degree[dep_idx] -= 1;
+            if in_degree[dep_idx] == 0 {
+                queue.push(dep_idx);
+            }
+        }
+    }
+
+    if result.len() != n {
+        panic!("cycle detected in const dependencies");
+    }
+
+    result
 }

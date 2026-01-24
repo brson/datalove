@@ -552,6 +552,28 @@ impl<'db> LowerCtx<'db> {
         self.ctfe_evaluator = Some(evaluator);
     }
 
+    /// Pre-populate const bindings from Phase 2 resolved values.
+    ///
+    /// When using the 3-phase CTFE pipeline, call this before lowering
+    /// to provide pre-evaluated const values. Lowering will then skip
+    /// inline evaluation for these consts.
+    ///
+    /// Takes the ConstBindingGraph (for type info) and ResolvedConsts (for values).
+    pub fn add_resolved_consts(
+        &mut self,
+        graph: &datalove_datafun_ir::ConstBindingGraph,
+        resolved: &datalove_datafun_ir::ResolvedConsts,
+    ) {
+        for binding in &graph.bindings {
+            if let Some(value) = resolved.get(binding.stmt_id) {
+                self.const_bindings.insert(
+                    binding.name.clone(),
+                    (binding.ir_type.clone(), value.clone()),
+                );
+            }
+        }
+    }
+
     /// Emit Drop instructions for the given operands.
     pub fn emit_drops(&mut self, operands: Vec<Operand>) {
         for operand in operands {

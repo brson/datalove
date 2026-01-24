@@ -28,15 +28,15 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
-use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr};
+use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts};
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, lower_script_fragment_tracked, lower_script_expr_tracked,
-    build_func_id_map,
+    build_func_id_map, collect_const_graph,
 };
 use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked,
 };
-use datalove_datafun_ir::{CtfeEvaluator, IrScriptUnit, IrType};
+use datalove_datafun_ir::{CtfeEvaluator, IrScriptUnit, IrType, ResolvedConsts};
 use datalove_datafun_tycheck::{
     type_check_script_units, create_batch_spec,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
@@ -291,8 +291,46 @@ impl<'db> ScriptCompiler<'db> {
                     };
                 }
 
-                if self.ctfe_evaluator.is_some() {
-                    // Use raw lowering with CTFE evaluator.
+                if let Some(ref evaluator) = self.ctfe_evaluator {
+                    // Use 3-phase CTFE pipeline for memoization.
+
+                    // Phase 1: Collect const graph (memoized).
+                    let const_graph = collect_const_graph(
+                        self.db,
+                        stmts.clone(),
+                        tycheck_result,
+                    );
+
+                    // Phase 2: Evaluate consts (not memoized - needs evaluator).
+                    let resolved_consts = if !const_graph.is_empty() {
+                        let expr_types = tycheck_result.expr_types(self.db);
+                        match evaluate_consts(
+                            self.db,
+                            &const_graph,
+                            &stmts,
+                            expr_types,
+                            evaluator.clone(),
+                        ) {
+                            Ok(resolved) => resolved,
+                            Err(e) => {
+                                return ScriptCompilationResult {
+                                    typecheck: TypecheckResult::Success,
+                                    ownership: OwnershipResult::Success,
+                                    lowering: LoweringResult::Error {
+                                        message: format!("const evaluation error: {}", e),
+                                    },
+                                    ir_unit: None,
+                                };
+                            }
+                        }
+                    } else {
+                        ResolvedConsts::new()
+                    };
+
+                    // Phase 3: Lower with pre-resolved consts.
+                    // We still use raw lowering but pass the evaluator for any
+                    // remaining inline evaluation. The pre-resolved consts
+                    // are added to the context by the lowering code.
                     let expr_types = tycheck_result.expr_types(self.db);
                     let call_targets = tycheck_result.call_targets(self.db);
                     let func_id_map = build_func_id_map(self.db, &self.module_specs);
@@ -312,6 +350,13 @@ impl<'db> ScriptCompiler<'db> {
                     let func_analyses = ownership_result.to_function_analyses_map(self.db, &stmts);
                     let script_analysis = ownership_result.script_analysis(self.db).clone()
                         .expect("script_analysis required for fragment units");
+
+                    // TODO: Pass resolved_consts to lowering for pre-population.
+                    // For now, we still use the evaluator-based path which will
+                    // re-evaluate consts inline. The benefit is Phase 1 memoization.
+                    // Full Phase 3 memoization requires modifying lower_script_fragment_raw
+                    // to accept pre-resolved consts.
+                    let _ = resolved_consts; // Temporarily unused until Phase 3 is fully wired.
 
                     match lower_script_fragment_raw(
                         self.db,

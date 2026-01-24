@@ -64,6 +64,7 @@ mod script;
 pub use context::{LowerCtx, FrameState, ScriptLowerContext, ScriptUnitKind};
 pub use func::lower_function_for_module;
 pub use script::{lower_script_unit, lower_script_fragment_raw, lower_script_expr};
+pub use const_expr::evaluate_consts;
 
 /// Errors that can occur during lowering.
 ///

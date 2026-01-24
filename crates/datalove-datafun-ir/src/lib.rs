@@ -1533,3 +1533,219 @@ impl CtfeEvaluator for NoopCtfeEvaluator {
         Err(CtfeError::InterpError("CTFE evaluator not configured".to_string()))
     }
 }
+
+// ============================================================================
+// CTFE Memoization Types
+// ============================================================================
+
+/// Identifier for a const statement in the AST.
+///
+/// Uses salsa's opaque ID type to reference const statements across
+/// compilation phases without coupling to specific AST types.
+pub type ConstStmtId = salsa::Id;
+
+/// Identifier for a const expression in the AST.
+pub type ConstExprId = salsa::Id;
+
+/// Global identifier for a const binding across script units.
+///
+/// In script contexts, const bindings from earlier units can be referenced
+/// by later units. This ID uniquely identifies a const across all units.
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+pub struct GlobalConstId {
+    /// Index of the script unit containing this const.
+    pub unit: u32,
+    /// ID of the const statement within that unit.
+    pub stmt: ConstStmtId,
+}
+
+/// Information about a const binding discovered during Phase 1 collection.
+///
+/// Collected from AST traversal without evaluating expressions.
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub struct ConstBindingInfo {
+    /// ID of the const statement in the AST.
+    pub stmt_id: ConstStmtId,
+    /// Name of the const binding (for error messages and lookup).
+    pub name: String,
+    /// ID of the expression to evaluate.
+    pub expr_id: ConstExprId,
+    /// Expected type of the const value.
+    pub ir_type: IrType,
+    /// Other const bindings this one depends on.
+    pub depends_on: Vec<ConstStmtId>,
+}
+
+/// Output of Phase 1: const bindings in dependency order.
+///
+/// This type is hashable for salsa memoization.
+#[derive(Clone, Debug, Default, Hash, Eq, PartialEq)]
+pub struct ConstBindingGraph {
+    /// Const bindings in topological order (dependencies before dependents).
+    pub bindings: Vec<ConstBindingInfo>,
+    /// Lookup from name to statement ID, sorted by name for determinism.
+    name_to_stmt: Vec<(String, ConstStmtId)>,
+}
+
+impl ConstBindingGraph {
+    /// Create a new graph with bindings in topological order.
+    pub fn new(bindings: Vec<ConstBindingInfo>) -> Self {
+        let mut name_to_stmt: Vec<_> = bindings.iter()
+            .map(|b| (b.name.clone(), b.stmt_id))
+            .collect();
+        name_to_stmt.sort_by(|a, b| a.0.cmp(&b.0));
+        Self { bindings, name_to_stmt }
+    }
+
+    /// Look up statement ID by name.
+    pub fn stmt_for_name(&self, name: &str) -> Option<ConstStmtId> {
+        self.name_to_stmt.iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, id)| *id)
+    }
+
+    /// Check if the graph is empty (no const bindings).
+    pub fn is_empty(&self) -> bool {
+        self.bindings.is_empty()
+    }
+}
+
+/// Output of Phase 2: evaluated const values.
+///
+/// This type is hashable for salsa memoization. When the same expressions
+/// evaluate to the same values, Phase 3 can use cached results.
+/// Uses sorted vectors instead of HashMaps for deterministic hashing.
+#[derive(Clone, Debug, Default, Hash, Eq, PartialEq)]
+pub struct ResolvedConsts {
+    /// Evaluated values sorted by statement ID.
+    values: Vec<(ConstStmtId, ConstValue)>,
+    /// Lookup from name to statement ID, sorted by name.
+    name_to_stmt: Vec<(String, ConstStmtId)>,
+}
+
+impl ResolvedConsts {
+    /// Create an empty ResolvedConsts.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Insert a const value.
+    pub fn insert(&mut self, stmt_id: ConstStmtId, name: String, value: ConstValue) {
+        // Insert into values, maintaining sort order.
+        match self.values.binary_search_by_key(&stmt_id, |(id, _)| *id) {
+            Ok(idx) => self.values[idx].1 = value,
+            Err(idx) => self.values.insert(idx, (stmt_id, value)),
+        }
+        // Insert into name lookup, maintaining sort order.
+        match self.name_to_stmt.binary_search_by(|(n, _)| n.as_str().cmp(&name)) {
+            Ok(idx) => self.name_to_stmt[idx].1 = stmt_id,
+            Err(idx) => self.name_to_stmt.insert(idx, (name, stmt_id)),
+        }
+    }
+
+    /// Look up a const value by name.
+    pub fn get_by_name(&self, name: &str) -> Option<&ConstValue> {
+        self.stmt_for_name(name).and_then(|id| self.get(id))
+    }
+
+    /// Look up a const value by statement ID.
+    pub fn get(&self, stmt_id: ConstStmtId) -> Option<&ConstValue> {
+        self.values.binary_search_by_key(&stmt_id, |(id, _)| *id)
+            .ok()
+            .map(|idx| &self.values[idx].1)
+    }
+
+    /// Look up statement ID by name.
+    pub fn stmt_for_name(&self, name: &str) -> Option<ConstStmtId> {
+        self.name_to_stmt.binary_search_by(|(n, _)| n.as_str().cmp(name))
+            .ok()
+            .map(|idx| self.name_to_stmt[idx].1)
+    }
+
+    /// Get the name for a statement ID.
+    pub fn name_for_stmt(&self, stmt_id: ConstStmtId) -> Option<&str> {
+        self.name_to_stmt.iter()
+            .find(|(_, id)| *id == stmt_id)
+            .map(|(name, _)| name.as_str())
+    }
+
+    /// Iterate over all (name, value) pairs.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &ConstValue)> {
+        self.name_to_stmt.iter()
+            .filter_map(|(name, stmt_id)| {
+                self.get(*stmt_id).map(|v| (name.as_str(), v))
+            })
+    }
+
+    /// Check if empty.
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    /// Iterate over all (stmt_id, value) pairs.
+    pub fn values_iter(&self) -> impl Iterator<Item = (ConstStmtId, &ConstValue)> {
+        self.values.iter().map(|(id, v)| (*id, v))
+    }
+
+    /// Iterate over all (name, stmt_id) pairs.
+    pub fn names_iter(&self) -> impl Iterator<Item = (&str, ConstStmtId)> {
+        self.name_to_stmt.iter().map(|(n, id)| (n.as_str(), *id))
+    }
+}
+
+/// Accumulated const values across script units.
+///
+/// Used in script contexts to track consts from all previous units.
+#[derive(Clone, Debug, Default)]
+pub struct AccumulatedConsts {
+    /// Values keyed by global ID.
+    pub values: std::collections::HashMap<GlobalConstId, ConstValue>,
+    /// Lookup from name to global ID (most recent definition wins).
+    pub name_index: std::collections::HashMap<String, GlobalConstId>,
+}
+
+impl AccumulatedConsts {
+    /// Add const values from a unit.
+    pub fn add_unit(&mut self, unit_index: u32, resolved: &ResolvedConsts) {
+        for (stmt_id, value) in resolved.values_iter() {
+            let global_id = GlobalConstId { unit: unit_index, stmt: stmt_id };
+            self.values.insert(global_id, value.clone());
+        }
+        for (name, stmt_id) in resolved.names_iter() {
+            let global_id = GlobalConstId { unit: unit_index, stmt: stmt_id };
+            self.name_index.insert(name.to_string(), global_id);
+        }
+    }
+
+    /// Look up a const value by name.
+    pub fn get_by_name(&self, name: &str) -> Option<&ConstValue> {
+        self.name_index.get(name).and_then(|id| self.values.get(id))
+    }
+}
+
+/// Error during const evaluation in Phase 2.
+///
+/// Distinct from `CtfeError` which is for interpreter-level errors.
+/// These are higher-level errors that can occur during the evaluation phase.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConstEvalError {
+    /// Gas limit exceeded - expression may not terminate.
+    GasExpired { binding_name: String },
+    /// Dependency on a const that failed to evaluate.
+    DependencyFailed { binding_name: String, dependency: String },
+}
+
+impl std::fmt::Display for ConstEvalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConstEvalError::GasExpired { binding_name } => {
+                write!(f, "gas limit exceeded evaluating const '{}'", binding_name)
+            }
+            ConstEvalError::DependencyFailed { binding_name, dependency } => {
+                write!(f, "const '{}' depends on failed const '{}'", binding_name, dependency)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ConstEvalError {}
