@@ -20,6 +20,7 @@ use datalove_datafun_tycheck::{TypecheckResult, ResolvedCallTarget};
 use datalove_datafun_ir::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
     ExportBinding, IrModuleId, FuncId, CtfeEvaluator,
+    ConstBindingGraph, ResolvedConsts,
 };
 use crate::ownership_analysis::ScriptFunctionAnalyses;
 use crate::tracked_script_ownership::ScriptAnalysisData;
@@ -163,6 +164,15 @@ pub fn lower_script_unit<'db>(
 /// instead of deriving from AST type hints. This is needed for type alias support.
 ///
 /// If `ctfe_evaluator` is provided, it will be used to evaluate complex const expressions.
+/// Pre-resolved const values from Phase 2 of CTFE pipeline.
+///
+/// When provided, lowering will use these values instead of
+/// evaluating const expressions inline.
+pub struct PreResolvedConsts<'a> {
+    pub graph: &'a ConstBindingGraph,
+    pub values: &'a ResolvedConsts,
+}
+
 pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
@@ -174,10 +184,16 @@ pub fn lower_script_fragment_raw<'db>(
     script_analysis: ScriptAnalysisData,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
     ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
+    resolved_consts: Option<PreResolvedConsts<'_>>,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
-    // Set up CTFE evaluator if provided.
+    // Pre-populate const bindings from Phase 2 resolved values.
+    if let Some(ref pre_resolved) = resolved_consts {
+        ctx.add_resolved_consts(pre_resolved.graph, pre_resolved.values);
+    }
+
+    // Set up CTFE evaluator if provided (fallback for any consts not pre-resolved).
     if let Some(evaluator) = ctfe_evaluator {
         ctx.set_ctfe_evaluator(evaluator);
     }
@@ -517,10 +533,17 @@ fn lower_statement_for_script<'db>(
             // Const bindings are evaluated at compile time.
             // Script-level const bindings work the same as function-level.
             let name = const_stmt.name.text(ctx.db).to_string();
+
+            // Check if this const was pre-resolved in Phase 2.
+            // If so, it's already in const_bindings - nothing more to do.
+            if ctx.lookup_const(&name).is_some() {
+                return Ok(());
+            }
+
+            // Not pre-resolved; evaluate inline.
             let init_expr = const_stmt.value;
             let ir_type = ctx.expr_type(init_expr);
 
-            // Try to evaluate the expression as a constant.
             match eval_const_expr(ctx, init_expr) {
                 Ok(value) => {
                     ctx.add_const(name, ir_type, value);

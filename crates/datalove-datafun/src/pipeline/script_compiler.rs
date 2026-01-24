@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
-use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts};
+use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts, PreResolvedConsts};
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, lower_script_fragment_tracked, lower_script_expr_tracked,
     build_func_id_map, collect_const_graph,
@@ -351,12 +351,16 @@ impl<'db> ScriptCompiler<'db> {
                     let script_analysis = ownership_result.script_analysis(self.db).clone()
                         .expect("script_analysis required for fragment units");
 
-                    // TODO: Pass resolved_consts to lowering for pre-population.
-                    // For now, we still use the evaluator-based path which will
-                    // re-evaluate consts inline. The benefit is Phase 1 memoization.
-                    // Full Phase 3 memoization requires modifying lower_script_fragment_raw
-                    // to accept pre-resolved consts.
-                    let _ = resolved_consts; // Temporarily unused until Phase 3 is fully wired.
+                    // Phase 3: Lower with pre-resolved consts.
+                    // Pass resolved values to avoid re-evaluating consts inline.
+                    let pre_resolved = if !const_graph.is_empty() {
+                        Some(PreResolvedConsts {
+                            graph: &const_graph,
+                            values: &resolved_consts,
+                        })
+                    } else {
+                        None
+                    };
 
                     match lower_script_fragment_raw(
                         self.db,
@@ -369,6 +373,7 @@ impl<'db> ScriptCompiler<'db> {
                         script_analysis,
                         Some(&func_param_types),
                         self.ctfe_evaluator.clone(),
+                        pre_resolved,
                     ) {
                         Ok(ir_unit) => {
                             let exports = ir_unit.exports.clone();

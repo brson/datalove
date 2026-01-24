@@ -199,6 +199,7 @@ pub fn lower_script_fragment_tracked<'db>(
         script_analysis,
         Some(&func_param_types),
         None, // ctfe_evaluator - not available in tracked context
+        None, // resolved_consts - not available in tracked context
     ) {
         Ok(ir_unit) => {
             let exports = ir_unit.exports.clone();
