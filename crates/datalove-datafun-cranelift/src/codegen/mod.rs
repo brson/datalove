@@ -409,14 +409,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
 
             // Zero-init tracking bytes.
-            let tracking_count = self.layout.value_tracking.len() + self.layout.slot_tracking.len();
-            if tracking_count > 0 {
+            if self.layout.tracking_count > 0 {
                 let track_addr = builder.ins().stack_addr(
                     PTR_TYPE,
                     frame_slot,
                     self.layout.tracking_offset as i32,
                 );
-                let size = builder.ins().iconst(PTR_TYPE, tracking_count as i64);
+                let size = builder.ins().iconst(PTR_TYPE, self.layout.tracking_count as i64);
                 let zero = builder.ins().iconst(cl_types::I8, 0);
                 builder.call_memset(self.isa.frontend_config(), track_addr, zero, size);
             }
@@ -956,8 +955,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Get the tracking byte offset for an operand, if it's tracked.
     fn tracking_byte_offset(&self, operand: &Operand) -> Option<u32> {
         match operand {
-            Operand::Value(vid) => self.layout.value_tracking.get(vid).copied(),
-            Operand::Slot(sid) => self.layout.slot_tracking.get(sid).copied(),
+            Operand::Value(vid) => self.layout.values[vid.0 as usize].tracking_byte,
+            Operand::Slot(sid) => self.layout.slots[sid.0 as usize].tracking_byte,
             _ => None,
         }
     }

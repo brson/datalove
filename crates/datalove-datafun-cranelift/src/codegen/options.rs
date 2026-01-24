@@ -263,7 +263,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Conditionally mark dest as LIVE based on is_some.
         // Only valid if it was Some.
-        if let Some(track_offset) = self.layout.value_tracking.get(&dest).copied() {
+        if let Some(track_offset) = self.layout.values[dest.0 as usize].tracking_byte {
             let frame_slot = self.frame_slot
                 .expect("tracking requires frame slot");
             let frame_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, 0);
@@ -410,8 +410,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Conditionally mark ok_dest or err_dest as LIVE based on is_ok.
         // Only one of them is valid at runtime.
-        let ok_track_offset = self.layout.value_tracking.get(&ok_dest).copied();
-        let err_track_offset = self.layout.value_tracking.get(&err_dest).copied();
+        let ok_track_offset = self.layout.values[ok_dest.0 as usize].tracking_byte;
+        let err_track_offset = self.layout.values[err_dest.0 as usize].tracking_byte;
 
         if ok_track_offset.is_some() || err_track_offset.is_some() {
             let frame_slot = self.frame_slot

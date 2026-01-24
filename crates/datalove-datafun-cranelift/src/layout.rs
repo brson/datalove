@@ -3,8 +3,6 @@
 //! Computes stack slot offsets for values and mutable slots within a function frame,
 //! matching the interpreter's layout for ABI compatibility.
 
-use std::collections::HashMap;
-
 use datalove_datafun_ir::{IrType, SlotId, ValueId};
 use crate::types::{self, align_up, TypeLayout, CraneliftRepr};
 
@@ -19,6 +17,8 @@ pub struct SlotLayout {
     pub align: u32,
     /// Cranelift representation.
     pub repr: CraneliftRepr,
+    /// Offset of tracking byte, if this value/slot is tracked.
+    pub tracking_byte: Option<u32>,
 }
 
 /// Sentinel values for tracking bytes.
@@ -49,10 +49,8 @@ pub struct FrameLayout {
     pub frame_align: u32,
     /// Offset of tracking bytes region within frame.
     pub tracking_offset: u32,
-    /// Mapping from tracked ValueId to its tracking byte offset.
-    pub value_tracking: HashMap<ValueId, u32>,
-    /// Mapping from tracked SlotId to its tracking byte offset.
-    pub slot_tracking: HashMap<SlotId, u32>,
+    /// Number of tracking bytes (for initialization).
+    pub tracking_count: u32,
 }
 
 impl FrameLayout {
@@ -85,6 +83,7 @@ impl FrameLayout {
                 size: types::PTR_SIZE,
                 align: types::PTR_ALIGN,
                 repr,
+                tracking_byte: None,
             });
             offset += types::PTR_SIZE;
             max_align = max_align.max(types::PTR_ALIGN);
@@ -101,6 +100,7 @@ impl FrameLayout {
                 size,
                 align,
                 repr,
+                tracking_byte: None,
             });
             offset += size;
             max_align = max_align.max(align);
@@ -117,6 +117,7 @@ impl FrameLayout {
                 size,
                 align,
                 repr,
+                tracking_byte: None,
             });
             offset += size;
             max_align = max_align.max(align);
@@ -125,18 +126,20 @@ impl FrameLayout {
         // Layout tracking bytes region.
         // One byte per tracked value/slot, no alignment requirements.
         let tracking_offset = offset;
-        let mut value_tracking = HashMap::new();
-        let mut slot_tracking = HashMap::new();
+        let tracking_count = (tracked_values.len() + tracked_slots.len()) as u32;
 
-        for &vid in tracked_values {
-            value_tracking.insert(vid, offset);
-            offset += 1;
+        // Assign tracking byte offsets to tracked values.
+        for (i, &vid) in tracked_values.iter().enumerate() {
+            values[vid.0 as usize].tracking_byte = Some(tracking_offset + i as u32);
         }
 
-        for &sid in tracked_slots {
-            slot_tracking.insert(sid, offset);
-            offset += 1;
+        // Assign tracking byte offsets to tracked slots.
+        let slot_tracking_base = tracking_offset + tracked_values.len() as u32;
+        for (i, &sid) in tracked_slots.iter().enumerate() {
+            slots[sid.0 as usize].tracking_byte = Some(slot_tracking_base + i as u32);
         }
+
+        offset += tracking_count;
 
         // Ensure frame_size is at least 1 so we always have a valid frame slot.
         // This is needed for zero-size types like Unit that still need a valid
@@ -150,8 +153,7 @@ impl FrameLayout {
             frame_size,
             frame_align: max_align,
             tracking_offset,
-            value_tracking,
-            slot_tracking,
+            tracking_count,
         }
     }
 
@@ -262,8 +264,10 @@ mod tests {
         );
         // Values: 0..4, 4..8; slot: 8..16; tracking: 16..18.
         assert_eq!(layout.tracking_offset, 16);
-        assert_eq!(layout.value_tracking.get(&ValueId(0)), Some(&16));
-        assert_eq!(layout.slot_tracking.get(&SlotId(0)), Some(&17));
+        assert_eq!(layout.tracking_count, 2);
+        assert_eq!(layout.values[0].tracking_byte, Some(16));
+        assert_eq!(layout.values[1].tracking_byte, None);
+        assert_eq!(layout.slots[0].tracking_byte, Some(17));
         // Frame size should include tracking bytes, aligned to 8.
         assert_eq!(layout.frame_size, 24);
     }
