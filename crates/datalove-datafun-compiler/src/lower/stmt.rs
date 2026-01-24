@@ -145,8 +145,7 @@ fn lower_statement_impl<'db>(
             Ok(())
         }
         Statement::Fun(_) => {
-            // Nested functions not supported in IR yet.
-            Err(LowerError::NotImplemented("nested functions".to_string()))
+            panic!("nested function definitions not allowed in datalove syntax");
         }
         Statement::Require(_) | Statement::Import(_) => {
             // These are module-level, not in function bodies.

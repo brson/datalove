@@ -80,8 +80,6 @@ pub enum LowerError {
     FunctionNotFound(String),
     /// Invalid literal value (e.g., integer out of range for target type).
     InvalidLiteral(String),
-    /// Feature not yet implemented in the lowering pass.
-    NotImplemented(String),
     /// Parse error node encountered during lowering (from error recovery).
     ParseError,
 }
@@ -93,7 +91,6 @@ impl std::fmt::Display for LowerError {
             LowerError::VariableNotMutable(name) => write!(f, "variable not mutable: {}", name),
             LowerError::FunctionNotFound(name) => write!(f, "function not found: {}", name),
             LowerError::InvalidLiteral(lit) => write!(f, "invalid literal: {}", lit),
-            LowerError::NotImplemented(what) => write!(f, "not implemented: {}", what),
             LowerError::ParseError => write!(f, "parse error in source"),
         }
     }
