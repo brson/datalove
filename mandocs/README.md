@@ -19,9 +19,9 @@ Then we'll add I/O to it &mdash; carefully.
 
 
 
-> **Roadmap**: [9 of 21 complete &middot; updated 2026-01-22](roadmap.md).
+> **Roadmap**: [9 of 21 complete &middot](roadmap.md), updated 2026-01-22.
 
-> **Latest news**: [2026-01-24: Compile-time function evaluation](posts.html).
+> **Latest news**: [Compile-time function evaluation](posts.html), updated 2026-01-24.
 
 
 
