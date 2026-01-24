@@ -21,7 +21,7 @@ Then we'll add I/O to it &mdash; carefully.
 
 > **Roadmap**: [9 of 21 complete &middot; updated 2026-01-22](roadmap.md).
 
-> **Latest news**: [No news yet](posts.html).
+> **Latest news**: [2026-01-24: Compile-time function evaluation](posts.html).
 
 
 
