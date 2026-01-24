@@ -13,7 +13,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 3735928559u32
+                        v0 = const 3735928559u64
                         debuglog v0
                         unit_end
                     exports:
@@ -25,7 +25,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 3735928559u32
+                        v0 = const 3735928559u64
                         debuglog v0
                         unit_end
                     exports:

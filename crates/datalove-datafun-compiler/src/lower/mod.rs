@@ -65,19 +65,14 @@ pub use script::{lower_script_unit, lower_script_fragment_raw, lower_script_expr
 
 /// Errors that can occur during lowering.
 ///
-/// Most semantic errors are caught by the typechecker before lowering runs.
-/// This error type covers edge cases the typechecker doesn't validate.
+/// Currently empty - all semantic errors are caught by the typechecker.
+/// This type is retained for API compatibility but may be removed in the future.
 #[derive(Debug, Clone, PartialEq)]
-pub enum LowerError {
-    /// Invalid literal value (e.g., integer out of range for target type).
-    InvalidLiteral(String),
-}
+pub enum LowerError {}
 
 impl std::fmt::Display for LowerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LowerError::InvalidLiteral(lit) => write!(f, "invalid literal: {}", lit),
-        }
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {}
     }
 }
 
