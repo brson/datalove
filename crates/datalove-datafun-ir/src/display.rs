@@ -445,8 +445,18 @@ impl fmt::Display for Instruction {
             Instruction::ParamStore { param, value } => {
                 write!(f, "store {}, {}", param, value)
             }
+            Instruction::ParamStoreTracked { param, value } => {
+                write!(f, "store.tracked {}, {}", param, value)
+            }
             Instruction::ParamSetField { param, field_path, value } => {
                 write!(f, "setfield {}", param)?;
+                for idx in field_path {
+                    write!(f, ".{}", idx)?;
+                }
+                write!(f, ", {}", value)
+            }
+            Instruction::ParamSetFieldTracked { param, field_path, value } => {
+                write!(f, "setfield.tracked {}", param)?;
                 for idx in field_path {
                     write!(f, ".{}", idx)?;
                 }
@@ -466,6 +476,9 @@ impl fmt::Display for Instruction {
             }
             Instruction::DropTracked { operand } => {
                 write!(f, "drop.tracked {}", operand)
+            }
+            Instruction::DropViaRef { ref_value } => {
+                write!(f, "drop.ref {}", ref_value)
             }
             Instruction::UnitEndDrop { operand } => {
                 write!(f, "unit_end_drop {}", operand)

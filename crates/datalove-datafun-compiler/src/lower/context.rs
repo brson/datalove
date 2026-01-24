@@ -520,6 +520,13 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// Emit a Drop instruction for a single operand if its type requires it.
+    pub fn emit_drop_for_type(&mut self, operand: &Operand, ty: &IrType) {
+        if !ty.is_copy() {
+            self.emit(Instruction::Drop { operand: operand.clone() });
+        }
+    }
+
     /// Record an expression temporary that needs dropping after the operation.
     pub fn record_expr_temp(&mut self, value: ValueId, ty: IrType) {
         if !ty.is_copy() {
@@ -891,18 +898,26 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit ParamStore to write a value to a mutable parameter.
     ///
-    /// All params are precise (always initialized by caller), so always
-    /// destroys old value before writing.
+    /// - Mut params: precise, always destroys old value (ParamStore)
+    /// - Out params: tracked, checks init state before destroying (ParamStoreTracked)
     pub fn emit_param_store(&mut self, param: ParamId, value: Operand) {
-        self.emit(Instruction::ParamStore { param, value });
+        if self.param_mode(param) == Some(ParamMode::Out) {
+            self.emit(Instruction::ParamStoreTracked { param, value });
+        } else {
+            self.emit(Instruction::ParamStore { param, value });
+        }
     }
 
     /// Emit ParamSetField to write a value to a field within a mutable parameter.
     ///
-    /// All params are precise (always initialized by caller), so always
-    /// destroys old field value before writing.
+    /// - Mut params: precise, always destroys old field value (ParamSetField)
+    /// - Out params: tracked, checks init state before destroying (ParamSetFieldTracked)
     pub fn emit_param_set_field(&mut self, param: ParamId, field_path: Vec<u32>, value: Operand) {
-        self.emit(Instruction::ParamSetField { param, field_path, value });
+        if self.param_mode(param) == Some(ParamMode::Out) {
+            self.emit(Instruction::ParamSetFieldTracked { param, field_path, value });
+        } else {
+            self.emit(Instruction::ParamSetField { param, field_path, value });
+        }
     }
 
     /// Emit SlotLoadCopy.
@@ -934,6 +949,16 @@ impl<'db> LowerCtx<'db> {
         }
 
         result
+    }
+
+    /// Compute tracked_params for the current function.
+    ///
+    /// Returns ParamIds for Out params that need runtime tracking.
+    pub fn compute_tracked_params(&self) -> Vec<ParamId> {
+        self.body.param_modes.iter().enumerate()
+            .filter(|(_, mode)| **mode == ParamMode::Out)
+            .map(|(i, _)| ParamId(i as u32))
+            .collect()
     }
 
     /// Compute unit_end_values for the current unit.

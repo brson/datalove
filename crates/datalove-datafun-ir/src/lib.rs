@@ -964,22 +964,41 @@ pub enum Instruction {
         value: Operand,
     },
 
-    /// Store value to mutable parameter (Mut or Out).
+    /// Store value to mutable parameter (Mut params only).
     ///
-    /// All params are precise - caller always provides initialized memory.
+    /// Mut params are precise - caller always provides initialized memory.
     /// Always destroys the old value before storing.
     ///
     /// **Ownership:** Consumes `value`, writes to caller's param location.
-    /// **Tracking:** None - all params are precise.
     ParamStore { param: ParamId, value: Operand },
 
-    /// Store value to a field within mutable parameter.
+    /// Store value to Out parameter (tracked).
     ///
-    /// All params are precise - always destroys the old field value.
+    /// Out params start uninitialized. Checks tracking byte before destroying:
+    /// first write doesn't destroy, subsequent writes destroy old value.
+    ///
+    /// **Ownership:** Consumes `value`, writes to caller's param location.
+    /// **Tracking:** Reads param tracking byte; writes LIVE after store.
+    ParamStoreTracked { param: ParamId, value: Operand },
+
+    /// Store value to a field within mutable parameter (Mut params only).
+    ///
+    /// Mut params are precise - always destroys the old field value.
     ///
     /// **Ownership:** Consumes `value`, writes to field within param.
-    /// **Tracking:** None - all params are precise.
     ParamSetField {
+        param: ParamId,
+        field_path: Vec<u32>,
+        value: Operand,
+    },
+
+    /// Store value to a field within Out parameter (tracked).
+    ///
+    /// Out params start uninitialized. Checks tracking byte before destroying.
+    ///
+    /// **Ownership:** Consumes `value`, writes to field within param.
+    /// **Tracking:** Reads param tracking byte; writes LIVE after store.
+    ParamSetFieldTracked {
         param: ParamId,
         field_path: Vec<u32>,
         value: Operand,
@@ -1017,6 +1036,15 @@ pub enum Instruction {
     /// **Ownership:** Conditionally consumes `operand` (must be a Slot).
     /// **Tracking:** Reads slot tracking byte; writes MOVED after drop.
     DropTracked { operand: Operand },
+
+    /// Drop through a reference value.
+    ///
+    /// Takes a value containing a reference (from GetFieldRef) and destroys
+    /// what the reference points to. Used to destroy field values before
+    /// passing a reference as an out param.
+    ///
+    /// **Ownership:** Does not consume `ref_value`, destroys referent.
+    DropViaRef { ref_value: ValueId },
 
     /// Drop a script-level value binding at unit end.
     ///
@@ -1137,6 +1165,12 @@ pub struct IrFunction {
     /// their state at every use point. Empty means all slots are precise.
     #[serde(default)]
     pub tracked_slots: Vec<SlotId>,
+    /// Params that need runtime tracking (Out params).
+    ///
+    /// Out params start uninitialized. First write should not destroy,
+    /// subsequent writes should destroy the old value.
+    #[serde(default)]
+    pub tracked_params: Vec<ParamId>,
 }
 
 impl IrFunction {

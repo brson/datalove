@@ -3,7 +3,7 @@
 //! Computes stack slot offsets for values and mutable slots within a function frame,
 //! matching the interpreter's layout for ABI compatibility.
 
-use datalove_datafun_ir::{IrType, SlotId};
+use datalove_datafun_ir::{IrType, ParamId, SlotId};
 use crate::types::{self, align_up, TypeLayout, CraneliftRepr};
 
 /// Layout information for a single value or slot.
@@ -57,12 +57,13 @@ impl FrameLayout {
     /// Compute frame layout from IR type arrays.
     ///
     /// Layout order: params, values, slots, tracking bytes.
-    /// Only slots (var bindings) need tracking bytes - values are always precise.
+    /// Tracked slots and Out params need tracking bytes.
     pub fn compute(
         param_types: &[IrType],
         value_types: &[IrType],
         slot_types: &[IrType],
         tracked_slots: &[SlotId],
+        tracked_params: &[ParamId],
     ) -> Self {
         let mut params = Vec::with_capacity(param_types.len());
         let mut values = Vec::with_capacity(value_types.len());
@@ -123,13 +124,21 @@ impl FrameLayout {
         }
 
         // Layout tracking bytes region.
-        // Only slots (var bindings) need tracking bytes.
+        // Tracked slots and Out params need tracking bytes.
         let tracking_offset = offset;
-        let tracking_count = tracked_slots.len() as u32;
+        let slot_tracking_count = tracked_slots.len() as u32;
+        let param_tracking_count = tracked_params.len() as u32;
+        let tracking_count = slot_tracking_count + param_tracking_count;
 
         // Assign tracking byte offsets to tracked slots.
         for (i, &sid) in tracked_slots.iter().enumerate() {
             slots[sid.0 as usize].tracking_byte = Some(tracking_offset + i as u32);
+        }
+
+        // Assign tracking byte offsets to tracked params (after slots).
+        let param_tracking_base = tracking_offset + slot_tracking_count;
+        for (i, &pid) in tracked_params.iter().enumerate() {
+            params[pid.0 as usize].tracking_byte = Some(param_tracking_base + i as u32);
         }
 
         offset += tracking_count;
@@ -172,7 +181,7 @@ mod tests {
 
     #[test]
     fn test_empty_frame() {
-        let layout = FrameLayout::compute(&[], &[], &[], &[]);
+        let layout = FrameLayout::compute(&[], &[], &[], &[], &[]);
         // Frame size is always at least 1 for debuglog of zero-size types.
         assert_eq!(layout.frame_size, 1);
         assert_eq!(layout.frame_align, 1);
@@ -180,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_single_value() {
-        let layout = FrameLayout::compute(&[], &[IrType::U32], &[], &[]);
+        let layout = FrameLayout::compute(&[], &[IrType::U32], &[], &[], &[]);
         assert_eq!(layout.values.len(), 1);
         assert_eq!(layout.values[0].offset, 0);
         assert_eq!(layout.values[0].size, 4);
@@ -190,7 +199,7 @@ mod tests {
     #[test]
     fn test_multiple_values_alignment() {
         // u8 at 0, u64 needs alignment to 8.
-        let layout = FrameLayout::compute(&[], &[IrType::U8, IrType::U64], &[], &[]);
+        let layout = FrameLayout::compute(&[], &[IrType::U8, IrType::U64], &[], &[], &[]);
         assert_eq!(layout.values[0].offset, 0);
         assert_eq!(layout.values[1].offset, 8); // Aligned to 8.
         assert_eq!(layout.frame_size, 16);
@@ -199,7 +208,7 @@ mod tests {
 
     #[test]
     fn test_params_are_pointers() {
-        let layout = FrameLayout::compute(&[IrType::U32, IrType::String], &[], &[], &[]);
+        let layout = FrameLayout::compute(&[IrType::U32, IrType::String], &[], &[], &[], &[]);
         assert_eq!(layout.params.len(), 2);
         // All params are pointers (8 bytes each).
         assert_eq!(layout.params[0].size, 8);
@@ -215,6 +224,7 @@ mod tests {
             &[IrType::U32],
             &[IrType::U64],
             &[],
+            &[],
         );
         assert_eq!(layout.values[0].offset, 0);
         assert_eq!(layout.slots[0].offset, 8); // After u32, aligned to 8.
@@ -228,6 +238,7 @@ mod tests {
         let layout = FrameLayout::compute(
             &[],
             &[IrType::String, IrType::U32],
+            &[],
             &[],
             &[],
         );
@@ -251,6 +262,7 @@ mod tests {
             &[IrType::U32, IrType::U32],
             &[IrType::U64],
             &tracked_slots,
+            &[],
         );
         // Values: 0..4, 4..8; slot: 8..16; tracking: 16..17.
         assert_eq!(layout.tracking_offset, 16);

@@ -45,21 +45,44 @@ pub fn lower_operand<'db>(
 /// For ref/mut/out params with field projection args, emits GetFieldRef instead
 /// of GetField to pass a reference to the field without copying.
 ///
+/// For 'out' mode params, the callee expects uninitialized memory, so we emit
+/// a Drop for the existing value before passing the reference.
+///
 /// For 'in' mode params, the function CONSUMES the argument (takes ownership).
 /// So we don't record temps - the value is transferred to the callee.
 fn lower_call_arg<'db>(
     ctx: &mut LowerCtx<'db>,
     arg: ExprFun<'db>,
     mode: ParamMode,
+    arg_type: Option<&IrType>,
 ) -> Result<Operand, LowerError> {
     // Check if this is a ref context AND the arg is a field projection.
     if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
         if let ExprFunKind::FieldProj(proj) = arg.expr(ctx.db) {
-            return lower_field_proj_as_ref(ctx, arg, proj);
+            let operand = lower_field_proj_as_ref(ctx, arg, proj)?;
+            // For out params, destroy existing field value before call.
+            // Use DropViaRef since we have a reference, not the value itself.
+            if mode == ParamMode::Out {
+                if let Operand::Value(ref_value) = operand {
+                    if let Some(ty) = arg_type {
+                        if !ty.is_copy() {
+                            ctx.emit(Instruction::DropViaRef { ref_value });
+                        }
+                    }
+                }
+            }
+            return Ok(operand);
         }
         // For ref/mut/out modes, use lower_operand which records temps.
         // The caller retains ownership and must drop after the call.
-        return lower_operand(ctx, arg);
+        let operand = lower_operand(ctx, arg)?;
+        // For out params, destroy existing value before call.
+        if mode == ParamMode::Out {
+            if let Some(ty) = arg_type {
+                ctx.emit_drop_for_type(&operand, ty);
+            }
+        }
+        return Ok(operand);
     }
 
     // For 'in' mode: function consumes the argument, so don't record temps.
@@ -291,7 +314,8 @@ pub fn lower_expression<'db>(
             let mut args = Vec::with_capacity(call_args.len());
             for (i, arg) in call_args.iter().enumerate() {
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                let operand = lower_call_arg(ctx, *arg, mode)?;
+                let arg_type = param_types.get(i);
+                let operand = lower_call_arg(ctx, *arg, mode, arg_type)?;
                 // Track in-mode args as pending intermediate.
                 // Ref/mut/out args are tracked via lower_operand's expr_temps.
                 if mode == ParamMode::In {

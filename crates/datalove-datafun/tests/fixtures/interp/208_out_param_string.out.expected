@@ -15,7 +15,7 @@ Analysis(
                     fn init_string(p0):
                     block0:
                         v0 = const "hello"
-                        store p0, v0
+                        store.tracked p0, v0
                         v1 = const true
                         return v1
                     
@@ -23,6 +23,7 @@ Analysis(
                     block0:
                         v0 = const ""
                         store.move.tracked s0, v0
+                        drop s0
                         v1 = call m0.f0(s0)
                         v2 = load.move.tracked s0
                         return v2

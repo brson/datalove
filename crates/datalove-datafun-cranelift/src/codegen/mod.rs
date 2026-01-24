@@ -194,6 +194,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             &func.value_types,
             &func.slot_types,
             &func.tracked_slots,
+            &func.tracked_params,
         );
 
         Self {
@@ -231,6 +232,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             &func.value_types,
             &func.slot_types,
             &func.tracked_slots,
+            &func.tracked_params,
         );
 
         Self {
@@ -270,6 +272,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             &func.value_types,
             &func.slot_types,
             &func.tracked_slots,
+            &func.tracked_params,
         );
 
         Self {
@@ -583,14 +586,23 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::ParamStore { param, value } => {
                 self.compile_param_store(builder, *param, value)?;
             }
+            Instruction::ParamStoreTracked { param, value } => {
+                self.compile_param_store_tracked(builder, *param, value)?;
+            }
             Instruction::ParamSetField { param, field_path, value } => {
                 self.compile_param_set_field(builder, param, field_path, value)?;
+            }
+            Instruction::ParamSetFieldTracked { param, field_path, value } => {
+                self.compile_param_set_field_tracked(builder, param, field_path, value)?;
             }
             Instruction::Drop { operand } => {
                 self.compile_drop(builder, operand)?;
             }
             Instruction::DropTracked { operand } => {
                 self.compile_drop_tracked(builder, operand)?;
+            }
+            Instruction::DropViaRef { ref_value } => {
+                self.compile_drop_via_ref(builder, *ref_value)?;
             }
             Instruction::UnitEndDrop { operand } => {
                 // Precise binding: unconditional drop.
@@ -913,6 +925,38 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     fn mark_slot_live(&self, builder: &mut FunctionBuilder, sid: SlotId) {
         self.mark_tracking_live(builder, &Operand::Slot(sid));
     }
+
+    /// Get tracking byte offset for a param, if tracked.
+    fn param_tracking_byte_offset(&self, pid: ParamId) -> Option<u32> {
+        self.layout.params[pid.0 as usize].tracking_byte
+    }
+
+    /// Mark a tracked param as LIVE after store.
+    fn mark_param_live(&self, builder: &mut FunctionBuilder, pid: ParamId) {
+        use crate::layout::tracking;
+
+        if let Some(track_offset) = self.param_tracking_byte_offset(pid) {
+            let frame_slot = self.frame_slot
+                .expect("tracking requires frame slot");
+            let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+            let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
+            builder.ins().store(MemFlags::new(), live_val, track_addr, 0);
+        }
+    }
+
+    /// Get the pointer stored in a ref value (from GetFieldRef).
+    ///
+    /// For ref values, the stored cranelift value IS the pointer.
+    fn get_value_as_ref_ptr(
+        &self,
+        _builder: &mut FunctionBuilder,
+        vid: ValueId,
+    ) -> Result<cl_ir::Value, CraneliftError> {
+        // GetFieldRef stores the pointer directly in self.values.
+        self.values.get(&vid).copied().ok_or_else(|| {
+            CraneliftError::Codegen(format!("ref value {:?} not found", vid))
+        })
+    }
 }
 
 #[cfg(test)]
@@ -975,6 +1019,7 @@ mod tests {
             value_types: vec![IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
+            tracked_params: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
@@ -1025,6 +1070,7 @@ mod tests {
             value_types: vec![IrType::I32, IrType::I32, IrType::Bool],
             slot_types: vec![],
             tracked_slots: vec![],
+            tracked_params: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
@@ -1067,6 +1113,7 @@ mod tests {
             value_types: vec![IrType::I32, IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
+            tracked_params: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
@@ -1140,6 +1187,7 @@ mod tests {
             value_types: vec![IrType::Bool, IrType::I32, IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
+            tracked_params: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);

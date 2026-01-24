@@ -585,11 +585,24 @@ impl IrInterpreter {
                 }
             }
             Instruction::ParamStore { param, value } => {
+                // Mut params are always initialized - always destroy old value.
                 let src_val = self.read_operand(value, frame, frames)?;
-                // Get destination pointer from param (points to caller's data).
                 let dest_ptr = frame.param_dest(*param);
-                // Destroy old value at destination only if initialized.
-                // (Out params start uninitialized - first write doesn't destroy.)
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        self.runtime.handle(),
+                        dest_ptr.ptr,
+                        dest_ptr.tydesc,
+                    );
+                }
+                unsafe { self.move_value(&src_val, dest_ptr); }
+                Self::mark_source_dropped_local(value, frame);
+            }
+            Instruction::ParamStoreTracked { param, value } => {
+                // Out params: caller destroys before call, so first write sees
+                // uninitialized memory. Check tracking byte before destroying.
+                let src_val = self.read_operand(value, frame, frames)?;
+                let dest_ptr = frame.param_dest(*param);
                 if frame.is_param_initialized(*param) {
                     unsafe {
                         datalove_rt::c::dtlv_rti_any_destroy_local(
@@ -599,9 +612,7 @@ impl IrInterpreter {
                         );
                     }
                 }
-                // Move new value into destination.
                 unsafe { self.move_value(&src_val, dest_ptr); }
-                // Mark param as initialized (important for Out params).
                 frame.mark_param_initialized(*param);
                 Self::mark_source_dropped_local(value, frame);
             }
@@ -952,6 +963,20 @@ impl IrInterpreter {
                 self.execute_drop(&val);
                 Self::mark_source_dropped_local(operand, frame);
             }
+            Instruction::DropViaRef { ref_value } => {
+                // Drop through a reference value (e.g., from GetFieldRef).
+                // The reference value contains a pointer to what we want to destroy.
+                let val = frame.value(*ref_value)?;
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        self.runtime.handle(),
+                        val.ptr,
+                        val.tydesc,
+                    );
+                }
+                // Note: we don't mark the ref_value as dropped - it's just a reference.
+                // The underlying storage still exists but is now uninitialized.
+            }
             Instruction::UnitEndDrop { operand: _ } => {
                 // No-op: script-level bindings persist for subsequent REPL units.
                 // AOT backend handles this as unconditional drop.
@@ -1113,37 +1138,12 @@ impl IrInterpreter {
                 }
             }
             Instruction::ParamSetField { param, field_path, value } => {
+                // Mut params are always initialized - always destroy old field.
                 let value_val = self.read_operand(value, frame, frames)?;
-
-                // Get the param's base pointer and tydesc.
                 let slot_info = frame.param_dest(*param);
-
-                // Navigate field path to find target field.
-                let mut current_ptr = slot_info.ptr;
-                let mut current_tydesc = slot_info.tydesc;
-
-                for &field_idx in field_path.iter() {
-                    let tag = unsafe { (*current_tydesc).type_tag };
-                    match tag {
-                        rtdt::TyTag::Tuple => {
-                            let tuple_info = unsafe { (*current_tydesc).type_info.tuple };
-                            let field_info = unsafe { &*tuple_info.fields.add(field_idx as usize) };
-                            current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
-                            current_tydesc = field_info.tydesc;
-                        }
-                        rtdt::TyTag::Struct => {
-                            let struct_info = unsafe { (*current_tydesc).type_info.struct_ };
-                            let field_info = unsafe { &*struct_info.fields.add(field_idx as usize) };
-                            current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
-                            current_tydesc = field_info.tydesc;
-                        }
-                        _ => return Err(InterpError::TypeMismatch(
-                            format!("ParamSetField path element requires tuple or struct type, got {:?}", tag)
-                        )),
-                    }
-                }
-
-                // Destroy old field value before overwriting.
+                let (current_ptr, current_tydesc) = self.navigate_field_path(
+                    slot_info.ptr, slot_info.tydesc, field_path
+                )?;
                 unsafe {
                     datalove_rt::c::dtlv_rti_any_destroy_local(
                         self.runtime.handle(),
@@ -1151,16 +1151,35 @@ impl IrInterpreter {
                         current_tydesc,
                     );
                 }
-
-                // Copy new value to target field.
                 let size = unsafe { (*current_tydesc).size as usize };
                 unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        value_val.ptr,
-                        current_ptr,
-                        size,
-                    );
+                    std::ptr::copy_nonoverlapping(value_val.ptr, current_ptr, size);
                 }
+                Self::mark_source_dropped_local(value, frame);
+            }
+            Instruction::ParamSetFieldTracked { param, field_path, value } => {
+                // Out params: caller destroys before call, so first write sees
+                // uninitialized memory. Check tracking byte before destroying.
+                let value_val = self.read_operand(value, frame, frames)?;
+                let slot_info = frame.param_dest(*param);
+                let (current_ptr, current_tydesc) = self.navigate_field_path(
+                    slot_info.ptr, slot_info.tydesc, field_path
+                )?;
+                if frame.is_param_initialized(*param) {
+                    unsafe {
+                        datalove_rt::c::dtlv_rti_any_destroy_local(
+                            self.runtime.handle(),
+                            current_ptr,
+                            current_tydesc,
+                        );
+                    }
+                }
+                let size = unsafe { (*current_tydesc).size as usize };
+                unsafe {
+                    std::ptr::copy_nonoverlapping(value_val.ptr, current_ptr, size);
+                }
+                frame.mark_param_initialized(*param);
+                Self::mark_source_dropped_local(value, frame);
             }
             Instruction::Intrinsic { dest, intrinsic, args } => {
                 let dest_slot = frame.value_dest(*dest);
@@ -1424,6 +1443,40 @@ impl IrInterpreter {
                 }
             }
         }
+    }
+
+    /// Navigate a field path to get the pointer and tydesc for a nested field.
+    fn navigate_field_path(
+        &self,
+        base_ptr: *mut u8,
+        base_tydesc: *const rtdt::TyDesc,
+        field_path: &[u32],
+    ) -> Result<(*mut u8, *const rtdt::TyDesc), InterpError> {
+        let mut current_ptr = base_ptr;
+        let mut current_tydesc = base_tydesc;
+
+        for &field_idx in field_path {
+            let tag = unsafe { (*current_tydesc).type_tag };
+            match tag {
+                rtdt::TyTag::Tuple => {
+                    let tuple_info = unsafe { (*current_tydesc).type_info.tuple };
+                    let field_info = unsafe { &*tuple_info.fields.add(field_idx as usize) };
+                    current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
+                    current_tydesc = field_info.tydesc;
+                }
+                rtdt::TyTag::Struct => {
+                    let struct_info = unsafe { (*current_tydesc).type_info.struct_ };
+                    let field_info = unsafe { &*struct_info.fields.add(field_idx as usize) };
+                    current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
+                    current_tydesc = field_info.tydesc;
+                }
+                _ => return Err(InterpError::TypeMismatch(
+                    format!("field path element requires tuple or struct type, got {:?}", tag)
+                )),
+            }
+        }
+
+        Ok((current_ptr, current_tydesc))
     }
 
     unsafe fn copy_value(&self, src: &Value, dest: Destination) {

@@ -242,6 +242,12 @@ pub enum AnalysisError {
         /// Which branch has the move (for error message).
         moved_in: &'static str,
     },
+    /// Partial field write to out param (must write whole value).
+    /// D009
+    OutParamPartialWrite {
+        local_index: u32,
+        name: String,
+    },
 }
 
 /// Format analysis errors for display.
@@ -277,6 +283,9 @@ fn format_single_error(error: &AnalysisError) -> String {
         }
         AnalysisError::InconsistentBranchMove { stmt_idx: _, name, moved_in } => {
             format!("error[D008]: `{}` moved in {} branch but not the other", name, moved_in)
+        }
+        AnalysisError::OutParamPartialWrite { local_index: _, name } => {
+            format!("error[D009]: cannot partially write to out parameter: `{}`", name)
         }
     }
 }
@@ -1286,7 +1295,19 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
     let name = match &stmt.target {
         SetTarget::Name(n) => n.text(ctx.db),
         SetTarget::Proj(_) => {
-            // TODO: Handle field projection in drop analysis.
+            // Find root name of projection chain.
+            let root_name = set_target_root_name(ctx.db, &stmt.target);
+            if let Some(root) = root_name {
+                if let Some(id) = ctx.lookup(root) {
+                    // Disallow partial field writes to Out params.
+                    if ctx.bindings[id.0 as usize].param_mode == Some(ParamMode::Out) {
+                        ctx.errors.push(AnalysisError::OutParamPartialWrite {
+                            local_index: stmt.local_index,
+                            name: root.to_string(),
+                        });
+                    }
+                }
+            }
             return;
         }
     };
@@ -1297,6 +1318,14 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
         if ctx.bindings[id.0 as usize].param_mode == Some(ParamMode::Out) {
             ctx.set_out_param_init(id, OutParamInitState::Initialized);
         }
+    }
+}
+
+/// Extract the root name from a set target projection chain.
+fn set_target_root_name<'a, 'db>(db: &'db dyn salsa::Database, target: &'a SetTarget<'db>) -> Option<&'a str> {
+    match target {
+        SetTarget::Name(n) => Some(n.text(db)),
+        SetTarget::Proj(proj) => set_target_root_name(db, &proj.base),
     }
 }
 

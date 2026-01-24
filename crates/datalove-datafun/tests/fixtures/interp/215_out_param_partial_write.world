@@ -1,0 +1,24 @@
+----------
+module local/test/main
+----------
+
+// Error test: partial field write to Out param.
+// Out params must be written as a whole, not field-by-field.
+fun bad_function(out x: (u32, u32)): bool
+    set x.0 = 42
+    set x.1 = 100
+    ret true
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.bad_function
+
+----------
+scriptunit-expr
+----------
+
+true
