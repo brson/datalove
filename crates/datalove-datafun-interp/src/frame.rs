@@ -244,32 +244,30 @@ impl Frame {
         }
     }
 
-    /// Destroy all initialized values, slots, and owned params.
+    /// Destroy persistent bindings (unit_end values/slots) in this frame.
     ///
-    /// Calls the runtime destructor for each initialized value/slot.
+    /// Called during REPL cleanup to free persistent bindings.
+    /// Only destroys values/slots listed in unit_end_values/slots - these are
+    /// the persistent bindings that UnitEndDrop would have cleaned up.
+    /// Intermediate values are explicitly dropped via Drop instructions during
+    /// execution and don't need cleanup here.
+    ///
     /// Skips:
     /// - Borrowed values (not owned by this frame)
-    /// - Borrowed params (caller retains ownership)
-    ///
-    /// Values/slots that were explicitly dropped by Drop instructions during
-    /// execution will have initialized=false and be skipped automatically.
-    pub fn destroy_all(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
-        // Destroy In params (not borrowed, and initialized - callee owns through pointer).
-        for idx in 0..self.param_ptrs.len() {
-            let ptr = self.param_ptrs[idx];
-            if !ptr.is_null() && !self.param_borrowed[idx] && self.param_initialized[idx] {
-                let tydesc = self.param_tydescs[idx];
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
-                }
-                self.param_ptrs[idx] = std::ptr::null_mut();
-                self.param_initialized[idx] = false;
-            }
-        }
-
-        // Destroy initialized values (skip borrowed).
-        for idx in 0..self.value_initialized.len() {
-            if self.value_initialized[idx] && !self.value_borrowed[idx] {
+    /// - Uninitialized values (already dropped/moved)
+    pub fn destroy_all(
+        &mut self,
+        rt_handle: datalove_rt::c::LocalRtHandle,
+        unit_end_values: &[ValueId],
+        unit_end_slots: &[SlotId],
+    ) {
+        // Destroy unit_end values (persistent let bindings).
+        for &vid in unit_end_values {
+            let idx = vid.0 as usize;
+            if idx < self.value_initialized.len()
+                && self.value_initialized[idx]
+                && !self.value_borrowed[idx]
+            {
                 let offset = self.layout.value_offsets[idx] as usize;
                 let tydesc = self.layout.value_tydescs[idx];
                 let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
@@ -280,9 +278,10 @@ impl Frame {
             }
         }
 
-        // Destroy initialized slots.
-        for idx in 0..self.slot_initialized.len() {
-            if self.slot_initialized[idx] {
+        // Destroy unit_end slots (persistent var bindings).
+        for &sid in unit_end_slots {
+            let idx = sid.0 as usize;
+            if idx < self.slot_initialized.len() && self.slot_initialized[idx] {
                 let offset = self.layout.slot_offsets[idx] as usize;
                 let tydesc = self.layout.slot_tydescs[idx];
                 let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
@@ -301,17 +300,32 @@ impl Frame {
 pub struct FrameStore {
     /// Frames from executed units, indexed by unit number.
     frames: Vec<Frame>,
+    /// Unit-end values for each unit (persistent bindings to destroy).
+    unit_end_values: Vec<Vec<ValueId>>,
+    /// Unit-end slots for each unit (persistent bindings to destroy).
+    unit_end_slots: Vec<Vec<SlotId>>,
 }
 
 impl FrameStore {
     /// Create a new empty frame store.
     pub fn new() -> Self {
-        Self { frames: Vec::new() }
+        Self {
+            frames: Vec::new(),
+            unit_end_values: Vec::new(),
+            unit_end_slots: Vec::new(),
+        }
     }
 
-    /// Add a completed unit's frame.
-    pub fn add_frame(&mut self, frame: Frame) {
+    /// Add a completed unit's frame with its persistent bindings.
+    pub fn add_frame(
+        &mut self,
+        frame: Frame,
+        unit_end_values: Vec<ValueId>,
+        unit_end_slots: Vec<SlotId>,
+    ) {
         self.frames.push(frame);
+        self.unit_end_values.push(unit_end_values);
+        self.unit_end_slots.push(unit_end_slots);
     }
 
     /// Read a value from a previous unit.
@@ -375,10 +389,12 @@ impl FrameStore {
         }
     }
 
-    /// Destroy all values in all frames.
+    /// Destroy persistent bindings in all frames.
     pub fn destroy_all(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
-        for frame in &mut self.frames {
-            frame.destroy_all(rt_handle);
+        for i in 0..self.frames.len() {
+            let values = &self.unit_end_values[i];
+            let slots = &self.unit_end_slots[i];
+            self.frames[i].destroy_all(rt_handle, values, slots);
         }
     }
 }

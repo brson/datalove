@@ -336,12 +336,21 @@ impl IrInterpreter {
 
         // On error, destroy the frame and propagate the error.
         if let Err(e) = result {
-            frame.destroy_all(self.runtime.handle());
+            frame.destroy_all(
+                self.runtime.handle(),
+                &unit.unit_end_values,
+                &unit.unit_end_slots,
+            );
             return Err(e);
         }
 
         // Add this unit's frame and functions to the environment for future units.
-        env.add_unit(frame, unit.functions.clone());
+        env.add_unit(
+            frame,
+            unit.functions.clone(),
+            unit.unit_end_values.clone(),
+            unit.unit_end_slots.clone(),
+        );
 
         result
     }
@@ -490,12 +499,15 @@ impl IrInterpreter {
             }
             Instruction::Move { dest, src } => {
                 // Precise move: ownership analysis guarantees source exists.
-                // Mark source dropped so destroy_all skips it.
+                // Mark external sources dropped so destroy_all skips them.
+                // (Local sources don't need marking - they're not in unit_end_values.)
                 let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&src_val, dest_slot); }
                 frame.mark_value_initialized(*dest);
-                Self::mark_source_dropped_all(src, frame, frames);
+                if let Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } = src {
+                    Self::mark_source_dropped_all(src, frame, frames);
+                }
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
                 let lhs_val = self.read_operand(lhs, frame, frames)?;
@@ -638,8 +650,6 @@ impl IrInterpreter {
                 }
             }
             Instruction::Unpack { dests, src } => {
-                // Unpack moves all fields from container into destinations.
-                // Mark source dropped so destroy_all skips it.
                 let src_val = self.read_operand(src, frame, frames)?;
                 let tag = unsafe { (*src_val.tydesc).type_tag };
                 match tag {
@@ -669,7 +679,6 @@ impl IrInterpreter {
                         format!("Unpack requires tuple or struct type, got {:?}", tag)
                     )),
                 }
-                Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
                 // Execute checked arithmetic and set overflow flag.
@@ -715,14 +724,12 @@ impl IrInterpreter {
                 }
             }
             Instruction::UnwrapOption { dest, is_some, src } => {
-                // Unwraps Option, marking source as dropped.
                 let src_val = self.read_operand(src, frame, frames)?;
                 let dest_slot = frame.value_dest(*dest);
                 let is_some_slot = frame.value_dest(*is_some);
                 self.execute_unwrap_option(&src_val, dest_slot, is_some_slot);
                 frame.mark_value_initialized(*dest);
                 frame.mark_value_initialized(*is_some);
-                Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::WrapOk { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
@@ -739,7 +746,6 @@ impl IrInterpreter {
                 Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
-                // Unwraps Result, marking source as dropped.
                 let src_val = self.read_operand(src, frame, frames)?;
                 let ok_slot = frame.value_dest(*ok_dest);
                 let err_slot = frame.value_dest(*err_dest);
@@ -748,7 +754,6 @@ impl IrInterpreter {
                 frame.mark_value_initialized(*ok_dest);
                 frame.mark_value_initialized(*err_dest);
                 frame.mark_value_initialized(*is_ok);
-                Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::ErrorFrom { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames)?;
