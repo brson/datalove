@@ -73,8 +73,6 @@ pub enum LowerError {
     /// Variable not found. Can occur when a previous script unit failed to lower
     /// and didn't export the binding that this unit references.
     VariableNotFound(String),
-    /// Assignment to an immutable variable (let binding, not var).
-    VariableNotMutable(String),
     /// Function not found. Can occur when a previous script unit failed to lower
     /// and didn't export the function that this unit references.
     FunctionNotFound(String),
@@ -88,7 +86,6 @@ impl std::fmt::Display for LowerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LowerError::VariableNotFound(name) => write!(f, "variable not found: {}", name),
-            LowerError::VariableNotMutable(name) => write!(f, "variable not mutable: {}", name),
             LowerError::FunctionNotFound(name) => write!(f, "function not found: {}", name),
             LowerError::InvalidLiteral(lit) => write!(f, "invalid literal: {}", lit),
             LowerError::ParseError => write!(f, "parse error in source"),

@@ -605,10 +605,10 @@ fn lower_set<'db>(
                         });
                         Ok(())
                     } else {
-                        Err(LowerError::VariableNotMutable(name_str))
+                        panic!("assignment to immutable param '{}' - typechecker should catch this", name_str)
                     }
                 }
-                _ => Err(LowerError::VariableNotMutable(name_str)),
+                _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", name_str),
             }
         }
         ast::SetTarget::Proj(proj) => {
@@ -637,10 +637,10 @@ fn lower_set<'db>(
                         });
                         Ok(())
                     } else {
-                        Err(LowerError::VariableNotMutable(root_name_str))
+                        panic!("assignment to field of immutable param '{}' - typechecker should catch this", root_name_str)
                     }
                 }
-                _ => Err(LowerError::VariableNotMutable(root_name_str)),
+                _ => panic!("assignment to field of immutable variable '{}' - typechecker should catch this", root_name_str),
             }
         }
     }

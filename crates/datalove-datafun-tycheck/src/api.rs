@@ -45,7 +45,8 @@ pub use crate::{
 #[derive(Clone, PartialEq, Eq, Hash, Default)]
 #[derive(salsa::Update)]
 pub struct AccumulatedBindings<'db> {
-    pub vars: Vec<(InternedText<'db>, Type<'db>)>,
+    /// Variables: (name, type, is_mutable).
+    pub vars: Vec<(InternedText<'db>, Type<'db>, bool)>,
     pub fns: Vec<(InternedText<'db>, TypeFunction<'db>)>,
     pub fn_asts: Vec<(InternedText<'db>, StmtFun<'db>, Option<ModuleId>)>,
 }
@@ -57,8 +58,9 @@ pub struct AccumulatedBindings<'db> {
 #[salsa::tracked]
 pub struct ScriptUnitTypecheckOutput<'db> {
     pub result: UnitTypecheckResultTracked<'db>,
+    /// Variables: (name, type, is_mutable).
     #[returns(ref)]
-    pub new_vars: Vec<(InternedText<'db>, Type<'db>)>,
+    pub new_vars: Vec<(InternedText<'db>, Type<'db>, bool)>,
     #[returns(ref)]
     pub new_fns: Vec<(InternedText<'db>, TypeFunction<'db>)>,
     #[returns(ref)]
@@ -106,8 +108,8 @@ pub fn typecheck_script_unit<'db>(
     ctx.expected_return_type = Some(Type::Datalit(result_unit_ty));
 
     // Seed with accumulated bindings from prior units.
-    for (name, ty) in &accumulated.vars {
-        ctx.add_variable(*name, ty.clone());
+    for (name, ty, is_mutable) in &accumulated.vars {
+        ctx.add_variable(*name, ty.clone(), *is_mutable);
     }
     for (name, func_ty) in &accumulated.fns {
         ctx.add_function(*name, *func_ty);
@@ -162,14 +164,14 @@ pub fn typecheck_script_unit<'db>(
                 match stmt {
                     Statement::Let(let_stmt) => {
                         let name = let_stmt.name;
-                        if let Some(ty) = ctx.variables.get(&name) {
-                            new_vars.push((name, ty.clone()));
+                        if let Some((ty, is_mutable)) = ctx.variables.get(&name) {
+                            new_vars.push((name, ty.clone(), *is_mutable));
                         }
                     }
                     Statement::Var(var_stmt) => {
                         let name = var_stmt.name;
-                        if let Some(ty) = ctx.variables.get(&name) {
-                            new_vars.push((name, ty.clone()));
+                        if let Some((ty, is_mutable)) = ctx.variables.get(&name) {
+                            new_vars.push((name, ty.clone(), *is_mutable));
                         }
                     }
                     Statement::Fun(fun_stmt) => {
@@ -267,8 +269,8 @@ pub fn type_check_script_with_context<'db>(
     let mut ctx = TypeContext::new(db, spans);
 
     // Seed with prior bindings.
-    for (name, ty) in &prior_ctx.variables {
-        ctx.add_variable(*name, ty.clone());
+    for (name, (ty, is_mutable)) in &prior_ctx.variables {
+        ctx.add_variable(*name, ty.clone(), *is_mutable);
     }
     for (name, func_ty) in &prior_ctx.functions {
         ctx.add_function(*name, *func_ty);
@@ -313,8 +315,8 @@ pub fn type_check_expr_with_context<'db>(
     let mut ctx = TypeContext::new(db, spans);
 
     // Seed with prior bindings.
-    for (name, ty) in &prior_ctx.variables {
-        ctx.add_variable(*name, ty.clone());
+    for (name, (ty, is_mutable)) in &prior_ctx.variables {
+        ctx.add_variable(*name, ty.clone(), *is_mutable);
     }
     for (name, func_ty) in &prior_ctx.functions {
         ctx.add_function(*name, *func_ty);

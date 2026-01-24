@@ -68,6 +68,7 @@ fn check_variable_decl<'db>(
     name: bct::text::InternedText<'db>,
     value: ExprFun<'db>,
     type_hint: Option<datalit::ast::TypeHint<'db>>,
+    is_mutable: bool,
 ) {
     let db = ctx.db;
 
@@ -101,7 +102,7 @@ fn check_variable_decl<'db>(
     };
 
     if let Some(ty) = var_type {
-        ctx.add_variable(name, ty);
+        ctx.add_variable(name, ty, is_mutable);
     }
 }
 
@@ -165,11 +166,11 @@ pub fn check_statement<'db>(
 
     match statement {
         Statement::Let(stmt) => {
-            check_variable_decl(ctx, stmt.name, stmt.value, stmt.type_hint.clone());
+            check_variable_decl(ctx, stmt.name, stmt.value, stmt.type_hint.clone(), false);
         }
 
         Statement::Var(stmt) => {
-            check_variable_decl(ctx, stmt.name, stmt.value, stmt.type_hint.clone());
+            check_variable_decl(ctx, stmt.name, stmt.value, stmt.type_hint.clone(), true);
         }
 
         Statement::Set(stmt) => {
@@ -181,6 +182,11 @@ pub fn check_statement<'db>(
                     // Look up the variable type.
                     match ctx.lookup_variable(*name) {
                         Some(expected_type) => {
+                            // Check mutability - reject assignment to immutable variables.
+                            if let Some(false) = ctx.lookup_variable_mutability(*name) {
+                                let err = ctx.error_variable_not_mutable(stmt, name.text(db).as_str());
+                                ctx.add_error(err);
+                            }
                             // Check that value matches the variable's type.
                             if let Err(e) = check_expr(ctx, value, &expected_type) {
                                 ctx.add_error(e);
@@ -194,6 +200,12 @@ pub fn check_statement<'db>(
                     }
                 }
                 SetTarget::Proj(proj) => {
+                    // Check that the root variable is mutable.
+                    let root_name = get_proj_root_name(proj);
+                    if let Some(false) = ctx.lookup_variable_mutability(root_name) {
+                        let err = ctx.error_variable_not_mutable(stmt, root_name.text(db).as_str());
+                        ctx.add_error(err);
+                    }
                     // Typecheck projection target.
                     match typecheck_set_target_proj(ctx, proj) {
                         Ok(expected_type) => {
@@ -237,8 +249,10 @@ pub fn check_statement<'db>(
             let saved_is_void = ctx.is_void_function;
 
             // Add parameters to context.
+            // Mut and Out params are mutable and can be assigned with `set`.
             for (param, param_ty) in params.iter().zip(param_types.iter()) {
-                ctx.add_variable(param.name, param_ty.clone());
+                let is_mutable = matches!(param.mode, datalove_datafun_ast::ast::ParamMode::Mut | datalove_datafun_ast::ast::ParamMode::Out);
+                ctx.add_variable(param.name, param_ty.clone(), is_mutable);
             }
 
             ctx.expected_return_type = Some(ret_ty);
@@ -354,8 +368,8 @@ pub fn check_statement<'db>(
                 // Save all variables before entering then branch.
                 let saved_variables = ctx.variables.C();
 
-                // Add binding to context for then body.
-                ctx.variables.insert(binding_name, binding_ty);
+                // Add binding to context for then body (immutable binding from destructuring).
+                ctx.variables.insert(binding_name, (binding_ty, false));
 
                 // Type check then body.
                 for stmt in then_body {
@@ -373,10 +387,10 @@ pub fn check_statement<'db>(
                     // If there's an else binding, bind error type for Result.
                     if let Some(else_binding_name) = else_binding {
                         if let Type::Datalit(datalit::tycheck::Type::Result(_)) = condition_ty {
-                            // Bind Error type.
+                            // Bind Error type (immutable binding from destructuring).
                             let error_ty = Type::Datalit(datalit::tycheck::Type::Error,
                             );
-                            ctx.variables.insert(else_binding_name, error_ty);
+                            ctx.variables.insert(else_binding_name, (error_ty, false));
                         } else {
                             let actual_type = type_to_string(db, &condition_ty);
                             let err = ctx.error_type_mismatch(
@@ -567,6 +581,14 @@ fn typecheck_set_target_proj<'db>(
                 }
             }
         }
+    }
+}
+
+/// Get the root variable name from a projection chain.
+fn get_proj_root_name<'db>(proj: &SetTargetProj<'db>) -> bct::text::InternedText<'db> {
+    match proj.base.as_ref() {
+        SetTarget::Name(name) => *name,
+        SetTarget::Proj(inner_proj) => get_proj_root_name(inner_proj),
     }
 }
 

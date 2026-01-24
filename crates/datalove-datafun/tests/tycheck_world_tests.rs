@@ -165,6 +165,11 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "kind": "UndefinedVariable"
             })
         }
+        TypeError::VariableNotMutable => {
+            json!({
+                "kind": "VariableNotMutable"
+            })
+        }
         TypeError::UnresolvedTypeAlias(name) => {
             json!({
                 "kind": "UnresolvedTypeAlias",

@@ -29,8 +29,8 @@ pub struct TypeContext<'db> {
     pub(crate) spans: DatafunSpans,
     /// Current module being typechecked (for pending diagnostics).
     pub(crate) current_module_id: Option<ModuleId>,
-    /// Variable bindings (name -> type).
-    pub(crate) variables: HashMap<InternedText<'db>, Type<'db>>,
+    /// Variable bindings (name -> (type, is_mutable)).
+    pub(crate) variables: HashMap<InternedText<'db>, (Type<'db>, bool)>,
     /// Function signatures (name -> function type).
     pub(crate) functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
     /// Function ASTs for resolving call targets (name -> (AST, module_id)).
@@ -282,8 +282,18 @@ impl<'db> TypeContext<'db> {
         TypeError::UndefinedVariable
     }
 
-    pub fn add_variable(&mut self, name: InternedText<'db>, ty: Type<'db>) {
-        self.variables.insert(name, ty);
+    /// F055: Cannot assign to immutable variable.
+    pub fn error_variable_not_mutable(&mut self, stmt: &StmtSet, name: &str) -> TypeError {
+        self.pending_diagnostics.push(PendingDiagnostic::VariableNotMutable {
+            local_index: stmt.local_index,
+            module_id: self.current_module_id,
+            name: InternedText::new(self.db, name.S()),
+        });
+        TypeError::VariableNotMutable
+    }
+
+    pub fn add_variable(&mut self, name: InternedText<'db>, ty: Type<'db>, is_mutable: bool) {
+        self.variables.insert(name, (ty, is_mutable));
     }
 
     /// Add a function signature only (for imports where AST comes from another module).
@@ -316,7 +326,11 @@ impl<'db> TypeContext<'db> {
     }
 
     pub fn lookup_variable(&self, name: InternedText<'db>) -> Option<Type<'db>> {
-        self.variables.get(&name).cloned()
+        self.variables.get(&name).map(|(ty, _)| ty.clone())
+    }
+
+    pub fn lookup_variable_mutability(&self, name: InternedText<'db>) -> Option<bool> {
+        self.variables.get(&name).map(|(_, is_mutable)| *is_mutable)
     }
 
     pub fn lookup_function(&self, name: InternedText<'db>) -> Option<TypeFunction<'db>> {
@@ -398,8 +412,8 @@ impl<'db> TypeContext<'db> {
 /// can reference them.
 #[derive(Clone, Default)]
 pub struct ScriptTypeContext<'db> {
-    /// Variable bindings from previous units: name -> type.
-    pub variables: HashMap<InternedText<'db>, Type<'db>>,
+    /// Variable bindings from previous units: name -> (type, is_mutable).
+    pub variables: HashMap<InternedText<'db>, (Type<'db>, bool)>,
     /// Function signatures from previous units: name -> signature.
     pub functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
 }
@@ -429,7 +443,7 @@ impl<'db> ScriptTypeContext<'db> {
                     let value_expr = let_stmt.value;
                     let expr_id = value_expr.as_id().index() as usize;
                     if let Some(ty) = result.expr_types.get(expr_id).and_then(|t| t.clone()) {
-                        self.variables.insert(name, ty);
+                        self.variables.insert(name, (ty, false)); // Let bindings are immutable.
                     }
                 }
                 Statement::Var(var_stmt) => {
@@ -437,7 +451,7 @@ impl<'db> ScriptTypeContext<'db> {
                     let value_expr = var_stmt.value;
                     let expr_id = value_expr.as_id().index() as usize;
                     if let Some(ty) = result.expr_types.get(expr_id).and_then(|t| t.clone()) {
-                        self.variables.insert(name, ty);
+                        self.variables.insert(name, (ty, true)); // Var bindings are mutable.
                     }
                 }
                 Statement::Fun(fun_stmt) => {

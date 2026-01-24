@@ -122,6 +122,8 @@ pub enum TypeError {
     FunctionRequiresReturnValue,
     /// Undefined variable reference.
     UndefinedVariable,
+    /// Cannot assign to immutable variable.
+    VariableNotMutable,
     /// Unresolved type alias (forward reference).
     UnresolvedTypeAlias(String),
     /// Duplicate type alias definition.
@@ -233,6 +235,12 @@ pub enum PendingDiagnostic<'db> {
     },
     /// F054: Undefined variable in set statement.
     UndefinedVariableSet {
+        local_index: u32,
+        module_id: Option<ModuleId>,
+        name: InternedText<'db>,
+    },
+    /// F055: Cannot assign to immutable variable.
+    VariableNotMutable {
         local_index: u32,
         module_id: Option<ModuleId>,
         name: InternedText<'db>,

@@ -358,7 +358,7 @@ fn lower_statement_for_script<'db>(
                                 }
                                 Ok(())
                             }
-                            _ => Err(LowerError::VariableNotMutable(name)),
+                            _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", name),
                         }
                     } else {
                         // Can occur when a previous script unit failed to lower.
@@ -385,7 +385,7 @@ fn lower_statement_for_script<'db>(
                             ctx.emit_set_field(SlotDest::External { unit, slot }, field_path, Operand::Value(value_id));
                             Ok(())
                         }
-                        _ => Err(LowerError::VariableNotMutable(root_name_str)),
+                        _ => panic!("assignment to field of immutable variable '{}' - typechecker should catch this", root_name_str),
                     }
                 }
             }

@@ -374,6 +374,18 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
+        PendingDiagnostic::VariableNotMutable { local_index, module_id: _, name } => {
+            if let Some(ts) = spans.lookup_set(db, *local_index) {
+                bct::diagnostic::DiagnosticBuilder::error(
+                    db,
+                    &format!("cannot assign to immutable variable `{}`", name.as_str(db)),
+                )
+                    .code("F055")
+                    .primary_label(ts, "cannot assign to immutable variable")
+                    .note("consider declaring the variable with 'var' instead of 'let'")
+                    .emit_type();
+            }
+        }
     }
 }
 
@@ -502,6 +514,11 @@ fn format_single_diagnostic<'db>(
             let ts = spans.lookup_set(db, *local_index)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F054]: cannot find variable `{}` in this scope", loc, name.as_str(db)))
+        }
+        PendingDiagnostic::VariableNotMutable { local_index, module_id: _, name } => {
+            let ts = spans.lookup_set(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F055]: cannot assign to immutable variable `{}`", loc, name.as_str(db)))
         }
         PendingDiagnostic::VoidFunctionReturnsValue { local_index, module_id: _ } => {
             let ts = spans.lookup_ret(db, *local_index)?;

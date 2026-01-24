@@ -4,14 +4,16 @@ Analysis(
             section_type: "module",
             name: Some("local/test/main"),
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "line 5, col 5: error[F055]: cannot assign to immutable variable `x`",
+                ],
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Error",
-                message: "Lowering error in try_set_ref: variable not mutable: x",
+                status: "Skipped",
             ),
             output: "",
         ),
