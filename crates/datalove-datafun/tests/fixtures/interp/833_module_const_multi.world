@@ -1,0 +1,45 @@
+----------
+module local/test/config
+----------
+
+const MAX_VALUE: u32 = 100
+const MIN_VALUE: u32 = 1
+
+fun get_max(): u32
+    ret MAX_VALUE
+end fun
+
+fun get_min(): u32
+    ret MIN_VALUE
+end fun
+
+----------
+module local/test/util
+----------
+
+const ZERO: u32 = 0
+const ONE: u32 = 1
+
+fun get_zero(): u32
+    ret ZERO
+end fun
+
+fun get_one(): u32
+    ret ONE
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/config
+require module local/test/util
+import config.get_max
+import config.get_min
+import util.get_zero
+import util.get_one
+
+debuglog get_max()
+debuglog get_min()
+debuglog get_zero()
+debuglog get_one()

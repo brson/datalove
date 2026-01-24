@@ -1,0 +1,32 @@
+----------
+module local/test/chain
+----------
+
+const BASE: u32 = 10
+const MIDDLE: u32 = 20
+const TOP: u32 = 40
+
+fun get_base(): u32
+    ret BASE
+end fun
+
+fun get_middle(): u32
+    ret MIDDLE
+end fun
+
+fun get_top(): u32
+    ret TOP
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/chain
+import chain.get_base
+import chain.get_middle
+import chain.get_top
+
+debuglog get_base()
+debuglog get_middle()
+debuglog get_top()
