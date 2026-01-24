@@ -6,11 +6,14 @@
 use datalove_datafun_ir::expand_ir_strings;
 use rmx::prelude::*;
 use std::path::Path;
+use std::cell::RefCell;
+use std::rc::Rc;
 use serde::{Serialize, Deserialize};
 
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection, ParsedWorldfile};
 use datalove_datafun_cranelift_jit::JitEngine;
+use datalove_datafun_interp::InterpCtfeEvaluator;
 use datafun::pipeline::{
     ModuleCompilationPipeline, TypecheckResult, OwnershipResult, LoweringResult,
     format_ownership_result, format_lowering_result,
@@ -139,6 +142,7 @@ pub fn analyze_worldfile_with_jit(
         }
         return Ok(Analysis { sections: results });
     };
+    compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
 
     let Some(mut executor) = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, Some(Box::new(jit))) else {
         return Ok(Analysis { sections: results });

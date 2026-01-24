@@ -4,17 +4,57 @@
 //! lowers them to IR, and outputs the serialized IR for snapshot testing.
 
 use rmx::prelude::*;
+use std::cell::RefCell;
 use std::path::Path;
 use std::collections::HashMap;
+use std::rc::Rc;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
-use datalove_datafun_compiler::lower::{self, ScriptLowerContext};
+use datalove_datafun_compiler::lower::{self, ScriptLowerContext, PreResolvedConsts, evaluate_consts};
 use datalove_datafun_compiler::ownership_analysis;
 use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
 use datalove_datafun_compiler::ir_ext::IrTypeExt;
-use datalove_datafun_ir::IrType;
+use datalove_datafun_ir::{IrType, ConstBindingInfo, ConstBindingGraph};
+use datalove_datafun_interp::InterpCtfeEvaluator;
+use salsa::plumbing::AsId;
 use bct::input::Source;
 use datalove_datafun_ast::ast::Statement;
+
+/// Build a simple const binding graph from statements and expr_types.
+/// This is a non-tracked version of collect_const_graph for tests.
+fn build_const_graph<'db>(
+    db: &'db dyn salsa::Database,
+    stmts: &[Statement<'db>],
+    expr_types: &[Option<datalove_datafun_tycheck::Type<'db>>],
+) -> ConstBindingGraph {
+    let mut bindings = Vec::new();
+
+    for stmt in stmts {
+        if let Statement::Const(const_stmt) = stmt {
+            let expr = const_stmt.value;
+            let stmt_id = expr.as_id();
+            let name = const_stmt.name.text(db).to_string();
+            let expr_id = expr.as_id();
+
+            // Get the type from typechecker using expression ID index.
+            let ir_type = expr_types.get(expr_id.index() as usize)
+                .cloned()
+                .flatten()
+                .map(|ty| IrType::from_tycheck(db, &ty))
+                .unwrap_or(IrType::Unit);
+
+            bindings.push(ConstBindingInfo {
+                stmt_id,
+                name,
+                expr_id,
+                ir_type,
+                depends_on: Vec::new(), // Simple test case: no dependencies.
+            });
+        }
+    }
+
+    ConstBindingGraph::new(bindings)
+}
 
 /// Analyze a worldfile and produce IR output for script units.
 fn analyze_file(path: &Path) -> Result<String, String> {
@@ -95,7 +135,29 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
                 // Script tests don't use modules, so use empty func_id_map.
                 let func_id_map = HashMap::new();
-                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), None, None) {
+
+                // Evaluate const bindings using CTFE (Phase 2).
+                let const_graph = build_const_graph(&db, &stmts, expr_types);
+                let resolved_consts = if !const_graph.bindings.is_empty() {
+                    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+                    match evaluate_consts(&db, &const_graph, &stmts, expr_types, evaluator) {
+                        Ok(resolved) => Some(resolved),
+                        Err(e) => {
+                            output.push_str(&format!("CTFE error: {:?}\n\n", e));
+                            unit_index += 1;
+                            continue;
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                let pre_resolved = resolved_consts.as_ref().map(|values| PreResolvedConsts {
+                    graph: &const_graph,
+                    values,
+                });
+
+                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), None, pre_resolved) {
                     Ok(ir_unit) => {
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

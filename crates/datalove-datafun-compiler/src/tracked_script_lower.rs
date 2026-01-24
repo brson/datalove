@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
-    IrScriptUnit, IrType, IrModuleId, FuncId, ValueId, SlotId, ExportBinding,
+    IrType, IrModuleId, FuncId, ValueId, SlotId, ExportBinding,
     ConstBindingInfo, ConstBindingGraph, ConstStmtId,
 };
 use datalove_datafun_tycheck::{
@@ -19,7 +19,6 @@ use datalove_datafun_tycheck::{
 use crate::module_graph::ModuleId;
 use crate::lower;
 use crate::ir_ext::IrTypeExt;
-use crate::tracked_script_ownership::ScriptUnitOwnershipResult;
 
 /// Accumulated bindings passed to subsequent script units for lowering.
 ///
@@ -106,172 +105,6 @@ impl AccumulatedLowerBindings {
         }
 
         self.current_unit = unit_index + 1;
-    }
-}
-
-/// Output from lower_script_unit_tracked.
-///
-/// Includes the lowered IR unit AND new exports for accumulation by the caller.
-#[salsa::tracked]
-pub struct ScriptUnitLowerOutput<'db> {
-    /// The lowered IR unit (None if lowering failed).
-    #[returns(ref)]
-    pub ir_unit: Option<IrScriptUnit>,
-    /// Lowering error message if failed.
-    #[returns(ref)]
-    pub error: Option<String>,
-    /// New exports from this unit (for accumulation).
-    #[returns(ref)]
-    pub new_exports: Vec<(String, ExportBinding)>,
-    /// Value types from this unit.
-    #[returns(ref)]
-    pub value_types: Vec<IrType>,
-    /// Slot types from this unit.
-    #[returns(ref)]
-    pub slot_types: Vec<IrType>,
-}
-
-/// Lower a single script fragment unit with accumulated context from prior units.
-///
-/// Memoized: if typecheck_result, module_specs, accumulated, statements, and ownership_result
-/// all match a previous call, returns the cached result.
-///
-/// Caller must first call `analyze_script_fragment_tracked` to get the ownership_result.
-#[salsa::tracked]
-pub fn lower_script_fragment_tracked<'db>(
-    db: &'db dyn salsa::Database,
-    typecheck_result: UnitTypecheckResultTracked<'db>,
-    module_specs: Vec<ModuleSpec<'db>>,
-    accumulated: AccumulatedLowerBindings,
-    statements: Vec<Statement<'db>>,
-    ownership_result: ScriptUnitOwnershipResult<'db>,
-) -> ScriptUnitLowerOutput<'db> {
-    // Check for ownership analysis errors first.
-    let ownership_errors = ownership_result.errors(db);
-    if !ownership_errors.is_empty() {
-        return ScriptUnitLowerOutput::new(
-            db,
-            None,
-            Some(ownership_errors.join("\n")),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        );
-    }
-
-    let expr_types = typecheck_result.expr_types(db);
-    let call_targets = typecheck_result.call_targets(db);
-
-    // Build func_id_map from module specs (for cross-module call resolution).
-    let func_id_map = build_func_id_map(db, &module_specs);
-
-    // Build map of function name -> resolved param types for type alias support.
-    let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
-    for (name, func_type) in typecheck_result.function_types(db) {
-        let param_types: Vec<IrType> = func_type.param_types(db)
-            .iter()
-            .map(|ty| IrType::from_tycheck(db, ty))
-            .collect();
-        func_param_types.insert(name.text(db).S(), param_types);
-    }
-
-    // Get function analyses from ownership result.
-    let func_analyses = ownership_result.to_function_analyses_map(db, &statements);
-
-    // Get script analysis from ownership result.
-    let script_analysis = ownership_result.script_analysis(db).clone()
-        .expect("script_analysis required for fragment units");
-
-    // Convert accumulated bindings to ScriptLowerContext.
-    let script_ctx = accumulated.to_script_lower_context();
-
-    // Lower the fragment.
-    // Note: tracked functions pass None for ctfe_evaluator since trait objects
-    // can't be part of salsa memoization keys. Use raw functions directly for CTFE.
-    match lower::lower_script_fragment_raw(
-        db,
-        expr_types,
-        call_targets,
-        &func_id_map,
-        script_ctx,
-        statements,
-        func_analyses,
-        script_analysis,
-        Some(&func_param_types),
-        None, // ctfe_evaluator - not available in tracked context
-        None, // resolved_consts - not available in tracked context
-    ) {
-        Ok(ir_unit) => {
-            let exports = ir_unit.exports.clone();
-            let value_types = ir_unit.value_types.clone();
-            let slot_types = ir_unit.slot_types.clone();
-            ScriptUnitLowerOutput::new(db, Some(ir_unit), None, exports, value_types, slot_types)
-        }
-        Err(e) => {
-            ScriptUnitLowerOutput::new(db, None, Some(format!("{}", e)), Vec::new(), Vec::new(), Vec::new())
-        }
-    }
-}
-
-/// Lower a single script expression unit with accumulated context from prior units.
-///
-/// Memoized: if typecheck_result, module_specs, accumulated, expr, and ownership_result
-/// all match a previous call, returns the cached result.
-///
-/// Caller must first call `analyze_script_expr_tracked` to get the ownership_result
-/// (which will be minimal for expressions).
-#[salsa::tracked]
-pub fn lower_script_expr_tracked<'db>(
-    db: &'db dyn salsa::Database,
-    typecheck_result: UnitTypecheckResultTracked<'db>,
-    module_specs: Vec<ModuleSpec<'db>>,
-    accumulated: AccumulatedLowerBindings,
-    expr: datalove_datafun_ast::ast::ExprFun<'db>,
-    ownership_result: ScriptUnitOwnershipResult<'db>,
-) -> ScriptUnitLowerOutput<'db> {
-    // Check for ownership analysis errors first (should be empty for expressions).
-    let ownership_errors = ownership_result.errors(db);
-    if !ownership_errors.is_empty() {
-        return ScriptUnitLowerOutput::new(
-            db,
-            None,
-            Some(ownership_errors.join("\n")),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        );
-    }
-
-    let expr_types = typecheck_result.expr_types(db);
-    let call_targets = typecheck_result.call_targets(db);
-
-    // Build func_id_map from module specs.
-    let func_id_map = build_func_id_map(db, &module_specs);
-
-    // Convert accumulated bindings to ScriptLowerContext.
-    let script_ctx = accumulated.to_script_lower_context();
-
-    // Lower the expression.
-    // Note: tracked functions pass None for ctfe_evaluator since trait objects
-    // can't be part of salsa memoization keys. Use raw functions directly for CTFE.
-    match lower::lower_script_expr(
-        db,
-        expr_types,
-        call_targets,
-        &func_id_map,
-        script_ctx,
-        expr,
-        None, // ctfe_evaluator - not available in tracked context
-    ) {
-        Ok(ir_unit) => {
-            let exports = ir_unit.exports.clone();
-            let value_types = ir_unit.value_types.clone();
-            let slot_types = ir_unit.slot_types.clone();
-            ScriptUnitLowerOutput::new(db, Some(ir_unit), None, exports, value_types, slot_types)
-        }
-        Err(e) => {
-            ScriptUnitLowerOutput::new(db, None, Some(format!("{}", e)), Vec::new(), Vec::new(), Vec::new())
-        }
     }
 }
 

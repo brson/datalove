@@ -17,10 +17,13 @@
 use datalove_datafun_ir::expand_ir_strings;
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
+use std::cell::RefCell;
 use std::path::Path;
 use std::process::Command;
+use std::rc::Rc;
 
 use datalove_datafun as datafun;
+use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_interp::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
@@ -289,6 +292,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         });
         return DualAnalysis { sections: results };
     };
+    interp_compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
     let Some(mut interp_executor) = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, None) else {
         return DualAnalysis { sections: results };
     };
@@ -329,6 +333,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         });
         return DualAnalysis { sections: results };
     };
+    aot_compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
     let aot_compiled = aot_compiler.compile_fragment(fragment_source);
     let registry = compiled2.module_registry();
 

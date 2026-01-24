@@ -29,7 +29,6 @@ use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind, FrameState};
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;
 use super::stmt::collect_field_path;
-use super::const_expr::eval_const_expr;
 use super::LowerError;
 
 /// Check if a set statement is a self-assignment (set v0 = v0) for script context.
@@ -530,26 +529,18 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Const(const_stmt) => {
-            // Const bindings are evaluated at compile time.
-            // Script-level const bindings work the same as function-level.
+            // Const bindings must be pre-resolved in Phase 2.
             let name = const_stmt.name.text(ctx.db).to_string();
 
-            // Check if this const was pre-resolved in Phase 2.
-            // If so, it's already in const_bindings - nothing more to do.
             if ctx.lookup_const(&name).is_some() {
-                return Ok(());
-            }
-
-            // Not pre-resolved; evaluate inline.
-            let init_expr = const_stmt.value;
-            let ir_type = ctx.expr_type(init_expr);
-
-            match eval_const_expr(ctx, init_expr) {
-                Ok(value) => {
-                    ctx.add_const(name, ir_type, value);
-                    Ok(())
-                }
-                Err(e) => Err(e),
+                // Already pre-resolved - nothing to do.
+                Ok(())
+            } else {
+                // Not pre-resolved - this is an error in the compilation pipeline.
+                Err(LowerError::NotImplemented(format!(
+                    "const '{}' was not pre-resolved; ensure CTFE evaluator is configured",
+                    name
+                )))
             }
         }
         Statement::ParseError(_) => {

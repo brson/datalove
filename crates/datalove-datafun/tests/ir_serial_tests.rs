@@ -10,10 +10,13 @@
 
 use rmx::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::path::Path;
 use std::process::Command;
+use std::rc::Rc;
 
 use datalove_datafun as datafun;
+use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_interp::{Destination, IrInterpreter, ScriptEnvironment};
 use datalove_datafun_ir::{expand_ir_strings, FunctionRegistry, IrScriptUnit, IrType};
@@ -478,6 +481,7 @@ fn analyze_worldfile_ir_serial(
         });
         return IrSerialAnalysis { sections: results };
     };
+    compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
     let compiled_unit = compiler.compile_fragment(fragment_source);
 
     // Get registry for AOT.

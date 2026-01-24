@@ -2,7 +2,10 @@
 
 use rmx::prelude::*;
 use std::path::Path;
+use std::cell::RefCell;
+use std::rc::Rc;
 use datalove_datafun as datafun;
+use datalove_datafun_interp::InterpCtfeEvaluator;
 use datafun::pipeline::{ModuleCompilationPipeline, TypecheckResult, LoweringResult};
 
 /// Run a script with the std library loaded from sys/ directory.
@@ -58,6 +61,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let Some(mut compiler) = compiled.script_compiler(&db) else {
         return Err("Module compilation failed".to_string());
     };
+    compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
     let Some(mut executor) = compiled.script_executor(datafun::DebugOutputMode::Disabled, None) else {
         return Err("Module compilation failed".to_string());
     };

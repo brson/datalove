@@ -16,10 +16,12 @@ use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
 use std::path::Path;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use datalove_datafun as datafun;
 use datafun::pipeline::{aot as pipeline_aot, ScriptCompiler, TypecheckResult, OwnershipResult, LoweringResult};
-use datalove_datafun_interp::FunctionRegistry;
+use datalove_datafun_interp::{FunctionRegistry, InterpCtfeEvaluator};
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 
 /// Result of AOT analysis.
@@ -167,6 +169,7 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
         }
         return AotAnalysis { sections: results };
     };
+    compiler.set_ctfe_evaluator(Rc::new(RefCell::new(InterpCtfeEvaluator::new())));
 
     // Get the module registry for world types.
     let registry = compiled.module_registry();
