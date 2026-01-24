@@ -29,8 +29,12 @@ use datalove_datafun_compiler::compile::{
     compile_modules as compiler_compile_modules,
 };
 use datalove_datafun_compiler::tracked_lower::{
-    lower_module_graph_with_mode, ModuleGraphLoweringResult,
+    lower_module_graph_with_mode, lower_module_graph_with_evaluator, ModuleGraphLoweringResult,
 };
+use datalove_datafun_ir::CtfeEvaluator;
+use datalove_datafun_interp::InterpCtfeEvaluator;
+use std::cell::RefCell;
+use std::rc::Rc;
 use datalove_datafun_tycheck::{DbClone, ParallelMode, parallel_mode_from_env};
 use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleId};
 use datalove_datafun_interp::ModuleFunctionRegistry;
@@ -171,6 +175,40 @@ impl ModuleCompilationPipeline {
         self.compile_impl_with_mode(db, module_graph, resolved_requires, mode)
     }
 
+    /// Compile all modules with CTFE support.
+    ///
+    /// Uses the provided evaluator for compile-time evaluation of const expressions
+    /// that require more than simple literal evaluation.
+    pub fn compile_fresh_with_ctfe<'db>(
+        &mut self,
+        db: &'db dyn DbClone,
+        evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    ) -> CompiledModules<'db> {
+        let mode = parallel_mode_from_env();
+        self.compile_fresh_with_mode_and_ctfe(db, mode, evaluator)
+    }
+
+    /// Compile all modules with CTFE support using default interpreter evaluator.
+    pub fn compile_fresh_with_ctfe_default<'db>(
+        &mut self,
+        db: &'db dyn DbClone,
+    ) -> CompiledModules<'db> {
+        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+        self.compile_fresh_with_ctfe(db, evaluator)
+    }
+
+    /// Compile all modules with explicit parallelism mode and CTFE support.
+    pub fn compile_fresh_with_mode_and_ctfe<'db>(
+        &mut self,
+        db: &'db dyn DbClone,
+        mode: ParallelMode,
+        evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    ) -> CompiledModules<'db> {
+        let path_deps = extract_dependencies(&self.world, db.as_salsa_db());
+        let (module_graph, resolved_requires) = self.world.build_fresh(db.as_salsa_db(), &path_deps);
+        self.compile_impl_with_ctfe(db, module_graph, resolved_requires, mode, evaluator)
+    }
+
     /// Compile all modules (incremental, needs `&mut db`).
     ///
     /// Uses `DATALOVE_PARALLEL` env var to determine parallelism mode.
@@ -200,6 +238,43 @@ impl ModuleCompilationPipeline {
         (compiled, db_ref)
     }
 
+    /// Compile all modules with CTFE support (incremental).
+    pub fn compile_with_ctfe<'db, D: DbClone>(
+        &mut self,
+        db: &'db mut D,
+        evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    ) -> (CompiledModules<'db>, &'db D) {
+        let mode = parallel_mode_from_env();
+        self.compile_with_mode_and_ctfe(db, mode, evaluator)
+    }
+
+    /// Compile all modules with CTFE support using default interpreter evaluator (incremental).
+    pub fn compile_with_ctfe_default<'db, D: DbClone>(
+        &mut self,
+        db: &'db mut D,
+    ) -> (CompiledModules<'db>, &'db D) {
+        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+        self.compile_with_ctfe(db, evaluator)
+    }
+
+    /// Compile all modules with explicit parallelism mode and CTFE support (incremental).
+    pub fn compile_with_mode_and_ctfe<'db, D: DbClone>(
+        &mut self,
+        db: &'db mut D,
+        mode: ParallelMode,
+        evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    ) -> (CompiledModules<'db>, &'db D) {
+        // Extract dependencies first (reads from db).
+        let path_deps = extract_dependencies(&self.world, db);
+        let (module_graph, resolved_requires) = self.world.prepare_for_compile(db, &path_deps);
+
+        // Reborrow as immutable for the rest of compilation.
+        let db_ref: &'db D = &*db;
+
+        let compiled = self.compile_impl_with_ctfe(db_ref, module_graph, resolved_requires, mode, evaluator);
+        (compiled, db_ref)
+    }
+
     /// Internal compilation implementation with configurable parallelism.
     fn compile_impl_with_mode<'db>(
         &self,
@@ -223,6 +298,40 @@ impl ModuleCompilationPipeline {
                 output.typecheck_result,
                 output.ownership_analysis,
                 mode,
+            ))
+        } else {
+            None
+        };
+
+        // Build interpreter structures from results.
+        self.wrap_compiler_output(db, output, lowering_result)
+    }
+
+    /// Internal compilation implementation with CTFE support.
+    fn compile_impl_with_ctfe<'db>(
+        &self,
+        db: &'db dyn DbClone,
+        module_graph: ModuleGraph,
+        resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+        mode: ParallelMode,
+        evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    ) -> CompiledModules<'db> {
+        // Run parsing, typechecking, and ownership analysis.
+        let input = ModuleCompilationInput {
+            graph: module_graph,
+            resolved_requires,
+        };
+        let output = compiler_compile_modules(db, input, mode);
+
+        // Only run lowering if analysis succeeded.
+        let lowering_result = if output.is_successful() {
+            Some(lower_module_graph_with_evaluator(
+                db,
+                output.parsed_graph,
+                output.typecheck_result,
+                output.ownership_analysis,
+                mode,
+                evaluator,
             ))
         } else {
             None
