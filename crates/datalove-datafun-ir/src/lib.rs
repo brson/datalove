@@ -1483,3 +1483,53 @@ impl IrScriptUnit {
         ron::from_str(s)
     }
 }
+
+// ============================================================================
+// Compile-Time Function Evaluation (CTFE)
+// ============================================================================
+
+/// Error during compile-time const expression evaluation.
+#[derive(Debug, Clone)]
+pub enum CtfeError {
+    /// Interpreter execution error.
+    InterpError(String),
+    /// Type extraction not supported.
+    UnsupportedType(String),
+    /// Early return via `!` or `?` operator.
+    EarlyReturn(String),
+}
+
+impl std::fmt::Display for CtfeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CtfeError::InterpError(msg) => write!(f, "interpreter error: {}", msg),
+            CtfeError::UnsupportedType(ty) => write!(f, "unsupported type for extraction: {}", ty),
+            CtfeError::EarlyReturn(msg) => write!(f, "early return: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for CtfeError {}
+
+/// Trait for compile-time evaluation of const expressions.
+///
+/// Implemented by the interpreter to execute IR at compile time.
+/// The compiler generates an `IrScriptUnit` for the const expression
+/// and calls this trait to evaluate it.
+pub trait CtfeEvaluator {
+    /// Execute a script unit and extract the result as a ConstValue.
+    ///
+    /// The unit should be a simple expression unit (single block, UnitEnd terminator).
+    fn evaluate(&mut self, unit: &IrScriptUnit, result_type: &IrType) -> Result<ConstValue, CtfeError>;
+}
+
+/// Placeholder CTFE evaluator that always returns an error.
+///
+/// Used when no interpreter is available (e.g., in minimal compilation contexts).
+pub struct NoopCtfeEvaluator;
+
+impl CtfeEvaluator for NoopCtfeEvaluator {
+    fn evaluate(&mut self, _unit: &IrScriptUnit, _result_type: &IrType) -> Result<ConstValue, CtfeError> {
+        Err(CtfeError::InterpError("CTFE evaluator not configured".to_string()))
+    }
+}

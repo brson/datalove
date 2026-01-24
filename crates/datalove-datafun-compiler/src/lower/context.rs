@@ -5,7 +5,9 @@
 //! - [`LowerCtx`]: Main context combining shared state (db, types) with `FrameState`.
 //! - [`ScriptLowerContext`]: Tracks bindings exported from previous script units.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall};
 use crate::module_graph::ModuleId;
@@ -13,7 +15,7 @@ use datalove_datafun_tycheck::ResolvedCallTarget;
 use datalove_datafun_ir::{
     IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
-    ConstValue, TypeRef, SlotDest,
+    ConstValue, TypeRef, SlotDest, CtfeEvaluator,
 };
 use crate::ir_ext::IrTypeExt;
 use crate::ownership_analysis::{BindingId, DropSchedule, BindingInfo, TrackingCategory};
@@ -247,6 +249,8 @@ pub struct LowerCtx<'db> {
     pub(super) is_script_unit: bool,
     /// Const bindings evaluated at compile time: name -> (type, value).
     pub(super) const_bindings: HashMap<String, (IrType, ConstValue)>,
+    /// Optional CTFE evaluator for complex const expressions.
+    pub(super) ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
 }
 
 /// Empty func_id_map for contexts that don't need module function resolution.
@@ -274,6 +278,7 @@ impl<'db> LowerCtx<'db> {
             return_type: None,
             is_script_unit: false,
             const_bindings: HashMap::new(),
+            ctfe_evaluator: None,
         }
     }
 
@@ -299,6 +304,7 @@ impl<'db> LowerCtx<'db> {
             return_type: None,
             is_script_unit: false,
             const_bindings: HashMap::new(),
+            ctfe_evaluator: None,
         }
     }
 
@@ -366,6 +372,7 @@ impl<'db> LowerCtx<'db> {
             return_type: Some(IrType::Result(Box::new(IrType::Unit))),
             is_script_unit: true,
             const_bindings: HashMap::new(),
+            ctfe_evaluator: None,
         }
     }
 
@@ -533,6 +540,16 @@ impl<'db> LowerCtx<'db> {
     /// Const bindings are evaluated at compile time and inlined at use sites.
     pub fn add_const(&mut self, name: String, ir_type: IrType, value: ConstValue) {
         self.const_bindings.insert(name, (ir_type, value));
+    }
+
+    /// Get the CTFE evaluator if one is configured.
+    pub fn ctfe_evaluator(&self) -> Option<&Rc<RefCell<dyn CtfeEvaluator>>> {
+        self.ctfe_evaluator.as_ref()
+    }
+
+    /// Set the CTFE evaluator for complex const expressions.
+    pub fn set_ctfe_evaluator(&mut self, evaluator: Rc<RefCell<dyn CtfeEvaluator>>) {
+        self.ctfe_evaluator = Some(evaluator);
     }
 
     /// Emit Drop instructions for the given operands.

@@ -1,223 +1,306 @@
 //! Compile-time constant expression evaluation.
 //!
-//! Evaluates expressions that can be computed at compile time for const bindings.
+//! Evaluates expressions at compile time. Simple literals are extracted directly.
+//! Complex expressions are lowered to IR and evaluated via a pluggable `CtfeEvaluator`.
 
-use datalove_datafun_ast::ast::{ExprFun, ExprFunKind, BinOp, UnaryOp};
-use datalove_datafun_ir::ConstValue;
+use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind};
+use datalove_datafun_ir::{
+    ConstValue, IrType, IrScriptUnit, IrBlock, BlockId, ValueId,
+    Operand, Terminator, Instruction, SymbolTable, BinOp, UnaryOp,
+};
 use super::context::LowerCtx;
 use super::LowerError;
 
 /// Evaluate a constant expression at compile time.
 ///
-/// Currently supports:
-/// - Integer, float, bool, and string literals
-/// - Simple arithmetic on constants
-/// - References to other const bindings
-/// - Option/Result wrappers (Some, None, Ok, Err)
-/// - Tuples and lists
-///
-/// Returns an error if the expression cannot be evaluated at compile time.
+/// - Simple literals are extracted directly without needing an evaluator.
+/// - Const name references look up previously computed values.
+/// - Complex expressions require a `CtfeEvaluator` to be configured.
 pub fn eval_const_expr<'db>(
     ctx: &LowerCtx<'db>,
     expr: ExprFun<'db>,
 ) -> Result<ConstValue, LowerError> {
-    match expr.expr(ctx.db) {
-        // Function calls - not yet supported.
-        ExprFunKind::FunctionCall(_) => {
-            Err(LowerError::NotImplemented(
-                "function calls in const expressions not yet supported".to_string()
-            ))
+    // For simple literals, extract directly.
+    if let Some(value) = try_eval_literal(ctx, expr) {
+        return value;
+    }
+
+    // For const references, look up the previously computed value.
+    if let ExprFunKind::Name(name) = expr.expr(ctx.db) {
+        let name_str = name.text(ctx.db);
+        if let Some((_, value)) = ctx.lookup_const(name_str) {
+            return Ok(value.clone());
         }
+        return Err(LowerError::NotImplemented(format!(
+            "non-const variable '{}' in const expression",
+            name_str
+        )));
+    }
 
-        // Bool literals.
-        ExprFunKind::True(_) => Ok(ConstValue::Bool(true)),
-        ExprFunKind::False(_) => Ok(ConstValue::Bool(false)),
+    // For complex expressions, lower to IR and use the evaluator.
+    let ir_type = ctx.expr_type(expr);
+    let unit = lower_const_expr_to_unit(ctx, expr)?;
 
-        // Integer literals.
+    // Get the evaluator from context.
+    let evaluator = ctx.ctfe_evaluator()
+        .ok_or_else(|| LowerError::NotImplemented(
+            "complex const expressions require a CTFE evaluator".to_string()
+        ))?;
+
+    evaluator.borrow_mut()
+        .evaluate(&unit, &ir_type)
+        .map_err(|e| LowerError::NotImplemented(format!("CTFE error: {}", e)))
+}
+
+/// Try to evaluate a literal expression directly without the interpreter.
+fn try_eval_literal<'db>(
+    ctx: &LowerCtx<'db>,
+    expr: ExprFun<'db>,
+) -> Option<Result<ConstValue, LowerError>> {
+    match expr.expr(ctx.db) {
+        ExprFunKind::True(_) => Some(Ok(ConstValue::Bool(true))),
+        ExprFunKind::False(_) => Some(Ok(ConstValue::Bool(false))),
+        ExprFunKind::None(_) => Some(Ok(ConstValue::OptionNone)),
+
         ExprFunKind::Int(int_expr) => {
             let ir_type = ctx.expr_type(expr);
             let text = int_expr.value.text(ctx.db);
-            super::literal::parse_int_const(text, &ir_type)
-                .map_err(|_| LowerError::InvalidLiteral(text.to_string()))
+            Some(
+                super::literal::parse_int_const(text, &ir_type)
+                    .map_err(|_| LowerError::InvalidLiteral(text.to_string()))
+            )
         }
 
-        // Float literals.
         ExprFunKind::Float(float_expr) => {
             let ir_type = ctx.expr_type(expr);
             let text = float_expr.value.text(ctx.db);
-            super::literal::parse_float_const(text, &ir_type)
-                .map_err(|_| LowerError::InvalidLiteral(text.to_string()))
+            Some(
+                super::literal::parse_float_const(text, &ir_type)
+                    .map_err(|_| LowerError::InvalidLiteral(text.to_string()))
+            )
         }
 
-        // String literals.
         ExprFunKind::String(s) => {
-            Ok(ConstValue::String(s.value.as_str(ctx.db).to_string()))
+            Some(Ok(ConstValue::String(s.value.as_str(ctx.db).to_string())))
         }
 
-        // Reference to another const binding.
-        ExprFunKind::Name(name) => {
-            let name_str = name.text(ctx.db);
-            if let Some((_, value)) = ctx.lookup_const(name_str) {
-                Ok(value.clone())
-            } else {
-                Err(LowerError::NotImplemented(format!(
-                    "non-const variable '{}' in const expression",
-                    name_str
-                )))
-            }
-        }
-
-        // Binary operations on constants.
-        ExprFunKind::BinOp(binop) => {
-            let lhs_val = eval_const_expr(ctx, binop.lhs)?;
-            let rhs_val = eval_const_expr(ctx, binop.rhs)?;
-            eval_const_binop(&lhs_val, &rhs_val, binop.op)
-        }
-
-        // Unary operations on constants.
-        ExprFunKind::UnaryOp(unop) => {
-            let operand_val = eval_const_expr(ctx, unop.operand)?;
-            eval_const_unaryop(&operand_val, unop.op)
-        }
-
-        // None literal.
-        ExprFunKind::None(_) => Ok(ConstValue::OptionNone),
-
-        // Some wrapper.
-        ExprFunKind::Some(some_expr) => {
-            let inner_val = eval_const_expr(ctx, some_expr.payload)?;
-            Ok(ConstValue::OptionSome(Box::new(inner_val)))
-        }
-
-        // Ok wrapper.
-        ExprFunKind::Ok(ok_expr) => {
-            let inner_val = eval_const_expr(ctx, ok_expr.payload)?;
-            Ok(ConstValue::ResultOk(Box::new(inner_val)))
-        }
-
-        // Err wrapper.
-        ExprFunKind::Er(er_expr) => {
-            let inner_val = eval_const_expr(ctx, er_expr.payload)?;
-            Ok(ConstValue::ResultErr(Box::new(inner_val)))
-        }
-
-        // Error wrapper.
-        ExprFunKind::Error(error_expr) => {
-            let inner_val = eval_const_expr(ctx, error_expr.value)?;
-            // Convert inner value to string for Error type.
-            let msg = match inner_val {
-                ConstValue::String(s) => s,
-                other => format!("{:?}", other),
-            };
-            Ok(ConstValue::Error(msg))
-        }
-
-        // Tuple literal (datafun style).
-        ExprFunKind::Tuple(tuple) => {
-            let mut values = Vec::with_capacity(tuple.elements.len());
-            for elem in &tuple.elements {
-                values.push(eval_const_expr(ctx, *elem)?);
-            }
-            Ok(ConstValue::Tuple(values))
-        }
-
-        // Anonymous tuple literal.
-        ExprFunKind::AnonTuple(tuple) => {
-            let mut values = Vec::with_capacity(tuple.elements.len());
-            for elem in &tuple.elements {
-                values.push(eval_const_expr(ctx, *elem)?);
-            }
-            Ok(ConstValue::Tuple(values))
-        }
-
-        // List literal.
-        ExprFunKind::List(list) => {
-            let mut values = Vec::with_capacity(list.elements.len());
-            for elem in &list.elements {
-                values.push(eval_const_expr(ctx, *elem)?);
-            }
-            Ok(ConstValue::List(values))
-        }
-
-        _ => Err(LowerError::NotImplemented(format!(
-            "const evaluation for expression type not yet supported: {:?}",
-            std::mem::discriminant(&expr.expr(ctx.db))
-        ))),
+        _ => None, // Not a simple literal.
     }
 }
 
-/// Evaluate a binary operation on constant values.
-pub fn eval_const_binop(
-    lhs: &ConstValue,
-    rhs: &ConstValue,
-    op: BinOp,
-) -> Result<ConstValue, LowerError> {
-    match (lhs, rhs, op) {
-        // u32 operations.
-        (ConstValue::U32(l), ConstValue::U32(r), BinOp::Add) => Ok(ConstValue::U32(l.wrapping_add(*r))),
-        (ConstValue::U32(l), ConstValue::U32(r), BinOp::AddChecked) => {
-            l.checked_add(*r)
-                .map(ConstValue::U32)
-                .ok_or_else(|| LowerError::InvalidLiteral("u32 overflow in const".to_string()))
-        }
-        (ConstValue::U32(l), ConstValue::U32(r), BinOp::Sub) => Ok(ConstValue::U32(l.wrapping_sub(*r))),
-        (ConstValue::U32(l), ConstValue::U32(r), BinOp::SubChecked) => {
-            l.checked_sub(*r)
-                .map(ConstValue::U32)
-                .ok_or_else(|| LowerError::InvalidLiteral("u32 underflow in const".to_string()))
-        }
-        (ConstValue::U32(l), ConstValue::U32(r), BinOp::Mul) => Ok(ConstValue::U32(l.wrapping_mul(*r))),
-        (ConstValue::U32(l), ConstValue::U32(r), BinOp::MulChecked) => {
-            l.checked_mul(*r)
-                .map(ConstValue::U32)
-                .ok_or_else(|| LowerError::InvalidLiteral("u32 overflow in const".to_string()))
-        }
+/// Lower a const expression to a minimal IrScriptUnit for execution.
+fn lower_const_expr_to_unit<'db>(
+    ctx: &LowerCtx<'db>,
+    expr: ExprFun<'db>,
+) -> Result<IrScriptUnit, LowerError> {
+    let result_type = ctx.expr_type(expr);
 
-        // i32 operations.
-        (ConstValue::I32(l), ConstValue::I32(r), BinOp::Add) => Ok(ConstValue::I32(l.wrapping_add(*r))),
-        (ConstValue::I32(l), ConstValue::I32(r), BinOp::AddChecked) => {
-            l.checked_add(*r)
-                .map(ConstValue::I32)
-                .ok_or_else(|| LowerError::InvalidLiteral("i32 overflow in const".to_string()))
-        }
-        (ConstValue::I32(l), ConstValue::I32(r), BinOp::Sub) => Ok(ConstValue::I32(l.wrapping_sub(*r))),
-        (ConstValue::I32(l), ConstValue::I32(r), BinOp::SubChecked) => {
-            l.checked_sub(*r)
-                .map(ConstValue::I32)
-                .ok_or_else(|| LowerError::InvalidLiteral("i32 underflow in const".to_string()))
-        }
-        (ConstValue::I32(l), ConstValue::I32(r), BinOp::Mul) => Ok(ConstValue::I32(l.wrapping_mul(*r))),
-        (ConstValue::I32(l), ConstValue::I32(r), BinOp::MulChecked) => {
-            l.checked_mul(*r)
-                .map(ConstValue::I32)
-                .ok_or_else(|| LowerError::InvalidLiteral("i32 overflow in const".to_string()))
-        }
+    // Create a mini lowering context for this expression.
+    let mut mini_ctx = MiniLowerCtx::new(ctx);
 
-        // Bool operations.
-        (ConstValue::Bool(l), ConstValue::Bool(r), BinOp::And) => Ok(ConstValue::Bool(*l && *r)),
-        (ConstValue::Bool(l), ConstValue::Bool(r), BinOp::Or) => Ok(ConstValue::Bool(*l || *r)),
+    // Lower the expression.
+    let result_value = mini_ctx.lower_expr(expr)?;
 
-        _ => Err(LowerError::NotImplemented(format!(
-            "const binop {:?} on {:?} and {:?}",
-            op, lhs, rhs
-        ))),
+    // Build the script unit.
+    mini_ctx.finish(result_value, result_type)
+}
+
+/// Minimal lowering context for const expression evaluation.
+struct MiniLowerCtx<'a, 'db> {
+    parent: &'a LowerCtx<'db>,
+    value_types: Vec<IrType>,
+    instructions: Vec<Instruction>,
+    next_value: u32,
+}
+
+impl<'a, 'db> MiniLowerCtx<'a, 'db> {
+    fn new(parent: &'a LowerCtx<'db>) -> Self {
+        Self {
+            parent,
+            value_types: Vec::new(),
+            instructions: Vec::new(),
+            next_value: 0,
+        }
+    }
+
+    fn fresh_value(&mut self, ty: IrType) -> ValueId {
+        let id = ValueId(self.next_value);
+        self.next_value += 1;
+        self.value_types.push(ty);
+        id
+    }
+
+    fn emit(&mut self, instr: Instruction) {
+        self.instructions.push(instr);
+    }
+
+    fn lower_expr(&mut self, expr: ExprFun<'db>) -> Result<ValueId, LowerError> {
+        let expr_type = self.parent.expr_type(expr);
+
+        match expr.expr(self.parent.db) {
+            // Literals - emit Const instructions.
+            ExprFunKind::True(_) => {
+                let dest = self.fresh_value(IrType::Bool);
+                self.emit(Instruction::Const { dest, value: ConstValue::Bool(true) });
+                Ok(dest)
+            }
+            ExprFunKind::False(_) => {
+                let dest = self.fresh_value(IrType::Bool);
+                self.emit(Instruction::Const { dest, value: ConstValue::Bool(false) });
+                Ok(dest)
+            }
+            ExprFunKind::None(_) => {
+                let dest = self.fresh_value(expr_type);
+                self.emit(Instruction::Const { dest, value: ConstValue::OptionNone });
+                Ok(dest)
+            }
+            ExprFunKind::Int(int_expr) => {
+                let text = int_expr.value.text(self.parent.db);
+                let value = super::literal::parse_int_const(text, &expr_type)
+                    .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
+                let dest = self.fresh_value(expr_type);
+                self.emit(Instruction::Const { dest, value });
+                Ok(dest)
+            }
+            ExprFunKind::Float(float_expr) => {
+                let text = float_expr.value.text(self.parent.db);
+                let value = super::literal::parse_float_const(text, &expr_type)
+                    .map_err(|_| LowerError::InvalidLiteral(text.to_string()))?;
+                let dest = self.fresh_value(expr_type);
+                self.emit(Instruction::Const { dest, value });
+                Ok(dest)
+            }
+            ExprFunKind::String(s) => {
+                let value = ConstValue::String(s.value.as_str(self.parent.db).to_string());
+                let dest = self.fresh_value(expr_type);
+                self.emit(Instruction::Const { dest, value });
+                Ok(dest)
+            }
+
+            // Const reference - substitute with the previously computed value.
+            ExprFunKind::Name(name) => {
+                let name_str = name.text(self.parent.db);
+                if let Some((_, value)) = self.parent.lookup_const(name_str) {
+                    let dest = self.fresh_value(expr_type);
+                    self.emit(Instruction::Const { dest, value: value.clone() });
+                    Ok(dest)
+                } else {
+                    Err(LowerError::NotImplemented(format!(
+                        "non-const variable '{}' in const expression",
+                        name_str
+                    )))
+                }
+            }
+
+            // Binary operation.
+            ExprFunKind::BinOp(binop) => {
+                let lhs = self.lower_expr(binop.lhs)?;
+                let rhs = self.lower_expr(binop.rhs)?;
+                let dest = self.fresh_value(expr_type);
+
+                let ir_op = convert_binop(binop.op)?;
+                self.emit(Instruction::BinOp {
+                    dest,
+                    op: ir_op,
+                    lhs: Operand::Value(lhs),
+                    rhs: Operand::Value(rhs),
+                });
+                Ok(dest)
+            }
+
+            // Unary operation.
+            ExprFunKind::UnaryOp(unop) => {
+                let operand = self.lower_expr(unop.operand)?;
+                let dest = self.fresh_value(expr_type);
+
+                let ir_op = convert_unaryop(unop.op)?;
+                self.emit(Instruction::UnaryOp {
+                    dest,
+                    op: ir_op,
+                    operand: Operand::Value(operand),
+                });
+                Ok(dest)
+            }
+
+            // Function calls not supported yet.
+            ExprFunKind::FunctionCall(_) => {
+                Err(LowerError::NotImplemented(
+                    "function calls in const expressions not yet supported".to_string()
+                ))
+            }
+
+            _ => Err(LowerError::NotImplemented(format!(
+                "const evaluation for expression type not yet supported: {:?}",
+                std::mem::discriminant(&expr.expr(self.parent.db))
+            ))),
+        }
+    }
+
+    fn finish(self, result: ValueId, result_type: IrType) -> Result<IrScriptUnit, LowerError> {
+        let block = IrBlock {
+            id: BlockId(0),
+            params: Vec::new(),
+            instructions: self.instructions,
+            terminator: Terminator::UnitEnd {
+                result: Some(Operand::Value(result)),
+            },
+        };
+
+        Ok(IrScriptUnit {
+            blocks: vec![block],
+            value_count: self.next_value,
+            slot_count: 0,
+            value_types: self.value_types,
+            slot_types: Vec::new(),
+            tracked_values: Vec::new(),
+            tracked_slots: Vec::new(),
+            unit_end_values: Vec::new(),
+            unit_end_slots: Vec::new(),
+            functions: Vec::new(),
+            symbols: SymbolTable::new(),
+            result: Some(result),
+            exports: Vec::new(),
+        })
     }
 }
 
-/// Evaluate a unary operation on a constant value.
-pub fn eval_const_unaryop(
-    operand: &ConstValue,
-    op: UnaryOp,
-) -> Result<ConstValue, LowerError> {
-    match (operand, op) {
-        (ConstValue::Bool(b), UnaryOp::Not) => Ok(ConstValue::Bool(!*b)),
-        (ConstValue::I32(n), UnaryOp::Neg) => Ok(ConstValue::I32(-*n)),
-        (ConstValue::I64(n), UnaryOp::Neg) => Ok(ConstValue::I64(-*n)),
-        (ConstValue::F32(n), UnaryOp::Neg) => Ok(ConstValue::F32(-*n)),
-        (ConstValue::F64(n), UnaryOp::Neg) => Ok(ConstValue::F64(-*n)),
-        _ => Err(LowerError::NotImplemented(format!(
-            "const unaryop {:?} on {:?}",
-            op, operand
-        ))),
+/// Convert AST BinOp to IR BinOp.
+fn convert_binop(ast_op: ast::BinOp) -> Result<BinOp, LowerError> {
+    match ast_op {
+        ast::BinOp::Add => Ok(BinOp::Add),
+        ast::BinOp::Sub => Ok(BinOp::Sub),
+        ast::BinOp::Mul => Ok(BinOp::Mul),
+        ast::BinOp::Div => Ok(BinOp::Div),
+        ast::BinOp::Eq => Ok(BinOp::Eq),
+        ast::BinOp::Ne => Ok(BinOp::Ne),
+        ast::BinOp::Lt => Ok(BinOp::Lt),
+        ast::BinOp::Le => Ok(BinOp::Le),
+        ast::BinOp::Gt => Ok(BinOp::Gt),
+        ast::BinOp::Ge => Ok(BinOp::Ge),
+        ast::BinOp::And => Ok(BinOp::LogicAnd),
+        ast::BinOp::Or => Ok(BinOp::LogicOr),
+        ast::BinOp::Xor => Ok(BinOp::LogicXor),
+        // Checked/optional ops not yet supported in simple CTFE.
+        ast::BinOp::AddChecked | ast::BinOp::SubChecked |
+        ast::BinOp::MulChecked | ast::BinOp::DivChecked |
+        ast::BinOp::AddOptional | ast::BinOp::SubOptional |
+        ast::BinOp::MulOptional | ast::BinOp::DivOptional => {
+            Err(LowerError::NotImplemented(
+                "checked/optional arithmetic in const expressions not yet supported".to_string()
+            ))
+        }
+    }
+}
+
+/// Convert AST UnaryOp to IR UnaryOp.
+fn convert_unaryop(ast_op: ast::UnaryOp) -> Result<UnaryOp, LowerError> {
+    match ast_op {
+        ast::UnaryOp::Neg => Ok(UnaryOp::Neg),
+        ast::UnaryOp::Not => Ok(UnaryOp::Not),
+        ast::UnaryOp::NegOptional | ast::UnaryOp::NegResult => {
+            Err(LowerError::NotImplemented(
+                "optional/result negation in const expressions not yet supported".to_string()
+            ))
+        }
     }
 }

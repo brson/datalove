@@ -48,6 +48,7 @@ mod types;
 mod collections;
 mod dispatch;
 mod intrinsics;
+mod ctfe;
 
 #[cfg(test)]
 mod tests;
@@ -59,6 +60,7 @@ pub use tydesc::IrTyDescTable;
 pub use frame::{Frame, FrameStore};
 pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ScriptEnvironment, ExecutionContext};
 pub use dispatch::{CallDispatcher, DispatchCallContext, DispatchResult};
+pub use ctfe::InterpCtfeEvaluator;
 pub use datalove_rt::c::DebugOutputMode;
 
 use std::cell::RefCell;
