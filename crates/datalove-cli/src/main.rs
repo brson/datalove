@@ -436,6 +436,9 @@ impl ScriptCommand {
             render::render_type_diagnostics(compiler.db(), &type_diags, file_path, &cwd);
             bail!("Type error");
         }
+        if let datafun::pipeline::OwnershipResult::Error { message } = &compiled_unit.ownership {
+            bail!("Ownership error: {}", message);
+        }
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }

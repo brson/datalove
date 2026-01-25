@@ -76,12 +76,16 @@ pub struct StmtLet<'db> {
 }
 
 /// Mutable variable declaration.
+///
+/// If `value` is None, the variable is declared but not initialized.
+/// A type hint is required when there is no initializer.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct StmtVar<'db> {
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub value: ExprFun<'db>,
+    /// The initial value. None for uninitialized declarations like `var x: i32`.
+    pub value: Option<ExprFun<'db>>,
 }
 
 /// Compile-time constant binding.

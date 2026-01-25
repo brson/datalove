@@ -43,7 +43,7 @@ pub struct StmtLet {
 pub struct StmtVar {
     pub name: String,
     pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
-    pub value: ExprFun,
+    pub value: Option<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -497,7 +497,7 @@ impl StmtVar {
         StmtVar {
             name: ast.name.as_str(db).to_string(),
             type_hint: ast.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
-            value: ExprFun::from_ast(db, ast.value),
+            value: ast.value.map(|v| ExprFun::from_ast(db, v)),
         }
     }
 }

@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+var x: i32
+set x = 42
+
+----------
+scriptunit-expr
+----------
+
+x

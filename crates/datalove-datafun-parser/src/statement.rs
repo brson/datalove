@@ -134,18 +134,22 @@ impl<'db> Parser<'db> {
             None
         };
 
-        // Need `=` sigil.
-        if !self.eat_sigil(Sigil::Equals) {
-            let ts = self.peek_text_span();
-            return self.emit_stmt_error(ts,
-                "expected '=' after var binding",
-                "D024",
-                "expected '='"
-            );
-        }
-
-        // Parse the value expression.
-        let value = self.parse_expr_full();
+        // Check for `=` sigil. If present, parse initializer.
+        // If absent, this is an uninitialized var (requires type hint).
+        let value = if self.eat_sigil(Sigil::Equals) {
+            Some(self.parse_expr_full())
+        } else {
+            // No initializer - require type hint.
+            if type_hint.is_none() {
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
+                    "uninitialized var requires type hint",
+                    "P026",
+                    "add ': Type' or '= value'"
+                );
+            }
+            None
+        };
 
         ast::Statement::Var(ast::StmtVar {
             name,

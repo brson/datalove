@@ -170,7 +170,25 @@ pub fn check_statement<'db>(
         }
 
         Statement::Var(stmt) => {
-            check_variable_decl(ctx, stmt.name, stmt.value, stmt.type_hint.clone(), true);
+            match stmt.value {
+                Some(value) => {
+                    check_variable_decl(ctx, stmt.name, value, stmt.type_hint.clone(), true);
+                }
+                None => {
+                    // Uninitialized var - type hint is required (parser enforces this).
+                    if let Some(hint) = stmt.type_hint.clone() {
+                        match convert_type_hint_with_aliases(db, hint, &ctx.type_aliases) {
+                            Ok(ty) => {
+                                ctx.add_variable(stmt.name, ty, true);
+                            }
+                            Err(e) => {
+                                ctx.add_error(e);
+                            }
+                        }
+                    }
+                    // If no type hint, parser already emitted error.
+                }
+            }
         }
 
         Statement::Set(stmt) => {

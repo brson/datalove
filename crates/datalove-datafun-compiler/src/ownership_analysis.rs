@@ -25,7 +25,7 @@
 //! - D002 DoubleMove: transferring ownership twice
 //! - D003 CannotMoveBorrowed: attempting to move a ref/mut/out parameter
 //! - D004 CannotMutFromRef: passing immutable ref where mutable is required
-//! - D005 ReadUninitializedOutParam: reading out param before initialization
+//! - D005 ReadUninitialized: reading binding before initialization
 //! - D006 OutParamNotInitialized: returning without initializing out param
 //! - D007 MoveInLoop: moving outer-scoped value inside loop body
 //!
@@ -215,9 +215,9 @@ pub enum AnalysisError {
         local_index: u32,
         name: String,
     },
-    /// Reading Out param before it was written.
-    /// D005
-    ReadUninitializedOutParam {
+    /// Reading binding before it was initialized.
+    /// D005. Applies to Out params and uninitialized var bindings.
+    ReadUninitialized {
         local_index: u32,
         name: String,
     },
@@ -274,8 +274,8 @@ fn format_single_error(error: &AnalysisError) -> String {
         AnalysisError::CannotMutFromRef { local_index: _, name } => {
             format!("error[D004]: cannot get mutable reference from immutable: `{}`", name)
         }
-        AnalysisError::ReadUninitializedOutParam { local_index: _, name } => {
-            format!("error[D005]: read of uninitialized out parameter: `{}`", name)
+        AnalysisError::ReadUninitialized { local_index: _, name } => {
+            format!("error[D005]: read of uninitialized binding: `{}`", name)
         }
         AnalysisError::OutParamNotInitialized { ret_stmt_idx: _, name } => {
             format!("error[D006]: out parameter not initialized: `{}`", name)
@@ -786,13 +786,11 @@ impl<'db> AnalysisCtx<'db> {
             ExprFunKind::Name(name) => {
                 let name_str = name.text(self.db);
                 if let Some(id) = self.lookup(name_str) {
-                    // Check for reading uninitialized Out param.
-                    if self.bindings[id.0 as usize].param_mode == Some(ParamMode::Out) {
-                        if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
-                            let name = self.bindings[id.0 as usize].name.C();
-                            self.errors.push(AnalysisError::ReadUninitializedOutParam { local_index, name });
-                            return None;
-                        }
+                    // Check for reading uninitialized binding (Out param or uninitialized var).
+                    if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
+                        let name = self.bindings[id.0 as usize].name.C();
+                        self.errors.push(AnalysisError::ReadUninitialized { local_index, name });
+                        return None;
                     }
                     // Check for use after move.
                     if self.get_state(id) == Some(BindingState::Moved) {
@@ -1277,25 +1275,38 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLet<'db>, stmt_idx: u
 }
 
 fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtVar<'db>, stmt_idx: usize) {
-    let expr = stmt.value;
-    let may_early_return = ctx.expr_may_early_return(expr);
-
-    // Analyze moves in the expression. The expression result is consumed by the binding.
-    ctx.analyze_expr_moves(expr, true);
-
-    // Check for early return operators AFTER analyzing moves.
-    // This ensures bindings consumed by the expression itself aren't dropped.
-    if may_early_return {
-        let drops = ctx.live_bindings_for_return();
-        if !drops.is_empty() {
-            ctx.schedule.before_try_return.insert(stmt_idx, drops);
-        }
-    }
-
-    // Create binding for the var (as a slot).
     let name = stmt.name.text(ctx.db).S();
-    let ty = ctx.expr_type(expr);
-    ctx.alloc_binding(name, ty, true, None);
+
+    if let Some(expr) = stmt.value {
+        // Initialized var - analyze the initializer expression.
+        let may_early_return = ctx.expr_may_early_return(expr);
+
+        // Analyze moves in the expression. The expression result is consumed by the binding.
+        ctx.analyze_expr_moves(expr, true);
+
+        // Check for early return operators AFTER analyzing moves.
+        if may_early_return {
+            let drops = ctx.live_bindings_for_return();
+            if !drops.is_empty() {
+                ctx.schedule.before_try_return.insert(stmt_idx, drops);
+            }
+        }
+
+        // Create binding for the var (as a slot), initialized.
+        let ty = ctx.expr_type(expr);
+        ctx.alloc_binding(name, ty, true, None);
+    } else {
+        // Uninitialized var - get type from type hint.
+        let ty = stmt.type_hint.as_ref()
+            .map(|th| IrType::from_type_hint(ctx.db, th))
+            .unwrap_or(IrType::Unit);
+
+        // Create binding, then mark as uninitialized.
+        let id = ctx.alloc_binding(name, ty, true, None);
+
+        // Mark as uninitialized (reuse Out param init tracking).
+        ctx.set_out_param_init(id, OutParamInitState::Uninitialized);
+    }
 }
 
 fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: usize) {
@@ -1322,8 +1333,8 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
             let root_name = set_target_root_name(ctx.db, &stmt.target);
             if let Some(root) = root_name {
                 if let Some(id) = ctx.lookup(root) {
-                    // Disallow partial field writes to Out params.
-                    if ctx.bindings[id.0 as usize].param_mode == Some(ParamMode::Out) {
+                    // Disallow partial field writes to uninitialized bindings (Out params or uninitialized vars).
+                    if ctx.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
                         ctx.errors.push(AnalysisError::OutParamPartialWrite {
                             local_index: stmt.local_index,
                             name: root.to_string(),
@@ -1337,8 +1348,9 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
     if let Some(id) = ctx.lookup(name) {
         ctx.set_state(id, BindingState::Live);
 
-        // Mark Out param as initialized.
-        if ctx.bindings[id.0 as usize].param_mode == Some(ParamMode::Out) {
+        // Mark binding as initialized (Out param or uninitialized var).
+        // Only set if the binding has init tracking (is in out_param_init map).
+        if ctx.get_out_param_init(id).is_some() {
             ctx.set_out_param_init(id, OutParamInitState::Initialized);
         }
     }

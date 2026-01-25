@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+var x: i32
+if true
+    set x = 1
+else
+    set x = 2
+end if
+
+----------
+scriptunit-expr
+----------
+
+x

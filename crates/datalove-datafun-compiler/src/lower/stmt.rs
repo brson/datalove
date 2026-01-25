@@ -74,17 +74,33 @@ fn lower_statement_impl<'db>(
         }
         Statement::Var(var_stmt) => {
             let name = var_stmt.name.text(ctx.db).to_string();
-            // Get type from the initialization expression.
-            let init_expr = var_stmt.value;
-            let slot_type = ctx.expr_type(init_expr);
+
+            // Get type and optionally lower the initializer.
+            let (slot_type, init_value) = if let Some(init_expr) = var_stmt.value {
+                let slot_type = ctx.expr_type(init_expr);
+                let value_id = lower_expression(ctx, init_expr)?;
+                (slot_type, Some(value_id))
+            } else {
+                // Uninitialized var - get type from type hint.
+                let type_hint = var_stmt.type_hint.as_ref()
+                    .expect("uninitialized var must have type hint");
+                let slot_type = IrType::from_type_hint(ctx.db, type_hint);
+                (slot_type, None)
+            };
+
             let is_copy = slot_type.is_copy();
             let slot = ctx.fresh_slot(slot_type);
-            let value_id = lower_expression(ctx, init_expr)?;
-            if is_copy {
-                ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
-            } else {
-                ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
+
+            // Only emit store instruction if there's an initializer.
+            if let Some(value_id) = init_value {
+                if is_copy {
+                    ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
+                } else {
+                    ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
+                }
             }
+            // If no initializer, slot is uninitialized and tracked.
+
             let operand = Operand::Slot(slot);
             ctx.bind_var(&name, operand);
             // Record binding operand for drop schedule.

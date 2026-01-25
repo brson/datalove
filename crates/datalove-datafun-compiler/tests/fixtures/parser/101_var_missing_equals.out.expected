@@ -3,16 +3,16 @@
     "statements": [
       {
         "kind": "ParseError",
-        "message": "expected '=' after var binding"
+        "message": "uninitialized var requires type hint"
       }
     ]
   },
   "diagnostics": [
     {
-      "code": "D024",
+      "code": "P026",
       "labels": [
         {
-          "message": "expected '='",
+          "message": "add ': Type' or '= value'",
           "span": [
             6,
             8
@@ -20,7 +20,7 @@
           "text": "42"
         }
       ],
-      "message": "expected '=' after var binding"
+      "message": "uninitialized var requires type hint"
     }
   ]
 }

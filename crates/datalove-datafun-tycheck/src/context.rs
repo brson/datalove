@@ -448,9 +448,16 @@ impl<'db> ScriptTypeContext<'db> {
                 }
                 Statement::Var(var_stmt) => {
                     let name = var_stmt.name;
-                    let value_expr = var_stmt.value;
-                    let expr_id = value_expr.as_id().index() as usize;
-                    if let Some(ty) = result.expr_types.get(expr_id).and_then(|t| t.clone()) {
+                    // Get type from value expression if present, otherwise from type hint.
+                    let ty = if let Some(value_expr) = var_stmt.value {
+                        let expr_id = value_expr.as_id().index() as usize;
+                        result.expr_types.get(expr_id).and_then(|t| t.clone())
+                    } else if let Some(type_hint) = var_stmt.type_hint.clone() {
+                        crate::types::convert_type_hint(db, type_hint).ok()
+                    } else {
+                        None
+                    };
+                    if let Some(ty) = ty {
                         self.variables.insert(name, (ty, true)); // Var bindings are mutable.
                     }
                 }

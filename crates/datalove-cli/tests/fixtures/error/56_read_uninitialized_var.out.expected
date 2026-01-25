@@ -1,0 +1,1 @@
+Error: Ownership error: error[D005]: read of uninitialized binding: `x`
