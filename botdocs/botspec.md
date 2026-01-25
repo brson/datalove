@@ -1,7 +1,7 @@
 # Datalove Bot Specification
 
 Bot-maintained specification reflecting actual implementation state.
-Last verified: 2026-01-24
+Last verified: 2026-01-25
 
 ## Overview
 
@@ -133,7 +133,7 @@ Hex literals can be used with any integer type or f32/f64. With floats, the hex 
 | Statement | Syntax | Status |
 |-----------|--------|--------|
 | `let` | `let name: type = expr` | Implemented |
-| `var` | `var name: type = expr` | Implemented (mutable slot) |
+| `var` | `var name: type = expr` or `var name: type` | Implemented (mutable slot) |
 | `set` | `set name = expr` | Implemented (mutate var or mut/out param) |
 | `type` | `type Name: structural_type` | Implemented (type alias) |
 | `fun` | `fun name(...): ret_type ... end fun` | Implemented |
@@ -305,6 +305,46 @@ end fun
 ```
 
 This restriction exists because runtime tracking is per-parameter, not per-field. The first field write would mark the parameter as initialized, causing the second write to incorrectly try to destroy an uninitialized field.
+
+#### Uninitialized Var Bindings
+
+Var bindings can be declared without an initializer:
+
+```
+var x: i32              // declared but not initialized
+set x = 42              // must initialize before use
+debuglog x              // now valid
+```
+
+**Requirements:**
+- Type hint is required when no initializer is provided
+- Must be initialized via `set` before reading
+- Conditional initialization must occur in all branches
+
+**Example with conditional initialization:**
+```
+var result: i32
+if condition
+    set result = 1
+else
+    set result = 2
+end if
+debuglog result         // valid: initialized on all paths
+```
+
+**Error cases:**
+```
+var x: i32
+debuglog x              // ERROR D005: read of uninitialized binding
+
+var y: i32
+if condition
+    set y = 1
+end if
+debuglog y              // ERROR: may be uninitialized (no else branch)
+```
+
+**Implementation:** Uninitialized vars reuse the same tracking mechanism as `out` parameters. Both use runtime tracking bytes to determine if a value has been written, enabling conditional drops at scope exit.
 
 #### Field Projections as Arguments
 
@@ -637,11 +677,33 @@ Ownership analysis runs after typechecking and before IR lowering. It performs s
 | D002 | DoubleMove | Transferring ownership twice in sequence |
 | D003 | CannotMoveBorrowed | Attempting to move a `ref`/`mut`/`out` parameter |
 | D004 | CannotMutFromRef | Passing immutable `ref` where `mut` is required |
-| D005 | ReadUninitializedOutParam | Reading `out` param before initialization |
+| D005 | ReadUninitialized | Reading uninitialized binding (`out` param or uninitialized `var`) |
 | D006 | OutParamNotInitialized | Returning without initializing `out` param |
 | D007 | MoveInLoop | Moving outer-scoped value inside loop body |
 | D008 | InconsistentBranchMove | Value moved in one branch but not another |
 | D009 | OutParamPartialWrite | Partial field write to `out` param |
+
+#### Initialization Tracking
+
+Some bindings may be uninitialized at declaration and must be tracked:
+
+| Binding Type | Starts Initialized | Tracking |
+|--------------|-------------------|----------|
+| `let x = expr` | Yes | Not tracked |
+| `var x = expr` | Yes | Tracked (for reassignment) |
+| `var x: Type` | No | Tracked (for init + reassignment) |
+| `out` param | No | Tracked (for init) |
+| `in`/`ref`/`mut` param | Yes | Not tracked for init |
+
+**Initialization state transitions:**
+- `Uninitialized` → `Initialized`: on first `set` to the binding
+- Reading while `Uninitialized`: compile-time error (D005)
+- Scope exit while `Uninitialized`: no drop (nothing to destroy)
+
+**Branch convergence:**
+- If a binding is initialized in one branch, it must be initialized in all branches
+- The analysis tracks init state through if/else and merges at convergence points
+- A binding that's uninitialized on some paths cannot be read after the branch
 
 #### Tracking Categories
 
@@ -654,10 +716,10 @@ Each binding is assigned a tracking category that determines how moves and drops
 | Tracked | State may vary at runtime | Tracked move/drop (with runtime checks) |
 
 **Tracked bindings include:**
+- `var` bindings (mutable slots that may be reassigned)
+- `out` parameters (may be uninitialized)
+- Uninitialized `var` bindings (declared without initializer)
 - Exported script bindings
-- Out parameters
-- Values with conditional moves (moved in one branch, not another)
-- Mutable slots that may or may not be initialized
 
 #### Drop Scheduling
 
