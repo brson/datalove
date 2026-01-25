@@ -325,7 +325,8 @@ pub fn lower_module<'db>(
 
             // Lower to IR with module-level consts.
             // Note: ctfe_evaluator is None because tracked functions can't take trait objects.
-            // Function-level consts in modules only support simple literals.
+            // Function-level consts are pre-evaluated via evaluate_all_module_consts() when
+            // using lower_module_graph_with_evaluator(), supporting full CTFE expressions.
             match lower::lower_function_for_module(
                 db,
                 expr_types,
