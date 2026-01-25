@@ -32,7 +32,6 @@
 
 - worldfile generator
 - human docs
-- precise drops
 - ctfe
 
 
