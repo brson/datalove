@@ -272,18 +272,10 @@ impl IrInterpreter {
                 let param_type = &func.param_types[i];
                 let tydesc = self.tydesc_table.get_or_create(param_type);
 
-                // Borrowed semantics (caller retains ownership, callee doesn't destroy):
-                // - Ref/Mut/Out modes: caller retains ownership
-                // - Copy types with In mode: callee makes a copy, caller retains original
-                // Non-borrowed (callee destroys):
-                // - Non-Copy types with In mode: ownership transfers to callee
-                let borrowed = matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out)
-                    || param_type.is_copy();
-
                 // Initialized: true for In/Ref/Mut (data exists), false for Out (callee writes first).
                 let initialized = !matches!(mode, ParamMode::Out);
 
-                frame.set_param(param_id, src.ptr, tydesc, borrowed, initialized);
+                frame.set_param(param_id, src.ptr, tydesc, initialized);
             }
         }
 

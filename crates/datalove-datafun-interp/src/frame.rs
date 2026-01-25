@@ -28,8 +28,6 @@ pub struct Frame {
     param_ptrs: Vec<*mut u8>,
     /// Type descriptors for each parameter.
     param_tydescs: Vec<*const TyDesc>,
-    /// Track which params are borrowed (Ref/Mut/Out - caller retains ownership).
-    param_borrowed: Vec<bool>,
     /// Track which params are initialized (Out params start uninitialized).
     param_initialized: Vec<bool>,
 }
@@ -50,7 +48,6 @@ impl Frame {
             slot_initialized: vec![false; slot_count],
             param_ptrs: vec![std::ptr::null_mut(); param_count],
             param_tydescs: vec![std::ptr::null(); param_count],
-            param_borrowed: vec![false; param_count],
             param_initialized: vec![false; param_count],
         }
     }
@@ -181,12 +178,11 @@ impl Frame {
     /// Set a parameter with pointer to caller's data.
     ///
     /// `initialized`: true for In/Ref/Mut (data exists), false for Out (callee must write first).
-    pub fn set_param(&mut self, id: ParamId, ptr: *mut u8, tydesc: *const TyDesc, borrowed: bool, initialized: bool) {
+    pub fn set_param(&mut self, id: ParamId, ptr: *mut u8, tydesc: *const TyDesc, initialized: bool) {
         let idx = id.0 as usize;
         if idx < self.param_ptrs.len() {
             self.param_ptrs[idx] = ptr;
             self.param_tydescs[idx] = tydesc;
-            self.param_borrowed[idx] = borrowed;
             self.param_initialized[idx] = initialized;
         }
     }
