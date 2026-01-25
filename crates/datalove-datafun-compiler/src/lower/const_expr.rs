@@ -302,9 +302,16 @@ pub fn evaluate_consts<'db>(
         }
 
         // Build resolved_consts HashMap for the lowering context.
+        // Use the type from the graph for each binding, not the current binding's type.
         let resolved_consts_map: HashMap<String, (IrType, ConstValue)> = resolved
             .iter()
-            .map(|(name, value)| (name.to_string(), (binding.ir_type.clone(), value.clone())))
+            .filter_map(|(name, value)| {
+                // Look up the type for this const from the graph.
+                let const_type = graph.bindings.iter()
+                    .find(|b| b.name == name)
+                    .map(|b| b.ir_type.clone())?;
+                Some((name.to_string(), (const_type, value.clone())))
+            })
             .collect();
 
         // Lower to IR unit using isolated lowering (gets widening, etc.).

@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE logical and.
+const A: bool = true
+const B: bool = false
+const C: bool = A and B
+debuglog C

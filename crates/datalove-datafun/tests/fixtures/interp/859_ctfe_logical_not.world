@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE logical not.
+const A: bool = true
+const B: bool = not A
+debuglog B

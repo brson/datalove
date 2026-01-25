@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE comparison at script level with const refs.
+const A: u32 = 10
+const B: u32 = 10
+const C: bool = A == B
+debuglog C
