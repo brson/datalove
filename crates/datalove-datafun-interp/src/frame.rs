@@ -15,7 +15,7 @@ use crate::value::{Value, Destination};
 pub struct Frame {
     /// Raw frame data with proper alignment (values and slots).
     data: AlignedBuffer,
-    /// Layout information (includes static value_is_ref).
+    /// Layout information.
     layout: IrLayout,
     /// Track which values are live (written but not dropped).
     ///
@@ -63,12 +63,6 @@ impl Frame {
         self.live_values.insert(id);
     }
 
-    /// Check if a value is a reference (statically known from type).
-    pub fn is_value_ref(&self, id: ValueId) -> bool {
-        let idx = id.0 as usize;
-        idx < self.layout.value_is_ref.len() && self.layout.value_is_ref[idx]
-    }
-
     /// Get destination for a value.
     ///
     /// Panics if the value ID is out of bounds.
@@ -82,6 +76,9 @@ impl Frame {
 
     /// Get value (for reading).
     ///
+    /// Returns the raw value without dereferencing. For ref values, this
+    /// returns the stored pointer. Use `value_deref` to dereference refs.
+    ///
     /// Panics if value ID is out of bounds (compiler bug).
     /// Returns error if value is not live (not written or already dropped).
     pub fn value(&self, id: ValueId) -> Result<Value, InterpError> {
@@ -92,20 +89,33 @@ impl Frame {
         let offset = self.layout.value_offsets[idx] as usize;
         let tydesc = self.layout.value_tydescs[idx];
         let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
+        Ok(Value { ptr, tydesc })
+    }
 
-        // Handle ref values: dereference the stored pointer and use inner tydesc.
-        if self.layout.value_is_ref[idx] {
-            // Read the stored pointer.
-            let stored_ptr = unsafe { *(ptr as *const *mut u8) };
-            // Get inner tydesc from the ref's tydesc (stored as 1-element tuple).
-            let inner_tydesc = unsafe {
-                let tuple_info = (*tydesc).type_info.tuple;
-                (*tuple_info.fields).tydesc
-            };
-            Ok(Value { ptr: stored_ptr, tydesc: inner_tydesc })
-        } else {
-            Ok(Value { ptr, tydesc })
+    /// Dereference a ref value to get the pointed-to data.
+    ///
+    /// For values produced by GetFieldRef, reads the stored pointer and
+    /// returns the data it points to with the inner type's tydesc.
+    ///
+    /// Panics if value ID is out of bounds (compiler bug).
+    /// Returns error if value is not live (not written or already dropped).
+    pub fn value_deref(&self, id: ValueId) -> Result<Value, InterpError> {
+        let idx = id.0 as usize;
+        if !self.live_values.contains(&id) {
+            return Err(InterpError::UninitializedValue(id));
         }
+        let offset = self.layout.value_offsets[idx] as usize;
+        let tydesc = self.layout.value_tydescs[idx];
+        let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
+
+        // Read the stored pointer.
+        let stored_ptr = unsafe { *(ptr as *const *mut u8) };
+        // Get inner tydesc from the ref's tydesc (stored as 1-element tuple).
+        let inner_tydesc = unsafe {
+            let tuple_info = (*tydesc).type_info.tuple;
+            (*tuple_info.fields).tydesc
+        };
+        Ok(Value { ptr: stored_ptr, tydesc: inner_tydesc })
     }
 
     /// Get destination for a slot.

@@ -22,9 +22,9 @@ DualAnalysis(
                         v6 = list [v1, v2, v3, v4, v5]
                         v7 = pack Struct0 {v0, v6}
                         v8 = getfieldref v7.0
-                        debuglog v8
+                        debuglog *v8
                         v9 = getfieldref v7.1
-                        debuglog v9
+                        debuglog *v9
                         unit_end_drop v7
                         unit_end
                     exports:
@@ -45,9 +45,9 @@ DualAnalysis(
                         v6 = list [v1, v2, v3, v4, v5]
                         v7 = pack Struct0 {v0, v6}
                         v8 = getfieldref v7.0
-                        debuglog v8
+                        debuglog *v8
                         v9 = getfieldref v7.1
-                        debuglog v9
+                        debuglog *v9
                         unit_end_drop v7
                         unit_end
                     exports:

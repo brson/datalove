@@ -18,9 +18,9 @@ DualAnalysis(
                         v2 = pack Struct0 {v0, v1}
                         v3 = call f0(v2)
                         v4 = getfieldref v3.0
-                        debuglog v4
+                        debuglog *v4
                         v5 = getfieldref v3.1
-                        debuglog v5
+                        debuglog *v5
                         unit_end
                     
                     fn swap_coords(p0):
@@ -47,9 +47,9 @@ DualAnalysis(
                         v2 = pack Struct0 {v0, v1}
                         v3 = call f0(v2)
                         v4 = getfieldref v3.0
-                        debuglog v4
+                        debuglog *v4
                         v5 = getfieldref v3.1
-                        debuglog v5
+                        debuglog *v5
                         unit_end
                     
                     fn swap_coords(p0):

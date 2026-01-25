@@ -456,6 +456,23 @@ impl<'db> LowerCtx<'db> {
         self.body.param_types.get(id.0 as usize)
     }
 
+    /// Get the type of a value.
+    pub fn value_type(&self, id: ValueId) -> Option<&IrType> {
+        self.body.value_types.get(id.0 as usize)
+    }
+
+    /// Convert an operand to ValueRef if it's a Value with Ref type.
+    ///
+    /// Used when the operand will be read (dereferenced) rather than passed as a ref.
+    pub fn deref_if_ref(&self, operand: Operand) -> Operand {
+        if let Operand::Value(vid) = operand {
+            if let Some(IrType::Ref(_)) = self.value_type(vid) {
+                return Operand::ValueRef(vid);
+            }
+        }
+        operand
+    }
+
     /// Allocate a fresh SSA value with known type.
     pub fn fresh_value(&mut self, ty: IrType) -> ValueId {
         let id = ValueId(self.body.next_value);

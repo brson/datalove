@@ -953,7 +953,7 @@ impl IrInterpreter {
                 // Used for script unit_end drops where bindings may have been moved.
                 // Check if the operand is initialized before reading.
                 let is_initialized = match operand {
-                    Operand::Value(id) => frame.is_value_initialized(*id),
+                    Operand::Value(id) | Operand::ValueRef(id) => frame.is_value_initialized(*id),
                     Operand::Slot(id) => frame.is_slot_initialized(*id),
                     Operand::Param(id) => frame.is_param_initialized(*id),
                     Operand::ExternalValue { unit, value } => {
@@ -974,7 +974,7 @@ impl IrInterpreter {
             Instruction::DropViaRef { ref_value } => {
                 // Drop through a reference value (e.g., from GetFieldRef).
                 // The reference value contains a pointer to what we want to destroy.
-                let val = frame.value(*ref_value)?;
+                let val = frame.value_deref(*ref_value)?;
                 unsafe {
                     datalove_rt::c::dtlv_rti_any_destroy_local(
                         self.runtime.handle(),
@@ -1310,7 +1310,7 @@ impl IrInterpreter {
     /// handled separately (typically in terminators via `mark_source_dropped_all`).
     fn mark_source_dropped_local(operand: &Operand, frame: &mut Frame) {
         match operand {
-            Operand::Value(id) => frame.mark_value_dropped(*id),
+            Operand::Value(id) | Operand::ValueRef(id) => frame.mark_value_dropped(*id),
             Operand::Slot(id) => frame.mark_slot_dropped(*id),
             Operand::Param(id) => frame.mark_param_dropped(*id),
             Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
@@ -1323,7 +1323,7 @@ impl IrInterpreter {
     /// instruction where external values/slots may be consumed.
     fn mark_source_dropped_all(operand: &Operand, frame: &mut Frame, frames: &mut FrameStore) {
         match operand {
-            Operand::Value(id) => frame.mark_value_dropped(*id),
+            Operand::Value(id) | Operand::ValueRef(id) => frame.mark_value_dropped(*id),
             Operand::Slot(id) => frame.mark_slot_dropped(*id),
             Operand::Param(id) => frame.mark_param_dropped(*id),
             Operand::ExternalValue { unit, value } => {
@@ -1343,6 +1343,7 @@ impl IrInterpreter {
     ) -> Result<Value, InterpError> {
         match op {
             Operand::Value(id) => frame.value(*id),
+            Operand::ValueRef(id) => frame.value_deref(*id),
             Operand::Slot(id) => frame.slot(*id),
             Operand::Param(id) => frame.param(*id),
             Operand::ExternalValue { unit, value } => {
@@ -1357,9 +1358,9 @@ impl IrInterpreter {
     /// Get pointer to operand's destination without checking initialization.
     ///
     /// Used for Out params where we need to pass a pointer to an uninitialized slot.
-    /// For ref values (created by GetFieldRef), dereferences to get the actual destination.
+    /// For ValueRef operands, dereferences to get the actual destination.
     ///
-    /// Panics if operand is not a Slot or Value (compiler bug).
+    /// Panics if operand is not a Slot, Value, or ValueRef (compiler bug).
     fn get_operand_dest(&mut self, op: &Operand, frame: &mut Frame) -> Value {
         match op {
             Operand::Slot(id) => {
@@ -1367,17 +1368,13 @@ impl IrInterpreter {
                 Value { ptr: dest.ptr, tydesc: dest.tydesc }
             }
             Operand::Value(id) => {
-                // Check if this is a ref value (from GetFieldRef).
-                // If so, dereference to get the actual destination.
-                if frame.is_value_ref(*id) {
-                    // Read the ref value (which dereferences the stored pointer).
-                    // This should always succeed for ref values.
-                    frame.value(*id).expect("ref value should be initialized")
-                } else {
-                    // Normal value - return the value storage as destination.
-                    let dest = frame.value_dest(*id);
-                    Value { ptr: dest.ptr, tydesc: dest.tydesc }
-                }
+                // Normal value - return the value storage as destination.
+                let dest = frame.value_dest(*id);
+                Value { ptr: dest.ptr, tydesc: dest.tydesc }
+            }
+            Operand::ValueRef(id) => {
+                // Dereference to get the pointed-to destination.
+                frame.value_deref(*id).expect("ref value should be initialized")
             }
             _ => panic!("get_operand_dest: invalid operand {:?} for out param", op),
         }

@@ -17,7 +17,7 @@ DualAnalysis(
                         v1 = const 200u32
                         v2 = pack Tuple2 {v0, v1}
                         v3 = getfieldref v2.0
-                        v4 = call f0(v3)
+                        v4 = call f0(*v3)
                         debuglog v4
                         unit_end
                     
@@ -39,7 +39,7 @@ DualAnalysis(
                         v1 = const 200u32
                         v2 = pack Tuple2 {v0, v1}
                         v3 = getfieldref v2.0
-                        v4 = call f0(v3)
+                        v4 = call f0(*v3)
                         debuglog v4
                         unit_end
                     

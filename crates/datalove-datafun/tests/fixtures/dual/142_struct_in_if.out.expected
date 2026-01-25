@@ -22,7 +22,7 @@ DualAnalysis(
                         branch v5, block1, block2
                     block1:
                         v6 = getfieldref v2.0
-                        debuglog v6
+                        debuglog *v6
                         goto block3
                     block2:
                         goto block3
@@ -33,7 +33,7 @@ DualAnalysis(
                         branch v9, block4, block5
                     block4:
                         v10 = getfieldref v2.1
-                        debuglog v10
+                        debuglog *v10
                         goto block6
                     block5:
                         goto block6
@@ -57,7 +57,7 @@ DualAnalysis(
                         branch v5, block1, block2
                     block1:
                         v6 = getfieldref v2.0
-                        debuglog v6
+                        debuglog *v6
                         goto block3
                     block2:
                         goto block3
@@ -68,7 +68,7 @@ DualAnalysis(
                         branch v9, block4, block5
                     block4:
                         v10 = getfieldref v2.1
-                        debuglog v10
+                        debuglog *v10
                         goto block6
                     block5:
                         goto block6

@@ -20,7 +20,7 @@ DualAnalysis(
                         v4 = getfield v3.0
                         v5 = getfield v4.0
                         v6 = getfieldref v5.0
-                        debuglog v6
+                        debuglog *v6
                         unit_end
                     exports:
                         deep = v3
@@ -38,7 +38,7 @@ DualAnalysis(
                         v4 = getfield v3.0
                         v5 = getfield v4.0
                         v6 = getfieldref v5.0
-                        debuglog v6
+                        debuglog *v6
                         unit_end
                     exports:
                         deep = v3

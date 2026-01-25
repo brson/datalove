@@ -19,13 +19,13 @@ DualAnalysis(
                         v3 = const 100u32
                         v4 = pack Struct0 {v0, v1, v2, v3}
                         v5 = getfieldref v4.0
-                        debuglog v5
+                        debuglog *v5
                         v6 = getfieldref v4.1
-                        debuglog v6
+                        debuglog *v6
                         v7 = getfieldref v4.2
-                        debuglog v7
+                        debuglog *v7
                         v8 = getfieldref v4.3
-                        debuglog v8
+                        debuglog *v8
                         unit_end_drop v4
                         unit_end
                     exports:
@@ -43,13 +43,13 @@ DualAnalysis(
                         v3 = const 100u32
                         v4 = pack Struct0 {v0, v1, v2, v3}
                         v5 = getfieldref v4.0
-                        debuglog v5
+                        debuglog *v5
                         v6 = getfieldref v4.1
-                        debuglog v6
+                        debuglog *v6
                         v7 = getfieldref v4.2
-                        debuglog v7
+                        debuglog *v7
                         v8 = getfieldref v4.3
-                        debuglog v8
+                        debuglog *v8
                         unit_end_drop v4
                         unit_end
                     exports:

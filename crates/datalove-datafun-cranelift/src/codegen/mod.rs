@@ -739,6 +739,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return Ok(addr);
         }
 
+        // ValueRef: the stored value is a pointer - return it directly.
+        // This is used for ref/mut/out params to get the dereferenced location.
+        if let Operand::ValueRef(vid) = operand {
+            return self.values.get(vid).copied().ok_or_else(|| {
+                CraneliftError::Codegen(format!("undefined value: {:?}", vid))
+            });
+        }
+
         let ty = self.get_operand_type(operand)?;
 
         // Ref types store a pointer value - return it directly without spilling.
@@ -796,6 +804,33 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen(format!("undefined value: {:?}", vid))
                 })
             }
+            Operand::ValueRef(vid) => {
+                // ValueRef: the stored value is a pointer. Dereference it.
+                let ptr = self.values.get(vid).copied().ok_or_else(|| {
+                    CraneliftError::Codegen(format!("undefined value: {:?}", vid))
+                })?;
+
+                // Get the inner type (the type being pointed to).
+                let ref_ty = &self.func.value_types[vid.0 as usize];
+                let inner_ty = match ref_ty {
+                    IrType::Ref(inner) => inner.as_ref(),
+                    _ => return Err(CraneliftError::Codegen(format!(
+                        "ValueRef on non-Ref type: {:?}", ref_ty
+                    ))),
+                };
+                let repr = types::ir_type_to_cranelift(inner_ty);
+
+                match repr {
+                    CraneliftRepr::Scalar(cl_ty) => {
+                        // Load scalar value from the pointer.
+                        Ok(builder.ins().load(cl_ty, MemFlags::new(), ptr, 0))
+                    }
+                    CraneliftRepr::Aggregate(_) => {
+                        // For aggregates, return the pointer itself.
+                        Ok(ptr)
+                    }
+                }
+            }
             Operand::Param(pid) => {
                 // Params are passed by pointer. Load the value from the pointer.
                 let param_ptr = self.param_values.get(pid).copied().ok_or_else(|| {
@@ -851,6 +886,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match op {
             Operand::Value(vid) => {
                 Ok(self.func.value_types[vid.0 as usize].clone())
+            }
+            Operand::ValueRef(vid) => {
+                // ValueRef dereferences, so return the inner type.
+                let ref_ty = &self.func.value_types[vid.0 as usize];
+                match ref_ty {
+                    IrType::Ref(inner) => Ok(inner.as_ref().clone()),
+                    _ => Err(CraneliftError::Codegen(format!(
+                        "ValueRef on non-Ref type: {:?}", ref_ty
+                    ))),
+                }
             }
             Operand::Param(pid) => {
                 Ok(self.func.param_types[pid.0 as usize].clone())

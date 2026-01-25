@@ -21,15 +21,15 @@ DualAnalysis(
                         v5 = pack Struct0 {v3, v4}
                         v6 = getfield v5.0
                         v7 = getfieldref v6.0
-                        debuglog v7
+                        debuglog *v7
                         v8 = getfield v5.0
                         v9 = getfieldref v8.1
-                        debuglog v9
+                        debuglog *v9
                         v10 = getfield v5.0
                         v11 = getfieldref v10.2
-                        debuglog v11
+                        debuglog *v11
                         v12 = getfieldref v5.1
-                        debuglog v12
+                        debuglog *v12
                         unit_end_drop v5
                         unit_end
                     exports:
@@ -49,15 +49,15 @@ DualAnalysis(
                         v5 = pack Struct0 {v3, v4}
                         v6 = getfield v5.0
                         v7 = getfieldref v6.0
-                        debuglog v7
+                        debuglog *v7
                         v8 = getfield v5.0
                         v9 = getfieldref v8.1
-                        debuglog v9
+                        debuglog *v9
                         v10 = getfield v5.0
                         v11 = getfieldref v10.2
-                        debuglog v11
+                        debuglog *v11
                         v12 = getfieldref v5.1
-                        debuglog v12
+                        debuglog *v12
                         unit_end_drop v5
                         unit_end
                     exports:

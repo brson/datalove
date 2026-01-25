@@ -506,6 +506,11 @@ impl SymbolTable {
 pub enum Operand {
     /// Local SSA value.
     Value(ValueId),
+    /// Local SSA value that holds a reference (auto-dereference on use).
+    ///
+    /// Produced by GetFieldRef. The value stores a pointer; reading this
+    /// operand dereferences it to access the pointed-to data.
+    ValueRef(ValueId),
     /// Local mutable slot.
     Slot(SlotId),
     /// Function parameter (reference to caller's data).

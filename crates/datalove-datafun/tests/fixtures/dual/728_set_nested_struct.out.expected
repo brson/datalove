@@ -23,7 +23,7 @@ DualAnalysis(
                         v5 = load.copy s0
                         v6 = getfield v5.0
                         v7 = getfieldref v6.0
-                        debuglog v7
+                        debuglog *v7
                         unit_end
                     exports:
                         s = s0
@@ -44,7 +44,7 @@ DualAnalysis(
                         v5 = load.copy s0
                         v6 = getfield v5.0
                         v7 = getfieldref v6.0
-                        debuglog v7
+                        debuglog *v7
                         unit_end
                     exports:
                         s = s0

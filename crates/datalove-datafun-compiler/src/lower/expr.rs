@@ -71,7 +71,8 @@ fn lower_call_arg<'db>(
                     }
                 }
             }
-            return Ok(operand);
+            // Convert to ValueRef for proper dereferencing at use site.
+            return Ok(ctx.deref_if_ref(operand));
         }
         // For ref/mut/out modes, use lower_operand which records temps.
         // The caller retains ownership and must drop after the call.
@@ -131,6 +132,10 @@ pub fn lower_field_proj_as_ref<'db>(
                 Operand::Value(v) => {
                     // SSA value - use as-is.
                     Operand::Value(v)
+                }
+                Operand::ValueRef(v) => {
+                    // Ref value (from GetFieldRef) - use as-is.
+                    Operand::ValueRef(v)
                 }
                 Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
                     // External references - use as-is.
@@ -225,7 +230,7 @@ pub fn lower_expression<'db>(
             let operand = ctx.lookup_var(name_str)
                 .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
             match operand {
-                Operand::Value(v) => {
+                Operand::Value(v) | Operand::ValueRef(v) => {
                     // For SSA values, just return the existing ValueId.
                     Ok(v)
                 }

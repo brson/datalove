@@ -23,7 +23,7 @@ DualAnalysis(
                         goto block2
                     block2:
                         v3 = getfieldref s0.0
-                        debuglog v3
+                        debuglog *v3
                         goto block3
                     block3:
                         v4 = const 2u32
@@ -31,7 +31,7 @@ DualAnalysis(
                         goto block4
                     block4:
                         v5 = getfieldref s0.0
-                        debuglog v5
+                        debuglog *v5
                         unit_end
                     exports:
                         s = s0
@@ -52,7 +52,7 @@ DualAnalysis(
                         goto block2
                     block2:
                         v3 = getfieldref s0.0
-                        debuglog v3
+                        debuglog *v3
                         goto block3
                     block3:
                         v4 = const 2u32
@@ -60,7 +60,7 @@ DualAnalysis(
                         goto block4
                     block4:
                         v5 = getfieldref s0.0
-                        debuglog v5
+                        debuglog *v5
                         unit_end
                     exports:
                         s = s0

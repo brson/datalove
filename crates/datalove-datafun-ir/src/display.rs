@@ -124,6 +124,7 @@ impl fmt::Display for Operand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Operand::Value(v) => write!(f, "{}", v),
+            Operand::ValueRef(v) => write!(f, "*{}", v),
             Operand::Slot(s) => write!(f, "{}", s),
             Operand::Param(p) => write!(f, "{}", p),
             Operand::ExternalValue { unit, value } => write!(f, "unit{}.{}", unit, value),

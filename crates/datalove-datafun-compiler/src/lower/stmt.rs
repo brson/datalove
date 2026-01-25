@@ -156,6 +156,8 @@ fn lower_statement_impl<'db>(
             // Use lower_expression_for_ref to handle field projections with GetFieldRef.
             // This borrows the value instead of copying, avoiding shallow-copy issues.
             let operand = lower_expression_for_ref(ctx, stmt.value)?;
+            // If the operand is a ref, dereference it for reading.
+            let operand = ctx.deref_if_ref(operand);
             ctx.emit(Instruction::DebugLog { operand });
             // Drop any expression temporaries (e.g., string literals created for debuglog).
             ctx.emit_expr_temp_drops();

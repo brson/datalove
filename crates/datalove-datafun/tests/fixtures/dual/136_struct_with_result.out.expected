@@ -18,9 +18,9 @@ DualAnalysis(
                         v2 = const "success"
                         v3 = pack Struct0 {v1, v2}
                         v4 = getfieldref v3.0
-                        debuglog v4
+                        debuglog *v4
                         v5 = getfieldref v3.1
-                        debuglog v5
+                        debuglog *v5
                         unit_end_drop v3
                         unit_end
                     exports:
@@ -37,9 +37,9 @@ DualAnalysis(
                         v2 = const "success"
                         v3 = pack Struct0 {v1, v2}
                         v4 = getfieldref v3.0
-                        debuglog v4
+                        debuglog *v4
                         v5 = getfieldref v3.1
-                        debuglog v5
+                        debuglog *v5
                         unit_end_drop v3
                         unit_end
                     exports:

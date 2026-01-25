@@ -18,11 +18,11 @@ DualAnalysis(
                         v2 = const true
                         v3 = pack Struct0 {v0, v1, v2}
                         v4 = getfieldref v3.0
-                        debuglog v4
+                        debuglog *v4
                         v5 = getfieldref v3.1
-                        debuglog v5
+                        debuglog *v5
                         v6 = getfieldref v3.2
-                        debuglog v6
+                        debuglog *v6
                         unit_end
                     exports:
                         flags = v3
@@ -38,11 +38,11 @@ DualAnalysis(
                         v2 = const true
                         v3 = pack Struct0 {v0, v1, v2}
                         v4 = getfieldref v3.0
-                        debuglog v4
+                        debuglog *v4
                         v5 = getfieldref v3.1
-                        debuglog v5
+                        debuglog *v5
                         v6 = getfieldref v3.2
-                        debuglog v6
+                        debuglog *v6
                         unit_end
                     exports:
                         flags = v3

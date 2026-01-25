@@ -17,9 +17,9 @@ DualAnalysis(
                         v1 = const 10u32
                         v2 = call f0(v0, v1)
                         v3 = getfieldref v2.0
-                        debuglog v3
+                        debuglog *v3
                         v4 = getfieldref v2.1
-                        debuglog v4
+                        debuglog *v4
                         unit_end
                     
                     fn make_pair(p0, p1):
@@ -42,9 +42,9 @@ DualAnalysis(
                         v1 = const 10u32
                         v2 = call f0(v0, v1)
                         v3 = getfieldref v2.0
-                        debuglog v3
+                        debuglog *v3
                         v4 = getfieldref v2.1
-                        debuglog v4
+                        debuglog *v4
                         unit_end
                     
                     fn make_pair(p0, p1):
