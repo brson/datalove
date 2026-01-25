@@ -101,10 +101,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Option Some: write tag=2 and inner value.
                 return self.compile_option_some_const(builder, dest, inner);
             }
+            ConstValue::Tuple(fields) => {
+                // Tuple: write each field at computed offset.
+                return self.compile_tuple_const(builder, dest, fields);
+            }
             // Aggregate and collection ConstValues are not yet supported for direct loading.
             // These will be used by const evaluation to extract computed values.
-            ConstValue::Tuple(_)
-            | ConstValue::Struct(_)
+            ConstValue::Struct(_)
             | ConstValue::Enum { .. }
             | ConstValue::ResultOk(_)
             | ConstValue::ResultErr(_)
@@ -321,6 +324,57 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
+    /// Compile a Tuple constant.
+    ///
+    /// Tuple layout: fields at computed offsets based on alignment.
+    fn compile_tuple_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        fields: &[ConstValue],
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Tuple constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Compute field offsets.
+        let field_offsets = self.compute_tuple_field_offsets(fields);
+
+        // Write each field at its offset.
+        for (i, field_value) in fields.iter().enumerate() {
+            let field_offset = field_offsets[i];
+            let field_addr = builder.ins().iadd_imm(base, field_offset as i64);
+            self.write_const_value_to_addr(builder, field_addr, field_value)?;
+        }
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Compute field offsets for a tuple of ConstValues.
+    fn compute_tuple_field_offsets(&self, fields: &[ConstValue]) -> Vec<u32> {
+        let mut offset = 0u32;
+        let mut offsets = Vec::with_capacity(fields.len());
+
+        for field in fields {
+            let field_align = self.align_of_const_value(field);
+            let field_size = self.size_of_const_value(field);
+
+            // Align offset to field alignment.
+            offset = datalove_rtdt::layout::align_up(offset, field_align);
+            offsets.push(offset);
+
+            // Advance offset by field size.
+            offset += field_size;
+        }
+
+        offsets
+    }
+
     /// Get the alignment of a ConstValue.
     fn align_of_const_value(&self, value: &ConstValue) -> u32 {
         match value {
@@ -333,8 +387,48 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ConstValue::Usize(_) | ConstValue::Isize(_) => std::mem::size_of::<usize>() as u32,
             // Pointer-sized types.
             ConstValue::Int { .. } | ConstValue::String(_) => 8,
-            ConstValue::OptionNone | ConstValue::OptionSome(_) => 1,
+            ConstValue::OptionNone => 1,
+            ConstValue::OptionSome(inner) => {
+                self.align_of_const_value(inner).max(1)
+            }
+            ConstValue::Tuple(fields) => {
+                fields.iter().map(|f| self.align_of_const_value(f)).max().unwrap_or(1)
+            }
             _ => 8, // Default to pointer alignment for other types.
+        }
+    }
+
+    /// Get the size of a ConstValue.
+    fn size_of_const_value(&self, value: &ConstValue) -> u32 {
+        match value {
+            ConstValue::Unit => 0,
+            ConstValue::Bool(_) => 1,
+            ConstValue::U8(_) | ConstValue::I8(_) => 1,
+            ConstValue::U16(_) | ConstValue::I16(_) => 2,
+            ConstValue::U32(_) | ConstValue::I32(_) | ConstValue::F32(_) => 4,
+            ConstValue::U64(_) | ConstValue::I64(_) | ConstValue::F64(_) => 8,
+            ConstValue::Usize(_) | ConstValue::Isize(_) => std::mem::size_of::<usize>() as u32,
+            ConstValue::Int { .. } => std::mem::size_of::<datalove_rtdt::Int>() as u32,
+            ConstValue::String(_) => 16, // ptr + size + capacity
+            ConstValue::OptionNone => 1, // Just the tag
+            ConstValue::OptionSome(inner) => {
+                let inner_align = self.align_of_const_value(inner);
+                let payload_offset = datalove_rtdt::layout::option_payload_offset(inner_align);
+                let inner_size = self.size_of_const_value(inner);
+                datalove_rtdt::layout::align_up(payload_offset + inner_size, inner_align.max(1))
+            }
+            ConstValue::Tuple(fields) => {
+                let offsets = self.compute_tuple_field_offsets(fields);
+                if fields.is_empty() {
+                    0
+                } else {
+                    let last_offset = offsets[fields.len() - 1];
+                    let last_size = self.size_of_const_value(&fields[fields.len() - 1]);
+                    let max_align = fields.iter().map(|f| self.align_of_const_value(f)).max().unwrap_or(1);
+                    datalove_rtdt::layout::align_up(last_offset + last_size, max_align)
+                }
+            }
+            _ => 8, // Default for other types
         }
     }
 

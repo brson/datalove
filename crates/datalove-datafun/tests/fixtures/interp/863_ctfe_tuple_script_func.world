@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE tuple in script function.
+fun get_pair(): (u32, bool)
+    const T: (u32, bool) = (100, false)
+    ret T
+end fun
+
+debuglog get_pair()

@@ -1,0 +1,19 @@
+----------
+module local/test/tuplemod
+----------
+
+// CTFE tuple as module item.
+const PAIR: (u32, bool) = (55, true)
+
+fun get_pair(): (u32, bool)
+    ret PAIR
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/tuplemod
+import tuplemod.get_pair
+
+debuglog get_pair()

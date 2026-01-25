@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE tuple in script unit.
+const T: (u32, bool) = (42, true)
+debuglog T

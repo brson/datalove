@@ -1456,10 +1456,26 @@ impl IrInterpreter {
                     };
                     self.write_const(inner, payload_dest);
                 }
+                ConstValue::Tuple(fields) => {
+                    // Tuple layout: fields at computed offsets.
+                    let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
+                    let layout = rtdt::layout::compute_tuple_layout(tydesc_ref);
+                    let tuple_info = tydesc_ref.tuple_info();
+                    for (i, field_value) in fields.iter().enumerate() {
+                        let field_offset = layout.field_offsets[i];
+                        let field_ref = tuple_info.field(i).expect("tuple field out of bounds");
+                        let field_tydesc = field_ref.tydesc().as_ptr();
+                        let field_ptr = dest.ptr.add(field_offset as usize);
+                        let field_dest = Destination {
+                            ptr: field_ptr,
+                            tydesc: field_tydesc,
+                        };
+                        self.write_const(field_value, field_dest);
+                    }
+                }
                 // Aggregate and collection ConstValues are not yet supported for direct loading.
                 // These will be used by const evaluation to extract computed values.
-                ConstValue::Tuple(_)
-                | ConstValue::Struct(_)
+                ConstValue::Struct(_)
                 | ConstValue::Enum { .. }
                 | ConstValue::ResultOk(_)
                 | ConstValue::ResultErr(_)

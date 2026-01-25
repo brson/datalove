@@ -1,0 +1,18 @@
+----------
+module local/test/tuplefunc
+----------
+
+// CTFE tuple in module function.
+fun compute(): (u32, bool)
+    const T: (u32, bool) = (77, false)
+    ret T
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/tuplefunc
+import tuplefunc.compute
+
+debuglog compute()
