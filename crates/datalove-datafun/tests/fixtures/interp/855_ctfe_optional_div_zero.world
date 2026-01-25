@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE optional div by zero - should be compile error.
+fun compute(): ?u32
+    const A: u32 = 10
+    const B: u32 = 0
+    const C: u32 = A /? B
+    ret some C
+end fun
+
+debuglog compute()

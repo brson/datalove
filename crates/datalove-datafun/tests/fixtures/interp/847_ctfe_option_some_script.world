@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE option some in script unit.
+const O: ?u32 = some 42
+debuglog O

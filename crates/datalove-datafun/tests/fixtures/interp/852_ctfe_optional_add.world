@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE optional add in script.
+fun compute(): ?u32
+    const A: u32 = 5
+    const B: u32 = 3
+    const C: ?u32 = some (A +? B)
+    ret C
+end fun
+
+debuglog compute()

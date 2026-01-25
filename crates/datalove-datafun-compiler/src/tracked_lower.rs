@@ -471,12 +471,14 @@ fn evaluate_single_const<'db>(
         Ok(v) => v,
         Err(_simple_err) => {
             // Fall back to CTFE evaluator for complex expressions.
+            // Module-level consts don't have a function return type.
             match lower::const_expr::eval_const_expr_with_evaluator(
                 db,
                 init_expr,
                 &ir_type,
                 expr_types,
                 resolved_so_far,
+                None, // No return type for module-level consts.
                 evaluator.clone(),
             ) {
                 Ok(v) => v,

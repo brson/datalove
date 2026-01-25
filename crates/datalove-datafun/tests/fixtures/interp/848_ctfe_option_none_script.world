@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE option none in script unit.
+const O: ?u32 = none
+debuglog O

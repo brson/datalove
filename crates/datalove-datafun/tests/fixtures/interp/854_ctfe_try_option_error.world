@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE try option fails - should be compile error.
+fun compute(): ?u32
+    const F: ?u32 = none
+    const G: u32 = F?
+    ret some G
+end fun
+
+debuglog compute()

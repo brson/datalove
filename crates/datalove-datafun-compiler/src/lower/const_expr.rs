@@ -80,6 +80,12 @@ fn lower_const_expr_to_unit<'db>(
     // Copy const bindings from parent so we can reference previously evaluated consts.
     isolated_ctx.const_bindings = parent_ctx.const_bindings.clone();
 
+    // Copy return type from parent for early-return operators (? and !).
+    isolated_ctx.return_type = parent_ctx.return_type.clone();
+
+    // Mark as script unit so early-return uses UnitEarlyReturn terminator.
+    isolated_ctx.is_script_unit = true;
+
     // Use the real lowering pipeline.
     let result_value = super::expr::lower_expression(&mut isolated_ctx, expr)?;
 
@@ -168,16 +174,20 @@ pub fn eval_const_expr_simple<'db>(
 /// This handles complex expressions that can't be evaluated as simple literals.
 /// Used for module-level const evaluation where we have access to the evaluator
 /// outside of tracked salsa functions.
+///
+/// The `return_type` is the enclosing function's return type, needed for
+/// early-return operators (`?` and `!`).
 pub fn eval_const_expr_with_evaluator<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
     ir_type: &IrType,
     expr_types: &'db [Option<Type<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
+    return_type: Option<IrType>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
 ) -> Result<ConstValue, LowerError> {
     // Lower the expression to a minimal IR unit using isolated lowering.
-    let unit = lower_const_expr_to_unit_standalone(db, expr, expr_types, resolved_consts)?;
+    let unit = lower_const_expr_to_unit_standalone(db, expr, expr_types, resolved_consts, return_type)?;
 
     // Evaluate using the CTFE evaluator.
     evaluator.borrow_mut()
@@ -193,6 +203,7 @@ fn lower_const_expr_to_unit_standalone<'db>(
     expr: ExprFun<'db>,
     expr_types: &'db [Option<Type<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
+    return_type: Option<IrType>,
 ) -> Result<IrScriptUnit, LowerError> {
     // Create a fresh LowerCtx with the provided type information.
     let mut ctx = LowerCtx::new(
@@ -203,6 +214,12 @@ fn lower_const_expr_to_unit_standalone<'db>(
 
     // Pre-populate const bindings from previously resolved values.
     ctx.const_bindings = resolved_consts.clone();
+
+    // Set return type for early-return operators (? and !).
+    ctx.return_type = return_type;
+
+    // Mark as script unit so early-return uses UnitEarlyReturn terminator.
+    ctx.is_script_unit = true;
 
     // Use the real lowering pipeline.
     let result_value = super::expr::lower_expression(&mut ctx, expr)?;
@@ -291,7 +308,8 @@ pub fn evaluate_consts<'db>(
             .collect();
 
         // Lower to IR unit using isolated lowering (gets widening, etc.).
-        let unit = lower_const_expr_to_unit_standalone(db, expr, expr_types, &resolved_consts_map)
+        // Script-level consts don't have a function return type.
+        let unit = lower_const_expr_to_unit_standalone(db, expr, expr_types, &resolved_consts_map, None)
             .map_err(|e| ConstEvalError::LoweringFailed {
                 binding_name: binding.name.clone(),
                 message: e.to_string(),
@@ -303,9 +321,23 @@ pub fn evaluate_consts<'db>(
                 CtfeError::InterpError(msg) if msg.contains("gas") => {
                     ConstEvalError::GasExpired { binding_name: binding.name.clone() }
                 }
-                _ => {
-                    // Other interpreter errors are unexpected.
-                    panic!("unexpected CTFE error evaluating const '{}': {}", binding.name, e);
+                CtfeError::InterpError(msg) => {
+                    ConstEvalError::LoweringFailed {
+                        binding_name: binding.name.clone(),
+                        message: msg,
+                    }
+                }
+                CtfeError::EarlyReturn(msg) => {
+                    ConstEvalError::EarlyReturn {
+                        binding_name: binding.name.clone(),
+                        message: msg,
+                    }
+                }
+                CtfeError::UnsupportedType(ty) => {
+                    ConstEvalError::UnsupportedType {
+                        binding_name: binding.name.clone(),
+                        type_name: ty,
+                    }
                 }
             })?;
 
@@ -345,6 +377,9 @@ pub fn evaluate_script_function_consts<'db>(
     for statement in statements {
         if let Statement::Fun(func_stmt) = statement {
             let func_name = func_stmt.name(db).text(db);
+            // Get function's return type for early-return operators.
+            let func_return_type = func_stmt.return_type(db)
+                .map(|ty| IrType::from_type_hint(db, &ty));
             // Track local consts for this function.
             let mut func_local_consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
 
@@ -381,6 +416,7 @@ pub fn evaluate_script_function_consts<'db>(
                                 &ir_type,
                                 expr_types,
                                 &lookup_map,
+                                func_return_type.clone(),
                                 evaluator.clone(),
                             ) {
                                 Ok(v) => v,

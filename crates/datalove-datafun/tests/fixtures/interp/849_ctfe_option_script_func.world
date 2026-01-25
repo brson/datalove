@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE option in script function.
+fun get_opt(): ?u32
+    const O: ?u32 = some 100
+    ret O
+end fun
+
+debuglog get_opt()

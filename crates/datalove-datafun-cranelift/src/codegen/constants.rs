@@ -93,13 +93,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // String needs runtime calls.
                 return self.compile_string_const(builder, dest, s);
             }
+            ConstValue::OptionNone => {
+                // Option None: write tag=1 at offset 0.
+                return self.compile_option_none_const(builder, dest);
+            }
+            ConstValue::OptionSome(inner) => {
+                // Option Some: write tag=2 and inner value.
+                return self.compile_option_some_const(builder, dest, inner);
+            }
             // Aggregate and collection ConstValues are not yet supported for direct loading.
             // These will be used by const evaluation to extract computed values.
             ConstValue::Tuple(_)
             | ConstValue::Struct(_)
             | ConstValue::Enum { .. }
-            | ConstValue::OptionSome(_)
-            | ConstValue::OptionNone
             | ConstValue::ResultOk(_)
             | ConstValue::ResultErr(_)
             | ConstValue::Data(_)
@@ -254,5 +260,166 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             .map_err(|e| CraneliftError::Module(format!("define static bytes: {}", e)))?;
 
         Ok(data_id)
+    }
+
+    /// Compile an Option None constant.
+    ///
+    /// Option layout: tag (u8) at offset 0, payload at aligned offset.
+    /// None tag = 1.
+    fn compile_option_none_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Option constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Write None tag (1) at offset 0.
+        let tag = builder.ins().iconst(cl_types::I8, 1);
+        builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), tag, base, 0);
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Compile an Option Some constant.
+    ///
+    /// Option layout: tag (u8) at offset 0, payload at aligned offset.
+    /// Some tag = 2.
+    fn compile_option_some_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        inner: &ConstValue,
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Option constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Write Some tag (2) at offset 0.
+        let tag = builder.ins().iconst(cl_types::I8, 2);
+        builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), tag, base, 0);
+
+        // Compute payload offset based on inner type alignment.
+        let inner_align = self.align_of_const_value(inner);
+        let payload_offset = datalove_rtdt::layout::option_payload_offset(inner_align);
+        let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
+
+        // Write the inner value at the payload offset.
+        self.write_const_value_to_addr(builder, payload_addr, inner)?;
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Get the alignment of a ConstValue.
+    fn align_of_const_value(&self, value: &ConstValue) -> u32 {
+        match value {
+            ConstValue::Unit => 1,
+            ConstValue::Bool(_) => 1,
+            ConstValue::U8(_) | ConstValue::I8(_) => 1,
+            ConstValue::U16(_) | ConstValue::I16(_) => 2,
+            ConstValue::U32(_) | ConstValue::I32(_) | ConstValue::F32(_) => 4,
+            ConstValue::U64(_) | ConstValue::I64(_) | ConstValue::F64(_) => 8,
+            ConstValue::Usize(_) | ConstValue::Isize(_) => std::mem::size_of::<usize>() as u32,
+            // Pointer-sized types.
+            ConstValue::Int { .. } | ConstValue::String(_) => 8,
+            ConstValue::OptionNone | ConstValue::OptionSome(_) => 1,
+            _ => 8, // Default to pointer alignment for other types.
+        }
+    }
+
+    /// Write a ConstValue to a memory address.
+    fn write_const_value_to_addr(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        addr: cranelift_codegen::ir::Value,
+        value: &ConstValue,
+    ) -> Result<(), CraneliftError> {
+        let mem_flags = cranelift_codegen::ir::MemFlags::trusted();
+        match value {
+            ConstValue::Unit => {
+                // Unit is zero-sized, nothing to write.
+            }
+            ConstValue::Bool(b) => {
+                let val = builder.ins().iconst(cl_types::I8, *b as i64);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            ConstValue::U8(v) => {
+                let val = builder.ins().iconst(cl_types::I8, *v as i64);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            ConstValue::U16(v) => {
+                let val = builder.ins().iconst(cl_types::I16, *v as i64);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            ConstValue::U32(v) => {
+                let val = builder.ins().iconst(cl_types::I32, *v as i64);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            ConstValue::U64(v) => {
+                let val = builder.ins().iconst(cl_types::I64, *v as i64);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            ConstValue::I8(v) => {
+                let val = builder.ins().iconst(cl_types::I8, *v as i64);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            ConstValue::I16(v) => {
+                let val = builder.ins().iconst(cl_types::I16, *v as i64);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            ConstValue::I32(v) => {
+                let val = builder.ins().iconst(cl_types::I32, *v as i64);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            ConstValue::I64(v) => {
+                let val = builder.ins().iconst(cl_types::I64, *v);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            #[cfg(not(feature = "index-64"))]
+            ConstValue::Usize(v) => {
+                let val = builder.ins().iconst(cl_types::I32, *v as i64);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            #[cfg(feature = "index-64")]
+            ConstValue::Usize(v) => {
+                let val = builder.ins().iconst(cl_types::I64, *v as i64);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            #[cfg(not(feature = "index-64"))]
+            ConstValue::Isize(v) => {
+                let val = builder.ins().iconst(cl_types::I32, *v as i64);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            #[cfg(feature = "index-64")]
+            ConstValue::Isize(v) => {
+                let val = builder.ins().iconst(cl_types::I64, *v);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            ConstValue::F32(v) => {
+                let val = builder.ins().f32const(*v);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            ConstValue::F64(v) => {
+                let val = builder.ins().f64const(*v);
+                builder.ins().store(mem_flags, val, addr, 0);
+            }
+            _ => {
+                return Err(CraneliftError::Codegen(format!(
+                    "write_const_value_to_addr not implemented for: {:?}", value
+                )));
+            }
+        }
+        Ok(())
     }
 }

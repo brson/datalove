@@ -1565,6 +1565,10 @@ pub enum ConstEvalError {
     DependencyFailed { binding_name: String, dependency: String },
     /// Lowering the const expression to IR failed.
     LoweringFailed { binding_name: String, message: String },
+    /// Early return in const expression (e.g., `?` on none, `!` on error).
+    EarlyReturn { binding_name: String, message: String },
+    /// Unsupported type for const extraction.
+    UnsupportedType { binding_name: String, type_name: String },
 }
 
 impl std::fmt::Display for ConstEvalError {
@@ -1578,6 +1582,12 @@ impl std::fmt::Display for ConstEvalError {
             }
             ConstEvalError::LoweringFailed { binding_name, message } => {
                 write!(f, "failed to lower const '{}': {}", binding_name, message)
+            }
+            ConstEvalError::EarlyReturn { binding_name, message } => {
+                write!(f, "const '{}' early-returned: {}", binding_name, message)
+            }
+            ConstEvalError::UnsupportedType { binding_name, type_name } => {
+                write!(f, "const '{}' has unsupported type for CTFE: {}", binding_name, type_name)
             }
         }
     }

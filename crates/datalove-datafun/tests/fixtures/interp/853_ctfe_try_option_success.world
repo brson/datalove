@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE try option succeeds.
+fun compute(): ?u32
+    const F: ?u32 = some 42
+    const G: u32 = F?
+    ret some G
+end fun
+
+debuglog compute()

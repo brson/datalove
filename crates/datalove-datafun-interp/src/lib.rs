@@ -1435,13 +1435,32 @@ impl IrInterpreter {
                         dest.tydesc,
                     );
                 }
+                ConstValue::OptionNone => {
+                    // Option layout: tag at offset 0.
+                    // None tag = 1.
+                    *(dest.ptr as *mut u8) = 1;
+                }
+                ConstValue::OptionSome(inner) => {
+                    // Option layout: tag at offset 0, payload at aligned offset.
+                    // Some tag = 2.
+                    *(dest.ptr as *mut u8) = 2;
+
+                    // Get inner type from tydesc.
+                    let inner_tydesc = (*dest.tydesc).type_info.option.inner_tydesc;
+                    let inner_align = (*inner_tydesc).align;
+                    let payload_offset = rtdt::layout::option_payload_offset(inner_align);
+                    let payload_ptr = dest.ptr.add(payload_offset as usize);
+                    let payload_dest = Destination {
+                        ptr: payload_ptr,
+                        tydesc: inner_tydesc,
+                    };
+                    self.write_const(inner, payload_dest);
+                }
                 // Aggregate and collection ConstValues are not yet supported for direct loading.
                 // These will be used by const evaluation to extract computed values.
                 ConstValue::Tuple(_)
                 | ConstValue::Struct(_)
                 | ConstValue::Enum { .. }
-                | ConstValue::OptionSome(_)
-                | ConstValue::OptionNone
                 | ConstValue::ResultOk(_)
                 | ConstValue::ResultErr(_)
                 | ConstValue::Data(_)

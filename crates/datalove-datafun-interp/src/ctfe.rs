@@ -84,6 +84,30 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
     }
 }
 
+/// Get the alignment of an IR type.
+///
+/// Used for computing payload offsets in composite types like Option.
+fn align_of_ir_type(ir_type: &IrType) -> u32 {
+    match ir_type {
+        IrType::Unit => 1,
+        IrType::Bool => 1,
+        IrType::U8 | IrType::I8 => 1,
+        IrType::U16 | IrType::I16 => 2,
+        IrType::U32 | IrType::I32 | IrType::F32 => 4,
+        IrType::U64 | IrType::I64 | IrType::F64 => 8,
+        IrType::Usize | IrType::Isize => std::mem::size_of::<usize>() as u32,
+        // Int, String, collections are pointer types - align to pointer size.
+        IrType::Int | IrType::String | IrType::Data | IrType::Error => 8,
+        IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) => 8,
+        IrType::Tuple(_) | IrType::Struct(_) | IrType::Enum(_) => 8,
+        IrType::Option(inner) => align_of_ir_type(inner).max(1),
+        IrType::Result(inner) => align_of_ir_type(inner).max(8), // Error is pointer-sized
+        IrType::Tensor(_, _) => 8,
+        IrType::Ref(_) => 8,
+        IrType::Table(_) => 8,
+    }
+}
+
 /// Extract a ConstValue from raw memory.
 ///
 /// Reads bytes from the given pointer and converts to a ConstValue based on type.
@@ -158,6 +182,24 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 };
 
                 Ok(ConstValue::Int { limbs, negative })
+            }
+            IrType::Option(inner) => {
+                // Option layout: tag (u8) at offset 0, payload at aligned offset.
+                let tag = *(ptr as *const u8);
+                match tag {
+                    1 => Ok(ConstValue::OptionNone),
+                    2 => {
+                        // Compute payload offset based on inner type alignment.
+                        let inner_align = align_of_ir_type(inner);
+                        let payload_offset = datalove_rtdt::layout::option_payload_offset(inner_align);
+                        let payload_ptr = ptr.add(payload_offset as usize);
+                        let inner_value = extract_const_value(payload_ptr, inner)?;
+                        Ok(ConstValue::OptionSome(Box::new(inner_value)))
+                    }
+                    _ => Err(CtfeError::InterpError(format!(
+                        "invalid option tag: {}", tag
+                    ))),
+                }
             }
             // TODO: Add support for aggregates and collections.
             _ => Err(CtfeError::UnsupportedType(format!("{:?}", ir_type))),

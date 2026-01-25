@@ -1,0 +1,18 @@
+----------
+module local/test/optfunc
+----------
+
+// CTFE option in module function.
+fun compute(): ?u32
+    const O: ?u32 = some 77
+    ret O
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/optfunc
+import optfunc.compute
+
+debuglog compute()
