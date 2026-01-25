@@ -15,7 +15,7 @@ use crate::value::{Value, Destination};
 pub struct Frame {
     /// Raw frame data with proper alignment (values and slots).
     data: AlignedBuffer,
-    /// Layout information.
+    /// Layout information (includes static value_is_ref).
     layout: IrLayout,
     /// Track which values are live (written but not dropped).
     ///
@@ -24,8 +24,6 @@ pub struct Frame {
     live_values: HashSet<ValueId>,
     /// Track which slots are initialized.
     slot_initialized: Vec<bool>,
-    /// Track which values are references (store pointers, dereference on read).
-    value_is_ref: Vec<bool>,
     /// Pointers to caller's data for each parameter.
     param_ptrs: Vec<*mut u8>,
     /// Type descriptors for each parameter.
@@ -39,7 +37,6 @@ pub struct Frame {
 impl Frame {
     /// Create a new frame from layout.
     pub fn new(layout: IrLayout, param_count: usize) -> Self {
-        let value_count = layout.value_offsets.len();
         let slot_count = layout.slot_offsets.len();
         let data = AlignedBuffer::with_align(
             layout.frame_size as usize,
@@ -51,7 +48,6 @@ impl Frame {
             layout,
             live_values: HashSet::new(),
             slot_initialized: vec![false; slot_count],
-            value_is_ref: vec![false; value_count],
             param_ptrs: vec![std::ptr::null_mut(); param_count],
             param_tydescs: vec![std::ptr::null(); param_count],
             param_borrowed: vec![false; param_count],
@@ -67,18 +63,10 @@ impl Frame {
         self.live_values.insert(id);
     }
 
-    /// Mark a value as a reference (stores pointer, dereference on read).
-    pub fn mark_value_is_ref(&mut self, id: ValueId) {
-        let idx = id.0 as usize;
-        if idx < self.value_is_ref.len() {
-            self.value_is_ref[idx] = true;
-        }
-    }
-
-    /// Check if a value is a reference.
+    /// Check if a value is a reference (statically known from type).
     pub fn is_value_ref(&self, id: ValueId) -> bool {
         let idx = id.0 as usize;
-        idx < self.value_is_ref.len() && self.value_is_ref[idx]
+        idx < self.layout.value_is_ref.len() && self.layout.value_is_ref[idx]
     }
 
     /// Get destination for a value.
@@ -106,7 +94,7 @@ impl Frame {
         let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
 
         // Handle ref values: dereference the stored pointer and use inner tydesc.
-        if self.value_is_ref[idx] {
+        if self.layout.value_is_ref[idx] {
             // Read the stored pointer.
             let stored_ptr = unsafe { *(ptr as *const *mut u8) };
             // Get inner tydesc from the ref's tydesc (stored as 1-element tuple).

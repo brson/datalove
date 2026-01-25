@@ -21,6 +21,8 @@ pub struct IrLayout {
     pub value_offsets: Vec<u32>,
     /// TyDesc for each ValueId.
     pub value_tydescs: Vec<*const TyDesc>,
+    /// Which values are references (statically known from IrType::Ref).
+    pub value_is_ref: Vec<bool>,
     /// Offset for each SlotId.
     pub slot_offsets: Vec<u32>,
     /// TyDesc for each SlotId.
@@ -40,6 +42,7 @@ impl IrLayout {
     ) -> Self {
         let mut value_offsets = Vec::with_capacity(value_types.len());
         let mut value_tydescs = Vec::with_capacity(value_types.len());
+        let mut value_is_ref = Vec::with_capacity(value_types.len());
         let mut slot_offsets = Vec::with_capacity(slot_types.len());
         let mut slot_tydescs = Vec::with_capacity(slot_types.len());
 
@@ -55,6 +58,7 @@ impl IrLayout {
             offset = align_up(offset, align);
             value_offsets.push(offset);
             value_tydescs.push(tydesc);
+            value_is_ref.push(matches!(ty, IrType::Ref(_)));
             offset += size;
             max_align = max_align.max(align);
         }
@@ -78,6 +82,7 @@ impl IrLayout {
         Self {
             value_offsets,
             value_tydescs,
+            value_is_ref,
             slot_offsets,
             slot_tydescs,
             frame_size,
