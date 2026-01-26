@@ -381,8 +381,25 @@ impl<'db> LowerCtx<'db> {
         std::mem::replace(&mut self.body, new_state)
     }
 
+    /// Pre-register a function for forward reference support.
+    ///
+    /// Call this for all functions before lowering any of them to enable
+    /// forward references (mutual recursion). The function can then be
+    /// looked up via `lookup_func` when lowering calls to it.
+    pub fn pre_register_func(&mut self, name: &str, param_count: usize) {
+        let func_id = self.symbols.define_func(name.to_string(), param_count);
+        self.func_scope.insert(name.to_string(), FuncRef::Local(func_id));
+    }
+
     /// Define a function in the current scope.
+    ///
+    /// If the function was pre-registered via `pre_register_func`, returns the
+    /// existing FuncId. Otherwise allocates a new one.
     pub fn define_func(&mut self, name: &str, param_count: usize) -> FuncId {
+        // Check if already pre-registered.
+        if let Some(FuncRef::Local(func_id)) = self.func_scope.get(name) {
+            return *func_id;
+        }
         let func_id = self.symbols.define_func(name.to_string(), param_count);
         self.func_scope.insert(name.to_string(), FuncRef::Local(func_id));
         func_id

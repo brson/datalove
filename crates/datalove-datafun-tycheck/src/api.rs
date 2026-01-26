@@ -125,11 +125,8 @@ pub fn typecheck_script_unit<'db>(
     // Typecheck this unit based on kind.
     match &unit_spec.kind {
         ScriptUnitKind::Fragment(script) => {
-            // Name resolution: collect type aliases only.
-            // Note: Unlike modules, scripts do NOT pre-collect function signatures.
-            // Functions are processed sequentially so they can only reference
-            // functions defined earlier (no mutual recursion in scripts).
-            let collected = resolve_names_impl(db, &script.statements, false);
+            // Name resolution: collect type aliases and function signatures.
+            let collected = resolve_names_impl(db, &script.statements);
             ctx.seed_from_collected_names(&collected, None);
 
             // Resolve imports using shared helper.
@@ -563,7 +560,7 @@ pub fn resolve_module_exports<'db>(
     parsed: ParsedStatements<'db>,
 ) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
     let _ = module; // Used as memoization key.
-    resolve_names_impl(db, &parsed.statements, true).functions
+    resolve_names_impl(db, &parsed.statements).functions
 }
 
 /// All module exports collected from the graph.
@@ -757,16 +754,11 @@ pub struct CollectedNames<'db> {
 /// Resolve names from parsed statements.
 ///
 /// This is the core name resolution implementation used by both modules and scripts.
-/// It collects type aliases and optionally function signatures.
-///
-/// Arguments:
-/// - `collect_functions`: If true, pre-collect all function signatures (for modules
-///   and scripts with module graphs). If false, only collect type aliases (for
-///   REPL-style scripts where functions are defined before use).
+/// It collects type aliases and function signatures, enabling forward references
+/// to functions defined later in the same compilation unit.
 pub fn resolve_names_impl<'db>(
     db: &'db dyn crate::Db,
     statements: &[Statement<'db>],
-    collect_functions: bool,
 ) -> CollectedNames<'db> {
     use crate::types::is_primitive_name;
 
@@ -806,58 +798,56 @@ pub fn resolve_names_impl<'db>(
         }
     }
 
-    // Pass 1: optionally collect function signatures.
+    // Pass 1: collect function signatures.
     let mut functions = Vec::new();
     let mut function_asts = Vec::new();
 
-    if collect_functions {
-        for statement in statements {
-            if let Statement::Fun(stmt) = statement {
-                let name = stmt.name(db);
-                let params = stmt.params(db);
-                let return_type = stmt.return_type(db);
+    for statement in statements {
+        if let Statement::Fun(stmt) = statement {
+            let name = stmt.name(db);
+            let params = stmt.params(db);
+            let return_type = stmt.return_type(db);
 
-                // Convert parameter types and collect modes.
-                let mut param_types = Vec::new();
-                let mut param_modes = Vec::new();
-                let mut has_error = false;
-                for param in params {
-                    match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
-                        Ok(ty) => {
-                            param_types.push(ty);
-                            param_modes.push(param.mode);
-                        }
+            // Convert parameter types and collect modes.
+            let mut param_types = Vec::new();
+            let mut param_modes = Vec::new();
+            let mut has_error = false;
+            for param in params {
+                match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
+                    Ok(ty) => {
+                        param_types.push(ty);
+                        param_modes.push(param.mode);
+                    }
+                    Err(e) => {
+                        errors.push(e);
+                        has_error = true;
+                        break;
+                    }
+                }
+            }
+
+            if has_error {
+                continue;
+            }
+
+            // Convert return type (default to unit if not specified).
+            let ret_ty = match return_type {
+                Some(type_hint) => {
+                    match convert_type_hint_with_aliases(db, type_hint, &type_aliases_map) {
+                        Ok(ty) => ty,
                         Err(e) => {
                             errors.push(e);
-                            has_error = true;
-                            break;
+                            continue;
                         }
                     }
                 }
+                None => unit_type(db),
+            };
 
-                if has_error {
-                    continue;
-                }
-
-                // Convert return type (default to unit if not specified).
-                let ret_ty = match return_type {
-                    Some(type_hint) => {
-                        match convert_type_hint_with_aliases(db, type_hint, &type_aliases_map) {
-                            Ok(ty) => ty,
-                            Err(e) => {
-                                errors.push(e);
-                                continue;
-                            }
-                        }
-                    }
-                    None => unit_type(db),
-                };
-
-                // Create function type and collect AST.
-                let func_type = TypeFunction::new(db, param_types, param_modes, ret_ty);
-                functions.push((name, func_type));
-                function_asts.push((name, *stmt));
-            }
+            // Create function type and collect AST.
+            let func_type = TypeFunction::new(db, param_types, param_modes, ret_ty);
+            functions.push((name, func_type));
+            function_asts.push((name, *stmt));
         }
     }
 
@@ -888,8 +878,8 @@ pub fn resolve_module_names<'db>(
 
     log_query("resolve_names", module_path, QueryPhase::Start);
 
-    // Resolve names with function collection enabled (modules pre-collect all signatures).
-    let collected = resolve_names_impl(db, &parsed.statements, true);
+    // Resolve names: collect type aliases and function signatures.
+    let collected = resolve_names_impl(db, &parsed.statements);
 
     log_query("resolve_names", module_path, QueryPhase::End);
 
@@ -995,7 +985,7 @@ fn build_script_module_functions<'db>(
 
     for module_spec in modules {
         // Use resolve_names_impl to get function signatures and ASTs.
-        let collected = resolve_names_impl(db, &module_spec.parsed.statements, true);
+        let collected = resolve_names_impl(db, &module_spec.parsed.statements);
 
         // Build function info map with ASTs.
         let ast_map: HashMap<_, _> = collected.function_asts.into_iter().collect();

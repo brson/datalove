@@ -199,6 +199,16 @@ pub fn lower_script_fragment_raw<'db>(
     // Get function-level consts from pre-resolved data.
     let func_consts = resolved_consts.map(|r| r.func_consts);
 
+    // Pre-register all functions to enable forward references (mutual recursion).
+    // This must happen before lowering any function bodies.
+    for stmt in &stmts {
+        if let Statement::Fun(fun_stmt) = stmt {
+            let func_name = fun_stmt.name(db).text(db).to_string();
+            let param_count = fun_stmt.params(db).len();
+            ctx.pre_register_func(&func_name, param_count);
+        }
+    }
+
     // Lower all statements with index tracking.
     for (idx, stmt) in stmts.iter().enumerate() {
         ctx.body.current_stmt_idx = Some(idx);

@@ -4,35 +4,87 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"is_odd\")",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                    
+                    fn is_even(p0):
+                    block0:
+                        v0 = const 0u32
+                        v1 = eq p0, v0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const true
+                        v3 = ok v2
+                        return v3
+                    block2:
+                        v4 = const 1u32
+                        v5, v6 = sub.checked p0, v4
+                        branch v6, block3, block4
+                    block3:
+                        v7 = const "arithmetic overflow"
+                        v8 = error_from v7
+                        v9 = err v8
+                        return v9
+                    block4:
+                        v10 = call f1(v5)
+                        return v10
+                    fn is_odd(p0):
+                    block0:
+                        v0 = const 0u32
+                        v1 = eq p0, v0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const false
+                        v3 = ok v2
+                        return v3
+                    block2:
+                        v4 = const 1u32
+                        v5, v6 = sub.checked p0, v4
+                        branch v6, block3, block4
+                    block3:
+                        v7 = const "arithmetic overflow"
+                        v8 = error_from v7
+                        v9 = err v8
+                        return v9
+                    block4:
+                        v10 = call f0(v5)
+                        return v10
+                    exports:
+                        is_even = f0
+                        is_odd = f1
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"is_even\")",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 6u32
+                        v1 = call unit0.f0(v0)
+                        unit_end v1
+                """,
             ),
-            output: "",
+            output: "ok true",
         ),
     ],
 )
