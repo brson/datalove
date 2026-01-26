@@ -40,15 +40,21 @@ Source Text
     |             - Per-module: parse_module_full [tracked]
     v             - Output: ParsedModuleGraph
     |
-[Phase 2: Typecheck]  typecheck_module_graph_with_mode
+[Phase 2: Name Resolution]  resolve_all_names_with_mode
+    |                       - Per-module: resolve_module_names [tracked]
+    v                       - Output: AllModuleNameResolutions
+    |                       - Collects type aliases and function signatures
+    |
+[Phase 3: Typecheck]  typecheck_module_graph_with_mode
     |                 - Per-module: typecheck_module [tracked]
     v                 - Output: ModuleGraphTypecheckResult
+    |                 - Uses name resolution via memoization (cache hit)
     |
-[Phase 3: Ownership Analysis]  analyze_module_graph_with_mode
+[Phase 4: Ownership Analysis]  analyze_module_graph_with_mode
     |                          - Per-module: analyze_module [tracked]
     v                          - Output: ModuleGraphAnalysis
     |
-[Phase 4: IR Lowering]  lower_module_graph_with_evaluator
+[Phase 5: IR Lowering]  lower_module_graph_with_evaluator
     |                   - Per-module: lower_module [tracked]
     v                   - Output: ModuleGraphLoweringResult
     |
@@ -102,7 +108,8 @@ Each phase has a tracked function that salsa memoizes:
 |----------|-----------|--------|
 | `parse_module_full` | `module` | `ParseResult` with spans |
 | `parse_module_ast` | `module` | `ParsedStatements` (no spans) |
-| `typecheck_module` | `module`, `parsed`, `requires` | `SingleModuleTypecheckResult` |
+| `resolve_module_names` | `module`, `parsed` | `ModuleNameResolution` (type aliases, functions, ASTs) |
+| `typecheck_module` | `module`, `parsed`, `name_resolution`, `imports` | `SingleModuleTypecheckResult` |
 | `analyze_module` | `module`, `parsed`, `typecheck` | `SingleModuleAnalysis` |
 | `lower_module` | `module`, `ir_idx`, `parsed`, `typecheck`, `ownership_analysis`, `func_ids` | `SingleModuleLoweringResult` |
 
@@ -112,6 +119,7 @@ Graph-level functions (`*_module_graph`) aggregate per-module results.
 
 Result types are `#[salsa::tracked]` for stable identity:
 - `ParsedModuleGraph<'db>`
+- `ModuleNameResolution<'db>`, `AllModuleNameResolutions<'db>`
 - `SingleModuleTypecheckResult<'db>`, `ModuleGraphTypecheckResult<'db>`
 - `SingleModuleAnalysis<'db>`, `ModuleGraphAnalysis<'db>`
 - `SingleModuleLoweringResult<'db>`, `ModuleGraphLoweringResult<'db>`

@@ -404,6 +404,71 @@ impl<'db> TypeContext<'db> {
         let index = id.index() as usize;
         self.intrinsic_targets.get(index).and_then(|t| *t)
     }
+
+    /// Seed context from a pre-computed name resolution.
+    ///
+    /// Populates type aliases, function signatures, and function ASTs from
+    /// the memoized name resolution pass. This replaces the inline Pass 0/1
+    /// collection in typecheck_module.
+    pub fn seed_from_name_resolution(
+        &mut self,
+        name_resolution: &crate::ModuleNameResolution<'db>,
+        module_id: Option<ModuleId>,
+    ) {
+        // Add type aliases.
+        for (name, ty) in name_resolution.type_aliases(self.db) {
+            self.type_aliases.insert(*name, ty.clone());
+        }
+
+        // Add function signatures with ASTs.
+        // First build a map of ASTs for lookup.
+        let ast_map: HashMap<bct::text::InternedText<'db>, StmtFun<'db>> = name_resolution.function_asts(self.db)
+            .iter()
+            .map(|(name, ast)| (*name, *ast))
+            .collect();
+
+        for (name, func_type) in name_resolution.functions(self.db) {
+            if let Some(&func_ast) = ast_map.get(name) {
+                self.add_function_with_ast(*name, *func_type, func_ast, module_id);
+            } else {
+                self.add_function(*name, *func_type);
+            }
+        }
+    }
+
+    /// Seed context from collected names (used by scripts).
+    ///
+    /// Like `seed_from_name_resolution` but takes `CollectedNames` directly
+    /// instead of the tracked `ModuleNameResolution` struct.
+    pub fn seed_from_collected_names(
+        &mut self,
+        collected: &crate::api::CollectedNames<'db>,
+        module_id: Option<ModuleId>,
+    ) {
+        // Add errors from name resolution.
+        for error in &collected.errors {
+            self.add_error(error.clone());
+        }
+
+        // Add type aliases.
+        for (name, ty) in &collected.type_aliases {
+            self.type_aliases.insert(*name, ty.clone());
+        }
+
+        // Add function signatures with ASTs.
+        let ast_map: HashMap<bct::text::InternedText<'db>, StmtFun<'db>> = collected.function_asts
+            .iter()
+            .map(|(name, ast)| (*name, *ast))
+            .collect();
+
+        for (name, func_type) in &collected.functions {
+            if let Some(&func_ast) = ast_map.get(name) {
+                self.add_function_with_ast(*name, *func_type, func_ast, module_id);
+            } else {
+                self.add_function(*name, *func_type);
+            }
+        }
+    }
 }
 
 /// Context for typechecking sequential script units.

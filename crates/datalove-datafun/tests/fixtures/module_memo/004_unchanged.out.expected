@@ -10,6 +10,7 @@
           "is_dependent": false,
           "parsed": true,
           "parse_ok": true,
+          "resolved_names": true,
           "typechecked": true,
           "typecheck_ok": true,
           "lowered": true,
@@ -17,6 +18,7 @@
           "hash_changed": true,
           "expected": {
             "parsed": true,
+            "resolved_names": true,
             "typechecked": true,
             "lowered": true,
             "hash_changed": true
@@ -35,6 +37,7 @@
           "is_dependent": false,
           "parsed": true,
           "parse_ok": true,
+          "resolved_names": true,
           "typechecked": true,
           "typecheck_ok": true,
           "lowered": true,
@@ -42,6 +45,7 @@
           "hash_changed": true,
           "expected": {
             "parsed": true,
+            "resolved_names": true,
             "typechecked": true,
             "lowered": true,
             "hash_changed": true

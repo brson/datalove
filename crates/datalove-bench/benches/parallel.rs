@@ -14,6 +14,7 @@ use datalove_datafun_compiler::{
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
     typecheck_module_graph, typecheck_module_graph_with_mode,
+    resolve_all_names_with_mode,
     ParallelMode as TypecheckParallelMode,
 };
 
@@ -181,6 +182,41 @@ fn parse_parallel(bencher: divan::Bencher) {
         })
         .bench_local_values(|(db, graph)| {
             let result = parse_module_graph_with_mode(&db, graph, BTreeMap::new(), ParallelMode::Parallel);
+            let _ = divan::black_box(result);
+        });
+}
+
+#[divan::bench]
+fn resolve_names_sequential(bencher: divan::Bencher) {
+    let sources = generate_sources();
+    bencher
+        .with_inputs(|| {
+            let db = Database::default();
+            let graph = setup_graph(&db, &sources);
+            // Prime: parse is memoized after this.
+            let _ = parse_module_graph(&db, graph, BTreeMap::new());
+            (db, graph)
+        })
+        .bench_local_values(|(db, graph)| {
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new()); // Memoized.
+            let result = resolve_all_names_with_mode(&db, parsed, TypecheckParallelMode::Sequential);
+            let _ = divan::black_box(result);
+        });
+}
+
+#[divan::bench]
+fn resolve_names_parallel(bencher: divan::Bencher) {
+    let sources = generate_sources();
+    bencher
+        .with_inputs(|| {
+            let db = Database::default();
+            let graph = setup_graph(&db, &sources);
+            let _ = parse_module_graph(&db, graph, BTreeMap::new());
+            (db, graph)
+        })
+        .bench_local_values(|(db, graph)| {
+            let parsed = parse_module_graph(&db, graph, BTreeMap::new());
+            let result = resolve_all_names_with_mode(&db, parsed, TypecheckParallelMode::Parallel);
             let _ = divan::black_box(result);
         });
 }

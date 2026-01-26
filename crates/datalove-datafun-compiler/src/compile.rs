@@ -10,7 +10,9 @@ use rmx::std::collections::BTreeMap;
 use bct::module_graph::{ModuleGraph, ModuleId};
 use datalove_datafun_tycheck::{
     DbClone, ParallelMode,
+    resolve_all_names_with_mode,
     typecheck_module_graph_with_mode,
+    AllModuleNameResolutions,
     ModuleGraphTypecheckResult,
     ParsedModuleGraph,
 };
@@ -28,7 +30,7 @@ pub struct ModuleCompilationInput {
 
 /// Output of module compilation - analysis results without lowering.
 ///
-/// Contains parsing, typechecking, and ownership analysis results.
+/// Contains parsing, name resolution, typechecking, and ownership analysis results.
 /// Callers who need IR lowering should call `lower_module_graph_with_evaluator`
 /// after checking for errors.
 pub struct ModuleCompilationOutput<'db> {
@@ -36,6 +38,8 @@ pub struct ModuleCompilationOutput<'db> {
     pub module_graph: ModuleGraph,
     /// Parsed module graph with AST.
     pub parsed_graph: ParsedModuleGraph<'db>,
+    /// Name resolution results (type aliases and function signatures).
+    pub name_resolution: AllModuleNameResolutions<'db>,
     /// Typecheck results per module.
     pub typecheck_result: ModuleGraphTypecheckResult<'db>,
     /// Ownership analysis results per module.
@@ -59,9 +63,15 @@ impl<'db> ModuleCompilationOutput<'db> {
 
 /// Analyze modules from pre-resolved input.
 ///
-/// Runs parsing, typechecking, and ownership analysis. Does NOT run IR lowering.
-/// Callers who need IR should call `lower_module_graph_with_evaluator` after checking
-/// that `is_successful()` returns true.
+/// Runs parsing, name resolution, typechecking, and ownership analysis.
+/// Does NOT run IR lowering. Callers who need IR should call
+/// `lower_module_graph_with_evaluator` after checking that `is_successful()` returns true.
+///
+/// Pipeline phases:
+/// 1. Parse - lexing/parsing to AST
+/// 2. Name Resolution - collect type aliases and function signatures (memoized per-module)
+/// 3. Typecheck - type inference and checking
+/// 4. Ownership Analysis - borrow checking and drop scheduling
 ///
 /// This separation allows callers to skip lowering entirely when analysis fails,
 /// and gives them control over when/if lowering happens.
@@ -70,16 +80,24 @@ pub fn compile_modules<'db>(
     input: ModuleCompilationInput,
     mode: ParallelMode,
 ) -> ModuleCompilationOutput<'db> {
+    // Phase 1: Parse
     let parsed_graph = parse_module_graph_with_mode(
         db,
         input.graph.clone(),
         input.resolved_requires,
         mode,
     );
+
+    // Phase 2: Name Resolution (memoized per-module, can be parallelized)
+    let name_resolution = resolve_all_names_with_mode(db, parsed_graph, mode);
+
+    // Phase 3: Typecheck (uses name resolution results internally via memoization)
     let typecheck_result = typecheck_module_graph_with_mode(db, parsed_graph, mode);
+
+    // Phase 4: Ownership Analysis
     let ownership_analysis = analyze_module_graph_with_mode(db, parsed_graph, typecheck_result, mode);
 
-    collect_results(db, input.graph, parsed_graph, typecheck_result, ownership_analysis)
+    collect_results(db, input.graph, parsed_graph, name_resolution, typecheck_result, ownership_analysis)
 }
 
 /// Collect all analysis results into the output structure.
@@ -87,6 +105,7 @@ fn collect_results<'db>(
     db: &'db dyn DbClone,
     module_graph: ModuleGraph,
     parsed_graph: ParsedModuleGraph<'db>,
+    name_resolution: AllModuleNameResolutions<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
 ) -> ModuleCompilationOutput<'db> {
@@ -146,6 +165,7 @@ fn collect_results<'db>(
     ModuleCompilationOutput {
         module_graph,
         parsed_graph,
+        name_resolution,
         typecheck_result,
         ownership_analysis,
         parse_errors,

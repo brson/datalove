@@ -4,8 +4,6 @@ ModulesAnalysis(
         errors: [
             "local/test/main: CannotSynthesize",
             "local/test/main: CannotSynthesize",
-            "local/test/main: CannotSynthesize",
-            "local/test/main: CannotSynthesize",
         ],
     ),
     lowering: LoweringResult(

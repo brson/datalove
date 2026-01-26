@@ -78,6 +78,7 @@ pub struct ModuleResult {
     pub is_dependent: bool,
     pub parsed: bool,
     pub parse_ok: bool,
+    pub resolved_names: bool,
     pub typechecked: bool,
     pub typecheck_ok: bool,
     pub lowered: bool,
@@ -95,6 +96,7 @@ pub struct ModuleResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExpectedBehavior {
     pub parsed: bool,
+    pub resolved_names: bool,
     pub typechecked: bool,
     pub lowered: bool,
     pub hash_changed: bool,
@@ -172,17 +174,20 @@ fn hash_string(s: &str) -> u64 {
 /// - Whitespace changes: source changed (hash changes), but AST stable (no re-typecheck)
 /// - AST changes: source changed (hash changes), AST changed (re-typecheck)
 ///
+/// Name resolution follows the same pattern as typecheck - it only re-runs when
+/// AST changes (since type aliases and function signatures come from the AST).
+///
 /// Lowering follows the same pattern as typecheck - it only re-runs when
 /// typecheck results change.
 fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> Option<ExpectedBehavior> {
     // Table based on source text content hashing:
-    // | action            | direct-ast | direct-ty | direct-low | direct-hash | depend-ast | depend-ty | depend-low | depend-hash |
-    // |-------------------|------------|-----------|------------|-------------|------------|-----------|------------|-------------|
-    // | add-module        | y          | y         | y          | y           | n/a        | n/a       | n/a        | n/a         |
-    // | remove-module     | y*         | y*        | y*         | y*          | **         | **        | **         | **          |
-    // | change-module-ws  | y          | n         | n          | y           | n          | n         | n          | y           |
-    // | change-module-ast | y          | y         | y          | y           | n          | n         | n          | y           |
-    // | change-module-ty  | y          | y         | y          | y           | n          | y         | y          | y           |
+    // | action            | direct-parse | direct-names | direct-ty | direct-low | direct-hash | depend-parse | depend-names | depend-ty | depend-low | depend-hash |
+    // |-------------------|--------------|--------------|-----------|------------|-------------|--------------|--------------|-----------|------------|-------------|
+    // | add-module        | y            | y            | y         | y          | y           | n/a          | n/a          | n/a       | n/a        | n/a         |
+    // | remove-module     | y*           | y*           | y*        | y*         | y*          | **           | **           | **        | **         | **          |
+    // | change-module-ws  | y            | n            | n         | n          | y           | n            | n            | n         | n          | y           |
+    // | change-module-ast | y            | y            | y         | y          | y           | n            | n            | n         | n          | y           |
+    // | change-module-ty  | y            | y            | y         | y          | y           | n            | n            | y         | y          | y           |
     //
     // *: removed module
     // **: impossible case - module graph can't resolve when dependency is removed
@@ -191,32 +196,37 @@ fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> Opt
         Some(match action {
             Action::Add | Action::ModuleAdd => ExpectedBehavior {
                 parsed: true,
+                resolved_names: true,
                 typechecked: true,
                 lowered: true,
                 hash_changed: true,
             },
             Action::ModuleRemove => ExpectedBehavior {
                 parsed: true,
+                resolved_names: true,
                 typechecked: true,
                 lowered: true,
                 hash_changed: true,
             },
-            // Whitespace change: source changed (hash changes), AST stable (no re-typecheck/lower).
+            // Whitespace change: source changed (hash changes), AST stable (no re-resolve/re-typecheck/lower).
             Action::ModuleChangeWs => ExpectedBehavior {
                 parsed: true,
+                resolved_names: false,
                 typechecked: false,
                 lowered: false,
                 hash_changed: true,
             },
-            // AST change: hash changes, must re-typecheck and re-lower.
+            // AST change: hash changes, must re-resolve, re-typecheck and re-lower.
             Action::ModuleChangeAst => ExpectedBehavior {
                 parsed: true,
+                resolved_names: true,
                 typechecked: true,
                 lowered: true,
                 hash_changed: true,
             },
             Action::ModuleChangeTy => ExpectedBehavior {
                 parsed: true,
+                resolved_names: true,
                 typechecked: true,
                 lowered: true,
                 hash_changed: true,
@@ -226,6 +236,7 @@ fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> Opt
         match action {
             Action::Add | Action::ModuleAdd => Some(ExpectedBehavior {
                 parsed: false,
+                resolved_names: false,
                 typechecked: false,
                 lowered: false,
                 hash_changed: false,
@@ -235,6 +246,7 @@ fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> Opt
             // Whitespace change in dependency: source changed (hash changes transitively).
             Action::ModuleChangeWs => Some(ExpectedBehavior {
                 parsed: false,
+                resolved_names: false,
                 typechecked: false,
                 lowered: false,
                 hash_changed: true,
@@ -242,12 +254,14 @@ fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> Opt
             // AST change in dependency: dependency hash changes, dependent hash changes.
             Action::ModuleChangeAst => Some(ExpectedBehavior {
                 parsed: false,
+                resolved_names: false,
                 typechecked: false,
                 lowered: false,
                 hash_changed: true,
             }),
             Action::ModuleChangeTy => Some(ExpectedBehavior {
                 parsed: false,
+                resolved_names: false,
                 typechecked: true,
                 lowered: true,
                 hash_changed: true,
@@ -256,6 +270,7 @@ fn expected_behavior(action: Action, is_direct: bool, is_dependent: bool) -> Opt
     } else {
         Some(ExpectedBehavior {
             parsed: false,
+            resolved_names: false,
             typechecked: false,
             lowered: false,
             hash_changed: false,
@@ -321,6 +336,8 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
         enable_query_logging();
         let typecheck_result = typecheck_module_graph(&db, parsed_graph);
         let typecheck_log = disable_query_logging();
+        let resolved_names_modules: BTreeSet<String> = get_executed_modules(&typecheck_log, "resolve_names")
+            .into_iter().collect();
         let typechecked_modules: BTreeSet<String> = get_executed_modules(&typecheck_log, "typecheck")
             .into_iter().collect();
 
@@ -376,6 +393,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
                 is_dependent: false,
                 parsed: true,
                 parse_ok: false,
+                resolved_names: true,
                 typechecked: true,
                 typecheck_ok: false,
                 lowered: true,
@@ -391,6 +409,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             let is_dependent = dependents.contains(path);
 
             let parsed = parsed_modules.contains(path);
+            let resolved_names = resolved_names_modules.contains(path);
             let typechecked = typechecked_modules.contains(path);
             let lowered = lowered_modules.contains(path);
 
@@ -413,6 +432,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
                     // the expected lowered value based on actual typecheck success.
                     let expected_lowered = if typecheck_ok { exp.lowered } else { false };
                     parsed == exp.parsed
+                        && resolved_names == exp.resolved_names
                         && typechecked == exp.typechecked
                         && lowered == expected_lowered
                         && hash_changed == exp.hash_changed
@@ -429,6 +449,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
                 is_dependent,
                 parsed,
                 parse_ok,
+                resolved_names,
                 typechecked,
                 typecheck_ok,
                 lowered,

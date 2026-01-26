@@ -527,6 +527,45 @@ pub struct ModuleImportResolution<'db> {
     pub errors: Vec<TypeError>,
 }
 
+// ============================================================================
+// Name Resolution Types
+// ============================================================================
+
+/// Result of name resolution for a single module.
+///
+/// Contains type aliases, function signatures, and function ASTs collected
+/// from a module's parsed statements. This is computed before typechecking
+/// and is memoized per-module via Salsa.
+#[salsa::tracked]
+pub struct ModuleNameResolution<'db> {
+    /// Module this is for.
+    pub module_id: ModuleId,
+
+    /// Type aliases defined in this module: (name, resolved_type).
+    #[returns(ref)]
+    pub type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
+
+    /// Function signatures: (name, function_type).
+    #[returns(ref)]
+    pub functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
+
+    /// Function ASTs for inlining: (name, ast).
+    #[returns(ref)]
+    pub function_asts: Vec<(InternedText<'db>, StmtFun<'db>)>,
+
+    /// Errors encountered during name resolution.
+    #[returns(ref)]
+    pub errors: Vec<TypeError>,
+}
+
+/// Aggregated name resolutions for all modules in a graph.
+#[salsa::tracked]
+pub struct AllModuleNameResolutions<'db> {
+    /// Per-module name resolutions.
+    #[returns(ref)]
+    pub resolutions: BTreeMap<ModuleId, ModuleNameResolution<'db>>,
+}
+
 /// Result of typechecking a single module.
 #[salsa::tracked]
 pub struct SingleModuleTypecheckResult<'db> {
@@ -738,6 +777,11 @@ pub use api::{
     AccumulatedBindings,
     ScriptUnitTypecheckOutput,
     typecheck_script_unit,
+    // Name resolution functions.
+    resolve_module_names,
+    resolve_all_names,
+    resolve_all_names_parallel,
+    resolve_all_names_with_mode,
 };
 
 // Re-export context types.
