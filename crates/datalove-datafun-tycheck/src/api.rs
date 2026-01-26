@@ -168,6 +168,12 @@ pub fn typecheck_script_unit<'db>(
                             new_vars.push((name, ty.clone(), *is_mutable));
                         }
                     }
+                    Statement::Const(const_stmt) => {
+                        let name = const_stmt.name;
+                        if let Some((ty, is_mutable)) = ctx.variables.get(&name) {
+                            new_vars.push((name, ty.clone(), *is_mutable));
+                        }
+                    }
                     Statement::Fun(fun_stmt) => {
                         let name = fun_stmt.name(db);
                         if let Some(func_ty) = ctx.functions.get(&name) {
