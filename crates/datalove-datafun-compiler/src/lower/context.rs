@@ -251,6 +251,9 @@ pub struct LowerCtx<'db> {
     pub(super) const_bindings: HashMap<String, (IrType, ConstValue)>,
     /// CTFE evaluator for const expressions.
     pub(super) ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
+    /// When true, lower function-level const statements as let statements (runtime evaluation).
+    /// Module/script-level consts that are pre-resolved still use CTFE.
+    pub(super) const_as_let: bool,
 }
 
 /// Empty func_id_map for contexts that don't need module function resolution.
@@ -279,6 +282,7 @@ impl<'db> LowerCtx<'db> {
             is_script_unit: false,
             const_bindings: HashMap::new(),
             ctfe_evaluator: None,
+            const_as_let: false,
         }
     }
 
@@ -305,6 +309,7 @@ impl<'db> LowerCtx<'db> {
             is_script_unit: false,
             const_bindings: HashMap::new(),
             ctfe_evaluator: None,
+            const_as_let: false,
         }
     }
 
@@ -373,6 +378,7 @@ impl<'db> LowerCtx<'db> {
             is_script_unit: true,
             const_bindings: HashMap::new(),
             ctfe_evaluator: None,
+            const_as_let: false,
         }
     }
 
@@ -564,6 +570,23 @@ impl<'db> LowerCtx<'db> {
     /// Set the CTFE evaluator for const expressions.
     pub fn set_ctfe_evaluator(&mut self, evaluator: Rc<RefCell<dyn CtfeEvaluator>>) {
         self.ctfe_evaluator = Some(evaluator);
+    }
+
+    /// Check if const-as-let mode is enabled.
+    ///
+    /// When true, function-level const statements are lowered as let statements
+    /// (runtime evaluation) instead of using CTFE.
+    pub fn const_as_let(&self) -> bool {
+        self.const_as_let
+    }
+
+    /// Enable or disable const-as-let mode.
+    ///
+    /// When enabled, function-level const statements are lowered as let statements
+    /// (runtime evaluation) instead of using CTFE. Module/script-level consts that
+    /// are pre-resolved still use CTFE.
+    pub fn set_const_as_let(&mut self, enabled: bool) {
+        self.const_as_let = enabled;
     }
 
     /// Pre-populate const bindings from Phase 2 resolved values.

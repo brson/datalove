@@ -192,6 +192,16 @@ fn lower_statement_impl<'db>(
                 return Ok(());
             }
 
+            // In const-as-let mode, lower function-level consts as runtime let bindings.
+            if ctx.const_as_let() {
+                let init_expr = const_stmt.value;
+                let value_id = lower_expression(ctx, init_expr)?;
+                let operand = Operand::Value(value_id);
+                ctx.bind_var(&name, operand);
+                ctx.record_binding_operand(operand);
+                return Ok(());
+            }
+
             // Evaluate the const expression using CTFE.
             let init_expr = const_stmt.value;
             let ir_type = ctx.expr_type(init_expr);

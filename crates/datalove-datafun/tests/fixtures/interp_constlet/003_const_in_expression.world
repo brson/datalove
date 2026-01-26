@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+fun double_const(): u32
+    const X: u32 = 21
+    ret X * 2
+end fun
+
+debuglog double_const()

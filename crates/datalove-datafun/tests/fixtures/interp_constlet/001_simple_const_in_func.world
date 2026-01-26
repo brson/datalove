@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+fun get_value(): u32
+    const X: u32 = 42
+    ret X
+end fun
+
+debuglog get_value()

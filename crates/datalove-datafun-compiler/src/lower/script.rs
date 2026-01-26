@@ -171,6 +171,14 @@ pub struct PreResolvedConsts<'a> {
     pub func_consts: &'a HashMap<String, (IrType, ConstValue)>,
 }
 
+/// Options for lowering.
+#[derive(Debug, Clone, Default)]
+pub struct LoweringOptions {
+    /// When true, lower function-level const statements as let statements (runtime evaluation).
+    /// Module/script-level consts that are pre-resolved still use CTFE.
+    pub const_as_let: bool,
+}
+
 pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
@@ -183,7 +191,31 @@ pub fn lower_script_fragment_raw<'db>(
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
     resolved_consts: Option<PreResolvedConsts<'_>>,
 ) -> Result<IrScriptUnit, LowerError> {
+    lower_script_fragment_raw_with_options(
+        db, expr_types, call_targets, func_id_map, script_ctx, stmts,
+        func_analyses, script_analysis, func_param_types, resolved_consts,
+        &LoweringOptions::default(),
+    )
+}
+
+/// Like `lower_script_fragment_raw` but with explicit lowering options.
+pub fn lower_script_fragment_raw_with_options<'db>(
+    db: &'db dyn salsa::Database,
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+    script_ctx: ScriptLowerContext,
+    stmts: Vec<Statement<'db>>,
+    func_analyses: ScriptFunctionAnalyses<'db>,
+    script_analysis: ScriptAnalysisData,
+    func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+    resolved_consts: Option<PreResolvedConsts<'_>>,
+    options: &LoweringOptions,
+) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
+
+    // Apply lowering options.
+    ctx.set_const_as_let(options.const_as_let);
 
     // Pre-populate const bindings from Phase 2 resolved values.
     if let Some(ref pre_resolved) = resolved_consts {
@@ -558,6 +590,16 @@ fn lower_statement_for_script<'db>(
 
             // Check if already pre-resolved (from Phase 2).
             if ctx.lookup_const(&name).is_some() {
+                return Ok(());
+            }
+
+            // In const-as-let mode, lower function-level consts as runtime let bindings.
+            if ctx.const_as_let() {
+                let init_expr = const_stmt.value;
+                let value_id = lower_expression(ctx, init_expr)?;
+                let operand = Operand::Value(value_id);
+                ctx.bind_var(&name, operand);
+                ctx.record_binding_operand(operand);
                 return Ok(());
             }
 

@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
-use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts, evaluate_script_function_consts, PreResolvedConsts};
+use datalove_datafun_compiler::lower::{lower_script_fragment_raw_with_options, lower_script_expr, evaluate_consts, evaluate_script_function_consts, PreResolvedConsts, LoweringOptions};
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, build_func_id_map, collect_const_graph,
 };
@@ -108,6 +108,7 @@ impl<'db> CompiledModules<'db> {
             last_source: None,
             last_batch_spec: None,
             ctfe_evaluator,
+            const_as_let: false,
         })
     }
 
@@ -124,6 +125,24 @@ impl<'db> CompiledModules<'db> {
         let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
         self.script_compiler(db, evaluator)
     }
+
+    /// Create a script compiler with const-as-let mode enabled.
+    ///
+    /// In this mode, function-level const statements are lowered as let statements
+    /// (runtime evaluation) instead of using CTFE. Module/script-level consts that
+    /// are pre-resolved still use CTFE.
+    ///
+    /// Returns `None` if module compilation failed (has errors).
+    pub fn script_compiler_constlet(
+        &self,
+        db: &'db dyn salsa::Database,
+    ) -> Option<ScriptCompiler<'db>> {
+        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+        self.script_compiler(db, evaluator).map(|mut c| {
+            c.const_as_let = true;
+            c
+        })
+    }
 }
 
 /// Script compiler for compiling script units.
@@ -139,6 +158,8 @@ pub struct ScriptCompiler<'db> {
     last_batch_spec: Option<ScriptBatchSpec<'db>>,
     /// CTFE evaluator for const expression evaluation.
     ctfe_evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    /// When true, lower function-level const statements as let statements.
+    const_as_let: bool,
 }
 
 impl<'db> ScriptCompiler<'db> {
@@ -385,7 +406,11 @@ impl<'db> ScriptCompiler<'db> {
                     None
                 };
 
-                match lower_script_fragment_raw(
+                let lowering_options = LoweringOptions {
+                    const_as_let: self.const_as_let,
+                };
+
+                match lower_script_fragment_raw_with_options(
                     self.db,
                     expr_types,
                     call_targets,
@@ -396,6 +421,7 @@ impl<'db> ScriptCompiler<'db> {
                     script_analysis,
                     Some(&func_param_types),
                     pre_resolved,
+                    &lowering_options,
                 ) {
                     Ok(ir_unit) => {
                         let exports = ir_unit.exports.clone();

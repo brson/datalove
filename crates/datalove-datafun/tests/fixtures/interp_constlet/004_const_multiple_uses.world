@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+fun sum_consts(): u32
+    const X: u32 = 5
+    ret X + X + X
+end fun
+
+debuglog sum_consts()

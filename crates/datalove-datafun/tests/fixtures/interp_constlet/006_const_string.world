@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+fun greeting(): str
+    const MSG: str = "hello"
+    ret MSG
+end fun
+
+debuglog greeting()

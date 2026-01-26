@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+fun compute(): int
+    const RESULT: int = 10 + 20
+    ret RESULT
+end fun
+
+debuglog compute()

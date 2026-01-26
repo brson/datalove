@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+fun check(): bool
+    const FLAG: bool = true
+    ret FLAG
+end fun
+
+debuglog check()
