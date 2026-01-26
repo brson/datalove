@@ -220,6 +220,7 @@ pub fn lower_module<'db>(
     ownership_analysis: SingleModuleAnalysis<'db>,
     func_id_map: FuncIdMap<'db>,
     pre_resolved_consts: Option<ModulePreResolvedConsts>,
+    const_as_let: bool,
 ) -> SingleModuleLoweringResult<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -338,7 +339,7 @@ pub fn lower_module<'db>(
                 resolved_params,
                 None, // ctfe_evaluator
                 module_consts_ref,
-                false, // const_as_let
+                const_as_let,
             ) {
                 Ok(ir_func) => {
                     functions.push(ir_func);
@@ -486,11 +487,17 @@ pub fn lower_module_graph_with_evaluator<'db>(
     ownership_analysis: ModuleGraphAnalysis<'db>,
     mode: ParallelMode,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    const_as_let: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     let db_salsa = db.as_salsa_db();
 
     // Phase 1: Pre-evaluate all module consts using the CTFE evaluator.
-    let pre_resolved_consts = evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator);
+    // Skip if const_as_let is enabled - function-level consts will be lowered as let bindings.
+    let pre_resolved_consts = if const_as_let {
+        HashMap::new()
+    } else {
+        evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator)
+    };
 
     // Collect CTFE errors from all modules.
     let ctfe_errors: Vec<(ModuleId, Vec<String>)> = pre_resolved_consts.iter()
@@ -501,10 +508,10 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // Phase 2: Lower modules with pre-resolved consts.
     let mut result = match mode {
         ParallelMode::Sequential => {
-            lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts)
+            lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts, const_as_let)
         }
         ParallelMode::Parallel => {
-            lower_module_graph_parallel_with_pre_resolved(db, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts)
+            lower_module_graph_parallel_with_pre_resolved(db, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts, const_as_let)
         }
     };
 
@@ -549,6 +556,7 @@ fn lower_module_graph_with_pre_resolved<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     pre_resolved_consts: &HashMap<ModuleId, ModulePreResolvedConsts>,
+    const_as_let: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     let graph = parsed_graph.graph(db);
 
@@ -601,6 +609,7 @@ fn lower_module_graph_with_pre_resolved<'db>(
             single_ownership_analysis,
             func_id_map,
             pre_resolved,
+            const_as_let,
         );
 
         if !result.errors(db).is_empty() {
@@ -624,6 +633,7 @@ fn lower_module_graph_parallel_with_pre_resolved<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     pre_resolved_consts: &HashMap<ModuleId, ModulePreResolvedConsts>,
+    const_as_let: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     use rayon::prelude::*;
 
@@ -671,12 +681,13 @@ fn lower_module_graph_parallel_with_pre_resolved<'db>(
                 single_typecheck,
                 single_ownership_analysis,
                 pre_resolved,
+                const_as_let,
             ))
         })
         .collect();
 
     // Lower modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_ownership_analysis, pre_resolved)| {
+    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_ownership_analysis, pre_resolved, const_as_let)| {
         let db_s = db_clone.as_salsa_db();
 
         // This populates the cache.
@@ -689,10 +700,11 @@ fn lower_module_graph_parallel_with_pre_resolved<'db>(
             single_ownership_analysis,
             func_id_map,
             pre_resolved,
+            const_as_let,
         );
     });
 
     // Delegate to sequential function which aggregates results.
     // All lower_module calls will be cache hits from the parallel phase.
-    lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, pre_resolved_consts)
+    lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, pre_resolved_consts, const_as_let)
 }

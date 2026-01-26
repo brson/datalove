@@ -56,6 +56,9 @@ pub fn analyze_worldfile_constlet(
     // Build pipeline from sections.
     let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
 
+    // Enable const_as_let mode for module function-level consts.
+    pipeline.set_const_as_let(true);
+
     // Compile modules (typecheck, drop analysis, lower).
     let (compiled, db) = pipeline.compile(db);
 

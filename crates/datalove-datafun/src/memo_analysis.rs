@@ -356,7 +356,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
         let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
         let lowering_result = lower_module_graph_with_evaluator(
             &db, parsed_graph, typecheck_result, ownership_analysis,
-            ParallelMode::Sequential, evaluator,
+            ParallelMode::Sequential, evaluator, false,
         );
         let lower_log = disable_query_logging();
         let lowered_modules: BTreeSet<String> = get_executed_modules(&lower_log, "lower")

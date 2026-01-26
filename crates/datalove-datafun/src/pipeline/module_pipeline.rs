@@ -48,6 +48,9 @@ use super::compiled_modules::{SharedModuleContext, CompiledModules};
 /// Use `compile_fresh` for initial compilation, then `compile` for incremental updates.
 pub struct ModuleCompilationPipeline {
     world: IncrementalModuleWorld,
+    /// If true, function-level consts in modules are lowered as let bindings
+    /// instead of being evaluated at compile time.
+    const_as_let: bool,
 }
 
 impl ModuleCompilationPipeline {
@@ -55,7 +58,17 @@ impl ModuleCompilationPipeline {
     pub fn new() -> Self {
         Self {
             world: IncrementalModuleWorld::new(),
+            const_as_let: false,
         }
+    }
+
+    /// Enable const_as_let mode for function-level consts in modules.
+    ///
+    /// When enabled, function-level const bindings are lowered as let bindings
+    /// instead of being evaluated at compile time. This allows const expressions
+    /// to call functions.
+    pub fn set_const_as_let(&mut self, enabled: bool) {
+        self.const_as_let = enabled;
     }
 
     /// Create a pipeline from worldfile sections.
@@ -251,6 +264,7 @@ impl ModuleCompilationPipeline {
                 output.ownership_analysis,
                 mode,
                 evaluator,
+                self.const_as_let,
             ))
         } else {
             None

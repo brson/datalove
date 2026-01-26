@@ -1,0 +1,50 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/chain"),
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "line 3, col 9: error[F016]: mismatched types: expected `u32`, found `int`",
+                    "line 7, col 9: error[F016]: mismatched types: expected `u32`, found `int`",
+                ],
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

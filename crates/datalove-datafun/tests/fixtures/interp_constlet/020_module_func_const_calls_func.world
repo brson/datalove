@@ -1,0 +1,25 @@
+----------
+module local/test/constcall
+----------
+
+fun helper(): u32
+    ret 75
+end fun
+
+fun get_value(): u32
+    const X: u32 = helper()
+    ret X
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/constcall
+import constcall.get_value
+
+----------
+scriptunit-expr
+----------
+
+get_value()

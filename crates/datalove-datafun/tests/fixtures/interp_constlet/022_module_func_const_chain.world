@@ -1,0 +1,30 @@
+----------
+module local/test/chain
+----------
+
+fun double(x: u32): u32
+    ret x * 2
+end fun
+
+fun add_ten(x: u32): u32
+    ret x + 10
+end fun
+
+fun compute(): u32
+    const A: u32 = double(5)
+    const B: u32 = add_ten(A)
+    ret B
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/chain
+import chain.compute
+
+----------
+scriptunit-expr
+----------
+
+compute()

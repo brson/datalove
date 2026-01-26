@@ -1,0 +1,25 @@
+----------
+module local/test/constargs
+----------
+
+fun subtract(a: u32, b: u32): u32
+    ret a - b
+end fun
+
+fun get_diff(): u32
+    const DIFF: u32 = subtract(100, 35)
+    ret DIFF
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/constargs
+import constargs.get_diff
+
+----------
+scriptunit-expr
+----------
+
+get_diff()
