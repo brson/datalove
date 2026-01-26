@@ -88,6 +88,21 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, Co
     }
 }
 
+/// Inline const values into a collection of module functions.
+///
+/// Takes the lowered functions and a map of const names to their evaluated values.
+/// For each function, consts tracked in the function's const_values field are inlined.
+///
+/// This function modifies the functions in place.
+pub fn inline_module_functions(
+    functions: &mut [IrFunction],
+    const_values: &HashMap<String, ConstValue>,
+) {
+    for func in functions {
+        inline_function_consts(func, const_values);
+    }
+}
+
 /// Get the destination ValueId of an instruction, if any.
 ///
 /// This returns the primary dest of an instruction that produces a value.

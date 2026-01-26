@@ -20,6 +20,7 @@ use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
+use crate::const_inline::inline_module_functions;
 use crate::ir_ext::IrTypeExt;
 use crate::lower;
 use crate::tracked_ownership_analysis::{SingleModuleAnalysis, ModuleGraphAnalysis};
@@ -254,7 +255,7 @@ pub fn lower_module<'db>(
     // Get module-level const bindings.
     // If pre-resolved consts are provided (from CTFE evaluation), use those.
     // Otherwise, fall back to simple literal evaluation.
-    let module_consts: HashMap<String, (IrType, ConstValue)> = if let Some(pre_resolved) = pre_resolved_consts {
+    let module_consts: HashMap<String, (IrType, ConstValue)> = if let Some(ref pre_resolved) = pre_resolved_consts {
         pre_resolved.to_hashmap()
     } else {
         // Fallback: evaluate simple literals only (no CTFE evaluator available).
@@ -328,6 +329,8 @@ pub fn lower_module<'db>(
             // Note: ctfe_evaluator is None because tracked functions can't take trait objects.
             // Function-level consts are pre-evaluated via evaluate_all_module_consts() when
             // using lower_module_graph_with_evaluator(), supporting full CTFE expressions.
+            // Always use const_as_let=true - consts are lowered as let bindings
+            // and inlined in a separate pass after lowering.
             match lower::lower_function_for_module(
                 db,
                 expr_types,
@@ -339,7 +342,7 @@ pub fn lower_module<'db>(
                 resolved_params,
                 None, // ctfe_evaluator
                 module_consts_ref,
-                const_as_let,
+                true, // const_as_let - always true now
             ) {
                 Ok(ir_func) => {
                     functions.push(ir_func);
@@ -348,6 +351,21 @@ pub fn lower_module<'db>(
                     errors.push(format!("Lowering error in {}: {}", func_name, e));
                 }
             }
+        }
+    }
+
+    // Inline evaluated const values into the lowered functions.
+    // Skip inlining in const_as_let test mode (when no pre_resolved_consts provided
+    // and const_as_let flag is true, we want consts evaluated at runtime).
+    if !const_as_let {
+        if let Some(ref pre_resolved) = pre_resolved_consts {
+            // Build const values map from pre-resolved consts.
+            // Pre-resolved consts have qualified names like "func_name::const_name".
+            let const_values: HashMap<String, ConstValue> = pre_resolved.consts
+                .iter()
+                .map(|(name, _ir_type, value)| (name.clone(), value.clone()))
+                .collect();
+            inline_module_functions(&mut functions, &const_values);
         }
     }
 
