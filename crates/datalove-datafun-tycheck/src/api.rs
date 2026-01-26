@@ -10,7 +10,7 @@ use datalove_ct::query_log::{log_query, QueryPhase};
 
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
-use crate::context::{TypeContext, ScriptTypeContext, ScriptTypecheckResultRaw, ExprTypecheckResultRaw};
+use crate::context::TypeContext;
 use crate::statement::check_statement;
 use crate::types::{convert_type_hint_with_aliases, unit_type};
 
@@ -24,7 +24,6 @@ pub use crate::{
     TypeError,
     TypeErrorEntry,
     ResolvedCallTarget,
-    TypecheckResult,
     ScriptUnitKind,
     ScriptUnitSpec,
     ScriptBatchSpec,
@@ -254,187 +253,6 @@ pub fn type_check_single_script<'db>(
     let batch_spec = create_batch_spec(db, source, vec![unit_spec], vec![]);
     let results = type_check_script_units(db, batch_spec);
     results.results(db)[0]
-}
-
-/// Typecheck a script with prior bindings from previous units.
-///
-/// Non-salsa version that accepts a script type context.
-/// Returns raw results (not salsa-tracked) to allow use outside tracked functions.
-pub fn type_check_script_with_context<'db>(
-    db: &'db dyn crate::Db,
-    spans: DatafunSpans,
-    parsed: ParsedStatements<'db>,
-    prior_ctx: &ScriptTypeContext<'db>,
-) -> ScriptTypecheckResultRaw<'db> {
-    let mut ctx = TypeContext::new(db, spans);
-
-    // Seed with prior bindings.
-    for (name, (ty, is_mutable)) in &prior_ctx.variables {
-        ctx.add_variable(*name, ty.clone(), *is_mutable);
-    }
-    for (name, func_ty) in &prior_ctx.functions {
-        ctx.add_function(*name, *func_ty);
-    }
-
-    // Name resolution: collect type aliases and function signatures.
-    let collected = resolve_names_impl(db, &parsed.statements, true);
-    ctx.seed_from_collected_names(&collected, None);
-
-    // Typecheck all statements.
-    for statement in &parsed.statements {
-        check_statement(&mut ctx, &statement);
-    }
-
-    // Emit pending diagnostics with local spans.
-    ctx.emit_pending_diagnostics();
-
-    ScriptTypecheckResultRaw {
-        root_parsed: parsed,
-        errors: ctx.errors,
-        expr_types: ctx.expr_types,
-        call_targets: ctx.call_targets,
-    }
-}
-
-/// Typecheck an expression with prior bindings from previous units.
-///
-/// Non-salsa version that accepts a script type context.
-/// Returns raw results (not salsa-tracked) to allow use outside tracked functions.
-pub fn type_check_expr_with_context<'db>(
-    db: &'db dyn crate::Db,
-    spans: DatafunSpans,
-    expr: ExprFun<'db>,
-    prior_ctx: &ScriptTypeContext<'db>,
-) -> ExprTypecheckResultRaw<'db> {
-    let mut ctx = TypeContext::new(db, spans);
-
-    // Seed with prior bindings.
-    for (name, (ty, is_mutable)) in &prior_ctx.variables {
-        ctx.add_variable(*name, ty.clone(), *is_mutable);
-    }
-    for (name, func_ty) in &prior_ctx.functions {
-        ctx.add_function(*name, *func_ty);
-    }
-
-    let _ = ctx.synthesize_expr(expr);
-
-    // Emit pending diagnostics with local spans.
-    ctx.emit_pending_diagnostics();
-
-    ExprTypecheckResultRaw {
-        errors: ctx.errors,
-        expr_types: ctx.expr_types,
-    }
-}
-
-/// Typecheck a script with module graph support.
-///
-/// This version of type_check allows scripts to import functions from modules
-/// in the module graph. Used for script units that define functions requiring
-/// access to imported function signatures.
-///
-/// Takes a `ParsedModuleGraph` which contains pre-parsed statements for each module.
-#[salsa::tracked]
-pub fn type_check_with_module_graph<'db>(
-    db: &'db dyn crate::Db,
-    spans: DatafunSpans,
-    parsed: ParsedStatements<'db>,
-    parsed_graph: ParsedModuleGraph<'db>,
-    graph_typecheck: ModuleGraphTypecheckResult<'db>,
-) -> TypecheckResult<'db> {
-    let graph = parsed_graph.graph(db);
-    let mut ctx = TypeContext::new(db, spans);
-
-    // Build path-to-id map from the module graph.
-    let mut path_to_id: HashMap<String, ModuleId> = HashMap::new();
-    for module in graph.iter_modules(db) {
-        let id = module.id(db);
-        path_to_id.insert(id.path(db).C(), id);
-    }
-
-    // Build a map of function ASTs per module from pre-parsed statements.
-    let mut module_function_asts: HashMap<ModuleId, HashMap<InternedText<'db>, StmtFun<'db>>> = HashMap::new();
-    for (module_id, module_parsed) in parsed_graph.statements_only(db) {
-        let mut funcs = HashMap::new();
-        for statement in &module_parsed.statements {
-            if let Statement::Fun(func) = statement {
-                funcs.insert(func.name(db), *func);
-            }
-        }
-        module_function_asts.insert(*module_id, funcs);
-    }
-
-    // Build module alias map from require statements.
-    let module_exports_map = graph_typecheck.module_exports(db);
-    let alias_map = build_module_alias_map_for_graph(db, &parsed, &path_to_id);
-
-    // Process import statements to populate function signatures.
-    for statement in &parsed.statements {
-        if let Statement::Import(import) = statement {
-            let module_name = import.module_name;
-            let item_name = import.item_name;
-
-            // Look up the module in the alias map.
-            if let Some(&source_module_id) = alias_map.get(&module_name) {
-                // Look up the module exports.
-                if let Some(exports) = module_exports_map.get(&source_module_id) {
-                    // Look up the function in the exports.
-                    let func_opt = exports.functions(db).iter()
-                        .find(|(name, _)| *name == item_name)
-                        .map(|(_, func_type)| *func_type);
-
-                    if let Some(func_type) = func_opt {
-                        // Look up the function AST from the source module.
-                        if let Some(source_funcs) = module_function_asts.get(&source_module_id) {
-                            if let Some(&func_ast) = source_funcs.get(&item_name) {
-                                ctx.add_imported_function(item_name, func_type, func_ast, source_module_id);
-                            } else {
-                                ctx.add_function(item_name, func_type);
-                            }
-                        } else {
-                            ctx.add_function(item_name, func_type);
-                        }
-                    } else {
-                        ctx.add_error(TypeError::UnresolvedName(
-                            format!("{}.{}", module_name.as_str(db), item_name.as_str(db))
-                        ));
-                    }
-                } else {
-                    ctx.add_error(TypeError::UnresolvedName(
-                        format!("module {} (not typechecked)", module_name.as_str(db))
-                    ));
-                }
-            } else {
-                ctx.add_error(TypeError::UnresolvedName(
-                    format!("module {} (not required)", module_name.as_str(db))
-                ));
-            }
-        }
-    }
-
-    // Name resolution: collect type aliases and function signatures.
-    // Scripts with module graphs pre-collect functions (like modules).
-    let collected = resolve_names_impl(db, &parsed.statements, true);
-    ctx.seed_from_collected_names(&collected, None);
-
-    // Typecheck all statements (including function bodies).
-    for statement in &parsed.statements {
-        check_statement(&mut ctx, &statement);
-    }
-
-    // Emit pending diagnostics with local spans.
-    ctx.emit_pending_diagnostics();
-
-    let errors = ctx
-        .errors
-        .into_iter()
-        .map(|e| TypeErrorEntry::new(db, e))
-        .collect();
-
-    // Extract function types for lowering (needed when type aliases are used in params).
-    let function_types: Vec<_> = ctx.functions.into_iter().collect();
-
-    TypecheckResult::new(db, parsed, errors, ctx.expr_types, ctx.call_targets, function_types)
 }
 
 /// Typecheck a module graph (package-agnostic).
@@ -728,41 +546,6 @@ fn emit_pending_diagnostics_for_module<'db>(
 ) {
     let span_lookup = crate::emit::ModuleGraphSpanLookup::new(parsed_graph, module_id);
     crate::emit::emit_pending_diagnostics(db, pending, &span_lookup);
-}
-
-/// Build module alias map from require module statements for ModuleGraph.
-///
-/// Maps module aliases to ModuleIds by parsing require statements and matching
-/// against the path_to_id map.
-fn build_module_alias_map_for_graph<'db>(
-    db: &'db dyn crate::Db,
-    parsed: &ParsedStatements<'db>,
-    path_to_id: &HashMap<String, ModuleId>,
-) -> HashMap<InternedText<'db>, ModuleId> {
-    let mut alias_map = HashMap::new();
-
-    for statement in &parsed.statements {
-        if let Statement::Require(StmtRequire::Module(req)) = statement {
-            let import_space = req.import_space;
-            let package_alias = req.package_alias;
-            let module_alias = req.module_alias;
-
-            // Build the module path from the require statement.
-            let path = format!(
-                "{}/{}/{}",
-                import_space.as_str(db),
-                package_alias.as_str(db),
-                module_alias.as_str(db)
-            );
-
-            // Look up the ModuleId by path.
-            if let Some(&module_id) = path_to_id.get(&path) {
-                alias_map.insert(module_alias, module_id);
-            }
-        }
-    }
-
-    alias_map
 }
 
 // ============================================================================

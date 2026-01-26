@@ -761,9 +761,6 @@ pub use api::{
     create_batch_spec,
     type_check_script_units,
     type_check_single_script,
-    type_check_script_with_context,
-    type_check_expr_with_context,
-    type_check_with_module_graph,
     typecheck_module_graph,
     typecheck_module_graph_parallel,
     typecheck_module_graph_with_mode,
@@ -785,13 +782,7 @@ pub use api::{
 };
 
 // Re-export context types.
-pub use context::{
-    TypeContext,
-    ScriptTypeContext,
-    ScriptTypecheckResultRaw,
-    ExprTypecheckResultRaw,
-    build_function_type_from_stmt,
-};
+pub use context::TypeContext;
 
 // Re-export statement functions.
 pub use statement::{collect_function_signature, collect_type_aliases};
