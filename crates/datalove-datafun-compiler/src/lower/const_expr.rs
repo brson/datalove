@@ -111,6 +111,7 @@ fn lower_const_expr_to_unit<'db>(
         symbols: SymbolTable::new(),
         result: Some(result_value),
         exports: Vec::new(),
+        const_values: Vec::new(),
     })
 }
 
@@ -246,6 +247,7 @@ fn lower_const_expr_to_unit_standalone<'db>(
         symbols: SymbolTable::new(),
         result: Some(result_value),
         exports: Vec::new(),
+        const_values: Vec::new(),
     })
 }
 

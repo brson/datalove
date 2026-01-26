@@ -195,6 +195,8 @@ fn lower_statement_impl<'db>(
                 ctx.bind_var(&name, operand);
                 // Record binding operand for drop schedule.
                 ctx.record_binding_operand(operand);
+                // Track as const for const inlining pass.
+                ctx.body.const_values.push((name, value_id));
                 return Ok(());
             }
 

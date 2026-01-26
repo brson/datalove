@@ -192,6 +192,7 @@ pub fn lower_function_body<'db>(
         slot_types: std::mem::take(&mut ctx.body.slot_types),
         tracked_slots: ctx.compute_tracked_slots(),
         tracked_params: ctx.compute_tracked_params(),
+        const_values: std::mem::take(&mut ctx.body.const_values),
     })
 }
 

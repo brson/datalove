@@ -84,6 +84,9 @@ pub struct FrameState {
     pub next_stmt_id: usize,
     /// Current statement index in the parent body (for drop schedule lookup).
     pub current_stmt_idx: Option<usize>,
+    /// Const bindings in this frame: (name, value_id).
+    /// Used for const inlining pass.
+    pub const_values: Vec<(String, ValueId)>,
 }
 
 impl FrameState {
@@ -114,6 +117,7 @@ impl FrameState {
             pending_intermediate_scopes: Vec::new(),
             next_stmt_id: 0,
             current_stmt_idx: None,
+            const_values: Vec::new(),
         }
     }
 }

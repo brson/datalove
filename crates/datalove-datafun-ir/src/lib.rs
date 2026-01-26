@@ -1230,6 +1230,13 @@ pub struct IrFunction {
     /// subsequent writes should destroy the old value.
     #[serde(default)]
     pub tracked_params: Vec<ParamId>,
+    /// Const bindings in this function: (name, value_id).
+    ///
+    /// Used by const inlining pass to identify which values to fold.
+    /// After inlining, these bindings have their defining instruction
+    /// replaced with a Const literal.
+    #[serde(default)]
+    pub const_values: Vec<(String, ValueId)>,
 }
 
 impl IrFunction {
@@ -1290,6 +1297,13 @@ pub struct IrScriptUnit {
     pub result: Option<ValueId>,
     /// Names exported to later units.
     pub exports: Vec<(String, ExportBinding)>,
+    /// Script-level const bindings: (name, value_id).
+    ///
+    /// Used by const inlining pass to identify which values to fold.
+    /// After inlining, these bindings have their defining instruction
+    /// replaced with a Const literal.
+    #[serde(default)]
+    pub const_values: Vec<(String, ValueId)>,
 }
 
 // ============================================================================

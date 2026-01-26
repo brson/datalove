@@ -9,6 +9,9 @@ pub mod ir_ext;
 // Compile-time function evaluation (CTFE).
 pub mod const_eval;
 
+// Const inlining pass.
+pub mod const_inline;
+
 // IR lowering from AST to IR.
 pub mod lower;
 

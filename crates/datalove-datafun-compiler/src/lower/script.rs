@@ -146,6 +146,7 @@ pub fn lower_script_unit<'db>(
         symbols: ctx.symbols,
         result,
         exports: ctx.exports,
+        const_values: std::mem::take(&mut ctx.body.const_values),
     })
 }
 
@@ -259,6 +260,7 @@ pub fn lower_script_fragment_raw<'db>(
         symbols: ctx.symbols,
         result: None,
         exports: ctx.exports,
+        const_values: std::mem::take(&mut ctx.body.const_values),
     })
 }
 
@@ -301,6 +303,7 @@ pub fn lower_script_expr<'db>(
         symbols: ctx.symbols,
         result: Some(value_id),
         exports: ctx.exports,
+        const_values: Vec::new(), // Expression units don't have const bindings.
     })
 }
 
@@ -592,7 +595,9 @@ fn lower_statement_for_script<'db>(
                 // Record binding operand for drop schedule.
                 ctx.record_binding_operand(operand);
                 // Export the binding (script-level consts become exported values).
-                ctx.exports.push((name, ExportBinding::Value(value_id)));
+                ctx.exports.push((name.clone(), ExportBinding::Value(value_id)));
+                // Track as const for const inlining pass.
+                ctx.body.const_values.push((name, value_id));
                 return Ok(());
             }
 

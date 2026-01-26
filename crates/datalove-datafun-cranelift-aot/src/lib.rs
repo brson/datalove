@@ -282,6 +282,7 @@ impl AotCompiler {
             slot_types: unit.slot_types.clone(),
             tracked_slots: unit.tracked_slots.clone(),
             tracked_params: vec![],
+            const_values: unit.const_values.clone(),
         }
     }
 
