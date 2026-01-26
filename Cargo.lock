@@ -1054,6 +1054,7 @@ dependencies = [
  "datalove-datafun",
  "datalove-datafun-compiler",
  "datalove-datafun-cranelift-jit",
+ "datalove-datafun-interp",
  "datalove-datafun-tycheck",
  "divan",
 ]

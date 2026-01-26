@@ -12,6 +12,7 @@ datalove-datafun-compiler = { path = "../datalove-datafun-compiler" }
 datalove-datafun-tycheck = { path = "../datalove-datafun-tycheck" }
 datalove-datafun = { path = "../datalove-datafun" }
 datalove-datafun-cranelift-jit = { path = "../datalove-datafun-cranelift-jit" }
+datalove-datafun-interp = { path = "../datalove-datafun-interp" }
 bct.workspace = true
 
 [[bench]]
