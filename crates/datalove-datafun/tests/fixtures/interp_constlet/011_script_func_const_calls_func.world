@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+fun helper(): u32
+    ret 50
+end fun
+
+fun main_func(): u32
+    const X: u32 = helper()
+    ret X
+end fun
+
+----------
+scriptunit-expr
+----------
+
+main_func()

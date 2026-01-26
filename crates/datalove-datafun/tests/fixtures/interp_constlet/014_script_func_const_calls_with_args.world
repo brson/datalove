@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+fun multiply(a: u32, b: u32): u32
+    ret a * b
+end fun
+
+fun compute(): u32
+    const PRODUCT: u32 = multiply(6, 7)
+    ret PRODUCT
+end fun
+
+----------
+scriptunit-expr
+----------
+
+compute()

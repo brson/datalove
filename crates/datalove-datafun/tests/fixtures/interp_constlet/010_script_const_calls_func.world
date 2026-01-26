@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+fun compute(): u32
+    ret 100
+end fun
+
+const RESULT: u32 = compute()
+
+----------
+scriptunit-expr
+----------
+
+RESULT

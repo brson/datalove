@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
-use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts, evaluate_script_function_consts, PreResolvedConsts, ScriptLowerOptions};
+use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts, evaluate_script_function_consts, PreResolvedConsts, ScriptLowerOptions, ScriptFunctionConstsResult};
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, build_func_id_map, collect_const_graph,
 };
@@ -438,7 +438,8 @@ impl<'db> ScriptCompiler<'db> {
         let const_graph = collect_const_graph(self.db, stmts.clone(), typecheck.result);
 
         // Evaluate script-level consts.
-        let resolved_consts = if !const_graph.is_empty() {
+        // Skip if const_as_let is enabled - consts will be lowered as let bindings.
+        let resolved_consts = if !self.const_as_let && !const_graph.is_empty() {
             match evaluate_consts(
                 self.db,
                 &const_graph,
@@ -475,13 +476,18 @@ impl<'db> ScriptCompiler<'db> {
             .collect();
 
         // Evaluate function-level consts.
-        let func_consts_result = evaluate_script_function_consts(
-            self.db,
-            stmts,
-            typecheck.expr_types,
-            &script_level_consts,
-            self.ctfe_evaluator.clone(),
-        );
+        // Skip if const_as_let is enabled - consts will be lowered as let bindings.
+        let func_consts_result = if !self.const_as_let {
+            evaluate_script_function_consts(
+                self.db,
+                stmts,
+                typecheck.expr_types,
+                &script_level_consts,
+                self.ctfe_evaluator.clone(),
+            )
+        } else {
+            ScriptFunctionConstsResult::empty()
+        };
 
         if !func_consts_result.errors.is_empty() {
             self.accumulated_unit_specs.pop();

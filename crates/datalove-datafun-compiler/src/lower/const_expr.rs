@@ -362,6 +362,16 @@ pub struct ScriptFunctionConstsResult {
     pub errors: Vec<String>,
 }
 
+impl ScriptFunctionConstsResult {
+    /// Create an empty result (no consts, no errors).
+    pub fn empty() -> Self {
+        Self {
+            consts: HashMap::new(),
+            errors: Vec::new(),
+        }
+    }
+}
+
 /// Evaluate function-level consts in script functions.
 ///
 /// This extends Phase 2 to also evaluate consts defined inside function bodies.

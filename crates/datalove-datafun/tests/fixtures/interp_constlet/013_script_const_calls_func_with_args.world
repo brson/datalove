@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+fun add(a: u32, b: u32): u32
+    ret a + b
+end fun
+
+const SUM: u32 = add(10, 20)
+
+----------
+scriptunit-expr
+----------
+
+SUM
