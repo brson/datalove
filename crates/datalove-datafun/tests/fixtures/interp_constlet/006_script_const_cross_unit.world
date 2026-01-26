@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+const MAGIC: u32 = 123
+let result = MAGIC
+
+----------
+scriptunit-expr
+----------
+
+result

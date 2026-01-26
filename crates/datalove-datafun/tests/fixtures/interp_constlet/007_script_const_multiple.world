@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+const A: u32 = 10
+const B: u32 = 20
+const C: u32 = 30
+let sum = A
+
+----------
+scriptunit-expr
+----------
+
+sum

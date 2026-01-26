@@ -198,8 +198,11 @@ pub fn lower_script_fragment_raw<'db>(
     ctx.set_const_as_let(options.const_as_let);
 
     // Pre-populate const bindings from Phase 2 resolved values.
-    if let Some(ref pre_resolved) = resolved_consts {
-        ctx.add_resolved_consts(pre_resolved.graph, pre_resolved.values);
+    // Skip this when const_as_let is enabled - consts will be lowered as let bindings.
+    if !options.const_as_let {
+        if let Some(ref pre_resolved) = resolved_consts {
+            ctx.add_resolved_consts(pre_resolved.graph, pre_resolved.values);
+        }
     }
 
     // Use pre-computed script analysis from ownership analysis phase.
@@ -578,8 +581,20 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Const(const_stmt) => {
-            // Const bindings are evaluated at compile time.
             let name = const_stmt.name.text(ctx.db).to_string();
+            let init_expr = const_stmt.value;
+
+            // In const_as_let mode, lower const as let binding (for both script and function level).
+            if ctx.const_as_let() {
+                let value_id = lower_expression(ctx, init_expr)?;
+                let operand = Operand::Value(value_id);
+                ctx.bind_var(&name, operand);
+                // Record binding operand for drop schedule.
+                ctx.record_binding_operand(operand);
+                // Export the binding (script-level consts become exported values).
+                ctx.exports.push((name, ExportBinding::Value(value_id)));
+                return Ok(());
+            }
 
             // Check if already pre-resolved (from Phase 2).
             if ctx.lookup_const(&name).is_some() {
@@ -587,7 +602,6 @@ fn lower_statement_for_script<'db>(
             }
 
             // Evaluate the const expression using CTFE.
-            let init_expr = const_stmt.value;
             let ir_type = ctx.expr_type(init_expr);
             let value = super::const_expr::eval_const_expr(ctx, init_expr)?;
             ctx.add_const(name, ir_type, value);

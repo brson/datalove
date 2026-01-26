@@ -14,11 +14,11 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 999u32
+                        v0 = const 123u32
                         unit_end
                     exports:
-                        SCRIPT_CONST = v0
-                        x = v0
+                        MAGIC = v0
+                        result = v0
                 """,
             ),
             output: "(fragment executed)",
@@ -41,7 +41,7 @@ Analysis(
                         unit_end v0
                 """,
             ),
-            output: "999",
+            output: "123",
         ),
     ],
 )
