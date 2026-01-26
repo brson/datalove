@@ -1,0 +1,18 @@
+[package]
+name = "datalove-datafun-resolve"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[features]
+index-64 = ["datalove-datalit/index-64"]
+
+[dependencies]
+rmx.workspace = true
+bct.workspace = true
+salsa.workspace = true
+rayon.workspace = true
+datalove-ct.path = "../datalove-ct"
+datalove-datafun-ast.path = "../datalove-datafun-ast"
+datalove-datalit.path = "../datalove-datalit"

@@ -257,11 +257,14 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let script = datalove_datafun_parser::parse_for_diagnostics(&db, source);
     let spans = datalove_datafun_parser::datafun_spans(&db, source);
 
+    // Resolve names for the script.
+    let name_resolution = datalove_datafun_resolve::resolve_script_names(&db, source, script.clone());
+
     // Use the tracked functions directly so we can get accumulated diagnostics.
     let unit_spec = datalove_datafun_tycheck::ScriptUnitSpec::new(
         source,
         spans,
-        datalove_datafun_tycheck::ScriptUnitKind::Fragment(script.clone()),
+        datalove_datafun_tycheck::ScriptUnitKind::Fragment(script.clone(), name_resolution),
     );
     let batch_spec = datalove_datafun_tycheck::create_batch_spec(&db, source, vec![unit_spec], vec![]);
     let results = datalove_datafun_tycheck::type_check_script_units(&db, batch_spec);

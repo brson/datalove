@@ -1,5 +1,6 @@
 use rmx::prelude::*;
 
+use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps};
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
@@ -793,7 +794,10 @@ impl TypecheckStdCommand {
         let graph_with_requires = datafun::to_module_graph(&db, package_world, pkg_graph);
         let module_graph = graph_with_requires.graph;
         let parsed_graph = datafun::module_graph::parse_module_graph(&db, module_graph, graph_with_requires.resolved_requires);
-        let typecheck_result = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed_graph);
+        let all_names = resolve_all_names(&db, parsed_graph);
+        let all_exports = resolve_all_exports(&db, parsed_graph);
+        let all_function_asts = build_all_function_ast_maps(&db, parsed_graph);
+        let typecheck_result = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed_graph, all_names, all_exports, all_function_asts);
 
         // Report typecheck errors.
         let module_errors = typecheck_result.module_errors(&db);

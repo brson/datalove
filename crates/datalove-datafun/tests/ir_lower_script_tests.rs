@@ -9,6 +9,7 @@ use std::path::Path;
 use std::collections::HashMap;
 use std::rc::Rc;
 use datalove_datafun as datafun;
+use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_compiler::lower::{self, ScriptLowerContext, PreResolvedConsts, evaluate_consts};
 use datalove_datafun_compiler::ownership_analysis;
@@ -82,7 +83,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
                 // Typecheck to get expression types using production path.
                 let spans = datalove_datafun_parser::datafun_spans(&db, source_obj);
-                let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj, spans, parsed_ast);
+                let name_resolution = resolve_script_names(&db, source_obj, parsed_ast.clone());
+                let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj, spans, parsed_ast, name_resolution);
                 let expr_types = tycheck_result.expr_types(&db);
                 let call_targets = tycheck_result.call_targets(&db);
 

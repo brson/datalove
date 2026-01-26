@@ -888,6 +888,21 @@ mod tests {
     // ========================================================================
 
     use datalove_datafun_tycheck::typecheck_module_graph;
+    use datalove_datafun_resolve::{
+        resolve_all_names, resolve_all_exports, build_all_function_ast_maps,
+        ParsedModuleGraph,
+    };
+
+    /// Helper that calls resolve functions and then typecheck_module_graph.
+    fn resolve_and_typecheck<'db>(
+        db: &'db dyn salsa::Database,
+        parsed: ParsedModuleGraph<'db>,
+    ) -> datalove_datafun_tycheck::ModuleGraphTypecheckResult<'db> {
+        let all_names = resolve_all_names(db, parsed);
+        let all_exports = resolve_all_exports(db, parsed);
+        let all_function_asts = build_all_function_ast_maps(db, parsed);
+        typecheck_module_graph(db, parsed, all_names, all_exports, all_function_asts)
+    }
 
     #[test]
     fn test_typecheck_records_all_modules() {
@@ -904,7 +919,7 @@ mod tests {
         let parsed = parse_module_graph(&db, graph, requires);
 
         enable_query_logging();
-        let _result = typecheck_module_graph(&db, parsed);
+        let _result = resolve_and_typecheck(&db, parsed);
         let log = disable_query_logging();
 
         let typechecked = get_executed_modules(&log, "typecheck");
@@ -934,7 +949,7 @@ mod tests {
         // First run: both modules should typecheck.
         let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
         enable_query_logging();
-        let _result1 = typecheck_module_graph(&db, parsed1);
+        let _result1 = resolve_and_typecheck(&db, parsed1);
         let log1 = disable_query_logging();
 
         let first_tc = get_executed_modules(&log1, "typecheck");
@@ -951,7 +966,7 @@ mod tests {
         // Second run: only B should re-typecheck.
         let parsed2 = parse_module_graph(&db, graph, requires);
         enable_query_logging();
-        let _result2 = typecheck_module_graph(&db, parsed2);
+        let _result2 = resolve_and_typecheck(&db, parsed2);
         let log2 = disable_query_logging();
 
         let second_tc = get_executed_modules(&log2, "typecheck");
@@ -982,7 +997,7 @@ mod tests {
 
         // First run.
         let parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new());
-        let _result1 = typecheck_module_graph(&db, parsed1);
+        let _result1 = resolve_and_typecheck(&db, parsed1);
 
         // Capture content hash after first run.
         let hash_a1 = parsed1.module_content_hashes(&db)[&id_a];
@@ -990,7 +1005,7 @@ mod tests {
         // Second run with no changes.
         let parsed2 = parse_module_graph(&db, graph, BTreeMap::new());
         enable_query_logging();
-        let _result2 = typecheck_module_graph(&db, parsed2);
+        let _result2 = resolve_and_typecheck(&db, parsed2);
         let log = disable_query_logging();
 
         let typechecked = get_executed_modules(&log, "typecheck");
@@ -1023,7 +1038,7 @@ mod tests {
         // First run.
         let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
         enable_query_logging();
-        let _result1 = typecheck_module_graph(&db, parsed1);
+        let _result1 = resolve_and_typecheck(&db, parsed1);
         let log1 = disable_query_logging();
 
         let first_tc = get_executed_modules(&log1, "typecheck");
@@ -1041,7 +1056,7 @@ mod tests {
         // Second run: only A should re-typecheck.
         let parsed2 = parse_module_graph(&db, graph, requires);
         enable_query_logging();
-        let _result2 = typecheck_module_graph(&db, parsed2);
+        let _result2 = resolve_and_typecheck(&db, parsed2);
         let log2 = disable_query_logging();
 
         let second_tc = get_executed_modules(&log2, "typecheck");
@@ -1077,7 +1092,7 @@ mod tests {
         // First run: both modules should have imports resolved.
         let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
         enable_query_logging();
-        let _result1 = typecheck_module_graph(&db, parsed1);
+        let _result1 = resolve_and_typecheck(&db, parsed1);
         let log1 = disable_query_logging();
 
         let first_resolved = get_executed_modules(&log1, "resolve_imports");
@@ -1087,7 +1102,7 @@ mod tests {
         // Second run with same inputs: should be fully cached.
         let parsed2 = parse_module_graph(&db, graph, requires);
         enable_query_logging();
-        let _result2 = typecheck_module_graph(&db, parsed2);
+        let _result2 = resolve_and_typecheck(&db, parsed2);
         let log2 = disable_query_logging();
 
         let second_resolved = get_executed_modules(&log2, "resolve_imports");
@@ -1113,14 +1128,14 @@ mod tests {
 
         // First: parallel typecheck populates cache (including import resolution).
         let parsed = parse_module_graph(&db, graph.clone(), requires.clone());
-        let _result1 = typecheck_module_graph_parallel(&db, parsed);
+        let _result1 = resolve_and_typecheck_parallel(&db, parsed);
 
         // Clear events after parallel phase.
         db.clear_events();
 
         // Second: sequential should hit cache for everything.
         let parsed2 = parse_module_graph(&db, graph, requires);
-        let _result2 = typecheck_module_graph(&db, parsed2);
+        let _result2 = resolve_and_typecheck(&db, parsed2);
 
         let executed = db.executed_queries();
         let resolve_queries: Vec<_> = executed.iter()
@@ -1237,6 +1252,35 @@ mod tests {
         typecheck_module_graph_with_mode,
         ParallelMode as TypecheckParallelMode,
     };
+    use datalove_datafun_resolve::{
+        resolve_all_names_parallel,
+        DbClone,
+    };
+    // Note: resolve_all_names, resolve_all_exports, build_all_function_ast_maps, ParsedModuleGraph
+    // are already imported in the earlier test section.
+
+    /// Helper that calls resolve functions and then typecheck_module_graph_parallel.
+    fn resolve_and_typecheck_parallel<'db>(
+        db: &'db dyn DbClone,
+        parsed: ParsedModuleGraph<'db>,
+    ) -> datalove_datafun_tycheck::ModuleGraphTypecheckResult<'db> {
+        let all_names = resolve_all_names_parallel(db, parsed);
+        let all_exports = resolve_all_exports(db.as_salsa_db(), parsed);
+        let all_function_asts = build_all_function_ast_maps(db.as_salsa_db(), parsed);
+        typecheck_module_graph_parallel(db, parsed, all_names, all_exports, all_function_asts)
+    }
+
+    /// Helper that calls resolve functions and then typecheck_module_graph_with_mode.
+    fn resolve_and_typecheck_with_mode<'db>(
+        db: &'db dyn DbClone,
+        parsed: ParsedModuleGraph<'db>,
+        mode: TypecheckParallelMode,
+    ) -> datalove_datafun_tycheck::ModuleGraphTypecheckResult<'db> {
+        let all_names = resolve_all_names(db.as_salsa_db(), parsed);
+        let all_exports = resolve_all_exports(db.as_salsa_db(), parsed);
+        let all_function_asts = build_all_function_ast_maps(db.as_salsa_db(), parsed);
+        typecheck_module_graph_with_mode(db, parsed, all_names, all_exports, all_function_asts, mode)
+    }
 
     #[test]
     fn test_parallel_typecheck_is_memoized() {
@@ -1255,7 +1299,7 @@ mod tests {
 
         // First: parallel typecheck populates cache.
         let parsed = parse_module_graph(&db, graph.clone(), BTreeMap::new());
-        let _result1 = typecheck_module_graph_parallel(&db, parsed);
+        let _result1 = resolve_and_typecheck_parallel(&db, parsed);
 
         // Clear events after parallel phase.
         db.clear_events();
@@ -1263,7 +1307,7 @@ mod tests {
         // Second: sequential typecheck should hit cache (warmed by parallel).
         // If parallel didn't populate the cache, this would show typecheck_module executions.
         let parsed2 = parse_module_graph(&db, graph, BTreeMap::new());
-        let _result2 = typecheck_module_graph(&db, parsed2);
+        let _result2 = resolve_and_typecheck(&db, parsed2);
 
         let executed = db.executed_queries();
         let typecheck_queries: Vec<_> = executed.iter()
@@ -1295,7 +1339,7 @@ mod tests {
         let parsed = parse_module_graph(&db, graph, requires);
 
         // Typecheck sequentially.
-        let result_seq = typecheck_module_graph_with_mode(&db, parsed, TypecheckParallelMode::Sequential);
+        let result_seq = resolve_and_typecheck_with_mode(&db, parsed, TypecheckParallelMode::Sequential);
 
         // Typecheck in parallel (on fresh db to avoid cache).
         let db2 = Database::default();
@@ -1306,7 +1350,7 @@ mod tests {
         let mut requires2 = BTreeMap::new();
         requires2.insert(ids2[1], vec![("b".to_string(), ids2[0])]);
         let parsed2 = parse_module_graph(&db2, graph2, requires2);
-        let result_par = typecheck_module_graph_with_mode(&db2, parsed2, TypecheckParallelMode::Parallel);
+        let result_par = resolve_and_typecheck_with_mode(&db2, parsed2, TypecheckParallelMode::Parallel);
 
         // Compare results.
         assert_eq!(
@@ -1351,7 +1395,7 @@ mod tests {
         // First run with sequential to establish baseline (parallel doesn't log queries).
         let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
         enable_query_logging();
-        let _result1 = typecheck_module_graph(&db, parsed1);
+        let _result1 = resolve_and_typecheck(&db, parsed1);
         let log1 = disable_query_logging();
 
         let first_tc = get_executed_modules(&log1, "typecheck");
@@ -1365,7 +1409,7 @@ mod tests {
         // Using sequential typecheck for verification since parallel doesn't log to query_log.
         let parsed2 = parse_module_graph(&db, graph, requires);
         enable_query_logging();
-        let _result2 = typecheck_module_graph(&db, parsed2);
+        let _result2 = resolve_and_typecheck(&db, parsed2);
         let log2 = disable_query_logging();
 
         let second_tc = get_executed_modules(&log2, "typecheck");

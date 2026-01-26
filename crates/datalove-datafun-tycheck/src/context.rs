@@ -20,6 +20,8 @@ pub use crate::{
     TypeFunction,
     TypeError,
     ResolvedCallTarget,
+    ModuleNameResolution,
+    CollectedNames,
 };
 
 /// Context for typechecking.
@@ -412,7 +414,7 @@ impl<'db> TypeContext<'db> {
     /// collection in typecheck_module.
     pub fn seed_from_name_resolution(
         &mut self,
-        name_resolution: &crate::ModuleNameResolution<'db>,
+        name_resolution: &ModuleNameResolution<'db>,
         module_id: Option<ModuleId>,
     ) {
         // Add type aliases.
@@ -442,7 +444,7 @@ impl<'db> TypeContext<'db> {
     /// instead of the tracked `ModuleNameResolution` struct.
     pub fn seed_from_collected_names(
         &mut self,
-        collected: &crate::api::CollectedNames<'db>,
+        collected: &CollectedNames<'db>,
         module_id: Option<ModuleId>,
     ) {
         // Add errors from name resolution.

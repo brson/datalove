@@ -9,52 +9,24 @@ use datalove_datafun_ast::ast::*;
 use datalove_datalit;
 
 use salsa::Database as Db;
-use bct::module_graph::{ModuleId, ModuleGraph};
+use bct::module_graph::ModuleId;
 use datalove_datafun_ast::spans::DatafunSpans;
 
-/// Extension trait for database cloning in parallel execution.
-///
-/// This trait provides a `dyn_clone` method that enables cloning the database
-/// through a trait object. When a database is cloned, salsa creates a new
-/// ZalsaLocal (thread-local state) while sharing the Arc<Zalsa> (global state).
-/// This allows safe parallel query execution across threads.
-///
-/// Implement this trait for your concrete Database types to enable parallel
-/// query execution with rayon.
-pub trait DbClone: salsa::Database {
-    /// Clone the database for use on another thread.
-    ///
-    /// Returns a boxed clone that can be sent to another thread. Each clone
-    /// has its own ZalsaLocal but shares the underlying Zalsa state.
-    fn dyn_clone(&self) -> Box<dyn DbClone + Send>;
-
-    /// Get a reference to self as a salsa::Database trait object.
-    ///
-    /// This allows passing the cloned database to salsa tracked functions
-    /// that expect `&dyn salsa::Database`.
-    fn as_salsa_db(&self) -> &dyn salsa::Database;
-}
-
-/// Controls whether compilation runs sequentially or in parallel.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum ParallelMode {
-    /// Sequential compilation (default, salsa-tracked).
-    #[default]
-    Sequential,
-    /// Parallel compilation with rayon (warms cache, then delegates to sequential).
-    Parallel,
-}
-
-/// Read parallel mode from `DATALOVE_PARALLEL` environment variable.
-///
-/// Returns `ParallelMode::Parallel` if the env var is set (to any value),
-/// otherwise returns `ParallelMode::Sequential`.
-pub fn parallel_mode_from_env() -> ParallelMode {
-    match rmx::std::env::var("DATALOVE_PARALLEL") {
-        Ok(_) => ParallelMode::Parallel,
-        Err(_) => ParallelMode::Sequential,
-    }
-}
+// Re-export shared types from ast crate.
+pub use datalove_datafun_ast::types::{
+    Type,
+    TypeFunction,
+    TypeError,
+    DbClone,
+    ParallelMode,
+    parallel_mode_from_env,
+    ParsedModuleGraph,
+    ModuleNameResolution,
+    AllModuleNameResolutions,
+    CollectedNames,
+    AllModuleExports,
+    AllModuleFunctionAsts,
+};
 
 // Implementation modules.
 mod api;
@@ -67,70 +39,6 @@ pub mod types;
 
 // Re-export emit infrastructure.
 pub use emit::{SpanLookup, LocalSpanLookup, ModuleGraphSpanLookup, emit_pending_diagnostics, format_pending_diagnostics};
-
-/// Type representation for datafun (extends datalit types with function types).
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub enum Type<'db> {
-    /// Datalit type (primitives, collections, etc.).
-    Datalit(datalove_datalit::tycheck::Type<'db>),
-    /// Function type: (param_types) -> return_type.
-    Function(TypeFunction<'db>),
-}
-
-#[salsa::tracked]
-pub struct TypeFunction<'db> {
-    #[tracked]
-    #[returns(ref)]
-    pub param_types: Vec<Type<'db>>,
-    pub param_modes: Vec<ParamMode>,
-    #[tracked]
-    pub return_type: Type<'db>,
-}
-
-/// Type error representation.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub enum TypeError {
-    TypeMismatch { expected: String, actual: String },
-    UnresolvedName(String),
-    CannotSynthesize,
-    InvalidOperandType { op: String, ty: String },
-    ArityMismatch { expected: usize, actual: usize },
-    NotAFunction(String),
-    DatalitError(String),
-    ResultRequiresErrorBinding,
-    TryTypeMismatch { operator: String, actual_type: String },
-    TryReturnTypeMismatch { operator: String, return_type: String },
-    IntOutOfRange,
-    MissingField(String),
-    ExtraField(String),
-    FieldOrderMismatch,
-    VariantNotFound(String),
-    BreakOutsideLoop,
-    ContinueOutsideLoop,
-    /// Field index out of bounds for tuple.
-    FieldIndexOutOfBounds { index: u32, tuple_size: usize },
-    /// Named field not found in struct.
-    FieldNotFound { field_name: String, ty: String },
-    /// Projection on non-aggregate type.
-    ProjectionOnNonAggregate { ty: String },
-    /// Field projection on move-type field (not allowed outside ref context).
-    NonCopyFieldProjection { field_ty: String },
-    /// Void function returning a value.
-    VoidFunctionReturnsValue,
-    /// Non-void function with bare return (missing return value).
-    FunctionRequiresReturnValue,
-    /// Undefined variable reference.
-    UndefinedVariable,
-    /// Cannot assign to immutable variable.
-    VariableNotMutable,
-    /// Unresolved type alias (forward reference).
-    UnresolvedTypeAlias(String),
-    /// Duplicate type alias definition.
-    DuplicateTypeAlias(String),
-    /// Cannot shadow primitive type name.
-    CannotShadowPrimitive(String),
-}
 
 /// Pending diagnostic for unified diagnostic emission.
 ///
@@ -305,25 +213,6 @@ pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ty
     }
 }
 
-impl From<datalove_datalit::tycheck::TypeError> for TypeError {
-    fn from(err: datalove_datalit::tycheck::TypeError) -> Self {
-        match err {
-            datalove_datalit::tycheck::TypeError::TypeMismatch { expected, actual } => {
-                TypeError::TypeMismatch { expected, actual }
-            }
-            datalove_datalit::tycheck::TypeError::CannotSynthesize => TypeError::CannotSynthesize,
-            datalove_datalit::tycheck::TypeError::MissingField(name) => TypeError::MissingField(name),
-            datalove_datalit::tycheck::TypeError::ExtraField(name) => TypeError::ExtraField(name),
-            datalove_datalit::tycheck::TypeError::FieldOrderMismatch => TypeError::FieldOrderMismatch,
-            datalove_datalit::tycheck::TypeError::IntOutOfRange => TypeError::IntOutOfRange,
-            datalove_datalit::tycheck::TypeError::VariantNotFound(name) => TypeError::VariantNotFound(name),
-            datalove_datalit::tycheck::TypeError::ArityMismatch { expected, actual } => {
-                TypeError::ArityMismatch { expected, actual }
-            }
-        }
-    }
-}
-
 /// Type error entry with location info.
 #[salsa::tracked]
 pub struct TypeErrorEntry<'db> {
@@ -381,8 +270,8 @@ pub struct ExprTypecheckResult<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub enum ScriptUnitKind<'db> {
-    /// A fragment containing statements.
-    Fragment(ParsedStatements<'db>),
+    /// A fragment containing statements and pre-computed name resolution.
+    Fragment(ParsedStatements<'db>, CollectedNames<'db>),
     /// A single expression.
     Expr(ExprFun<'db>),
 }
@@ -403,7 +292,7 @@ impl<'db> ScriptUnitSpec<'db> {
     }
 }
 
-/// Spec for a module (path + pre-parsed statements + module ID).
+/// Spec for a module (path + pre-parsed statements + module ID + name resolution).
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ModuleSpec<'db> {
@@ -412,6 +301,8 @@ pub struct ModuleSpec<'db> {
     pub spans: DatafunSpans,
     pub parsed: ParsedStatements<'db>,
     pub module_id: ModuleId,
+    /// Pre-computed name resolution for this module.
+    pub name_resolution: CollectedNames<'db>,
 }
 
 impl<'db> ModuleSpec<'db> {
@@ -422,8 +313,9 @@ impl<'db> ModuleSpec<'db> {
         spans: DatafunSpans,
         parsed: ParsedStatements<'db>,
         module_id: ModuleId,
+        name_resolution: CollectedNames<'db>,
     ) -> Self {
-        Self { path, source, spans, parsed, module_id }
+        Self { path, source, spans, parsed, module_id, name_resolution }
     }
 }
 
@@ -525,45 +417,6 @@ pub struct ModuleImportResolution<'db> {
     /// Import resolution errors.
     #[returns(ref)]
     pub errors: Vec<TypeError>,
-}
-
-// ============================================================================
-// Name Resolution Types
-// ============================================================================
-
-/// Result of name resolution for a single module.
-///
-/// Contains type aliases, function signatures, and function ASTs collected
-/// from a module's parsed statements. This is computed before typechecking
-/// and is memoized per-module via Salsa.
-#[salsa::tracked]
-pub struct ModuleNameResolution<'db> {
-    /// Module this is for.
-    pub module_id: ModuleId,
-
-    /// Type aliases defined in this module: (name, resolved_type).
-    #[returns(ref)]
-    pub type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
-
-    /// Function signatures: (name, function_type).
-    #[returns(ref)]
-    pub functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
-
-    /// Function ASTs for inlining: (name, ast).
-    #[returns(ref)]
-    pub function_asts: Vec<(InternedText<'db>, StmtFun<'db>)>,
-
-    /// Errors encountered during name resolution.
-    #[returns(ref)]
-    pub errors: Vec<TypeError>,
-}
-
-/// Aggregated name resolutions for all modules in a graph.
-#[salsa::tracked]
-pub struct AllModuleNameResolutions<'db> {
-    /// Per-module name resolutions.
-    #[returns(ref)]
-    pub resolutions: BTreeMap<ModuleId, ModuleNameResolution<'db>>,
 }
 
 /// Result of typechecking a single module.
@@ -683,76 +536,6 @@ impl<'db> ModuleGraphTypecheckResult<'db> {
 }
 
 // ============================================================================
-// Parsed Module Graph
-// ============================================================================
-
-/// A module graph paired with pre-parsed statements and spans for each module.
-#[salsa::tracked]
-pub struct ParsedModuleGraph<'db> {
-    /// The underlying module graph (identity key).
-    pub graph: ModuleGraph,
-
-    /// Pre-parsed statements only, as (ModuleId, ParsedStatements) tuples.
-    /// Separate from spans so typecheck can depend only on statements.
-    /// Order matches graph.iter_modules() order.
-    #[tracked]
-    #[returns(ref)]
-    pub statements_only: Vec<(ModuleId, ParsedStatements<'db>)>,
-
-    /// Expression spans for each module, separate from statements.
-    /// Changes to spans don't invalidate typecheck.
-    #[tracked]
-    #[returns(ref)]
-    pub spans: Vec<(ModuleId, DatafunSpans)>,
-
-    /// Resolved module requires from package resolution.
-    ///
-    /// Maps each module to its resolved require aliases: (alias, target_module_id).
-    /// This is populated by the package resolver and used by the typechecker for
-    /// import resolution instead of re-parsing require statements.
-    #[tracked]
-    #[returns(ref)]
-    pub resolved_requires: BTreeMap<ModuleId, Vec<(InternedText<'db>, ModuleId)>>,
-
-    /// Recursive content hashes for each module.
-    ///
-    /// Each module's hash incorporates its source text and the content hashes of
-    /// its resolved dependencies (sorted by alias for determinism). This enables
-    /// verification that Salsa memoization is working correctly: if a module's
-    /// content hash is unchanged, its typecheck result should be cached.
-    #[tracked]
-    #[returns(ref)]
-    pub module_content_hashes: BTreeMap<ModuleId, u64>,
-}
-
-impl<'db> ParsedModuleGraph<'db> {
-    /// Get the parsed statements for a module by its ID.
-    pub fn get_parsed(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<ParsedStatements<'db>> {
-        self.statements_only(db).iter()
-            .find(|(id, _)| *id == module_id)
-            .map(|(_, parsed)| parsed.clone())
-    }
-
-    /// Get the spans for a module by its ID.
-    pub fn get_spans(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<DatafunSpans> {
-        self.spans(db).iter()
-            .find(|(id, _)| *id == module_id)
-            .map(|(_, spans)| spans.clone())
-    }
-
-    /// Get the resolved require aliases for a module.
-    ///
-    /// Returns a slice of (alias, target_module_id) pairs representing what
-    /// `require module` statements in this module resolved to.
-    pub fn get_requires(&self, db: &'db dyn Db, module_id: ModuleId) -> &[(InternedText<'db>, ModuleId)] {
-        self.resolved_requires(db)
-            .get(&module_id)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
-    }
-}
-
-// ============================================================================
 // Public API Re-exports
 // ============================================================================
 
@@ -764,21 +547,11 @@ pub use api::{
     typecheck_module_graph,
     typecheck_module_graph_parallel,
     typecheck_module_graph_with_mode,
-    resolve_module_exports,
-    resolve_all_exports,
     resolve_module_imports,
-    AllModuleExports,
-    build_all_function_ast_maps,
-    AllModuleFunctionAsts,
     // Per-unit memoization types.
     AccumulatedBindings,
     ScriptUnitTypecheckOutput,
     typecheck_script_unit,
-    // Name resolution functions.
-    resolve_module_names,
-    resolve_all_names,
-    resolve_all_names_parallel,
-    resolve_all_names_with_mode,
 };
 
 // Re-export context types.

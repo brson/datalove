@@ -1071,6 +1071,7 @@ dependencies = [
  "datalove-datafun-interp",
  "datalove-datafun-parser",
  "datalove-datafun-pkg",
+ "datalove-datafun-resolve",
  "datalove-datafun-tycheck",
  "datalove-datalit",
  "datalove-diagnostic",
@@ -1109,6 +1110,7 @@ dependencies = [
  "datalove-datafun-ir",
  "datalove-datafun-parser",
  "datalove-datafun-pkg",
+ "datalove-datafun-resolve",
  "datalove-datafun-tycheck",
  "datalove-datalit",
  "datalove-diagnostic",
@@ -1145,6 +1147,7 @@ dependencies = [
  "datalove-datafun-intrinsics",
  "datalove-datafun-ir",
  "datalove-datafun-parser",
+ "datalove-datafun-resolve",
  "datalove-datafun-tycheck",
  "datalove-datalit",
  "datalove-diagnostic",
@@ -1257,6 +1260,19 @@ version = "0.1.0"
 dependencies = [
  "bcts",
  "datalove-exampletest",
+ "rustmax",
+ "salsa",
+]
+
+[[package]]
+name = "datalove-datafun-resolve"
+version = "0.1.0"
+dependencies = [
+ "bcts",
+ "datalove-ct",
+ "datalove-datafun-ast",
+ "datalove-datalit",
+ "rayon",
  "rustmax",
  "salsa",
 ]
@@ -1410,6 +1426,7 @@ dependencies = [
  "datalove-datafun",
  "datalove-datafun-ast",
  "datalove-datafun-pkg",
+ "datalove-datafun-resolve",
  "datalove-datafun-tycheck",
  "datalove-datalit",
  "rand 0.8.5",

@@ -5,6 +5,7 @@
 use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
 use datalove_datafun::{Database, package, package_resolve, package_load_worldfile, to_module_graph, module_graph};
 use datalove_datafun_tycheck::typecheck_module_graph;
+use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps};
 
 /// Parse and typecheck a worldfile, returning the number of errors.
 fn typecheck_worldfile(source: &str) -> Vec<String> {
@@ -30,7 +31,10 @@ fn typecheck_worldfile(source: &str) -> Vec<String> {
     // Convert to ModuleGraph, parse, and typecheck.
     let graph_with_requires = to_module_graph(&db, package_world, pkg_graph);
     let parsed_graph = module_graph::parse_module_graph(&db, graph_with_requires.graph, graph_with_requires.resolved_requires);
-    let typecheck_result = typecheck_module_graph(&db, parsed_graph);
+    let all_names = resolve_all_names(&db, parsed_graph);
+    let all_exports = resolve_all_exports(&db, parsed_graph);
+    let all_function_asts = build_all_function_ast_maps(&db, parsed_graph);
+    let typecheck_result = typecheck_module_graph(&db, parsed_graph, all_names, all_exports, all_function_asts);
 
     // Collect all errors from all modules.
     let mut errors = Vec::new();

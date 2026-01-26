@@ -1,0 +1,340 @@
+//! Name resolution for datafun.
+//!
+//! Provides name resolution (type aliases, function signatures) as a separate
+//! phase before typechecking. This crate has no dependency on tycheck.
+
+use std::collections::{HashMap, BTreeMap};
+use bct::text::InternedText;
+use bct::module_graph::{ModuleId, Module};
+use datalove_ct::query_log::{log_query, QueryPhase};
+
+use datalove_datafun_ast::ast::*;
+
+use salsa::Database as Db;
+
+// Re-export shared types from ast.
+pub use datalove_datafun_ast::types::{
+    DbClone,
+    ParallelMode,
+    parallel_mode_from_env,
+    ParsedModuleGraph,
+    ModuleNameResolution,
+    AllModuleNameResolutions,
+    CollectedNames,
+    AllModuleExports,
+    AllModuleFunctionAsts,
+    Type,
+    TypeFunction,
+    TypeError,
+    convert_type_hint_with_aliases,
+    is_primitive_name,
+    unit_type,
+};
+
+pub use datalove_datafun_ast::spans::DatafunSpans;
+
+// ============================================================================
+// Name Resolution Implementation
+// ============================================================================
+
+/// Resolve names from parsed statements.
+///
+/// This is the core name resolution implementation used by both modules and scripts.
+/// It collects type aliases and function signatures, enabling forward references
+/// to functions defined later in the same compilation unit.
+pub fn resolve_names_impl<'db>(
+    db: &'db dyn Db,
+    statements: &[Statement<'db>],
+) -> CollectedNames<'db> {
+    let mut errors = Vec::new();
+
+    // Pass 0: collect type aliases.
+    let mut type_aliases_map: HashMap<InternedText<'db>, Type<'db>> = HashMap::new();
+    let mut type_aliases_vec = Vec::new();
+
+    for statement in statements {
+        if let Statement::TypeAlias(stmt) = statement {
+            let name = stmt.name;
+            let name_str = name.as_str(db);
+
+            // Check for shadowing primitive types.
+            if is_primitive_name(name_str) {
+                errors.push(TypeError::CannotShadowPrimitive(name_str.to_string()));
+                continue;
+            }
+
+            // Check for duplicate type alias.
+            if type_aliases_map.contains_key(&name) {
+                errors.push(TypeError::DuplicateTypeAlias(name_str.to_string()));
+                continue;
+            }
+
+            // Resolve the type hint using already-collected aliases.
+            match convert_type_hint_with_aliases(db, stmt.type_hint.clone(), &type_aliases_map) {
+                Ok(ty) => {
+                    type_aliases_map.insert(name, ty.clone());
+                    type_aliases_vec.push((name, ty));
+                }
+                Err(e) => {
+                    errors.push(e);
+                }
+            }
+        }
+    }
+
+    // Pass 1: collect function signatures.
+    let mut functions = Vec::new();
+    let mut function_asts = Vec::new();
+
+    for statement in statements {
+        if let Statement::Fun(stmt) = statement {
+            let name = stmt.name(db);
+            let params = stmt.params(db);
+            let return_type = stmt.return_type(db);
+
+            // Convert parameter types and collect modes.
+            let mut param_types = Vec::new();
+            let mut param_modes = Vec::new();
+            let mut has_error = false;
+            for param in params {
+                match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
+                    Ok(ty) => {
+                        param_types.push(ty);
+                        param_modes.push(param.mode);
+                    }
+                    Err(e) => {
+                        errors.push(e);
+                        has_error = true;
+                        break;
+                    }
+                }
+            }
+
+            if has_error {
+                continue;
+            }
+
+            // Convert return type (default to unit if not specified).
+            let ret_ty = match return_type {
+                Some(type_hint) => {
+                    match convert_type_hint_with_aliases(db, type_hint, &type_aliases_map) {
+                        Ok(ty) => ty,
+                        Err(e) => {
+                            errors.push(e);
+                            continue;
+                        }
+                    }
+                }
+                None => unit_type(db),
+            };
+
+            // Create function type and collect AST.
+            let func_type = TypeFunction::new(db, param_types, param_modes, ret_ty);
+            functions.push((name, func_type));
+            function_asts.push((name, *stmt));
+        }
+    }
+
+    CollectedNames {
+        type_aliases: type_aliases_vec,
+        functions,
+        function_asts,
+        errors,
+    }
+}
+
+/// Resolve names (type aliases and function signatures) for a single module.
+///
+/// This is a tracked function memoized per module. It collects:
+/// - Type aliases (pass 0)
+/// - Function signatures (pass 1)
+/// - Function ASTs (for inlining)
+///
+/// These are resolved before typechecking and seeded into the TypeContext.
+#[salsa::tracked]
+pub fn resolve_module_names<'db>(
+    db: &'db dyn Db,
+    module: Module,
+    parsed: ParsedStatements<'db>,
+) -> ModuleNameResolution<'db> {
+    let module_id = module.id(db);
+    let module_path = module_id.path(db);
+
+    log_query("resolve_names", module_path, QueryPhase::Start);
+
+    // Resolve names: collect type aliases and function signatures.
+    let collected = resolve_names_impl(db, &parsed.statements);
+
+    log_query("resolve_names", module_path, QueryPhase::End);
+
+    ModuleNameResolution::new(
+        db,
+        module_id,
+        collected.type_aliases,
+        collected.functions,
+        collected.function_asts,
+        Vec::new(), // No errors from this pass (errors are validation, not collection).
+    )
+}
+
+/// Resolve names for all modules in a graph.
+///
+/// Calls the tracked `resolve_module_names` for each module, enabling
+/// per-module caching of name resolution.
+#[salsa::tracked]
+pub fn resolve_all_names<'db>(
+    db: &'db dyn Db,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> AllModuleNameResolutions<'db> {
+    let graph = parsed_graph.graph(db);
+    let module_to_module_obj: HashMap<ModuleId, Module> = graph.iter_modules(db)
+        .map(|m| (m.id(db), m))
+        .collect();
+
+    let mut all_resolutions = BTreeMap::new();
+
+    for (module_id, parsed) in parsed_graph.statements_only(db) {
+        let module = module_to_module_obj.get(module_id)
+            .expect("module should exist in graph");
+        let resolution = resolve_module_names(db, *module, parsed.clone());
+        all_resolutions.insert(*module_id, resolution);
+    }
+
+    AllModuleNameResolutions::new(db, all_resolutions)
+}
+
+/// Resolve names for all modules in parallel.
+///
+/// Uses rayon to resolve names for each module in parallel, warming the
+/// memoization cache. Then delegates to `resolve_all_names` for aggregation.
+pub fn resolve_all_names_parallel<'db>(
+    db: &'db dyn DbClone,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> AllModuleNameResolutions<'db> {
+    use rayon::prelude::*;
+
+    let db_salsa = db.as_salsa_db();
+    let graph = parsed_graph.graph(db_salsa);
+
+    // Build module lookup and work items.
+    let module_to_module_obj: HashMap<ModuleId, Module> = graph.iter_modules(db_salsa)
+        .map(|m| (m.id(db_salsa), m))
+        .collect();
+
+    let work: Vec<_> = parsed_graph.statements_only(db_salsa)
+        .iter()
+        .map(|(module_id, parsed)| {
+            let module = *module_to_module_obj.get(module_id)
+                .expect("module should exist in graph");
+            (db.dyn_clone(), module, parsed.clone())
+        })
+        .collect();
+
+    // Resolve names in parallel - populates salsa's memoization cache.
+    work.into_par_iter().for_each(|(db_clone, module, parsed)| {
+        let db_salsa = db_clone.as_salsa_db();
+        let _ = resolve_module_names(db_salsa, module, parsed);
+    });
+
+    // Delegate to tracked function which aggregates results.
+    // All resolve_module_names calls will be cache hits.
+    resolve_all_names(db_salsa, parsed_graph)
+}
+
+/// Resolve names with configurable parallelism.
+pub fn resolve_all_names_with_mode<'db>(
+    db: &'db dyn DbClone,
+    parsed_graph: ParsedModuleGraph<'db>,
+    mode: ParallelMode,
+) -> AllModuleNameResolutions<'db> {
+    match mode {
+        ParallelMode::Sequential => resolve_all_names(db.as_salsa_db(), parsed_graph),
+        ParallelMode::Parallel => resolve_all_names_parallel(db, parsed_graph),
+    }
+}
+
+// ============================================================================
+// Script Name Resolution
+// ============================================================================
+
+/// Resolve names for a script (tracked function for scripts).
+///
+/// This is a tracked function that provides memoization for script name resolution.
+/// It uses the source as the memoization key, ensuring that the same script
+/// produces the same resolution results.
+#[salsa::tracked]
+pub fn resolve_script_names<'db>(
+    db: &'db dyn Db,
+    source: bct::input::Source,
+    parsed: ParsedStatements<'db>,
+) -> CollectedNames<'db> {
+    let _ = source; // Used as memoization key.
+    resolve_names_impl(db, &parsed.statements)
+}
+
+// ============================================================================
+// Export Resolution
+// ============================================================================
+
+/// Collect function signatures exported from a module.
+///
+/// This is a tracked function so Salsa can cache per-module export collection.
+/// Only depends on parsed statements, not on any other module.
+#[salsa::tracked]
+pub fn resolve_module_exports<'db>(
+    db: &'db dyn Db,
+    module: Module,
+    parsed: ParsedStatements<'db>,
+) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
+    let _ = module; // Used as memoization key.
+    resolve_names_impl(db, &parsed.statements).functions
+}
+
+/// Collect exports from all modules in the graph.
+///
+/// Calls the tracked `resolve_module_exports` for each module, enabling
+/// per-module caching of export collection.
+#[salsa::tracked]
+pub fn resolve_all_exports<'db>(
+    db: &'db dyn Db,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> AllModuleExports<'db> {
+    let graph = parsed_graph.graph(db);
+    let module_to_module_obj: HashMap<ModuleId, Module> = graph.iter_modules(db)
+        .map(|m| (m.id(db), m))
+        .collect();
+
+    let mut all_exports = BTreeMap::new();
+
+    for (module_id, parsed) in parsed_graph.statements_only(db) {
+        let module = module_to_module_obj.get(module_id)
+            .expect("module should exist in graph");
+        let exports = resolve_module_exports(db, *module, parsed.clone());
+        all_exports.insert(*module_id, exports);
+    }
+
+    AllModuleExports::new(db, all_exports)
+}
+
+/// Build function AST maps for all modules.
+///
+/// Used for function inlining - maps module ID to function name to AST.
+#[salsa::tracked]
+pub fn build_all_function_ast_maps<'db>(
+    db: &'db dyn Db,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> AllModuleFunctionAsts<'db> {
+    let mut module_function_asts = BTreeMap::new();
+
+    for (module_id, parsed) in parsed_graph.statements_only(db) {
+        let mut funcs = Vec::new();
+        for statement in &parsed.statements {
+            if let Statement::Fun(func) = statement {
+                funcs.push((func.name(db), *func));
+            }
+        }
+        module_function_asts.insert(*module_id, funcs);
+    }
+
+    AllModuleFunctionAsts::new(db, module_function_asts)
+}

@@ -11,6 +11,7 @@ use rmx::prelude::*;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
+use datalove_datafun_resolve::resolve_script_names;
 use datalove_datalit::ast_gen::AstGenConfig;
 use datalove_datalit::mutation_gen::{Mutation, MutationResult};
 
@@ -126,7 +127,8 @@ fn get_datafun_errors<'db>(
     }
 
     let spans = datalove_datafun_parser::datafun_spans(db, src);
-    let result = datalove_datafun_tycheck::type_check_single_script(db, src, spans, script);
+    let name_resolution = resolve_script_names(db, src, script.clone());
+    let result = datalove_datafun_tycheck::type_check_single_script(db, src, spans, script, name_resolution);
 
     let errors: Vec<String> = result
         .errors(db)

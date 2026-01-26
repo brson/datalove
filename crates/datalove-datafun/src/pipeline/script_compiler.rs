@@ -43,6 +43,7 @@ use datalove_datafun_tycheck::{
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
     UnitTypecheckResultTracked, ResolvedCallTarget, Type,
 };
+use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_compiler::ir_ext::IrTypeExt;
 
 use super::compiled_modules::CompiledModules;
@@ -116,6 +117,7 @@ impl<'db> CompiledModules<'db> {
                 .expect("module should exist in graph");
             let spans = spans_map.get(salsa_module_id).cloned()
                 .expect("spans should exist for module");
+            let name_resolution = resolve_script_names(db, module_source, parsed.clone());
 
             module_specs.push(ModuleSpec::new(
                 module_path.clone(),
@@ -123,6 +125,7 @@ impl<'db> CompiledModules<'db> {
                 spans,
                 parsed.clone(),
                 *salsa_module_id,
+                name_resolution,
             ));
         }
 
@@ -303,7 +306,10 @@ impl<'db> ScriptCompiler<'db> {
         // Create unit spec.
         let spans = datalove_datafun_parser::datafun_spans(self.db, src);
         let unit_kind = match unit {
-            ParsedUnit::Fragment { parsed, .. } => ScriptUnitKind::Fragment(parsed.clone()),
+            ParsedUnit::Fragment { parsed, .. } => {
+                let name_resolution = resolve_script_names(self.db, src, parsed.clone());
+                ScriptUnitKind::Fragment(parsed.clone(), name_resolution)
+            }
             ParsedUnit::Expr(expr) => ScriptUnitKind::Expr(*expr),
         };
         let unit_spec = ScriptUnitSpec::new(src, spans, unit_kind);
