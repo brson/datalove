@@ -40,5 +40,31 @@ debuglog x
 ```
 
 
+### Conditional initialization
 
+Uninitialized vars can be initialized in branches,
+but must be initialized in all branches if read afterward.
 
+```datalove
+var result: i32
+
+if condition
+  set result = 1
+else
+  set result = 2
+end if
+
+debuglog result   // ok - initialized on all paths
+```
+
+This won't compile:
+
+```datalove
+var result: i32
+
+if condition
+  set result = 1
+end if
+
+debuglog result   // error - may be uninitialized
+```
