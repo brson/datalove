@@ -2,12 +2,12 @@
 module local/test/constargs
 ----------
 
-fun subtract(a: u32, b: u32): u32
+fun subtract(a: int, b: int): int
     ret a - b
 end fun
 
-fun get_diff(): u32
-    const DIFF: u32 = subtract(100, 35)
+fun get_diff(): int
+    const DIFF: int = subtract(100, 35)
     ret DIFF
 end fun
 

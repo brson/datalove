@@ -2,17 +2,17 @@
 module local/test/chain
 ----------
 
-fun double(x: u32): u32
-    ret x * 2
+fun double(x: int): int
+    ret x * :int/2
 end fun
 
-fun add_ten(x: u32): u32
-    ret x + 10
+fun add_ten(x: int): int
+    ret x + :int/10
 end fun
 
-fun compute(): u32
-    const A: u32 = double(5)
-    const B: u32 = add_ten(A)
+fun compute(): int
+    const A: int = double(:int/5)
+    const B: int = add_ten(A)
     ret B
 end fun
 

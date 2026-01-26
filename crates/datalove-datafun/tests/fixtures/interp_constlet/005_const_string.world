@@ -2,8 +2,8 @@
 scriptunit-fragment
 ----------
 
-fun get_greeting(): String
-    const GREETING: String = "hello"
+fun get_greeting(): string
+    const GREETING: string = "hello"
     ret GREETING
 end fun
 

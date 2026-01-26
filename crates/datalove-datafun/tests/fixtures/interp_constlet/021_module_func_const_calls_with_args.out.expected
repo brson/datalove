@@ -4,16 +4,28 @@ Analysis(
             section_type: "module",
             name: Some("local/test/constargs"),
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "line 3, col 9: error[F016]: mismatched types: expected `u32`, found `int`",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    fn subtract(p0, p1):
+                    block0:
+                        v0 = sub p0, p1
+                        drop p0
+                        drop p1
+                        return v0
+                    
+                    fn get_diff():
+                    block0:
+                        v0 = const 100int
+                        v1 = const 35int
+                        v2 = call m0.f0(v0, v1)
+                        return v2
+                """,
             ),
             output: "",
         ),
@@ -21,29 +33,40 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Skipped",
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Skipped",
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.f1()
+                        unit_end v0
+                """,
             ),
-            output: "",
+            output: "65",
         ),
     ],
 )

@@ -4,36 +4,47 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "ParseError",
-                errors: [
-                    "unknown type \'String\', did you mean \'string\'?",
-                    "unknown type \'String\', did you mean \'string\'?",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                    
+                    fn get_greeting():
+                    block0:
+                        v0 = const "hello"
+                        return v0
+                    exports:
+                        get_greeting = f0
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"get_greeting\")",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call unit0.f0()
+                        unit_end v0
+                """,
             ),
-            output: "",
+            output: "\"hello\"",
         ),
     ],
 )
