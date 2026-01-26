@@ -387,26 +387,9 @@ pub fn evaluate_all_module_consts<'db>(
 
         let mut consts = Vec::new();
         let mut errors = Vec::new();
-        let mut resolved_so_far: HashMap<String, (IrType, ConstValue)> = HashMap::new();
 
-        // First pass: evaluate module-level consts.
-        for statement in &parsed.statements {
-            if let Statement::Const(const_stmt) = statement {
-                match evaluate_single_const(
-                    db, const_stmt, expr_types, &resolved_so_far, &evaluator
-                ) {
-                    Ok((name, ir_type, value)) => {
-                        resolved_so_far.insert(name.clone(), (ir_type.clone(), value.clone()));
-                        consts.push((name, ir_type, value));
-                    }
-                    Err(e) => errors.push(e),
-                }
-            }
-        }
-
-        // Second pass: evaluate function-level consts.
-        // Function-level consts can reference module-level consts and other
-        // consts within the same function.
+        // Evaluate function-level consts.
+        // Module-level consts are not allowed (rejected by typechecker).
         for statement in &parsed.statements {
             if let Statement::Fun(func_stmt) = statement {
                 let func_name = func_stmt.name(db).text(db);
@@ -415,14 +398,8 @@ pub fn evaluate_all_module_consts<'db>(
 
                 for func_body_stmt in func_stmt.body(db).iter() {
                     if let Statement::Const(const_stmt) = func_body_stmt {
-                        // Merge function-local consts with module-level for lookup.
-                        let mut lookup_map = resolved_so_far.clone();
-                        for (name, (ty, val)) in &func_local_consts {
-                            lookup_map.insert(name.clone(), (ty.clone(), val.clone()));
-                        }
-
                         match evaluate_single_const(
-                            db, const_stmt, expr_types, &lookup_map, &evaluator
+                            db, const_stmt, expr_types, &func_local_consts, &evaluator
                         ) {
                             Ok((name, ir_type, value)) => {
                                 // Store locally for other consts in this function.

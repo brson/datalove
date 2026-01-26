@@ -246,6 +246,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "name": name
             })
         }
+        TypeError::ConstNotAllowedInModule(name) => {
+            json!({
+                "kind": "ConstNotAllowedInModule",
+                "name": name
+            })
+        }
     }
 }
 

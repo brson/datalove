@@ -264,6 +264,8 @@ pub enum TypeError {
     DuplicateTypeAlias(String),
     /// Cannot shadow primitive type name.
     CannotShadowPrimitive(String),
+    /// Const not allowed at module level.
+    ConstNotAllowedInModule(String),
 }
 
 impl From<datalove_datalit::tycheck::TypeError> for TypeError {

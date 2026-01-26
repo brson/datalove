@@ -419,6 +419,12 @@ pub fn check_statement<'db>(
         }
 
         Statement::Const(stmt) => {
+            // Reject const at module level - const is only allowed in scripts and function bodies.
+            if ctx.is_module_top_level() {
+                let err = ctx.error_const_not_allowed_in_module(stmt);
+                ctx.add_error(err);
+                return;
+            }
             // Const bindings are typechecked like let bindings.
             // The const evaluation happens during lowering.
             check_variable_decl(ctx, stmt.name, stmt.value, stmt.type_hint.clone(), false);

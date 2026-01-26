@@ -153,6 +153,12 @@ pub enum PendingDiagnostic<'db> {
         module_id: Option<ModuleId>,
         name: InternedText<'db>,
     },
+    /// F056: Const not allowed at module level.
+    ConstNotAllowedInModule {
+        local_index: u32,
+        module_id: Option<ModuleId>,
+        name: InternedText<'db>,
+    },
 }
 
 /// Check if a datalit type is a copy type (can be safely copied without cloning).

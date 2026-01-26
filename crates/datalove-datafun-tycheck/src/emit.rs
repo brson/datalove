@@ -386,6 +386,18 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
+        PendingDiagnostic::ConstNotAllowedInModule { local_index, module_id: _, name } => {
+            if let Some(ts) = spans.lookup_expr(db, *local_index) {
+                bct::diagnostic::DiagnosticBuilder::error(
+                    db,
+                    &format!("const `{}` not allowed at module level", name.as_str(db)),
+                )
+                    .code("F056")
+                    .primary_label(ts, "const not allowed at module level")
+                    .note("const bindings are only allowed inside functions and scripts")
+                    .emit_type();
+            }
+        }
     }
 }
 
@@ -529,6 +541,11 @@ fn format_single_diagnostic<'db>(
             let ts = spans.lookup_expr(db, *expr_id)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F049]: try operator `{}` return type mismatch: expected `{}`, found `{}`", loc, operator.as_str(db), expected.as_str(db), actual.as_str(db)))
+        }
+        PendingDiagnostic::ConstNotAllowedInModule { local_index, module_id: _, name } => {
+            let ts = spans.lookup_expr(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F056]: const `{}` not allowed at module level", loc, name.as_str(db)))
         }
     }
 }

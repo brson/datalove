@@ -294,6 +294,24 @@ impl<'db> TypeContext<'db> {
         TypeError::VariableNotMutable
     }
 
+    /// F056: Const not allowed at module level.
+    pub fn error_const_not_allowed_in_module(&mut self, stmt: &StmtConst<'db>) -> TypeError {
+        let name = stmt.name;
+        // Use the value expression's ID for span lookup.
+        let local_index = stmt.value.as_id().index();
+        self.pending_diagnostics.push(PendingDiagnostic::ConstNotAllowedInModule {
+            local_index,
+            module_id: self.current_module_id,
+            name,
+        });
+        TypeError::ConstNotAllowedInModule(name.as_str(self.db).S())
+    }
+
+    /// Check if we're at module top level (not inside a function).
+    pub fn is_module_top_level(&self) -> bool {
+        self.current_module_id.is_some() && self.expected_return_type.is_none()
+    }
+
     pub fn add_variable(&mut self, name: InternedText<'db>, ty: Type<'db>, is_mutable: bool) {
         self.variables.insert(name, (ty, is_mutable));
     }
