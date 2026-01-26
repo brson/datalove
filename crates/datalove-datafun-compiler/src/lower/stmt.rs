@@ -184,8 +184,19 @@ fn lower_statement_impl<'db>(
             Ok(())
         }
         Statement::Const(const_stmt) => {
-            // Const bindings are evaluated at compile time.
             let name = const_stmt.name.text(ctx.db).to_string();
+            let init_expr = const_stmt.value;
+
+            // In const_as_let mode for function bodies, lower const as let.
+            // This only applies when not in a script unit (i.e., in a function body).
+            if ctx.const_as_let() && !ctx.is_script_unit {
+                let value_id = lower_expression(ctx, init_expr)?;
+                let operand = Operand::Value(value_id);
+                ctx.bind_var(&name, operand);
+                // Record binding operand for drop schedule.
+                ctx.record_binding_operand(operand);
+                return Ok(());
+            }
 
             // Check if already pre-resolved (script/module level consts).
             if ctx.lookup_const(&name).is_some() {
@@ -193,7 +204,6 @@ fn lower_statement_impl<'db>(
             }
 
             // Evaluate the const expression using CTFE.
-            let init_expr = const_stmt.value;
             let ir_type = ctx.expr_type(init_expr);
             let value = eval_const_expr(ctx, init_expr)?;
             ctx.add_const(name, ir_type, value);

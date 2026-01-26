@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+fun get_greeting(): str
+    const GREETING: str = "hello"
+    ret GREETING
+end fun
+
+----------
+scriptunit-expr
+----------
+
+get_greeting()

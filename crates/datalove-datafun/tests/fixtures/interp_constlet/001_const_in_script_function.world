@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+fun get_answer(): u32
+    const X: u32 = 42
+    ret X
+end fun
+
+----------
+scriptunit-expr
+----------
+
+get_answer()

@@ -11,7 +11,7 @@ use std::rc::Rc;
 use datalove_datafun as datafun;
 use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
-use datalove_datafun_compiler::lower::{self, ScriptLowerContext, PreResolvedConsts, evaluate_consts};
+use datalove_datafun_compiler::lower::{self, ScriptLowerContext, PreResolvedConsts, evaluate_consts, ScriptLowerOptions};
 use datalove_datafun_compiler::ownership_analysis::{self, CallInfo};
 use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
 use datalove_datafun_compiler::ir_ext::IrTypeExt;
@@ -192,7 +192,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     func_consts: &empty_func_consts,
                 });
 
+<<<<<<< HEAD
                 match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), pre_resolved) {
+=======
+                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), pre_resolved, ScriptLowerOptions::default()) {
+>>>>>>> 0729f95 (Add const_as_let IR lowering mode for function-level consts)
                     Ok(ir_unit) => {
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

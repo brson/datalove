@@ -338,6 +338,7 @@ pub fn lower_module<'db>(
                 resolved_params,
                 None, // ctfe_evaluator
                 module_consts_ref,
+                false, // const_as_let
             ) {
                 Ok(ir_func) => {
                     functions.push(ir_func);

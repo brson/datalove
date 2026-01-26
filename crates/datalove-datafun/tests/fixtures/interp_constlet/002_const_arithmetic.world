@@ -1,0 +1,19 @@
+----------
+scriptunit-fragment
+----------
+
+fun first_const(): u32
+    const A: u32 = 10
+    ret A
+end fun
+
+fun second_const(): u32
+    const B: u32 = 20
+    ret B
+end fun
+
+----------
+scriptunit-expr
+----------
+
+first_const()

@@ -1,0 +1,59 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                    
+                    fn select_const(p0):
+                    block0:
+                        v0 = const 100u32
+                        v1 = const 0u32
+                        v2 = copy p0
+                        branch v2, block1, block2
+                    block1:
+                        return v0
+                    block2:
+                        goto block3
+                    block3:
+                        return v1
+                    exports:
+                        select_const = f0
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const true
+                        v1 = call unit0.f0(v0)
+                        unit_end v1
+                """,
+            ),
+            output: "100",
+        ),
+    ],
+)

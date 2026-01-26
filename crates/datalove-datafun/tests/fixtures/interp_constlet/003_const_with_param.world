@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+fun select_const(flag: bool): u32
+    const TRUE_VAL: u32 = 100
+    const FALSE_VAL: u32 = 0
+    if flag
+        ret TRUE_VAL
+    end if
+    ret FALSE_VAL
+end fun
+
+----------
+scriptunit-expr
+----------
+
+select_const(true)

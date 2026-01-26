@@ -171,6 +171,14 @@ pub struct PreResolvedConsts<'a> {
     pub func_consts: &'a HashMap<String, (IrType, ConstValue)>,
 }
 
+/// Options for script lowering.
+#[derive(Debug, Clone, Default)]
+pub struct ScriptLowerOptions {
+    /// When true, const bindings in functions are lowered as let bindings
+    /// instead of being evaluated at compile time.
+    pub const_as_let: bool,
+}
+
 pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
@@ -182,8 +190,12 @@ pub fn lower_script_fragment_raw<'db>(
     script_analysis: ScriptAnalysisData,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
     resolved_consts: Option<PreResolvedConsts<'_>>,
+    options: ScriptLowerOptions,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
+
+    // Set const_as_let mode if enabled in options.
+    ctx.set_const_as_let(options.const_as_let);
 
     // Pre-populate const bindings from Phase 2 resolved values.
     if let Some(ref pre_resolved) = resolved_consts {
@@ -477,11 +489,14 @@ fn lower_statement_for_script<'db>(
 
             // Add function-level consts for this function to the context.
             // They are stored with qualified names (`func_name::const_name`).
-            if let Some(consts) = func_consts {
-                let prefix = format!("{}::", func_name);
-                for (name, (ir_type, value)) in consts {
-                    if let Some(local_name) = name.strip_prefix(&prefix) {
-                        ctx.add_const(local_name.to_string(), ir_type.clone(), value.clone());
+            // Skip this when const_as_let is enabled - consts will be lowered as let bindings.
+            if !ctx.const_as_let() {
+                if let Some(consts) = func_consts {
+                    let prefix = format!("{}::", func_name);
+                    for (name, (ir_type, value)) in consts {
+                        if let Some(local_name) = name.strip_prefix(&prefix) {
+                            ctx.add_const(local_name.to_string(), ir_type.clone(), value.clone());
+                        }
                     }
                 }
             }

@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
-use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts, evaluate_script_function_consts, PreResolvedConsts};
+use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts, evaluate_script_function_consts, PreResolvedConsts, ScriptLowerOptions};
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, build_func_id_map, collect_const_graph,
 };
@@ -137,6 +137,7 @@ impl<'db> CompiledModules<'db> {
             last_source: None,
             last_batch_spec: None,
             ctfe_evaluator,
+            const_as_let: false,
         })
     }
 
@@ -168,6 +169,8 @@ pub struct ScriptCompiler<'db> {
     last_batch_spec: Option<ScriptBatchSpec<'db>>,
     /// CTFE evaluator for const expression evaluation.
     ctfe_evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    /// When true, const bindings in functions are lowered as let bindings.
+    const_as_let: bool,
 }
 
 impl<'db> ScriptCompiler<'db> {
@@ -224,6 +227,15 @@ impl<'db> ScriptCompiler<'db> {
     /// Get the database reference.
     pub fn db(&self) -> &'db dyn salsa::Database {
         self.db
+    }
+
+    /// Enable const_as_let mode for function-level consts.
+    ///
+    /// When enabled, const bindings inside functions are lowered as let bindings
+    /// instead of being evaluated at compile time. This is useful for testing
+    /// runtime behavior of const-like values.
+    pub fn set_const_as_let(&mut self, enabled: bool) {
+        self.const_as_let = enabled;
     }
 
     /// Check for parse errors and return early result if any.
@@ -541,6 +553,7 @@ impl<'db> ScriptCompiler<'db> {
                     script_analysis,
                     Some(&func_param_types),
                     pre_resolved,
+                    ScriptLowerOptions { const_as_let: self.const_as_let },
                 ).map_err(|e| {
                     self.accumulated_unit_specs.pop();
                     ScriptCompilationResult {

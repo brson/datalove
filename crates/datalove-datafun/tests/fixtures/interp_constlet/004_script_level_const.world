@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+const SCRIPT_CONST: u32 = 999
+let x = SCRIPT_CONST
+
+----------
+scriptunit-expr
+----------
+
+x
