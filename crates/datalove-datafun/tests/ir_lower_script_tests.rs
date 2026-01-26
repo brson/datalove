@@ -11,7 +11,8 @@ use std::rc::Rc;
 use datalove_datafun as datafun;
 use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
-use datalove_datafun_compiler::lower::{self, ScriptLowerContext, PreResolvedConsts, evaluate_consts, ScriptLowerOptions};
+use datalove_datafun_compiler::lower::{self, ScriptLowerContext, evaluate_consts, ScriptLowerOptions};
+use datalove_datafun_compiler::const_inline::inline_script_consts;
 use datalove_datafun_compiler::ownership_analysis::{self, CallInfo};
 use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
 use datalove_datafun_compiler::ir_ext::IrTypeExt;
@@ -184,20 +185,18 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     None
                 };
 
-                // Empty map for function-level consts (this test doesn't use them).
-                let empty_func_consts = std::collections::HashMap::new();
-                let pre_resolved = resolved_consts.as_ref().map(|values| PreResolvedConsts {
-                    graph: &const_graph,
-                    values,
-                    func_consts: &empty_func_consts,
-                });
+                // Use const_as_let mode, then inline consts after lowering.
+                let options = ScriptLowerOptions { const_as_let: true };
 
-<<<<<<< HEAD
-                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), pre_resolved) {
-=======
-                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), pre_resolved, ScriptLowerOptions::default()) {
->>>>>>> 0729f95 (Add const_as_let IR lowering mode for function-level consts)
+                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), None, options) {
                     Ok(ir_unit) => {
+                        // Inline const values into the IR.
+                        let const_values_map: HashMap<String, datalove_datafun_ir::ConstValue> = resolved_consts
+                            .as_ref()
+                            .map(|rc| rc.iter().map(|(k, v)| (k.to_string(), v.clone())).collect())
+                            .unwrap_or_default();
+                        let ir_unit = inline_script_consts(ir_unit, &const_values_map);
+
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.
                         script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.value_types, &ir_unit.slot_types);

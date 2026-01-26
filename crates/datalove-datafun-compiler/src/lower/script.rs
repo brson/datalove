@@ -99,10 +99,9 @@ pub fn lower_script_unit<'db>(
             ctx.unit_end_drops = analysis.unit_end;
 
             // Lower all statements with index tracking.
-            // Note: func_consts is None here - this older API doesn't support pre-resolution.
             for (idx, stmt) in stmts.iter().enumerate() {
                 ctx.body.current_stmt_idx = Some(idx);
-                lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, Some(&func_param_types), None)?;
+                lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, Some(&func_param_types))?;
             }
             ctx.body.current_stmt_idx = None;
 
@@ -163,6 +162,10 @@ pub fn lower_script_unit<'db>(
 ///
 /// Pre-resolved const values from Phase 2 of CTFE pipeline.
 /// When provided, lowering will use these values for const bindings.
+///
+/// DEPRECATED: This is being phased out in favor of const inlining pass.
+/// Lowering should always use const_as_let mode, then const values are
+/// inlined in a separate pass.
 pub struct PreResolvedConsts<'a> {
     /// Script-level const binding graph.
     pub graph: &'a ConstBindingGraph,
@@ -173,6 +176,9 @@ pub struct PreResolvedConsts<'a> {
 }
 
 /// Options for script lowering.
+///
+/// DEPRECATED: This is being phased out. Lowering will always use const_as_let
+/// semantics, with const inlining happening in a separate pass.
 #[derive(Debug, Clone, Default)]
 pub struct ScriptLowerOptions {
     /// When true, const bindings in functions are lowered as let bindings
@@ -190,30 +196,23 @@ pub fn lower_script_fragment_raw<'db>(
     func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: ScriptAnalysisData,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
-    resolved_consts: Option<PreResolvedConsts<'_>>,
-    options: ScriptLowerOptions,
+    // DEPRECATED: resolved_consts is no longer used - consts are lowered as let bindings
+    // and inlined in a separate pass. Pass None.
+    _resolved_consts: Option<PreResolvedConsts<'_>>,
+    // DEPRECATED: options.const_as_let is always true now.
+    _options: ScriptLowerOptions,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
-    // Set const_as_let mode if enabled in options.
-    ctx.set_const_as_let(options.const_as_let);
-
-    // Pre-populate const bindings from Phase 2 resolved values.
-    // Skip this when const_as_let is enabled - consts will be lowered as let bindings.
-    if !options.const_as_let {
-        if let Some(ref pre_resolved) = resolved_consts {
-            ctx.add_resolved_consts(pre_resolved.graph, pre_resolved.values);
-        }
-    }
+    // Always use const_as_let mode - consts are lowered as let bindings
+    // and inlined by the const_inline pass after lowering.
+    ctx.set_const_as_let(true);
 
     // Use pre-computed script analysis from ownership analysis phase.
     ctx.body.drop_schedule = script_analysis.schedule;
     ctx.body.binding_info = script_analysis.bindings;
     ctx.body.tracking = script_analysis.tracking;
     ctx.unit_end_drops = script_analysis.unit_end;
-
-    // Get function-level consts from pre-resolved data.
-    let func_consts = resolved_consts.map(|r| r.func_consts);
 
     // Pre-register all functions to enable forward references (mutual recursion).
     // This must happen before lowering any function bodies.
@@ -228,7 +227,7 @@ pub fn lower_script_fragment_raw<'db>(
     // Lower all statements with index tracking.
     for (idx, stmt) in stmts.iter().enumerate() {
         ctx.body.current_stmt_idx = Some(idx);
-        lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, func_param_types, func_consts)?;
+        lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, func_param_types)?;
     }
     ctx.body.current_stmt_idx = None;
 
@@ -314,16 +313,12 @@ pub fn lower_script_expr<'db>(
 ///
 /// If `func_param_types` is provided, use those resolved param types for function parameters
 /// instead of deriving from AST type hints. This is needed for type alias support.
-///
-/// If `func_consts` is provided, function-level consts are looked up by qualified name
-/// (`func_name::const_name`) and added to the context before lowering function bodies.
 fn lower_statement_for_script<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &Statement<'db>,
     _stmt_idx: usize,
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
-    func_consts: Option<&HashMap<String, (IrType, ConstValue)>>,
 ) -> Result<(), LowerError> {
     // Allocate a globally-unique statement ID that matches ownership analysis.
     // This is critical: ownership analysis uses alloc_stmt_id() for ALL statements,
@@ -493,20 +488,6 @@ fn lower_statement_for_script<'db>(
             // Swap in fresh state for function body.
             let saved = ctx.swap_body_state(FrameState::new());
 
-            // Add function-level consts for this function to the context.
-            // They are stored with qualified names (`func_name::const_name`).
-            // Skip this when const_as_let is enabled - consts will be lowered as let bindings.
-            if !ctx.const_as_let() {
-                if let Some(consts) = func_consts {
-                    let prefix = format!("{}::", func_name);
-                    for (name, (ir_type, value)) in consts {
-                        if let Some(local_name) = name.strip_prefix(&prefix) {
-                            ctx.add_const(local_name.to_string(), ir_type.clone(), value.clone());
-                        }
-                    }
-                }
-            }
-
             // Look up resolved param types for this function.
             let func_name_str = fun_stmt.name(ctx.db).text(ctx.db);
             let resolved_params = func_param_types
@@ -594,7 +575,7 @@ fn lower_statement_for_script<'db>(
                 ctx.bind_var(&name, operand);
                 // Record binding operand for drop schedule.
                 ctx.record_binding_operand(operand);
-                // Export the binding (script-level consts become exported values).
+                // Export the binding for cross-unit reference.
                 ctx.exports.push((name.clone(), ExportBinding::Value(value_id)));
                 // Track as const for const inlining pass.
                 ctx.body.const_values.push((name, value_id));

@@ -28,7 +28,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
-use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts, evaluate_script_function_consts, PreResolvedConsts, ScriptLowerOptions, ScriptFunctionConstsResult};
+use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts, evaluate_script_function_consts, ScriptLowerOptions, ScriptFunctionConstsResult};
+use datalove_datafun_compiler::const_inline::inline_script_consts;
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, build_func_id_map, collect_const_graph,
 };
@@ -36,7 +37,7 @@ use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData,
 };
 use datalove_datafun_compiler::ownership_analysis::ScriptFunctionAnalyses;
-use datalove_datafun_ir::{ConstBindingGraph, ConstValue, CtfeEvaluator, IrScriptUnit, IrType, ResolvedConsts};
+use datalove_datafun_ir::{ConstValue, CtfeEvaluator, IrScriptUnit, IrType, ResolvedConsts};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
     type_check_script_units, create_batch_spec,
@@ -68,7 +69,6 @@ struct OwnershipOutput<'db> {
 
 /// Output from const evaluation phase.
 struct ConstEvalOutput {
-    const_graph: ConstBindingGraph,
     resolved_consts: ResolvedConsts,
     func_consts: HashMap<String, (IrType, ConstValue)>,
 }
@@ -263,7 +263,8 @@ impl<'db> ScriptCompiler<'db> {
     /// 1. Typecheck - type inference and checking
     /// 2. Ownership Analysis - borrow checking and drop scheduling
     /// 3. Const Evaluation - compile-time const evaluation (fragment only)
-    /// 4. IR Lowering - generate IR
+    /// 4. IR Lowering - generate IR (always const_as_let mode)
+    /// 5. Const Inlining - inline evaluated const values into IR
     fn compile_unit_inner(
         &mut self,
         src: bct::input::Source,
@@ -282,16 +283,25 @@ impl<'db> ScriptCompiler<'db> {
         };
 
         // Phase 3: Const Evaluation (fragment only)
+        // This evaluates const expressions using mini-lowering + interpretation.
+        // The results are used for const inlining after lowering.
         let consts = match self.phase_const_eval(&unit, &typecheck) {
             Ok(c) => c,
             Err(result) => return result,
         };
 
         // Phase 4: IR Lowering
+        // Lowering always uses const_as_let mode - const bindings are lowered
+        // as let bindings with their initializer expressions.
         let ir_unit = match self.phase_lower(&unit, &typecheck, &ownership, &consts) {
             Ok(ir) => ir,
             Err(result) => return result,
         };
+
+        // Phase 5: Const Inlining
+        // Replace const initializer expressions with their evaluated values.
+        // In const_as_let mode, skip inlining so const expressions are evaluated at runtime.
+        let ir_unit = self.phase_const_inline(ir_unit, &consts);
 
         // Update accumulated state
         self.update_accumulated_state(&ir_unit);
@@ -428,7 +438,6 @@ impl<'db> ScriptCompiler<'db> {
         let ParsedUnit::Fragment { stmts, .. } = unit else {
             // Expressions don't have const bindings.
             return Ok(ConstEvalOutput {
-                const_graph: ConstBindingGraph::default(),
                 resolved_consts: ResolvedConsts::new(),
                 func_consts: HashMap::new(),
             });
@@ -502,7 +511,6 @@ impl<'db> ScriptCompiler<'db> {
         }
 
         Ok(ConstEvalOutput {
-            const_graph,
             resolved_consts,
             func_consts: func_consts_result.consts,
         })
@@ -513,12 +521,16 @@ impl<'db> ScriptCompiler<'db> {
     // ========================================================================
 
     /// Lower to IR.
+    ///
+    /// Lowering always uses const_as_let mode - const bindings are lowered as
+    /// let bindings with their initializer expressions. Const inlining happens
+    /// as a separate pass after lowering.
     fn phase_lower(
         &mut self,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
         ownership: &OwnershipOutput<'db>,
-        consts: &ConstEvalOutput,
+        _consts: &ConstEvalOutput,
     ) -> Result<IrScriptUnit, ScriptCompilationResult> {
         let func_id_map = build_func_id_map(self.db, &self.module_specs);
         let script_ctx = self.accumulated_lower_bindings.to_script_lower_context();
@@ -538,16 +550,8 @@ impl<'db> ScriptCompiler<'db> {
                 let script_analysis = ownership.script_analysis.clone()
                     .expect("script_analysis required for fragment units");
 
-                let pre_resolved = if !consts.const_graph.is_empty() || !consts.func_consts.is_empty() {
-                    Some(PreResolvedConsts {
-                        graph: &consts.const_graph,
-                        values: &consts.resolved_consts,
-                        func_consts: &consts.func_consts,
-                    })
-                } else {
-                    None
-                };
-
+                // Always use const_as_let mode for lowering.
+                // Const inlining happens in phase_const_inline after lowering.
                 lower_script_fragment_raw(
                     self.db,
                     typecheck.expr_types,
@@ -558,8 +562,8 @@ impl<'db> ScriptCompiler<'db> {
                     ownership.func_analyses.clone(),
                     script_analysis,
                     Some(&func_param_types),
-                    pre_resolved,
-                    ScriptLowerOptions { const_as_let: self.const_as_let },
+                    None,  // No pre-resolved consts - inlining happens separately
+                    ScriptLowerOptions { const_as_let: true },  // Always const_as_let
                 ).map_err(|e| {
                     self.accumulated_unit_specs.pop();
                     ScriptCompilationResult {
@@ -589,6 +593,48 @@ impl<'db> ScriptCompiler<'db> {
                 })
             }
         }
+    }
+
+    // ========================================================================
+    // Phase 5: Const Inlining
+    // ========================================================================
+
+    /// Inline evaluated const values into the lowered IR.
+    ///
+    /// This replaces const initializer expressions with their pre-computed
+    /// literal values. In const_as_let mode, this is skipped so const
+    /// expressions are evaluated at runtime instead of compile time.
+    fn phase_const_inline(
+        &self,
+        ir_unit: IrScriptUnit,
+        consts: &ConstEvalOutput,
+    ) -> IrScriptUnit {
+        // In const_as_let mode, skip inlining - consts are evaluated at runtime.
+        if self.const_as_let {
+            return ir_unit;
+        }
+
+        // Build the const values map for inlining.
+        // Combine script-level and function-level consts.
+        let mut const_values: HashMap<String, ConstValue> = HashMap::new();
+
+        // Add script-level consts.
+        for (name, value) in consts.resolved_consts.iter() {
+            const_values.insert(name.to_string(), value.clone());
+        }
+
+        // Add function-level consts (already qualified as "func_name::const_name").
+        for (qualified_name, (_, value)) in &consts.func_consts {
+            // Extract the local const name for function-level consts.
+            // The key in func_consts is "func_name::const_name".
+            if let Some(pos) = qualified_name.rfind("::") {
+                let local_name = &qualified_name[pos + 2..];
+                const_values.insert(local_name.to_string(), value.clone());
+            }
+        }
+
+        // Run the const inlining pass.
+        inline_script_consts(ir_unit, &const_values)
     }
 
     // ========================================================================
