@@ -42,7 +42,7 @@ impl ReplHistory {
 impl<'db> Engine<'db> {
     pub fn new(db: &'db datafun::Database) -> AnyResult<Engine<'db>> {
         // Create an empty module pipeline and compile.
-        let mut pipeline = ModuleCompilationPipeline::new();
+        let mut pipeline = ModuleCompilationPipeline::default();
         let compiled = pipeline.compile_fresh(db);
 
         // Check for errors.
@@ -70,7 +70,7 @@ impl<'db> Engine<'db> {
         // Cleanup the current executor.
         self.executor.destroy_live_values();
         // Create new compiler and executor (empty pipeline always succeeds).
-        let mut pipeline = ModuleCompilationPipeline::new();
+        let mut pipeline = ModuleCompilationPipeline::default();
         let compiled = pipeline.compile_fresh(self.db);
         self.compiler = compiled.script_compiler_default(self.db)
             .expect("empty pipeline compilation should succeed");

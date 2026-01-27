@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```ignore
-//! let mut pipeline = ModuleCompilationPipeline::new();
+//! let mut pipeline = ModuleCompilationPipeline::default();
 //! pipeline.add_module(&db, "local", "mypackage", "main", source);
 //! let compiled = pipeline.compile_fresh(&db);
 //!
@@ -42,41 +42,42 @@ use datalove_datafun_interp::ModuleFunctionRegistry;
 use crate::incremental::{IncrementalModuleWorld, extract_dependencies};
 use super::compiled_modules::{SharedModuleContext, CompiledModules};
 
+/// Controls whether const bindings are evaluated at compile time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ConstInlining {
+    /// Evaluate const bindings at compile time and inline the results.
+    #[default]
+    Enabled,
+    /// Skip const inlining; evaluate const bindings at runtime instead.
+    /// Useful for testing and debugging const expressions.
+    Disabled,
+}
+
 /// Module compilation pipeline with incremental recompilation support.
 ///
 /// Compiles modules through parsing, typechecking, drop analysis, and IR lowering.
 /// Use `compile_fresh` for initial compilation, then `compile` for incremental updates.
 pub struct ModuleCompilationPipeline {
     world: IncrementalModuleWorld,
-    /// If true, function-level consts in modules are lowered as let bindings
-    /// instead of being evaluated at compile time.
-    skip_const_inlining: bool,
+    const_inlining: ConstInlining,
 }
 
 impl ModuleCompilationPipeline {
     /// Create an empty pipeline.
-    pub fn new() -> Self {
+    pub fn new(const_inlining: ConstInlining) -> Self {
         Self {
             world: IncrementalModuleWorld::new(),
-            skip_const_inlining: false,
+            const_inlining,
         }
-    }
-
-    /// Skip compile-time const evaluation and inlining for modules.
-    ///
-    /// When enabled, const bindings are evaluated at runtime instead of being
-    /// replaced with literal values at compile time. This is useful for testing
-    /// and debugging const expressions.
-    pub fn set_skip_const_inlining(&mut self, enabled: bool) {
-        self.skip_const_inlining = enabled;
     }
 
     /// Create a pipeline from worldfile sections.
     pub fn from_sections(
         db: &dyn salsa::Database,
         sections: &[WorldfileSection],
+        const_inlining: ConstInlining,
     ) -> Self {
-        let mut pipeline = Self::new();
+        let mut pipeline = Self::new(const_inlining);
         pipeline.add_modules_from_sections(db, sections);
         pipeline
     }
@@ -264,7 +265,7 @@ impl ModuleCompilationPipeline {
                 output.ownership_analysis,
                 mode,
                 evaluator,
-                self.skip_const_inlining,
+                self.const_inlining == ConstInlining::Disabled,
             ))
         } else {
             None
@@ -349,6 +350,6 @@ impl ModuleCompilationPipeline {
 
 impl Default for ModuleCompilationPipeline {
     fn default() -> Self {
-        Self::new()
+        Self::new(ConstInlining::default())
     }
 }

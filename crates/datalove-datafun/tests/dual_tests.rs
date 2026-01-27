@@ -24,6 +24,7 @@ use datalove_datafun as datafun;
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_interp::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
+use datafun::pipeline::ConstInlining;
 
 /// Result of dual analysis.
 #[derive(Debug, Serialize, Deserialize)]
@@ -204,7 +205,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         .unwrap();
 
     // Build pipeline and add modules (use consolidated constructor).
-    let mut pipeline = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
+    let mut pipeline = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections, ConstInlining::Enabled);
     let compiled = pipeline.compile_fresh(&db);
 
     // Check for resolution errors.
@@ -304,7 +305,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     interp_executor.destroy_live_values();
 
     // Build pipeline again for AOT context (necessary because script_compiler borrows compiled).
-    let mut pipeline2 = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections);
+    let mut pipeline2 = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections, ConstInlining::Enabled);
     let compiled2 = pipeline2.compile_fresh(&db);
 
     // Run AOT pipeline.

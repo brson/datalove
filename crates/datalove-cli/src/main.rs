@@ -388,7 +388,7 @@ impl ScriptCommand {
         let db = datafun::Database::default();
 
         // Load sys library unless --no-sys.
-        let mut pipeline = ModuleCompilationPipeline::new();
+        let mut pipeline = ModuleCompilationPipeline::default();
         if !no_sys {
             rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
         }
@@ -476,7 +476,7 @@ impl ScriptIrCommand {
         let db = datafun::Database::default();
 
         // Load sys library unless --no-sys.
-        let mut pipeline = ModuleCompilationPipeline::new();
+        let mut pipeline = ModuleCompilationPipeline::default();
         if !self.no_sys {
             rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
         }
@@ -535,7 +535,7 @@ impl AotCompileCommand {
         let db = datafun::Database::default();
 
         // Load sys library unless --no-sys.
-        let mut pipeline = ModuleCompilationPipeline::new();
+        let mut pipeline = ModuleCompilationPipeline::default();
         if !self.no_sys {
             rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
         }
@@ -663,7 +663,7 @@ impl ScriptWorldCommand {
         }
 
         // Build pipeline from module sections.
-        let mut pipeline = ModuleCompilationPipeline::new();
+        let mut pipeline = ModuleCompilationPipeline::default();
         if !self.no_sys {
             rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
         }

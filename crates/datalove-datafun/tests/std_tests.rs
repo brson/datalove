@@ -30,7 +30,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     ).map_err(|e| format!("Failed to load package world: {}", e))?;
 
     // Build pipeline with loaded packages.
-    let mut pipeline = ModuleCompilationPipeline::new();
+    let mut pipeline = ModuleCompilationPipeline::default();
 
     // Add all modules from the loaded package world.
     for (pkg_name, pkg) in &package_world_raw.pkglib_system {

@@ -12,7 +12,7 @@ use serde::{Serialize, Deserialize};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 
 use crate::pipeline::{
-    ModuleCompilationPipeline, TypecheckResult, OwnershipResult, LoweringResult,
+    ModuleCompilationPipeline, ConstInlining, TypecheckResult, OwnershipResult, LoweringResult,
     format_ownership_result, format_lowering_result,
 };
 
@@ -53,11 +53,8 @@ pub fn analyze_worldfile_constlet(
 ) -> AnyResult<Analysis> {
     let mut results = Vec::new();
 
-    // Build pipeline from sections.
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
-
-    // Enable skip_const_inlining mode for module function-level consts.
-    pipeline.set_skip_const_inlining(true);
+    // Build pipeline from sections with skip_const_inlining enabled.
+    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, ConstInlining::Disabled);
 
     // Compile modules (typecheck, drop analysis, lower).
     let (compiled, db) = pipeline.compile(db);

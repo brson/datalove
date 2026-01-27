@@ -16,7 +16,7 @@
 //!
 //! ```ignore
 //! // Stage 1: compile modules.
-//! let mut pipeline = ModuleCompilationPipeline::new();
+//! let mut pipeline = ModuleCompilationPipeline::default();
 //! pipeline.add_module(&db, "local", "mypackage", "main", source);
 //! let compiled = pipeline.compile_fresh(&db);
 //!
@@ -64,7 +64,7 @@ pub use result::{
 pub use compiled_modules::{SharedModuleContext, CompiledModules};
 pub use script_compiler::ScriptCompiler;
 pub use script_executor::ScriptExecutor;
-pub use module_pipeline::ModuleCompilationPipeline;
+pub use module_pipeline::{ModuleCompilationPipeline, ConstInlining};
 
 #[cfg(test)]
 mod tests;

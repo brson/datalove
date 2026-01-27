@@ -74,7 +74,7 @@ pub fn compile_modules<'db>(
 
 **High-level API** (`datalove-datafun`):
 ```rust
-let mut pipeline = ModuleCompilationPipeline::new();
+let mut pipeline = ModuleCompilationPipeline::default();
 pipeline.add_module(&db, "local", "pkg", "main", source);
 let compiled = pipeline.compile_fresh(&db);
 // Or incremental:

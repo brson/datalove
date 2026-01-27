@@ -14,7 +14,7 @@ use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection, ParsedWorldfile};
 use datalove_datafun_cranelift_jit::{JitEngine, ChaosDispatcher};
 use datalove_datafun_interp::CallDispatcher;
-use datafun::pipeline::ModuleCompilationPipeline;
+use datafun::pipeline::{ModuleCompilationPipeline, ConstInlining};
 
 /// Simplified result for comparison.
 #[derive(Debug, Clone, PartialEq)]
@@ -32,7 +32,7 @@ fn run_worldfile(
 ) -> Vec<UnitOutput> {
     let mut results = Vec::new();
 
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
+    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, ConstInlining::Enabled);
     let compiled = pipeline.compile_fresh(db);
 
     if compiled.resolution_error.is_some() {

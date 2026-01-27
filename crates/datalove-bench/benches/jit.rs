@@ -43,7 +43,7 @@ debuglog run_many(repeat, n)
 /// Run the benchmark with optional call dispatcher.
 fn run_benchmark(call_dispatcher: Option<Box<dyn CallDispatcher>>) {
     let db = datafun::Database::default();
-    let mut pipeline = ModuleCompilationPipeline::new();
+    let mut pipeline = ModuleCompilationPipeline::default();
     let compiled = pipeline.compile_fresh(&db);
 
     let mut compiler = compiled.script_compiler_default(&db).unwrap();

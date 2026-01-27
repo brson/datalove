@@ -87,7 +87,7 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
     let mut results = Vec::new();
 
     // Build pipeline and add modules.
-    let mut pipeline = datafun::pipeline::ModuleCompilationPipeline::new();
+    let mut pipeline = datafun::pipeline::ModuleCompilationPipeline::default();
     pipeline.add_modules_from_sections(&db, &parsed.sections);
 
     // Compile modules (typecheck, drop analysis, lower).
