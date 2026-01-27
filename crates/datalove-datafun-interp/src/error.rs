@@ -15,8 +15,6 @@ pub enum InterpError {
     RuntimeError(String),
     /// Type mismatch.
     TypeMismatch(String),
-    /// External unit not found.
-    ExternalUnitNotFound(u32),
     /// Module function not found.
     ModuleFunctionNotFound { module: IrModuleId, func: FuncId },
 }

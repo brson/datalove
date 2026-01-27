@@ -7,7 +7,6 @@ use std::collections::HashSet;
 use datalove_rt::rust::AlignedBuffer;
 use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::{ValueId, SlotId, ParamId};
-use crate::error::InterpError;
 use crate::layout::IrLayout;
 use crate::value::{Value, Destination};
 
@@ -323,31 +322,36 @@ impl FrameStore {
     }
 
     /// Read a value from a previous unit.
-    pub fn external_value(&self, unit: u32, value: ValueId) -> Result<Value, InterpError> {
+    ///
+    /// Panics if unit not found (compiler bug).
+    pub fn external_value(&self, unit: u32, value: ValueId) -> Value {
         let frame = self.frames.get(unit as usize)
-            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
-        Ok(frame.value(value))
+            .unwrap_or_else(|| panic!("external unit {} not found", unit));
+        frame.value(value)
     }
 
     /// Read a slot from a previous unit.
-    pub fn external_slot(&self, unit: u32, slot: SlotId) -> Result<Value, InterpError> {
+    ///
+    /// Panics if unit not found (compiler bug).
+    pub fn external_slot(&self, unit: u32, slot: SlotId) -> Value {
         let frame = self.frames.get(unit as usize)
-            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
-        Ok(frame.slot(slot))
+            .unwrap_or_else(|| panic!("external unit {} not found", unit));
+        frame.slot(slot)
     }
 
     /// Write a value to a slot in a previous unit.
     ///
     /// If the slot already contains a value, destroys it before writing.
+    /// Panics if unit not found (compiler bug).
     pub fn write_external_slot(
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
         unit: u32,
         slot: SlotId,
         value: &Value,
-    ) -> Result<(), InterpError> {
+    ) {
         let frame = self.frames.get_mut(unit as usize)
-            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
+            .unwrap_or_else(|| panic!("external unit {} not found", unit));
 
         // Destroy old value if slot was already initialized.
         if frame.is_slot_initialized(slot) {
@@ -366,7 +370,6 @@ impl FrameStore {
             std::ptr::copy_nonoverlapping(value.ptr, dest.ptr, (*value.tydesc).size as usize);
         }
         frame.mark_slot_initialized(slot);
-        Ok(())
     }
 
     /// Mark an external value as dropped (moved out).

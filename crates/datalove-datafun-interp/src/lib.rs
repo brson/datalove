@@ -542,7 +542,7 @@ impl IrInterpreter {
                             *unit,
                             *slot,
                             &src_val,
-                        )?;
+                        );
                     }
                 }
             }
@@ -573,7 +573,7 @@ impl IrInterpreter {
                             *unit,
                             *slot,
                             &src_val,
-                        )?;
+                        );
                         Self::mark_source_dropped_local(value, frame);
                     }
                 }
@@ -866,7 +866,7 @@ impl IrInterpreter {
                     if let Some(unit) = callee_unit {
                         // External function - create context with callee's unit functions.
                         let unit_funcs = registry.unit_functions(unit)
-                            .ok_or(InterpError::ExternalUnitNotFound(unit))?;
+                            .unwrap_or_else(|| panic!("external unit {} not found", unit));
                         let callee_ctx = ExecutionContext::new(unit_funcs);
                         self.call_in_context(callee, arg_vals, dest_slot, &callee_ctx, registry, frames)?;
                     } else {
@@ -1208,7 +1208,7 @@ impl IrInterpreter {
                             *unit,
                             *slot,
                             &src_val,
-                        )?;
+                        );
                     }
                 }
             }
@@ -1237,7 +1237,7 @@ impl IrInterpreter {
                             *unit,
                             *slot,
                             &src_val,
-                        )?;
+                        );
                         Self::mark_source_dropped_local(value, frame);
                     }
                 }
@@ -1339,10 +1339,10 @@ impl IrInterpreter {
             Operand::Slot(id) => Ok(frame.slot(*id)),
             Operand::Param(id) => Ok(frame.param(*id)),
             Operand::ExternalValue { unit, value } => {
-                frames.external_value(*unit, *value)
+                Ok(frames.external_value(*unit, *value))
             }
             Operand::ExternalSlot { unit, slot } => {
-                frames.external_slot(*unit, *slot)
+                Ok(frames.external_slot(*unit, *slot))
             }
         }
     }

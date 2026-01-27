@@ -92,8 +92,8 @@ impl<'a> ExecutionContext<'a> {
                     .ok_or(InterpError::FunctionNotFound(*id))
             }
             FuncRef::External { unit, func } => {
-                registry.get_external_function(*unit, *func)
-                    .ok_or(InterpError::ExternalUnitNotFound(*unit))
+                Ok(registry.get_external_function(*unit, *func)
+                    .unwrap_or_else(|| panic!("external unit {} not found", unit)))
             }
             FuncRef::Module { module, func } => {
                 registry.get_module_function(*module, *func)
@@ -120,7 +120,7 @@ impl<'a> ExecutionContext<'a> {
             }
             FuncRef::External { unit, func } => {
                 let callee = registry.get_external_function(*unit, *func)
-                    .ok_or(InterpError::ExternalUnitNotFound(*unit))?;
+                    .unwrap_or_else(|| panic!("external unit {} not found", unit));
                 Ok((callee, Some(*unit))) // Need context from this unit.
             }
             FuncRef::Module { module, func } => {

@@ -185,11 +185,9 @@ impl ScriptExecutor {
             let ty = self.script_ctx.value_types.get(name)
                 .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".S());
-            let val = match self.env.frames.external_value(*unit, *value_id) {
-                Ok(v) => self.interp.pretty_print_value(&v)
-                    .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
-                Err(e) => format!("<error: {:?}>", e),
-            };
+            let v = self.env.frames.external_value(*unit, *value_id);
+            let val = self.interp.pretty_print_value(&v)
+                .unwrap_or_else(|e| format!("<print error: {:?}>", e));
             return Some((ty, val));
         }
 
@@ -197,11 +195,9 @@ impl ScriptExecutor {
             let ty = self.script_ctx.slot_types.get(name)
                 .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".S());
-            let val = match self.env.frames.external_slot(*unit, *slot_id) {
-                Ok(v) => self.interp.pretty_print_value(&v)
-                    .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
-                Err(e) => format!("<error: {:?}>", e),
-            };
+            let v = self.env.frames.external_slot(*unit, *slot_id);
+            let val = self.interp.pretty_print_value(&v)
+                .unwrap_or_else(|e| format!("<print error: {:?}>", e));
             return Some((ty, val));
         }
 
@@ -216,11 +212,9 @@ impl ScriptExecutor {
             let ty = self.script_ctx.value_types.get(name)
                 .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".S());
-            let val = match self.env.frames.external_value(*unit, *value_id) {
-                Ok(v) => self.interp.pretty_print_value(&v)
-                    .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
-                Err(e) => format!("<error: {:?}>", e),
-            };
+            let v = self.env.frames.external_value(*unit, *value_id);
+            let val = self.interp.pretty_print_value(&v)
+                .unwrap_or_else(|e| format!("<print error: {:?}>", e));
             result.push((name.C(), "let".S(), ty, val));
         }
 
@@ -228,11 +222,9 @@ impl ScriptExecutor {
             let ty = self.script_ctx.slot_types.get(name)
                 .map(|t| format!("{}", t))
                 .unwrap_or_else(|| "?".S());
-            let val = match self.env.frames.external_slot(*unit, *slot_id) {
-                Ok(v) => self.interp.pretty_print_value(&v)
-                    .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
-                Err(e) => format!("<error: {:?}>", e),
-            };
+            let v = self.env.frames.external_slot(*unit, *slot_id);
+            let val = self.interp.pretty_print_value(&v)
+                .unwrap_or_else(|e| format!("<print error: {:?}>", e));
             result.push((name.C(), "var".S(), ty, val));
         }
 
