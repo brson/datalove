@@ -8,12 +8,12 @@ use rmx::prelude::*;
 use std::collections::HashMap;
 use datalove_datafun_ast::ast::{Statement, StmtFun};
 use datalove_datafun_ir::IrType;
-use datalove_datafun_tycheck::UnitTypecheckResultTracked;
+use datalove_datafun_tycheck::{UnitTypecheckResultTracked, ResolvedCallTarget, Type};
 
 use crate::ir_ext::IrTypeExt;
-use crate::ownership_analysis::{
-    self, DropSchedule, BindingInfo, BindingId, FunctionAnalysis, TrackingCategory,
-    ScriptFunctionAnalyses, format_analysis_errors,
+use datalove_datafun_ownership::{
+    self as ownership_analysis, DropSchedule, BindingInfo, BindingId, FunctionAnalysis,
+    TrackingCategory, ScriptFunctionAnalyses, format_analysis_errors, CallInfo,
 };
 
 /// Hashable wrapper for FunctionAnalysis.
@@ -98,6 +98,35 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
     }
 }
 
+// ============================================================================
+// Type Conversion Helpers
+// ============================================================================
+
+/// Convert tycheck expression types to IR types.
+fn convert_expr_types<'db>(
+    db: &'db dyn salsa::Database,
+    types: &[Option<Type<'db>>],
+) -> Vec<Option<IrType>> {
+    types.iter()
+        .map(|opt| opt.as_ref().map(|ty| IrType::from_tycheck(db, ty)))
+        .collect()
+}
+
+/// Convert resolved call targets to CallInfo.
+fn convert_call_targets<'db>(
+    db: &'db dyn salsa::Database,
+    targets: &[Option<ResolvedCallTarget<'db>>],
+) -> Vec<Option<CallInfo>> {
+    targets.iter()
+        .map(|opt| opt.as_ref().map(|target| CallInfo {
+            param_modes: target.func(db).params(db)
+                .iter()
+                .map(|p| p.mode)
+                .collect()
+        }))
+        .collect()
+}
+
 /// Analyze ownership for a script fragment unit.
 ///
 /// Memoized: if typecheck_result and statements match a previous call,
@@ -108,8 +137,9 @@ pub fn analyze_script_fragment_tracked<'db>(
     typecheck_result: UnitTypecheckResultTracked<'db>,
     statements: Vec<Statement<'db>>,
 ) -> ScriptUnitOwnershipResult<'db> {
-    let expr_types = typecheck_result.expr_types(db);
-    let call_targets = typecheck_result.call_targets(db);
+    // Convert tycheck types to IR types.
+    let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
+    let call_info = convert_call_targets(db, typecheck_result.call_targets(db));
 
     // Build map of function name -> resolved param types for type alias support.
     let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
@@ -123,7 +153,7 @@ pub fn analyze_script_fragment_tracked<'db>(
 
     // Analyze functions in this unit for ownership.
     let func_analyses_result = ownership_analysis::analyze_script_functions(
-        db, expr_types, call_targets, &statements, Some(&func_param_types)
+        db, &expr_types, &call_info, &statements, Some(&func_param_types)
     );
 
     let (func_analyses, func_errors) = match func_analyses_result {
@@ -145,7 +175,7 @@ pub fn analyze_script_fragment_tracked<'db>(
 
     // Analyze script-level statements for drop schedule.
     let script_analysis = ownership_analysis::analyze_script_statements(
-        db, expr_types, call_targets, &statements
+        db, &expr_types, &call_info, &statements
     );
 
     // Check for script analysis errors.
@@ -195,10 +225,11 @@ pub fn analyze_script_expr_tracked<'db>(
     typecheck_result: UnitTypecheckResultTracked<'db>,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
 ) -> ScriptUnitOwnershipResult<'db> {
-    let expr_types = typecheck_result.expr_types(db);
-    let call_targets = typecheck_result.call_targets(db);
+    // Convert tycheck types to IR types.
+    let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
+    let call_info = convert_call_targets(db, typecheck_result.call_targets(db));
 
-    let analysis = ownership_analysis::analyze_expr(db, expr, expr_types, call_targets);
+    let analysis = ownership_analysis::analyze_expr(db, expr, &expr_types, &call_info);
 
     if !analysis.errors.is_empty() {
         let error_msg = format_analysis_errors(&analysis.errors);

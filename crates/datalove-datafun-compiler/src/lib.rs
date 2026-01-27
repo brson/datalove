@@ -18,8 +18,8 @@ pub mod tracked_lower;
 // Salsa-tracked script unit lowering functions.
 pub mod tracked_script_lower;
 
-// Ownership and liveness analysis.
-pub mod ownership_analysis;
+// Ownership and liveness analysis (re-exported from peer crate).
+pub use datalove_datafun_ownership as ownership_analysis;
 
 // Salsa-tracked script unit ownership analysis functions.
 pub mod tracked_script_ownership;

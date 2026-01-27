@@ -12,14 +12,40 @@ use datalove_datafun as datafun;
 use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_compiler::lower::{self, ScriptLowerContext, PreResolvedConsts, evaluate_consts};
-use datalove_datafun_compiler::ownership_analysis;
+use datalove_datafun_compiler::ownership_analysis::{self, CallInfo};
 use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
 use datalove_datafun_compiler::ir_ext::IrTypeExt;
 use datalove_datafun_ir::{IrType, ConstBindingInfo, ConstBindingGraph};
+use datalove_datafun_tycheck::{Type, ResolvedCallTarget};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use salsa::plumbing::AsId;
 use bct::input::Source;
 use datalove_datafun_ast::ast::Statement;
+
+/// Convert tycheck expression types to IR types.
+fn convert_expr_types<'db>(
+    db: &'db dyn salsa::Database,
+    types: &[Option<Type<'db>>],
+) -> Vec<Option<IrType>> {
+    types.iter()
+        .map(|opt| opt.as_ref().map(|ty| IrType::from_tycheck(db, ty)))
+        .collect()
+}
+
+/// Convert resolved call targets to CallInfo.
+fn convert_call_targets<'db>(
+    db: &'db dyn salsa::Database,
+    targets: &[Option<ResolvedCallTarget<'db>>],
+) -> Vec<Option<CallInfo>> {
+    targets.iter()
+        .map(|opt| opt.as_ref().map(|target| CallInfo {
+            param_modes: target.func(db).params(db)
+                .iter()
+                .map(|p| p.mode)
+                .collect()
+        }))
+        .collect()
+}
 
 /// Build a simple const binding graph from statements and expr_types.
 /// This is a non-tracked version of collect_const_graph for tests.
@@ -85,8 +111,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let spans = datalove_datafun_parser::datafun_spans(&db, source_obj);
                 let name_resolution = resolve_script_names(&db, source_obj, parsed_ast.clone());
                 let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj, spans, parsed_ast, name_resolution);
-                let expr_types = tycheck_result.expr_types(&db);
-                let call_targets = tycheck_result.call_targets(&db);
+                let expr_types_raw = tycheck_result.expr_types(&db);
+                let call_targets_raw = tycheck_result.call_targets(&db);
+
+                // Convert to IR types for ownership analysis.
+                let expr_types_ir = convert_expr_types(&db, expr_types_raw);
+                let call_info = convert_call_targets(&db, call_targets_raw);
 
                 output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));
 
@@ -101,7 +131,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 }
 
                 // Run drop analysis on all functions first.
-                let func_analyses = match ownership_analysis::analyze_script_functions(&db, expr_types, call_targets, &stmts, Some(&func_param_types)) {
+                let func_analyses = match ownership_analysis::analyze_script_functions(&db, &expr_types_ir, &call_info, &stmts, Some(&func_param_types)) {
                     Ok(analyses) => analyses,
                     Err(errors) => {
                         for (func_name, errs) in errors {
@@ -117,7 +147,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 };
 
                 // Run script-level ownership analysis.
-                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, expr_types, call_targets, &stmts);
+                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, &expr_types_ir, &call_info, &stmts);
 
                 // Check for script analysis errors.
                 if !script_analysis_raw.errors.is_empty() {
@@ -139,10 +169,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let func_id_map = HashMap::new();
 
                 // Evaluate const bindings using CTFE (Phase 2).
-                let const_graph = build_const_graph(&db, &stmts, expr_types);
+                let const_graph = build_const_graph(&db, &stmts, expr_types_raw);
                 let resolved_consts = if !const_graph.bindings.is_empty() {
                     let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-                    match evaluate_consts(&db, &const_graph, &stmts, expr_types, evaluator) {
+                    match evaluate_consts(&db, &const_graph, &stmts, expr_types_raw, evaluator) {
                         Ok(resolved) => Some(resolved),
                         Err(e) => {
                             output.push_str(&format!("CTFE error: {:?}\n\n", e));
@@ -162,7 +192,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     func_consts: &empty_func_consts,
                 });
 
-                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), pre_resolved) {
+                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), pre_resolved) {
                     Ok(ir_unit) => {
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

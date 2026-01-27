@@ -14,11 +14,13 @@ use datalove_datafun_tycheck::{
     SingleModuleTypecheckResult,
     ModuleGraphTypecheckResult,
     ParsedModuleGraph,
+    ResolvedCallTarget,
+    Type,
 };
-
 use datalove_datafun_ir::IrType;
+use datalove_datafun_ownership::{self as ownership_analysis, FunctionAnalysis, CallInfo};
+
 use crate::ir_ext::IrTypeExt;
-use crate::ownership_analysis::{self, FunctionAnalysis};
 
 /// Result of ownership analysis for a single function.
 #[salsa::tracked]
@@ -76,6 +78,35 @@ impl<'db> ModuleGraphAnalysis<'db> {
     }
 }
 
+// ============================================================================
+// Type Conversion Helpers
+// ============================================================================
+
+/// Convert tycheck expression types to IR types.
+fn convert_expr_types<'db>(
+    db: &'db dyn salsa::Database,
+    types: &[Option<Type<'db>>],
+) -> Vec<Option<IrType>> {
+    types.iter()
+        .map(|opt| opt.as_ref().map(|ty| IrType::from_tycheck(db, ty)))
+        .collect()
+}
+
+/// Convert resolved call targets to CallInfo.
+fn convert_call_targets<'db>(
+    db: &'db dyn salsa::Database,
+    targets: &[Option<ResolvedCallTarget<'db>>],
+) -> Vec<Option<CallInfo>> {
+    targets.iter()
+        .map(|opt| opt.as_ref().map(|target| CallInfo {
+            param_modes: target.func(db).params(db)
+                .iter()
+                .map(|p| p.mode)
+                .collect()
+        }))
+        .collect()
+}
+
 /// Analyze a single module for ownership errors.
 #[salsa::tracked]
 pub fn analyze_module<'db>(
@@ -89,8 +120,9 @@ pub fn analyze_module<'db>(
 
     log_query("ownership_analysis", module_path, QueryPhase::Start);
 
-    let expr_types = typecheck_result.expr_types(db);
-    let call_targets = typecheck_result.call_targets(db);
+    // Convert tycheck types to IR types.
+    let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
+    let call_info = convert_call_targets(db, typecheck_result.call_targets(db));
 
     // Build map of function name -> resolved param types from exports.
     // This is needed to resolve type aliases in function parameters.
@@ -114,7 +146,7 @@ pub fn analyze_module<'db>(
             let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
 
             // Run ownership analysis.
-            let analysis = ownership_analysis::analyze_function(db, *func, expr_types, call_targets, resolved_params);
+            let analysis = ownership_analysis::analyze_function(db, *func, &expr_types, &call_info, resolved_params);
 
             let (opt_analysis, errors) = if analysis.errors.is_empty() {
                 (Some(analysis), Vec::new())

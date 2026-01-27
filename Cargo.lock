@@ -1160,6 +1160,7 @@ dependencies = [
  "datalove-datafun-common",
  "datalove-datafun-intrinsics",
  "datalove-datafun-ir",
+ "datalove-datafun-ownership",
  "datalove-datafun-parser",
  "datalove-datafun-resolve",
  "datalove-datafun-tycheck",
@@ -1254,6 +1255,19 @@ dependencies = [
  "ron",
  "salsa",
  "serde",
+]
+
+[[package]]
+name = "datalove-datafun-ownership"
+version = "0.1.0"
+dependencies = [
+ "bcts",
+ "datalove-datafun-ast",
+ "datalove-datafun-common",
+ "datalove-datafun-ir",
+ "datalove-rtdt",
+ "rustmax",
+ "salsa",
 ]
 
 [[package]]

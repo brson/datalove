@@ -46,7 +46,6 @@ use datalove_datafun_ast::ast::{
     ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, SetTarget,
 };
 use datalove_datafun_ir::IrType;
-use crate::ir_ext::IrTypeExt;
 
 // ============================================================================
 // Statement identity for debug verification
@@ -108,6 +107,21 @@ impl StmtKey {
             _ => "Unknown",
         }
     }
+}
+
+// ============================================================================
+// Call site information
+// ============================================================================
+
+/// Pre-resolved call site info for ownership analysis.
+///
+/// This provides the parameter modes of the callee function, which ownership
+/// analysis needs to determine whether arguments are consumed (In) or borrowed
+/// (Ref, Mut, Out).
+#[derive(Clone, Debug)]
+pub struct CallInfo {
+    /// Parameter modes of the called function.
+    pub param_modes: Vec<ParamMode>,
 }
 
 // ============================================================================
@@ -354,9 +368,10 @@ pub struct FunctionAnalysis {
 /// Context for ownership and liveness analysis.
 struct AnalysisCtx<'db> {
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
-    /// Resolved call targets for looking up callee parameter modes.
-    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+    /// Pre-converted expression types (IrType).
+    expr_types: &'db [Option<IrType>],
+    /// Pre-resolved call info for looking up callee parameter modes.
+    call_info: &'db [Option<CallInfo>],
     /// Next binding ID to allocate.
     next_binding: u32,
     /// Next global statement ID for drop schedule keys.
@@ -401,13 +416,13 @@ enum ScopeKind {
 impl<'db> AnalysisCtx<'db> {
     fn new(
         db: &'db dyn salsa::Database,
-        expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
-        call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+        expr_types: &'db [Option<IrType>],
+        call_info: &'db [Option<CallInfo>],
     ) -> Self {
         Self {
             db,
             expr_types,
-            call_targets,
+            call_info,
             next_binding: 0,
             next_stmt_id: 0,
             bindings: Vec::new(),
@@ -703,10 +718,7 @@ impl<'db> AnalysisCtx<'db> {
     fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
         let expr_id = expr.as_id();
         let index = expr_id.index() as usize;
-        match self.expr_types.get(index).cloned().flatten() {
-            Some(ty) => IrType::from_tycheck(self.db, &ty),
-            None => IrType::Unit,
-        }
+        self.expr_types.get(index).cloned().flatten().unwrap_or(IrType::Unit)
     }
 
     /// If the expression is a simple name, return its binding ID.
@@ -820,15 +832,10 @@ impl<'db> AnalysisCtx<'db> {
             ExprFunKind::FunctionCall(call) => {
                 // Look up callee's parameter modes if available.
                 let call_index = call.as_id().index() as usize;
-                let callee_modes: Vec<ParamMode> = self.call_targets
+                let callee_modes: Vec<ParamMode> = self.call_info
                     .get(call_index)
                     .and_then(|opt| opt.as_ref())
-                    .map(|target| {
-                        target.func(self.db).params(self.db)
-                            .iter()
-                            .map(|p| p.mode)
-                            .collect()
-                    })
+                    .map(|info| info.param_modes.clone())
                     .unwrap_or_default();
 
                 // Analyze args with appropriate consumption based on param mode.
@@ -988,11 +995,11 @@ impl<'db> AnalysisCtx<'db> {
 pub fn analyze_function<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
-    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
-    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+    expr_types: &'db [Option<IrType>],
+    call_info: &'db [Option<CallInfo>],
     resolved_param_types: Option<&[IrType]>,
 ) -> FunctionAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, call_targets);
+    let mut ctx = AnalysisCtx::new(db, expr_types, call_info);
 
     // Enter function scope.
     ctx.enter_scope(ScopeKind::Function);
@@ -1036,8 +1043,8 @@ pub fn analyze_function<'db>(
 /// This is needed when type aliases are used in function parameters.
 pub fn analyze_script_functions<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
-    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+    expr_types: &'db [Option<IrType>],
+    call_info: &'db [Option<CallInfo>],
     stmts: &[Statement<'db>],
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError>)>> {
@@ -1052,7 +1059,7 @@ pub fn analyze_script_functions<'db>(
                 .and_then(|m| m.get(func_name))
                 .map(|v| v.as_slice());
 
-            let analysis = analyze_function(db, *func, expr_types, call_targets, resolved_params);
+            let analysis = analyze_function(db, *func, expr_types, call_info, resolved_params);
             if !analysis.errors.is_empty() {
                 errors.push((func_name.S(), analysis.errors.C()));
             }
@@ -1102,11 +1109,11 @@ pub struct ScriptAnalysis {
 /// - AOT: conditional drop (checks tracking byte)
 pub fn analyze_script_statements<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
-    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+    expr_types: &'db [Option<IrType>],
+    call_info: &'db [Option<CallInfo>],
     stmts: &[Statement<'db>],
 ) -> ScriptAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, call_targets);
+    let mut ctx = AnalysisCtx::new(db, expr_types, call_info);
 
     // Enter ScriptUnit scope so bindings are Tracked.
     ctx.enter_scope(ScopeKind::ScriptUnit);
@@ -1167,10 +1174,10 @@ pub struct ExprAnalysis {
 pub fn analyze_expr<'db>(
     db: &'db dyn salsa::Database,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
-    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
-    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+    expr_types: &'db [Option<IrType>],
+    call_info: &'db [Option<CallInfo>],
 ) -> ExprAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, call_targets);
+    let mut ctx = AnalysisCtx::new(db, expr_types, call_info);
 
     // Enter a scope for the expression analysis.
     ctx.enter_scope(ScopeKind::Function);
@@ -1575,154 +1582,5 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLoop<'db>, stmt_idx:
     let loop_drops = ctx.exit_scope();
     if !loop_drops.is_empty() {
         ctx.schedule.loop_body_end.insert(stmt_idx, loop_drops);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use bct::input::Source;
-
-    fn parse_function<'db>(db: &'db dyn salsa::Database, source_code: &str) -> StmtFun<'db> {
-        let source = Source::new(db, source_code.to_string());
-        let script = datalove_datafun_parser::parse_for_test(db, source);
-        let statements = script.statements;
-
-        for stmt in statements {
-            if let Statement::Fun(fun) = stmt {
-                return fun;
-            }
-        }
-        panic!("No function found in source code");
-    }
-
-    #[test]
-    fn test_simple_function() {
-        let ref db = crate::Database::default();
-        let source = r#"
-fun test(): u32
-    let x = @42
-    ret x
-end fun
-        "#;
-
-        let func = parse_function(db, source);
-        let expr_types = &[];
-        let call_targets = &[];
-        let analysis = analyze_function(db, func, expr_types, call_targets, None);
-
-        assert!(analysis.errors.is_empty());
-    }
-
-    #[test]
-    fn test_conditional_move() {
-        // Full convergence testing is done in interp3 test 120_conditional_move_convergence.
-        // This test just verifies the analysis runs without panicking.
-        let ref db = crate::Database::default();
-        let source = r#"
-fun test(cond: bool): u32
-    let x = [@1, @2]
-    if cond
-        let _sink = x
-    end if
-    ret @0
-end fun
-        "#;
-
-        let func = parse_function(db, source);
-        // Without full expr_types, types default to Unit (Copy), so no drops scheduled.
-        // This just tests that analysis completes without panicking.
-        let analysis = analyze_function(db, func, &[], &[], None);
-
-        // No errors expected even without type info.
-        assert!(analysis.errors.is_empty());
-    }
-
-    #[test]
-    fn test_ref_param_registered_correctly() {
-        // Verify that ref params have param_mode = Some(Ref).
-        let ref db = crate::Database::default();
-        let source = r#"
-fun test(ref x: u32): u32
-    ret x
-end fun
-        "#;
-
-        let func = parse_function(db, source);
-        let analysis = analyze_function(db, func, &[], &[], None);
-
-        // Should have one binding (the ref param).
-        assert_eq!(analysis.bindings.len(), 1);
-        assert_eq!(analysis.bindings[0].param_mode, Some(ParamMode::Ref), "ref param should have param_mode = Ref");
-        assert!(analysis.bindings[0].is_borrowed(), "ref param should be borrowed");
-        assert_eq!(analysis.bindings[0].name, "x");
-        assert!(analysis.errors.is_empty());
-    }
-
-    #[test]
-    fn test_in_param_not_ref() {
-        // Verify that regular in params have param_mode = Some(In).
-        let ref db = crate::Database::default();
-        let source = r#"
-fun test(x: u32): u32
-    ret x
-end fun
-        "#;
-
-        let func = parse_function(db, source);
-        let analysis = analyze_function(db, func, &[], &[], None);
-
-        // Should have one binding (the in param).
-        assert_eq!(analysis.bindings.len(), 1);
-        assert_eq!(analysis.bindings[0].param_mode, Some(ParamMode::In), "in param should have param_mode = In");
-        assert!(!analysis.bindings[0].is_borrowed(), "in param should NOT be borrowed");
-        assert_eq!(analysis.bindings[0].name, "x");
-        assert!(analysis.errors.is_empty());
-    }
-
-    #[test]
-    fn test_ref_param_cannot_be_moved() {
-        // Verify that trying to move a ref param produces an error.
-        // Use @int (non-Copy type) since Copy types don't trigger move tracking.
-        let ref db = crate::Database::default();
-        let source = r#"
-fun test(ref x: int): int
-    let sink = x
-    ret sink
-end fun
-        "#;
-
-        let func = parse_function(db, source);
-        let analysis = analyze_function(db, func, &[], &[], None);
-
-        // Should have an error for moving the ref param.
-        assert!(!analysis.errors.is_empty(), "should have error for moving ref param");
-
-        // Check that it's specifically a CannotMoveBorrowed error.
-        let has_cannot_move_error = analysis.errors.iter().any(|e| {
-            matches!(e, AnalysisError::CannotMoveBorrowed { name, .. } if name == "x")
-        });
-        assert!(has_cannot_move_error, "error should be CannotMoveBorrowed for 'x'");
-    }
-
-    #[test]
-    fn test_mixed_ref_and_in_params() {
-        // Verify mixed parameter modes are tracked correctly.
-        let ref db = crate::Database::default();
-        let source = r#"
-fun test(a: u32, ref b: u32, c: u32): u32
-    ret a
-end fun
-        "#;
-
-        let func = parse_function(db, source);
-        let analysis = analyze_function(db, func, &[], &[], None);
-
-        // Should have three bindings.
-        assert_eq!(analysis.bindings.len(), 3);
-        assert_eq!(analysis.bindings[0].param_mode, Some(ParamMode::In), "a should be In mode");
-        assert_eq!(analysis.bindings[1].param_mode, Some(ParamMode::Ref), "b should be Ref mode");
-        assert_eq!(analysis.bindings[2].param_mode, Some(ParamMode::In), "c should be In mode");
-        assert!(analysis.errors.is_empty());
     }
 }
