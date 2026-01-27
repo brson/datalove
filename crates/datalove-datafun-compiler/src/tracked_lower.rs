@@ -332,6 +332,9 @@ pub fn lower_module<'db>(
     // and skip_const_inlining flag is true, we want consts evaluated at runtime).
     if !skip_const_inlining {
         if let Some(ref pre_resolved) = pre_resolved_consts {
+            // Include any CTFE errors from const evaluation.
+            errors.extend(pre_resolved.errors.iter().cloned());
+
             // Build const values map from pre-resolved consts.
             // Pre-resolved consts have qualified names like "func_name::const_name".
             let const_values: HashMap<String, ConstValue> = pre_resolved.consts
@@ -514,6 +517,9 @@ pub fn evaluate_all_module_consts<'db>(
         for statement in &parsed.statements {
             if let Statement::Fun(func_stmt) = statement {
                 let func_name = func_stmt.name(db).text(db);
+                // Get function's return type for try operators in const expressions.
+                let func_return_type = func_stmt.return_type(db)
+                    .map(|ty| IrType::from_type_hint(db, &ty));
                 // Track local consts for this function so later consts can reference earlier ones.
                 let mut func_local_consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
 
@@ -521,7 +527,7 @@ pub fn evaluate_all_module_consts<'db>(
                     if let Statement::Const(const_stmt) = func_body_stmt {
                         match evaluate_single_const(
                             db, const_stmt, expr_types, call_targets, &func_local_consts, &evaluator,
-                            funcs, &func_map,
+                            funcs, &func_map, func_return_type.clone(),
                         ) {
                             Ok((name, ir_type, value)) => {
                                 // Store locally for other consts in this function.
@@ -551,6 +557,7 @@ pub fn evaluate_all_module_consts<'db>(
 /// Returns the evaluated const or an error message describing what went wrong.
 ///
 /// The `lowered_functions` are used when const expressions call functions.
+/// The `func_return_type` is needed for try operators (`?` and `!`) in const expressions.
 fn evaluate_single_const<'db>(
     db: &'db dyn salsa::Database,
     const_stmt: &datalove_datafun_ast::ast::StmtConst<'db>,
@@ -560,6 +567,7 @@ fn evaluate_single_const<'db>(
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
     lowered_functions: &[IrFunction],
     func_name_to_id: &HashMap<String, FuncId>,
+    func_return_type: Option<IrType>,
 ) -> Result<(String, IrType, ConstValue), String> {
     let name = const_stmt.name.text(db).S();
     let init_expr = const_stmt.value;
@@ -580,7 +588,7 @@ fn evaluate_single_const<'db>(
         expr_types,
         call_targets,
         resolved_so_far,
-        None, // No return type for module-level consts.
+        func_return_type,
         lowered_functions,
         func_name_to_id,
     ).map_err(|e| format!("const '{}': lowering error: {}", name, e))?;
@@ -638,54 +646,16 @@ pub fn lower_module_graph_with_evaluator<'db>(
         (resolved, lowered_functions)
     };
 
-    // Collect CTFE errors from all modules.
-    let ctfe_errors: Vec<(ModuleId, Vec<String>)> = resolved_consts.iter()
-        .filter(|(_, v)| !v.errors.is_empty())
-        .map(|(k, v)| (*k, v.errors.clone()))
-        .collect();
-
     // Phase 3+4: Assemble modules with lowered functions, then inline consts.
-    let mut result = match mode {
+    // CTFE errors from resolved_consts are included in lower_module via pre_resolved_consts.errors.
+    match mode {
         ParallelMode::Sequential => {
             assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_functions, skip_const_inlining)
         }
         ParallelMode::Parallel => {
             assemble_module_graph_parallel(db, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_functions, skip_const_inlining)
         }
-    };
-
-    // If there were CTFE errors, create a new result with those errors included.
-    if !ctfe_errors.is_empty() {
-        let mut module_results = result.module_results(db_salsa).clone();
-
-        for (module_id, errors) in ctfe_errors {
-            if let Some(existing) = module_results.get(&module_id) {
-                // Prepend CTFE errors to existing module errors.
-                let mut all_errors = errors;
-                all_errors.extend(existing.errors(db_salsa).iter().cloned());
-
-                // Create updated result with CTFE errors.
-                let updated = SingleModuleLoweringResult::new(
-                    db_salsa,
-                    module_id,
-                    existing.ir_module_id(db_salsa),
-                    existing.functions(db_salsa).clone(),
-                    all_errors,
-                    existing.func_ids(db_salsa).clone(),
-                );
-                module_results.insert(module_id, updated);
-            }
-        }
-
-        result = ModuleGraphLoweringResult::new(
-            db_salsa,
-            module_results,
-            result.func_id_map(db_salsa),
-            false, // all_success = false due to CTFE errors
-        );
     }
-
-    result
 }
 
 /// Assemble module graph sequentially.

@@ -1,0 +1,20 @@
+----------
+module local/test/tryopterr
+----------
+
+// CTFE try option fails in module function.
+// This mirrors 854_ctfe_try_option_error but in a module.
+fun compute(): ?u32
+    const F: ?u32 = none
+    const G: u32 = F?
+    ret some G
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/tryopterr
+import tryopterr.compute
+
+debuglog compute()

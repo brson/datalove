@@ -1,0 +1,54 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/tryopt"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn compute():
+                    block0:
+                        v0 = const 42u32
+                        v1 = some v0
+                        v2, v3 = unwrap_option v1
+                        branch v3, block2, block1
+                    block1:
+                        v4 = none
+                        return v4
+                    block2:
+                        v5 = some v2
+                        return v5
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.f0()
+                        debuglog v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("some 42\n"),
+        ),
+    ],
+)

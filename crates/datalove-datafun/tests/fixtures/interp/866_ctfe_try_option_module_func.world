@@ -1,0 +1,20 @@
+----------
+module local/test/tryopt
+----------
+
+// CTFE try option in module function.
+// This mirrors 853_ctfe_try_option_success but in a module.
+fun compute(): ?u32
+    const F: ?u32 = some 42
+    const G: u32 = F?
+    ret some G
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/tryopt
+import tryopt.compute
+
+debuglog compute()
