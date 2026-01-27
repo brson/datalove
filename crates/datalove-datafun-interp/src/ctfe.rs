@@ -100,6 +100,10 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
 
         result
     }
+
+    fn set_module_registry(&mut self, registry: Arc<ModuleFunctionRegistry>) {
+        self.module_registry = Some(registry);
+    }
 }
 
 /// Get the alignment of an IR type.

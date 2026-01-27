@@ -12,7 +12,8 @@ use datalove_ct::query_log::{log_query, QueryPhase};
 use datalove_datafun_ast::ast::{ParsedStatements, Statement};
 use std::cell::RefCell;
 use std::rc::Rc;
-use datalove_datafun_ir::{ConstValue, CtfeEvaluator, IrFunction, IrType, FuncId, IrModuleId};
+use std::sync::Arc;
+use datalove_datafun_ir::{ConstValue, CtfeEvaluator, IrFunction, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
 use datalove_datafun_tycheck::{
     DbClone, ParallelMode,
     SingleModuleTypecheckResult,
@@ -370,6 +371,29 @@ pub struct ModuleLoweredFunctions {
     pub func_name_to_id: Vec<(String, FuncId)>,
 }
 
+/// Build a module function registry from lowered functions.
+///
+/// This creates a temporary registry for CTFE to use when evaluating
+/// const expressions that call functions from other modules.
+fn build_module_registry_from_lowered(
+    lowered_functions: &HashMap<ModuleId, ModuleLoweredFunctions>,
+    func_id_map: &HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+) -> Arc<ModuleFunctionRegistry> {
+    let mut registry = ModuleFunctionRegistry::new();
+
+    // Iterate over the func_id_map to get the IrModuleId for each function.
+    for ((module_id, _func_name), (ir_module_id, func_id)) in func_id_map {
+        // Find the corresponding lowered function.
+        if let Some(lowered) = lowered_functions.get(module_id) {
+            if let Some(func) = lowered.functions.iter().find(|f| f.id == *func_id) {
+                registry.add_module_function(*ir_module_id, *func_id, func.clone());
+            }
+        }
+    }
+
+    Arc::new(registry)
+}
+
 /// Lower all module functions.
 ///
 /// This lowers all functions across all modules. The lowered functions are
@@ -650,6 +674,12 @@ pub fn lower_module_graph_with_evaluator<'db>(
         let lowered_functions = lower_all_module_functions(
             db_salsa, parsed_graph, typecheck_result, ownership_analysis, func_id_map
         );
+
+        // Build a module registry from lowered functions for cross-module CTFE calls.
+        let func_id_hashmap = func_id_map.to_hashmap(db_salsa);
+        let module_registry = build_module_registry_from_lowered(&lowered_functions, &func_id_hashmap);
+        evaluator.borrow_mut().set_module_registry(module_registry);
+
         let resolved = evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions, func_id_map);
         (resolved, lowered_functions)
     };

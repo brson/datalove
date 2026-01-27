@@ -1365,6 +1365,12 @@ pub trait CtfeEvaluator {
     ///
     /// The unit should be a simple expression unit (single block, UnitEnd terminator).
     fn evaluate(&mut self, unit: &IrScriptUnit, result_type: &IrType) -> Result<ConstValue, CtfeError>;
+
+    /// Set the module function registry for cross-module CTFE calls.
+    ///
+    /// This allows const expressions to call functions from other modules.
+    /// The registry is built from already-lowered module functions.
+    fn set_module_registry(&mut self, registry: std::sync::Arc<ModuleFunctionRegistry>);
 }
 
 /// Placeholder CTFE evaluator that always returns an error.
@@ -1375,6 +1381,10 @@ pub struct NoopCtfeEvaluator;
 impl CtfeEvaluator for NoopCtfeEvaluator {
     fn evaluate(&mut self, _unit: &IrScriptUnit, _result_type: &IrType) -> Result<ConstValue, CtfeError> {
         Err(CtfeError::InterpError("CTFE evaluator not configured".to_string()))
+    }
+
+    fn set_module_registry(&mut self, _registry: std::sync::Arc<ModuleFunctionRegistry>) {
+        // No-op: this evaluator doesn't support module function calls.
     }
 }
 

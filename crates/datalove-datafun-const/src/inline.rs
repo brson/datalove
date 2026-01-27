@@ -123,13 +123,45 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, Co
 /// Takes the lowered functions and a map of const names to their evaluated values.
 /// For each function, consts tracked in the function's const_values field are inlined.
 ///
+/// The const_values map uses qualified names like "func_name::const_name", matching
+/// how module consts are stored during evaluation.
+///
 /// This function modifies the functions in place.
 pub fn inline_module_functions(
     functions: &mut [IrFunction],
     const_values: &HashMap<String, ConstValue>,
 ) {
     for func in functions {
-        inline_function_consts(func, const_values);
+        // For module functions, const_values has qualified names "func_name::const_name"
+        // but func.const_values has just the local name "const_name".
+        // We need to qualify the names when looking up.
+        let func_name = func.name.clone();
+        inline_module_function_consts(func, const_values, &func_name);
+    }
+}
+
+/// Inline const values into a module IrFunction.
+///
+/// Like inline_function_consts but qualifies const names with the function name
+/// when looking them up in the const_values map.
+fn inline_module_function_consts(
+    func: &mut IrFunction,
+    const_values: &HashMap<String, ConstValue>,
+    func_name: &str,
+) {
+    // Build map of ValueId -> ConstValue for consts that should be inlined.
+    let mut value_to_const: HashMap<ValueId, ConstValue> = HashMap::new();
+    for (name, value_id) in &func.const_values {
+        // Look up with qualified name: "func_name::const_name"
+        let qualified_name = format!("{}::{}", func_name, name);
+        if let Some(const_value) = const_values.get(&qualified_name) {
+            value_to_const.insert(*value_id, const_value.clone());
+        }
+    }
+
+    // Inline consts in all blocks.
+    for block in &mut func.blocks {
+        inline_block_consts(block, &value_to_const);
     }
 }
 

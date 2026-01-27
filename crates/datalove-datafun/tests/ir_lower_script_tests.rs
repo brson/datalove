@@ -207,6 +207,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                             None,
                             &lowered_functions,
                             &func_name_to_id,
+                            None, // No module functions for script tests
                         );
 
                         let value = match lower_result {

@@ -15,9 +15,6 @@ require module local/test/base
 import base.get_value
 
 // Module function with const calling function from another module.
-// NOTE: Cross-module CTFE within modules is not yet supported.
-// The module registry is built after compilation, but CTFE runs during compilation.
-// This test documents the expected error for this limitation.
 fun compute(): u32
     const X: u32 = get_value()
     ret X
