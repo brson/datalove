@@ -37,12 +37,10 @@
 
 ## On deck
 
-- uninitialized lets and vars - unify with out params
+- move benchmarks into bench crate
+- split ctfe and lowering phases into crates
 - fix rt error/alloc semantics
 - clone and coerce
-- updates feed
-- roadmap status page
-- clean up benchmarks
 - datalit syntax cleanup
   - map set type syntax
   - usize/isize -> index/offset
@@ -52,7 +50,6 @@
 - std.string - waiting for rtcalls
 - assert statements - needed for std_tests?
 - fully reactive scripts, undo/redo
-- widening coercions
 - match
 - generics
 
