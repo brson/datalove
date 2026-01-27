@@ -10,11 +10,13 @@ use datalove_datafun_ast::ast::{Statement, StmtFun};
 use datalove_datafun_ir::IrType;
 use datalove_datafun_tycheck::{UnitTypecheckResultTracked, ResolvedCallTarget, Type};
 
-use crate::ir_ext::IrTypeExt;
+use crate::IrTypeExt;
+use crate::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ownership::{
-    self as ownership_analysis, DropSchedule, BindingInfo, BindingId, FunctionAnalysis,
-    TrackingCategory, ScriptFunctionAnalyses, format_analysis_errors, CallInfo,
+    self as ownership_analysis, DropSchedule, BindingInfo, FunctionAnalysis,
+    TrackingCategory, format_analysis_errors, CallInfo,
 };
+pub use datalove_datafun_sema::ScriptAnalysisData;
 
 /// Hashable wrapper for FunctionAnalysis.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -33,16 +35,6 @@ impl From<FunctionAnalysis> for FunctionAnalysisData {
             tracking: analysis.tracking,
         }
     }
-}
-
-/// Hashable wrapper for ScriptAnalysis.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-#[derive(salsa::Update)]
-pub struct ScriptAnalysisData {
-    pub schedule: DropSchedule,
-    pub bindings: Vec<BindingInfo>,
-    pub tracking: Vec<TrackingCategory>,
-    pub unit_end: Vec<BindingId>,
 }
 
 /// Result of ownership analysis for a single script unit.

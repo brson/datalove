@@ -8,8 +8,25 @@
 //! without depending on the full ownership analysis module.
 
 use rmx::std::collections::BTreeMap;
-use datalove_datafun_ast::ast::{Statement, ParamMode};
+use bct::module_graph::ModuleId;
+use datalove_datafun_ast::ast::{Statement, StmtFun, ParamMode};
 use datalove_datafun_ir::IrType;
+
+// ============================================================================
+// Resolved call target
+// ============================================================================
+
+/// Resolved call target from typechecking.
+///
+/// Stores the resolved function AST and source module for a function call,
+/// eliminating the need for runtime name lookup.
+#[salsa::tracked]
+pub struct ResolvedCallTarget<'db> {
+    /// The resolved function AST.
+    pub func: StmtFun<'db>,
+    /// The source module (None for script-local functions).
+    pub module_id: Option<ModuleId>,
+}
 
 // ============================================================================
 // Statement identity for debug verification
@@ -287,4 +304,20 @@ pub struct FunctionAnalysis {
     /// Tracking category for each binding (indexed by BindingId).
     /// Determines whether precise or tracked move/drop instructions are used.
     pub tracking: Vec<TrackingCategory>,
+}
+
+/// Analysis result for script-level statements.
+///
+/// Similar to FunctionAnalysis but includes script-specific data like unit_end
+/// drops for bindings that should be dropped when the script unit ends.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct ScriptAnalysisData {
+    /// Computed drop schedule.
+    pub schedule: DropSchedule,
+    /// Information about each binding (indexed by BindingId).
+    pub bindings: Vec<BindingInfo>,
+    /// Tracking category for each binding (indexed by BindingId).
+    pub tracking: Vec<TrackingCategory>,
+    /// Bindings to drop at unit end (for AOT cleanup).
+    pub unit_end: Vec<BindingId>,
 }

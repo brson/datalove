@@ -11,6 +11,7 @@ index-64 = ["datalove-datafun-ir/index-64", "datalove-datafun-common/index-64"]
 [dependencies]
 rmx.workspace = true
 salsa.workspace = true
+bct.workspace = true
 datalove-datafun-ast.path = "../datalove-datafun-ast"
 datalove-datafun-common.path = "../datalove-datafun-common"
 datalove-datafun-ir.path = "../datalove-datafun-ir"

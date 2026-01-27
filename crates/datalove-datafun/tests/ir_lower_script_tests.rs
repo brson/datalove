@@ -15,7 +15,7 @@ use datalove_datafun_compiler::lower::{self, ScriptLowerContext, evaluate_consts
 use datalove_datafun_compiler::const_inline::inline_script_consts;
 use datalove_datafun_compiler::ownership_analysis::{self, CallInfo};
 use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
-use datalove_datafun_compiler::ir_ext::IrTypeExt;
+use datalove_datafun_compiler::IrTypeExt;
 use datalove_datafun_ir::{IrType, ConstBindingInfo, ConstBindingGraph};
 use datalove_datafun_tycheck::{Type, ResolvedCallTarget};
 use datalove_datafun_interp::InterpCtfeEvaluator;

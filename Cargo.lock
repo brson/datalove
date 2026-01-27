@@ -1160,6 +1160,7 @@ dependencies = [
  "datalove-datafun-common",
  "datalove-datafun-intrinsics",
  "datalove-datafun-ir",
+ "datalove-datafun-lower",
  "datalove-datafun-ownership",
  "datalove-datafun-parser",
  "datalove-datafun-resolve",
@@ -1259,6 +1260,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-datafun-lower"
+version = "0.1.0"
+dependencies = [
+ "bcts",
+ "datalove-datafun-ast",
+ "datalove-datafun-common",
+ "datalove-datafun-intrinsics",
+ "datalove-datafun-ir",
+ "datalove-datafun-sema",
+ "datalove-rtdt",
+ "rustmax",
+ "salsa",
+]
+
+[[package]]
 name = "datalove-datafun-ownership"
 version = "0.1.0"
 dependencies = [
@@ -1312,6 +1328,7 @@ dependencies = [
 name = "datalove-datafun-sema"
 version = "0.1.0"
 dependencies = [
+ "bcts",
  "datalove-datafun-ast",
  "datalove-datafun-common",
  "datalove-datafun-ir",
@@ -1328,6 +1345,7 @@ dependencies = [
  "datalove-datafun-ast",
  "datalove-datafun-common",
  "datalove-datafun-intrinsics",
+ "datalove-datafun-sema",
  "datalove-datalit",
  "datalove-diagnostic",
  "rayon",

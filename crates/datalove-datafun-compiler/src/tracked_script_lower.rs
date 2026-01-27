@@ -18,7 +18,7 @@ use datalove_datafun_tycheck::{
 
 use crate::module_graph::ModuleId;
 use crate::lower;
-use crate::ir_ext::IrTypeExt;
+use crate::IrTypeExt;
 
 /// Accumulated bindings passed to subsequent script units for lowering.
 ///

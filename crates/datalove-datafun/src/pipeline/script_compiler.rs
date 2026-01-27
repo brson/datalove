@@ -36,7 +36,7 @@ use datalove_datafun_compiler::tracked_script_lower::{
 use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData,
 };
-use datalove_datafun_compiler::ownership_analysis::ScriptFunctionAnalyses;
+use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ir::{ConstValue, CtfeEvaluator, IrScriptUnit, IrType, ResolvedConsts};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
@@ -45,7 +45,7 @@ use datalove_datafun_tycheck::{
     UnitTypecheckResultTracked, ResolvedCallTarget, Type,
 };
 use datalove_datafun_resolve::resolve_script_names;
-use datalove_datafun_compiler::ir_ext::IrTypeExt;
+use datalove_datafun_compiler::IrTypeExt;
 
 use super::compiled_modules::CompiledModules;
 use super::result::{TypecheckResult, OwnershipResult, LoweringResult, ScriptCompilationResult};

@@ -3,17 +3,15 @@ use rmx::prelude::*;
 pub mod resolution;
 pub mod funlit_equiv;
 
-// IR extension trait (adds from_tycheck conversion).
-pub mod ir_ext;
-
 // Compile-time function evaluation (CTFE).
 pub mod const_eval;
 
 // Const inlining pass.
 pub mod const_inline;
 
-// IR lowering from AST to IR.
-pub mod lower;
+// IR lowering (re-exported from peer crate).
+pub use datalove_datafun_lower as lower;
+pub use datalove_datafun_lower::IrTypeExt;
 
 // Salsa-tracked IR lowering functions.
 pub mod tracked_lower;

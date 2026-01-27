@@ -20,7 +20,7 @@ use datalove_datafun_tycheck::{
 use datalove_datafun_ir::IrType;
 use datalove_datafun_ownership::{self as ownership_analysis, FunctionAnalysis, CallInfo};
 
-use crate::ir_ext::IrTypeExt;
+use crate::IrTypeExt;
 
 /// Result of ownership analysis for a single function.
 #[salsa::tracked]

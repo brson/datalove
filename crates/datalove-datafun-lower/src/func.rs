@@ -7,11 +7,12 @@
 //!   function lowering. For script functions, called after `swap_body_state`.
 
 use std::collections::HashMap;
+use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast;
-use crate::module_graph::ModuleId;
-use datalove_datafun_tycheck::ResolvedCallTarget;
+use datalove_datafun_common::Type;
+use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{IrType, IrFunction, Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId};
-use crate::ownership_analysis::FunctionAnalysis;
+use datalove_datafun_sema::FunctionAnalysis;
 use super::context::LowerCtx;
 use super::stmt::lower_statement_indexed;
 use super::LowerError;
@@ -32,7 +33,7 @@ use super::LowerError;
 /// available for use within the function body.
 pub fn lower_function_for_module<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    expr_types: &'db [Option<Type<'db>>],
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     func: ast::StmtFun<'db>,

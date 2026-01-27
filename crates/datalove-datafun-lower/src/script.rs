@@ -4,25 +4,24 @@
 //! bindings, and reference values from previous units.
 //!
 //! Entry points:
-//! - [`lower_script_unit`]: Main entry, takes `TypecheckResult`
-//! - [`lower_script_fragment_raw`]: Takes raw `expr_types` for non-salsa paths
+//! - [`lower_script_fragment_raw`]: For statement sequences (fragments)
 //! - [`lower_script_expr`]: For single-expression units
 //!
 //! When a script contains function definitions, they are lowered via
 //! `lower_function_body` after swapping `FrameState` to isolate the function's IR.
 
 use std::collections::HashMap;
+use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
-use crate::module_graph::ModuleId;
-use datalove_datafun_tycheck::{TypecheckResult, ResolvedCallTarget};
+use datalove_datafun_common::Type;
+use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
     ExportBinding, IrModuleId, FuncId,
 };
-use crate::ownership_analysis::ScriptFunctionAnalyses;
-use crate::tracked_script_ownership::ScriptAnalysisData;
-use crate::ir_ext::IrTypeExt;
-use super::context::{LowerCtx, ScriptLowerContext, ScriptUnitKind, FrameState};
+use datalove_datafun_sema::ScriptAnalysisData;
+use crate::ScriptFunctionAnalyses;
+use super::context::{LowerCtx, ScriptLowerContext, FrameState};
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;
 use super::stmt::collect_field_path;
@@ -56,101 +55,7 @@ fn is_self_assignment_script<'db>(
     false
 }
 
-/// Lower a script unit.
-///
-/// Script units are sequences of statements (fragment) or a single expression (expr).
-/// They can reference values from previous units and export bindings to subsequent units.
-///
-/// For fragments, caller must first call `analyze_script_fragment_tracked` to get
-/// ownership analysis (`script_analysis`), then `analyze_script_functions` for `func_analyses`.
-/// For expressions, pass None for `script_analysis` and an empty map for `func_analyses`.
-pub fn lower_script_unit<'db>(
-    db: &'db dyn salsa::Database,
-    tycheck_result: TypecheckResult<'db>,
-    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
-    func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
-    script_ctx: ScriptLowerContext,
-    kind: ScriptUnitKind<'db>,
-    func_analyses: ScriptFunctionAnalyses<'db>,
-    script_analysis: Option<ScriptAnalysisData>,
-) -> Result<IrScriptUnit, LowerError> {
-    let expr_types = tycheck_result.expr_types(db);
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
-
-    // Build map of function name -> resolved param types for type alias support.
-    let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
-    for (name, func_type) in tycheck_result.function_types(db) {
-        let param_types: Vec<IrType> = func_type.param_types(db)
-            .iter()
-            .map(|ty| IrType::from_tycheck(db, ty))
-            .collect();
-        func_param_types.insert(name.text(db).to_string(), param_types);
-    }
-
-    let result = match kind {
-        ScriptUnitKind::Fragment(stmts) => {
-            // Use pre-computed script analysis from ownership analysis phase.
-            let analysis = script_analysis
-                .expect("script_analysis required for Fragment units");
-            ctx.body.drop_schedule = analysis.schedule;
-            ctx.body.binding_info = analysis.bindings;
-            ctx.body.tracking = analysis.tracking;
-            ctx.unit_end_drops = analysis.unit_end;
-
-            // Lower all statements with index tracking.
-            for (idx, stmt) in stmts.iter().enumerate() {
-                ctx.body.current_stmt_idx = Some(idx);
-                lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, Some(&func_param_types))?;
-            }
-            ctx.body.current_stmt_idx = None;
-
-            // Fragment units have no result value.
-            None
-        }
-        ScriptUnitKind::Expr(expr) => {
-            // Expression units don't have statements, no drop schedule needed.
-            // Lower the expression and capture the result.
-            let value_id = lower_expression(&mut ctx, expr)?;
-            Some(value_id)
-        }
-    };
-
-    // Compute unit_end values/slots BEFORE emit_unit_end_drops, because that
-    // method consumes unit_end_drops which we need to compute these.
-    let unit_end_values = ctx.compute_unit_end_values();
-    let unit_end_slots = ctx.compute_unit_end_slots();
-
-    // Emit drops for script-level bindings at unit end (for AOT).
-    ctx.emit_unit_end_drops();
-
-    // Finish the final block with UnitEnd.
-    ctx.finish_block(Terminator::UnitEnd {
-        result: result.map(Operand::Value),
-    });
-
-    // Renumber blocks for O(1) lookup in interpreter.
-    ctx.renumber_blocks();
-
-    Ok(IrScriptUnit {
-        blocks: std::mem::take(&mut ctx.body.blocks),
-        value_count: ctx.body.next_value,
-        slot_count: ctx.body.next_slot,
-        value_types: std::mem::take(&mut ctx.body.value_types),
-        slot_types: std::mem::take(&mut ctx.body.slot_types),
-        tracked_slots: ctx.compute_tracked_slots(),
-        unit_end_values,
-        unit_end_slots,
-        functions: ctx.functions,
-        symbols: ctx.symbols,
-        result,
-        exports: ctx.exports,
-        const_values: std::mem::take(&mut ctx.body.const_values),
-    })
-}
-
-/// Lower a script fragment unit with raw expr_types.
-///
-/// Like `lower_script_unit` but takes expr_types directly instead of TypecheckResult.
+/// Lower a script fragment unit.
 /// Lower a script fragment to IR.
 ///
 /// Caller must first call `analyze_script_fragment_tracked` to get ownership analysis,
@@ -163,7 +68,7 @@ pub fn lower_script_unit<'db>(
 /// separately to replace them with literal values.
 pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    expr_types: &'db [Option<Type<'db>>],
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
@@ -244,7 +149,7 @@ pub fn lower_script_fragment_raw<'db>(
 /// Returns a vector of lowered functions and a map from function name to FuncId.
 pub fn lower_script_functions<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    expr_types: &'db [Option<Type<'db>>],
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     stmts: &[Statement<'db>],
     func_analyses: &ScriptFunctionAnalyses<'db>,
@@ -309,7 +214,7 @@ pub fn lower_script_functions<'db>(
 /// Expression units don't have const bindings, so no pre-resolution is needed.
 pub fn lower_script_expr<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    expr_types: &'db [Option<Type<'db>>],
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,

@@ -19,13 +19,14 @@ use datalove_datafun_ir::{
     ConstEvalError, CtfeEvaluator, CtfeError,
     Operand, Terminator, SymbolTable,
 };
-use datalove_datafun_tycheck::Type;
+use datalove_datafun_common::Type;
+use datalove_datafun_sema::ResolvedCallTarget;
 use crate::ir_ext::IrTypeExt;
 use super::context::LowerCtx;
 use super::LowerError;
 
 // Empty arrays for isolated contexts that don't need call resolution.
-static EMPTY_CALL_TARGETS: Vec<Option<datalove_datafun_tycheck::ResolvedCallTarget<'static>>> = Vec::new();
+static EMPTY_CALL_TARGETS: Vec<Option<ResolvedCallTarget<'static>>> = Vec::new();
 
 /// Evaluate a constant expression at compile time using the LowerCtx's evaluator.
 ///
@@ -186,7 +187,7 @@ pub fn eval_const_expr_with_evaluator<'db>(
     expr: ExprFun<'db>,
     ir_type: &IrType,
     expr_types: &'db [Option<Type<'db>>],
-    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
@@ -215,7 +216,7 @@ fn lower_const_expr_to_unit_standalone<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
     expr_types: &'db [Option<Type<'db>>],
-    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
     pre_lowered_functions: &[datalove_datafun_ir::IrFunction],
@@ -319,7 +320,7 @@ pub fn evaluate_consts<'db>(
     graph: &ConstBindingGraph,
     statements: &[Statement<'db>],
     expr_types: &'db [Option<Type<'db>>],
-    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     pre_lowered_functions: &[datalove_datafun_ir::IrFunction],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
@@ -448,7 +449,7 @@ pub fn evaluate_script_function_consts<'db>(
     db: &'db dyn salsa::Database,
     statements: &[Statement<'db>],
     expr_types: &'db [Option<Type<'db>>],
-    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     script_level_consts: &HashMap<String, (IrType, ConstValue)>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     pre_lowered_functions: &[datalove_datafun_ir::IrFunction],

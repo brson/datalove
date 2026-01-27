@@ -28,6 +28,9 @@ pub use datalove_datafun_common::{
     AllModuleFunctionAsts,
 };
 
+// Re-export ResolvedCallTarget from sema.
+pub use datalove_datafun_sema::ResolvedCallTarget;
+
 // Implementation modules.
 mod api;
 mod check;
@@ -223,18 +226,6 @@ pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ty
 #[salsa::tracked]
 pub struct TypeErrorEntry<'db> {
     pub error: TypeError,
-}
-
-/// Resolved call target from typechecking.
-///
-/// Stores the resolved function AST and source module for a function call,
-/// eliminating the need for runtime name lookup.
-#[salsa::tracked]
-pub struct ResolvedCallTarget<'db> {
-    /// The resolved function AST.
-    pub func: StmtFun<'db>,
-    /// The source module (None for script-local functions).
-    pub module_id: Option<ModuleId>,
 }
 
 /// Result of typechecking a script.

@@ -9,9 +9,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use salsa::plumbing::AsId;
+use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall};
-use crate::module_graph::ModuleId;
-use datalove_datafun_tycheck::ResolvedCallTarget;
+use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{
     IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
@@ -222,7 +222,7 @@ pub struct LowerCtx<'db> {
     // Shared/immutable context (from typechecker).
     pub(super) db: &'db dyn salsa::Database,
     /// Expression types from typechecker.
-    pub(super) expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    pub(super) expr_types: &'db [Option<datalove_datafun_common::Type<'db>>],
     /// Resolved call targets from typechecker, indexed by ExprFunctionCall salsa ID.
     pub(super) call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
@@ -264,7 +264,7 @@ static EMPTY_FUNC_ID_MAP: std::sync::LazyLock<HashMap<(ModuleId, String), (IrMod
 impl<'db> LowerCtx<'db> {
     pub fn new(
         db: &'db dyn salsa::Database,
-        expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+        expr_types: &'db [Option<datalove_datafun_common::Type<'db>>],
         call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     ) -> Self {
         Self {
@@ -289,7 +289,7 @@ impl<'db> LowerCtx<'db> {
     /// Create a context for lowering module functions with call resolution support.
     pub fn new_for_module(
         db: &'db dyn salsa::Database,
-        expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+        expr_types: &'db [Option<datalove_datafun_common::Type<'db>>],
         call_targets: &'db [Option<ResolvedCallTarget<'db>>],
         func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     ) -> Self {
@@ -328,7 +328,7 @@ impl<'db> LowerCtx<'db> {
     /// Create a context for lowering a script unit.
     pub fn new_for_script(
         db: &'db dyn salsa::Database,
-        expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+        expr_types: &'db [Option<datalove_datafun_common::Type<'db>>],
         call_targets: &'db [Option<ResolvedCallTarget<'db>>],
         func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
         script_ctx: ScriptLowerContext,

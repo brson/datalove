@@ -21,7 +21,7 @@ use datalove_datafun_tycheck::{
 };
 
 use crate::const_inline::inline_module_functions;
-use crate::ir_ext::IrTypeExt;
+use crate::IrTypeExt;
 use crate::lower;
 use crate::tracked_ownership_analysis::{SingleModuleAnalysis, ModuleGraphAnalysis};
 

@@ -11,6 +11,7 @@ index-64 = [
     "datalove-rtdt/index-64",
     "datalove-datafun-common/index-64",
     "datalove-datafun-ir/index-64",
+    "datalove-datafun-lower/index-64",
     "datalove-datafun-ownership/index-64",
     "datalove-datafun-sema/index-64",
     "datalove-datafun-tycheck/index-64",
@@ -31,6 +32,7 @@ datalove-datafun-ast.path = "../datalove-datafun-ast"
 datalove-datafun-common.path = "../datalove-datafun-common"
 datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
 datalove-datafun-ir.path = "../datalove-datafun-ir"
+datalove-datafun-lower.path = "../datalove-datafun-lower"
 datalove-datafun-ownership.path = "../datalove-datafun-ownership"
 datalove-datafun-parser.path = "../datalove-datafun-parser"
 datalove-datafun-resolve.path = "../datalove-datafun-resolve"

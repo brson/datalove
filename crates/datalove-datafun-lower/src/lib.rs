@@ -9,10 +9,10 @@
 //! defined in `.dlm` module files. Each function is lowered independently with
 //! its own `LowerCtx`.
 //!
-//! **Script lowering** (`lower_script_unit`): Lowers REPL-style script units,
-//! which are sequences of statements that can define functions, create bindings,
-//! and reference values from previous units. Script units support incremental
-//! execution where bindings persist across units.
+//! **Script lowering** (`lower_script_fragment_raw`, `lower_script_expr`): Lowers
+//! REPL-style script units, which are sequences of statements that can define
+//! functions, create bindings, and reference values from previous units. Script
+//! units support incremental execution where bindings persist across units.
 //!
 //! # Script Function Nesting
 //!
@@ -20,7 +20,7 @@
 //! functions are lowered as nested calls within the script lowering process:
 //!
 //! ```text
-//! lower_script_unit
+//! lower_script_fragment_raw
 //!   -> lower_statement_for_script (for each statement)
 //!        -> Statement::Fun case:
 //!             1. swap_body_state(FrameState::new())  // Save script state
@@ -47,10 +47,14 @@
 //! - `context`: Context types (`LowerCtx`, `FrameState`, `ScriptLowerContext`)
 //! - `const_expr`: Compile-time constant expression evaluation
 //! - `func`: Function lowering (`lower_function_for_module`, `lower_function_body`)
-//! - `script`: Script unit lowering (`lower_script_unit`, `lower_script_fragment_raw`)
+//! - `script`: Script unit lowering (`lower_script_fragment_raw`, `lower_script_expr`)
 //! - `stmt`: Statement lowering (let, var, set, if, loop, return, etc.)
 //! - `expr`: Expression lowering
 //! - `literal`: Literal parsing (int, float, string constants)
+
+use std::collections::HashMap;
+use datalove_datafun_ast::ast::StmtFun;
+use datalove_datafun_sema::FunctionAnalysis;
 
 mod context;
 pub(crate) mod literal;
@@ -59,12 +63,17 @@ mod expr;
 mod stmt;
 mod func;
 mod script;
+mod ir_ext;
 
 // Re-export public types and functions.
 pub use context::{LowerCtx, FrameState, ScriptLowerContext, ScriptUnitKind};
 pub use func::lower_function_for_module;
-pub use script::{lower_script_unit, lower_script_fragment_raw, lower_script_expr, lower_script_functions};
+pub use script::{lower_script_fragment_raw, lower_script_expr, lower_script_functions};
 pub use const_expr::{evaluate_consts, evaluate_script_function_consts, ScriptFunctionConstsResult};
+pub use ir_ext::IrTypeExt;
+
+/// Pre-computed drop analyses for functions in a script unit.
+pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionAnalysis>;
 
 /// Errors that can occur during lowering.
 ///
