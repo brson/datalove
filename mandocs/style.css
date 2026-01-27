@@ -6,16 +6,22 @@
 
 :root {
     /* Text font options - uncomment one to test */
-    --font-text: 'Cormorant Garamond', Georgia, serif;
-    --font-text: 'Spectral', Georgia, serif;
-    --font-header: 'Spectral', Georgia, serif;
-    --font-header: 'Vollkorn', Georgia, serif;
-    --font-code: 'IBM Plex Mono', monospace;
-    --font-code: 'Source Code Pro', monospace;
+    ---font-text: 'Cormorant Garamond', Georgia, serif;
+    --font-text: 'EB Garamond', Georgia, serif;          /* Classic Garamond, common in journals */
+    ---font-text: 'Spectral', Georgia, serif;
+    ---font-header: 'Spectral', Georgia, serif;
+    ---font-header: 'Vollkorn', Georgia, serif;
+    --font-header: 'DM Serif Display', Georgia, serif;
+    ---font-code: 'IBM Plex Mono', monospace;
+    ---font-code: 'Source Code Pro', monospace;
+    ---font-code: 'Cutive Mono', monospace;
+    --font-code: 'Anonymous Pro', monospace;
 
-    --font-size-text: 1.1rem;
+    --font-size-text: 1.2rem;
     --font-size-code: 1rem;
-    --font-size-header-scale: 1;
+    --font-size-header-scale: 1.0;
+    --line-height: 2.0;
+    --line-height-code: 1.6;
     --baseline: 2.2rem;
 
     ---font-header: 'Alegreya', Georgia, serif;
@@ -42,8 +48,8 @@
 
     ---font-text: 'Source Sans 3', system-ui, sans-serif;
     ---font-text: 'Source Serif 4', Georgia, serif;
-    ---font-header: 'EB Garamond', Georgia, serif;          /* Classic Garamond, common in journals */
-    ---font-header: 'Crimson Pro', Georgia, serif;          /* Old-style serif, scholarly feel */
+    ---font-text: 'EB Garamond', Georgia, serif;          /* Classic Garamond, common in journals */
+    ---font-text: 'Crimson Pro', Georgia, serif;          /* Old-style serif, scholarly feel */
 
     /* Code font options */
     ---font-code: 'Source Code Pro', monospace;
@@ -51,6 +57,12 @@
     ---font-code: 'Fira Code', monospace;         /* Has ligatures */
     ---font-code: 'IBM Plex Mono', monospace;     /* Clean, professional */
     ---font-code: 'Inconsolata', monospace;       /* Classic */
+
+    /* Typewriter code fonts */
+    ---font-code: 'Courier Prime', monospace;     /* Clean Courier revival */
+    ---font-code: 'Cutive Mono', monospace;       /* Typewriter aesthetic */
+    ---font-code: 'Anonymous Pro', monospace;     /* Typewriter with coding clarity */
+    ---font-code: 'Special Elite', monospace;     /* Worn typewriter keys */
 
     /* Header font - defaults to text font if not set */
     ---font-header: var(--font-text);
@@ -211,7 +223,7 @@ body {
     color: var(--fg);
     margin: 0;
     padding: 0;
-    line-height: 1.6;
+    line-height: var(--line-height);
 }
 
 nav {
@@ -294,6 +306,7 @@ pre {
     border-left: 3px solid var(--accent);
     overflow-x: auto;
     margin: var(--baseline) 0;
+    line-height: var(--line-height-code);
     font-feature-settings: "lnum" 1;
 }
 
