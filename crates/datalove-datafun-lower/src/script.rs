@@ -10,13 +10,13 @@
 //! When a script contains function definitions, they are lowered via
 //! `lower_function_body` after swapping `FrameState` to isolate the function's IR.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use datalove_datafun_common::Type;
 use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{
-    IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
+    IrType, IrScriptUnit, IrFunction, Operand, Terminator, Instruction, ConstValue, SlotDest,
     ExportBinding, IrModuleId, FuncId,
 };
 use datalove_datafun_sema::ScriptAnalysisData;
@@ -64,6 +64,11 @@ fn is_self_assignment_script<'db>(
 /// If `func_param_types` is provided, use those resolved param types for function parameters
 /// instead of deriving from AST type hints. This is needed for type alias support.
 ///
+/// If `pre_lowered_functions` is provided, those functions are reused instead of being
+/// re-lowered. This avoids redundant work when functions have already been lowered
+/// for CTFE. The tuple contains the pre-lowered functions and a map from function
+/// name to FuncId.
+///
 /// Const bindings are lowered as let bindings. The const inlining pass runs
 /// separately to replace them with literal values.
 pub fn lower_script_fragment_raw<'db>(
@@ -76,6 +81,7 @@ pub fn lower_script_fragment_raw<'db>(
     func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: ScriptAnalysisData,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+    pre_lowered_functions: Option<(Vec<IrFunction>, HashMap<String, FuncId>)>,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
@@ -85,20 +91,38 @@ pub fn lower_script_fragment_raw<'db>(
     ctx.body.tracking = script_analysis.tracking;
     ctx.unit_end_drops = script_analysis.unit_end;
 
-    // Pre-register all functions to enable forward references (mutual recursion).
-    // This must happen before lowering any function bodies.
-    for stmt in &stmts {
-        if let Statement::Fun(fun_stmt) = stmt {
-            let func_name = fun_stmt.name(db).text(db).to_string();
-            let param_count = fun_stmt.params(db).len();
-            ctx.pre_register_func(&func_name, param_count);
+    // Track which functions are pre-lowered (to skip re-lowering in statement handling).
+    let pre_lowered_func_names: HashSet<String>;
+
+    // Handle pre-lowered functions if provided.
+    if let Some((functions, func_name_to_id)) = pre_lowered_functions {
+        // Use pre-lowered functions directly.
+        ctx.functions = functions;
+
+        // Register each function with its existing FuncId so call resolution works.
+        for (name, func_id) in &func_name_to_id {
+            ctx.register_func_with_id(name, 0, *func_id);
+        }
+
+        pre_lowered_func_names = func_name_to_id.keys().cloned().collect();
+    } else {
+        pre_lowered_func_names = HashSet::new();
+
+        // Pre-register all functions to enable forward references (mutual recursion).
+        // This must happen before lowering any function bodies.
+        for stmt in &stmts {
+            if let Statement::Fun(fun_stmt) = stmt {
+                let func_name = fun_stmt.name(db).text(db).to_string();
+                let param_count = fun_stmt.params(db).len();
+                ctx.pre_register_func(&func_name, param_count);
+            }
         }
     }
 
     // Lower all statements with index tracking.
     for (idx, stmt) in stmts.iter().enumerate() {
         ctx.body.current_stmt_idx = Some(idx);
-        lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, func_param_types)?;
+        lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, func_param_types, &pre_lowered_func_names)?;
     }
     ctx.body.current_stmt_idx = None;
 
@@ -258,12 +282,16 @@ pub fn lower_script_expr<'db>(
 ///
 /// If `func_param_types` is provided, use those resolved param types for function parameters
 /// instead of deriving from AST type hints. This is needed for type alias support.
+///
+/// If `pre_lowered_funcs` contains a function name, that function has already been lowered
+/// and only the export should be emitted (body lowering is skipped).
 fn lower_statement_for_script<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &Statement<'db>,
     _stmt_idx: usize,
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+    pre_lowered_funcs: &HashSet<String>,
 ) -> Result<(), LowerError> {
     // Allocate a globally-unique statement ID that matches ownership analysis.
     // This is critical: ownership analysis uses alloc_stmt_id() for ALL statements,
@@ -420,13 +448,26 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Fun(fun_stmt) => {
+            let func_name = fun_stmt.name(ctx.db).text(ctx.db).to_string();
+
+            // If this function is pre-lowered, just export it (body already in ctx.functions).
+            if pre_lowered_funcs.contains(&func_name) {
+                let func_ref = ctx.lookup_func(&func_name)
+                    .expect("pre-lowered function should be registered");
+                let func_id = match func_ref {
+                    datalove_datafun_ir::FuncRef::Local(id) => id,
+                    _ => panic!("pre-lowered function should be local"),
+                };
+                ctx.exports.push((func_name, ExportBinding::Function(func_id)));
+                return Ok(());
+            }
+
             // Look up pre-computed analysis.
             let analysis = func_analyses.get(fun_stmt)
                 .expect("function analysis not found - caller must run analyze_script_functions first")
                 .clone();
 
             // Define the function in the symbol table first (allows recursion).
-            let func_name = fun_stmt.name(ctx.db).text(ctx.db).to_string();
             let param_count = fun_stmt.params(ctx.db).len();
             let func_id = ctx.define_func(&func_name, param_count);
 

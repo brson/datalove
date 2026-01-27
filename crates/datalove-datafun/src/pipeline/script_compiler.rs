@@ -68,6 +68,7 @@ struct OwnershipOutput<'db> {
 }
 
 /// Output from function pre-lowering phase.
+#[derive(Clone)]
 struct PreLoweredFunctions {
     functions: Vec<datalove_datafun_ir::IrFunction>,
     func_name_to_id: HashMap<String, datalove_datafun_ir::FuncId>,
@@ -307,7 +308,8 @@ impl<'db> ScriptCompiler<'db> {
         // Phase 4: IR Lowering
         // Lowering always uses skip_const_inlining mode - const bindings are lowered
         // as let bindings with their initializer expressions.
-        let ir_unit = match self.phase_lower(&unit, &typecheck, &ownership, &consts) {
+        // Pass pre-lowered functions to avoid re-lowering them.
+        let ir_unit = match self.phase_lower(&unit, &typecheck, &ownership, &consts, &pre_lowered) {
             Ok(ir) => ir,
             Err(result) => return result,
         };
@@ -467,6 +469,16 @@ impl<'db> ScriptCompiler<'db> {
         // Get module function ID map for resolving module function calls.
         let func_id_map = build_func_id_map(self.db, &self.module_specs);
 
+        // Build func_param_types for type alias support.
+        let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+        for (name, func_type) in typecheck.result.function_types(self.db) {
+            let param_types: Vec<IrType> = func_type.param_types(self.db)
+                .iter()
+                .map(|ty| IrType::from_tycheck(self.db, ty))
+                .collect();
+            func_param_types.insert(name.text(self.db).S(), param_types);
+        }
+
         // Lower just the functions.
         match lower_script_functions(
             self.db,
@@ -474,7 +486,7 @@ impl<'db> ScriptCompiler<'db> {
             typecheck.call_targets,
             stmts,
             &ownership.func_analyses,
-            None, // func_param_types not needed for script functions
+            Some(&func_param_types),
             &func_id_map,
             script_ctx,
         ) {
@@ -602,12 +614,15 @@ impl<'db> ScriptCompiler<'db> {
     /// Lowering always uses skip_const_inlining mode - const bindings are lowered as
     /// let bindings with their initializer expressions. Const inlining happens
     /// as a separate pass after lowering.
+    ///
+    /// If `pre_lowered` contains functions, they are reused instead of being re-lowered.
     fn phase_lower(
         &mut self,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
         ownership: &OwnershipOutput<'db>,
         _consts: &ConstEvalOutput,
+        pre_lowered: &PreLoweredFunctions,
     ) -> Result<IrScriptUnit, ScriptCompilationResult> {
         let func_id_map = build_func_id_map(self.db, &self.module_specs);
         let script_ctx = self.accumulated_lower_bindings.to_script_lower_context();
@@ -629,6 +644,13 @@ impl<'db> ScriptCompiler<'db> {
 
                 // Const bindings are lowered as let bindings.
                 // Const inlining happens in phase_const_inline after lowering.
+                // Pass pre-lowered functions to avoid re-lowering them.
+                let pre_lowered_arg = if pre_lowered.functions.is_empty() {
+                    None
+                } else {
+                    Some((pre_lowered.functions.clone(), pre_lowered.func_name_to_id.clone()))
+                };
+
                 lower_script_fragment_raw(
                     self.db,
                     typecheck.expr_types,
@@ -639,6 +661,7 @@ impl<'db> ScriptCompiler<'db> {
                     ownership.func_analyses.clone(),
                     script_analysis,
                     Some(&func_param_types),
+                    pre_lowered_arg,
                 ).map_err(|e| {
                     self.accumulated_unit_specs.pop();
                     ScriptCompilationResult {

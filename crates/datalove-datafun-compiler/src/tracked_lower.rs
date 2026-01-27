@@ -208,6 +208,10 @@ impl<'db> ModuleGraphLoweringResult<'db> {
 /// If `pre_resolved_consts` is provided, those values are used for function-level
 /// const inlining (when `skip_const_inlining` is false).
 ///
+/// If `pre_lowered_functions` is provided, those functions are reused instead of
+/// being re-lowered from the AST. This avoids redundant work when functions have
+/// already been lowered for CTFE.
+///
 /// Requires pre-computed ownership analysis results. Functions with ownership analysis
 /// errors are skipped (but those errors are already captured in the ownership
 /// analysis result, not here).
@@ -222,6 +226,7 @@ pub fn lower_module<'db>(
     func_id_map: FuncIdMap<'db>,
     pre_resolved_consts: Option<ModulePreResolvedConsts>,
     skip_const_inlining: bool,
+    pre_lowered_functions: Option<ModulePreLoweredFunctions>,
 ) -> SingleModuleLoweringResult<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -248,7 +253,7 @@ pub fn lower_module<'db>(
         func_param_types.insert(name.text(db).S(), param_types);
     }
 
-    let mut functions = Vec::new();
+    let mut functions;
     let mut errors = Vec::new();
     let mut func_ids = Vec::new();
 
@@ -263,48 +268,55 @@ pub fn lower_module<'db>(
         }
     }
 
-    // Lower functions.
-    let mut func_idx = 0;
-    for statement in &parsed.statements {
-        if let Statement::Fun(func) = statement {
-            let func_name = func.name(db).text(db).S();
-            let func_id = func_ids[func_idx].1;
-            func_idx += 1;
+    // If pre-lowered functions are provided, use them directly.
+    if let Some(ref pre_lowered) = pre_lowered_functions {
+        functions = pre_lowered.functions.clone();
+        // func_ids was already computed above, and should match pre_lowered.func_name_to_id.
+    } else {
+        // Lower functions from scratch.
+        functions = Vec::new();
+        let mut func_idx = 0;
+        for statement in &parsed.statements {
+            if let Statement::Fun(func) = statement {
+                let func_name = func.name(db).text(db).S();
+                let func_id = func_ids[func_idx].1;
+                func_idx += 1;
 
-            // Get resolved param types for this function.
-            let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
+                // Get resolved param types for this function.
+                let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
 
-            // Get pre-computed ownership analysis for this function.
-            let Some(single_analysis) = function_analyses.get(&func_name) else {
-                errors.push(format!("Lowering error in {}: missing ownership analysis", func_name));
-                continue;
-            };
+                // Get pre-computed ownership analysis for this function.
+                let Some(single_analysis) = function_analyses.get(&func_name) else {
+                    errors.push(format!("Lowering error in {}: missing ownership analysis", func_name));
+                    continue;
+                };
 
-            // Skip functions that had ownership analysis errors.
-            let Some(analysis) = single_analysis.analysis(db).clone() else {
-                // Drop analysis errors are already captured separately.
-                continue;
-            };
+                // Skip functions that had ownership analysis errors.
+                let Some(analysis) = single_analysis.analysis(db).clone() else {
+                    // Drop analysis errors are already captured separately.
+                    continue;
+                };
 
-            // Lower to IR with module-level consts.
-            // Note: ctfe_evaluator is None because tracked functions can't take trait objects.
-            // Function-level consts are pre-evaluated via evaluate_all_module_consts() when
-            // using lower_module_graph_with_evaluator(), supporting full CTFE expressions.
-            match lower::lower_function_for_module(
-                db,
-                expr_types,
-                call_targets,
-                &func_id_hashmap,
-                *func,
-                func_id,
-                analysis,
-                resolved_params,
-            ) {
-                Ok(ir_func) => {
-                    functions.push(ir_func);
-                }
-                Err(e) => {
-                    errors.push(format!("Lowering error in {}: {}", func_name, e));
+                // Lower to IR with module-level consts.
+                // Note: ctfe_evaluator is None because tracked functions can't take trait objects.
+                // Function-level consts are pre-evaluated via evaluate_all_module_consts() when
+                // using lower_module_graph_with_evaluator(), supporting full CTFE expressions.
+                match lower::lower_function_for_module(
+                    db,
+                    expr_types,
+                    call_targets,
+                    &func_id_hashmap,
+                    *func,
+                    func_id,
+                    analysis,
+                    resolved_params,
+                ) {
+                    Ok(ir_func) => {
+                        functions.push(ir_func);
+                    }
+                    Err(e) => {
+                        errors.push(format!("Lowering error in {}: {}", func_name, e));
+                    }
                 }
             }
         }
@@ -341,11 +353,13 @@ pub fn lower_module<'db>(
 ///
 /// Used to pass pre-lowered function IR to const evaluation so that
 /// const expressions can call functions without re-lowering them.
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ModulePreLoweredFunctions {
     /// The lowered IR functions for this module.
     pub functions: Vec<IrFunction>,
     /// Map from function name to FuncId.
-    pub func_name_to_id: HashMap<String, FuncId>,
+    /// Sorted vector for deterministic hashing.
+    pub func_name_to_id: Vec<(String, FuncId)>,
 }
 
 /// Pre-lower all module functions for CTFE.
@@ -392,7 +406,7 @@ pub fn lower_all_module_functions<'db>(
         }
 
         let mut functions = Vec::new();
-        let mut func_name_to_id = HashMap::new();
+        let mut func_name_to_id = Vec::new();
 
         // Assign FuncIds and lower each function.
         let mut next_func_id: u32 = 0;
@@ -402,7 +416,7 @@ pub fn lower_all_module_functions<'db>(
                 let func_id = FuncId(next_func_id);
                 next_func_id += 1;
 
-                func_name_to_id.insert(func_name.clone(), func_id);
+                func_name_to_id.push((func_name.clone(), func_id));
 
                 // Get resolved param types for this function.
                 let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
@@ -478,13 +492,9 @@ pub fn evaluate_all_module_consts<'db>(
         let call_targets = single_typecheck.call_targets(db);
 
         // Get pre-lowered functions for this module (if any).
-        let (funcs, func_map) = match pre_lowered_functions.get(module_id) {
-            Some(plf) => (plf.functions.as_slice(), &plf.func_name_to_id),
-            None => {
-                static EMPTY_MAP: std::sync::LazyLock<HashMap<String, FuncId>> =
-                    std::sync::LazyLock::new(HashMap::new);
-                (&[][..], &*EMPTY_MAP)
-            }
+        let (funcs, func_map): (&[IrFunction], HashMap<String, FuncId>) = match pre_lowered_functions.get(module_id) {
+            Some(plf) => (plf.functions.as_slice(), plf.func_name_to_id.iter().cloned().collect()),
+            None => (&[], HashMap::new()),
         };
 
         let mut consts = Vec::new();
@@ -502,7 +512,7 @@ pub fn evaluate_all_module_consts<'db>(
                     if let Statement::Const(const_stmt) = func_body_stmt {
                         match evaluate_single_const(
                             db, const_stmt, expr_types, call_targets, &func_local_consts, &evaluator,
-                            funcs, func_map,
+                            funcs, &func_map,
                         ) {
                             Ok((name, ir_type, value)) => {
                                 // Store locally for other consts in this function.
@@ -607,14 +617,16 @@ pub fn lower_module_graph_with_evaluator<'db>(
 
     // Phase 1: Pre-evaluate all module consts using the CTFE evaluator.
     // Skip if skip_const_inlining is enabled - function-level consts will be lowered as let bindings.
-    let pre_resolved_consts = if skip_const_inlining {
-        HashMap::new()
+    // Also pre-lower functions so they can be reused in the final lowering phase.
+    let (pre_resolved_consts, pre_lowered_functions) = if skip_const_inlining {
+        (HashMap::new(), HashMap::new())
     } else {
         // Pre-lower all module functions first so CTFE can call them.
         let pre_lowered_functions = lower_all_module_functions(
             db_salsa, parsed_graph, typecheck_result, ownership_analysis, func_id_map
         );
-        evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator, &pre_lowered_functions)
+        let pre_resolved = evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator, &pre_lowered_functions);
+        (pre_resolved, pre_lowered_functions)
     };
 
     // Collect CTFE errors from all modules.
@@ -623,13 +635,13 @@ pub fn lower_module_graph_with_evaluator<'db>(
         .map(|(k, v)| (*k, v.errors.clone()))
         .collect();
 
-    // Phase 2: Lower modules with pre-resolved consts.
+    // Phase 2: Lower modules with pre-resolved consts and pre-lowered functions.
     let mut result = match mode {
         ParallelMode::Sequential => {
-            lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts, skip_const_inlining)
+            lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts, &pre_lowered_functions, skip_const_inlining)
         }
         ParallelMode::Parallel => {
-            lower_module_graph_parallel_with_pre_resolved(db, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts, skip_const_inlining)
+            lower_module_graph_parallel_with_pre_resolved(db, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts, &pre_lowered_functions, skip_const_inlining)
         }
     };
 
@@ -668,12 +680,16 @@ pub fn lower_module_graph_with_evaluator<'db>(
 }
 
 /// Lower module graph sequentially with pre-resolved const bindings.
+///
+/// If `pre_lowered_functions` is provided, those functions are reused instead of
+/// being re-lowered from the AST.
 fn lower_module_graph_with_pre_resolved<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     pre_resolved_consts: &HashMap<ModuleId, ModulePreResolvedConsts>,
+    pre_lowered_functions: &HashMap<ModuleId, ModulePreLoweredFunctions>,
     skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     let graph = parsed_graph.graph(db);
@@ -718,6 +734,9 @@ fn lower_module_graph_with_pre_resolved<'db>(
         // Get pre-resolved consts for this module.
         let pre_resolved = pre_resolved_consts.get(module_id).cloned();
 
+        // Get pre-lowered functions for this module.
+        let pre_lowered = pre_lowered_functions.get(module_id).cloned();
+
         let result = lower_module(
             db,
             module,
@@ -728,6 +747,7 @@ fn lower_module_graph_with_pre_resolved<'db>(
             func_id_map,
             pre_resolved,
             skip_const_inlining,
+            pre_lowered,
         );
 
         if !result.errors(db).is_empty() {
@@ -745,12 +765,16 @@ fn lower_module_graph_with_pre_resolved<'db>(
 ///
 /// Warms salsa's memoization cache by lowering modules in parallel,
 /// then delegates to the tracked function for final aggregation.
+///
+/// If `pre_lowered_functions` is provided, those functions are reused instead of
+/// being re-lowered from the AST.
 fn lower_module_graph_parallel_with_pre_resolved<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     pre_resolved_consts: &HashMap<ModuleId, ModulePreResolvedConsts>,
+    pre_lowered_functions: &HashMap<ModuleId, ModulePreLoweredFunctions>,
     skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     use rayon::prelude::*;
@@ -791,6 +815,9 @@ fn lower_module_graph_parallel_with_pre_resolved<'db>(
             // Get pre-resolved consts for this module.
             let pre_resolved = pre_resolved_consts.get(module_id).cloned();
 
+            // Get pre-lowered functions for this module.
+            let pre_lowered = pre_lowered_functions.get(module_id).cloned();
+
             Some((
                 db.dyn_clone(),
                 module,
@@ -800,12 +827,13 @@ fn lower_module_graph_parallel_with_pre_resolved<'db>(
                 single_ownership_analysis,
                 pre_resolved,
                 skip_const_inlining,
+                pre_lowered,
             ))
         })
         .collect();
 
     // Lower modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_ownership_analysis, pre_resolved, skip_const_inlining)| {
+    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_ownership_analysis, pre_resolved, skip_const_inlining, pre_lowered)| {
         let db_s = db_clone.as_salsa_db();
 
         // This populates the cache.
@@ -819,10 +847,11 @@ fn lower_module_graph_parallel_with_pre_resolved<'db>(
             func_id_map,
             pre_resolved,
             skip_const_inlining,
+            pre_lowered,
         );
     });
 
     // Delegate to sequential function which aggregates results.
     // All lower_module calls will be cache hits from the parallel phase.
-    lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, pre_resolved_consts, skip_const_inlining)
+    lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, pre_resolved_consts, pre_lowered_functions, skip_const_inlining)
 }

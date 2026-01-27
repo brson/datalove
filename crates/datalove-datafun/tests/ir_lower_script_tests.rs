@@ -192,7 +192,14 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     None
                 };
 
-                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types)) {
+                // Pass pre-lowered functions to avoid re-lowering them.
+                let pre_lowered_arg = if pre_lowered_functions.is_empty() {
+                    None
+                } else {
+                    Some((pre_lowered_functions, func_name_to_id))
+                };
+
+                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), pre_lowered_arg) {
                     Ok(ir_unit) => {
                         // Inline const values into the IR.
                         let const_values_map: HashMap<String, datalove_datafun_ir::ConstValue> = resolved_consts
