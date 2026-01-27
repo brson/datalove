@@ -1,8 +1,10 @@
-[31m[F001] Error:[0m cannot find value `x` in this scope
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/world_error/14_F049_try_wrong_return_in_module.world:4:7[38;5;246m][0m
+[31m[F049] Error:[0m try operator `?` requires function to return Option, found `u32`
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/world_error/14_F049_try_wrong_return_in_module.world:4:8[38;5;246m][0m
    [38;5;246m│[0m
- [38;5;246m4 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;201mx[0m[38;5;249m?[0m
- [38;5;240m  │[0m       [38;5;201m┬[0m  
- [38;5;240m  │[0m       [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m not found in this scope
+ [38;5;246m4 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mx[0m[38;5;201m?[0m
+ [38;5;240m  │[0m        [38;5;201m┬[0m  
+ [38;5;240m  │[0m        [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m try operator here
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: function must return Option to use `?` operator
 [38;5;246m───╯[0m
 Error: Module compilation error

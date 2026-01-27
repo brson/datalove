@@ -2,7 +2,7 @@
 module local/test/main
 ----------
 
-fun add(x: @int, y: @int): @int
+fun add(x: i64, y: i64): i64
   ret x + y
 end fun
 
@@ -12,4 +12,4 @@ scriptunit-fragment
 
 require module local/test/main
 import main.add
-let output = add(@5, @true)
+let output = add(5, true)

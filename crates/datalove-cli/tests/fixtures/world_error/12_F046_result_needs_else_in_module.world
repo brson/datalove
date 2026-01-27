@@ -2,7 +2,7 @@
 module local/test/main
 ----------
 
-fun test_result(a: @!u8): u8
+fun test_result(a: !u8): u8
   if a |value|
     ret value
   end if

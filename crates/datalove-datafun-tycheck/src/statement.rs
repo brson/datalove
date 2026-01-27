@@ -7,53 +7,9 @@ use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
 use crate::context::TypeContext;
 use crate::check::check_expr;
-use crate::types::{convert_type_hint_with_aliases, type_to_string, unit_type, is_primitive_name};
-use crate::ModuleId;
+use crate::types::{convert_type_hint_with_aliases, type_to_string};
 
-pub use crate::{Type, TypeFunction, TypeError};
-
-// ============================================================================
-// Type Alias Collection
-// ============================================================================
-
-/// Collect type aliases from statements (pass 0).
-///
-/// Type aliases must be defined before use (no forward references).
-pub fn collect_type_aliases<'db>(
-    ctx: &mut TypeContext<'db>,
-    statements: &[Statement<'db>],
-) {
-    let db = ctx.db;
-
-    for statement in statements {
-        if let Statement::TypeAlias(stmt) = statement {
-            let name = stmt.name;
-            let name_str = name.as_str(db);
-
-            // Check for shadowing primitive types.
-            if is_primitive_name(name_str) {
-                ctx.add_error(TypeError::CannotShadowPrimitive(name_str.to_string()));
-                continue;
-            }
-
-            // Check for duplicate type alias.
-            if ctx.lookup_type_alias(name).is_some() {
-                ctx.add_error(TypeError::DuplicateTypeAlias(name_str.to_string()));
-                continue;
-            }
-
-            // Resolve the type hint using already-collected aliases.
-            match convert_type_hint_with_aliases(db, stmt.type_hint.clone(), &ctx.type_aliases) {
-                Ok(ty) => {
-                    ctx.add_type_alias(name, ty);
-                }
-                Err(e) => {
-                    ctx.add_error(e);
-                }
-            }
-        }
-    }
-}
+pub use crate::{Type, TypeError};
 
 // ============================================================================
 // Variable Declaration Helper
@@ -104,57 +60,6 @@ fn check_variable_decl<'db>(
     if let Some(ty) = var_type {
         ctx.add_variable(name, ty, is_mutable);
     }
-}
-
-/// Collect function signature without checking body (pass 1).
-///
-/// Uses type aliases from the context (collected in pass 0).
-pub fn collect_function_signature<'db>(
-    ctx: &mut TypeContext<'db>,
-    stmt: &StmtFun<'db>,
-    module_id: Option<ModuleId>,
-) {
-    let db = ctx.db;
-    let name = stmt.name(db);
-    let params = stmt.params(db);
-    let return_type = stmt.return_type(db);
-
-    // Convert parameter types and collect modes.
-    let mut param_types = Vec::new();
-    let mut param_modes = Vec::new();
-    for param in params {
-        match convert_type_hint_with_aliases(db, param.type_hint.clone(), &ctx.type_aliases) {
-            Ok(ty) => {
-                param_types.push(ty);
-                param_modes.push(param.mode);
-            }
-            Err(e) => {
-                ctx.add_error(e);
-                return;
-            }
-        }
-    }
-
-    // Convert return type (default to Void if not specified).
-    let ret_ty = match return_type {
-        Some(type_hint) => {
-            match convert_type_hint_with_aliases(db, type_hint, &ctx.type_aliases) {
-                Ok(ty) => ty,
-                Err(e) => {
-                    ctx.add_error(e);
-                    return;
-                }
-            }
-        }
-        None => {
-            // Functions without explicit return type return unit `()`.
-            unit_type(db)
-        }
-    };
-
-    // Create function type and add to context with AST.
-    let func_type = TypeFunction::new(db, param_types, param_modes, ret_ty);
-    ctx.add_function_with_ast(name, func_type, *stmt, module_id);
 }
 
 /// Check a statement.
@@ -243,20 +148,9 @@ pub fn check_statement<'db>(
             let params = stmt.params(db);
             let body = stmt.body(db);
 
-            // Function signature should already be collected in first pass.
-            // Look it up to get param types and return type.
-            let func_type = match ctx.lookup_function(name) {
-                Some(func_type) => func_type,
-                None => {
-                    // Function not in context (shouldn't happen in normal flow).
-                    // Collect signature now for error resilience.
-                    collect_function_signature(ctx, stmt, None);
-                    match ctx.lookup_function(name) {
-                        Some(func_type) => func_type,
-                        None => return, // Errors already recorded.
-                    }
-                }
-            };
+            // Function signature should already be collected by resolve crate.
+            let func_type = ctx.lookup_function(name)
+                .expect("function should be in context from name resolution");
 
             let param_types = func_type.param_types(db);
             let ret_ty = func_type.return_type(db);

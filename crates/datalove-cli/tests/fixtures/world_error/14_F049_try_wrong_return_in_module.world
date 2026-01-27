@@ -3,7 +3,7 @@ module local/test/main
 ----------
 
 fun broken(): u32
-  let x: ?@u32 = some(@42)
+  let x: ?u32 = some(42)
   ret x?
 end fun
 

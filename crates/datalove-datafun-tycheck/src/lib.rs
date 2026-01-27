@@ -557,9 +557,6 @@ pub use api::{
 // Re-export context types.
 pub use context::TypeContext;
 
-// Re-export statement functions.
-pub use statement::{collect_function_signature, collect_type_aliases};
-
 // Re-export type utilities.
 pub use types::{
     convert_type_hint,
