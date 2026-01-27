@@ -1,0 +1,32 @@
+----------
+module local/test/base
+----------
+
+// Base module with helper function.
+fun get_value(): u32
+    ret 21
+end fun
+
+----------
+module local/test/middle
+----------
+
+require module local/test/base
+import base.get_value
+
+// Middle module calls base module.
+fun compute(): int
+    ret get_value() + get_value()
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/middle
+import middle.compute
+
+// Script const calling module function which calls another module.
+const RESULT: int = compute()
+
+debuglog RESULT
