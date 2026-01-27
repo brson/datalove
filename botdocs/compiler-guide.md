@@ -55,8 +55,13 @@ Source Text
     v                          - Output: ModuleGraphAnalysis
     |
 [Phase 5: IR Lowering]  lower_module_graph_with_evaluator
-    |                   - Per-module: lower_module [tracked]
-    v                   - Output: ModuleGraphLoweringResult
+    |                   - Subphases:
+    |                     a. Lower functions (reused for CTFE)
+    |                     b. Const evaluation (CTFE with lowered functions)
+    |                     c. Assemble IR (combines functions + module code)
+    |                     d. Const inlining (replaces const bindings)
+    v                   - Per-module: lower_module [tracked]
+    |                   - Output: ModuleGraphLoweringResult
     |
 ModuleCompilationOutput
 ```

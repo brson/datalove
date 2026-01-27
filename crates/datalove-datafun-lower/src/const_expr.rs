@@ -180,8 +180,7 @@ pub fn eval_const_expr_simple<'db>(
 /// The `return_type` is the enclosing function's return type, needed for
 /// early-return operators (`?` and `!`).
 ///
-/// If `pre_lowered_functions` is provided, called functions will be looked up from
-/// this slice and included in the CTFE unit. This avoids re-lowering functions.
+/// The `lowered_functions` parameter provides already-lowered function IR for CTFE calls.
 pub fn eval_const_expr_with_evaluator<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
@@ -191,13 +190,13 @@ pub fn eval_const_expr_with_evaluator<'db>(
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
-    pre_lowered_functions: &[datalove_datafun_ir::IrFunction],
+    lowered_functions: &[datalove_datafun_ir::IrFunction],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
 ) -> Result<ConstValue, LowerError> {
     // Lower the expression to a minimal IR unit using isolated lowering.
     let unit = lower_const_expr_to_unit_standalone(
         db, expr, expr_types, call_targets, resolved_consts, return_type,
-        pre_lowered_functions, func_name_to_id,
+        lowered_functions, func_name_to_id,
     )?;
 
     // Evaluate using the CTFE evaluator.
@@ -208,10 +207,9 @@ pub fn eval_const_expr_with_evaluator<'db>(
 
 /// Lower a const expression to IrScriptUnit without needing a parent LowerCtx.
 ///
-/// Used for module-level const evaluation and Phase 2 of the memoized pipeline.
+/// Used for module-level const evaluation.
 ///
-/// If `pre_lowered_functions` is non-empty, called functions will be looked up from
-/// this slice and included in the CTFE unit. This avoids re-lowering functions.
+/// The `lowered_functions` parameter provides already-lowered function IR for CTFE calls.
 fn lower_const_expr_to_unit_standalone<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
@@ -219,7 +217,7 @@ fn lower_const_expr_to_unit_standalone<'db>(
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
-    pre_lowered_functions: &[datalove_datafun_ir::IrFunction],
+    lowered_functions: &[datalove_datafun_ir::IrFunction],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
 ) -> Result<IrScriptUnit, LowerError> {
     use datalove_datafun_ir::{FuncRef, FuncId, Instruction, IrFunction};
@@ -242,10 +240,10 @@ fn lower_const_expr_to_unit_standalone<'db>(
     ctx.is_script_unit = true;
 
     // Pre-register all functions using the name-to-id map so call resolution works.
-    // We need to use the same FuncIds as the pre-lowered functions.
+    // We need to use the same FuncIds as the lowered functions.
     for (func_name, &func_id) in func_name_to_id {
-        // Find the param count from the pre-lowered function.
-        if let Some(func) = pre_lowered_functions.iter().find(|f| f.id == func_id) {
+        // Find the param count from the lowered function.
+        if let Some(func) = lowered_functions.iter().find(|f| f.id == func_id) {
             ctx.register_func_with_id(func_name, func.params.len(), func_id);
         }
     }
@@ -273,11 +271,11 @@ fn lower_const_expr_to_unit_standalone<'db>(
         }
     }
 
-    // Include called functions from the pre-lowered set (no re-lowering needed).
+    // Include called functions from the lowered set (no re-lowering needed).
     let mut functions: Vec<IrFunction> = Vec::new();
     for func_id in called_func_ids {
-        // Find the function in pre-lowered functions.
-        if let Some(func) = pre_lowered_functions.iter().find(|f| f.id == func_id) {
+        // Find the function in lowered functions.
+        if let Some(func) = lowered_functions.iter().find(|f| f.id == func_id) {
             functions.push(func.clone());
         }
     }
@@ -306,22 +304,17 @@ fn lower_const_expr_to_unit_standalone<'db>(
 
 /// Evaluate all const bindings from a ConstBindingGraph.
 ///
-/// This is Phase 2 of the 3-phase CTFE memoization pipeline.
-/// NOT memoized because it requires a trait object (CtfeEvaluator).
-///
 /// Evaluates consts in topological order (dependencies before dependents).
 /// Simple literals are extracted directly; complex expressions use the evaluator.
 ///
-/// The `pre_lowered_functions` parameter provides already-lowered function IR that can
-/// be included in CTFE units when const expressions call functions. This avoids
-/// re-lowering functions that will be lowered again during main IR lowering.
+/// The `lowered_functions` parameter provides already-lowered function IR for CTFE calls.
 pub fn evaluate_consts<'db>(
     db: &'db dyn salsa::Database,
     graph: &ConstBindingGraph,
     statements: &[Statement<'db>],
     expr_types: &'db [Option<Type<'db>>],
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
-    pre_lowered_functions: &[datalove_datafun_ir::IrFunction],
+    lowered_functions: &[datalove_datafun_ir::IrFunction],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
 ) -> Result<ResolvedConsts, ConstEvalError> {
@@ -374,10 +367,10 @@ pub fn evaluate_consts<'db>(
 
         // Lower to IR unit using isolated lowering (gets widening, etc.).
         // Script-level consts don't have a function return type.
-        // Pass pre-lowered functions to include in the CTFE unit.
+        // Pass lowered functions to include in the CTFE unit.
         let unit = lower_const_expr_to_unit_standalone(
             db, expr, expr_types, call_targets, &resolved_consts_map, None,
-            pre_lowered_functions, func_name_to_id,
+            lowered_functions, func_name_to_id,
         ).map_err(|e| ConstEvalError::LoweringFailed {
             binding_name: binding.name.clone(),
             message: e.to_string(),
@@ -443,8 +436,7 @@ impl ScriptFunctionConstsResult {
 /// - Script-level consts (from `script_level_consts`)
 /// - Earlier function-level consts in the same function
 ///
-/// If `pre_lowered_functions` is provided, const expressions that call functions
-/// will use these pre-lowered functions instead of re-lowering them.
+/// The `lowered_functions` parameter provides already-lowered function IR for CTFE calls.
 pub fn evaluate_script_function_consts<'db>(
     db: &'db dyn salsa::Database,
     statements: &[Statement<'db>],
@@ -452,7 +444,7 @@ pub fn evaluate_script_function_consts<'db>(
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     script_level_consts: &HashMap<String, (IrType, ConstValue)>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
-    pre_lowered_functions: &[datalove_datafun_ir::IrFunction],
+    lowered_functions: &[datalove_datafun_ir::IrFunction],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
 ) -> ScriptFunctionConstsResult {
     let mut consts = HashMap::new();
@@ -503,7 +495,7 @@ pub fn evaluate_script_function_consts<'db>(
                                 &lookup_map,
                                 func_return_type.clone(),
                                 evaluator.clone(),
-                                pre_lowered_functions,
+                                lowered_functions,
                                 func_name_to_id,
                             ) {
                                 Ok(v) => v,

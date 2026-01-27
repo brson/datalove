@@ -67,9 +67,12 @@ struct OwnershipOutput<'db> {
     script_analysis: Option<ScriptAnalysisData>,
 }
 
-/// Output from function pre-lowering phase.
+/// Lowered functions from the lowering phase.
+///
+/// Functions are lowered once, then reused for const evaluation
+/// and the final IR assembly.
 #[derive(Clone)]
-struct PreLoweredFunctions {
+struct LoweredFunctions {
     functions: Vec<datalove_datafun_ir::IrFunction>,
     func_name_to_id: HashMap<String, datalove_datafun_ir::FuncId>,
 }
@@ -264,59 +267,56 @@ impl<'db> ScriptCompiler<'db> {
         })
     }
 
-    /// Compile a parsed unit through typecheck, ownership, const eval, and lowering.
+    /// Compile a parsed unit through the pipeline.
     ///
     /// Pipeline phases:
-    /// 1. Typecheck - type inference and checking
-    /// 2. Ownership Analysis - borrow checking and drop scheduling
-    /// 3. Const Evaluation - compile-time const evaluation (fragment only)
-    /// 4. IR Lowering - generate IR (always skip_const_inlining mode)
-    /// 5. Const Inlining - inline evaluated const values into IR
+    /// 1. Analysis
+    ///    a. Typecheck - type inference and checking
+    ///    b. Ownership - borrow checking and drop scheduling
+    /// 2. Lowering - generate IR (const bindings lowered as let bindings)
+    /// 3. Const Evaluation - evaluate const expressions at compile time
+    /// 4. Const Inlining - replace const bindings with evaluated values
     fn compile_unit_inner(
         &mut self,
         src: bct::input::Source,
         unit: ParsedUnit<'db>,
     ) -> ScriptCompilationResult {
-        // Phase 1: Typecheck
+        // Phase 1a: Typecheck
         let typecheck = match self.phase_typecheck(src, &unit) {
             Ok(tc) => tc,
             Err(result) => return result,
         };
 
-        // Phase 2: Ownership Analysis
+        // Phase 1b: Ownership Analysis
         let ownership = match self.phase_ownership(&unit, &typecheck) {
             Ok(own) => own,
             Err(result) => return result,
         };
 
-        // Phase 3a: Pre-lower Functions (fragment only)
-        // Functions are lowered first so CTFE can reuse the already-lowered IR
-        // instead of re-lowering functions that call from const expressions.
-        let pre_lowered = match self.phase_lower_functions(&unit, &typecheck, &ownership) {
-            Ok(pl) => pl,
+        // Phase 2: Lowering
+        // Functions are lowered first, then reused for const evaluation.
+        let lowered_funcs = match self.phase_lower_functions(&unit, &typecheck, &ownership) {
+            Ok(lf) => lf,
             Err(result) => return result,
         };
 
-        // Phase 3b: Const Evaluation (fragment only)
-        // This evaluates const expressions using mini-lowering + interpretation.
-        // The results are used for const inlining after lowering.
-        let consts = match self.phase_const_eval(&unit, &typecheck, &pre_lowered) {
+        // Phase 3: Const Evaluation
+        // Evaluates const expressions using the lowered functions + interpretation.
+        let consts = match self.phase_const_eval(&unit, &typecheck, &lowered_funcs) {
             Ok(c) => c,
             Err(result) => return result,
         };
 
-        // Phase 4: IR Lowering
-        // Lowering always uses skip_const_inlining mode - const bindings are lowered
-        // as let bindings with their initializer expressions.
-        // Pass pre-lowered functions to avoid re-lowering them.
-        let ir_unit = match self.phase_lower(&unit, &typecheck, &ownership, &consts, &pre_lowered) {
+        // Phase 2 (continued): Assemble final IR
+        // Combines lowered functions with script-level code.
+        let ir_unit = match self.phase_assemble_ir(&unit, &typecheck, &ownership, &consts, &lowered_funcs) {
             Ok(ir) => ir,
             Err(result) => return result,
         };
 
-        // Phase 5: Const Inlining
-        // Replace const initializer expressions with their evaluated values.
-        // In skip_const_inlining mode, skip inlining so const expressions are evaluated at runtime.
+        // Phase 4: Const Inlining
+        // Replaces const initializer expressions with their evaluated values.
+        // Skipped in skip_const_inlining mode (consts evaluated at runtime).
         let ir_unit = self.phase_const_inline(ir_unit, &consts);
 
         // Update accumulated state
@@ -387,7 +387,7 @@ impl<'db> ScriptCompiler<'db> {
     }
 
     // ========================================================================
-    // Phase 2: Ownership Analysis
+    // Phase 1b: Ownership Analysis
     // ========================================================================
 
     /// Run ownership analysis on the unit.
@@ -442,22 +442,22 @@ impl<'db> ScriptCompiler<'db> {
     }
 
     // ========================================================================
-    // Phase 3a: Pre-lower Functions
+    // Phase 2a: Lower Functions
     // ========================================================================
 
-    /// Pre-lower functions before const evaluation.
+    /// Lower functions to IR.
     ///
-    /// This allows CTFE to reuse the already-lowered function IR instead of
-    /// re-lowering functions when const expressions call them.
+    /// Functions are lowered once, then reused for const evaluation
+    /// and final IR assembly.
     fn phase_lower_functions(
         &mut self,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
         ownership: &OwnershipOutput<'db>,
-    ) -> Result<PreLoweredFunctions, ScriptCompilationResult> {
+    ) -> Result<LoweredFunctions, ScriptCompilationResult> {
         let ParsedUnit::Fragment { stmts, .. } = unit else {
             // Expressions don't have function definitions.
-            return Ok(PreLoweredFunctions {
+            return Ok(LoweredFunctions {
                 functions: Vec::new(),
                 func_name_to_id: HashMap::new(),
             });
@@ -491,7 +491,7 @@ impl<'db> ScriptCompiler<'db> {
             script_ctx,
         ) {
             Ok((functions, func_name_to_id)) => {
-                Ok(PreLoweredFunctions { functions, func_name_to_id })
+                Ok(LoweredFunctions { functions, func_name_to_id })
             }
             Err(e) => {
                 self.accumulated_unit_specs.pop();
@@ -508,7 +508,7 @@ impl<'db> ScriptCompiler<'db> {
     }
 
     // ========================================================================
-    // Phase 3b: Const Evaluation
+    // Phase 3: Const Evaluation
     // ========================================================================
 
     /// Evaluate compile-time constants (fragment only).
@@ -516,7 +516,7 @@ impl<'db> ScriptCompiler<'db> {
         &mut self,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
-        pre_lowered: &PreLoweredFunctions,
+        lowered_funcs: &LoweredFunctions,
     ) -> Result<ConstEvalOutput, ScriptCompilationResult> {
         let ParsedUnit::Fragment { stmts, .. } = unit else {
             // Expressions don't have const bindings.
@@ -538,8 +538,8 @@ impl<'db> ScriptCompiler<'db> {
                 stmts,
                 typecheck.expr_types,
                 typecheck.call_targets,
-                &pre_lowered.functions,
-                &pre_lowered.func_name_to_id,
+                &lowered_funcs.functions,
+                &lowered_funcs.func_name_to_id,
                 self.ctfe_evaluator.clone(),
             ) {
                 Ok(resolved) => resolved,
@@ -580,8 +580,8 @@ impl<'db> ScriptCompiler<'db> {
                 typecheck.call_targets,
                 &script_level_consts,
                 self.ctfe_evaluator.clone(),
-                &pre_lowered.functions,
-                &pre_lowered.func_name_to_id,
+                &lowered_funcs.functions,
+                &lowered_funcs.func_name_to_id,
             )
         } else {
             ScriptFunctionConstsResult::empty()
@@ -606,23 +606,20 @@ impl<'db> ScriptCompiler<'db> {
     }
 
     // ========================================================================
-    // Phase 4: IR Lowering
+    // Phase 2b: Assemble Final IR
     // ========================================================================
 
-    /// Lower to IR.
+    /// Assemble the final IR by combining lowered functions with script-level code.
     ///
-    /// Lowering always uses skip_const_inlining mode - const bindings are lowered as
-    /// let bindings with their initializer expressions. Const inlining happens
-    /// as a separate pass after lowering.
-    ///
-    /// If `pre_lowered` contains functions, they are reused instead of being re-lowered.
-    fn phase_lower(
+    /// Const bindings are lowered as let bindings with their initializer expressions.
+    /// Const inlining happens as a separate pass after IR assembly.
+    fn phase_assemble_ir(
         &mut self,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
         ownership: &OwnershipOutput<'db>,
         _consts: &ConstEvalOutput,
-        pre_lowered: &PreLoweredFunctions,
+        lowered_funcs: &LoweredFunctions,
     ) -> Result<IrScriptUnit, ScriptCompilationResult> {
         let func_id_map = build_func_id_map(self.db, &self.module_specs);
         let script_ctx = self.accumulated_lower_bindings.to_script_lower_context();
@@ -643,12 +640,12 @@ impl<'db> ScriptCompiler<'db> {
                     .expect("script_analysis required for fragment units");
 
                 // Const bindings are lowered as let bindings.
-                // Const inlining happens in phase_const_inline after lowering.
-                // Pass pre-lowered functions to avoid re-lowering them.
-                let pre_lowered_arg = if pre_lowered.functions.is_empty() {
+                // Const inlining happens in phase_const_inline after IR assembly.
+                // Pass lowered functions to avoid re-lowering them.
+                let lowered_funcs_arg = if lowered_funcs.functions.is_empty() {
                     None
                 } else {
-                    Some((pre_lowered.functions.clone(), pre_lowered.func_name_to_id.clone()))
+                    Some((lowered_funcs.functions.clone(), lowered_funcs.func_name_to_id.clone()))
                 };
 
                 lower_script_fragment_raw(
@@ -661,7 +658,7 @@ impl<'db> ScriptCompiler<'db> {
                     ownership.func_analyses.clone(),
                     script_analysis,
                     Some(&func_param_types),
-                    pre_lowered_arg,
+                    lowered_funcs_arg,
                 ).map_err(|e| {
                     self.accumulated_unit_specs.pop();
                     ScriptCompilationResult {
@@ -694,7 +691,7 @@ impl<'db> ScriptCompiler<'db> {
     }
 
     // ========================================================================
-    // Phase 5: Const Inlining
+    // Phase 4: Const Inlining
     // ========================================================================
 
     /// Inline evaluated const values into the lowered IR.
