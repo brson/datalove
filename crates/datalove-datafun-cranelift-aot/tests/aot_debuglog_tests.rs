@@ -40,6 +40,7 @@ fn create_debuglog_i32_script(value: i32) -> IrScriptUnit {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![],
+        const_values: vec![],
     }
 }
 
@@ -103,6 +104,7 @@ fn test_compile_debuglog_bool() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![],
+        const_values: vec![],
     };
 
     let mut compiler = AotCompiler::new_for_host().expect("failed to create compiler");
@@ -157,6 +159,7 @@ fn test_compile_multiple_debuglogs() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![],
+        const_values: vec![],
     };
 
     let mut compiler = AotCompiler::new_for_host().expect("failed to create compiler");

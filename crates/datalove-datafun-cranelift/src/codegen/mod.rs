@@ -1065,6 +1065,7 @@ mod tests {
             slot_types: vec![],
             tracked_slots: vec![],
             tracked_params: vec![],
+            const_values: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
@@ -1116,6 +1117,7 @@ mod tests {
             slot_types: vec![],
             tracked_slots: vec![],
             tracked_params: vec![],
+            const_values: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
@@ -1159,6 +1161,7 @@ mod tests {
             slot_types: vec![],
             tracked_slots: vec![],
             tracked_params: vec![],
+            const_values: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
@@ -1233,6 +1236,7 @@ mod tests {
             slot_types: vec![],
             tracked_slots: vec![],
             tracked_params: vec![],
+            const_values: vec![],
         };
 
         let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);

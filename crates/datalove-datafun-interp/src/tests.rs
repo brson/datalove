@@ -63,6 +63,7 @@ fn make_identity_function() -> IrFunction {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     }
 }
 
@@ -111,6 +112,7 @@ fn test_simple_function_call() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     // Create context with both functions.
@@ -157,6 +159,7 @@ fn test_nested_function_calls() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     // fn nested(x: i64) -> i64 { passthrough(passthrough(x)) }
@@ -194,6 +197,7 @@ fn test_nested_function_calls() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     // Create context with both functions.
@@ -308,6 +312,7 @@ fn test_const_u8() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     let functions = [func.clone()];
@@ -353,6 +358,7 @@ fn test_const_i32() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     let functions = [func.clone()];
@@ -398,6 +404,7 @@ fn test_const_bool() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -442,6 +449,7 @@ fn test_binop_eq() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -478,6 +486,7 @@ fn test_binop_ne() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -514,6 +523,7 @@ fn test_binop_lt() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -550,6 +560,7 @@ fn test_binop_bitand() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 8);
@@ -586,6 +597,7 @@ fn test_binop_bitor() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 14);
@@ -622,6 +634,7 @@ fn test_binop_shl() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 16);
@@ -664,6 +677,7 @@ fn test_binop_checked_no_overflow() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 30);
@@ -702,6 +716,7 @@ fn test_binop_checked_overflow() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -740,6 +755,7 @@ fn test_unaryop_neg() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), -42);
@@ -774,6 +790,7 @@ fn test_unaryop_not() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert!(!run_bool_function(&func));
@@ -808,6 +825,7 @@ fn test_unaryop_bitnot() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_u32_function(&func), 0xFFFFFFFF);
@@ -848,6 +866,7 @@ fn test_slot_store_load() {
         slot_types: vec![IrType::I64],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -889,6 +908,7 @@ fn test_slot_multiple_updates() {
         slot_types: vec![IrType::I64],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 8);
@@ -937,6 +957,7 @@ fn test_branch_true() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 1);
@@ -981,6 +1002,7 @@ fn test_branch_false() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 2);
@@ -1031,6 +1053,7 @@ fn test_goto_chain() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     // Returns 2 from block1, proving control flow worked.
@@ -1066,6 +1089,7 @@ fn test_copy() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -1096,6 +1120,7 @@ fn test_move() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -1142,6 +1167,7 @@ fn test_pack_tuple() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 10);
@@ -1189,6 +1215,7 @@ fn test_unpack_tuple() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 20);
@@ -1233,6 +1260,7 @@ fn test_wrap_some_unwrap() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -1273,6 +1301,7 @@ fn test_is_some() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -1314,6 +1343,7 @@ fn test_is_none() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -1369,6 +1399,7 @@ fn test_option_branch() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 1);
@@ -1414,6 +1445,7 @@ fn test_wrap_ok_unwrap() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 42);
@@ -1455,6 +1487,7 @@ fn test_is_ok() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -1503,6 +1536,7 @@ fn test_is_err() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert!(run_bool_function(&func));
@@ -1559,6 +1593,7 @@ fn test_result_branch() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 1);
@@ -1608,6 +1643,7 @@ fn test_pack_struct() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 10);
@@ -1658,6 +1694,7 @@ fn test_unpack_struct() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     assert_eq!(run_i64_function(&func), 20);
@@ -1693,6 +1730,7 @@ fn test_crossunit_external_value() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![("x".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
+        const_values: vec![],
     };
 
     // Unit 1: return x (from unit 0)
@@ -1720,6 +1758,7 @@ fn test_crossunit_external_value() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: Some(ValueId(0)),
         exports: vec![],
+        const_values: vec![],
     };
 
     // Execute both units.
@@ -1780,6 +1819,7 @@ fn test_crossunit_external_slot() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![("y".to_string(), datalove_datafun_ir::ExportBinding::Slot(SlotId(0)))],
+        const_values: vec![],
     };
 
     // Unit 1: return y (from unit 0's slot)
@@ -1807,6 +1847,7 @@ fn test_crossunit_external_slot() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: Some(ValueId(0)),
         exports: vec![],
+        const_values: vec![],
     };
 
     // Execute both units.
@@ -1861,6 +1902,7 @@ fn test_crossunit_external_function() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     let unit0 = IrScriptUnit {
@@ -1881,6 +1923,7 @@ fn test_crossunit_external_function() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![("identity".to_string(), datalove_datafun_ir::ExportBinding::Function(FuncId(0)))],
+        const_values: vec![],
     };
 
     // Unit 1: return identity(7)
@@ -1912,6 +1955,7 @@ fn test_crossunit_external_function() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: Some(ValueId(1)),
         exports: vec![],
+        const_values: vec![],
     };
 
     // Execute both units.
@@ -1968,6 +2012,7 @@ fn test_crossunit_chain() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![("a".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
+        const_values: vec![],
     };
 
     // Unit 1: let b = a (just pass through)
@@ -1995,6 +2040,7 @@ fn test_crossunit_chain() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![("b".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
+        const_values: vec![],
     };
 
     // Unit 2: return b
@@ -2022,6 +2068,7 @@ fn test_crossunit_chain() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: Some(ValueId(0)),
         exports: vec![],
+        const_values: vec![],
     };
 
     // Execute all units.
@@ -2101,6 +2148,7 @@ fn test_list_with_explicit_drop() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![],
+        const_values: vec![],
     };
 
     let mut interp = IrInterpreter::new();
@@ -2144,6 +2192,7 @@ fn test_script_with_function_and_list_drop() {
         slot_types: vec![],
         tracked_slots: vec![],
     tracked_params: vec![],
+        const_values: vec![],
     };
 
     // Script unit that defines the function and creates a list binding with explicit drop.
@@ -2194,6 +2243,7 @@ fn test_script_with_function_and_list_drop() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![],
+        const_values: vec![],
     };
 
     let mut interp = IrInterpreter::new();
@@ -2260,6 +2310,7 @@ fn test_multiple_explicit_drops() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![],
+        const_values: vec![],
     };
 
     let mut interp = IrInterpreter::new();

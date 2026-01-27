@@ -33,6 +33,7 @@ fn create_debuglog_i32_script(value: i32) -> IrScriptUnit {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![],
+        const_values: vec![],
     }
 }
 
@@ -80,6 +81,7 @@ fn test_link_and_run_debuglog_bool_true() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![],
+        const_values: vec![],
     };
 
     // Use pipeline::aot to compile, link, and run.
@@ -135,6 +137,7 @@ fn test_link_and_run_multiple_debuglogs() {
         symbols: datalove_datafun_ir::SymbolTable::new(),
         result: None,
         exports: vec![],
+        const_values: vec![],
     };
 
     // Use pipeline::aot to compile, link, and run.

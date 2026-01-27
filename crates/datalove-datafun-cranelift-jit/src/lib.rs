@@ -275,7 +275,8 @@ mod tests {
             value_types: vec![IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
-        tracked_params: vec![],
+            tracked_params: vec![],
+            const_values: vec![],
         }
     }
 
@@ -390,7 +391,8 @@ mod tests {
             value_types: vec![],
             slot_types: vec![],
             tracked_slots: vec![],
-        tracked_params: vec![],
+            tracked_params: vec![],
+            const_values: vec![],
         };
 
         // Create caller: fn main() -> i32 { identity(42) }
@@ -423,7 +425,8 @@ mod tests {
             value_types: vec![IrType::I32, IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
-        tracked_params: vec![],
+            tracked_params: vec![],
+            const_values: vec![],
         };
 
         // Set up interpreter with JIT dispatcher (threshold=1: compile on first call).
@@ -490,7 +493,8 @@ mod tests {
             value_types: vec![],
             slot_types: vec![],
             tracked_slots: vec![],
-        tracked_params: vec![],
+            tracked_params: vec![],
+            const_values: vec![],
         };
 
         // Create caller: fn main() -> i32 { identity(42) }
@@ -523,7 +527,8 @@ mod tests {
             value_types: vec![IrType::I32, IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
-        tracked_params: vec![],
+            tracked_params: vec![],
+            const_values: vec![],
         };
 
         // Set up context with both functions.
