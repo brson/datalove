@@ -110,6 +110,7 @@ Final IrScriptUnit
 - `ResolvedConsts`: Script-level const values (name -> value)
 
 **Crate responsibilities:**
+
 | Crate | Responsibility |
 |-------|----------------|
 | `datalove-datafun-lower` | AST to IR lowering, `lower_const_binding()` |
