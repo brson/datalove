@@ -19,7 +19,7 @@ IrSerialAnalysis(
             ),
             direct_interp_output: "enum None\n",
             direct_aot_output: "enum None\n",
-            serialized_ir_size: 908,
+            serialized_ir_size: 930,
             serialized_registry_size: 177,
             deser_success: true,
             deser_interp_output: "enum None\n",

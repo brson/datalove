@@ -23,6 +23,7 @@ Analysis(
                         v0 = const 42u32
                         v1 = const some 42u32
                         v2 = const 42u32
+                        v3 = const true
                         branch v3, block2, block1
                     block1:
                         v4 = none
@@ -34,7 +35,8 @@ Analysis(
                         compute = f0
                 """,
             ),
-            output: "Error: UninitializedValue(ValueId(3))",
+            output: "(fragment executed)",
+            debug_output: Some("some 42\n"),
         ),
     ],
 )

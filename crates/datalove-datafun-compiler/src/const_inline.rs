@@ -73,18 +73,48 @@ pub fn inline_function_consts(
 /// Inline const values in a single block.
 ///
 /// For each instruction that defines a const value, replace it with a Const literal.
+/// For instructions that produce multiple values (like UnwrapOption), we may need to
+/// insert additional Const instructions to define the other outputs.
 fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, ConstValue>) {
-    for instr in &mut block.instructions {
+    // We may need to insert instructions, so collect replacements first.
+    let mut replacements: Vec<(usize, Vec<Instruction>)> = Vec::new();
+
+    for (idx, instr) in block.instructions.iter().enumerate() {
         // Check if this instruction defines a const value.
         if let Some(dest) = instruction_dest(instr) {
             if let Some(const_value) = value_to_const.get(&dest) {
-                // Replace with Const instruction.
-                *instr = Instruction::Const {
+                // Build replacement instructions.
+                let mut new_instrs = vec![Instruction::Const {
                     dest,
                     value: const_value.clone(),
-                };
+                }];
+
+                // Special handling for UnwrapOption: also define is_some = true.
+                // If we're inlining the dest, the unwrap succeeded, so is_some must be true.
+                if let Instruction::UnwrapOption { is_some, .. } = instr {
+                    new_instrs.push(Instruction::Const {
+                        dest: *is_some,
+                        value: ConstValue::Bool(true),
+                    });
+                }
+
+                // Special handling for UnwrapResult: also define is_ok = true.
+                // If we're inlining the ok_dest, the unwrap succeeded, so is_ok must be true.
+                if let Instruction::UnwrapResult { is_ok, .. } = instr {
+                    new_instrs.push(Instruction::Const {
+                        dest: *is_ok,
+                        value: ConstValue::Bool(true),
+                    });
+                }
+
+                replacements.push((idx, new_instrs));
             }
         }
+    }
+
+    // Apply replacements in reverse order to maintain correct indices.
+    for (idx, new_instrs) in replacements.into_iter().rev() {
+        block.instructions.splice(idx..=idx, new_instrs);
     }
 }
 
@@ -294,6 +324,94 @@ mod tests {
                 assert_eq!(*value, ConstValue::I32(100));
             }
             _ => panic!("expected Const instruction"),
+        }
+    }
+
+    #[test]
+    fn test_inline_unwrap_option() {
+        // Simulate: const X = opt_val? where opt_val is Some(42), which lowered to:
+        //   v0 = const some 42   (the option value)
+        //   v1, v2 = unwrap_option v0  (v1 = inner value, v2 = is_some)
+        //   branch v2, ...
+        // We'll inline v1 with 42. This should also set v2 = true.
+        let blocks = vec![IrBlock {
+            id: BlockId(0),
+            params: vec![],
+            instructions: vec![
+                Instruction::Const {
+                    dest: ValueId(0),
+                    value: ConstValue::OptionSome(Box::new(ConstValue::I32(42))),
+                },
+                Instruction::UnwrapOption {
+                    dest: ValueId(1),
+                    is_some: ValueId(2),
+                    src: Operand::Value(ValueId(0)),
+                },
+            ],
+            terminator: Terminator::Branch {
+                cond: Operand::Value(ValueId(2)),
+                then_block: BlockId(1),
+                then_args: vec![],
+                else_block: BlockId(2),
+                else_args: vec![],
+            },
+        }];
+
+        let unit = IrScriptUnit {
+            blocks,
+            value_count: 3,
+            slot_count: 0,
+            value_types: vec![
+                IrType::Option(Box::new(IrType::I32)),
+                IrType::I32,
+                IrType::Bool,
+            ],
+            slot_types: vec![],
+            tracked_slots: vec![],
+            unit_end_values: vec![],
+            unit_end_slots: vec![],
+            functions: vec![],
+            symbols: datalove_datafun_ir::SymbolTable::new(),
+            result: None,
+            exports: vec![],
+            // v1 (the unwrapped value) is tracked as a const.
+            const_values: vec![("X".to_string(), ValueId(1))],
+        };
+
+        let mut const_values = HashMap::new();
+        const_values.insert("X".to_string(), ConstValue::I32(42));
+
+        let result = inline_script_consts(unit, &const_values);
+
+        // Check that we now have 3 instructions (original 2 -> 3 after replacement).
+        // The UnwrapOption is replaced with Const for dest AND Const for is_some.
+        assert_eq!(result.blocks[0].instructions.len(), 3);
+
+        // First instruction: Const for the option value (unchanged).
+        match &result.blocks[0].instructions[0] {
+            Instruction::Const { dest, value } => {
+                assert_eq!(*dest, ValueId(0));
+                assert!(matches!(value, ConstValue::OptionSome(_)));
+            }
+            _ => panic!("expected Const instruction for option"),
+        }
+
+        // Second instruction: Const for the unwrapped dest.
+        match &result.blocks[0].instructions[1] {
+            Instruction::Const { dest, value } => {
+                assert_eq!(*dest, ValueId(1));
+                assert_eq!(*value, ConstValue::I32(42));
+            }
+            _ => panic!("expected Const instruction for unwrapped value"),
+        }
+
+        // Third instruction: Const for is_some = true.
+        match &result.blocks[0].instructions[2] {
+            Instruction::Const { dest, value } => {
+                assert_eq!(*dest, ValueId(2));
+                assert_eq!(*value, ConstValue::Bool(true));
+            }
+            _ => panic!("expected Const instruction for is_some"),
         }
     }
 }
