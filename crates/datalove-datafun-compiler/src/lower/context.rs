@@ -402,6 +402,14 @@ impl<'db> LowerCtx<'db> {
         self.func_scope.insert(name.to_string(), FuncRef::Local(func_id));
     }
 
+    /// Register a function with a specific FuncId.
+    ///
+    /// Used for CTFE to register functions with the same IDs as pre-lowered functions,
+    /// so that call resolution produces matching FuncRefs.
+    pub fn register_func_with_id(&mut self, name: &str, _param_count: usize, func_id: FuncId) {
+        self.func_scope.insert(name.to_string(), FuncRef::Local(func_id));
+    }
+
     /// Define a function in the current scope.
     ///
     /// If the function was pre-registered via `pre_register_func`, returns the

@@ -11,7 +11,7 @@ use std::rc::Rc;
 use datalove_datafun as datafun;
 use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
-use datalove_datafun_compiler::lower::{self, ScriptLowerContext, evaluate_consts, ScriptLowerOptions};
+use datalove_datafun_compiler::lower::{self, ScriptLowerContext, evaluate_consts, lower_script_functions, ScriptLowerOptions};
 use datalove_datafun_compiler::const_inline::inline_script_consts;
 use datalove_datafun_compiler::ownership_analysis::{self, CallInfo};
 use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
@@ -169,11 +169,16 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 // Script tests don't use modules, so use empty func_id_map.
                 let func_id_map = HashMap::new();
 
+                // Pre-lower functions so CTFE can reuse them.
+                let (pre_lowered_functions, func_name_to_id) = lower_script_functions(
+                    &db, expr_types, call_targets, &stmts, &func_analyses, None
+                ).expect("function lowering failed");
+
                 // Evaluate const bindings using CTFE (Phase 2).
                 let const_graph = build_const_graph(&db, &stmts, expr_types_raw);
                 let resolved_consts = if !const_graph.bindings.is_empty() {
                     let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-                    match evaluate_consts(&db, &const_graph, &stmts, expr_types, call_targets, &func_analyses, evaluator) {
+                    match evaluate_consts(&db, &const_graph, &stmts, expr_types, call_targets, &pre_lowered_functions, &func_name_to_id, evaluator) {
                         Ok(resolved) => Some(resolved),
                         Err(e) => {
                             output.push_str(&format!("CTFE error: {:?}\n\n", e));

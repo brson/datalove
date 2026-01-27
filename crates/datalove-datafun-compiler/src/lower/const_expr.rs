@@ -189,11 +189,13 @@ pub fn eval_const_expr_with_evaluator<'db>(
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
 ) -> Result<ConstValue, LowerError> {
     // Lower the expression to a minimal IR unit using isolated lowering.
-    // For module-level consts, we don't pass func_analyses since modules can't call
-    // script-local functions.
+    // For module-level consts, we don't pass pre-lowered functions since modules
+    // can't call script-local functions.
+    let empty_functions: Vec<datalove_datafun_ir::IrFunction> = Vec::new();
+    let empty_func_map: HashMap<String, datalove_datafun_ir::FuncId> = HashMap::new();
     let unit = lower_const_expr_to_unit_standalone(
         db, expr, expr_types, call_targets, resolved_consts, return_type,
-        None, None,
+        &empty_functions, &empty_func_map,
     )?;
 
     // Evaluate using the CTFE evaluator.
@@ -206,8 +208,8 @@ pub fn eval_const_expr_with_evaluator<'db>(
 ///
 /// Used for module-level const evaluation and Phase 2 of the memoized pipeline.
 ///
-/// If `func_analyses` and `statements` are provided, called functions will be lowered
-/// and included in the unit, enabling CTFE with function calls.
+/// If `pre_lowered_functions` is non-empty, called functions will be looked up from
+/// this slice and included in the CTFE unit. This avoids re-lowering functions.
 fn lower_const_expr_to_unit_standalone<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
@@ -215,8 +217,8 @@ fn lower_const_expr_to_unit_standalone<'db>(
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
-    func_analyses: Option<&crate::ownership_analysis::ScriptFunctionAnalyses<'db>>,
-    statements: Option<&[Statement<'db>]>,
+    pre_lowered_functions: &[datalove_datafun_ir::IrFunction],
+    func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
 ) -> Result<IrScriptUnit, LowerError> {
     use datalove_datafun_ir::{FuncRef, FuncId, Instruction, IrFunction};
     use std::collections::HashSet;
@@ -237,14 +239,12 @@ fn lower_const_expr_to_unit_standalone<'db>(
     // Mark as script unit so early-return uses UnitEarlyReturn terminator.
     ctx.is_script_unit = true;
 
-    // Pre-register all functions from statements so call resolution works.
-    if let Some(stmts) = statements {
-        for stmt in stmts {
-            if let Statement::Fun(fun_stmt) = stmt {
-                let func_name = fun_stmt.name(db).text(db).to_string();
-                let param_count = fun_stmt.params(db).len();
-                ctx.pre_register_func(&func_name, param_count);
-            }
+    // Pre-register all functions using the name-to-id map so call resolution works.
+    // We need to use the same FuncIds as the pre-lowered functions.
+    for (func_name, &func_id) in func_name_to_id {
+        // Find the param count from the pre-lowered function.
+        if let Some(func) = pre_lowered_functions.iter().find(|f| f.id == func_id) {
+            ctx.register_func_with_id(func_name, func.params.len(), func_id);
         }
     }
 
@@ -271,39 +271,12 @@ fn lower_const_expr_to_unit_standalone<'db>(
         }
     }
 
-    // Lower called functions and include them in the unit.
+    // Include called functions from the pre-lowered set (no re-lowering needed).
     let mut functions: Vec<IrFunction> = Vec::new();
-    if let (Some(stmts), Some(analyses)) = (statements, func_analyses) {
-        for func_id in called_func_ids {
-            // Find the function in statements.
-            for stmt in stmts {
-                if let Statement::Fun(fun_stmt) = stmt {
-                    let func_name = fun_stmt.name(db).text(db).to_string();
-                    // Check if this function's pre-registered ID matches.
-                    if let Some(FuncRef::Local(registered_id)) = ctx.lookup_func(&func_name) {
-                        if registered_id == func_id {
-                            // Look up its analysis using the StmtFun as key.
-                            if let Some(analysis) = analyses.get(fun_stmt) {
-                                // Lower the function.
-                                match lower_function_for_ctfe(
-                                    &mut ctx,
-                                    func_id,
-                                    *fun_stmt,
-                                    analysis.clone(),
-                                ) {
-                                    Ok(ir_func) => functions.push(ir_func),
-                                    Err(e) => {
-                                        return Err(LowerError::NotImplemented(
-                                            format!("Failed to lower function '{}' for CTFE: {}", func_name, e)
-                                        ));
-                                    }
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
+    for func_id in called_func_ids {
+        // Find the function in pre-lowered functions.
+        if let Some(func) = pre_lowered_functions.iter().find(|f| f.id == func_id) {
+            functions.push(func.clone());
         }
     }
 
@@ -325,30 +298,6 @@ fn lower_const_expr_to_unit_standalone<'db>(
     })
 }
 
-/// Lower a function for CTFE execution.
-///
-/// This is a simplified version of function lowering that's used when evaluating
-/// const expressions that call functions.
-fn lower_function_for_ctfe<'db>(
-    parent_ctx: &mut LowerCtx<'db>,
-    func_id: datalove_datafun_ir::FuncId,
-    func: datalove_datafun_ast::ast::StmtFun<'db>,
-    analysis: crate::ownership_analysis::FunctionAnalysis,
-) -> Result<datalove_datafun_ir::IrFunction, LowerError> {
-    // Use the existing lower_function_body with a fresh frame state.
-    let saved = parent_ctx.swap_body_state(super::context::FrameState::new());
-
-    // Set const_as_let to true for CTFE function lowering.
-    parent_ctx.set_const_as_let(true);
-
-    let result = super::func::lower_function_body(parent_ctx, func_id, func, analysis, None);
-
-    // Restore parent state.
-    parent_ctx.swap_body_state(saved);
-
-    result
-}
-
 // ============================================================================
 // Phase 2: Evaluate Consts (Not Memoized)
 // ============================================================================
@@ -361,15 +310,17 @@ fn lower_function_for_ctfe<'db>(
 /// Evaluates consts in topological order (dependencies before dependents).
 /// Simple literals are extracted directly; complex expressions use the evaluator.
 ///
-/// The `func_analyses` parameter provides ownership analysis for functions that may be
-/// called from const expressions. This enables CTFE to lower and execute those functions.
+/// The `pre_lowered_functions` parameter provides already-lowered function IR that can
+/// be included in CTFE units when const expressions call functions. This avoids
+/// re-lowering functions that will be lowered again during main IR lowering.
 pub fn evaluate_consts<'db>(
     db: &'db dyn salsa::Database,
     graph: &ConstBindingGraph,
     statements: &[Statement<'db>],
     expr_types: &'db [Option<Type<'db>>],
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
-    func_analyses: &crate::ownership_analysis::ScriptFunctionAnalyses<'db>,
+    pre_lowered_functions: &[datalove_datafun_ir::IrFunction],
+    func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
 ) -> Result<ResolvedConsts, ConstEvalError> {
     let mut resolved = ResolvedConsts::new();
@@ -421,10 +372,10 @@ pub fn evaluate_consts<'db>(
 
         // Lower to IR unit using isolated lowering (gets widening, etc.).
         // Script-level consts don't have a function return type.
-        // Pass func_analyses and statements to enable lowering of called functions.
+        // Pass pre-lowered functions to include in the CTFE unit.
         let unit = lower_const_expr_to_unit_standalone(
             db, expr, expr_types, call_targets, &resolved_consts_map, None,
-            Some(func_analyses), Some(statements),
+            pre_lowered_functions, func_name_to_id,
         ).map_err(|e| ConstEvalError::LoweringFailed {
             binding_name: binding.name.clone(),
             message: e.to_string(),

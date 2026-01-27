@@ -263,6 +263,79 @@ pub fn lower_script_fragment_raw<'db>(
     })
 }
 
+/// Lower only the functions from a script fragment.
+///
+/// This is used to pre-lower functions before CTFE, so that const expressions
+/// that call functions can reuse the already-lowered function IR instead of
+/// re-lowering them.
+///
+/// Returns a vector of lowered functions and a map from function name to FuncId.
+pub fn lower_script_functions<'db>(
+    db: &'db dyn salsa::Database,
+    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    stmts: &[Statement<'db>],
+    func_analyses: &ScriptFunctionAnalyses<'db>,
+    func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+) -> Result<(Vec<datalove_datafun_ir::IrFunction>, HashMap<String, FuncId>), LowerError> {
+    use std::collections::HashMap as StdHashMap;
+
+    // Create a minimal context just for function lowering.
+    let func_id_map: StdHashMap<(ModuleId, String), (IrModuleId, FuncId)> = StdHashMap::new();
+    let script_ctx = ScriptLowerContext::new();
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, &func_id_map, script_ctx);
+
+    // Always use const_as_let mode.
+    ctx.set_const_as_let(true);
+
+    // Pre-register all functions to enable forward references (mutual recursion).
+    for stmt in stmts {
+        if let Statement::Fun(fun_stmt) = stmt {
+            let func_name = fun_stmt.name(db).text(db).to_string();
+            let param_count = fun_stmt.params(db).len();
+            ctx.pre_register_func(&func_name, param_count);
+        }
+    }
+
+    // Build a map of function names to FuncIds.
+    let mut func_name_to_id: HashMap<String, FuncId> = HashMap::new();
+
+    // Lower only the function statements.
+    for stmt in stmts {
+        if let Statement::Fun(fun_stmt) = stmt {
+            // Look up pre-computed analysis.
+            let analysis = func_analyses.get(fun_stmt)
+                .expect("function analysis not found")
+                .clone();
+
+            let func_name = fun_stmt.name(db).text(db).to_string();
+            let param_count = fun_stmt.params(db).len();
+            let func_id = ctx.define_func(&func_name, param_count);
+
+            func_name_to_id.insert(func_name.clone(), func_id);
+
+            // Swap in fresh state for function body.
+            let saved = ctx.swap_body_state(FrameState::new());
+
+            // Look up resolved param types for this function.
+            let func_name_str = fun_stmt.name(db).text(db);
+            let resolved_params = func_param_types
+                .and_then(|m| m.get(func_name_str))
+                .map(|v| v.as_slice());
+
+            // Lower the function body.
+            let func = lower_function_body(&mut ctx, func_id, *fun_stmt, analysis, resolved_params)?;
+
+            // Restore parent state.
+            ctx.swap_body_state(saved);
+
+            ctx.functions.push(func);
+        }
+    }
+
+    Ok((ctx.functions, func_name_to_id))
+}
+
 /// Lower a script expression unit.
 ///
 /// Like `lower_script_unit` but takes expr_types directly and an expression.

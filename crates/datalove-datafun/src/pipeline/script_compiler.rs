@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
-use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, evaluate_consts, evaluate_script_function_consts, ScriptLowerOptions, ScriptFunctionConstsResult};
+use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, lower_script_functions, evaluate_consts, evaluate_script_function_consts, ScriptLowerOptions, ScriptFunctionConstsResult};
 use datalove_datafun_compiler::const_inline::inline_script_consts;
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, build_func_id_map, collect_const_graph,
@@ -65,6 +65,12 @@ struct TypecheckOutput<'db> {
 struct OwnershipOutput<'db> {
     func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: Option<ScriptAnalysisData>,
+}
+
+/// Output from function pre-lowering phase.
+struct PreLoweredFunctions {
+    functions: Vec<datalove_datafun_ir::IrFunction>,
+    func_name_to_id: HashMap<String, datalove_datafun_ir::FuncId>,
 }
 
 /// Output from const evaluation phase.
@@ -282,10 +288,18 @@ impl<'db> ScriptCompiler<'db> {
             Err(result) => return result,
         };
 
-        // Phase 3: Const Evaluation (fragment only)
+        // Phase 3a: Pre-lower Functions (fragment only)
+        // Functions are lowered first so CTFE can reuse the already-lowered IR
+        // instead of re-lowering functions that call from const expressions.
+        let pre_lowered = match self.phase_lower_functions(&unit, &typecheck, &ownership) {
+            Ok(pl) => pl,
+            Err(result) => return result,
+        };
+
+        // Phase 3b: Const Evaluation (fragment only)
         // This evaluates const expressions using mini-lowering + interpretation.
         // The results are used for const inlining after lowering.
-        let consts = match self.phase_const_eval(&unit, &typecheck, &ownership) {
+        let consts = match self.phase_const_eval(&unit, &typecheck, &pre_lowered) {
             Ok(c) => c,
             Err(result) => return result,
         };
@@ -426,7 +440,55 @@ impl<'db> ScriptCompiler<'db> {
     }
 
     // ========================================================================
-    // Phase 3: Const Evaluation
+    // Phase 3a: Pre-lower Functions
+    // ========================================================================
+
+    /// Pre-lower functions before const evaluation.
+    ///
+    /// This allows CTFE to reuse the already-lowered function IR instead of
+    /// re-lowering functions when const expressions call them.
+    fn phase_lower_functions(
+        &mut self,
+        unit: &ParsedUnit<'db>,
+        typecheck: &TypecheckOutput<'db>,
+        ownership: &OwnershipOutput<'db>,
+    ) -> Result<PreLoweredFunctions, ScriptCompilationResult> {
+        let ParsedUnit::Fragment { stmts, .. } = unit else {
+            // Expressions don't have function definitions.
+            return Ok(PreLoweredFunctions {
+                functions: Vec::new(),
+                func_name_to_id: HashMap::new(),
+            });
+        };
+
+        // Lower just the functions.
+        match lower_script_functions(
+            self.db,
+            typecheck.expr_types,
+            typecheck.call_targets,
+            stmts,
+            &ownership.func_analyses,
+            None, // func_param_types not needed for script functions
+        ) {
+            Ok((functions, func_name_to_id)) => {
+                Ok(PreLoweredFunctions { functions, func_name_to_id })
+            }
+            Err(e) => {
+                self.accumulated_unit_specs.pop();
+                Err(ScriptCompilationResult {
+                    typecheck: TypecheckResult::Success,
+                    ownership: OwnershipResult::Success,
+                    lowering: LoweringResult::Error {
+                        message: format!("function lowering error: {}", e),
+                    },
+                    ir_unit: None,
+                })
+            }
+        }
+    }
+
+    // ========================================================================
+    // Phase 3b: Const Evaluation
     // ========================================================================
 
     /// Evaluate compile-time constants (fragment only).
@@ -434,7 +496,7 @@ impl<'db> ScriptCompiler<'db> {
         &mut self,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
-        ownership: &OwnershipOutput<'db>,
+        pre_lowered: &PreLoweredFunctions,
     ) -> Result<ConstEvalOutput, ScriptCompilationResult> {
         let ParsedUnit::Fragment { stmts, .. } = unit else {
             // Expressions don't have const bindings.
@@ -456,7 +518,8 @@ impl<'db> ScriptCompiler<'db> {
                 stmts,
                 typecheck.expr_types,
                 typecheck.call_targets,
-                &ownership.func_analyses,
+                &pre_lowered.functions,
+                &pre_lowered.func_name_to_id,
                 self.ctfe_evaluator.clone(),
             ) {
                 Ok(resolved) => resolved,
