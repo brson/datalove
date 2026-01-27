@@ -190,7 +190,6 @@ impl ScriptExecutor {
             let val = match self.env.frames.external_value(*unit, *value_id) {
                 Ok(v) => self.interp.pretty_print_value(&v)
                     .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
-                Err(InterpError::UninitializedValue(_)) => "<moved>".S(),
                 Err(e) => format!("<error: {:?}>", e),
             };
             return Some((ty, val));
@@ -224,7 +223,6 @@ impl ScriptExecutor {
             let val = match self.env.frames.external_value(*unit, *value_id) {
                 Ok(v) => self.interp.pretty_print_value(&v)
                     .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
-                Err(InterpError::UninitializedValue(_)) => "<moved>".S(),
                 Err(e) => format!("<error: {:?}>", e),
             };
             result.push((name.C(), "let".S(), ty, val));

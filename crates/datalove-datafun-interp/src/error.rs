@@ -1,12 +1,10 @@
 //! Interpreter errors.
 
-use datalove_datafun_ir::{ValueId, SlotId, ParamId, FuncId, IrModuleId};
+use datalove_datafun_ir::{SlotId, ParamId, FuncId, IrModuleId};
 
 /// Interpreter error.
 #[derive(Debug)]
 pub enum InterpError {
-    /// Value not initialized (may occur during Drop).
-    UninitializedValue(ValueId),
     /// Slot not initialized (may occur during Drop).
     UninitializedSlot(SlotId),
     /// Parameter not initialized (may occur during Drop).

@@ -76,17 +76,18 @@ impl Frame {
     /// Returns the raw value without dereferencing. For ref values, this
     /// returns the stored pointer. Use `value_deref` to dereference refs.
     ///
-    /// Panics if value ID is out of bounds (compiler bug).
-    /// Returns error if value is not live (not written or already dropped).
-    pub fn value(&self, id: ValueId) -> Result<Value, InterpError> {
+    /// Panics if value ID is out of bounds or not live (compiler bug).
+    pub fn value(&self, id: ValueId) -> Value {
         let idx = id.0 as usize;
-        if !self.live_values.contains(&id) {
-            return Err(InterpError::UninitializedValue(id));
-        }
+        assert!(
+            self.live_values.contains(&id),
+            "value {:?} not live (not written or already dropped)",
+            id
+        );
         let offset = self.layout.value_offsets[idx] as usize;
         let tydesc = self.layout.value_tydescs[idx];
         let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
-        Ok(Value { ptr, tydesc })
+        Value { ptr, tydesc }
     }
 
     /// Dereference a ref value to get the pointed-to data.
@@ -94,13 +95,14 @@ impl Frame {
     /// For values produced by GetFieldRef, reads the stored pointer and
     /// returns the data it points to with the inner type's tydesc.
     ///
-    /// Panics if value ID is out of bounds (compiler bug).
-    /// Returns error if value is not live (not written or already dropped).
-    pub fn value_deref(&self, id: ValueId) -> Result<Value, InterpError> {
+    /// Panics if value ID is out of bounds or not live (compiler bug).
+    pub fn value_deref(&self, id: ValueId) -> Value {
         let idx = id.0 as usize;
-        if !self.live_values.contains(&id) {
-            return Err(InterpError::UninitializedValue(id));
-        }
+        assert!(
+            self.live_values.contains(&id),
+            "value {:?} not live (not written or already dropped)",
+            id
+        );
         let offset = self.layout.value_offsets[idx] as usize;
         let tydesc = self.layout.value_tydescs[idx];
         let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
@@ -112,7 +114,7 @@ impl Frame {
             let tuple_info = (*tydesc).type_info.tuple;
             (*tuple_info.fields).tydesc
         };
-        Ok(Value { ptr: stored_ptr, tydesc: inner_tydesc })
+        Value { ptr: stored_ptr, tydesc: inner_tydesc }
     }
 
     /// Get destination for a slot.
@@ -322,7 +324,7 @@ impl FrameStore {
     pub fn external_value(&self, unit: u32, value: ValueId) -> Result<Value, InterpError> {
         let frame = self.frames.get(unit as usize)
             .ok_or(InterpError::ExternalUnitNotFound(unit))?;
-        frame.value(value)
+        Ok(frame.value(value))
     }
 
     /// Read a slot from a previous unit.

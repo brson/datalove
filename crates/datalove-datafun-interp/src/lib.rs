@@ -966,7 +966,7 @@ impl IrInterpreter {
             Instruction::DropViaRef { ref_value } => {
                 // Drop through a reference value (e.g., from GetFieldRef).
                 // The reference value contains a pointer to what we want to destroy.
-                let val = frame.value_deref(*ref_value)?;
+                let val = frame.value_deref(*ref_value);
                 unsafe {
                     datalove_rt::c::dtlv_rti_any_destroy_local(
                         self.runtime.handle(),
@@ -1334,8 +1334,8 @@ impl IrInterpreter {
         frames: &FrameStore,
     ) -> Result<Value, InterpError> {
         match op {
-            Operand::Value(id) => frame.value(*id),
-            Operand::ValueRef(id) => frame.value_deref(*id),
+            Operand::Value(id) => Ok(frame.value(*id)),
+            Operand::ValueRef(id) => Ok(frame.value_deref(*id)),
             Operand::Slot(id) => frame.slot(*id),
             Operand::Param(id) => frame.param(*id),
             Operand::ExternalValue { unit, value } => {
@@ -1366,7 +1366,7 @@ impl IrInterpreter {
             }
             Operand::ValueRef(id) => {
                 // Dereference to get the pointed-to destination.
-                frame.value_deref(*id).expect("ref value should be initialized")
+                frame.value_deref(*id)
             }
             _ => panic!("get_operand_dest: invalid operand {:?} for out param", op),
         }
