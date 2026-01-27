@@ -105,11 +105,13 @@ impl<'db> Parser<'db> {
         }
     }
 
-    /// Get current position (only valid for Vec-backed parser).
+    /// Get current position.
+    ///
+    /// Only valid for Vec-backed parsers.
     pub(super) fn pos(&self) -> usize {
         match &self.source {
             TokenSource::Vec { pos, .. } => *pos,
-            TokenSource::Iter { .. } => 0, // Not meaningful for iterator-backed.
+            TokenSource::Iter { .. } => panic!("pos() called on iterator-backed parser"),
         }
     }
 
