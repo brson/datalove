@@ -492,6 +492,8 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse a datafun tuple: (expr1, expr2, ...).
+    ///
+    /// Caller must have already peeked and confirmed a `ParenOpen` branch.
     pub(super) fn parse_datafun_tuple(&mut self) -> ast::ExprFun<'db> {
         // Consume the ParenOpen branch and get its contents.
         let (iter, open_span) = match self.next() {
@@ -499,14 +501,7 @@ impl<'db> Parser<'db> {
                 let open_span = TextSpan::new(self.source_text(), open.span(self.db));
                 (inner, open_span)
             }
-            _ => {
-                let ts = self.peek_text_span();
-                return self.emit_expr_error(ts,
-                    "expected tuple",
-                    "P009",
-                    "expected '(' to start tuple"
-                );
-            }
+            _ => unreachable!("caller must peek for ParenOpen before calling"),
         };
 
         let mut sub = self.sub_parser(iter, Some((open_span, "in this tuple")));

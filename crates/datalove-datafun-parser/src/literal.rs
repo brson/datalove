@@ -273,19 +273,15 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse anonymous tuple: (expr, expr, ...)
+    ///
+    /// Caller must have already peeked and confirmed a `ParenOpen` branch.
     fn parse_lit_anon_tuple(
         &mut self,
         type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
-            _ => {
-                let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.C(),
-                    message: InternedText::new(self.db, "expected '('".S()),
-                });
-            }
+            _ => unreachable!("caller must peek for ParenOpen before calling"),
         };
 
         let elements = self.parse_comma_separated_exprs(inner);
@@ -293,19 +289,15 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse anonymous struct: { name = expr, ... }
+    ///
+    /// Caller must have already peeked and confirmed a `BraceOpen` branch.
     fn parse_lit_anon_struct(
         &mut self,
         type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
-            _ => {
-                let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.C(),
-                    message: InternedText::new(self.db, "expected '{'".S()),
-                });
-            }
+            _ => unreachable!("caller must peek for BraceOpen before calling"),
         };
 
         let fields = self.parse_comma_separated_struct_fields(inner);
@@ -313,19 +305,15 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse list: [expr, expr, ...]
+    ///
+    /// Caller must have already peeked and confirmed a `BracketOpen` branch.
     fn parse_lit_list(
         &mut self,
         type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner,
-            _ => {
-                let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.C(),
-                    message: InternedText::new(self.db, "expected '['".S()),
-                });
-            }
+            _ => unreachable!("caller must peek for BracketOpen before calling"),
         };
 
         let elements = self.parse_comma_separated_exprs(inner);
@@ -409,7 +397,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
                 let inner = match self.next() {
                     Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
-                    _ => return None,
+                    _ => unreachable!("peek confirmed ParenOpen"),
                 };
                 let mut sub = self.sub_parser(inner, None);
                 if sub.peek().is_none() {
