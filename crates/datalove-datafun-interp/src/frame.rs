@@ -75,18 +75,17 @@ impl Frame {
     /// Returns the raw value without dereferencing. For ref values, this
     /// returns the stored pointer. Use `value_deref` to dereference refs.
     ///
-    /// Panics if value ID is out of bounds or not live (compiler bug).
-    pub fn value(&self, id: ValueId) -> Value {
+    /// Returns None if value is not live (moved or not written).
+    /// Panics if value ID is out of bounds (compiler bug).
+    pub fn value(&self, id: ValueId) -> Option<Value> {
         let idx = id.0 as usize;
-        assert!(
-            self.live_values.contains(&id),
-            "value {:?} not live (not written or already dropped)",
-            id
-        );
+        if !self.live_values.contains(&id) {
+            return None;
+        }
         let offset = self.layout.value_offsets[idx] as usize;
         let tydesc = self.layout.value_tydescs[idx];
         let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
-        Value { ptr, tydesc }
+        Some(Value { ptr, tydesc })
     }
 
     /// Dereference a ref value to get the pointed-to data.
@@ -94,14 +93,13 @@ impl Frame {
     /// For values produced by GetFieldRef, reads the stored pointer and
     /// returns the data it points to with the inner type's tydesc.
     ///
-    /// Panics if value ID is out of bounds or not live (compiler bug).
-    pub fn value_deref(&self, id: ValueId) -> Value {
+    /// Returns None if value is not live (moved or not written).
+    /// Panics if value ID is out of bounds (compiler bug).
+    pub fn value_deref(&self, id: ValueId) -> Option<Value> {
         let idx = id.0 as usize;
-        assert!(
-            self.live_values.contains(&id),
-            "value {:?} not live (not written or already dropped)",
-            id
-        );
+        if !self.live_values.contains(&id) {
+            return None;
+        }
         let offset = self.layout.value_offsets[idx] as usize;
         let tydesc = self.layout.value_tydescs[idx];
         let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
@@ -113,7 +111,7 @@ impl Frame {
             let tuple_info = (*tydesc).type_info.tuple;
             (*tuple_info.fields).tydesc
         };
-        Value { ptr: stored_ptr, tydesc: inner_tydesc }
+        Some(Value { ptr: stored_ptr, tydesc: inner_tydesc })
     }
 
     /// Get destination for a slot.
@@ -129,18 +127,17 @@ impl Frame {
 
     /// Get slot value (for reading).
     ///
-    /// Panics if slot ID is out of bounds or not initialized (compiler bug).
-    pub fn slot(&self, id: SlotId) -> Value {
+    /// Returns None if slot is not initialized (moved or not written).
+    /// Panics if slot ID is out of bounds (compiler bug).
+    pub fn slot(&self, id: SlotId) -> Option<Value> {
         let idx = id.0 as usize;
-        assert!(
-            self.slot_initialized[idx],
-            "slot {:?} not initialized",
-            id
-        );
+        if !self.slot_initialized[idx] {
+            return None;
+        }
         let offset = self.layout.slot_offsets[idx] as usize;
         let tydesc = self.layout.slot_tydescs[idx];
         let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
-        Value { ptr, tydesc }
+        Some(Value { ptr, tydesc })
     }
 
     /// Mark slot as initialized.
@@ -191,17 +188,16 @@ impl Frame {
 
     /// Read param (dereferences pointer to caller's data).
     ///
-    /// Panics if param ID is out of bounds or not initialized (compiler bug).
-    pub fn param(&self, id: ParamId) -> Value {
+    /// Returns None if param is not initialized.
+    /// Panics if param ID is out of bounds (compiler bug).
+    pub fn param(&self, id: ParamId) -> Option<Value> {
         let idx = id.0 as usize;
         let ptr = self.param_ptrs[idx];
-        assert!(
-            !ptr.is_null() && self.param_initialized[idx],
-            "param {:?} not initialized",
-            id
-        );
+        if ptr.is_null() || !self.param_initialized[idx] {
+            return None;
+        }
         let tydesc = self.param_tydescs[idx];
-        Value { ptr, tydesc }
+        Some(Value { ptr, tydesc })
     }
 
     /// Get mutable destination for Mut/Out params.
@@ -323,8 +319,9 @@ impl FrameStore {
 
     /// Read a value from a previous unit.
     ///
+    /// Returns None if value is not live (moved or not written).
     /// Panics if unit not found (compiler bug).
-    pub fn external_value(&self, unit: u32, value: ValueId) -> Value {
+    pub fn external_value(&self, unit: u32, value: ValueId) -> Option<Value> {
         let frame = self.frames.get(unit as usize)
             .unwrap_or_else(|| panic!("external unit {} not found", unit));
         frame.value(value)
@@ -332,8 +329,9 @@ impl FrameStore {
 
     /// Read a slot from a previous unit.
     ///
+    /// Returns None if slot is not initialized (moved or not written).
     /// Panics if unit not found (compiler bug).
-    pub fn external_slot(&self, unit: u32, slot: SlotId) -> Value {
+    pub fn external_slot(&self, unit: u32, slot: SlotId) -> Option<Value> {
         let frame = self.frames.get(unit as usize)
             .unwrap_or_else(|| panic!("external unit {} not found", unit));
         frame.slot(slot)
@@ -354,8 +352,7 @@ impl FrameStore {
             .unwrap_or_else(|| panic!("external unit {} not found", unit));
 
         // Destroy old value if slot was already initialized.
-        if frame.is_slot_initialized(slot) {
-            let old_val = frame.slot(slot);
+        if let Some(old_val) = frame.slot(slot) {
             unsafe {
                 datalove_rt::c::dtlv_rti_any_destroy_local(
                     rt_handle,
