@@ -3,19 +3,33 @@
 //! Implements the `CtfeEvaluator` trait for the interpreter, allowing
 //! const expressions to be evaluated at compile time.
 
+use std::sync::Arc;
 use datalove_datafun_ir::{ConstValue, CtfeError, CtfeEvaluator, IrScriptUnit, IrType};
-use crate::{IrInterpreter, ScriptEnvironment, UnitCompletion, Destination};
+use crate::{IrInterpreter, ScriptEnvironment, UnitCompletion, Destination, ModuleFunctionRegistry};
 
 /// CTFE evaluator backed by the IR interpreter.
 pub struct InterpCtfeEvaluator {
     interp: IrInterpreter,
+    /// Module function registry for cross-module CTFE calls.
+    module_registry: Option<Arc<ModuleFunctionRegistry>>,
 }
 
 impl InterpCtfeEvaluator {
-    /// Create a new CTFE evaluator.
+    /// Create a new CTFE evaluator without module function support.
     pub fn new() -> Self {
         Self {
             interp: IrInterpreter::new(),
+            module_registry: None,
+        }
+    }
+
+    /// Create a CTFE evaluator with module function support.
+    ///
+    /// The registry provides access to compiled module functions for cross-module calls.
+    pub fn with_module_registry(module_registry: Arc<ModuleFunctionRegistry>) -> Self {
+        Self {
+            interp: IrInterpreter::new(),
+            module_registry: Some(module_registry),
         }
     }
 }
@@ -28,7 +42,11 @@ impl Default for InterpCtfeEvaluator {
 
 impl CtfeEvaluator for InterpCtfeEvaluator {
     fn evaluate(&mut self, unit: &IrScriptUnit, result_type: &IrType) -> Result<ConstValue, CtfeError> {
-        let mut env = ScriptEnvironment::new();
+        // Create environment with module registry if available (for cross-module CTFE).
+        let mut env = match &self.module_registry {
+            Some(registry) => ScriptEnvironment::with_module_registry(registry.clone()),
+            None => ScriptEnvironment::new(),
+        };
 
         // Allocate space for the result.
         let result_tydesc = self.interp.tydesc_table_mut().get_or_create(result_type);

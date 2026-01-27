@@ -12,9 +12,10 @@
 //! lowering when a CTFE evaluator is available in the LowerCtx.
 
 use std::collections::HashMap;
+use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
-    ConstValue, IrType, IrScriptUnit,
+    ConstValue, IrType, IrScriptUnit, IrModuleId,
     Operand, Terminator, SymbolTable,
 };
 use datalove_datafun_common::Type;
@@ -120,6 +121,7 @@ fn lower_const_expr_to_unit<'db>(
 /// then pass the resulting IR units to the const crate for evaluation.
 ///
 /// The `lowered_functions` parameter provides already-lowered function IR for CTFE calls.
+/// The `module_func_id_map` parameter enables cross-module function calls in const expressions.
 pub fn lower_const_expr_to_unit_standalone<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
@@ -129,15 +131,17 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     return_type: Option<IrType>,
     lowered_functions: &[datalove_datafun_ir::IrFunction],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
+    module_func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, datalove_datafun_ir::FuncId)>,
 ) -> Result<IrScriptUnit, LowerError> {
     use datalove_datafun_ir::{FuncRef, FuncId, Instruction, IrFunction};
     use std::collections::HashSet;
 
-    // Create a fresh LowerCtx with the provided type information.
-    let mut ctx = LowerCtx::new(
+    // Create a fresh LowerCtx with the provided type information and module func_id_map.
+    let mut ctx = LowerCtx::new_for_module(
         db,
         expr_types,
         call_targets,
+        module_func_id_map,
     );
 
     // Pre-populate const bindings from previously resolved values.
@@ -208,6 +212,10 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     })
 }
 
+/// Empty module func_id_map for contexts that don't need cross-module function calls.
+static EMPTY_MODULE_FUNC_ID_MAP: std::sync::LazyLock<HashMap<(ModuleId, String), (IrModuleId, datalove_datafun_ir::FuncId)>> =
+    std::sync::LazyLock::new(HashMap::new);
+
 /// Lower a single const binding, returning either a simple value or an IR unit.
 ///
 /// This is the primary entry point for the "lower then evaluate" pattern.
@@ -220,6 +228,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
 ///
 /// The `resolved_consts` parameter contains previously evaluated consts that this
 /// expression may reference.
+/// The `module_func_id_map` parameter enables cross-module function calls in const expressions.
 pub fn lower_const_binding<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
@@ -230,6 +239,7 @@ pub fn lower_const_binding<'db>(
     return_type: Option<IrType>,
     lowered_functions: &[datalove_datafun_ir::IrFunction],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
+    module_func_id_map: Option<&'db HashMap<(ModuleId, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
 ) -> Result<(Option<IrScriptUnit>, Option<ConstValue>), LowerError> {
     // Try simple literal extraction first.
     if let Some(value) = try_extract_literal(db, expr, ir_type) {
@@ -245,10 +255,13 @@ pub fn lower_const_binding<'db>(
         // Not a const reference we've evaluated - fall through to lowering.
     }
 
+    // Use provided module func_id_map or empty one.
+    let func_id_map = module_func_id_map.unwrap_or(&EMPTY_MODULE_FUNC_ID_MAP);
+
     // Lower to IR unit for CTFE evaluation.
     let unit = lower_const_expr_to_unit_standalone(
         db, expr, expr_types, call_targets, resolved_consts, return_type,
-        lowered_functions, func_name_to_id,
+        lowered_functions, func_name_to_id, func_id_map,
     )?;
 
     Ok((Some(unit), None))

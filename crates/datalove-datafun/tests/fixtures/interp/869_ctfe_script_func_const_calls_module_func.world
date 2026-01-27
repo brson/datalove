@@ -1,0 +1,23 @@
+----------
+module local/test/helper
+----------
+
+// Helper module with a simple function.
+fun get_value(): u32
+    ret 42
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/helper
+import helper.get_value
+
+// Script function with const calling imported module function.
+fun get_result(): u32
+    const X: u32 = get_value()
+    ret X
+end fun
+
+debuglog get_result()

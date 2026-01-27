@@ -486,12 +486,15 @@ pub fn lower_all_module_functions<'db>(
 ///
 /// This function accesses tracked struct fields but does NOT create tracked structs,
 /// so it can be called outside of tracked function context.
+///
+/// The `func_id_map` enables cross-module function calls in const expressions.
 pub fn evaluate_all_module_consts<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     lowered_functions: &HashMap<ModuleId, ModuleLoweredFunctions>,
+    func_id_map: FuncIdMap<'db>,
 ) -> HashMap<ModuleId, ModulePreResolvedConsts> {
     let typecheck_module_results = typecheck_result.module_results(db);
     let mut result = HashMap::new();
@@ -527,7 +530,7 @@ pub fn evaluate_all_module_consts<'db>(
                     if let Statement::Const(const_stmt) = func_body_stmt {
                         match evaluate_single_const(
                             db, const_stmt, expr_types, call_targets, &func_local_consts, &evaluator,
-                            funcs, &func_map, func_return_type.clone(),
+                            funcs, &func_map, func_return_type.clone(), func_id_map,
                         ) {
                             Ok((name, ir_type, value)) => {
                                 // Store locally for other consts in this function.
@@ -558,6 +561,7 @@ pub fn evaluate_all_module_consts<'db>(
 ///
 /// The `lowered_functions` are used when const expressions call functions.
 /// The `func_return_type` is needed for try operators (`?` and `!`) in const expressions.
+/// The `func_id_map` enables cross-module function calls in const expressions.
 fn evaluate_single_const<'db>(
     db: &'db dyn salsa::Database,
     const_stmt: &datalove_datafun_ast::ast::StmtConst<'db>,
@@ -568,6 +572,7 @@ fn evaluate_single_const<'db>(
     lowered_functions: &[IrFunction],
     func_name_to_id: &HashMap<String, FuncId>,
     func_return_type: Option<IrType>,
+    func_id_map: FuncIdMap<'db>,
 ) -> Result<(String, IrType, ConstValue), String> {
     let name = const_stmt.name.text(db).S();
     let init_expr = const_stmt.value;
@@ -581,6 +586,8 @@ fn evaluate_single_const<'db>(
     };
 
     // Lower the const binding using the "lower then evaluate" pattern.
+    // Convert the tracked FuncIdMap to a HashMap for lowering.
+    let func_id_map_hashmap = func_id_map.to_hashmap(db);
     let (unit_opt, value_opt) = lower::lower_const_binding(
         db,
         init_expr,
@@ -591,6 +598,7 @@ fn evaluate_single_const<'db>(
         func_return_type,
         lowered_functions,
         func_name_to_id,
+        Some(&func_id_map_hashmap),
     ).map_err(|e| format!("const '{}': lowering error: {}", name, e))?;
 
     // Evaluate to get the const value.
@@ -642,7 +650,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
         let lowered_functions = lower_all_module_functions(
             db_salsa, parsed_graph, typecheck_result, ownership_analysis, func_id_map
         );
-        let resolved = evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions);
+        let resolved = evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions, func_id_map);
         (resolved, lowered_functions)
     };
 

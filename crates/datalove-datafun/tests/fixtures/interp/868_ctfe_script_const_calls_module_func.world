@@ -1,0 +1,20 @@
+----------
+module local/test/helper
+----------
+
+// Helper module with a simple function.
+fun compute(): u32
+    ret 42
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/helper
+import helper.compute
+
+// Script-level const calling imported module function.
+const RESULT: u32 = compute()
+
+debuglog RESULT

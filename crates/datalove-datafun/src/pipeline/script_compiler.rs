@@ -26,6 +26,7 @@ use rmx::prelude::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
@@ -51,7 +52,7 @@ use datalove_datafun_tycheck::{
 use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_compiler::IrTypeExt;
 
-use super::compiled_modules::CompiledModules;
+use super::compiled_modules::{CompiledModules, SharedModuleContext};
 use super::result::{TypecheckResult, OwnershipResult, LoweringResult, ScriptCompilationResult};
 
 // ============================================================================
@@ -152,6 +153,7 @@ impl<'db> CompiledModules<'db> {
             last_batch_spec: None,
             ctfe_evaluator,
             skip_const_inlining: false,
+            shared_context: self.shared.clone(),
         })
     }
 
@@ -165,7 +167,10 @@ impl<'db> CompiledModules<'db> {
         &self,
         db: &'db dyn salsa::Database,
     ) -> Option<ScriptCompiler<'db>> {
-        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+        // Use CTFE evaluator with module registry for cross-module const function calls.
+        let evaluator = Rc::new(RefCell::new(
+            InterpCtfeEvaluator::with_module_registry(self.shared.module_registry.clone())
+        ));
         self.script_compiler(db, evaluator)
     }
 }
@@ -185,6 +190,8 @@ pub struct ScriptCompiler<'db> {
     ctfe_evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     /// When true, const bindings in functions are lowered as let bindings.
     skip_const_inlining: bool,
+    /// Shared module context for cross-module CTFE function calls.
+    shared_context: Arc<SharedModuleContext<'db>>,
 }
 
 impl<'db> ScriptCompiler<'db> {
@@ -634,6 +641,7 @@ impl<'db> ScriptCompiler<'db> {
                 .expect("const binding expression not found");
 
             // Lower the const binding to get either a simple value or an IR unit.
+            // Pass the module func_id_map for cross-module CTFE function calls.
             let (unit_opt, value_opt) = lower_const_binding(
                 self.db,
                 expr,
@@ -644,6 +652,7 @@ impl<'db> ScriptCompiler<'db> {
                 None, // Script-level consts don't have a function return type
                 &lowered_funcs.functions,
                 &lowered_funcs.func_name_to_id,
+                Some(&self.shared_context.func_id_map),
             ).map_err(|e| ConstEvalError::LoweringFailed {
                 binding_name: binding.name.clone(),
                 message: e.to_string(),
@@ -711,6 +720,7 @@ impl<'db> ScriptCompiler<'db> {
                         }
 
                         // Lower the const binding.
+                        // Pass the module func_id_map for cross-module CTFE function calls.
                         let lower_result = lower_const_binding(
                             self.db,
                             init_expr,
@@ -721,6 +731,7 @@ impl<'db> ScriptCompiler<'db> {
                             func_return_type.clone(),
                             &lowered_funcs.functions,
                             &lowered_funcs.func_name_to_id,
+                            Some(&self.shared_context.func_id_map),
                         );
 
                         let value = match lower_result {
