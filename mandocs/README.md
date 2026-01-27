@@ -21,9 +21,9 @@ Then we'll add I/O to it &mdash; carefully.
 
 
 
-> **Roadmap**: [9 of 21 complete &middot](roadmap.md), updated 2026-01-22.
+> **Roadmap**: [9 of 21 complete](roadmap.md) &middot; updated 2026-01-22.
 
-> **Latest news**: [Precise drops](posts.html), updated 2026-01-24.
+> **Latest news**: [Precise drops](posts.html) &middot; updated 2026-01-24.
 
 
 
