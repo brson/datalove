@@ -10,6 +10,10 @@ that are impossible based on the invariants
 of e.g. previous compiler passes,
 remove them or convert to panics.
 
+Look for arguments that take `Option`
+where the `None` case is not used for any production
+purpose.
+
 
 
 
