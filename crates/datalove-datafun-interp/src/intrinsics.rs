@@ -19,94 +19,94 @@ impl IrInterpreter {
         match intrinsic {
             // Bitwise operations on u32.
             BitnotU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
                 self.write_u32(!a, dest);
             }
             BitandU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_u32(a & b, dest);
             }
             BitorU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_u32(a | b, dest);
             }
             BitxorU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_u32(a ^ b, dest);
             }
 
             // Shift operations on u32.
             ShlU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_u32(a.wrapping_shl(b), dest);
             }
             ShrU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_u32(a.wrapping_shr(b), dest);
             }
 
             // Bit counting operations on u32.
             PopcountU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
                 self.write_u32(a.count_ones(), dest);
             }
             ClzU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
                 self.write_u32(a.leading_zeros(), dest);
             }
             CtzU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
                 self.write_u32(a.trailing_zeros(), dest);
             }
 
             // Byte/bit manipulation on u32.
             SwapBytesU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
                 self.write_u32(a.swap_bytes(), dest);
             }
             ReverseBitsU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
                 self.write_u32(a.reverse_bits(), dest);
             }
 
             // Wrapping arithmetic on u32.
             AddWrappingU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_u32(a.wrapping_add(b), dest);
             }
             SubWrappingU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_u32(a.wrapping_sub(b), dest);
             }
             MulWrappingU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_u32(a.wrapping_mul(b), dest);
             }
             RemU32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_u32(a % b, dest);
             }
 
             // Type conversions.
             U32ToI32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
                 self.write_i32(a as i32, dest);
             }
             I32ToU32 => {
-                let a = self.read_i32(&args[0], frame, frames)?;
+                let a = self.read_i32(&args[0], frame, frames);
                 self.write_u32(a as u32, dest);
             }
             NegWrappingI32 => {
-                let a = self.read_i32(&args[0], frame, frames)?;
+                let a = self.read_i32(&args[0], frame, frames);
                 self.write_i32(a.wrapping_neg(), dest);
             }
 
@@ -121,13 +121,13 @@ impl IrInterpreter {
 
             // Signed i32 operations.
             SshrI32 => {
-                let a = self.read_i32(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let a = self.read_i32(&args[0], frame, frames);
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_i32(a.wrapping_shr(b), dest);
             }
             SremI32 => {
-                let a = self.read_i32(&args[0], frame, frames)?;
-                let b = self.read_i32(&args[1], frame, frames)?;
+                let a = self.read_i32(&args[0], frame, frames);
+                let b = self.read_i32(&args[1], frame, frames);
                 self.write_i32(a % b, dest);
             }
 
@@ -147,7 +147,7 @@ impl IrInterpreter {
                 self.write_u32(a.to_bits(), dest);
             }
             BitsToF32 => {
-                let a = self.read_u32(&args[0], frame, frames)?;
+                let a = self.read_u32(&args[0], frame, frames);
                 self.write_f32(f32::from_bits(a), dest);
             }
 
@@ -592,12 +592,12 @@ impl IrInterpreter {
             // Usize shift operations.
             ShlUsize => {
                 let a = self.read_usize(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_usize(a.wrapping_shl(b), dest);
             }
             ShrUsize => {
                 let a = self.read_usize(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_usize(a.wrapping_shr(b), dest);
             }
 
@@ -664,7 +664,7 @@ impl IrInterpreter {
             }
             SshrIsize => {
                 let a = self.read_isize(&args[0], frame, frames)?;
-                let b = self.read_u32(&args[1], frame, frames)?;
+                let b = self.read_u32(&args[1], frame, frames);
                 self.write_isize(a.wrapping_shr(b), dest);
             }
             SremIsize => {
@@ -677,15 +677,15 @@ impl IrInterpreter {
     }
 
     /// Read a u32 value from an operand.
-    fn read_u32(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<u32, InterpError> {
-        let val = self.read_operand(op, frame, frames)?;
-        Ok(unsafe { *(val.ptr as *const u32) })
+    fn read_u32(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> u32 {
+        let val = self.read_operand(op, frame, frames);
+        unsafe { *(val.ptr as *const u32) }
     }
 
     /// Read an i32 value from an operand.
-    fn read_i32(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<i32, InterpError> {
-        let val = self.read_operand(op, frame, frames)?;
-        Ok(unsafe { *(val.ptr as *const i32) })
+    fn read_i32(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> i32 {
+        let val = self.read_operand(op, frame, frames);
+        unsafe { *(val.ptr as *const i32) }
     }
 
     /// Write a u32 value to destination.
@@ -705,7 +705,7 @@ impl IrInterpreter {
 
     /// Read an f32 value from an operand.
     fn read_f32(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<f32, InterpError> {
-        let val = self.read_operand(op, frame, frames)?;
+        let val = self.read_operand(op, frame, frames);
         Ok(unsafe { *(val.ptr as *const f32) })
     }
 
@@ -716,7 +716,7 @@ impl IrInterpreter {
 
     /// Read an f64 value from an operand.
     fn read_f64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<f64, InterpError> {
-        let val = self.read_operand(op, frame, frames)?;
+        let val = self.read_operand(op, frame, frames);
         Ok(unsafe { *(val.ptr as *const f64) })
     }
 
@@ -727,7 +727,7 @@ impl IrInterpreter {
 
     /// Read a u64 value from an operand.
     fn read_u64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<u64, InterpError> {
-        let val = self.read_operand(op, frame, frames)?;
+        let val = self.read_operand(op, frame, frames);
         Ok(unsafe { *(val.ptr as *const u64) })
     }
 
@@ -738,7 +738,7 @@ impl IrInterpreter {
 
     /// Read an i64 value from an operand.
     fn read_i64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<i64, InterpError> {
-        let val = self.read_operand(op, frame, frames)?;
+        let val = self.read_operand(op, frame, frames);
         Ok(unsafe { *(val.ptr as *const i64) })
     }
 
@@ -749,7 +749,7 @@ impl IrInterpreter {
 
     /// Read a u8 value from an operand.
     fn read_u8(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<u8, InterpError> {
-        let val = self.read_operand(op, frame, frames)?;
+        let val = self.read_operand(op, frame, frames);
         Ok(unsafe { *(val.ptr as *const u8) })
     }
 
@@ -760,7 +760,7 @@ impl IrInterpreter {
 
     /// Read an i8 value from an operand.
     fn read_i8(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<i8, InterpError> {
-        let val = self.read_operand(op, frame, frames)?;
+        let val = self.read_operand(op, frame, frames);
         Ok(unsafe { *(val.ptr as *const i8) })
     }
 
@@ -771,7 +771,7 @@ impl IrInterpreter {
 
     /// Read a u16 value from an operand.
     fn read_u16(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<u16, InterpError> {
-        let val = self.read_operand(op, frame, frames)?;
+        let val = self.read_operand(op, frame, frames);
         Ok(unsafe { *(val.ptr as *const u16) })
     }
 
@@ -782,7 +782,7 @@ impl IrInterpreter {
 
     /// Read an i16 value from an operand.
     fn read_i16(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<i16, InterpError> {
-        let val = self.read_operand(op, frame, frames)?;
+        let val = self.read_operand(op, frame, frames);
         Ok(unsafe { *(val.ptr as *const i16) })
     }
 
@@ -793,7 +793,7 @@ impl IrInterpreter {
 
     /// Read a usize value from an operand.
     fn read_usize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<datalove_rtdt::UsizeRepr, InterpError> {
-        let val = self.read_operand(op, frame, frames)?;
+        let val = self.read_operand(op, frame, frames);
         Ok(unsafe { *(val.ptr as *const datalove_rtdt::UsizeRepr) })
     }
 
@@ -804,7 +804,7 @@ impl IrInterpreter {
 
     /// Read an isize value from an operand.
     fn read_isize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<datalove_rtdt::IsizeRepr, InterpError> {
-        let val = self.read_operand(op, frame, frames)?;
+        let val = self.read_operand(op, frame, frames);
         Ok(unsafe { *(val.ptr as *const datalove_rtdt::IsizeRepr) })
     }
 

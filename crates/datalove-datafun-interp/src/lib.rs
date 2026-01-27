@@ -378,7 +378,7 @@ impl IrInterpreter {
                     current_block = *target;
                 }
                 Terminator::Branch { cond, then_block, then_args, else_block, else_args } => {
-                    let cond_val = self.read_operand(cond, frame, frames)?;
+                    let cond_val = self.read_operand(cond, frame, frames);
                     let cond_bool = unsafe { *(cond_val.ptr as *const bool) };
                     if cond_bool {
                         self.pass_block_args(blocks, *then_block, then_args, frame, frames)?;
@@ -390,7 +390,7 @@ impl IrInterpreter {
                 }
                 Terminator::Return { value } => {
                     if let Some(op) = value {
-                        let val = self.read_operand(op, frame, frames)?;
+                        let val = self.read_operand(op, frame, frames);
                         // Use move_value (shallow copy). The frame will be
                         // destroyed by call_in_context, so we must transfer
                         // ownership to avoid double-free.
@@ -401,7 +401,7 @@ impl IrInterpreter {
                 }
                 Terminator::UnitEnd { result } => {
                     if let Some(op) = result {
-                        let val = self.read_operand(op, frame, frames)?;
+                        let val = self.read_operand(op, frame, frames);
                         // Write to expr_dest (not ret_dest) for expression results.
                         let dest = expr_dest.expect("UnitEnd with result requires expr_dest");
                         unsafe { self.move_value(&val, dest); }
@@ -410,7 +410,7 @@ impl IrInterpreter {
                     return Ok(UnitCompletion::Normal);
                 }
                 Terminator::UnitEarlyReturn { value } => {
-                    let val = self.read_operand(value, frame, frames)?;
+                    let val = self.read_operand(value, frame, frames);
                     // Debuglog the value (borrow, not consume).
                     let rt_handle = self.runtime.handle();
                     unsafe {
@@ -460,7 +460,7 @@ impl IrInterpreter {
 
         // Pass each argument to the corresponding block parameter.
         for (param_id, arg) in target_block.params.iter().zip(args.iter()) {
-            let src_val = self.read_operand(arg, frame, frames)?;
+            let src_val = self.read_operand(arg, frame, frames);
             let dest_slot = frame.value_dest(*param_id);
             // Block args use move semantics.
             unsafe { self.move_value(&src_val, dest_slot); }
@@ -486,7 +486,7 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
             }
             Instruction::Copy { dest, src } => {
-                let src_val = self.read_operand(src, frame, frames)?;
+                let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.copy_value(&src_val, dest_slot); }
                 frame.mark_value_live(*dest);
@@ -495,7 +495,7 @@ impl IrInterpreter {
                 // Precise move: ownership analysis guarantees source exists.
                 // Mark external sources dropped so destroy_live_values skips them.
                 // (Local sources don't need marking - they're not in unit_end_values.)
-                let src_val = self.read_operand(src, frame, frames)?;
+                let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&src_val, dest_slot); }
                 frame.mark_value_live(*dest);
@@ -504,20 +504,20 @@ impl IrInterpreter {
                 }
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
-                let lhs_val = self.read_operand(lhs, frame, frames)?;
-                let rhs_val = self.read_operand(rhs, frame, frames)?;
+                let lhs_val = self.read_operand(lhs, frame, frames);
+                let rhs_val = self.read_operand(rhs, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_binop(*op, &lhs_val, &rhs_val, dest_slot);
                 frame.mark_value_live(*dest);
             }
             Instruction::UnaryOp { dest, op, operand } => {
-                let src_val = self.read_operand(operand, frame, frames)?;
+                let src_val = self.read_operand(operand, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_unaryop(*op, &src_val, dest_slot);
                 frame.mark_value_live(*dest);
             }
             Instruction::SlotStoreCopy { dest, value } => {
-                let src_val = self.read_operand(value, frame, frames)?;
+                let src_val = self.read_operand(value, frame, frames);
                 match dest {
                     SlotDest::Local(slot_id) => {
                         // Destroy old value if slot was already initialized.
@@ -547,7 +547,7 @@ impl IrInterpreter {
                 }
             }
             Instruction::SlotStoreMove { dest, value } => {
-                let src_val = self.read_operand(value, frame, frames)?;
+                let src_val = self.read_operand(value, frame, frames);
                 match dest {
                     SlotDest::Local(slot_id) => {
                         // For move types, the compiler emits Drop before SlotStoreMove,
@@ -580,7 +580,7 @@ impl IrInterpreter {
             }
             Instruction::ParamStore { param, value } => {
                 // Mut params are always initialized - always destroy old value.
-                let src_val = self.read_operand(value, frame, frames)?;
+                let src_val = self.read_operand(value, frame, frames);
                 let dest_ptr = frame.param_dest(*param);
                 unsafe {
                     datalove_rt::c::dtlv_rti_any_destroy_local(
@@ -595,7 +595,7 @@ impl IrInterpreter {
             Instruction::ParamStoreTracked { param, value } => {
                 // Out params: caller destroys before call, so first write sees
                 // uninitialized memory. Check tracking byte before destroying.
-                let src_val = self.read_operand(value, frame, frames)?;
+                let src_val = self.read_operand(value, frame, frames);
                 let dest_ptr = frame.param_dest(*param);
                 if frame.is_param_initialized(*param) {
                     unsafe {
@@ -637,7 +637,7 @@ impl IrInterpreter {
             Instruction::Pack { dest, ty: _, fields } => {
                 let field_vals: Vec<Value> = fields.iter()
                     .map(|op| self.read_operand(op, frame, frames))
-                    .collect::<Result<_, _>>()?;
+                    .collect();
                 let dest_slot = frame.value_dest(*dest);
                 // Check type tag to determine if tuple or struct.
                 let tag = unsafe { (*dest_slot.tydesc).type_tag };
@@ -655,7 +655,7 @@ impl IrInterpreter {
                 }
             }
             Instruction::Unpack { dests, src } => {
-                let src_val = self.read_operand(src, frame, frames)?;
+                let src_val = self.read_operand(src, frame, frames);
                 let tag = unsafe { (*src_val.tydesc).type_tag };
                 match tag {
                     rtdt::TyTag::Tuple => {
@@ -687,8 +687,8 @@ impl IrInterpreter {
             }
             Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
                 // Execute checked arithmetic and set overflow flag.
-                let lhs_val = self.read_operand(lhs, frame, frames)?;
-                let rhs_val = self.read_operand(rhs, frame, frames)?;
+                let lhs_val = self.read_operand(lhs, frame, frames);
+                let rhs_val = self.read_operand(rhs, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 let overflow_slot = frame.value_dest(*overflow);
                 self.execute_binop_checked(*op, &lhs_val, &rhs_val, dest_slot, overflow_slot);
@@ -697,7 +697,7 @@ impl IrInterpreter {
             }
             Instruction::UnaryOpChecked { dest, overflow, op, operand } => {
                 // Execute checked unary op and set overflow flag.
-                let operand_val = self.read_operand(operand, frame, frames)?;
+                let operand_val = self.read_operand(operand, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 let overflow_slot = frame.value_dest(*overflow);
                 self.execute_unaryop_checked(*op, &operand_val, dest_slot, overflow_slot);
@@ -705,7 +705,7 @@ impl IrInterpreter {
                 frame.mark_value_live(*overflow);
             }
             Instruction::WrapSome { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, frames)?;
+                let inner_val = self.read_operand(inner, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_wrap_some(&inner_val, dest_slot);
                 frame.mark_value_live(*dest);
@@ -718,8 +718,7 @@ impl IrInterpreter {
             }
             Instruction::EnumVariant { dest, variant_index, payload } => {
                 let payload_val = payload.as_ref()
-                    .map(|p| self.read_operand(p, frame, frames))
-                    .transpose()?;
+                    .map(|p| self.read_operand(p, frame, frames));
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_enum_variant(*variant_index, payload_val.as_ref(), dest_slot);
                 frame.mark_value_live(*dest);
@@ -729,7 +728,7 @@ impl IrInterpreter {
                 }
             }
             Instruction::UnwrapOption { dest, is_some, src } => {
-                let src_val = self.read_operand(src, frame, frames)?;
+                let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 let is_some_slot = frame.value_dest(*is_some);
                 self.execute_unwrap_option(&src_val, dest_slot, is_some_slot);
@@ -737,21 +736,21 @@ impl IrInterpreter {
                 frame.mark_value_live(*is_some);
             }
             Instruction::WrapOk { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, frames)?;
+                let inner_val = self.read_operand(inner, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_wrap_ok(&inner_val, dest_slot);
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::WrapErr { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, frames)?;
+                let inner_val = self.read_operand(inner, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_wrap_err(&inner_val, dest_slot);
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
-                let src_val = self.read_operand(src, frame, frames)?;
+                let src_val = self.read_operand(src, frame, frames);
                 let ok_slot = frame.value_dest(*ok_dest);
                 let err_slot = frame.value_dest(*err_dest);
                 let is_ok_slot = frame.value_dest(*is_ok);
@@ -761,14 +760,14 @@ impl IrInterpreter {
                 frame.mark_value_live(*is_ok);
             }
             Instruction::ErrorFrom { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, frames)?;
+                let inner_val = self.read_operand(inner, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_error_from(&inner_val, dest_slot);
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::DataFrom { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, frames)?;
+                let inner_val = self.read_operand(inner, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_data_from(&inner_val, dest_slot);
                 frame.mark_value_live(*dest);
@@ -801,7 +800,7 @@ impl IrInterpreter {
                         arg_vals.push(val);
                     } else {
                         // Other modes: read the value.
-                        arg_vals.push(self.read_operand(op, frame, frames)?);
+                        arg_vals.push(self.read_operand(op, frame, frames));
                     }
                 }
 
@@ -936,7 +935,7 @@ impl IrInterpreter {
             }
             Instruction::Drop { operand } => {
                 // Precise drop: ownership analysis guarantees value exists.
-                let val = self.read_operand(operand, frame, frames)?;
+                let val = self.read_operand(operand, frame, frames);
                 self.execute_drop(&val);
                 Self::mark_source_dropped_local(operand, frame);
             }
@@ -959,7 +958,7 @@ impl IrInterpreter {
                     // Already dropped or moved, skip.
                     return Ok(());
                 }
-                let val = self.read_operand(operand, frame, frames)?;
+                let val = self.read_operand(operand, frame, frames);
                 self.execute_drop(&val);
                 Self::mark_source_dropped_local(operand, frame);
             }
@@ -986,7 +985,7 @@ impl IrInterpreter {
                 // AOT backend handles this as conditional drop (checks tracking byte).
             }
             Instruction::DebugLog { operand } => {
-                let val = self.read_operand(operand, frame, frames)?;
+                let val = self.read_operand(operand, frame, frames);
                 let rt_handle = self.runtime.handle();
                 unsafe {
                     let status = datalove_rt::c::dtlv_rti_debuglog_local(
@@ -1004,7 +1003,7 @@ impl IrInterpreter {
             }
             Instruction::Widen { dest, src } => {
                 // Widen a fixed-width integer to Int.
-                let src_val = self.read_operand(src, frame, frames)?;
+                let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 // Cast dest to Int buffer and call widen_to_int.
                 unsafe {
@@ -1016,7 +1015,7 @@ impl IrInterpreter {
             }
             Instruction::Nop => {}
             Instruction::GetField { dest, src, field_index } => {
-                let src_val = self.read_operand(src, frame, frames)?;
+                let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 let tag = unsafe { (*src_val.tydesc).type_tag };
 
@@ -1050,7 +1049,7 @@ impl IrInterpreter {
             Instruction::GetFieldRef { dest, src, field_index } => {
                 // Get a reference (pointer) to a field within an aggregate.
                 // Unlike GetField, this stores the field pointer instead of copying.
-                let src_val = self.read_operand(src, frame, frames)?;
+                let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 let tag = unsafe { (*src_val.tydesc).type_tag };
 
@@ -1077,7 +1076,7 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
             }
             Instruction::SetField { slot, field_path, value } => {
-                let value_val = self.read_operand(value, frame, frames)?;
+                let value_val = self.read_operand(value, frame, frames);
 
                 // Get the slot's base pointer and tydesc.
                 let slot_info = match slot {
@@ -1136,7 +1135,7 @@ impl IrInterpreter {
             }
             Instruction::ParamSetField { param, field_path, value } => {
                 // Mut params are always initialized - always destroy old field.
-                let value_val = self.read_operand(value, frame, frames)?;
+                let value_val = self.read_operand(value, frame, frames);
                 let slot_info = frame.param_dest(*param);
                 let (current_ptr, current_tydesc) = self.navigate_field_path(
                     slot_info.ptr, slot_info.tydesc, field_path
@@ -1157,7 +1156,7 @@ impl IrInterpreter {
             Instruction::ParamSetFieldTracked { param, field_path, value } => {
                 // Out params: caller destroys before call, so first write sees
                 // uninitialized memory. Check tracking byte before destroying.
-                let value_val = self.read_operand(value, frame, frames)?;
+                let value_val = self.read_operand(value, frame, frames);
                 let slot_info = frame.param_dest(*param);
                 let (current_ptr, current_tydesc) = self.navigate_field_path(
                     slot_info.ptr, slot_info.tydesc, field_path
@@ -1185,7 +1184,7 @@ impl IrInterpreter {
             }
             // Slot tracking variants - these track SLOT state, not value state.
             Instruction::SlotStoreCopyTracked { dest, value } => {
-                let src_val = self.read_operand(value, frame, frames)?;
+                let src_val = self.read_operand(value, frame, frames);
                 match dest {
                     SlotDest::Local(slot_id) => {
                         if frame.is_slot_initialized(*slot_id) {
@@ -1213,7 +1212,7 @@ impl IrInterpreter {
                 }
             }
             Instruction::SlotStoreMoveTracked { dest, value } => {
-                let src_val = self.read_operand(value, frame, frames)?;
+                let src_val = self.read_operand(value, frame, frames);
                 match dest {
                     SlotDest::Local(slot_id) => {
                         if frame.is_slot_initialized(*slot_id) {
@@ -1243,7 +1242,7 @@ impl IrInterpreter {
                 }
             }
             Instruction::SetFieldTracked { slot, field_path, value } => {
-                let value_val = self.read_operand(value, frame, frames)?;
+                let value_val = self.read_operand(value, frame, frames);
                 let slot_info = match slot {
                     SlotDest::Local(id) => frame.slot_dest(*id),
                     SlotDest::External { unit, slot: ext_slot } => {
@@ -1332,17 +1331,17 @@ impl IrInterpreter {
         op: &Operand,
         frame: &Frame,
         frames: &FrameStore,
-    ) -> Result<Value, InterpError> {
+    ) -> Value {
         match op {
-            Operand::Value(id) => Ok(frame.value(*id)),
-            Operand::ValueRef(id) => Ok(frame.value_deref(*id)),
-            Operand::Slot(id) => Ok(frame.slot(*id)),
-            Operand::Param(id) => Ok(frame.param(*id)),
+            Operand::Value(id) => frame.value(*id),
+            Operand::ValueRef(id) => frame.value_deref(*id),
+            Operand::Slot(id) => frame.slot(*id),
+            Operand::Param(id) => frame.param(*id),
             Operand::ExternalValue { unit, value } => {
-                Ok(frames.external_value(*unit, *value))
+                frames.external_value(*unit, *value)
             }
             Operand::ExternalSlot { unit, slot } => {
-                Ok(frames.external_slot(*unit, *slot))
+                frames.external_slot(*unit, *slot)
             }
         }
     }

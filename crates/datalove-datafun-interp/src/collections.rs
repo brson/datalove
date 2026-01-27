@@ -65,7 +65,7 @@ impl IrInterpreter {
 
         // Copy each element into the list's data buffer.
         for (i, elem_op) in elements.iter().enumerate() {
-            let elem_val = self.read_operand(elem_op, frame, frames)?;
+            let elem_val = self.read_operand(elem_op, frame, frames);
 
             // Get pointer to element slot in list's data buffer.
             let data_ptr = unsafe { (*(list_ptr as *const rtdt::List)).data as *mut u8 };
@@ -123,7 +123,7 @@ impl IrInterpreter {
         let mut elem_values: Vec<Value> = elements
             .iter()
             .map(|op| self.read_operand(op, frame, frames))
-            .collect::<Result<_, _>>()?;
+            .collect();
 
         // Sort elements using runtime comparison.
         elem_values.sort_by(|a, b| unsafe {
@@ -231,11 +231,11 @@ impl IrInterpreter {
         let mut kv_pairs: Vec<(Value, Value)> = entries
             .iter()
             .map(|(k_op, v_op)| {
-                let k = self.read_operand(k_op, frame, frames)?;
-                let v = self.read_operand(v_op, frame, frames)?;
-                Ok((k, v))
+                let k = self.read_operand(k_op, frame, frames);
+                let v = self.read_operand(v_op, frame, frames);
+                (k, v)
             })
-            .collect::<Result<_, InterpError>>()?;
+            .collect();
 
         // Sort by key using runtime comparison.
         kv_pairs.sort_by(|a, b| unsafe {
@@ -377,7 +377,7 @@ impl IrInterpreter {
 
             // Copy each element into the data buffer.
             for (i, elem_op) in elements.iter().enumerate() {
-                let elem_val = self.read_operand(elem_op, frame, frames)?;
+                let elem_val = self.read_operand(elem_op, frame, frames);
                 let elem_dest = unsafe { array_ptr.add(i * element_size) };
                 unsafe {
                     std::ptr::copy_nonoverlapping(elem_val.ptr, elem_dest, element_size);
@@ -515,7 +515,7 @@ impl IrInterpreter {
 
         // Push each row (rows are tuples).
         for row_op in rows {
-            let row_val = self.read_operand(row_op, frame, frames)?;
+            let row_val = self.read_operand(row_op, frame, frames);
 
             let status = unsafe {
                 datalove_rt::c::dtlv_rti_table_push_row_local(
