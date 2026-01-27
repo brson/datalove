@@ -403,6 +403,7 @@ pub fn evaluate_all_module_consts<'db>(
             continue;
         };
         let expr_types = single_typecheck.expr_types(db);
+        let call_targets = single_typecheck.call_targets(db);
 
         let mut consts = Vec::new();
         let mut errors = Vec::new();
@@ -418,7 +419,7 @@ pub fn evaluate_all_module_consts<'db>(
                 for func_body_stmt in func_stmt.body(db).iter() {
                     if let Statement::Const(const_stmt) = func_body_stmt {
                         match evaluate_single_const(
-                            db, const_stmt, expr_types, &func_local_consts, &evaluator
+                            db, const_stmt, expr_types, call_targets, &func_local_consts, &evaluator
                         ) {
                             Ok((name, ir_type, value)) => {
                                 // Store locally for other consts in this function.
@@ -450,6 +451,7 @@ fn evaluate_single_const<'db>(
     db: &'db dyn salsa::Database,
     const_stmt: &datalove_datafun_ast::ast::StmtConst<'db>,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
+    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     resolved_so_far: &HashMap<String, (IrType, ConstValue)>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
 ) -> Result<(String, IrType, ConstValue), String> {
@@ -475,6 +477,7 @@ fn evaluate_single_const<'db>(
                 init_expr,
                 &ir_type,
                 expr_types,
+                call_targets,
                 resolved_so_far,
                 None, // No return type for module-level consts.
                 evaluator.clone(),

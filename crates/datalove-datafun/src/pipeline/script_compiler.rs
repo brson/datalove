@@ -454,6 +454,7 @@ impl<'db> ScriptCompiler<'db> {
                 &const_graph,
                 stmts,
                 typecheck.expr_types,
+                typecheck.call_targets,
                 self.ctfe_evaluator.clone(),
             ) {
                 Ok(resolved) => resolved,
@@ -491,6 +492,7 @@ impl<'db> ScriptCompiler<'db> {
                 self.db,
                 stmts,
                 typecheck.expr_types,
+                typecheck.call_targets,
                 &script_level_consts,
                 self.ctfe_evaluator.clone(),
             )

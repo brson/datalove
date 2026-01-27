@@ -183,12 +183,13 @@ pub fn eval_const_expr_with_evaluator<'db>(
     expr: ExprFun<'db>,
     ir_type: &IrType,
     expr_types: &'db [Option<Type<'db>>],
+    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
 ) -> Result<ConstValue, LowerError> {
     // Lower the expression to a minimal IR unit using isolated lowering.
-    let unit = lower_const_expr_to_unit_standalone(db, expr, expr_types, resolved_consts, return_type)?;
+    let unit = lower_const_expr_to_unit_standalone(db, expr, expr_types, call_targets, resolved_consts, return_type)?;
 
     // Evaluate using the CTFE evaluator.
     evaluator.borrow_mut()
@@ -203,6 +204,7 @@ fn lower_const_expr_to_unit_standalone<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
     expr_types: &'db [Option<Type<'db>>],
+    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
 ) -> Result<IrScriptUnit, LowerError> {
@@ -210,7 +212,7 @@ fn lower_const_expr_to_unit_standalone<'db>(
     let mut ctx = LowerCtx::new(
         db,
         expr_types,
-        &EMPTY_CALL_TARGETS,
+        call_targets,
     );
 
     // Pre-populate const bindings from previously resolved values.
@@ -267,6 +269,7 @@ pub fn evaluate_consts<'db>(
     graph: &ConstBindingGraph,
     statements: &[Statement<'db>],
     expr_types: &'db [Option<Type<'db>>],
+    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
 ) -> Result<ResolvedConsts, ConstEvalError> {
     let mut resolved = ResolvedConsts::new();
@@ -318,7 +321,7 @@ pub fn evaluate_consts<'db>(
 
         // Lower to IR unit using isolated lowering (gets widening, etc.).
         // Script-level consts don't have a function return type.
-        let unit = lower_const_expr_to_unit_standalone(db, expr, expr_types, &resolved_consts_map, None)
+        let unit = lower_const_expr_to_unit_standalone(db, expr, expr_types, call_targets, &resolved_consts_map, None)
             .map_err(|e| ConstEvalError::LoweringFailed {
                 binding_name: binding.name.clone(),
                 message: e.to_string(),
@@ -387,6 +390,7 @@ pub fn evaluate_script_function_consts<'db>(
     db: &'db dyn salsa::Database,
     statements: &[Statement<'db>],
     expr_types: &'db [Option<Type<'db>>],
+    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     script_level_consts: &HashMap<String, (IrType, ConstValue)>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
 ) -> ScriptFunctionConstsResult {
@@ -434,6 +438,7 @@ pub fn evaluate_script_function_consts<'db>(
                                 init_expr,
                                 &ir_type,
                                 expr_types,
+                                call_targets,
                                 &lookup_map,
                                 func_return_type.clone(),
                                 evaluator.clone(),
