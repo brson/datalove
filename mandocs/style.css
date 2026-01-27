@@ -5,13 +5,14 @@
  * =========================================================================== */
 
 :root {
-    /* Text font options - uncomment one to test */
     ---font-text: 'Cormorant Garamond', Georgia, serif;
-    --font-text: 'EB Garamond', Georgia, serif;          /* Classic Garamond, common in journals */
+    --font-text: 'EB Garamond', Georgia, serif;
     ---font-text: 'Spectral', Georgia, serif;
+
     ---font-header: 'Spectral', Georgia, serif;
     ---font-header: 'Vollkorn', Georgia, serif;
     --font-header: 'DM Serif Display', Georgia, serif;
+
     ---font-code: 'IBM Plex Mono', monospace;
     ---font-code: 'Source Code Pro', monospace;
     ---font-code: 'Cutive Mono', monospace;
@@ -23,49 +24,6 @@
     --line-height: 2.0;
     --line-height-code: 1.6;
     --baseline: 2.2rem;
-
-    ---font-header: 'Alegreya', Georgia, serif;
-    ---font-header: 'Old Standard TT', Georgia, serif;
-    
-    /* Display/header fonts */
-    ---font-header: 'Alegreya', Georgia, serif;            /* Calligraphic, scholarly */
-    ---font-header: 'Old Standard TT', Georgia, serif;     /* Classic, timeless */
-    ---font-header: 'Playfair Display', Georgia, serif;    /* High contrast, elegant titles */
-    ---font-header: 'DM Serif Display', Georgia, serif;    /* Modern display serif */
-    ---font-header: 'Vollkorn', Georgia, serif;            /* Organic, warm */
-
-    /* Text fonts as headers */
-    ---font-header: 'Cormorant Garamond', Georgia, serif;
-    ---font-header: 'Spectral', Georgia, serif;
-    ---font-header: 'Libre Baskerville', Georgia, serif;
-    ---font-header: 'Lora', Georgia, serif;
-
-
-    ---font-text: 'Cormorant Garamond', Georgia, serif;   /* Elegant, light strokes */
-    ---font-text: 'Spectral', Georgia, serif;                   /* Google's scholarly serif */
-    ---font-text: 'Libre Baskerville', Georgia, serif;    /* Baskerville revival, very academic */
-    ---font-text: 'Lora', Georgia, serif;                 /* Contemporary, good readability */
-
-    ---font-text: 'Source Sans 3', system-ui, sans-serif;
-    ---font-text: 'Source Serif 4', Georgia, serif;
-    ---font-text: 'EB Garamond', Georgia, serif;          /* Classic Garamond, common in journals */
-    ---font-text: 'Crimson Pro', Georgia, serif;          /* Old-style serif, scholarly feel */
-
-    /* Code font options */
-    ---font-code: 'Source Code Pro', monospace;
-    ---font-code: 'JetBrains Mono', monospace;    /* Modern, popular */
-    ---font-code: 'Fira Code', monospace;         /* Has ligatures */
-    ---font-code: 'IBM Plex Mono', monospace;     /* Clean, professional */
-    ---font-code: 'Inconsolata', monospace;       /* Classic */
-
-    /* Typewriter code fonts */
-    ---font-code: 'Courier Prime', monospace;     /* Clean Courier revival */
-    ---font-code: 'Cutive Mono', monospace;       /* Typewriter aesthetic */
-    ---font-code: 'Anonymous Pro', monospace;     /* Typewriter with coding clarity */
-    ---font-code: 'Special Elite', monospace;     /* Worn typewriter keys */
-
-    /* Header font - defaults to text font if not set */
-    ---font-header: var(--font-text);
 
     /* Dune palette */
     --dune-base00: #20201d;
