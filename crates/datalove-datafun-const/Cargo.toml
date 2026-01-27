@@ -1,0 +1,12 @@
+[package]
+name = "datalove-datafun-const"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[features]
+index-64 = ["datalove-datafun-ir/index-64"]
+
+[dependencies]
+datalove-datafun-ir.path = "../datalove-datafun-ir"

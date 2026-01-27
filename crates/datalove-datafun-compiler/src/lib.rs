@@ -6,8 +6,8 @@ pub mod funlit_equiv;
 // Compile-time function evaluation (CTFE).
 pub mod const_eval;
 
-// Const inlining pass.
-pub mod const_inline;
+// Re-export const inlining from const crate.
+pub use datalove_datafun_const as datafun_const;
 
 // IR lowering (re-exported from peer crate).
 pub use datalove_datafun_lower as lower;

@@ -1105,6 +1105,7 @@ dependencies = [
  "datalove-datafun-ast",
  "datalove-datafun-common",
  "datalove-datafun-compiler",
+ "datalove-datafun-const",
  "datalove-datafun-cranelift-aot",
  "datalove-datafun-cranelift-jit",
  "datalove-datafun-interp",
@@ -1158,6 +1159,7 @@ dependencies = [
  "datalove-ct",
  "datalove-datafun-ast",
  "datalove-datafun-common",
+ "datalove-datafun-const",
  "datalove-datafun-intrinsics",
  "datalove-datafun-ir",
  "datalove-datafun-lower",
@@ -1177,6 +1179,13 @@ dependencies = [
  "rustmax",
  "salsa",
  "serde",
+]
+
+[[package]]
+name = "datalove-datafun-const"
+version = "0.1.0"
+dependencies = [
+ "datalove-datafun-ir",
 ]
 
 [[package]]

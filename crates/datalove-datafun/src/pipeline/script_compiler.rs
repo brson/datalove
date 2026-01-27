@@ -29,7 +29,7 @@ use std::rc::Rc;
 
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
 use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, lower_script_functions, evaluate_consts, evaluate_script_function_consts, ScriptFunctionConstsResult};
-use datalove_datafun_compiler::const_inline::inline_script_consts;
+use datalove_datafun_const::inline_script_consts;
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, build_func_id_map, collect_const_graph,
 };

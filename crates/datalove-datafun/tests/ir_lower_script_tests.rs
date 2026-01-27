@@ -12,7 +12,7 @@ use datalove_datafun as datafun;
 use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_compiler::lower::{self, ScriptLowerContext, evaluate_consts, lower_script_functions};
-use datalove_datafun_compiler::const_inline::inline_script_consts;
+use datalove_datafun_const::inline_script_consts;
 use datalove_datafun_compiler::ownership_analysis::{self, CallInfo};
 use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
 use datalove_datafun_compiler::IrTypeExt;
