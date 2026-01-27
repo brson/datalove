@@ -1250,8 +1250,8 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>])
                 // Type aliases are resolved at typecheck time; nothing to analyze.
             }
             Statement::Const(const_stmt) => {
-                // In const_as_let mode (now always true), const bindings are lowered as
-                // let bindings and need runtime ownership tracking just like let.
+                // Const bindings are lowered as let bindings and need runtime
+                // ownership tracking just like let.
                 analyze_const(ctx, const_stmt, stmt_id);
             }
             Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
@@ -1285,8 +1285,7 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLet<'db>, stmt_idx: u
 
 /// Analyze a const statement.
 ///
-/// In const_as_let mode (now always true), const bindings are lowered as
-/// let bindings and need the same ownership tracking.
+/// Const bindings are lowered as let bindings and need the same ownership tracking.
 fn analyze_const<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtConst<'db>, stmt_idx: usize) {
     let expr = stmt.value;
     let may_early_return = ctx.expr_may_early_return(expr);
@@ -1302,7 +1301,7 @@ fn analyze_const<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtConst<'db>, stmt_id
         }
     }
 
-    // Create binding for the const (same as let in const_as_let mode).
+    // Create binding for the const (same as let).
     let name = stmt.name.text(ctx.db).S();
     let ty = ctx.expr_type(expr);
     ctx.alloc_binding(name, ty, false, None);

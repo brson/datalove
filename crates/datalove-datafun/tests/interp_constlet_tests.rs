@@ -1,6 +1,6 @@
-//! IR interpreter tests with const_as_let mode enabled.
+//! IR interpreter tests with skip_const_inlining mode enabled.
 //!
-//! This test suite is similar to interp_tests but uses const_as_let mode,
+//! This test suite is similar to interp_tests but uses skip_const_inlining mode,
 //! where const bindings in functions are lowered as let bindings instead
 //! of being evaluated at compile time.
 //!
@@ -12,7 +12,7 @@ use std::path::Path;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile;
 
-/// Analyze a worldfile with const_as_let mode and produce RON output.
+/// Analyze a worldfile with skip_const_inlining mode and produce RON output.
 fn analyze_file(path: &Path) -> Result<String, String> {
     let file_bytes = std::fs::read(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
@@ -23,7 +23,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
         .map_err(|e| format!("Failed to parse worldfile: {}", e))?;
 
-    // Analyze using const_as_let mode.
+    // Analyze using skip_const_inlining mode.
     let analysis = datafun::constlet_worldfile_analysis::analyze_worldfile_constlet(&mut db, parsed)
         .map_err(|e| format!("Analysis failed: {}", e))?;
 

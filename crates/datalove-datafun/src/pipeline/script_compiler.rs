@@ -143,7 +143,7 @@ impl<'db> CompiledModules<'db> {
             last_source: None,
             last_batch_spec: None,
             ctfe_evaluator,
-            const_as_let: false,
+            skip_const_inlining: false,
         })
     }
 
@@ -176,7 +176,7 @@ pub struct ScriptCompiler<'db> {
     /// CTFE evaluator for const expression evaluation.
     ctfe_evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     /// When true, const bindings in functions are lowered as let bindings.
-    const_as_let: bool,
+    skip_const_inlining: bool,
 }
 
 impl<'db> ScriptCompiler<'db> {
@@ -235,13 +235,13 @@ impl<'db> ScriptCompiler<'db> {
         self.db
     }
 
-    /// Enable const_as_let mode for function-level consts.
+    /// Skip compile-time const evaluation and inlining.
     ///
-    /// When enabled, const bindings inside functions are lowered as let bindings
-    /// instead of being evaluated at compile time. This is useful for testing
-    /// runtime behavior of const-like values.
-    pub fn set_const_as_let(&mut self, enabled: bool) {
-        self.const_as_let = enabled;
+    /// When enabled, const bindings are evaluated at runtime instead of being
+    /// replaced with literal values at compile time. This is useful for testing
+    /// and debugging const expressions.
+    pub fn set_skip_const_inlining(&mut self, enabled: bool) {
+        self.skip_const_inlining = enabled;
     }
 
     /// Check for parse errors and return early result if any.
@@ -269,7 +269,7 @@ impl<'db> ScriptCompiler<'db> {
     /// 1. Typecheck - type inference and checking
     /// 2. Ownership Analysis - borrow checking and drop scheduling
     /// 3. Const Evaluation - compile-time const evaluation (fragment only)
-    /// 4. IR Lowering - generate IR (always const_as_let mode)
+    /// 4. IR Lowering - generate IR (always skip_const_inlining mode)
     /// 5. Const Inlining - inline evaluated const values into IR
     fn compile_unit_inner(
         &mut self,
@@ -305,7 +305,7 @@ impl<'db> ScriptCompiler<'db> {
         };
 
         // Phase 4: IR Lowering
-        // Lowering always uses const_as_let mode - const bindings are lowered
+        // Lowering always uses skip_const_inlining mode - const bindings are lowered
         // as let bindings with their initializer expressions.
         let ir_unit = match self.phase_lower(&unit, &typecheck, &ownership, &consts) {
             Ok(ir) => ir,
@@ -314,7 +314,7 @@ impl<'db> ScriptCompiler<'db> {
 
         // Phase 5: Const Inlining
         // Replace const initializer expressions with their evaluated values.
-        // In const_as_let mode, skip inlining so const expressions are evaluated at runtime.
+        // In skip_const_inlining mode, skip inlining so const expressions are evaluated at runtime.
         let ir_unit = self.phase_const_inline(ir_unit, &consts);
 
         // Update accumulated state
@@ -518,8 +518,8 @@ impl<'db> ScriptCompiler<'db> {
         let const_graph = collect_const_graph(self.db, stmts.clone(), typecheck.result);
 
         // Evaluate script-level consts.
-        // Skip if const_as_let is enabled - consts will be lowered as let bindings.
-        let resolved_consts = if !self.const_as_let && !const_graph.is_empty() {
+        // Skip if skip_const_inlining is enabled - consts will be lowered as let bindings.
+        let resolved_consts = if !self.skip_const_inlining && !const_graph.is_empty() {
             match evaluate_consts(
                 self.db,
                 &const_graph,
@@ -559,8 +559,8 @@ impl<'db> ScriptCompiler<'db> {
             .collect();
 
         // Evaluate function-level consts.
-        // Skip if const_as_let is enabled - consts will be lowered as let bindings.
-        let func_consts_result = if !self.const_as_let {
+        // Skip if skip_const_inlining is enabled - consts will be lowered as let bindings.
+        let func_consts_result = if !self.skip_const_inlining {
             evaluate_script_function_consts(
                 self.db,
                 stmts,
@@ -599,7 +599,7 @@ impl<'db> ScriptCompiler<'db> {
 
     /// Lower to IR.
     ///
-    /// Lowering always uses const_as_let mode - const bindings are lowered as
+    /// Lowering always uses skip_const_inlining mode - const bindings are lowered as
     /// let bindings with their initializer expressions. Const inlining happens
     /// as a separate pass after lowering.
     fn phase_lower(
@@ -677,15 +677,15 @@ impl<'db> ScriptCompiler<'db> {
     /// Inline evaluated const values into the lowered IR.
     ///
     /// This replaces const initializer expressions with their pre-computed
-    /// literal values. In const_as_let mode, this is skipped so const
+    /// literal values. In skip_const_inlining mode, this is skipped so const
     /// expressions are evaluated at runtime instead of compile time.
     fn phase_const_inline(
         &self,
         ir_unit: IrScriptUnit,
         consts: &ConstEvalOutput,
     ) -> IrScriptUnit {
-        // In const_as_let mode, skip inlining - consts are evaluated at runtime.
-        if self.const_as_let {
+        // In skip_const_inlining mode, skip inlining - consts are evaluated at runtime.
+        if self.skip_const_inlining {
             return ir_unit;
         }
 

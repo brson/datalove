@@ -1,11 +1,11 @@
 //! Const inlining pass for IR.
 //!
 //! This pass transforms IR by replacing const binding initializer expressions
-//! with their evaluated constant values. This is used after the lowering pass
-//! to implement compile-time const evaluation.
+//! with their evaluated constant values. This is used after lowering to
+//! implement compile-time const evaluation.
 //!
 //! The pass:
-//! 1. Takes IR that was lowered with const_as_let mode (consts lowered as let bindings)
+//! 1. Takes IR where consts are lowered as let bindings
 //! 2. Uses the const_values metadata to identify which values are consts
 //! 3. Replaces the defining instruction with a Const literal
 //!

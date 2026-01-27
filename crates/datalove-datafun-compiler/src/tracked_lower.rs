@@ -206,7 +206,7 @@ impl<'db> ModuleGraphLoweringResult<'db> {
 /// parameter serves as the primary cache key.
 ///
 /// If `pre_resolved_consts` is provided, those values are used for function-level
-/// const inlining (when `const_as_let` is false).
+/// const inlining (when `skip_const_inlining` is false).
 ///
 /// Requires pre-computed ownership analysis results. Functions with ownership analysis
 /// errors are skipped (but those errors are already captured in the ownership
@@ -221,7 +221,7 @@ pub fn lower_module<'db>(
     ownership_analysis: SingleModuleAnalysis<'db>,
     func_id_map: FuncIdMap<'db>,
     pre_resolved_consts: Option<ModulePreResolvedConsts>,
-    const_as_let: bool,
+    skip_const_inlining: bool,
 ) -> SingleModuleLoweringResult<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -311,9 +311,9 @@ pub fn lower_module<'db>(
     }
 
     // Inline evaluated const values into the lowered functions.
-    // Skip inlining in const_as_let test mode (when no pre_resolved_consts provided
-    // and const_as_let flag is true, we want consts evaluated at runtime).
-    if !const_as_let {
+    // Skip inlining in skip_const_inlining test mode (when no pre_resolved_consts provided
+    // and skip_const_inlining flag is true, we want consts evaluated at runtime).
+    if !skip_const_inlining {
         if let Some(ref pre_resolved) = pre_resolved_consts {
             // Build const values map from pre-resolved consts.
             // Pre-resolved consts have qualified names like "func_name::const_name".
@@ -352,7 +352,7 @@ pub struct ModulePreLoweredFunctions {
 ///
 /// This lowers all functions across all modules before const evaluation,
 /// so that const expressions can call functions without re-lowering them.
-/// Functions are lowered with const_as_let=true since const values aren't
+/// Functions are lowered with skip_const_inlining=true since const values aren't
 /// resolved yet at this point.
 ///
 /// Returns a map of module_id -> pre-lowered functions.
@@ -598,7 +598,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     ownership_analysis: ModuleGraphAnalysis<'db>,
     mode: ParallelMode,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
-    const_as_let: bool,
+    skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     let db_salsa = db.as_salsa_db();
 
@@ -606,8 +606,8 @@ pub fn lower_module_graph_with_evaluator<'db>(
     let func_id_map = compute_func_id_map(db_salsa, parsed_graph);
 
     // Phase 1: Pre-evaluate all module consts using the CTFE evaluator.
-    // Skip if const_as_let is enabled - function-level consts will be lowered as let bindings.
-    let pre_resolved_consts = if const_as_let {
+    // Skip if skip_const_inlining is enabled - function-level consts will be lowered as let bindings.
+    let pre_resolved_consts = if skip_const_inlining {
         HashMap::new()
     } else {
         // Pre-lower all module functions first so CTFE can call them.
@@ -626,10 +626,10 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // Phase 2: Lower modules with pre-resolved consts.
     let mut result = match mode {
         ParallelMode::Sequential => {
-            lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts, const_as_let)
+            lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts, skip_const_inlining)
         }
         ParallelMode::Parallel => {
-            lower_module_graph_parallel_with_pre_resolved(db, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts, const_as_let)
+            lower_module_graph_parallel_with_pre_resolved(db, parsed_graph, typecheck_result, ownership_analysis, &pre_resolved_consts, skip_const_inlining)
         }
     };
 
@@ -674,7 +674,7 @@ fn lower_module_graph_with_pre_resolved<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     pre_resolved_consts: &HashMap<ModuleId, ModulePreResolvedConsts>,
-    const_as_let: bool,
+    skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     let graph = parsed_graph.graph(db);
 
@@ -727,7 +727,7 @@ fn lower_module_graph_with_pre_resolved<'db>(
             single_ownership_analysis,
             func_id_map,
             pre_resolved,
-            const_as_let,
+            skip_const_inlining,
         );
 
         if !result.errors(db).is_empty() {
@@ -751,7 +751,7 @@ fn lower_module_graph_parallel_with_pre_resolved<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     pre_resolved_consts: &HashMap<ModuleId, ModulePreResolvedConsts>,
-    const_as_let: bool,
+    skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     use rayon::prelude::*;
 
@@ -799,13 +799,13 @@ fn lower_module_graph_parallel_with_pre_resolved<'db>(
                 single_typecheck,
                 single_ownership_analysis,
                 pre_resolved,
-                const_as_let,
+                skip_const_inlining,
             ))
         })
         .collect();
 
     // Lower modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_ownership_analysis, pre_resolved, const_as_let)| {
+    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_ownership_analysis, pre_resolved, skip_const_inlining)| {
         let db_s = db_clone.as_salsa_db();
 
         // This populates the cache.
@@ -818,11 +818,11 @@ fn lower_module_graph_parallel_with_pre_resolved<'db>(
             single_ownership_analysis,
             func_id_map,
             pre_resolved,
-            const_as_let,
+            skip_const_inlining,
         );
     });
 
     // Delegate to sequential function which aggregates results.
     // All lower_module calls will be cache hits from the parallel phase.
-    lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, pre_resolved_consts, const_as_let)
+    lower_module_graph_with_pre_resolved(db_salsa, parsed_graph, typecheck_result, ownership_analysis, pre_resolved_consts, skip_const_inlining)
 }

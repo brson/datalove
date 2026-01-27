@@ -1,7 +1,7 @@
-//! Worldfile analysis with const_as_let mode enabled.
+//! Worldfile analysis with skip_const_inlining mode enabled.
 //!
 //! This module provides the same functionality as `worldfile_analysis` but
-//! with the const_as_let mode enabled, causing const bindings in functions
+//! with the skip_const_inlining mode enabled, causing const bindings in functions
 //! to be lowered as let bindings instead of being evaluated at compile time.
 //!
 //! This is useful for testing runtime behavior of const-like values.
@@ -16,7 +16,7 @@ use crate::pipeline::{
     format_ownership_result, format_lowering_result,
 };
 
-/// Result of analyzing a worldfile with const_as_let mode.
+/// Result of analyzing a worldfile with skip_const_inlining mode.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Analysis {
     /// Per-section results.
@@ -43,10 +43,10 @@ pub struct SectionResult {
     pub debug_output: Option<String>,
 }
 
-/// Analyze a worldfile with const_as_let mode enabled.
+/// Analyze a worldfile with skip_const_inlining mode enabled.
 ///
 /// This is similar to `worldfile_analysis::analyze_worldfile` but with
-/// const_as_let mode enabled for script functions.
+/// skip_const_inlining mode enabled for script functions.
 pub fn analyze_worldfile_constlet(
     db: &mut crate::Database,
     parsed: ParsedWorldfile,
@@ -56,8 +56,8 @@ pub fn analyze_worldfile_constlet(
     // Build pipeline from sections.
     let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections);
 
-    // Enable const_as_let mode for module function-level consts.
-    pipeline.set_const_as_let(true);
+    // Enable skip_const_inlining mode for module function-level consts.
+    pipeline.set_skip_const_inlining(true);
 
     // Compile modules (typecheck, drop analysis, lower).
     let (compiled, db) = pipeline.compile(db);
@@ -110,13 +110,13 @@ pub fn analyze_worldfile_constlet(
         }
     }
 
-    // Create script compiler and executor with const_as_let mode enabled.
+    // Create script compiler and executor with skip_const_inlining mode enabled.
     let mut compiler = compiled.script_compiler_default(db);
     let mut executor = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, None);
 
-    // Enable const_as_let mode on the compiler.
+    // Enable skip_const_inlining mode on the compiler.
     if let Some(ref mut compiler) = compiler {
-        compiler.set_const_as_let(true);
+        compiler.set_skip_const_inlining(true);
     }
 
     // Process script units using the compiler and executor.

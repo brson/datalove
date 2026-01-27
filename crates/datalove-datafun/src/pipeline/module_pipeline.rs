@@ -50,7 +50,7 @@ pub struct ModuleCompilationPipeline {
     world: IncrementalModuleWorld,
     /// If true, function-level consts in modules are lowered as let bindings
     /// instead of being evaluated at compile time.
-    const_as_let: bool,
+    skip_const_inlining: bool,
 }
 
 impl ModuleCompilationPipeline {
@@ -58,17 +58,17 @@ impl ModuleCompilationPipeline {
     pub fn new() -> Self {
         Self {
             world: IncrementalModuleWorld::new(),
-            const_as_let: false,
+            skip_const_inlining: false,
         }
     }
 
-    /// Enable const_as_let mode for function-level consts in modules.
+    /// Skip compile-time const evaluation and inlining for modules.
     ///
-    /// When enabled, function-level const bindings are lowered as let bindings
-    /// instead of being evaluated at compile time. This allows const expressions
-    /// to call functions.
-    pub fn set_const_as_let(&mut self, enabled: bool) {
-        self.const_as_let = enabled;
+    /// When enabled, const bindings are evaluated at runtime instead of being
+    /// replaced with literal values at compile time. This is useful for testing
+    /// and debugging const expressions.
+    pub fn set_skip_const_inlining(&mut self, enabled: bool) {
+        self.skip_const_inlining = enabled;
     }
 
     /// Create a pipeline from worldfile sections.
@@ -264,7 +264,7 @@ impl ModuleCompilationPipeline {
                 output.ownership_analysis,
                 mode,
                 evaluator,
-                self.const_as_let,
+                self.skip_const_inlining,
             ))
         } else {
             None
