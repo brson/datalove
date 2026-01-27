@@ -20,8 +20,10 @@ Analysis(
                     
                     fn get_pair():
                     block0:
-                        v0 = const (100u32, false)
-                        return v0
+                        v0 = const 100u32
+                        v1 = const false
+                        v2 = const (100u32, false)
+                        return v2
                     exports:
                         get_pair = f0
                 """,

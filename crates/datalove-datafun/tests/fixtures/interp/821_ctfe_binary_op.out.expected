@@ -17,6 +17,7 @@ Analysis(
                         v0 = const 15i64
                         unit_end
                     exports:
+                        X = v0
                         y = v0
                 """,
             ),

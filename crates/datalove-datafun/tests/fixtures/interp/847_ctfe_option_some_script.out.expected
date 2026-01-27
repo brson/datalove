@@ -14,9 +14,12 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const some 42u32
-                        debuglog v0
+                        v0 = const 42u32
+                        v1 = const some 42u32
+                        debuglog v1
                         unit_end
+                    exports:
+                        O = v1
                 """,
             ),
             output: "(fragment executed)",

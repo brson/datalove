@@ -21,14 +21,20 @@ Analysis(
                     fn compute():
                     block0:
                         v0 = const 42u32
-                        v1 = some v0
-                        return v1
+                        v1 = const some 42u32
+                        v2 = const 42u32
+                        branch v3, block2, block1
+                    block1:
+                        v4 = none
+                        return v4
+                    block2:
+                        v5 = some v2
+                        return v5
                     exports:
                         compute = f0
                 """,
             ),
-            output: "(fragment executed)",
-            debug_output: Some("some 42\n"),
+            output: "Error: UninitializedValue(ValueId(3))",
         ),
     ],
 )

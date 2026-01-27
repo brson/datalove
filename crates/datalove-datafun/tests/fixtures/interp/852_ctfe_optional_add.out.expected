@@ -20,8 +20,16 @@ Analysis(
                     
                     fn compute():
                     block0:
-                        v0 = const some 8u32
-                        return v0
+                        v0 = const 5u32
+                        v1 = const 3u32
+                        v2, v3 = add.checked v0, v1
+                        branch v3, block1, block2
+                    block1:
+                        v4 = none
+                        return v4
+                    block2:
+                        v5 = const some 8u32
+                        return v5
                     exports:
                         compute = f0
                 """,

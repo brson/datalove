@@ -19,6 +19,9 @@ Analysis(
                         v2 = const true
                         unit_end
                     exports:
+                        I = v0
+                        U = v1
+                        B = v2
                         i = v0
                         u = v1
                         b = v2

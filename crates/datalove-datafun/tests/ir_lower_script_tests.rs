@@ -173,7 +173,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let const_graph = build_const_graph(&db, &stmts, expr_types_raw);
                 let resolved_consts = if !const_graph.bindings.is_empty() {
                     let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-                    match evaluate_consts(&db, &const_graph, &stmts, expr_types, call_targets, evaluator) {
+                    match evaluate_consts(&db, &const_graph, &stmts, expr_types, call_targets, &func_analyses, evaluator) {
                         Ok(resolved) => Some(resolved),
                         Err(e) => {
                             output.push_str(&format!("CTFE error: {:?}\n\n", e));

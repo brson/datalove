@@ -14,8 +14,14 @@ Analysis(
                 ir: """
                     fn compute_big():
                     block0:
-                        v0 = const 1000int
-                        return v0
+                        v0 = const 500u32
+                        v1 = const 500u32
+                        v2 = widen v0
+                        v3 = widen v1
+                        v4 = add v2, v3
+                        drop v2
+                        drop v3
+                        return v4
                 """,
             ),
             output: "",

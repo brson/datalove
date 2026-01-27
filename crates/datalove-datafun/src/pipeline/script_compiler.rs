@@ -285,7 +285,7 @@ impl<'db> ScriptCompiler<'db> {
         // Phase 3: Const Evaluation (fragment only)
         // This evaluates const expressions using mini-lowering + interpretation.
         // The results are used for const inlining after lowering.
-        let consts = match self.phase_const_eval(&unit, &typecheck) {
+        let consts = match self.phase_const_eval(&unit, &typecheck, &ownership) {
             Ok(c) => c,
             Err(result) => return result,
         };
@@ -434,6 +434,7 @@ impl<'db> ScriptCompiler<'db> {
         &mut self,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
+        ownership: &OwnershipOutput<'db>,
     ) -> Result<ConstEvalOutput, ScriptCompilationResult> {
         let ParsedUnit::Fragment { stmts, .. } = unit else {
             // Expressions don't have const bindings.
@@ -455,6 +456,7 @@ impl<'db> ScriptCompiler<'db> {
                 stmts,
                 typecheck.expr_types,
                 typecheck.call_targets,
+                &ownership.func_analyses,
                 self.ctfe_evaluator.clone(),
             ) {
                 Ok(resolved) => resolved,

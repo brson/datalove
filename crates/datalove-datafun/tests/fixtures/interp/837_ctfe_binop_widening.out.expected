@@ -17,6 +17,8 @@ Analysis(
                         v0 = const 42u32
                         debuglog v0
                         unit_end
+                    exports:
+                        A = v0
                 """,
             ),
             output: "(fragment executed)",
