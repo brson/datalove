@@ -1,7 +1,14 @@
 # Datalove Principles
 
 
-## Simple and complete syntax and representation for data types
+
+
+## Glorify the data types
+
+
+
+
+## Interactive scripting first
 
 
 
@@ -17,6 +24,8 @@ We establish broad architecture-level capabilities early
 to inform architectural and design decisions.
 
 
+
+
 ## Minimal compiler passes, simple analysis
 
 The type system is strong but simple and restrictive.
@@ -27,11 +36,15 @@ A simple implementation makes maintenance easier,
 enables quick development.
 
 
+
+
 ## Minimal syntax sugar
 
 Provide the core features necessary,
 avoid bloating the compiler with extra language features.
 Syntactic niceties added with careful deliberation.
+
+
 
 
 ## Mechanical and machine-model sympathy
@@ -44,10 +57,14 @@ Syntax lowers trivially to SSA-based IRs
 to minimize analysis-based reconstruction.
 
 
+
+
 ## Numerical correctness
 
 Overflow must be handled,
 early-return checked operations and widening to ease the burden.
+
+
 
 
 ## Sigil-logic

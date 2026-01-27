@@ -1,3 +1,29 @@
+## task-critical-organization
+
+Review the code for logical and top-down organization.
+
+Our code should read naturally top-down,
+starting with entry points and key datatypes,
+proceeding to implementations and utilities and tests.
+
+Where a single module contains multiple logical
+groupings of types or functionality,
+consider extracting it to its own module.
+
+We are very focused on establishing dependency
+and modules DAGs, creating very firm
+separation of concerns between functions modules and crates,
+letting them interact through shared data types,
+not shared behavior.
+
+Firm boundaries make maintenance easier.
+
+We use lots of crates arranged as peers
+with diamond dependencies for shared types.
+
+
+
+
 ## task-critical-comment-review
 
 Review comments and doc comments for
