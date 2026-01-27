@@ -14,6 +14,14 @@ Look for arguments that take `Option`
 where the `None` case is not used for any production
 purpose.
 
+Look for backwards-compatibility reexports
+and update callers to use the canonical locations;
+only datalove,
+datalove-datafun,
+datalove-datafun-compiler
+are facade crates and can do reexports of pub items at the crate level.
+Most modules should not be declaring reexports of pub items.
+
 
 
 
