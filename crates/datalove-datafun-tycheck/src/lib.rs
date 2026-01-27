@@ -12,8 +12,8 @@ use salsa::Database as Db;
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::spans::DatafunSpans;
 
-// Re-export shared types from ast crate.
-pub use datalove_datafun_ast::types::{
+// Re-export shared types from common crate.
+pub use datalove_datafun_common::{
     Type,
     TypeFunction,
     TypeError,

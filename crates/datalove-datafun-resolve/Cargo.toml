@@ -6,7 +6,7 @@ authors.workspace = true
 edition.workspace = true
 
 [features]
-index-64 = ["datalove-datalit/index-64"]
+index-64 = ["datalove-datalit/index-64", "datalove-datafun-common/index-64"]
 
 [dependencies]
 rmx.workspace = true
@@ -15,4 +15,5 @@ salsa.workspace = true
 rayon.workspace = true
 datalove-ct.path = "../datalove-ct"
 datalove-datafun-ast.path = "../datalove-datafun-ast"
+datalove-datafun-common.path = "../datalove-datafun-common"
 datalove-datalit.path = "../datalove-datalit"

@@ -1,22 +1,17 @@
 [package]
-name = "datalove-datafun-tycheck"
+name = "datalove-datafun-common"
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
 
 [features]
-index-64 = ["datalove-datalit/index-64", "datalove-datafun-common/index-64"]
+index-64 = ["datalove-datalit/index-64"]
 
 [dependencies]
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
-rayon.workspace = true
 datalove-ct.path = "../datalove-ct"
 datalove-datafun-ast.path = "../datalove-datafun-ast"
-datalove-datafun-common.path = "../datalove-datafun-common"
-datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
 datalove-datalit.path = "../datalove-datalit"
-datalove-diagnostic.path = "../datalove-diagnostic"
-

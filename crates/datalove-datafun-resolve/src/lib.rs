@@ -12,8 +12,8 @@ use datalove_datafun_ast::ast::*;
 
 use salsa::Database as Db;
 
-// Re-export shared types from ast.
-pub use datalove_datafun_ast::types::{
+// Re-export shared types from common.
+pub use datalove_datafun_common::{
     DbClone,
     ParallelMode,
     parallel_mode_from_env,

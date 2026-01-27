@@ -11,8 +11,8 @@ use datalit::ast::TypeHint;
 
 use salsa::Database as Db;
 
-use crate::ast::{ParsedStatements, StmtFun};
-use crate::spans::DatafunSpans;
+use datalove_datafun_ast::ast::{ParsedStatements, StmtFun, ParamMode};
+use datalove_datafun_ast::spans::DatafunSpans;
 
 // ============================================================================
 // Parallel Execution Infrastructure
@@ -217,7 +217,7 @@ pub struct TypeFunction<'db> {
     #[tracked]
     #[returns(ref)]
     pub param_types: Vec<Type<'db>>,
-    pub param_modes: Vec<crate::ast::ParamMode>,
+    pub param_modes: Vec<ParamMode>,
     #[tracked]
     pub return_type: Type<'db>,
 }

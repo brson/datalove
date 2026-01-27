@@ -9,6 +9,7 @@ edition.workspace = true
 slow_tests = []
 index-64 = [
     "datalove-rtdt/index-64",
+    "datalove-datafun-common/index-64",
     "datalove-datafun-ir/index-64",
     "datalove-datafun-tycheck/index-64",
     "datalove-datafun-parser/index-64",
@@ -25,6 +26,7 @@ serde = { version = "1", features = ["derive"] }
 ron = "0.8"
 datalove-ct.path = "../datalove-ct"
 datalove-datafun-ast.path = "../datalove-datafun-ast"
+datalove-datafun-common.path = "../datalove-datafun-common"
 datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
 datalove-datafun-ir.path = "../datalove-datafun-ir"
 datalove-datafun-parser.path = "../datalove-datafun-parser"
