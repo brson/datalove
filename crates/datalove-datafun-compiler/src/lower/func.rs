@@ -6,13 +6,11 @@
 //! - [`lower_function_body`]: Shared implementation used by both module and script
 //!   function lowering. For script functions, called after `swap_body_state`.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 use datalove_datafun_ast::ast;
 use crate::module_graph::ModuleId;
 use datalove_datafun_tycheck::ResolvedCallTarget;
-use datalove_datafun_ir::{ConstValue, CtfeEvaluator, IrType, IrFunction, Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId};
+use datalove_datafun_ir::{IrType, IrFunction, Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId};
 use crate::ownership_analysis::FunctionAnalysis;
 use super::context::LowerCtx;
 use super::stmt::lower_statement_indexed;
@@ -32,9 +30,6 @@ use super::LowerError;
 ///
 /// If `module_consts` is provided, those pre-evaluated const bindings will be
 /// available for use within the function body.
-///
-/// If `const_as_let` is true, const bindings in the function body are lowered as
-/// let bindings instead of being evaluated at compile time.
 pub fn lower_function_for_module<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
@@ -44,42 +39,8 @@ pub fn lower_function_for_module<'db>(
     func_id: FuncId,
     analysis: FunctionAnalysis,
     resolved_param_types: Option<&[IrType]>,
-    ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
-    module_consts: Option<&HashMap<String, (IrType, ConstValue)>>,
-    const_as_let: bool,
 ) -> Result<IrFunction, LowerError> {
     let mut ctx = LowerCtx::new_for_module(db, expr_types, call_targets, func_id_map);
-
-    // Set up const_as_let mode if enabled.
-    ctx.set_const_as_let(const_as_let);
-
-    // Set up CTFE evaluator if provided.
-    if let Some(evaluator) = ctfe_evaluator {
-        ctx.set_ctfe_evaluator(evaluator);
-    }
-
-    // Pre-populate const bindings from module-level and function-level consts.
-    // In const_as_let mode, skip function-level consts (they'll be lowered as let bindings).
-    if let Some(consts) = module_consts {
-        let func_name = func.name(db).text(db);
-        let prefix = format!("{}::", func_name);
-
-        for (name, (ir_type, value)) in consts {
-            // Check if this is a function-level const for this function.
-            if let Some(local_name) = name.strip_prefix(&prefix) {
-                // Function-level const: add as local name.
-                // Skip if const_as_let is enabled - consts will be lowered as let bindings.
-                if !const_as_let {
-                    ctx.add_const(local_name.to_string(), ir_type.clone(), value.clone());
-                }
-            } else if !name.contains("::") {
-                // Module-level const: add as-is (always, even in const_as_let mode).
-                ctx.add_const(name.clone(), ir_type.clone(), value.clone());
-            }
-            // Skip function-level consts from other functions.
-        }
-    }
-
     lower_function_body(&mut ctx, func_id, func, analysis, resolved_param_types)
 }
 

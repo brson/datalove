@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
-use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, lower_script_functions, evaluate_consts, evaluate_script_function_consts, ScriptLowerOptions, ScriptFunctionConstsResult};
+use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, lower_script_functions, evaluate_consts, evaluate_script_function_consts, ScriptFunctionConstsResult};
 use datalove_datafun_compiler::const_inline::inline_script_consts;
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, build_func_id_map, collect_const_graph,
@@ -627,7 +627,7 @@ impl<'db> ScriptCompiler<'db> {
                 let script_analysis = ownership.script_analysis.clone()
                     .expect("script_analysis required for fragment units");
 
-                // Always use const_as_let mode for lowering.
+                // Const bindings are lowered as let bindings.
                 // Const inlining happens in phase_const_inline after lowering.
                 lower_script_fragment_raw(
                     self.db,
@@ -639,8 +639,6 @@ impl<'db> ScriptCompiler<'db> {
                     ownership.func_analyses.clone(),
                     script_analysis,
                     Some(&func_param_types),
-                    None,  // No pre-resolved consts - inlining happens separately
-                    ScriptLowerOptions { const_as_let: true },  // Always const_as_let
                 ).map_err(|e| {
                     self.accumulated_unit_specs.pop();
                     ScriptCompilationResult {

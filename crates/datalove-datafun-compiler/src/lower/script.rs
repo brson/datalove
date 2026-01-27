@@ -18,7 +18,6 @@ use datalove_datafun_tycheck::{TypecheckResult, ResolvedCallTarget};
 use datalove_datafun_ir::{
     IrType, IrScriptUnit, Operand, Terminator, Instruction, ConstValue, SlotDest,
     ExportBinding, IrModuleId, FuncId,
-    ConstBindingGraph, ResolvedConsts,
 };
 use crate::ownership_analysis::ScriptFunctionAnalyses;
 use crate::tracked_script_ownership::ScriptAnalysisData;
@@ -152,7 +151,7 @@ pub fn lower_script_unit<'db>(
 /// Lower a script fragment unit with raw expr_types.
 ///
 /// Like `lower_script_unit` but takes expr_types directly instead of TypecheckResult.
-/// Used when typechecking with context (non-salsa version).
+/// Lower a script fragment to IR.
 ///
 /// Caller must first call `analyze_script_fragment_tracked` to get ownership analysis,
 /// then call `analyze_script_functions` to get `func_analyses`.
@@ -160,32 +159,8 @@ pub fn lower_script_unit<'db>(
 /// If `func_param_types` is provided, use those resolved param types for function parameters
 /// instead of deriving from AST type hints. This is needed for type alias support.
 ///
-/// Pre-resolved const values from Phase 2 of CTFE pipeline.
-/// When provided, lowering will use these values for const bindings.
-///
-/// DEPRECATED: This is being phased out in favor of const inlining pass.
-/// Lowering should always use const_as_let mode, then const values are
-/// inlined in a separate pass.
-pub struct PreResolvedConsts<'a> {
-    /// Script-level const binding graph.
-    pub graph: &'a ConstBindingGraph,
-    /// Script-level resolved const values.
-    pub values: &'a ResolvedConsts,
-    /// Function-level consts with qualified names (`func_name::const_name`).
-    pub func_consts: &'a HashMap<String, (IrType, ConstValue)>,
-}
-
-/// Options for script lowering.
-///
-/// DEPRECATED: This is being phased out. Lowering will always use const_as_let
-/// semantics, with const inlining happening in a separate pass.
-#[derive(Debug, Clone, Default)]
-pub struct ScriptLowerOptions {
-    /// When true, const bindings in functions are lowered as let bindings
-    /// instead of being evaluated at compile time.
-    pub const_as_let: bool,
-}
-
+/// Const bindings are lowered as let bindings. The const inlining pass runs
+/// separately to replace them with literal values.
 pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
@@ -196,17 +171,8 @@ pub fn lower_script_fragment_raw<'db>(
     func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: ScriptAnalysisData,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
-    // DEPRECATED: resolved_consts is no longer used - consts are lowered as let bindings
-    // and inlined in a separate pass. Pass None.
-    _resolved_consts: Option<PreResolvedConsts<'_>>,
-    // DEPRECATED: options.const_as_let is always true now.
-    _options: ScriptLowerOptions,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
-
-    // Always use const_as_let mode - consts are lowered as let bindings
-    // and inlined by the const_inline pass after lowering.
-    ctx.set_const_as_let(true);
 
     // Use pre-computed script analysis from ownership analysis phase.
     ctx.body.drop_schedule = script_analysis.schedule;
@@ -288,9 +254,6 @@ pub fn lower_script_functions<'db>(
 ) -> Result<(Vec<datalove_datafun_ir::IrFunction>, HashMap<String, FuncId>), LowerError> {
     // Create a minimal context with the accumulated script context.
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
-
-    // Always use const_as_let mode.
-    ctx.set_const_as_let(true);
 
     // Pre-register all functions to enable forward references (mutual recursion).
     for stmt in stmts {
@@ -642,32 +605,16 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Const(const_stmt) => {
+            // Const bindings are lowered as let bindings.
+            // The const inlining pass runs later to replace with literal values.
             let name = const_stmt.name.text(ctx.db).to_string();
             let init_expr = const_stmt.value;
-
-            // In const_as_let mode, lower const as let binding (for both script and function level).
-            if ctx.const_as_let() {
-                let value_id = lower_expression(ctx, init_expr)?;
-                let operand = Operand::Value(value_id);
-                ctx.bind_var(&name, operand);
-                // Record binding operand for drop schedule.
-                ctx.record_binding_operand(operand);
-                // Export the binding for cross-unit reference.
-                ctx.exports.push((name.clone(), ExportBinding::Value(value_id)));
-                // Track as const for const inlining pass.
-                ctx.body.const_values.push((name, value_id));
-                return Ok(());
-            }
-
-            // Check if already pre-resolved (from Phase 2).
-            if ctx.lookup_const(&name).is_some() {
-                return Ok(());
-            }
-
-            // Evaluate the const expression using CTFE.
-            let ir_type = ctx.expr_type(init_expr);
-            let value = super::const_expr::eval_const_expr(ctx, init_expr)?;
-            ctx.add_const(name, ir_type, value);
+            let value_id = lower_expression(ctx, init_expr)?;
+            let operand = Operand::Value(value_id);
+            ctx.bind_var(&name, operand);
+            ctx.record_binding_operand(operand);
+            ctx.exports.push((name.clone(), ExportBinding::Value(value_id)));
+            ctx.body.const_values.push((name, value_id));
             Ok(())
         }
         Statement::ParseError(_) => {

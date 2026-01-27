@@ -290,8 +290,6 @@ pub fn lower_module<'db>(
             // Note: ctfe_evaluator is None because tracked functions can't take trait objects.
             // Function-level consts are pre-evaluated via evaluate_all_module_consts() when
             // using lower_module_graph_with_evaluator(), supporting full CTFE expressions.
-            // Always use const_as_let=true - consts are lowered as let bindings
-            // and inlined in a separate pass after lowering.
             match lower::lower_function_for_module(
                 db,
                 expr_types,
@@ -301,9 +299,6 @@ pub fn lower_module<'db>(
                 func_id,
                 analysis,
                 resolved_params,
-                None, // ctfe_evaluator
-                None, // module_consts - module-level consts don't exist
-                true, // const_as_let - always true now
             ) {
                 Ok(ir_func) => {
                     functions.push(ir_func);
@@ -422,7 +417,6 @@ pub fn lower_all_module_functions<'db>(
                     continue;
                 };
 
-                // Lower with const_as_let=true and no module_consts (not resolved yet).
                 match lower::lower_function_for_module(
                     db,
                     expr_types,
@@ -432,9 +426,6 @@ pub fn lower_all_module_functions<'db>(
                     func_id,
                     analysis,
                     resolved_params,
-                    None, // ctfe_evaluator
-                    None, // module_consts - not resolved yet
-                    true, // const_as_let
                 ) {
                     Ok(ir_func) => {
                         functions.push(ir_func);

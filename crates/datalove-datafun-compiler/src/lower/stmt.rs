@@ -8,7 +8,6 @@ use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode};
 use super::context::LowerCtx;
 use super::expr::{lower_expression, lower_expression_for_ref};
-use super::const_expr::eval_const_expr;
 use super::LowerError;
 
 /// Check if a set statement is a self-assignment (set v0 = v0).
@@ -184,31 +183,15 @@ fn lower_statement_impl<'db>(
             Ok(())
         }
         Statement::Const(const_stmt) => {
+            // Const bindings in function bodies are lowered as let bindings.
+            // The const inlining pass runs later to replace with literal values.
             let name = const_stmt.name.text(ctx.db).to_string();
             let init_expr = const_stmt.value;
-
-            // In const_as_let mode for function bodies, lower const as let.
-            // This only applies when not in a script unit (i.e., in a function body).
-            if ctx.const_as_let() && !ctx.is_script_unit {
-                let value_id = lower_expression(ctx, init_expr)?;
-                let operand = Operand::Value(value_id);
-                ctx.bind_var(&name, operand);
-                // Record binding operand for drop schedule.
-                ctx.record_binding_operand(operand);
-                // Track as const for const inlining pass.
-                ctx.body.const_values.push((name, value_id));
-                return Ok(());
-            }
-
-            // Check if already pre-resolved (script/module level consts).
-            if ctx.lookup_const(&name).is_some() {
-                return Ok(());
-            }
-
-            // Evaluate the const expression using CTFE.
-            let ir_type = ctx.expr_type(init_expr);
-            let value = eval_const_expr(ctx, init_expr)?;
-            ctx.add_const(name, ir_type, value);
+            let value_id = lower_expression(ctx, init_expr)?;
+            let operand = Operand::Value(value_id);
+            ctx.bind_var(&name, operand);
+            ctx.record_binding_operand(operand);
+            ctx.body.const_values.push((name, value_id));
             Ok(())
         }
         Statement::ParseError(_) => {
