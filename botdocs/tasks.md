@@ -1,3 +1,18 @@
+## task-no-defensive-code
+
+Our process tends to result in defensive
+and fallback code sitting around that
+either does nothing or actively obscures bugs.
+
+Look for suspicious "fallback"
+and "backwards compatibility" branches
+that are impossible based on the invariants
+of e.g. previous compiler passes,
+remove them or convert to panics.
+
+
+
+
 ## task-critical-organization
 
 Review the code for logical and top-down organization.
@@ -20,6 +35,8 @@ Firm boundaries make maintenance easier.
 
 We use lots of crates arranged as peers
 with diamond dependencies for shared types.
+
+Re-exports
 
 
 
