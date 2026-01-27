@@ -170,15 +170,17 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let func_id_map = HashMap::new();
 
                 // Pre-lower functions so CTFE can reuse them.
+                // Use empty ScriptLowerContext since tests don't accumulate across units.
+                // Use empty func_id_map since these tests don't use modules.
                 let (pre_lowered_functions, func_name_to_id) = lower_script_functions(
-                    &db, expr_types, call_targets, &stmts, &func_analyses, None
+                    &db, expr_types_raw, call_targets_raw, &stmts, &func_analyses, None, &func_id_map, ScriptLowerContext::new()
                 ).expect("function lowering failed");
 
                 // Evaluate const bindings using CTFE (Phase 2).
                 let const_graph = build_const_graph(&db, &stmts, expr_types_raw);
                 let resolved_consts = if !const_graph.bindings.is_empty() {
                     let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-                    match evaluate_consts(&db, &const_graph, &stmts, expr_types, call_targets, &pre_lowered_functions, &func_name_to_id, evaluator) {
+                    match evaluate_consts(&db, &const_graph, &stmts, expr_types_raw, call_targets_raw, &pre_lowered_functions, &func_name_to_id, evaluator) {
                         Ok(resolved) => Some(resolved),
                         Err(e) => {
                             output.push_str(&format!("CTFE error: {:?}\n\n", e));
@@ -193,7 +195,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 // Use const_as_let mode, then inline consts after lowering.
                 let options = ScriptLowerOptions { const_as_let: true };
 
-                match lower::lower_script_fragment_raw(&db, expr_types, call_targets, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), None, options) {
+                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), None, options) {
                     Ok(ir_unit) => {
                         // Inline const values into the IR.
                         let const_values_map: HashMap<String, datalove_datafun_ir::ConstValue> = resolved_consts

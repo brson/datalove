@@ -178,6 +178,9 @@ pub fn eval_const_expr_simple<'db>(
 ///
 /// The `return_type` is the enclosing function's return type, needed for
 /// early-return operators (`?` and `!`).
+///
+/// If `pre_lowered_functions` is provided, called functions will be looked up from
+/// this slice and included in the CTFE unit. This avoids re-lowering functions.
 pub fn eval_const_expr_with_evaluator<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
@@ -187,15 +190,13 @@ pub fn eval_const_expr_with_evaluator<'db>(
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    pre_lowered_functions: &[datalove_datafun_ir::IrFunction],
+    func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
 ) -> Result<ConstValue, LowerError> {
     // Lower the expression to a minimal IR unit using isolated lowering.
-    // For module-level consts, we don't pass pre-lowered functions since modules
-    // can't call script-local functions.
-    let empty_functions: Vec<datalove_datafun_ir::IrFunction> = Vec::new();
-    let empty_func_map: HashMap<String, datalove_datafun_ir::FuncId> = HashMap::new();
     let unit = lower_const_expr_to_unit_standalone(
         db, expr, expr_types, call_targets, resolved_consts, return_type,
-        &empty_functions, &empty_func_map,
+        pre_lowered_functions, func_name_to_id,
     )?;
 
     // Evaluate using the CTFE evaluator.
@@ -440,6 +441,9 @@ impl ScriptFunctionConstsResult {
 /// Function-level consts can reference:
 /// - Script-level consts (from `script_level_consts`)
 /// - Earlier function-level consts in the same function
+///
+/// If `pre_lowered_functions` is provided, const expressions that call functions
+/// will use these pre-lowered functions instead of re-lowering them.
 pub fn evaluate_script_function_consts<'db>(
     db: &'db dyn salsa::Database,
     statements: &[Statement<'db>],
@@ -447,6 +451,8 @@ pub fn evaluate_script_function_consts<'db>(
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     script_level_consts: &HashMap<String, (IrType, ConstValue)>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    pre_lowered_functions: &[datalove_datafun_ir::IrFunction],
+    func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
 ) -> ScriptFunctionConstsResult {
     let mut consts = HashMap::new();
     let mut errors = Vec::new();
@@ -496,6 +502,8 @@ pub fn evaluate_script_function_consts<'db>(
                                 &lookup_map,
                                 func_return_type.clone(),
                                 evaluator.clone(),
+                                pre_lowered_functions,
+                                func_name_to_id,
                             ) {
                                 Ok(v) => v,
                                 Err(e) => {

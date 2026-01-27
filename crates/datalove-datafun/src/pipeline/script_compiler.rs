@@ -461,6 +461,12 @@ impl<'db> ScriptCompiler<'db> {
             });
         };
 
+        // Get accumulated context for cross-unit function resolution.
+        let script_ctx = self.accumulated_lower_bindings.to_script_lower_context();
+
+        // Get module function ID map for resolving module function calls.
+        let func_id_map = build_func_id_map(self.db, &self.module_specs);
+
         // Lower just the functions.
         match lower_script_functions(
             self.db,
@@ -469,6 +475,8 @@ impl<'db> ScriptCompiler<'db> {
             stmts,
             &ownership.func_analyses,
             None, // func_param_types not needed for script functions
+            &func_id_map,
+            script_ctx,
         ) {
             Ok((functions, func_name_to_id)) => {
                 Ok(PreLoweredFunctions { functions, func_name_to_id })
@@ -560,6 +568,8 @@ impl<'db> ScriptCompiler<'db> {
                 typecheck.call_targets,
                 &script_level_consts,
                 self.ctfe_evaluator.clone(),
+                &pre_lowered.functions,
+                &pre_lowered.func_name_to_id,
             )
         } else {
             ScriptFunctionConstsResult::empty()

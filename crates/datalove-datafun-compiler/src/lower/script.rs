@@ -269,6 +269,12 @@ pub fn lower_script_fragment_raw<'db>(
 /// that call functions can reuse the already-lowered function IR instead of
 /// re-lowering them.
 ///
+/// The `script_ctx` parameter provides access to accumulated function bindings
+/// from previous compilation units, enabling cross-unit function calls.
+///
+/// The `func_id_map` parameter maps module functions to their IR locations,
+/// enabling calls to module functions from script functions.
+///
 /// Returns a vector of lowered functions and a map from function name to FuncId.
 pub fn lower_script_functions<'db>(
     db: &'db dyn salsa::Database,
@@ -277,13 +283,11 @@ pub fn lower_script_functions<'db>(
     stmts: &[Statement<'db>],
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+    func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+    script_ctx: ScriptLowerContext,
 ) -> Result<(Vec<datalove_datafun_ir::IrFunction>, HashMap<String, FuncId>), LowerError> {
-    use std::collections::HashMap as StdHashMap;
-
-    // Create a minimal context just for function lowering.
-    let func_id_map: StdHashMap<(ModuleId, String), (IrModuleId, FuncId)> = StdHashMap::new();
-    let script_ctx = ScriptLowerContext::new();
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, &func_id_map, script_ctx);
+    // Create a minimal context with the accumulated script context.
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
     // Always use const_as_let mode.
     ctx.set_const_as_let(true);

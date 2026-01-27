@@ -381,11 +381,130 @@ pub fn lower_module<'db>(
     )
 }
 
+/// Pre-lowered functions for a single module.
+///
+/// Used to pass pre-lowered function IR to const evaluation so that
+/// const expressions can call functions without re-lowering them.
+pub struct ModulePreLoweredFunctions {
+    /// The lowered IR functions for this module.
+    pub functions: Vec<IrFunction>,
+    /// Map from function name to FuncId.
+    pub func_name_to_id: HashMap<String, FuncId>,
+}
+
+/// Pre-lower all module functions for CTFE.
+///
+/// This lowers all functions across all modules before const evaluation,
+/// so that const expressions can call functions without re-lowering them.
+/// Functions are lowered with const_as_let=true since const values aren't
+/// resolved yet at this point.
+///
+/// Returns a map of module_id -> pre-lowered functions.
+pub fn lower_all_module_functions<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+    typecheck_result: ModuleGraphTypecheckResult<'db>,
+    ownership_analysis: ModuleGraphAnalysis<'db>,
+    func_id_map: FuncIdMap<'db>,
+) -> HashMap<ModuleId, ModulePreLoweredFunctions> {
+    let typecheck_module_results = typecheck_result.module_results(db);
+    let ownership_analysis_results = ownership_analysis.module_results(db);
+    let func_id_hashmap = func_id_map.to_hashmap(db);
+
+    let mut result = HashMap::new();
+
+    for (module_id, parsed) in parsed_graph.statements_only(db) {
+        let Some(single_typecheck) = typecheck_module_results.get(module_id) else {
+            continue;
+        };
+        let Some(single_ownership) = ownership_analysis_results.get(module_id) else {
+            continue;
+        };
+
+        let expr_types = single_typecheck.expr_types(db);
+        let call_targets = single_typecheck.call_targets(db);
+        let function_analyses = single_ownership.function_analyses(db);
+
+        // Build map of function name -> resolved param types from exports.
+        let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+        for (name, func_type) in single_typecheck.exports(db) {
+            let param_types: Vec<IrType> = func_type.param_types(db)
+                .iter()
+                .map(|ty| IrType::from_tycheck(db, ty))
+                .collect();
+            func_param_types.insert(name.text(db).S(), param_types);
+        }
+
+        let mut functions = Vec::new();
+        let mut func_name_to_id = HashMap::new();
+
+        // Assign FuncIds and lower each function.
+        let mut next_func_id: u32 = 0;
+        for statement in &parsed.statements {
+            if let Statement::Fun(func) = statement {
+                let func_name = func.name(db).text(db).S();
+                let func_id = FuncId(next_func_id);
+                next_func_id += 1;
+
+                func_name_to_id.insert(func_name.clone(), func_id);
+
+                // Get resolved param types for this function.
+                let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
+
+                // Get pre-computed ownership analysis for this function.
+                let Some(single_analysis) = function_analyses.get(&func_name) else {
+                    continue;
+                };
+
+                // Skip functions that had ownership analysis errors.
+                let Some(analysis) = single_analysis.analysis(db).clone() else {
+                    continue;
+                };
+
+                // Lower with const_as_let=true and no module_consts (not resolved yet).
+                match lower::lower_function_for_module(
+                    db,
+                    expr_types,
+                    call_targets,
+                    &func_id_hashmap,
+                    *func,
+                    func_id,
+                    analysis,
+                    resolved_params,
+                    None, // ctfe_evaluator
+                    None, // module_consts - not resolved yet
+                    true, // const_as_let
+                ) {
+                    Ok(ir_func) => {
+                        functions.push(ir_func);
+                    }
+                    Err(_) => {
+                        // Errors will be reported during the main lowering phase.
+                        continue;
+                    }
+                }
+            }
+        }
+
+        if !functions.is_empty() {
+            result.insert(*module_id, ModulePreLoweredFunctions {
+                functions,
+                func_name_to_id,
+            });
+        }
+    }
+
+    result
+}
+
 /// Evaluate module-level and function-level const bindings using the CTFE evaluator.
 ///
 /// Pre-evaluates all const bindings across all modules before lowering.
 /// This includes both module-level consts and consts inside function bodies.
 /// Returns a map of module_id -> pre-resolved consts.
+///
+/// If `pre_lowered_functions` is provided, const expressions that call functions
+/// will use these pre-lowered functions instead of re-lowering them.
 ///
 /// This function accesses tracked struct fields but does NOT create tracked structs,
 /// so it can be called outside of tracked function context.
@@ -394,6 +513,7 @@ pub fn evaluate_all_module_consts<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    pre_lowered_functions: &HashMap<ModuleId, ModulePreLoweredFunctions>,
 ) -> HashMap<ModuleId, ModulePreResolvedConsts> {
     let typecheck_module_results = typecheck_result.module_results(db);
     let mut result = HashMap::new();
@@ -404,6 +524,16 @@ pub fn evaluate_all_module_consts<'db>(
         };
         let expr_types = single_typecheck.expr_types(db);
         let call_targets = single_typecheck.call_targets(db);
+
+        // Get pre-lowered functions for this module (if any).
+        let (funcs, func_map) = match pre_lowered_functions.get(module_id) {
+            Some(plf) => (plf.functions.as_slice(), &plf.func_name_to_id),
+            None => {
+                static EMPTY_MAP: std::sync::LazyLock<HashMap<String, FuncId>> =
+                    std::sync::LazyLock::new(HashMap::new);
+                (&[][..], &*EMPTY_MAP)
+            }
+        };
 
         let mut consts = Vec::new();
         let mut errors = Vec::new();
@@ -419,7 +549,8 @@ pub fn evaluate_all_module_consts<'db>(
                 for func_body_stmt in func_stmt.body(db).iter() {
                     if let Statement::Const(const_stmt) = func_body_stmt {
                         match evaluate_single_const(
-                            db, const_stmt, expr_types, call_targets, &func_local_consts, &evaluator
+                            db, const_stmt, expr_types, call_targets, &func_local_consts, &evaluator,
+                            funcs, func_map,
                         ) {
                             Ok((name, ir_type, value)) => {
                                 // Store locally for other consts in this function.
@@ -447,6 +578,9 @@ pub fn evaluate_all_module_consts<'db>(
 /// Evaluate a single const statement.
 ///
 /// Returns the evaluated const or an error message describing what went wrong.
+///
+/// If `pre_lowered_functions` is provided, const expressions that call functions
+/// will use these pre-lowered functions instead of re-lowering them.
 fn evaluate_single_const<'db>(
     db: &'db dyn salsa::Database,
     const_stmt: &datalove_datafun_ast::ast::StmtConst<'db>,
@@ -454,6 +588,8 @@ fn evaluate_single_const<'db>(
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     resolved_so_far: &HashMap<String, (IrType, ConstValue)>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
+    pre_lowered_functions: &[IrFunction],
+    func_name_to_id: &HashMap<String, FuncId>,
 ) -> Result<(String, IrType, ConstValue), String> {
     let name = const_stmt.name.text(db).S();
     let init_expr = const_stmt.value;
@@ -481,6 +617,8 @@ fn evaluate_single_const<'db>(
                 resolved_so_far,
                 None, // No return type for module-level consts.
                 evaluator.clone(),
+                pre_lowered_functions,
+                func_name_to_id,
             ) {
                 Ok(v) => v,
                 Err(ctfe_err) => {
@@ -512,12 +650,19 @@ pub fn lower_module_graph_with_evaluator<'db>(
 ) -> ModuleGraphLoweringResult<'db> {
     let db_salsa = db.as_salsa_db();
 
+    // Compute func_id_map first (needed for pre-lowering and final lowering).
+    let func_id_map = compute_func_id_map(db_salsa, parsed_graph);
+
     // Phase 1: Pre-evaluate all module consts using the CTFE evaluator.
     // Skip if const_as_let is enabled - function-level consts will be lowered as let bindings.
     let pre_resolved_consts = if const_as_let {
         HashMap::new()
     } else {
-        evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator)
+        // Pre-lower all module functions first so CTFE can call them.
+        let pre_lowered_functions = lower_all_module_functions(
+            db_salsa, parsed_graph, typecheck_result, ownership_analysis, func_id_map
+        );
+        evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator, &pre_lowered_functions)
     };
 
     // Collect CTFE errors from all modules.
