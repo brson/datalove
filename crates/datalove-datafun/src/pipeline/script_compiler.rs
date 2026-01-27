@@ -27,9 +27,13 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
-use datalove_datafun_compiler::lower::{lower_script_fragment_raw, lower_script_expr, lower_script_functions, evaluate_consts, evaluate_script_function_consts, ScriptFunctionConstsResult};
-use datalove_datafun_const::inline_script_consts;
+use datalove_datafun_compiler::lower::{
+    lower_script_fragment_raw, lower_script_expr, lower_script_functions,
+    lower_const_binding,
+};
+use datalove_datafun_const::{inline_script_consts, PreparedConst, ScriptFunctionConstsResult, evaluate_prepared_const};
 use datalove_datafun_compiler::tracked_script_lower::{
     AccumulatedLowerBindings, build_func_id_map, collect_const_graph,
 };
@@ -37,7 +41,7 @@ use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData,
 };
 use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
-use datalove_datafun_ir::{ConstValue, CtfeEvaluator, IrScriptUnit, IrType, ResolvedConsts};
+use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrScriptUnit, IrType, ResolvedConsts, ConstEvalError};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
     type_check_script_units, create_batch_spec,
@@ -512,6 +516,10 @@ impl<'db> ScriptCompiler<'db> {
     // ========================================================================
 
     /// Evaluate compile-time constants (fragment only).
+    ///
+    /// Uses the "lower then evaluate" pattern:
+    /// 1. For each const binding in dependency order, lower it to IR or extract simple value
+    /// 2. Evaluate the IR unit via CTFE if needed
     fn phase_const_eval(
         &mut self,
         unit: &ParsedUnit<'db>,
@@ -532,15 +540,12 @@ impl<'db> ScriptCompiler<'db> {
         // Evaluate script-level consts.
         // Skip if skip_const_inlining is enabled - consts will be lowered as let bindings.
         let resolved_consts = if !self.skip_const_inlining && !const_graph.is_empty() {
-            match evaluate_consts(
-                self.db,
+            match self.evaluate_script_consts(
                 &const_graph,
                 stmts,
                 typecheck.expr_types,
                 typecheck.call_targets,
-                &lowered_funcs.functions,
-                &lowered_funcs.func_name_to_id,
-                self.ctfe_evaluator.clone(),
+                lowered_funcs,
             ) {
                 Ok(resolved) => resolved,
                 Err(e) => {
@@ -573,15 +578,12 @@ impl<'db> ScriptCompiler<'db> {
         // Evaluate function-level consts.
         // Skip if skip_const_inlining is enabled - consts will be lowered as let bindings.
         let func_consts_result = if !self.skip_const_inlining {
-            evaluate_script_function_consts(
-                self.db,
+            self.evaluate_function_consts(
                 stmts,
                 typecheck.expr_types,
                 typecheck.call_targets,
                 &script_level_consts,
-                self.ctfe_evaluator.clone(),
-                &lowered_funcs.functions,
-                &lowered_funcs.func_name_to_id,
+                lowered_funcs,
             )
         } else {
             ScriptFunctionConstsResult::empty()
@@ -603,6 +605,177 @@ impl<'db> ScriptCompiler<'db> {
             resolved_consts,
             func_consts: func_consts_result.consts,
         })
+    }
+
+    /// Evaluate script-level const bindings using "lower then evaluate" pattern.
+    fn evaluate_script_consts(
+        &self,
+        const_graph: &datalove_datafun_ir::ConstBindingGraph,
+        statements: &[Statement<'db>],
+        expr_types: &'db [Option<Type<'db>>],
+        call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+        lowered_funcs: &LoweredFunctions,
+    ) -> Result<ResolvedConsts, ConstEvalError> {
+        let mut resolved = ResolvedConsts::new();
+        let mut resolved_consts_map: HashMap<String, (IrType, ConstValue)> = HashMap::new();
+
+        for binding in &const_graph.bindings {
+            // Find the expression for this binding.
+            let expr = statements.iter()
+                .find_map(|s| match s {
+                    Statement::Const(c) if c.value.as_id() == binding.stmt_id => Some(c.value),
+                    _ => None,
+                })
+                .expect("const binding expression not found");
+
+            // Lower the const binding to get either a simple value or an IR unit.
+            let (unit_opt, value_opt) = lower_const_binding(
+                self.db,
+                expr,
+                &binding.ir_type,
+                expr_types,
+                call_targets,
+                &resolved_consts_map,
+                None, // Script-level consts don't have a function return type
+                &lowered_funcs.functions,
+                &lowered_funcs.func_name_to_id,
+            ).map_err(|e| ConstEvalError::LoweringFailed {
+                binding_name: binding.name.clone(),
+                message: e.to_string(),
+            })?;
+
+            // Evaluate to get the const value.
+            let value = match (unit_opt, value_opt) {
+                (None, Some(v)) => v,
+                (Some(unit), None) => {
+                    let prepared = PreparedConst::Unit(unit);
+                    evaluate_prepared_const(&prepared, &binding.ir_type, &self.ctfe_evaluator)
+                        .map_err(|e| self.ctfe_error_to_const_eval_error(e, &binding.name))?
+                }
+                _ => unreachable!("lower_const_binding returns exactly one of unit or value"),
+            };
+
+            resolved.insert(binding.stmt_id, binding.name.clone(), value.clone());
+            resolved_consts_map.insert(binding.name.clone(), (binding.ir_type.clone(), value));
+        }
+
+        Ok(resolved)
+    }
+
+    /// Evaluate function-level const bindings using "lower then evaluate" pattern.
+    fn evaluate_function_consts(
+        &self,
+        statements: &[Statement<'db>],
+        expr_types: &'db [Option<Type<'db>>],
+        call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+        script_level_consts: &HashMap<String, (IrType, ConstValue)>,
+        lowered_funcs: &LoweredFunctions,
+    ) -> ScriptFunctionConstsResult {
+        let mut consts = HashMap::new();
+        let mut errors = Vec::new();
+
+        for statement in statements {
+            if let Statement::Fun(func_stmt) = statement {
+                let func_name = func_stmt.name(self.db).text(self.db);
+                // Get function's return type for early-return operators.
+                let func_return_type = func_stmt.return_type(self.db)
+                    .map(|ty| IrType::from_type_hint(self.db, &ty));
+                // Track local consts for this function.
+                let mut func_local_consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
+
+                for func_body_stmt in func_stmt.body(self.db).iter() {
+                    if let Statement::Const(const_stmt) = func_body_stmt {
+                        let name = const_stmt.name.text(self.db).to_string();
+                        let init_expr = const_stmt.value;
+
+                        // Get the type from the typechecker.
+                        let expr_id = init_expr.as_id();
+                        let index = expr_id.index() as usize;
+                        let ir_type = match expr_types.get(index).cloned().flatten() {
+                            Some(ty) => IrType::from_tycheck(self.db, &ty),
+                            None => {
+                                errors.push(format!("{}::{}: missing type information", func_name, name));
+                                continue;
+                            }
+                        };
+
+                        // Build lookup map: script-level + function-local consts.
+                        let mut lookup_map = script_level_consts.clone();
+                        for (local_name, (ty, val)) in &func_local_consts {
+                            lookup_map.insert(local_name.clone(), (ty.clone(), val.clone()));
+                        }
+
+                        // Lower the const binding.
+                        let lower_result = lower_const_binding(
+                            self.db,
+                            init_expr,
+                            &ir_type,
+                            expr_types,
+                            call_targets,
+                            &lookup_map,
+                            func_return_type.clone(),
+                            &lowered_funcs.functions,
+                            &lowered_funcs.func_name_to_id,
+                        );
+
+                        let value = match lower_result {
+                            Ok((None, Some(v))) => v,
+                            Ok((Some(unit), None)) => {
+                                let prepared = PreparedConst::Unit(unit);
+                                match evaluate_prepared_const(&prepared, &ir_type, &self.ctfe_evaluator) {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        errors.push(format!("{}::{}: {}", func_name, name, e));
+                                        continue;
+                                    }
+                                }
+                            }
+                            Ok(_) => unreachable!("lower_const_binding returns exactly one of unit or value"),
+                            Err(e) => {
+                                errors.push(format!("{}::{}: {}", func_name, name, e));
+                                continue;
+                            }
+                        };
+
+                        // Store locally for other consts in this function.
+                        func_local_consts.insert(name.clone(), (ir_type.clone(), value.clone()));
+
+                        // Store with qualified name for the result.
+                        let qualified_name = format!("{}::{}", func_name, name);
+                        consts.insert(qualified_name, (ir_type, value));
+                    }
+                }
+            }
+        }
+
+        ScriptFunctionConstsResult { consts, errors }
+    }
+
+    /// Convert a CtfeError to a ConstEvalError.
+    fn ctfe_error_to_const_eval_error(&self, e: CtfeError, binding_name: &str) -> ConstEvalError {
+        match e {
+            CtfeError::InterpError(msg) if msg.contains("gas") => {
+                ConstEvalError::GasExpired { binding_name: binding_name.to_string() }
+            }
+            CtfeError::InterpError(msg) => {
+                ConstEvalError::LoweringFailed {
+                    binding_name: binding_name.to_string(),
+                    message: msg,
+                }
+            }
+            CtfeError::EarlyReturn(msg) => {
+                ConstEvalError::EarlyReturn {
+                    binding_name: binding_name.to_string(),
+                    message: msg,
+                }
+            }
+            CtfeError::UnsupportedType(ty) => {
+                ConstEvalError::UnsupportedType {
+                    binding_name: binding_name.to_string(),
+                    type_name: ty,
+                }
+            }
+        }
     }
 
     // ========================================================================

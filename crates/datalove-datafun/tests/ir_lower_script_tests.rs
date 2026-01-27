@@ -11,12 +11,12 @@ use std::rc::Rc;
 use datalove_datafun as datafun;
 use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
-use datalove_datafun_compiler::lower::{self, ScriptLowerContext, evaluate_consts, lower_script_functions};
-use datalove_datafun_const::inline_script_consts;
+use datalove_datafun_compiler::lower::{self, ScriptLowerContext, lower_script_functions, lower_const_binding};
+use datalove_datafun_const::{inline_script_consts, PreparedConst, evaluate_prepared_const};
 use datalove_datafun_compiler::ownership_analysis::{self, CallInfo};
 use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
 use datalove_datafun_compiler::IrTypeExt;
-use datalove_datafun_ir::{IrType, ConstBindingInfo, ConstBindingGraph};
+use datalove_datafun_ir::{IrType, ConstBindingInfo, ConstBindingGraph, ConstValue, ResolvedConsts};
 use datalove_datafun_tycheck::{Type, ResolvedCallTarget};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use salsa::plumbing::AsId;
@@ -176,18 +176,66 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     &db, expr_types_raw, call_targets_raw, &stmts, &func_analyses, None, &func_id_map, ScriptLowerContext::new()
                 ).expect("function lowering failed");
 
-                // Evaluate const bindings using CTFE.
+                // Evaluate const bindings using CTFE with "lower then evaluate" pattern.
                 let const_graph = build_const_graph(&db, &stmts, expr_types_raw);
                 let resolved_consts = if !const_graph.bindings.is_empty() {
-                    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-                    match evaluate_consts(&db, &const_graph, &stmts, expr_types_raw, call_targets_raw, &lowered_functions, &func_name_to_id, evaluator) {
-                        Ok(resolved) => Some(resolved),
-                        Err(e) => {
-                            output.push_str(&format!("CTFE error: {:?}\n\n", e));
-                            unit_index += 1;
-                            continue;
-                        }
+                    let evaluator: Rc<RefCell<dyn datalove_datafun_ir::CtfeEvaluator>> = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+                    let mut resolved = ResolvedConsts::new();
+                    let mut resolved_consts_map: HashMap<String, (IrType, ConstValue)> = HashMap::new();
+                    let mut ctfe_error = None;
+
+                    for binding in &const_graph.bindings {
+                        // Find the expression for this binding.
+                        let expr = stmts.iter()
+                            .find_map(|s| match s {
+                                Statement::Const(c) if c.value.as_id() == binding.stmt_id => Some(c.value),
+                                _ => None,
+                            })
+                            .expect("const binding expression not found");
+
+                        // Lower the const binding.
+                        let lower_result = lower_const_binding(
+                            &db,
+                            expr,
+                            &binding.ir_type,
+                            expr_types_raw,
+                            call_targets_raw,
+                            &resolved_consts_map,
+                            None,
+                            &lowered_functions,
+                            &func_name_to_id,
+                        );
+
+                        let value = match lower_result {
+                            Ok((None, Some(v))) => v,
+                            Ok((Some(unit), None)) => {
+                                let prepared = PreparedConst::Unit(unit);
+                                match evaluate_prepared_const(&prepared, &binding.ir_type, &evaluator) {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        ctfe_error = Some(format!("CTFE error: {}", e));
+                                        break;
+                                    }
+                                }
+                            }
+                            Ok(_) => unreachable!(),
+                            Err(e) => {
+                                ctfe_error = Some(format!("Lowering error: {}", e));
+                                break;
+                            }
+                        };
+
+                        resolved.insert(binding.stmt_id, binding.name.clone(), value.clone());
+                        resolved_consts_map.insert(binding.name.clone(), (binding.ir_type.clone(), value));
                     }
+
+                    if let Some(err) = ctfe_error {
+                        output.push_str(&format!("{}\n\n", err));
+                        unit_index += 1;
+                        continue;
+                    }
+
+                    Some(resolved)
                 } else {
                     None
                 };

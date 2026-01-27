@@ -20,7 +20,7 @@ use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
-use datalove_datafun_const::inline_module_functions;
+use datalove_datafun_const::{inline_module_functions, PreparedConst, evaluate_prepared_const};
 use crate::IrTypeExt;
 use crate::lower;
 use crate::tracked_ownership_analysis::{SingleModuleAnalysis, ModuleGraphAnalysis};
@@ -561,30 +561,28 @@ fn evaluate_single_const<'db>(
         None => return Err(format!("const '{}': missing type information", name)),
     };
 
-    // Try simple evaluation first.
-    let value = match lower::const_expr::eval_const_expr_simple(db, init_expr, &ir_type, resolved_so_far) {
-        Ok(v) => v,
-        Err(_simple_err) => {
-            // Fall back to CTFE evaluator for complex expressions.
-            // Module-level consts don't have a function return type.
-            match lower::const_expr::eval_const_expr_with_evaluator(
-                db,
-                init_expr,
-                &ir_type,
-                expr_types,
-                call_targets,
-                resolved_so_far,
-                None, // No return type for module-level consts.
-                evaluator.clone(),
-                lowered_functions,
-                func_name_to_id,
-            ) {
-                Ok(v) => v,
-                Err(ctfe_err) => {
-                    return Err(format!("const '{}': {}", name, ctfe_err));
-                }
-            }
+    // Lower the const binding using the "lower then evaluate" pattern.
+    let (unit_opt, value_opt) = lower::lower_const_binding(
+        db,
+        init_expr,
+        &ir_type,
+        expr_types,
+        call_targets,
+        resolved_so_far,
+        None, // No return type for module-level consts.
+        lowered_functions,
+        func_name_to_id,
+    ).map_err(|e| format!("const '{}': lowering error: {}", name, e))?;
+
+    // Evaluate to get the const value.
+    let value = match (unit_opt, value_opt) {
+        (None, Some(v)) => v,
+        (Some(unit), None) => {
+            let prepared = PreparedConst::Unit(unit);
+            evaluate_prepared_const(&prepared, &ir_type, evaluator)
+                .map_err(|e| format!("const '{}': CTFE error: {}", name, e))?
         }
+        _ => unreachable!("lower_const_binding returns exactly one of unit or value"),
     };
 
     Ok((name, ir_type, value))

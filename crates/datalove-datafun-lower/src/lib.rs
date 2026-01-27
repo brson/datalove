@@ -69,7 +69,9 @@ mod ir_ext;
 pub use context::{LowerCtx, FrameState, ScriptLowerContext, ScriptUnitKind};
 pub use func::lower_function_for_module;
 pub use script::{lower_script_fragment_raw, lower_script_expr, lower_script_functions};
-pub use const_expr::{evaluate_consts, evaluate_script_function_consts, ScriptFunctionConstsResult};
+pub use const_expr::{
+    lower_const_binding, lower_const_expr_to_unit_standalone, try_extract_literal,
+};
 pub use ir_ext::IrTypeExt;
 
 /// Pre-computed drop analyses for functions in a script unit.
