@@ -11,10 +11,11 @@
     --font-header: 'Spectral', Georgia, serif;
     --font-header: 'Vollkorn', Georgia, serif;
     --font-code: 'IBM Plex Mono', monospace;
+    --font-code: 'Source Code Pro', monospace;
 
-    --font-size-text: 1.3rem;
-    --font-size-code: 1.0rem;
-    --font-size-header-scale: 1.2;
+    --font-size-text: 1.1rem;
+    --font-size-code: 1rem;
+    --font-size-header-scale: 1;
     --baseline: 2.2rem;
 
     ---font-header: 'Alegreya', Georgia, serif;
@@ -133,7 +134,9 @@
         --bg: var(--cave-base07);
         --fg: var(--cave-base01);
         --accent: var(--cave-red);
+        --accent: var(--heath-red);
         --code-bg: var(--cave-base06);
+        --code-bg: color-mix(in srgb, var(--cave-base06), white 20%);
         --table-header-bg: var(--cave-base06);
         --link: var(--cave-violet);
         --syn-keyword: var(--cave-magenta);
