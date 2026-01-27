@@ -8,15 +8,21 @@ Reference for the datalove-datafun compiler architecture, crate organization, sa
 
 | Crate | Purpose |
 |-------|---------|
-| `datalove-datafun-compiler` | Core pipeline: parsing, typechecking, ownership analysis, IR lowering |
+| `datalove-datafun-compiler` | Core pipeline: parsing, salsa-tracked phases, module compilation |
 | `datalove-datafun` | High-level facade, `ModuleCompilationPipeline`, `ScriptCompilationContext` |
 | `datalove-datafun-parser` | Lexer, parser, bracer |
 | `datalove-datafun-ast` | AST types (`Statement`, `Expr`, etc.) |
+| `datalove-datafun-resolve` | Name resolution (type aliases, function signatures) |
 | `datalove-datafun-tycheck` | Type checking, call resolution |
+| `datalove-datafun-sema` | Semantic analysis (`FunctionAnalysis`, drop schedules) |
+| `datalove-datafun-ownership` | Ownership analysis (move/borrow/drop tracking) |
+| `datalove-datafun-lower` | AST to IR lowering |
+| `datalove-datafun-const` | Const evaluation (CTFE) and const inlining |
 | `datalove-datafun-ir` | IR types (`IrFunction`, `IrType`, `ValueId`, etc.) |
 | `datalove-datafun-interp` | Interpreter, `CallDispatcher`, `ModuleFunctionRegistry` |
-| `datalove-datafun-aot-cranelift` | AOT compilation via Cranelift |
-| `datalove-datafun-jit` | JIT compilation |
+| `datalove-datafun-cranelift` | Shared Cranelift utilities |
+| `datalove-datafun-cranelift-aot` | AOT compilation via Cranelift |
+| `datalove-datafun-cranelift-jit` | JIT compilation |
 | `datalove-datafun-pkg` | Package loading, `PackageWorld`, module resolution |
 
 ### Supporting Crates
@@ -55,16 +61,61 @@ Source Text
     v                          - Output: ModuleGraphAnalysis
     |
 [Phase 5: IR Lowering]  lower_module_graph_with_evaluator
-    |                   - Subphases:
-    |                     a. Lower functions (reused for CTFE)
-    |                     b. Const evaluation (CTFE with lowered functions)
-    |                     c. Assemble IR (combines functions + module code)
-    |                     d. Const inlining (replaces const bindings)
+    |                   - See "Lower/Const Pipeline" below
     v                   - Per-module: lower_module [tracked]
     |                   - Output: ModuleGraphLoweringResult
     |
 ModuleCompilationOutput
 ```
+
+### Lower/Const Pipeline
+
+Phase 5 has multiple subphases with different flows for modules vs scripts.
+
+**Module lowering** (tracked, incremental):
+```
+1. Lower all functions once (lower_all_module_functions)
+   |   - IrFunction per function, reused for CTFE + final assembly
+   v
+2. Const evaluation (evaluate_all_module_consts) [outside tracked fn]
+   |   - Uses CTFE evaluator to execute const binding expressions
+   |   - Function-level consts qualified as "func_name::const_name"
+   v
+3. lower_module [tracked]
+   |   - Accepts pre_resolved_consts + optional lowered_functions
+   |   - inline_module_functions() replaces const refs with values
+   v
+Final IR with consts inlined
+```
+
+**Script lowering** (non-incremental, REPL-style):
+```
+Phase 2a: Lower functions (phase_lower_functions)
+    |     - Lower once, reused for const eval + final assembly
+    v
+Phase 3: Const evaluation (phase_const_eval)
+    |     - Script-level: evaluate_script_consts()
+    |     - Function-level: evaluate_function_consts()
+    v
+Phase 4: Assemble IR (phase_assemble_ir)
+    |     - Combines lowered functions + module code
+    |     - inline_script_consts() replaces const refs
+    v
+Final IrScriptUnit
+```
+
+**Key types:**
+- `PreparedConst`: Either `Simple(ConstValue)` or `Unit(IrScriptUnit)` for CTFE
+- `ModulePreResolvedConsts`: Pre-evaluated consts passed to tracked `lower_module`
+- `ResolvedConsts`: Script-level const values (name -> value)
+
+**Crate responsibilities:**
+| Crate | Responsibility |
+|-------|----------------|
+| `datalove-datafun-lower` | AST to IR lowering, `lower_const_binding()` |
+| `datalove-datafun-const` | `evaluate_prepared_const()`, `inline_*_consts()` |
+| `datalove-datafun-compiler` | `tracked_lower.rs` - salsa-tracked module lowering |
+| `datalove-datafun` | `script_compiler.rs` - script compilation pipeline |
 
 ### Entry Points
 
@@ -116,7 +167,7 @@ Each phase has a tracked function that salsa memoizes:
 | `resolve_module_names` | `module`, `parsed` | `ModuleNameResolution` (type aliases, functions, ASTs) |
 | `typecheck_module` | `module`, `parsed`, `name_resolution`, `imports` | `SingleModuleTypecheckResult` |
 | `analyze_module` | `module`, `parsed`, `typecheck` | `SingleModuleAnalysis` |
-| `lower_module` | `module`, `ir_idx`, `parsed`, `typecheck`, `ownership_analysis`, `func_ids` | `SingleModuleLoweringResult` |
+| `lower_module` | `module`, `ir_idx`, `parsed`, `typecheck`, `ownership_analysis`, `func_id_map`, `pre_resolved_consts`, `skip_const_inlining`, `lowered_functions` | `SingleModuleLoweringResult` |
 
 Graph-level functions (`*_module_graph`) aggregate per-module results.
 
@@ -405,13 +456,19 @@ fun bar() end fun
 | `compiler/src/lib.rs` | `Database`, module exports |
 | `compiler/src/compile.rs` | `compile_modules()`, `ModuleCompilationOutput` |
 | `compiler/src/module_graph.rs` | `IncrementalModuleWorld`, parsing pipeline |
-| `compiler/src/ownership_analysis.rs` | Drop/ownership analysis (see Ownership Analysis section) |
 | `compiler/src/tracked_ownership_analysis.rs` | Salsa-tracked ownership analysis |
-| `compiler/src/tracked_lower.rs` | Salsa-tracked IR lowering |
-| `compiler/src/lower/` | IR lowering implementation |
+| `compiler/src/tracked_lower.rs` | Salsa-tracked IR lowering, `lower_module()`, `lower_all_module_functions()` |
+| `compiler/src/const_eval.rs` | `extract_const_value()` - interpreter memory to ConstValue |
+| `lower/src/lib.rs` | Lower crate entry, `lower_function_for_module()` |
+| `lower/src/const_expr.rs` | `lower_const_binding()`, `try_extract_literal()` |
+| `lower/src/script.rs` | Script unit lowering |
+| `const/src/eval.rs` | `evaluate_prepared_const()`, `evaluate_consts_prepared()` |
+| `const/src/inline.rs` | `inline_script_consts()`, `inline_module_functions()` |
 | `datafun/src/pipeline.rs` | `ModuleCompilationPipeline` |
+| `datafun/src/pipeline/script_compiler.rs` | Script compilation with const phases |
 | `datafun/src/memo_analysis.rs` | Memoization testing infrastructure |
 | `datafun/src/incremental.rs` | `IncrementalModuleWorld` (higher-level) |
+| `ownership/src/lib.rs` | Drop/ownership analysis (see Ownership Analysis section) |
 
 ## Design Patterns
 
