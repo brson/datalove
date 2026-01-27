@@ -42,7 +42,7 @@ use rmx::std::collections::BTreeMap;
 use std::collections::HashMap;
 use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{
-    Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop,
+    Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtConst,
     ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, SetTarget,
 };
 use datalove_datafun_ir::IrType;
@@ -1249,8 +1249,10 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>])
             Statement::TypeAlias(_) => {
                 // Type aliases are resolved at typecheck time; nothing to analyze.
             }
-            Statement::Const(_) => {
-                // Const bindings are evaluated at compile time; no runtime ownership tracking.
+            Statement::Const(const_stmt) => {
+                // In const_as_let mode (now always true), const bindings are lowered as
+                // let bindings and need runtime ownership tracking just like let.
+                analyze_const(ctx, const_stmt, stmt_id);
             }
             Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
                 // No drops.
@@ -1276,6 +1278,31 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLet<'db>, stmt_idx: u
     }
 
     // Create binding for the let.
+    let name = stmt.name.text(ctx.db).S();
+    let ty = ctx.expr_type(expr);
+    ctx.alloc_binding(name, ty, false, None);
+}
+
+/// Analyze a const statement.
+///
+/// In const_as_let mode (now always true), const bindings are lowered as
+/// let bindings and need the same ownership tracking.
+fn analyze_const<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtConst<'db>, stmt_idx: usize) {
+    let expr = stmt.value;
+    let may_early_return = ctx.expr_may_early_return(expr);
+
+    // Analyze moves in the expression. The expression result is consumed by the binding.
+    ctx.analyze_expr_moves(expr, true);
+
+    // Check for early return operators AFTER analyzing moves.
+    if may_early_return {
+        let drops = ctx.live_bindings_for_return();
+        if !drops.is_empty() {
+            ctx.schedule.before_try_return.insert(stmt_idx, drops);
+        }
+    }
+
+    // Create binding for the const (same as let in const_as_let mode).
     let name = stmt.name.text(ctx.db).S();
     let ty = ctx.expr_type(expr);
     ctx.alloc_binding(name, ty, false, None);
