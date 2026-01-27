@@ -344,11 +344,12 @@ pub fn synthesize_expr<'db>(
                 return convert_type_hint(db, type_hint);
             }
             // Synthesize inner type and wrap in Option.
+            // Synthesized expression types are always Datalit (Function types only appear in signatures).
             let payload = some_expr.payload;
             let inner_ty = ctx.synthesize_expr(payload)?;
             let inner_datalit_ty = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(ctx.error_cannot_synthesize(expr, "function type in Some")),
+                Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
             };
             let option_ty = datalit::tycheck::Type::Option(
                 datalit::tycheck::TypeOption { inner_type: Box::new(inner_datalit_ty) }
@@ -360,11 +361,12 @@ pub fn synthesize_expr<'db>(
                 return convert_type_hint(db, type_hint);
             }
             // Synthesize inner type and wrap in Result.
+            // Synthesized expression types are always Datalit (Function types only appear in signatures).
             let payload = ok_expr.payload;
             let inner_ty = ctx.synthesize_expr(payload)?;
             let inner_datalit_ty = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(ctx.error_cannot_synthesize(expr, "function type in Ok")),
+                Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
             };
             let result_ty = datalit::tycheck::Type::Result(
                 datalit::tycheck::TypeResult { inner_type: Box::new(inner_datalit_ty) }
@@ -975,7 +977,7 @@ fn synthesize_inline_list<'db>(
     let first_ty = ctx.synthesize_expr(elements[0])?;
     let first_datalit = match first_ty {
         Type::Datalit(ref dt) => dt.clone(),
-        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+        Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
     };
 
     // Check remaining elements for type compatibility.
@@ -1006,7 +1008,7 @@ fn synthesize_inline_set<'db>(
     let first_ty = ctx.synthesize_expr(elements[0])?;
     let first_datalit = match first_ty {
         Type::Datalit(ref dt) => dt.clone(),
-        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+        Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
     };
 
     // Check remaining elements for type compatibility.
@@ -1037,12 +1039,12 @@ fn synthesize_inline_map<'db>(
     let first_key_ty = ctx.synthesize_expr(entries[0].key)?;
     let first_key_datalit = match first_key_ty {
         Type::Datalit(ref dt) => dt.clone(),
-        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+        Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
     };
     let first_value_ty = ctx.synthesize_expr(entries[0].value)?;
     let first_value_datalit = match first_value_ty {
         Type::Datalit(ref dt) => dt.clone(),
-        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+        Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
     };
 
     // Check remaining entries for type compatibility.
@@ -1079,7 +1081,7 @@ fn synthesize_inline_tensor<'db>(
     let first_ty = ctx.synthesize_expr(elements[0])?;
     let first_datalit = match first_ty {
         Type::Datalit(ref dt) => dt.clone(),
-        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+        Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
     };
 
     // Check remaining elements for type compatibility.
@@ -1108,7 +1110,7 @@ fn synthesize_inline_anon_tuple<'db>(
         let elem_ty = ctx.synthesize_expr(*elem)?;
         let elem_datalit = match elem_ty {
             Type::Datalit(dt) => dt.clone(),
-            Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
         };
         elem_types.push(elem_datalit);
     }
@@ -1133,7 +1135,7 @@ fn synthesize_inline_anon_struct<'db>(
         let field_ty = ctx.synthesize_expr(field.value)?;
         let field_datalit = match field_ty {
             Type::Datalit(dt) => dt.clone(),
-            Type::Function(_) => return Err(TypeError::CannotSynthesize),
+            Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
         };
         field_types.push(datalit::tycheck::TypeNamedField { name: field.name, ty: Box::new(field_datalit) });
     }

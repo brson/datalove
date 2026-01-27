@@ -30,9 +30,10 @@ fn check_element_type<'db>(
     expected_type: &crate::Type<'db>,
 ) -> Result<(), TypeError> {
     // Extract actual datalit type.
+    // Synthesized expression types are always Datalit (Function types only appear in signatures).
     let actual_datalit_ty = match elem_ty {
         Type::Datalit(dt) => dt,
-        _ => return Ok(()), // Non-datalit types handled elsewhere.
+        Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
     };
 
     // Check type compatibility with coercion.
@@ -521,7 +522,7 @@ fn check_type_coercion<'db>(
         Type::Datalit(expected_dt) => {
             datalit::tycheck::check_type_coercion(db, actual, expected_dt).map_err(TypeError::from)
         }
-        _ => Ok(()), // Non-datalit types handled elsewhere.
+        Type::Function(_) => unreachable!("expected type in expression context is always Datalit"),
     }
 }
 
@@ -541,11 +542,12 @@ pub fn check_list_elements<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract the element type from the list type.
+    // Callers ensure expected_ty is a List type before calling.
     let expected_elem_ty = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::List(list_ty)) => {
             Type::Datalit((*list_ty.element_type).clone())
         }
-        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+        _ => unreachable!("check_list_elements called with non-list type"),
     };
     for elem in elements {
         check_expr(ctx, *elem, &expected_elem_ty)?;
@@ -566,11 +568,12 @@ pub fn check_set_elements<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract the element type from the set type.
+    // Callers ensure expected_ty is a Set type before calling.
     let expected_elem_ty = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::Set(set_ty)) => {
             Type::Datalit((*set_ty.element_type).clone())
         }
-        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+        _ => unreachable!("check_set_elements called with non-set type"),
     };
     for elem in elements {
         check_expr(ctx, *elem, &expected_elem_ty)?;
@@ -591,6 +594,7 @@ pub fn check_map_entries<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract the key and value types from the map type.
+    // Callers ensure expected_ty is a Map type before calling.
     let (expected_key_ty, expected_value_ty) = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::Map(map_ty)) => {
             (
@@ -598,7 +602,7 @@ pub fn check_map_entries<'db>(
                 Type::Datalit((*map_ty.value_type).clone()),
             )
         }
-        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+        _ => unreachable!("check_map_entries called with non-map type"),
     };
     for entry in entries {
         check_expr(ctx, entry.key, &expected_key_ty)?;
@@ -622,11 +626,12 @@ pub fn check_tensor_shape_and_elements<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract tensor type info.
+    // Callers ensure expected_ty is a Tensor type before calling.
     let (elem_type, expected_rank) = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::Tensor(tensor_ty)) => {
             (tensor_ty.element_type.clone(), tensor_ty.rank)
         }
-        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+        _ => unreachable!("check_tensor_shape_and_elements called with non-tensor type"),
     };
 
     // Check rank matches type hint.
@@ -664,11 +669,12 @@ pub fn check_tuple_elements<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract the field types from the tuple type.
+    // Callers ensure expected_ty is a Tuple type before calling.
     let expected_fields = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::AnonTuple(tuple_ty)) => {
             tuple_ty.fields.C()
         }
-        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+        _ => unreachable!("check_tuple_elements called with non-tuple type"),
     };
 
     // Check arity.
@@ -701,11 +707,12 @@ pub fn check_struct_fields<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract the field types from the struct type.
+    // Callers ensure expected_ty is a Struct type before calling.
     let expected_fields = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::AnonStruct(struct_ty)) => {
             struct_ty.fields.C()
         }
-        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+        _ => unreachable!("check_struct_fields called with non-struct type"),
     };
 
     // Check arity.
@@ -744,11 +751,12 @@ pub fn check_enum_variant<'db>(
     let inner_ty = unwrap_wrapper_types(db, expected_ty);
 
     // Extract the variants from the enum type.
+    // Callers ensure expected_ty is an Enum type before calling.
     let expected_variants = match inner_ty {
         Type::Datalit(datalit::tycheck::Type::AnonEnum(enum_ty)) => {
             enum_ty.variants.C()
         }
-        _ => return Ok(()), // Type mismatch will be caught elsewhere.
+        _ => unreachable!("check_enum_variant called with non-enum type"),
     };
 
     // Look up the variant by name.
@@ -766,10 +774,11 @@ pub fn check_enum_variant<'db>(
     // than individual variant payloads.
     if let (Some(payload_expr), Some(expected_payload_ty)) = (payload, expected_variant.payload.as_ref()) {
         // Synthesize payload type and check against expected.
+        // Synthesized expression types are always Datalit (Function types only appear in signatures).
         let payload_ty = ctx.synthesize_expr(payload_expr)?;
         let actual_datalit_ty = match payload_ty {
             Type::Datalit(dt) => dt,
-            _ => return Ok(()), // Non-datalit types handled elsewhere.
+            Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
         };
         let expected_ty = Type::Datalit((**expected_payload_ty).clone());
         check_type_coercion(db, &actual_datalit_ty, &expected_ty)?;

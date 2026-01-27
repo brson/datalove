@@ -435,7 +435,7 @@ fn convert_type_hint_inner<'db>(
                     let f_ty = convert_type_hint_inner(db, f.clone())?;
                     match f_ty {
                         Type::Datalit(dt) => Ok(dt.clone()),
-                        Type::Function(_) => Err(TypeError::CannotSynthesize),
+                        Type::Function(_) => unreachable!("type hint cannot produce function type"),
                     }
                 })
                 .collect();
@@ -451,7 +451,7 @@ fn convert_type_hint_inner<'db>(
                     let f_ty = convert_type_hint_inner(db, (*f.type_hint).clone())?;
                     let dt = match f_ty {
                         Type::Datalit(dt) => dt.clone(),
-                        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                        Type::Function(_) => unreachable!("type hint cannot produce function type"),
                     };
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
@@ -470,10 +470,11 @@ fn convert_type_hint_inner<'db>(
                     let name = v.name;
                     let payload = v.payload.as_ref().map(|p| {
                         let p_ty = convert_type_hint_inner(db, (**p).clone())?;
-                        match p_ty {
-                            Type::Datalit(dt) => Ok(Box::new(dt.clone())),
-                            Type::Function(_) => Err(TypeError::CannotSynthesize),
-                        }
+                        // Type hints cannot produce function types.
+                        let Type::Datalit(dt) = p_ty else {
+                            unreachable!("type hint cannot produce function type")
+                        };
+                        Ok::<_, TypeError>(Box::new(dt.clone()))
                     }).transpose()?;
                     Ok(datalit::tycheck::TypeEnumVariant { name, payload })
                 })
@@ -487,7 +488,7 @@ fn convert_type_hint_inner<'db>(
             let elem_ty = convert_type_hint_inner(db, (*l.element_type).clone())?;
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             Type::Datalit(datalit::tycheck::Type::List(
                 datalit::tycheck::TypeList {
@@ -500,12 +501,12 @@ fn convert_type_hint_inner<'db>(
             let key_ty = convert_type_hint_inner(db, (*m.key_type).clone())?;
             let key_dt = match key_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             let value_ty = convert_type_hint_inner(db, (*m.value_type).clone())?;
             let value_dt = match value_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             Type::Datalit(datalit::tycheck::Type::Map(
                 datalit::tycheck::TypeMap {
@@ -519,7 +520,7 @@ fn convert_type_hint_inner<'db>(
             let elem_ty = convert_type_hint_inner(db, (*s.element_type).clone())?;
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             Type::Datalit(datalit::tycheck::Type::Set(
                 datalit::tycheck::TypeSet {
@@ -532,7 +533,7 @@ fn convert_type_hint_inner<'db>(
             let inner_ty = convert_type_hint_inner(db, (*o.inner_type).clone())?;
             let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             Type::Datalit(datalit::tycheck::Type::Option(
                 datalit::tycheck::TypeOption {
@@ -545,7 +546,7 @@ fn convert_type_hint_inner<'db>(
             let inner_ty = convert_type_hint_inner(db, (*r.inner_type).clone())?;
             let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             Type::Datalit(datalit::tycheck::Type::Result(
                 datalit::tycheck::TypeResult {
@@ -558,7 +559,7 @@ fn convert_type_hint_inner<'db>(
             let elem_ty = convert_type_hint_inner(db, (*t.element_type).clone())?;
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             Type::Datalit(datalit::tycheck::Type::Tensor(
                 datalit::tycheck::TypeTensor {
@@ -580,7 +581,7 @@ fn convert_type_hint_inner<'db>(
                     let c_ty = convert_type_hint_inner(db, (*c.type_hint).clone())?;
                     let dt = match c_ty {
                         Type::Datalit(dt) => dt.clone(),
-                        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                        Type::Function(_) => unreachable!("type hint cannot produce function type"),
                     };
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
@@ -636,7 +637,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
                     let f_ty = convert_type_hint_with_aliases_inner(db, f.clone(), aliases)?;
                     match f_ty {
                         Type::Datalit(dt) => Ok(dt.clone()),
-                        Type::Function(_) => Err(TypeError::CannotSynthesize),
+                        Type::Function(_) => unreachable!("type hint cannot produce function type"),
                     }
                 })
                 .collect();
@@ -652,7 +653,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
                     let f_ty = convert_type_hint_with_aliases_inner(db, (*f.type_hint).clone(), aliases)?;
                     let dt = match f_ty {
                         Type::Datalit(dt) => dt.clone(),
-                        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                        Type::Function(_) => unreachable!("type hint cannot produce function type"),
                     };
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
@@ -671,10 +672,11 @@ fn convert_type_hint_with_aliases_inner<'db>(
                     let name = v.name;
                     let payload = v.payload.as_ref().map(|p| {
                         let p_ty = convert_type_hint_with_aliases_inner(db, (**p).clone(), aliases)?;
-                        match p_ty {
-                            Type::Datalit(dt) => Ok(Box::new(dt.clone())),
-                            Type::Function(_) => Err(TypeError::CannotSynthesize),
-                        }
+                        // Type hints cannot produce function types.
+                        let Type::Datalit(dt) = p_ty else {
+                            unreachable!("type hint cannot produce function type")
+                        };
+                        Ok::<_, TypeError>(Box::new(dt.clone()))
                     }).transpose()?;
                     Ok(datalit::tycheck::TypeEnumVariant { name, payload })
                 })
@@ -688,7 +690,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let elem_ty = convert_type_hint_with_aliases_inner(db, (*l.element_type).clone(), aliases)?;
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             Type::Datalit(datalit::tycheck::Type::List(
                 datalit::tycheck::TypeList {
@@ -701,12 +703,12 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let key_ty = convert_type_hint_with_aliases_inner(db, (*m.key_type).clone(), aliases)?;
             let key_dt = match key_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             let value_ty = convert_type_hint_with_aliases_inner(db, (*m.value_type).clone(), aliases)?;
             let value_dt = match value_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             Type::Datalit(datalit::tycheck::Type::Map(
                 datalit::tycheck::TypeMap {
@@ -720,7 +722,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let elem_ty = convert_type_hint_with_aliases_inner(db, (*s.element_type).clone(), aliases)?;
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             Type::Datalit(datalit::tycheck::Type::Set(
                 datalit::tycheck::TypeSet {
@@ -733,7 +735,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let inner_ty = convert_type_hint_with_aliases_inner(db, (*o.inner_type).clone(), aliases)?;
             let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             Type::Datalit(datalit::tycheck::Type::Option(
                 datalit::tycheck::TypeOption {
@@ -746,7 +748,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let inner_ty = convert_type_hint_with_aliases_inner(db, (*r.inner_type).clone(), aliases)?;
             let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             Type::Datalit(datalit::tycheck::Type::Result(
                 datalit::tycheck::TypeResult {
@@ -759,7 +761,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let elem_ty = convert_type_hint_with_aliases_inner(db, (*t.element_type).clone(), aliases)?;
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
-                Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
             };
             Type::Datalit(datalit::tycheck::Type::Tensor(
                 datalit::tycheck::TypeTensor {
@@ -786,7 +788,7 @@ fn convert_type_hint_with_aliases_inner<'db>(
                     let c_ty = convert_type_hint_with_aliases_inner(db, (*c.type_hint).clone(), aliases)?;
                     let dt = match c_ty {
                         Type::Datalit(dt) => dt.clone(),
-                        Type::Function(_) => return Err(TypeError::CannotSynthesize),
+                        Type::Function(_) => unreachable!("type hint cannot produce function type"),
                     };
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
