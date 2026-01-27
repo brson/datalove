@@ -12,10 +12,10 @@
 - clone and coerce (@)
 - [x] logic ops
 - [x] type aliases
+- ctfe
 - generic functions for built-in generic types
 - basic repl,
 - [x] script runner
-- pipeline tools
 - [x] interpreter
 - [x] jit
 - [x] aot
@@ -72,6 +72,7 @@
 
 ## Backburner
 
+- pipeline tools
 - worldfile generator - waiting on pipeline stability
 - closures
 - comptime / const evaluation
