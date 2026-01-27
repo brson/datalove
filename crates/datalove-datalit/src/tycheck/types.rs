@@ -667,6 +667,8 @@ fn check_coercion_arity_or_mismatch<'db>(
 // ============================================================================
 
 /// Check if an integer value fits within a given type.
+///
+/// Only valid for integer types (fixed-size or bigint).
 pub fn check_int_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeError> {
     match ty {
         Type::U8 => value_str.parse::<u8>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
@@ -680,7 +682,7 @@ pub fn check_int_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeErr
         Type::Usize => value_str.parse::<datalove_rtdt::UsizeRepr>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
         Type::Isize => value_str.parse::<datalove_rtdt::IsizeRepr>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
         Type::Int => Ok(()),
-        _ => Ok(()),
+        _ => panic!("check_int_fits_type called with non-integer type"),
     }
 }
 
@@ -781,7 +783,7 @@ pub fn check_hex_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeErr
             u64::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
         }
         _ if is_negative => Err(TypeError::IntOutOfRange),
-        _ => Ok(()),
+        _ => panic!("check_hex_fits_type called with unsupported type"),
     }
 }
 
