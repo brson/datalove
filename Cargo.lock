@@ -1163,6 +1163,7 @@ dependencies = [
  "datalove-datafun-ownership",
  "datalove-datafun-parser",
  "datalove-datafun-resolve",
+ "datalove-datafun-sema",
  "datalove-datafun-tycheck",
  "datalove-datalit",
  "datalove-diagnostic",
@@ -1265,6 +1266,7 @@ dependencies = [
  "datalove-datafun-ast",
  "datalove-datafun-common",
  "datalove-datafun-ir",
+ "datalove-datafun-sema",
  "datalove-rtdt",
  "rustmax",
  "salsa",
@@ -1302,6 +1304,17 @@ dependencies = [
  "datalove-datafun-common",
  "datalove-datalit",
  "rayon",
+ "rustmax",
+ "salsa",
+]
+
+[[package]]
+name = "datalove-datafun-sema"
+version = "0.1.0"
+dependencies = [
+ "datalove-datafun-ast",
+ "datalove-datafun-common",
+ "datalove-datafun-ir",
  "rustmax",
  "salsa",
 ]

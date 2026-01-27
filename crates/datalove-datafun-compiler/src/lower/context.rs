@@ -18,7 +18,7 @@ use datalove_datafun_ir::{
     ConstValue, TypeRef, SlotDest, CtfeEvaluator,
 };
 use crate::ir_ext::IrTypeExt;
-use crate::ownership_analysis::{BindingId, DropSchedule, BindingInfo, TrackingCategory, StmtKey};
+use datalove_datafun_sema::{BindingId, DropSchedule, BindingInfo, TrackingCategory, StmtKey};
 
 /// Compile-time state for building a function's IR.
 ///
