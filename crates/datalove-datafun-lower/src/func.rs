@@ -25,6 +25,7 @@ use super::LowerError;
 ///
 /// If `resolved_param_types` is provided, use those types for parameters instead of
 /// deriving from AST type hints. This is necessary when type aliases are used.
+/// Similarly, `resolved_return_type` provides the resolved return type.
 ///
 /// If `ctfe_evaluator` is provided, it will be used to evaluate complex const
 /// expressions at compile time.
@@ -40,9 +41,10 @@ pub fn lower_function_for_module<'db>(
     func_id: FuncId,
     analysis: FunctionAnalysis,
     resolved_param_types: Option<&[IrType]>,
+    resolved_return_type: Option<IrType>,
 ) -> Result<IrFunction, LowerError> {
     let mut ctx = LowerCtx::new_for_module(db, expr_types, call_targets, func_id_map);
-    lower_function_body(&mut ctx, func_id, func, analysis, resolved_param_types)
+    lower_function_body(&mut ctx, func_id, func, analysis, resolved_param_types, resolved_return_type)
 }
 
 /// Lower a function body given an already-allocated FuncId and pre-computed drop analysis.
@@ -51,12 +53,14 @@ pub fn lower_function_for_module<'db>(
 ///
 /// If `resolved_param_types` is provided, use those types for parameters instead of
 /// deriving from AST type hints. This is necessary when type aliases are used.
+/// Similarly, `resolved_return_type` provides the resolved return type.
 pub fn lower_function_body<'db>(
     ctx: &mut LowerCtx<'db>,
     func_id: FuncId,
     func: ast::StmtFun<'db>,
     analysis: FunctionAnalysis,
     resolved_param_types: Option<&[IrType]>,
+    resolved_return_type: Option<IrType>,
 ) -> Result<IrFunction, LowerError> {
     // Assert no analysis errors - caller should have checked.
     assert!(
@@ -84,8 +88,11 @@ pub fn lower_function_body<'db>(
     let saved_is_script_unit = ctx.is_script_unit;
     ctx.is_script_unit = false;
 
-    // Set return type from function signature.
-    ctx.return_type = func.return_type(ctx.db).map(|ty| IrType::from_type_hint(ctx.db, &ty));
+    // Set return type from resolved type if available, otherwise from AST type hint.
+    ctx.return_type = match resolved_return_type {
+        Some(ty) => Some(ty),
+        None => func.return_type(ctx.db).map(|ty| IrType::from_type_hint(ctx.db, &ty)),
+    };
 
     // Allocate ParamIds for parameters with correct types and modes.
     // Record binding operands to match analysis order.

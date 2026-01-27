@@ -1,0 +1,22 @@
+----------
+scriptunit-fragment
+----------
+
+// Type alias for bool as return type.
+// This tests that the JIT correctly handles type alias return types.
+// Without the fix, the return type would be IrType::Error (16 bytes, sret)
+// instead of Bool (1 byte, register return), causing a calling convention mismatch.
+type MyBool: bool
+
+fun pass_through(b: bool): MyBool
+    ret b
+end fun
+
+fun negate(b: bool): MyBool
+    ret not b
+end fun
+
+debuglog pass_through(true)
+debuglog pass_through(false)
+debuglog negate(true)
+debuglog negate(false)

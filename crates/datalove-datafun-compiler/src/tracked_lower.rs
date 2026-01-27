@@ -241,15 +241,19 @@ pub fn lower_module<'db>(
     // Get pre-computed ownership analysis results.
     let function_analyses = ownership_analysis.function_analyses(db);
 
-    // Build map of function name -> resolved param types from exports.
-    // This is needed to resolve type aliases in function parameters.
+    // Build maps of function name -> resolved types from exports.
+    // This is needed to resolve type aliases in function parameters and return types.
     let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+    let mut func_return_types: HashMap<String, IrType> = HashMap::new();
     for (name, func_type) in typecheck_result.exports(db) {
         let param_types: Vec<IrType> = func_type.param_types(db)
             .iter()
             .map(|ty| IrType::from_tycheck(db, ty))
             .collect();
         func_param_types.insert(name.text(db).S(), param_types);
+
+        let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
+        func_return_types.insert(name.text(db).S(), return_type);
     }
 
     let mut functions;
@@ -281,8 +285,9 @@ pub fn lower_module<'db>(
                 let func_id = func_ids[func_idx].1;
                 func_idx += 1;
 
-                // Get resolved param types for this function.
+                // Get resolved types for this function.
                 let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
+                let resolved_return = func_return_types.get(&func_name).cloned();
 
                 // Get pre-computed ownership analysis for this function.
                 let Some(single_analysis) = function_analyses.get(&func_name) else {
@@ -309,6 +314,7 @@ pub fn lower_module<'db>(
                     func_id,
                     analysis,
                     resolved_params,
+                    resolved_return,
                 ) {
                     Ok(ir_func) => {
                         functions.push(ir_func);
@@ -392,14 +398,17 @@ pub fn lower_all_module_functions<'db>(
         let call_targets = single_typecheck.call_targets(db);
         let function_analyses = single_ownership.function_analyses(db);
 
-        // Build map of function name -> resolved param types from exports.
+        // Build maps of function name -> resolved types from exports.
         let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+        let mut func_return_types: HashMap<String, IrType> = HashMap::new();
         for (name, func_type) in single_typecheck.exports(db) {
             let param_types: Vec<IrType> = func_type.param_types(db)
                 .iter()
                 .map(|ty| IrType::from_tycheck(db, ty))
                 .collect();
             func_param_types.insert(name.text(db).S(), param_types);
+            let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
+            func_return_types.insert(name.text(db).S(), return_type);
         }
 
         let mut functions = Vec::new();
@@ -415,8 +424,9 @@ pub fn lower_all_module_functions<'db>(
 
                 func_name_to_id.push((func_name.clone(), func_id));
 
-                // Get resolved param types for this function.
+                // Get resolved param and return types for this function.
                 let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
+                let resolved_return = func_return_types.get(&func_name).cloned();
 
                 // Get pre-computed ownership analysis for this function.
                 let Some(single_analysis) = function_analyses.get(&func_name) else {
@@ -437,6 +447,7 @@ pub fn lower_all_module_functions<'db>(
                     func_id,
                     analysis,
                     resolved_params,
+                    resolved_return,
                 ) {
                     Ok(ir_func) => {
                         functions.push(ir_func);

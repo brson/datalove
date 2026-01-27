@@ -1,0 +1,48 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const true
+                        v1 = call f0(v0)
+                        debuglog v1
+                        v2 = const false
+                        v3 = call f0(v2)
+                        debuglog v3
+                        v4 = const true
+                        v5 = call f1(v4)
+                        debuglog v5
+                        v6 = const false
+                        v7 = call f1(v6)
+                        debuglog v7
+                        unit_end
+                    
+                    fn pass_through(p0):
+                    block0:
+                        v0 = copy p0
+                        return v0
+                    fn negate(p0):
+                    block0:
+                        v0 = logic_not p0
+                        return v0
+                    exports:
+                        pass_through = f0
+                        negate = f1
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("true\nfalse\nfalse\ntrue\n"),
+        ),
+    ],
+)

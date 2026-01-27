@@ -121,14 +121,17 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
                 output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));
 
-                // Build map of function name -> resolved param types for type alias support.
+                // Build map of function name -> resolved param/return types for type alias support.
                 let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+                let mut func_return_types: HashMap<String, IrType> = HashMap::new();
                 for (name, func_type) in tycheck_result.function_types(&db) {
                     let param_types: Vec<IrType> = func_type.param_types(&db)
                         .iter()
                         .map(|ty| IrType::from_tycheck(&db, ty))
                         .collect();
                     func_param_types.insert(name.text(&db).S(), param_types);
+                    let return_type = IrType::from_tycheck(&db, &func_type.return_type(&db));
+                    func_return_types.insert(name.text(&db).S(), return_type);
                 }
 
                 // Run drop analysis on all functions first.
@@ -173,7 +176,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 // Use empty ScriptLowerContext since tests don't accumulate across units.
                 // Use empty func_id_map since these tests don't use modules.
                 let (lowered_functions, func_name_to_id) = lower_script_functions(
-                    &db, expr_types_raw, call_targets_raw, &stmts, &func_analyses, None, &func_id_map, ScriptLowerContext::new()
+                    &db, expr_types_raw, call_targets_raw, &stmts, &func_analyses, None, Some(&func_return_types), &func_id_map, ScriptLowerContext::new()
                 ).expect("function lowering failed");
 
                 // Evaluate const bindings using CTFE with "lower then evaluate" pattern.
@@ -247,7 +250,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     Some((lowered_functions, func_name_to_id))
                 };
 
-                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), lowered_funcs_arg) {
+                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), Some(&func_return_types), lowered_funcs_arg) {
                     Ok(ir_unit) => {
                         // Inline const values into the IR.
                         let const_values_map: HashMap<String, datalove_datafun_ir::ConstValue> = resolved_consts

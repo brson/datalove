@@ -61,8 +61,9 @@ fn is_self_assignment_script<'db>(
 /// Caller must first call `analyze_script_fragment_tracked` to get ownership analysis,
 /// then call `analyze_script_functions` to get `func_analyses`.
 ///
-/// If `func_param_types` is provided, use those resolved param types for function parameters
-/// instead of deriving from AST type hints. This is needed for type alias support.
+/// If `func_param_types` and `func_return_types` are provided, use those resolved types
+/// for function parameters and return type instead of deriving from AST type hints.
+/// This is needed for type alias support.
 ///
 /// If `lowered_functions` is provided, those functions are reused instead of being
 /// re-lowered. The tuple contains the lowered functions and a map from function
@@ -80,6 +81,7 @@ pub fn lower_script_fragment_raw<'db>(
     func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: ScriptAnalysisData,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+    func_return_types: Option<&HashMap<String, IrType>>,
     lowered_functions: Option<(Vec<IrFunction>, HashMap<String, FuncId>)>,
 ) -> Result<IrScriptUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
@@ -121,7 +123,7 @@ pub fn lower_script_fragment_raw<'db>(
     // Lower all statements with index tracking.
     for (idx, stmt) in stmts.iter().enumerate() {
         ctx.body.current_stmt_idx = Some(idx);
-        lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, func_param_types, &already_lowered_funcs)?;
+        lower_statement_for_script(&mut ctx, stmt, idx, &func_analyses, func_param_types, func_return_types, &already_lowered_funcs)?;
     }
     ctx.body.current_stmt_idx = None;
 
@@ -177,6 +179,7 @@ pub fn lower_script_functions<'db>(
     stmts: &[Statement<'db>],
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+    func_return_types: Option<&HashMap<String, IrType>>,
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
 ) -> Result<(Vec<datalove_datafun_ir::IrFunction>, HashMap<String, FuncId>), LowerError> {
@@ -212,14 +215,17 @@ pub fn lower_script_functions<'db>(
             // Swap in fresh state for function body.
             let saved = ctx.swap_body_state(FrameState::new());
 
-            // Look up resolved param types for this function.
+            // Look up resolved types for this function.
             let func_name_str = fun_stmt.name(db).text(db);
             let resolved_params = func_param_types
                 .and_then(|m| m.get(func_name_str))
                 .map(|v| v.as_slice());
+            let resolved_return = func_return_types
+                .and_then(|m| m.get(func_name_str))
+                .cloned();
 
             // Lower the function body.
-            let func = lower_function_body(&mut ctx, func_id, *fun_stmt, analysis, resolved_params)?;
+            let func = lower_function_body(&mut ctx, func_id, *fun_stmt, analysis, resolved_params, resolved_return)?;
 
             // Restore parent state.
             ctx.swap_body_state(saved);
@@ -279,8 +285,9 @@ pub fn lower_script_expr<'db>(
 /// This handles function definitions by lowering them and adding to the unit's functions.
 /// The `func_analyses` map must contain pre-computed analyses for all function statements.
 ///
-/// If `func_param_types` is provided, use those resolved param types for function parameters
-/// instead of deriving from AST type hints. This is needed for type alias support.
+/// If `func_param_types` and `func_return_types` are provided, use those resolved types
+/// for function parameters and return type instead of deriving from AST type hints.
+/// This is needed for type alias support.
 ///
 /// If `already_lowered_funcs` contains a function name, that function has already been lowered
 /// and only the export should be emitted (body lowering is skipped).
@@ -290,6 +297,7 @@ fn lower_statement_for_script<'db>(
     _stmt_idx: usize,
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+    func_return_types: Option<&HashMap<String, IrType>>,
     already_lowered_funcs: &HashSet<String>,
 ) -> Result<(), LowerError> {
     // Allocate a globally-unique statement ID that matches ownership analysis.
@@ -473,14 +481,17 @@ fn lower_statement_for_script<'db>(
             // Swap in fresh state for function body.
             let saved = ctx.swap_body_state(FrameState::new());
 
-            // Look up resolved param types for this function.
+            // Look up resolved types for this function.
             let func_name_str = fun_stmt.name(ctx.db).text(ctx.db);
             let resolved_params = func_param_types
                 .and_then(|m| m.get(func_name_str))
                 .map(|v| v.as_slice());
+            let resolved_return = func_return_types
+                .and_then(|m| m.get(func_name_str))
+                .cloned();
 
-            // Lower the function body with resolved param types for type alias support.
-            let func = lower_function_body(ctx, func_id, *fun_stmt, analysis, resolved_params)?;
+            // Lower the function body with resolved types for type alias support.
+            let func = lower_function_body(ctx, func_id, *fun_stmt, analysis, resolved_params, resolved_return)?;
 
             // Restore parent state.
             ctx.swap_body_state(saved);

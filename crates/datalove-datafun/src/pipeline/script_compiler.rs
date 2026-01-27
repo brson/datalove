@@ -473,14 +473,18 @@ impl<'db> ScriptCompiler<'db> {
         // Get module function ID map for resolving module function calls.
         let func_id_map = build_func_id_map(self.db, &self.module_specs);
 
-        // Build func_param_types for type alias support.
+        // Build func_param_types and func_return_types for type alias support.
         let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+        let mut func_return_types: HashMap<String, IrType> = HashMap::new();
         for (name, func_type) in typecheck.result.function_types(self.db) {
             let param_types: Vec<IrType> = func_type.param_types(self.db)
                 .iter()
                 .map(|ty| IrType::from_tycheck(self.db, ty))
                 .collect();
             func_param_types.insert(name.text(self.db).S(), param_types);
+
+            let return_type = IrType::from_tycheck(self.db, &func_type.return_type(self.db));
+            func_return_types.insert(name.text(self.db).S(), return_type);
         }
 
         // Lower just the functions.
@@ -491,6 +495,7 @@ impl<'db> ScriptCompiler<'db> {
             stmts,
             &ownership.func_analyses,
             Some(&func_param_types),
+            Some(&func_return_types),
             &func_id_map,
             script_ctx,
         ) {
@@ -799,14 +804,18 @@ impl<'db> ScriptCompiler<'db> {
 
         match unit {
             ParsedUnit::Fragment { stmts, .. } => {
-                // Build func_param_types for type alias support.
+                // Build func_param_types and func_return_types for type alias support.
                 let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+                let mut func_return_types: HashMap<String, IrType> = HashMap::new();
                 for (name, func_type) in typecheck.result.function_types(self.db) {
                     let param_types: Vec<IrType> = func_type.param_types(self.db)
                         .iter()
                         .map(|ty| IrType::from_tycheck(self.db, ty))
                         .collect();
                     func_param_types.insert(name.text(self.db).S(), param_types);
+
+                    let return_type = IrType::from_tycheck(self.db, &func_type.return_type(self.db));
+                    func_return_types.insert(name.text(self.db).S(), return_type);
                 }
 
                 let script_analysis = ownership.script_analysis.clone()
@@ -831,6 +840,7 @@ impl<'db> ScriptCompiler<'db> {
                     ownership.func_analyses.clone(),
                     script_analysis,
                     Some(&func_param_types),
+                    Some(&func_return_types),
                     lowered_funcs_arg,
                 ).map_err(|e| {
                     self.accumulated_unit_specs.pop();
