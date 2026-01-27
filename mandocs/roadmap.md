@@ -30,7 +30,6 @@
 
 ## In progress
 
-- worldfile generator
 - human docs
 - ctfe
 
@@ -77,6 +76,7 @@
 
 ## Backburner
 
+- worldfile generator - waiting on pipeline stability
 - closures
 - comptime / const evaluation
 - allocation statistics
