@@ -5,10 +5,54 @@
  * =========================================================================== */
 
 :root {
-    --font-text: 'Source Sans 3', system-ui, sans-serif;
-    --font-text: 'Source Serif 4', system-ui, sans-serif;
-    --font-code: 'Source Code Pro', monospace;
-    --baseline: 1.6rem;
+    /* Text font options - uncomment one to test */
+    --font-text: 'Cormorant Garamond', Georgia, serif;
+    --font-text: 'Spectral', Georgia, serif;
+    --font-header: 'Spectral', Georgia, serif;
+    --font-header: 'Vollkorn', Georgia, serif;
+    --font-code: 'IBM Plex Mono', monospace;
+
+    --font-size-text: 1.3rem;
+    --font-size-code: 1.0rem;
+    --font-size-header-scale: 1.2;
+    --baseline: 2.2rem;
+
+    ---font-header: 'Alegreya', Georgia, serif;
+    ---font-header: 'Old Standard TT', Georgia, serif;
+    
+    /* Display/header fonts */
+    ---font-header: 'Alegreya', Georgia, serif;            /* Calligraphic, scholarly */
+    ---font-header: 'Old Standard TT', Georgia, serif;     /* Classic, timeless */
+    ---font-header: 'Playfair Display', Georgia, serif;    /* High contrast, elegant titles */
+    ---font-header: 'DM Serif Display', Georgia, serif;    /* Modern display serif */
+    ---font-header: 'Vollkorn', Georgia, serif;            /* Organic, warm */
+
+    /* Text fonts as headers */
+    ---font-header: 'Cormorant Garamond', Georgia, serif;
+    ---font-header: 'Spectral', Georgia, serif;
+    ---font-header: 'Libre Baskerville', Georgia, serif;
+    ---font-header: 'Lora', Georgia, serif;
+
+
+    ---font-text: 'Cormorant Garamond', Georgia, serif;   /* Elegant, light strokes */
+    ---font-text: 'Spectral', Georgia, serif;                   /* Google's scholarly serif */
+    ---font-text: 'Libre Baskerville', Georgia, serif;    /* Baskerville revival, very academic */
+    ---font-text: 'Lora', Georgia, serif;                 /* Contemporary, good readability */
+
+    ---font-text: 'Source Sans 3', system-ui, sans-serif;
+    ---font-text: 'Source Serif 4', Georgia, serif;
+    ---font-header: 'EB Garamond', Georgia, serif;          /* Classic Garamond, common in journals */
+    ---font-header: 'Crimson Pro', Georgia, serif;          /* Old-style serif, scholarly feel */
+
+    /* Code font options */
+    ---font-code: 'Source Code Pro', monospace;
+    ---font-code: 'JetBrains Mono', monospace;    /* Modern, popular */
+    ---font-code: 'Fira Code', monospace;         /* Has ligatures */
+    ---font-code: 'IBM Plex Mono', monospace;     /* Clean, professional */
+    ---font-code: 'Inconsolata', monospace;       /* Classic */
+
+    /* Header font - defaults to text font if not set */
+    ---font-header: var(--font-text);
 
     /* Dune palette */
     --dune-base00: #20201d;
@@ -158,6 +202,7 @@
 
 body {
     font-family: var(--font-text);
+    font-size: var(--font-size-text);
     font-feature-settings: "onum" 1, "kern" 1;
     background: var(--bg);
     color: var(--fg);
@@ -199,20 +244,21 @@ main {
 
 h1 {
     text-align: center;
-    width: 50%;
+    width: 60%;
     min-width: 200px;
     margin-left: auto;
     margin-right: auto;
 }
 
 h1, h2, h3, h4 {
+    font-family: var(--font-header);
     color: var(--accent);
     margin-top: 2rem;
 }
 
-h1 { font-size: 2rem; letter-spacing: -0.02em; }
-h2 { font-size: 1.5rem; letter-spacing: -0.01em; }
-h3 { font-size: 1.25rem; }
+h1 { font-size: calc(2rem * var(--font-size-header-scale)); letter-spacing: -0.02em; }
+h2 { font-size: calc(1.5rem * var(--font-size-header-scale)); letter-spacing: -0.01em; }
+h3 { font-size: calc(1.25rem * var(--font-size-header-scale)); }
 
 a {
     color: var(--link);
@@ -233,6 +279,7 @@ code {
     padding: 0.2rem 0.4rem;
     border-radius: 3px;
     font-family: var(--font-code);
+    font-size: var(--font-size-code);
     font-feature-settings: "lnum" 1;
 }
 
