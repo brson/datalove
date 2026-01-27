@@ -130,17 +130,18 @@ impl Frame {
 
     /// Get slot value (for reading).
     ///
-    /// Panics if slot ID is out of bounds (compiler bug).
-    /// Returns error if slot is uninitialized (may happen during Drop).
-    pub fn slot(&self, id: SlotId) -> Result<Value, InterpError> {
+    /// Panics if slot ID is out of bounds or not initialized (compiler bug).
+    pub fn slot(&self, id: SlotId) -> Value {
         let idx = id.0 as usize;
-        if !self.slot_initialized[idx] {
-            return Err(InterpError::UninitializedSlot(id));
-        }
+        assert!(
+            self.slot_initialized[idx],
+            "slot {:?} not initialized",
+            id
+        );
         let offset = self.layout.slot_offsets[idx] as usize;
         let tydesc = self.layout.slot_tydescs[idx];
         let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
-        Ok(Value { ptr, tydesc })
+        Value { ptr, tydesc }
     }
 
     /// Mark slot as initialized.
@@ -191,16 +192,17 @@ impl Frame {
 
     /// Read param (dereferences pointer to caller's data).
     ///
-    /// Panics if param ID is out of bounds (compiler bug).
-    /// Returns error if param is uninitialized (may happen during Drop).
-    pub fn param(&self, id: ParamId) -> Result<Value, InterpError> {
+    /// Panics if param ID is out of bounds or not initialized (compiler bug).
+    pub fn param(&self, id: ParamId) -> Value {
         let idx = id.0 as usize;
         let ptr = self.param_ptrs[idx];
-        if ptr.is_null() || !self.param_initialized[idx] {
-            return Err(InterpError::UninitializedParam(id));
-        }
+        assert!(
+            !ptr.is_null() && self.param_initialized[idx],
+            "param {:?} not initialized",
+            id
+        );
         let tydesc = self.param_tydescs[idx];
-        Ok(Value { ptr, tydesc })
+        Value { ptr, tydesc }
     }
 
     /// Get mutable destination for Mut/Out params.
@@ -331,7 +333,7 @@ impl FrameStore {
     pub fn external_slot(&self, unit: u32, slot: SlotId) -> Result<Value, InterpError> {
         let frame = self.frames.get(unit as usize)
             .ok_or(InterpError::ExternalUnitNotFound(unit))?;
-        frame.slot(slot)
+        Ok(frame.slot(slot))
     }
 
     /// Write a value to a slot in a previous unit.
@@ -349,7 +351,7 @@ impl FrameStore {
 
         // Destroy old value if slot was already initialized.
         if frame.is_slot_initialized(slot) {
-            let old_val = frame.slot(slot)?;
+            let old_val = frame.slot(slot);
             unsafe {
                 datalove_rt::c::dtlv_rti_any_destroy_local(
                     rt_handle,

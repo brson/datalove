@@ -523,7 +523,7 @@ impl IrInterpreter {
                         // Destroy old value if slot was already initialized.
                         // This happens when reassigning copy types (no Drop emitted for them).
                         if frame.is_slot_initialized(*slot_id) {
-                            let old_val = frame.slot(*slot_id)?;
+                            let old_val = frame.slot(*slot_id);
                             unsafe {
                                 datalove_rt::c::dtlv_rti_any_destroy_local(
                                     self.runtime.handle(),
@@ -553,7 +553,7 @@ impl IrInterpreter {
                         // For move types, the compiler emits Drop before SlotStoreMove,
                         // so the slot should not be initialized. But check defensively.
                         if frame.is_slot_initialized(*slot_id) {
-                            let old_val = frame.slot(*slot_id)?;
+                            let old_val = frame.slot(*slot_id);
                             unsafe {
                                 datalove_rt::c::dtlv_rti_any_destroy_local(
                                     self.runtime.handle(),
@@ -611,7 +611,7 @@ impl IrInterpreter {
                 Self::mark_source_dropped_local(value, frame);
             }
             Instruction::SlotLoadCopy { dest, slot } => {
-                let slot_val = frame.slot(*slot)?;
+                let slot_val = frame.slot(*slot);
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.copy_value(&slot_val, dest_slot); }
                 frame.mark_value_live(*dest);
@@ -620,7 +620,7 @@ impl IrInterpreter {
                 // Precise slot load: ownership analysis guarantees slot is occupied.
                 // Slot is not marked dropped - destroy_live_values skips untracked slots,
                 // and precise slots are explicitly dropped via Drop instructions.
-                let slot_val = frame.slot(*slot)?;
+                let slot_val = frame.slot(*slot);
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&slot_val, dest_slot); }
                 frame.mark_value_live(*dest);
@@ -628,7 +628,7 @@ impl IrInterpreter {
             Instruction::SlotLoadMoveTracked { dest, slot } => {
                 // Tracked slot load: slot may have been moved, updates tracking.
                 // Mark slot dropped so destroy_live_values skips it.
-                let slot_val = frame.slot(*slot)?;
+                let slot_val = frame.slot(*slot);
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&slot_val, dest_slot); }
                 frame.mark_slot_dropped(*slot);
@@ -1189,7 +1189,7 @@ impl IrInterpreter {
                 match dest {
                     SlotDest::Local(slot_id) => {
                         if frame.is_slot_initialized(*slot_id) {
-                            let old_val = frame.slot(*slot_id)?;
+                            let old_val = frame.slot(*slot_id);
                             unsafe {
                                 datalove_rt::c::dtlv_rti_any_destroy_local(
                                     self.runtime.handle(),
@@ -1217,7 +1217,7 @@ impl IrInterpreter {
                 match dest {
                     SlotDest::Local(slot_id) => {
                         if frame.is_slot_initialized(*slot_id) {
-                            let old_val = frame.slot(*slot_id)?;
+                            let old_val = frame.slot(*slot_id);
                             unsafe {
                                 datalove_rt::c::dtlv_rti_any_destroy_local(
                                     self.runtime.handle(),
@@ -1336,8 +1336,8 @@ impl IrInterpreter {
         match op {
             Operand::Value(id) => Ok(frame.value(*id)),
             Operand::ValueRef(id) => Ok(frame.value_deref(*id)),
-            Operand::Slot(id) => frame.slot(*id),
-            Operand::Param(id) => frame.param(*id),
+            Operand::Slot(id) => Ok(frame.slot(*id)),
+            Operand::Param(id) => Ok(frame.param(*id)),
             Operand::ExternalValue { unit, value } => {
                 frames.external_value(*unit, *value)
             }

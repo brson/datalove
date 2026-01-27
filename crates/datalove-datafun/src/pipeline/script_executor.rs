@@ -181,8 +181,6 @@ impl ScriptExecutor {
 
     /// Get the type and value of a binding by name.
     pub fn get_binding(&mut self, name: &str) -> Option<(String, String)> {
-        use datalove_datafun_interp::InterpError;
-
         if let Some((unit, value_id)) = self.script_ctx.values.get(name) {
             let ty = self.script_ctx.value_types.get(name)
                 .map(|t| format!("{}", t))
@@ -202,7 +200,6 @@ impl ScriptExecutor {
             let val = match self.env.frames.external_slot(*unit, *slot_id) {
                 Ok(v) => self.interp.pretty_print_value(&v)
                     .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
-                Err(InterpError::UninitializedSlot(_)) => "<moved>".S(),
                 Err(e) => format!("<error: {:?}>", e),
             };
             return Some((ty, val));
@@ -213,7 +210,6 @@ impl ScriptExecutor {
 
     /// Get all bindings as (name, kind, type, value) tuples.
     pub fn get_environment(&mut self) -> Vec<(String, String, String, String)> {
-        use datalove_datafun_interp::InterpError;
         let mut result = Vec::new();
 
         for (name, (unit, value_id)) in &self.script_ctx.values {
@@ -235,7 +231,6 @@ impl ScriptExecutor {
             let val = match self.env.frames.external_slot(*unit, *slot_id) {
                 Ok(v) => self.interp.pretty_print_value(&v)
                     .unwrap_or_else(|e| format!("<print error: {:?}>", e)),
-                Err(InterpError::UninitializedSlot(_)) => "<moved>".S(),
                 Err(e) => format!("<error: {:?}>", e),
             };
             result.push((name.C(), "var".S(), ty, val));
