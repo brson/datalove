@@ -205,8 +205,8 @@ impl<'db> ModuleGraphLoweringResult<'db> {
 /// This is a tracked function enabling per-module memoization. The `module`
 /// parameter serves as the primary cache key.
 ///
-/// If `pre_resolved_consts` is provided, those values are used for module-level
-/// const bindings. Otherwise, only simple literals are supported.
+/// If `pre_resolved_consts` is provided, those values are used for function-level
+/// const inlining (when `const_as_let` is false).
 ///
 /// Requires pre-computed ownership analysis results. Functions with ownership analysis
 /// errors are skipped (but those errors are already captured in the ownership
@@ -252,44 +252,6 @@ pub fn lower_module<'db>(
     let mut errors = Vec::new();
     let mut func_ids = Vec::new();
 
-    // Get module-level const bindings.
-    // If pre-resolved consts are provided (from CTFE evaluation), use those.
-    // Otherwise, fall back to simple literal evaluation.
-    let module_consts: HashMap<String, (IrType, ConstValue)> = if let Some(ref pre_resolved) = pre_resolved_consts {
-        pre_resolved.to_hashmap()
-    } else {
-        // Fallback: evaluate simple literals only (no CTFE evaluator available).
-        let mut consts = HashMap::new();
-        for statement in &parsed.statements {
-            if let Statement::Const(const_stmt) = statement {
-                let name = const_stmt.name.text(db).S();
-                let init_expr = const_stmt.value;
-
-                // Get the type from the typechecker.
-                let expr_id = init_expr.as_id();
-                let index = expr_id.index() as usize;
-                let ir_type = match expr_types.get(index).cloned().flatten() {
-                    Some(ty) => IrType::from_tycheck(db, &ty),
-                    None => {
-                        errors.push(format!("Const '{}': missing type information", name));
-                        continue;
-                    }
-                };
-
-                // Evaluate the const expression (simple literals only).
-                match lower::const_expr::eval_const_expr_simple(db, init_expr, &ir_type, &consts) {
-                    Ok(value) => {
-                        consts.insert(name, (ir_type, value));
-                    }
-                    Err(e) => {
-                        errors.push(format!("Const '{}': {}", name, e));
-                    }
-                }
-            }
-        }
-        consts
-    };
-
     // Assign module-local FuncIds (0, 1, 2, ...).
     let mut next_func_id: u32 = 0;
     for statement in &parsed.statements {
@@ -301,8 +263,7 @@ pub fn lower_module<'db>(
         }
     }
 
-    // Lower functions with module-level consts available.
-    let module_consts_ref = if module_consts.is_empty() { None } else { Some(&module_consts) };
+    // Lower functions.
     let mut func_idx = 0;
     for statement in &parsed.statements {
         if let Statement::Fun(func) = statement {
@@ -341,7 +302,7 @@ pub fn lower_module<'db>(
                 analysis,
                 resolved_params,
                 None, // ctfe_evaluator
-                module_consts_ref,
+                None, // module_consts - module-level consts don't exist
                 true, // const_as_let - always true now
             ) {
                 Ok(ir_func) => {
