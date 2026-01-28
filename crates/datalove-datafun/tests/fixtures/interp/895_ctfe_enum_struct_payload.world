@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE enum with struct payload.
+const E: enum { Point({x: u32, y: u32}), Empty } = enum Point({x = 100, y = 200})
+debuglog E

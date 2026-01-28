@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE empty list.
+const L: [u32] = []
+debuglog L

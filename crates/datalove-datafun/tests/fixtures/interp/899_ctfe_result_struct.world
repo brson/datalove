@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE result containing struct.
+const R: !{x: u32, y: u32} = ok {x = 50, y = 60}
+debuglog R

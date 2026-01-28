@@ -1,0 +1,31 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = pack Struct0 {v0}
+                        v2 = pack Struct0 {v1}
+                        v3 = const {a = {b = {c = 42u32}}}
+                        debuglog v3
+                        unit_end
+                    exports:
+                        D = v3
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("{a = {b = {c = 42}}}\n"),
+        ),
+    ],
+)

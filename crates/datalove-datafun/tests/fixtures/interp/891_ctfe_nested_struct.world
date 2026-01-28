@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE nested struct (struct containing struct).
+const P: {outer: {x: u32, y: u32}, value: u32} = {outer = {x = 1, y = 2}, value = 3}
+debuglog P

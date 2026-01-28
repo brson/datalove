@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE deeply nested structure.
+const D: {a: {b: {c: u32}}} = {a = {b = {c = 42}}}
+debuglog D

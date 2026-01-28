@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE list of structs.
+const L: [{x: u32, y: u32}] = [{x = 1, y = 2}, {x = 3, y = 4}]
+debuglog L

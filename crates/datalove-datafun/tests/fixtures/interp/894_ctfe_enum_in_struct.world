@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE enum inside struct.
+const S: {status: enum { Active, Inactive }, id: u32} = {status = enum Active, id = 42}
+debuglog S

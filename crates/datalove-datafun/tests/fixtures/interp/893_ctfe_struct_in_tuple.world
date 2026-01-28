@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE struct inside tuple.
+const T: ({x: u32, y: u32}, bool) = ({x = 5, y = 6}, true)
+debuglog T

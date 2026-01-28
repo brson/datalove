@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE struct inside option.
+const O: ?{x: u32, y: u32} = some {x = 10, y = 20}
+debuglog O
