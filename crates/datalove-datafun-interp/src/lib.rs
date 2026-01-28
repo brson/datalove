@@ -841,17 +841,17 @@ impl IrInterpreter {
             }
             Instruction::DropTracked { operand } => {
                 // Tracked drop: check initialization first, skip if not present.
-                // Used for script unit_end drops where bindings may have been moved.
-                // Check if the operand is initialized before reading.
+                // Only emitted for Tracked bindings (slots, Out params).
+                // Values are Precise and use Drop instead.
                 let is_initialized = match operand {
-                    Operand::Value(id) | Operand::ValueRef(id) => frame.is_value_initialized(*id),
                     Operand::Slot(id) => frame.is_slot_initialized(*id),
                     Operand::Param(id) => frame.is_param_initialized(*id),
-                    Operand::ExternalValue { unit, value } => {
-                        frames.is_external_value_initialized(*unit, *value)
-                    }
                     Operand::ExternalSlot { unit, slot } => {
                         frames.is_external_slot_initialized(*unit, *slot)
+                    }
+                    // Values are Precise, never Tracked.
+                    Operand::Value(_) | Operand::ValueRef(_) | Operand::ExternalValue { .. } => {
+                        unreachable!("DropTracked emitted for Precise binding")
                     }
                 };
                 if !is_initialized {

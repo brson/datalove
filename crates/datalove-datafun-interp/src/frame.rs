@@ -89,19 +89,6 @@ impl Frame {
         }
     }
 
-    /// Check if a value is initialized.
-    ///
-    /// Returns false for function frames (DropTracked should not be used there).
-    pub fn is_value_initialized(&self, id: ValueId) -> bool {
-        match &self.value_initialized {
-            Some(initialized) => {
-                let idx = id.0 as usize;
-                idx < initialized.len() && initialized[idx]
-            }
-            None => false,
-        }
-    }
-
     /// Mark a value as dropped.
     ///
     /// No-op for function frames (which don't track value initialization).
@@ -472,11 +459,6 @@ impl FrameStore {
     /// Mark an external slot as moved out.
     pub fn mark_external_slot_dropped(&mut self, unit: u32, slot: SlotId) {
         self.moved_slots.insert((unit, slot));
-    }
-
-    /// Check if an external value is initialized (not moved).
-    pub fn is_external_value_initialized(&self, unit: u32, value: ValueId) -> bool {
-        !self.moved_values.contains(&(unit, value))
     }
 
     /// Check if an external slot is initialized (not moved).
