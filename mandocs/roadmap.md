@@ -37,7 +37,6 @@
 
 ## On deck
 
-- split ctfe and lowering phases into crates
 - fix rt error/alloc semantics
 - clone and coerce
 - datalit syntax cleanup
