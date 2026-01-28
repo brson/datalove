@@ -105,15 +105,26 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Tuple: write each field at computed offset.
                 return self.compile_tuple_const(builder, dest, fields);
             }
+            ConstValue::Struct(fields) => {
+                // Struct: write each named field at computed offset.
+                return self.compile_struct_const(builder, dest, fields);
+            }
+            ConstValue::Enum { variant, payload } => {
+                // Enum: write discriminant and optional payload.
+                return self.compile_enum_const(builder, dest, variant, payload.as_deref());
+            }
+            ConstValue::ResultOk(inner) => {
+                // Result Ok: write tag=1 and inner value.
+                return self.compile_result_ok_const(builder, dest, inner);
+            }
+            ConstValue::List(elements) => {
+                // List: create list and push elements.
+                return self.compile_list_const(builder, dest, elements);
+            }
             // Aggregate and collection ConstValues are not yet supported for direct loading.
-            // These will be used by const evaluation to extract computed values.
-            ConstValue::Struct(_)
-            | ConstValue::Enum { .. }
-            | ConstValue::ResultOk(_)
-            | ConstValue::ResultErr(_)
+            ConstValue::ResultErr(_)
             | ConstValue::Data(_)
             | ConstValue::Error(_)
-            | ConstValue::List(_)
             | ConstValue::Set(_)
             | ConstValue::Map(_)
             | ConstValue::Table { .. } => {
@@ -355,6 +366,199 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
+    /// Compile a Struct constant.
+    ///
+    /// Struct layout: same as tuple, fields at computed offsets based on alignment.
+    fn compile_struct_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        fields: &[(String, ConstValue)],
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Struct constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Compute field offsets (same algorithm as tuple).
+        let field_values: Vec<_> = fields.iter().map(|(_, v)| v.clone()).collect();
+        let field_offsets = self.compute_tuple_field_offsets(&field_values);
+
+        // Write each field at its offset.
+        for (i, (_, field_value)) in fields.iter().enumerate() {
+            let field_offset = field_offsets[i];
+            let field_addr = builder.ins().iadd_imm(base, field_offset as i64);
+            self.write_const_value_to_addr(builder, field_addr, field_value)?;
+        }
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Compile an Enum constant.
+    ///
+    /// Enum layout: discriminant (u32) at offset 0, payload at aligned offset.
+    fn compile_enum_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        variant: &str,
+        payload: Option<&ConstValue>,
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Enum constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Get enum type from function to find variant index.
+        let ir_type = self.func.value_types.get(dest.0 as usize).ok_or_else(|| {
+            CraneliftError::Codegen("no type for Enum constant".into())
+        })?;
+        let variants = match ir_type {
+            IrType::Enum(v) => v,
+            _ => return Err(CraneliftError::Codegen("expected Enum type".into())),
+        };
+
+        // Find variant index.
+        let variant_index = variants.iter().position(|(name, _)| name == variant)
+            .ok_or_else(|| CraneliftError::Codegen(format!("enum variant '{}' not found", variant)))?;
+
+        // Write discriminant (u32) at offset 0.
+        let discriminant = builder.ins().iconst(cl_types::I32, variant_index as i64);
+        builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), discriminant, base, 0);
+
+        // Write payload if present.
+        if let Some(payload_value) = payload {
+            let payload_align = self.align_of_const_value(payload_value);
+            let payload_offset = datalove_rtdt::layout::align_up(4, payload_align);
+            let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
+            self.write_const_value_to_addr(builder, payload_addr, payload_value)?;
+        }
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Compile a Result Ok constant.
+    ///
+    /// Result layout: tag (u8) at offset 0, payload at aligned offset.
+    /// Ok tag = 1.
+    fn compile_result_ok_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        inner: &ConstValue,
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Result constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Write Ok tag (1) at offset 0.
+        let tag = builder.ins().iconst(cl_types::I8, 1);
+        builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), tag, base, 0);
+
+        // Compute payload offset based on inner type alignment.
+        let inner_align = self.align_of_const_value(inner);
+        let error_align = 8u32;
+        let max_align = inner_align.max(error_align);
+        let payload_offset = datalove_rtdt::layout::align_up(1, max_align);
+        let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
+
+        // Write the inner value at the payload offset.
+        self.write_const_value_to_addr(builder, payload_addr, inner)?;
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Compile a List constant.
+    ///
+    /// Creates an empty list and pushes each element.
+    fn compile_list_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        elements: &[ConstValue],
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for List constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Need runtime handle and imports.
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("List constant requires runtime handle".into())
+        })?;
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("List constant requires runtime imports".into())
+        })?;
+
+        // Get List type from function.
+        let ir_type = self.func.value_types.get(dest.0 as usize).ok_or_else(|| {
+            CraneliftError::Codegen("no type for List constant".into())
+        })?;
+        let element_type = match ir_type {
+            IrType::List(elem) => (**elem).clone(),
+            _ => return Err(CraneliftError::Codegen("expected List type".into())),
+        };
+
+        // Get List TyDesc.
+        let list_tydesc_id = self.tydesc_emitter.get(ir_type).ok_or_else(|| {
+            CraneliftError::Codegen("TyDesc not found for List".into())
+        })?;
+        let list_tydesc_gv = self.module.declare_data_in_func(list_tydesc_id, builder.func);
+        let list_tydesc_ptr = builder.ins().global_value(PTR_TYPE, list_tydesc_gv);
+
+        // Get element TyDesc.
+        let elem_tydesc_id = self.tydesc_emitter.get(&element_type).ok_or_else(|| {
+            CraneliftError::Codegen("TyDesc not found for List element".into())
+        })?;
+        let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
+        let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
+
+        // Create empty list.
+        let list_create_ref = self.module.declare_func_in_func(runtime.list_create, builder.func);
+        builder.ins().call(list_create_ref, &[rt_handle, base, list_tydesc_ptr]);
+
+        // Get element size/alignment for temp buffer allocation.
+        let elem_layout = crate::types::ir_type_to_cranelift(&element_type).layout();
+        let elem_size = elem_layout.size;
+        let elem_align = elem_layout.align;
+        let elem_stride = datalove_rtdt::layout::align_up(elem_size, elem_align);
+        let elem_stride = if elem_stride == 0 { 1 } else { elem_stride };
+
+        // Allocate temp slot for element values.
+        let temp_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            elem_stride,
+            elem_align as u8,
+        ));
+
+        // Push each element.
+        let list_push_ref = self.module.declare_func_in_func(runtime.list_push, builder.func);
+        for element_value in elements.iter() {
+            let temp_addr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
+            self.write_const_value_to_addr(builder, temp_addr, element_value)?;
+            builder.ins().call(list_push_ref, &[rt_handle, base, list_tydesc_ptr, temp_addr, elem_tydesc_ptr]);
+        }
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
     /// Compute field offsets for a tuple of ConstValues.
     fn compute_tuple_field_offsets(&self, fields: &[ConstValue]) -> Vec<u32> {
         let mut offset = 0u32;
@@ -394,6 +598,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ConstValue::Tuple(fields) => {
                 fields.iter().map(|f| self.align_of_const_value(f)).max().unwrap_or(1)
             }
+            ConstValue::Struct(fields) => {
+                fields.iter().map(|(_, v)| self.align_of_const_value(v)).max().unwrap_or(1)
+            }
+            ConstValue::Enum { payload, .. } => {
+                // Enum alignment is max of discriminant (4) and payload alignment.
+                let payload_align = payload.as_ref().map(|p| self.align_of_const_value(p)).unwrap_or(1);
+                4u32.max(payload_align)
+            }
+            ConstValue::ResultOk(inner) | ConstValue::ResultErr(inner) => {
+                // Result alignment is max of inner and Error (8).
+                self.align_of_const_value(inner).max(8)
+            }
+            ConstValue::List(_) => 8, // List is pointer-aligned
             _ => 8, // Default to pointer alignment for other types.
         }
     }
@@ -428,6 +645,38 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     datalove_rtdt::layout::align_up(last_offset + last_size, max_align)
                 }
             }
+            ConstValue::Struct(fields) => {
+                let field_values: Vec<_> = fields.iter().map(|(_, v)| v.clone()).collect();
+                let offsets = self.compute_tuple_field_offsets(&field_values);
+                if fields.is_empty() {
+                    0
+                } else {
+                    let last_offset = offsets[fields.len() - 1];
+                    let last_size = self.size_of_const_value(&fields[fields.len() - 1].1);
+                    let max_align = fields.iter().map(|(_, v)| self.align_of_const_value(v)).max().unwrap_or(1);
+                    datalove_rtdt::layout::align_up(last_offset + last_size, max_align)
+                }
+            }
+            ConstValue::Enum { payload, .. } => {
+                // Enum size: discriminant (4) + aligned payload.
+                let payload_size = payload.as_ref().map(|p| self.size_of_const_value(p)).unwrap_or(0);
+                let payload_align = payload.as_ref().map(|p| self.align_of_const_value(p)).unwrap_or(1);
+                let payload_offset = datalove_rtdt::layout::align_up(4, payload_align);
+                let max_align = 4u32.max(payload_align);
+                datalove_rtdt::layout::align_up(payload_offset + payload_size, max_align)
+            }
+            ConstValue::ResultOk(inner) | ConstValue::ResultErr(inner) => {
+                // Result size: tag (1) + padding + max(inner, Error).
+                let inner_size = self.size_of_const_value(inner);
+                let error_size = 16u32; // Error is two pointers
+                let max_payload = inner_size.max(error_size);
+                let inner_align = self.align_of_const_value(inner);
+                let error_align = 8u32;
+                let max_align = inner_align.max(error_align);
+                let payload_offset = datalove_rtdt::layout::align_up(1, max_align);
+                datalove_rtdt::layout::align_up(payload_offset + max_payload, max_align)
+            }
+            ConstValue::List(_) => 24, // ptr + size + capacity (with padding)
             _ => 8, // Default for other types
         }
     }
@@ -507,6 +756,113 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ConstValue::F64(v) => {
                 let val = builder.ins().f64const(*v);
                 builder.ins().store(mem_flags, val, addr, 0);
+            }
+            ConstValue::Int { limbs, negative } => {
+                // Int needs runtime call - allocate inline.
+                let rt_handle = self.rt_handle_param.ok_or_else(|| {
+                    CraneliftError::Codegen("Int constant requires runtime handle".into())
+                })?;
+                let int_from_limbs_func = self.runtime.as_ref().ok_or_else(|| {
+                    CraneliftError::Codegen("Int constant requires runtime imports".into())
+                })?.int_from_limbs;
+
+                let tydesc_id = self.tydesc_emitter.get(&IrType::Int).ok_or_else(|| {
+                    CraneliftError::Codegen("TyDesc not found for Int".into())
+                })?;
+                let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+                let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+                let limbs_ptr = if limbs.is_empty() {
+                    builder.ins().iconst(PTR_TYPE, 0)
+                } else {
+                    let limbs_bytes: Vec<u8> = limbs.iter()
+                        .flat_map(|&limb| limb.to_le_bytes())
+                        .collect();
+                    let limbs_data_id = self.emit_static_bytes_aligned(&limbs_bytes, 4)?;
+                    let limbs_gv = self.module.declare_data_in_func(limbs_data_id, builder.func);
+                    builder.ins().global_value(PTR_TYPE, limbs_gv)
+                };
+
+                let limb_count = builder.ins().iconst(cl_types::I32, limbs.len() as i64);
+                let negative_val = builder.ins().iconst(cl_types::I8, *negative as i64);
+
+                let func_ref = self.module.declare_func_in_func(int_from_limbs_func, builder.func);
+                builder.ins().call(func_ref, &[rt_handle, limbs_ptr, limb_count, negative_val, addr, tydesc_ptr]);
+            }
+            ConstValue::String(s) => {
+                // String needs runtime call.
+                let rt_handle = self.rt_handle_param.ok_or_else(|| {
+                    CraneliftError::Codegen("String constant requires runtime handle".into())
+                })?;
+                let runtime = self.runtime.ok_or_else(|| {
+                    CraneliftError::Codegen("String constant requires runtime imports".into())
+                })?;
+
+                let tydesc_id = self.tydesc_emitter.get(&IrType::String).ok_or_else(|| {
+                    CraneliftError::Codegen("TyDesc not found for String".into())
+                })?;
+                let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+                let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+                let (bytes_ptr, len) = if s.is_empty() {
+                    let null_ptr = builder.ins().iconst(PTR_TYPE, 0);
+                    let zero_len = builder.ins().iconst(cl_types::I32, 0);
+                    (null_ptr, zero_len)
+                } else {
+                    let bytes = s.as_bytes();
+                    let bytes_data_id = self.emit_static_bytes(bytes)?;
+                    let bytes_gv = self.module.declare_data_in_func(bytes_data_id, builder.func);
+                    let bytes_ptr = builder.ins().global_value(PTR_TYPE, bytes_gv);
+                    let len = builder.ins().iconst(cl_types::I32, bytes.len() as i64);
+                    (bytes_ptr, len)
+                };
+
+                let from_bytes_ref = self.module.declare_func_in_func(runtime.string_from_bytes, builder.func);
+                builder.ins().call(from_bytes_ref, &[rt_handle, bytes_ptr, len, addr, tydesc_ptr]);
+            }
+            ConstValue::OptionNone => {
+                // Write None tag (1) at offset 0.
+                let tag = builder.ins().iconst(cl_types::I8, 1);
+                builder.ins().store(mem_flags, tag, addr, 0);
+            }
+            ConstValue::OptionSome(inner) => {
+                // Write Some tag (2) and payload.
+                let tag = builder.ins().iconst(cl_types::I8, 2);
+                builder.ins().store(mem_flags, tag, addr, 0);
+
+                let inner_align = self.align_of_const_value(inner);
+                let payload_offset = datalove_rtdt::layout::option_payload_offset(inner_align);
+                let payload_addr = builder.ins().iadd_imm(addr, payload_offset as i64);
+                self.write_const_value_to_addr(builder, payload_addr, inner)?;
+            }
+            ConstValue::Tuple(fields) => {
+                let field_offsets = self.compute_tuple_field_offsets(fields);
+                for (i, field_value) in fields.iter().enumerate() {
+                    let field_offset = field_offsets[i];
+                    let field_addr = builder.ins().iadd_imm(addr, field_offset as i64);
+                    self.write_const_value_to_addr(builder, field_addr, field_value)?;
+                }
+            }
+            ConstValue::Struct(fields) => {
+                let field_values: Vec<_> = fields.iter().map(|(_, v)| v.clone()).collect();
+                let field_offsets = self.compute_tuple_field_offsets(&field_values);
+                for (i, (_, field_value)) in fields.iter().enumerate() {
+                    let field_offset = field_offsets[i];
+                    let field_addr = builder.ins().iadd_imm(addr, field_offset as i64);
+                    self.write_const_value_to_addr(builder, field_addr, field_value)?;
+                }
+            }
+            ConstValue::ResultOk(inner) => {
+                // Write Ok tag (1) at offset 0.
+                let tag = builder.ins().iconst(cl_types::I8, 1);
+                builder.ins().store(mem_flags, tag, addr, 0);
+
+                let inner_align = self.align_of_const_value(inner);
+                let error_align = 8u32;
+                let max_align = inner_align.max(error_align);
+                let payload_offset = datalove_rtdt::layout::align_up(1, max_align);
+                let payload_addr = builder.ins().iadd_imm(addr, payload_offset as i64);
+                self.write_const_value_to_addr(builder, payload_addr, inner)?;
             }
             _ => {
                 return Err(CraneliftError::Codegen(format!(
