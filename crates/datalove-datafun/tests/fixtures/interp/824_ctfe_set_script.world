@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE set in script unit.
+const S: set<u32> = set { 3, 1, 2 }
+debuglog S

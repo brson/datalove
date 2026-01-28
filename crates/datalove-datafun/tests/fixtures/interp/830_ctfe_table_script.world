@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE table in script unit.
+const T: {| x: u32, y: u32 |} = {| x, y; 1, 2; 3, 4 |}
+debuglog T

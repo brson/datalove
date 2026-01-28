@@ -1565,14 +1565,183 @@ impl IrInterpreter {
                         );
                     }
                 }
-                // Aggregate and collection ConstValues are not yet supported for direct loading.
-                // These will be used by const evaluation to extract computed values.
+                ConstValue::Set(elements) => {
+                    // Create empty set and insert elements.
+                    let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
+                    let element_tydesc = tydesc_ref.set_element_ty().as_ptr();
+                    let element_size = (*element_tydesc).size as usize;
+                    let element_align = (*element_tydesc).align;
+
+                    // Create an empty set.
+                    datalove_rt::c::dtlv_rti_btreeset_create_local(
+                        self.runtime.handle(),
+                        dest.ptr,
+                        dest.tydesc,
+                    );
+
+                    // Compute element stride.
+                    let stride = rtdt::layout::align_up(element_size as u32, element_align) as usize;
+                    let stride = if stride == 0 { 1 } else { stride };
+
+                    // Allocate temp buffer for elements.
+                    let mut temp_buffer = vec![0u8; stride.max(8)];
+                    let mut was_inserted = 0u8;
+
+                    // Insert each element.
+                    for element_value in elements.iter() {
+                        // Write element to temp buffer.
+                        let element_dest = Destination {
+                            ptr: temp_buffer.as_mut_ptr(),
+                            tydesc: element_tydesc,
+                        };
+                        self.write_const(element_value, element_dest);
+
+                        // Insert element to set (takes ownership).
+                        datalove_rt::c::dtlv_rti_btreeset_insert_local(
+                            self.runtime.handle(),
+                            dest.ptr,
+                            dest.tydesc,
+                            temp_buffer.as_mut_ptr(),
+                            element_tydesc,
+                            &mut was_inserted,
+                        );
+                    }
+                }
+                ConstValue::Map(entries) => {
+                    // Create empty map and insert entries.
+                    let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
+                    let key_tydesc = tydesc_ref.map_key_ty().as_ptr();
+                    let value_tydesc = tydesc_ref.map_value_ty().as_ptr();
+                    let key_size = (*key_tydesc).size as usize;
+                    let key_align = (*key_tydesc).align;
+                    let value_size = (*value_tydesc).size as usize;
+                    let value_align = (*value_tydesc).align;
+
+                    // Create an empty map.
+                    datalove_rt::c::dtlv_rti_btreemap_create_local(
+                        self.runtime.handle(),
+                        dest.ptr,
+                        dest.tydesc,
+                    );
+
+                    // Compute key and value strides.
+                    let key_stride = rtdt::layout::align_up(key_size as u32, key_align) as usize;
+                    let key_stride = if key_stride == 0 { 1 } else { key_stride };
+                    let value_stride = rtdt::layout::align_up(value_size as u32, value_align) as usize;
+                    let value_stride = if value_stride == 0 { 1 } else { value_stride };
+
+                    // Allocate temp buffers for key and value.
+                    let mut key_buffer = vec![0u8; key_stride.max(8)];
+                    let mut value_buffer = vec![0u8; value_stride.max(8)];
+
+                    // Insert each entry.
+                    for (key_value, val_value) in entries.iter() {
+                        // Write key to temp buffer.
+                        let key_dest = Destination {
+                            ptr: key_buffer.as_mut_ptr(),
+                            tydesc: key_tydesc,
+                        };
+                        self.write_const(key_value, key_dest);
+
+                        // Write value to temp buffer.
+                        let val_dest = Destination {
+                            ptr: value_buffer.as_mut_ptr(),
+                            tydesc: value_tydesc,
+                        };
+                        self.write_const(val_value, val_dest);
+
+                        // Insert entry to map (takes ownership of both).
+                        datalove_rt::c::dtlv_rti_btreemap_insert_local(
+                            self.runtime.handle(),
+                            dest.ptr,
+                            dest.tydesc,
+                            key_buffer.as_mut_ptr(),
+                            key_tydesc,
+                            value_buffer.as_mut_ptr(),
+                            value_tydesc,
+                        );
+                    }
+                }
+                ConstValue::Table { columns: _, rows } => {
+                    // Create empty table and push rows.
+                    let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
+
+                    // Create an empty table.
+                    datalove_rt::c::dtlv_rti_table_create_local(
+                        self.runtime.handle(),
+                        dest.ptr,
+                        dest.tydesc,
+                    );
+
+                    // Collect column type descriptors.
+                    let col_tydescs: Vec<*const rtdt::TyDesc> = tydesc_ref
+                        .table_column_tydescs()
+                        .map(|col| col.tydesc().as_ptr())
+                        .collect();
+                    let num_cols = col_tydescs.len();
+
+                    // Compute row tuple layout manually.
+                    let mut row_offset = 0u32;
+                    let mut row_max_align = 1u32;
+                    let mut field_offsets = Vec::with_capacity(num_cols);
+                    for &col_tydesc in col_tydescs.iter() {
+                        let field_align = (*col_tydesc).align;
+                        let field_size = (*col_tydesc).size;
+                        row_max_align = row_max_align.max(field_align);
+                        row_offset = rtdt::layout::align_up(row_offset, field_align);
+                        field_offsets.push(row_offset);
+                        row_offset += field_size;
+                    }
+                    let row_size = rtdt::layout::align_up(row_offset, row_max_align);
+
+                    // Create row tuple type descriptor.
+                    let mut row_tuple_fields: Vec<rtdt::TyInfoTupleField> = Vec::with_capacity(num_cols);
+                    for (i, &col_tydesc) in col_tydescs.iter().enumerate() {
+                        row_tuple_fields.push(rtdt::TyInfoTupleField {
+                            offset: field_offsets[i],
+                            tydesc: col_tydesc,
+                        });
+                    }
+                    let row_tydesc = rtdt::TyDesc {
+                        type_tag: rtdt::TyTag::Tuple,
+                        size: row_size,
+                        align: row_max_align,
+                        type_info: rtdt::TyInfo {
+                            tuple: rtdt::TyInfoTuple {
+                                num_fields: num_cols as u32,
+                                fields: row_tuple_fields.as_ptr(),
+                            },
+                        },
+                    };
+
+                    // Allocate temp buffer for row tuple.
+                    let mut row_buffer = vec![0u8; row_size.max(8) as usize];
+
+                    // Push each row.
+                    for row_values in rows.iter() {
+                        // Write each column value to the row tuple.
+                        for (i, col_value) in row_values.iter().enumerate() {
+                            let col_dest = Destination {
+                                ptr: row_buffer.as_mut_ptr().add(field_offsets[i] as usize),
+                                tydesc: col_tydescs[i],
+                            };
+                            self.write_const(col_value, col_dest);
+                        }
+
+                        // Push row to table.
+                        datalove_rt::c::dtlv_rti_table_push_row_local(
+                            self.runtime.handle(),
+                            dest.ptr,
+                            dest.tydesc,
+                            row_buffer.as_ptr(),
+                            &row_tydesc,
+                        );
+                    }
+                }
+                // Aggregate and collection ConstValues that are not yet supported.
                 ConstValue::ResultErr(_)
                 | ConstValue::Data(_)
-                | ConstValue::Error(_)
-                | ConstValue::Set(_)
-                | ConstValue::Map(_)
-                | ConstValue::Table { .. } => {
+                | ConstValue::Error(_) => {
                     todo!("write_const for aggregate/collection types: {:?}", value)
                 }
             }

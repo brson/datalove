@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE set containing struct values.
+const S: set<{ x: u32, y: u32 }> = set { { x: 1, y: 2 }, { x: 3, y: 4 } }
+debuglog S

@@ -1,0 +1,22 @@
+----------
+module local/test/mapfunc
+----------
+
+// CTFE map in module function.
+fun compute(): map<u32, u32>
+    const M: map<u32, u32> = map { 10 = 100, 20 = 200, 30 = 300 }
+    ret M
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/mapfunc
+import mapfunc.compute
+
+----------
+scriptunit-expr
+----------
+
+compute()

@@ -1,0 +1,69 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/mapfunc"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn compute():
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 100u32
+                        v2 = const 20u32
+                        v3 = const 200u32
+                        v4 = const 30u32
+                        v5 = const 300u32
+                        v6 = const map {10u32 = 100u32, 20u32 = 200u32, 30u32 = 300u32}
+                        return v6
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.f0()
+                        unit_end v0
+                """,
+            ),
+            output: "map {10 = 100, 20 = 200, 30 = 300}",
+        ),
+    ],
+)

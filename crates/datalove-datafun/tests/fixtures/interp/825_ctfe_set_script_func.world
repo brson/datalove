@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE set in script function.
+fun get_numbers(): set<u32>
+    const S: set<u32> = set { 30, 10, 20 }
+    ret S
+end fun
+
+debuglog get_numbers()

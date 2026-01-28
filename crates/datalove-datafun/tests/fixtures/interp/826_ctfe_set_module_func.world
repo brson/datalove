@@ -1,0 +1,22 @@
+----------
+module local/test/setfunc
+----------
+
+// CTFE set in module function.
+fun compute(): set<u32>
+    const S: set<u32> = set { 9, 7, 8 }
+    ret S
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/setfunc
+import setfunc.compute
+
+----------
+scriptunit-expr
+----------
+
+compute()

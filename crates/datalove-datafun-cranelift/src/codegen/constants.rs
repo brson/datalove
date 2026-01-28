@@ -121,13 +121,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // List: create list and push elements.
                 return self.compile_list_const(builder, dest, elements);
             }
+            ConstValue::Set(elements) => {
+                // Set: create set and insert elements.
+                return self.compile_set_const(builder, dest, elements);
+            }
+            ConstValue::Map(entries) => {
+                // Map: create map and insert entries.
+                return self.compile_map_const(builder, dest, entries);
+            }
+            ConstValue::Table { rows, .. } => {
+                // Table: create table and push rows.
+                return self.compile_table_const(builder, dest, rows);
+            }
             // Aggregate and collection ConstValues are not yet supported for direct loading.
             ConstValue::ResultErr(_)
             | ConstValue::Data(_)
-            | ConstValue::Error(_)
-            | ConstValue::Set(_)
-            | ConstValue::Map(_)
-            | ConstValue::Table { .. } => {
+            | ConstValue::Error(_) => {
                 todo!("compile_const for aggregate/collection types: {:?}", value)
             }
         };
@@ -552,6 +561,343 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let temp_addr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
             self.write_const_value_to_addr(builder, temp_addr, element_value)?;
             builder.ins().call(list_push_ref, &[rt_handle, base, list_tydesc_ptr, temp_addr, elem_tydesc_ptr]);
+        }
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Compile a Set constant.
+    ///
+    /// Creates an empty set and inserts each element.
+    fn compile_set_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        elements: &[ConstValue],
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Set constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Need runtime handle and imports.
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("Set constant requires runtime handle".into())
+        })?;
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("Set constant requires runtime imports".into())
+        })?;
+
+        // Get Set type from function.
+        let ir_type = self.func.value_types.get(dest.0 as usize).ok_or_else(|| {
+            CraneliftError::Codegen("no type for Set constant".into())
+        })?;
+        let element_type = match ir_type {
+            IrType::Set(elem) => (**elem).clone(),
+            _ => return Err(CraneliftError::Codegen("expected Set type".into())),
+        };
+
+        // Get Set TyDesc.
+        let set_tydesc_id = self.tydesc_emitter.get(ir_type).ok_or_else(|| {
+            CraneliftError::Codegen("TyDesc not found for Set".into())
+        })?;
+        let set_tydesc_gv = self.module.declare_data_in_func(set_tydesc_id, builder.func);
+        let set_tydesc_ptr = builder.ins().global_value(PTR_TYPE, set_tydesc_gv);
+
+        // Get element TyDesc.
+        let elem_tydesc_id = self.tydesc_emitter.get(&element_type).ok_or_else(|| {
+            CraneliftError::Codegen("TyDesc not found for Set element".into())
+        })?;
+        let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
+        let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
+
+        // Create empty set.
+        let set_create_ref = self.module.declare_func_in_func(runtime.set_create, builder.func);
+        builder.ins().call(set_create_ref, &[rt_handle, base, set_tydesc_ptr]);
+
+        // Get element size/alignment for temp buffer allocation.
+        let elem_layout = crate::types::ir_type_to_cranelift(&element_type).layout();
+        let elem_size = elem_layout.size;
+        let elem_align = elem_layout.align;
+        let elem_stride = datalove_rtdt::layout::align_up(elem_size, elem_align);
+        let elem_stride = if elem_stride == 0 { 1 } else { elem_stride };
+
+        // Allocate temp slot for element values.
+        let temp_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            elem_stride,
+            elem_align as u8,
+        ));
+
+        // Allocate temp slot for bool_out.
+        let bool_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            1,
+            1,
+        ));
+        let bool_addr = builder.ins().stack_addr(PTR_TYPE, bool_slot, 0);
+
+        // Insert each element.
+        let set_insert_ref = self.module.declare_func_in_func(runtime.set_insert, builder.func);
+        for element_value in elements.iter() {
+            let temp_addr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
+            self.write_const_value_to_addr(builder, temp_addr, element_value)?;
+            builder.ins().call(set_insert_ref, &[rt_handle, base, set_tydesc_ptr, temp_addr, elem_tydesc_ptr, bool_addr]);
+        }
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Compile a Map constant.
+    ///
+    /// Creates an empty map and inserts each entry.
+    fn compile_map_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        entries: &[(ConstValue, ConstValue)],
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Map constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Need runtime handle and imports.
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("Map constant requires runtime handle".into())
+        })?;
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("Map constant requires runtime imports".into())
+        })?;
+
+        // Get Map type from function.
+        let ir_type = self.func.value_types.get(dest.0 as usize).ok_or_else(|| {
+            CraneliftError::Codegen("no type for Map constant".into())
+        })?;
+        let (key_type, value_type) = match ir_type {
+            IrType::Map(k, v) => ((**k).clone(), (**v).clone()),
+            _ => return Err(CraneliftError::Codegen("expected Map type".into())),
+        };
+
+        // Get Map TyDesc.
+        let map_tydesc_id = self.tydesc_emitter.get(ir_type).ok_or_else(|| {
+            CraneliftError::Codegen("TyDesc not found for Map".into())
+        })?;
+        let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
+        let map_tydesc_ptr = builder.ins().global_value(PTR_TYPE, map_tydesc_gv);
+
+        // Get key TyDesc.
+        let key_tydesc_id = self.tydesc_emitter.get(&key_type).ok_or_else(|| {
+            CraneliftError::Codegen("TyDesc not found for Map key".into())
+        })?;
+        let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
+        let key_tydesc_ptr = builder.ins().global_value(PTR_TYPE, key_tydesc_gv);
+
+        // Get value TyDesc.
+        let val_tydesc_id = self.tydesc_emitter.get(&value_type).ok_or_else(|| {
+            CraneliftError::Codegen("TyDesc not found for Map value".into())
+        })?;
+        let val_tydesc_gv = self.module.declare_data_in_func(val_tydesc_id, builder.func);
+        let val_tydesc_ptr = builder.ins().global_value(PTR_TYPE, val_tydesc_gv);
+
+        // Create empty map.
+        let map_create_ref = self.module.declare_func_in_func(runtime.map_create, builder.func);
+        builder.ins().call(map_create_ref, &[rt_handle, base, map_tydesc_ptr]);
+
+        // Get key size/alignment for temp buffer allocation.
+        let key_layout = crate::types::ir_type_to_cranelift(&key_type).layout();
+        let key_size = key_layout.size;
+        let key_align = key_layout.align;
+        let key_stride = datalove_rtdt::layout::align_up(key_size, key_align);
+        let key_stride = if key_stride == 0 { 1 } else { key_stride };
+
+        // Get value size/alignment.
+        let val_layout = crate::types::ir_type_to_cranelift(&value_type).layout();
+        let val_size = val_layout.size;
+        let val_align = val_layout.align;
+        let val_stride = datalove_rtdt::layout::align_up(val_size, val_align);
+        let val_stride = if val_stride == 0 { 1 } else { val_stride };
+
+        // Allocate temp slots for key and value.
+        let key_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            key_stride,
+            key_align as u8,
+        ));
+        let val_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            val_stride,
+            val_align as u8,
+        ));
+
+        // Insert each entry.
+        let map_insert_ref = self.module.declare_func_in_func(runtime.map_insert, builder.func);
+        for (key_value, val_value) in entries.iter() {
+            let key_addr = builder.ins().stack_addr(PTR_TYPE, key_slot, 0);
+            let val_addr = builder.ins().stack_addr(PTR_TYPE, val_slot, 0);
+            self.write_const_value_to_addr(builder, key_addr, key_value)?;
+            self.write_const_value_to_addr(builder, val_addr, val_value)?;
+            builder.ins().call(map_insert_ref, &[rt_handle, base, map_tydesc_ptr, key_addr, key_tydesc_ptr, val_addr, val_tydesc_ptr]);
+        }
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Compile a Table constant.
+    ///
+    /// Creates an empty table and pushes each row.
+    fn compile_table_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        rows: &[Vec<ConstValue>],
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Table constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Need runtime handle and imports.
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("Table constant requires runtime handle".into())
+        })?;
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("Table constant requires runtime imports".into())
+        })?;
+
+        // Get Table type from function.
+        let ir_type = self.func.value_types.get(dest.0 as usize).ok_or_else(|| {
+            CraneliftError::Codegen("no type for Table constant".into())
+        })?;
+        let columns = match ir_type {
+            IrType::Table(cols) => cols.clone(),
+            _ => return Err(CraneliftError::Codegen("expected Table type".into())),
+        };
+
+        // Get Table TyDesc.
+        let table_tydesc_id = self.tydesc_emitter.get(ir_type).ok_or_else(|| {
+            CraneliftError::Codegen("TyDesc not found for Table".into())
+        })?;
+        let table_tydesc_gv = self.module.declare_data_in_func(table_tydesc_id, builder.func);
+        let table_tydesc_ptr = builder.ins().global_value(PTR_TYPE, table_tydesc_gv);
+
+        // Create empty table.
+        let table_create_ref = self.module.declare_func_in_func(runtime.table_create, builder.func);
+        builder.ins().call(table_create_ref, &[rt_handle, base, table_tydesc_ptr]);
+
+        // Compute row tuple layout.
+        let col_types: Vec<_> = columns.iter().map(|(_, ty)| (**ty).clone()).collect();
+        let mut row_offset = 0u32;
+        let mut row_max_align = 1u32;
+        let mut field_offsets = Vec::with_capacity(col_types.len());
+        let mut col_tydescs = Vec::with_capacity(col_types.len());
+
+        for col_type in col_types.iter() {
+            let col_layout = crate::types::ir_type_to_cranelift(col_type).layout();
+            let field_align = col_layout.align;
+            let field_size = col_layout.size;
+            row_max_align = row_max_align.max(field_align);
+            row_offset = datalove_rtdt::layout::align_up(row_offset, field_align);
+            field_offsets.push(row_offset);
+            row_offset += field_size;
+
+            let col_tydesc_id = self.tydesc_emitter.get(col_type).ok_or_else(|| {
+                CraneliftError::Codegen("TyDesc not found for Table column".into())
+            })?;
+            col_tydescs.push(col_tydesc_id);
+        }
+        let row_size = datalove_rtdt::layout::align_up(row_offset, row_max_align);
+
+        // Create row tuple TyDesc as static data.
+        // Row tuple fields: offset (u32), tydesc ptr (pointer)
+        let mut tydesc_field_data = Vec::new();
+        for (i, &col_tydesc_id) in col_tydescs.iter().enumerate() {
+            tydesc_field_data.extend_from_slice(&field_offsets[i].to_le_bytes());
+            // Pad to pointer alignment (8 bytes).
+            tydesc_field_data.extend_from_slice(&[0u8; 4]);
+            // Placeholder for tydesc pointer - will be filled at runtime by declaring in func.
+            tydesc_field_data.extend_from_slice(&[0u8; 8]);
+        }
+
+        // Allocate temp slot for row tuple.
+        let row_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            row_size.max(8),
+            row_max_align as u8,
+        ));
+
+        // Build row tuple TyDesc on stack.
+        // TyInfoTupleField is { offset: u32, _pad: u32, tydesc: *const TyDesc }
+        let tuple_fields_size = columns.len() as u32 * 16; // Each field is 16 bytes
+        let tuple_fields_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            tuple_fields_size.max(8),
+            8,
+        ));
+        let tuple_fields_addr = builder.ins().stack_addr(PTR_TYPE, tuple_fields_slot, 0);
+
+        // Fill in the tuple fields.
+        let mem_flags = cranelift_codegen::ir::MemFlags::trusted();
+        for (i, &col_tydesc_id) in col_tydescs.iter().enumerate() {
+            let field_base = builder.ins().iadd_imm(tuple_fields_addr, (i * 16) as i64);
+            let offset_val = builder.ins().iconst(cl_types::I32, field_offsets[i] as i64);
+            builder.ins().store(mem_flags, offset_val, field_base, 0);
+
+            let col_tydesc_gv = self.module.declare_data_in_func(col_tydesc_id, builder.func);
+            let col_tydesc_ptr = builder.ins().global_value(PTR_TYPE, col_tydesc_gv);
+            builder.ins().store(mem_flags, col_tydesc_ptr, field_base, 8);
+        }
+
+        // Build the tuple TyDesc on stack.
+        // TyDesc = { type_tag: u8, _pad: [u8; 3], size: u32, align: u32, _pad2: u32, type_info: TyInfo }
+        // TyInfo for Tuple = { num_fields: u32, _pad: u32, fields: *const TyInfoTupleField }
+        // Total size: 1 + 3 + 4 + 4 + 4 + 4 + 4 + 8 = 32 bytes
+        let row_tydesc_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            32,
+            8,
+        ));
+        let row_tydesc_addr = builder.ins().stack_addr(PTR_TYPE, row_tydesc_slot, 0);
+
+        // type_tag = Tuple (7)
+        let tag_val = builder.ins().iconst(cl_types::I8, 7);
+        builder.ins().store(mem_flags, tag_val, row_tydesc_addr, 0);
+        // size
+        let size_val = builder.ins().iconst(cl_types::I32, row_size as i64);
+        builder.ins().store(mem_flags, size_val, row_tydesc_addr, 4);
+        // align
+        let align_val = builder.ins().iconst(cl_types::I32, row_max_align as i64);
+        builder.ins().store(mem_flags, align_val, row_tydesc_addr, 8);
+        // num_fields
+        let num_fields_val = builder.ins().iconst(cl_types::I32, columns.len() as i64);
+        builder.ins().store(mem_flags, num_fields_val, row_tydesc_addr, 16);
+        // fields pointer
+        builder.ins().store(mem_flags, tuple_fields_addr, row_tydesc_addr, 24);
+
+        // Push each row.
+        let table_push_ref = self.module.declare_func_in_func(runtime.table_push_row, builder.func);
+        for row_values in rows.iter() {
+            // Write each column value to the row tuple.
+            for (i, col_value) in row_values.iter().enumerate() {
+                let col_addr = builder.ins().stack_addr(PTR_TYPE, row_slot, field_offsets[i] as i32);
+                self.write_const_value_to_addr(builder, col_addr, col_value)?;
+            }
+
+            // Push row to table.
+            let row_addr = builder.ins().stack_addr(PTR_TYPE, row_slot, 0);
+            builder.ins().call(table_push_ref, &[rt_handle, base, table_tydesc_ptr, row_addr, row_tydesc_addr]);
         }
 
         // Store base pointer for this value.

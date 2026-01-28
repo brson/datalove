@@ -449,6 +449,83 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                     Ok(ConstValue::List(elements))
                 }
             }
+            IrType::Set(element_type) => {
+                // Set layout: root (*const SetNode), len.
+                let set_ptr = ptr as *const datalove_rtdt::Set;
+                let set_val = &*set_ptr;
+
+                let len = set_val.len.0 as usize;
+                if len == 0 || set_val.root.is_null() {
+                    Ok(ConstValue::Set(Vec::new()))
+                } else {
+                    // Extract elements by walking the B-tree leaf nodes.
+                    let mut elements = Vec::with_capacity(len);
+                    extract_set_elements(set_val.root, element_type, &mut elements)?;
+                    Ok(ConstValue::Set(elements))
+                }
+            }
+            IrType::Map(key_type, value_type) => {
+                // Map layout: root (*const MapNode), len.
+                let map_ptr = ptr as *const datalove_rtdt::Map;
+                let map_val = &*map_ptr;
+
+                let len = map_val.len.0 as usize;
+                if len == 0 || map_val.root.is_null() {
+                    Ok(ConstValue::Map(Vec::new()))
+                } else {
+                    // Extract key-value pairs by walking the B-tree leaf nodes.
+                    let mut entries = Vec::with_capacity(len);
+                    extract_map_entries(map_val.root, key_type, value_type, &mut entries)?;
+                    Ok(ConstValue::Map(entries))
+                }
+            }
+            IrType::Table(columns) => {
+                // Table layout: len, capacity, data.
+                let table_ptr = ptr as *const datalove_rtdt::Table;
+                let table_val = &*table_ptr;
+
+                let num_rows = table_val.len.0 as usize;
+                if num_rows == 0 || table_val.data.is_null() {
+                    let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
+                    Ok(ConstValue::Table { columns: column_names, rows: Vec::new() })
+                } else {
+                    // Extract rows from columnar storage.
+                    let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
+                    let column_types: Vec<&IrType> = columns.iter().map(|(_, ty)| ty.as_ref()).collect();
+                    let mut rows = Vec::with_capacity(num_rows);
+
+                    // Compute column offsets and sizes.
+                    let col_sizes: Vec<u32> = column_types.iter().map(|ty| size_of_ir_type(ty)).collect();
+                    let col_aligns: Vec<u32> = column_types.iter().map(|ty| align_of_ir_type(ty)).collect();
+
+                    // Compute column offsets in the data buffer.
+                    let capacity = table_val.capacity.0;
+                    let mut col_offsets = Vec::with_capacity(columns.len());
+                    let mut offset = 0u32;
+                    for i in 0..column_types.len() {
+                        offset = datalove_rtdt::layout::align_up(offset, col_aligns[i]);
+                        col_offsets.push(offset as usize);
+                        let col_size = col_sizes[i];
+                        let stride = datalove_rtdt::layout::align_up(col_size, col_aligns[i]);
+                        offset += stride * capacity;
+                    }
+
+                    for row_idx in 0..num_rows {
+                        let mut row_values = Vec::with_capacity(columns.len());
+                        for (col_idx, col_ty) in column_types.iter().enumerate() {
+                            let col_offset = col_offsets[col_idx];
+                            let elem_stride = datalove_rtdt::layout::align_up(col_sizes[col_idx], col_aligns[col_idx]) as usize;
+                            let elem_stride = if elem_stride == 0 { 1 } else { elem_stride };
+                            let elem_ptr = table_val.data.add(col_offset + row_idx * elem_stride);
+                            let elem_value = extract_const_value(elem_ptr, col_ty)?;
+                            row_values.push(elem_value);
+                        }
+                        rows.push(row_values);
+                    }
+
+                    Ok(ConstValue::Table { columns: column_names, rows })
+                }
+            }
             _ => Err(CtfeError::UnsupportedType(format!("{:?}", ir_type))),
         }
     }
@@ -481,4 +558,167 @@ fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, CtfeE
             "cannot reconstruct IrType from TyTag::{:?}", other
         ))),
     }
+}
+
+/// Extract all elements from a Set B-tree by walking leaf nodes.
+///
+/// The B+tree stores elements in leaf nodes, linked via next_leaf pointers.
+unsafe fn extract_set_elements(
+    root: *const datalove_rtdt::SetNode,
+    element_type: &IrType,
+    out: &mut Vec<ConstValue>,
+) -> Result<(), CtfeError> {
+    if root.is_null() {
+        return Ok(());
+    }
+
+    let element_size = size_of_ir_type(element_type) as usize;
+    let element_align = align_of_ir_type(element_type);
+
+    // Find the leftmost leaf by descending through internal nodes.
+    let mut node = root;
+    loop {
+        let tag = unsafe { *(node as *const u8) };
+        match tag {
+            1 => {
+                // Internal node - descend to first child.
+                // Internal node layout: tag (u8 @ 0), len (u32 @ 4), then keys and child_ptrs.
+                let keys_offset = datalove_rtdt::layout::align_up(8, element_align);
+                let keys_size = datalove_rtdt::SET_NODE_CAPACITY * datalove_rtdt::layout::align_up(element_size as u32, element_align);
+                let child_ptrs_offset = datalove_rtdt::layout::align_up(keys_offset + keys_size, 8);
+                let child_ptr = unsafe {
+                    let ptr = (node as *const u8).add(child_ptrs_offset as usize) as *const *const datalove_rtdt::SetNode;
+                    *ptr
+                };
+                node = child_ptr;
+            }
+            2 => {
+                // Leaf node - we've found the leftmost leaf.
+                break;
+            }
+            _ => {
+                return Err(CtfeError::InterpError(format!("invalid SetNodeTag: {}", tag)));
+            }
+        }
+    }
+
+    // Now walk through all leaf nodes via next_leaf pointers.
+    loop {
+        let tag = unsafe { *(node as *const u8) };
+        if tag != 2 {
+            return Err(CtfeError::InterpError("expected leaf node".to_string()));
+        }
+
+        let len = unsafe { *((node as *const u8).add(4) as *const u32) };
+
+        // Leaf node layout: tag (u8 @ 0), len (u32 @ 4), next_leaf (ptr @ 8), keys after that.
+        let next_leaf_offset = 8usize;
+        let keys_offset = datalove_rtdt::layout::align_up(next_leaf_offset as u32 + 8, element_align) as usize;
+        let stride = datalove_rtdt::layout::align_up(element_size as u32, element_align) as usize;
+        let stride = if stride == 0 { 1 } else { stride };
+
+        for i in 0..len as usize {
+            let elem_ptr = unsafe { (node as *const u8).add(keys_offset + i * stride) };
+            let elem_value = extract_const_value(elem_ptr, element_type)?;
+            out.push(elem_value);
+        }
+
+        // Move to next leaf.
+        let next_leaf = unsafe {
+            let ptr = (node as *const u8).add(next_leaf_offset) as *const *const datalove_rtdt::SetNode;
+            *ptr
+        };
+        if next_leaf.is_null() {
+            break;
+        }
+        node = next_leaf;
+    }
+
+    Ok(())
+}
+
+/// Extract all key-value pairs from a Map B-tree by walking leaf nodes.
+///
+/// The B+tree stores key-value pairs in leaf nodes, linked via next_leaf pointers.
+unsafe fn extract_map_entries(
+    root: *const datalove_rtdt::MapNode,
+    key_type: &IrType,
+    value_type: &IrType,
+    out: &mut Vec<(ConstValue, ConstValue)>,
+) -> Result<(), CtfeError> {
+    if root.is_null() {
+        return Ok(());
+    }
+
+    let key_size = size_of_ir_type(key_type) as usize;
+    let key_align = align_of_ir_type(key_type);
+    let value_size = size_of_ir_type(value_type) as usize;
+    let value_align = align_of_ir_type(value_type);
+
+    // Find the leftmost leaf by descending through internal nodes.
+    let mut node = root;
+    loop {
+        let tag = unsafe { *(node as *const u8) };
+        match tag {
+            1 => {
+                // Internal node - descend to first child.
+                // Internal node layout: tag (u8 @ 0), len (u32 @ 4), then keys and child_ptrs.
+                let keys_offset = datalove_rtdt::layout::align_up(8, key_align);
+                let keys_size = datalove_rtdt::MAP_NODE_CAPACITY * datalove_rtdt::layout::align_up(key_size as u32, key_align);
+                let child_ptrs_offset = datalove_rtdt::layout::align_up(keys_offset + keys_size, 8);
+                let child_ptr = unsafe {
+                    let ptr = (node as *const u8).add(child_ptrs_offset as usize) as *const *const datalove_rtdt::MapNode;
+                    *ptr
+                };
+                node = child_ptr;
+            }
+            2 => {
+                // Leaf node - we've found the leftmost leaf.
+                break;
+            }
+            _ => {
+                return Err(CtfeError::InterpError(format!("invalid MapNodeTag: {}", tag)));
+            }
+        }
+    }
+
+    // Now walk through all leaf nodes via next_leaf pointers.
+    loop {
+        let tag = unsafe { *(node as *const u8) };
+        if tag != 2 {
+            return Err(CtfeError::InterpError("expected leaf node".to_string()));
+        }
+
+        let len = unsafe { *((node as *const u8).add(4) as *const u32) };
+
+        // Leaf node layout: tag (u8 @ 0), len (u32 @ 4), next_leaf (ptr @ 8), then keys, then values.
+        let next_leaf_offset = 8usize;
+        let keys_offset = datalove_rtdt::layout::align_up(next_leaf_offset as u32 + 8, key_align) as usize;
+        let key_stride = datalove_rtdt::layout::align_up(key_size as u32, key_align) as usize;
+        let key_stride = if key_stride == 0 { 1 } else { key_stride };
+        let keys_size = datalove_rtdt::MAP_NODE_CAPACITY as usize * key_stride;
+        let values_offset = datalove_rtdt::layout::align_up((keys_offset + keys_size) as u32, value_align) as usize;
+        let value_stride = datalove_rtdt::layout::align_up(value_size as u32, value_align) as usize;
+        let value_stride = if value_stride == 0 { 1 } else { value_stride };
+
+        for i in 0..len as usize {
+            let key_ptr = unsafe { (node as *const u8).add(keys_offset + i * key_stride) };
+            let value_ptr = unsafe { (node as *const u8).add(values_offset + i * value_stride) };
+            let key_value = extract_const_value(key_ptr, key_type)?;
+            let value_value = extract_const_value(value_ptr, value_type)?;
+            out.push((key_value, value_value));
+        }
+
+        // Move to next leaf.
+        let next_leaf = unsafe {
+            let ptr = (node as *const u8).add(next_leaf_offset) as *const *const datalove_rtdt::MapNode;
+            *ptr
+        };
+        if next_leaf.is_null() {
+            break;
+        }
+        node = next_leaf;
+    }
+
+    Ok(())
 }
