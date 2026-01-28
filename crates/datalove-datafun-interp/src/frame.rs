@@ -10,17 +10,14 @@ use datalove_datafun_ir::{ValueId, SlotId, ParamId};
 use crate::layout::IrLayout;
 use crate::value::{Value, Destination};
 
-/// Execution frame for a function call.
+/// Execution frame for a function or script unit.
 pub struct Frame {
     /// Raw frame data with proper alignment (values and slots).
     data: AlignedBuffer,
     /// Layout information.
     layout: IrLayout,
-    /// Track which values are live (written but not dropped).
-    ///
-    /// Only used for script frames that need cleanup tracking.
-    /// Function frames set this to None to avoid hashing overhead.
-    live_values: Option<HashSet<ValueId>>,
+    /// Track which values are initialized (for DropTracked).
+    value_initialized: Vec<bool>,
     /// Track which slots are initialized.
     slot_initialized: Vec<bool>,
     /// Pointers to caller's data for each parameter.
@@ -32,8 +29,9 @@ pub struct Frame {
 }
 
 impl Frame {
-    /// Create a new frame for function execution (no live value tracking).
+    /// Create a new frame for function execution.
     pub fn new_function(layout: IrLayout, param_count: usize) -> Self {
+        let value_count = layout.value_offsets.len();
         let slot_count = layout.slot_offsets.len();
         let data = AlignedBuffer::with_align(
             layout.frame_size as usize,
@@ -43,7 +41,7 @@ impl Frame {
         Self {
             data,
             layout,
-            live_values: None,
+            value_initialized: vec![false; value_count],
             slot_initialized: vec![false; slot_count],
             param_ptrs: vec![std::ptr::null_mut(); param_count],
             param_tydescs: vec![std::ptr::null(); param_count],
@@ -51,8 +49,9 @@ impl Frame {
         }
     }
 
-    /// Create a new frame for script execution (with live value tracking).
+    /// Create a new frame for script execution.
     pub fn new_script(layout: IrLayout) -> Self {
+        let value_count = layout.value_offsets.len();
         let slot_count = layout.slot_offsets.len();
         let data = AlignedBuffer::with_align(
             layout.frame_size as usize,
@@ -62,22 +61,33 @@ impl Frame {
         Self {
             data,
             layout,
-            live_values: Some(HashSet::new()),
+            value_initialized: vec![false; value_count],
             slot_initialized: vec![false; slot_count],
-            param_ptrs: vec![std::ptr::null_mut(); 0],
-            param_tydescs: vec![std::ptr::null(); 0],
-            param_initialized: vec![false; 0],
+            param_ptrs: Vec::new(),
+            param_tydescs: Vec::new(),
+            param_initialized: Vec::new(),
         }
     }
 
-    /// Mark a value as live (written).
-    ///
-    /// Called when a value is written to. Used to track which unit_end
-    /// values need cleanup in destroy_live_values.
-    /// No-op for function frames (live_values is None).
+    /// Mark a value as initialized.
     pub fn mark_value_live(&mut self, id: ValueId) {
-        if let Some(ref mut live_values) = self.live_values {
-            live_values.insert(id);
+        let idx = id.0 as usize;
+        if idx < self.value_initialized.len() {
+            self.value_initialized[idx] = true;
+        }
+    }
+
+    /// Check if a value is initialized.
+    pub fn is_value_initialized(&self, id: ValueId) -> bool {
+        let idx = id.0 as usize;
+        idx < self.value_initialized.len() && self.value_initialized[idx]
+    }
+
+    /// Mark a value as dropped.
+    pub fn mark_value_dropped(&mut self, id: ValueId) {
+        let idx = id.0 as usize;
+        if idx < self.value_initialized.len() {
+            self.value_initialized[idx] = false;
         }
     }
 
@@ -97,20 +107,13 @@ impl Frame {
     /// Returns the raw value without dereferencing. For ref values, this
     /// returns the stored pointer. Use `value_deref` to dereference refs.
     ///
-    /// Returns None if value is not live (moved or not written).
-    /// For function frames (no tracking), always returns the value.
     /// Panics if value ID is out of bounds (compiler bug).
-    pub fn value(&self, id: ValueId) -> Option<Value> {
+    pub fn value(&self, id: ValueId) -> Value {
         let idx = id.0 as usize;
-        if let Some(ref live_values) = self.live_values {
-            if !live_values.contains(&id) {
-                return None;
-            }
-        }
         let offset = self.layout.value_offsets[idx] as usize;
         let tydesc = self.layout.value_tydescs[idx];
         let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
-        Some(Value { ptr, tydesc })
+        Value { ptr, tydesc }
     }
 
     /// Dereference a ref value to get the pointed-to data.
@@ -118,16 +121,9 @@ impl Frame {
     /// For values produced by GetFieldRef, reads the stored pointer and
     /// returns the data it points to with the inner type's tydesc.
     ///
-    /// Returns None if value is not live (moved or not written).
-    /// For function frames (no tracking), always returns the value.
     /// Panics if value ID is out of bounds (compiler bug).
-    pub fn value_deref(&self, id: ValueId) -> Option<Value> {
+    pub fn value_deref(&self, id: ValueId) -> Value {
         let idx = id.0 as usize;
-        if let Some(ref live_values) = self.live_values {
-            if !live_values.contains(&id) {
-                return None;
-            }
-        }
         let offset = self.layout.value_offsets[idx] as usize;
         let tydesc = self.layout.value_tydescs[idx];
         let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
@@ -139,7 +135,7 @@ impl Frame {
             let tuple_info = (*tydesc).type_info.tuple;
             (*tuple_info.fields).tydesc
         };
-        Some(Value { ptr: stored_ptr, tydesc: inner_tydesc })
+        Value { ptr: stored_ptr, tydesc: inner_tydesc }
     }
 
     /// Get destination for a slot.
@@ -180,26 +176,6 @@ impl Frame {
     pub fn is_slot_initialized(&self, id: SlotId) -> bool {
         let idx = id.0 as usize;
         idx < self.slot_initialized.len() && self.slot_initialized[idx]
-    }
-
-    /// Check if value is initialized (live).
-    ///
-    /// Returns true if the value has been written and not yet dropped.
-    /// For function frames (no tracking), always returns true.
-    pub fn is_value_initialized(&self, id: ValueId) -> bool {
-        match &self.live_values {
-            Some(live_values) => live_values.contains(&id),
-            None => true,
-        }
-    }
-
-    /// Mark value as dropped to prevent double-destroy.
-    ///
-    /// No-op for function frames (live_values is None).
-    pub fn mark_value_dropped(&mut self, id: ValueId) {
-        if let Some(ref mut live_values) = self.live_values {
-            live_values.remove(&id);
-        }
     }
 
     /// Mark slot as dropped to prevent double-destroy.
@@ -270,42 +246,32 @@ impl Frame {
         }
     }
 
-    /// Destroy live unit_end bindings (values/slots) in this frame.
+    /// Destroy initialized unit_end bindings on error cleanup.
     ///
-    /// Called during REPL cleanup to free persistent bindings.
-    /// Only destroys values/slots listed in unit_end_values/slots - these are
-    /// the persistent bindings that UnitEndDrop would have cleaned up.
-    /// Intermediate values are explicitly dropped via Drop instructions during
-    /// execution and don't need cleanup here.
-    ///
-    /// Skips:
-    /// - Borrowed values (not owned by this frame)
-    /// - Values not in live_values (not written or already dropped)
-    pub fn destroy_live_values(
+    /// Used when a script unit errors out before being added to FrameStore.
+    /// Uses value_initialized to determine what to destroy.
+    pub fn destroy_on_error(
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
         unit_end_values: &[ValueId],
         unit_end_slots: &[SlotId],
     ) {
-        // Destroy unit_end values (persistent let bindings).
-        if let Some(ref mut live_values) = self.live_values {
-            for &vid in unit_end_values {
-                // Skip if not live (not written or already dropped).
-                if !live_values.contains(&vid) {
-                    continue;
-                }
-                let idx = vid.0 as usize;
-                let offset = self.layout.value_offsets[idx] as usize;
-                let tydesc = self.layout.value_tydescs[idx];
-                let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
-                }
-                live_values.remove(&vid);
+        // Destroy unit_end values that were initialized.
+        for &vid in unit_end_values {
+            if !self.is_value_initialized(vid) {
+                continue;
             }
+            let idx = vid.0 as usize;
+            let offset = self.layout.value_offsets[idx] as usize;
+            let tydesc = self.layout.value_tydescs[idx];
+            let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
+            unsafe {
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
+            }
+            self.value_initialized[idx] = false;
         }
 
-        // Destroy unit_end slots (persistent var bindings).
+        // Destroy unit_end slots that were initialized.
         for &sid in unit_end_slots {
             let idx = sid.0 as usize;
             if idx < self.slot_initialized.len() && self.slot_initialized[idx] {
@@ -319,11 +285,57 @@ impl Frame {
             }
         }
     }
+
+    /// Destroy unit_end bindings (values/slots) in this frame.
+    ///
+    /// Called during REPL cleanup to free persistent bindings.
+    /// `moved_values`/`moved_slots` contain IDs that have been moved out and should be skipped.
+    pub fn destroy_unit_end_bindings(
+        &mut self,
+        rt_handle: datalove_rt::c::LocalRtHandle,
+        unit_end_values: &[ValueId],
+        unit_end_slots: &[SlotId],
+        moved_values: &HashSet<ValueId>,
+        moved_slots: &HashSet<SlotId>,
+    ) {
+        // Destroy unit_end values (persistent let bindings).
+        for &vid in unit_end_values {
+            let idx = vid.0 as usize;
+            // Skip if not initialized or moved out.
+            if !self.is_value_initialized(vid) || moved_values.contains(&vid) {
+                continue;
+            }
+            let offset = self.layout.value_offsets[idx] as usize;
+            let tydesc = self.layout.value_tydescs[idx];
+            let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
+            unsafe {
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
+            }
+            self.value_initialized[idx] = false;
+        }
+
+        // Destroy unit_end slots (persistent var bindings).
+        for &sid in unit_end_slots {
+            let idx = sid.0 as usize;
+            // Skip if not initialized or moved out.
+            if idx >= self.slot_initialized.len() || !self.slot_initialized[idx] || moved_slots.contains(&sid) {
+                continue;
+            }
+            let offset = self.layout.slot_offsets[idx] as usize;
+            let tydesc = self.layout.slot_tydescs[idx];
+            let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
+            unsafe {
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
+            }
+            self.slot_initialized[idx] = false;
+        }
+    }
 }
 
 /// Mutable frame storage for script unit execution.
 ///
 /// Stores frames from previously executed units for external value/slot access.
+/// Tracks which values/slots have been moved out for post-execution inspection.
 pub struct FrameStore {
     /// Frames from executed units, indexed by unit number.
     frames: Vec<Frame>,
@@ -331,6 +343,10 @@ pub struct FrameStore {
     unit_end_values: Vec<Vec<ValueId>>,
     /// Unit-end slots for each unit (persistent bindings to destroy).
     unit_end_slots: Vec<Vec<SlotId>>,
+    /// Values that have been moved out, keyed by (unit, value_id).
+    moved_values: HashSet<(u32, ValueId)>,
+    /// Slots that have been moved out, keyed by (unit, slot_id).
+    moved_slots: HashSet<(u32, SlotId)>,
 }
 
 impl FrameStore {
@@ -340,6 +356,8 @@ impl FrameStore {
             frames: Vec::new(),
             unit_end_values: Vec::new(),
             unit_end_slots: Vec::new(),
+            moved_values: HashSet::new(),
+            moved_slots: HashSet::new(),
         }
     }
 
@@ -357,19 +375,25 @@ impl FrameStore {
 
     /// Read a value from a previous unit.
     ///
-    /// Returns None if value is not live (moved or not written).
+    /// Returns None if value has been moved out.
     /// Panics if unit not found (compiler bug).
     pub fn external_value(&self, unit: u32, value: ValueId) -> Option<Value> {
+        if self.moved_values.contains(&(unit, value)) {
+            return None;
+        }
         let frame = self.frames.get(unit as usize)
             .unwrap_or_else(|| panic!("external unit {} not found", unit));
-        frame.value(value)
+        Some(frame.value(value))
     }
 
     /// Read a slot from a previous unit.
     ///
-    /// Returns None if slot is not initialized (moved or not written).
+    /// Returns None if slot has been moved out or not initialized.
     /// Panics if unit not found (compiler bug).
     pub fn external_slot(&self, unit: u32, slot: SlotId) -> Option<Value> {
+        if self.moved_slots.contains(&(unit, slot)) {
+            return None;
+        }
         let frame = self.frames.get(unit as usize)
             .unwrap_or_else(|| panic!("external unit {} not found", unit));
         frame.slot(slot)
@@ -407,40 +431,48 @@ impl FrameStore {
         frame.mark_slot_initialized(slot);
     }
 
-    /// Mark an external value as dropped (moved out).
+    /// Mark an external value as moved out.
     pub fn mark_external_value_dropped(&mut self, unit: u32, value: ValueId) {
-        if let Some(frame) = self.frames.get_mut(unit as usize) {
-            frame.mark_value_dropped(value);
-        }
+        self.moved_values.insert((unit, value));
     }
 
-    /// Mark an external slot as dropped (moved out).
+    /// Mark an external slot as moved out.
     pub fn mark_external_slot_dropped(&mut self, unit: u32, slot: SlotId) {
-        if let Some(frame) = self.frames.get_mut(unit as usize) {
-            frame.mark_slot_dropped(slot);
-        }
+        self.moved_slots.insert((unit, slot));
     }
 
-    /// Check if an external value is initialized.
+    /// Check if an external value is initialized (not moved).
     pub fn is_external_value_initialized(&self, unit: u32, value: ValueId) -> bool {
-        self.frames.get(unit as usize)
-            .map(|frame| frame.is_value_initialized(value))
-            .unwrap_or(false)
+        !self.moved_values.contains(&(unit, value))
     }
 
-    /// Check if an external slot is initialized.
+    /// Check if an external slot is initialized (not moved).
     pub fn is_external_slot_initialized(&self, unit: u32, slot: SlotId) -> bool {
-        self.frames.get(unit as usize)
-            .map(|frame| frame.is_slot_initialized(slot))
-            .unwrap_or(false)
+        let frame = match self.frames.get(unit as usize) {
+            Some(f) => f,
+            None => return false,
+        };
+        frame.is_slot_initialized(slot) && !self.moved_slots.contains(&(unit, slot))
     }
 
     /// Destroy live bindings in all frames.
     pub fn destroy_live_values(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
         for i in 0..self.frames.len() {
+            let unit = i as u32;
             let values = &self.unit_end_values[i];
             let slots = &self.unit_end_slots[i];
-            self.frames[i].destroy_live_values(rt_handle, values, slots);
+            // Build sets of moved values/slots for this unit.
+            let moved_values_for_unit: HashSet<ValueId> = self.moved_values.iter()
+                .filter(|(u, _)| *u == unit)
+                .map(|(_, v)| *v)
+                .collect();
+            let moved_slots_for_unit: HashSet<SlotId> = self.moved_slots.iter()
+                .filter(|(u, _)| *u == unit)
+                .map(|(_, s)| *s)
+                .collect();
+            self.frames[i].destroy_unit_end_bindings(
+                rt_handle, values, slots, &moved_values_for_unit, &moved_slots_for_unit
+            );
         }
     }
 }

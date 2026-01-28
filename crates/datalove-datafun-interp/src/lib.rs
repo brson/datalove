@@ -335,7 +335,7 @@ impl IrInterpreter {
 
         // On error, destroy the frame and propagate the error.
         if let Err(e) = result {
-            frame.destroy_live_values(
+            frame.destroy_on_error(
                 self.runtime.handle(),
                 &unit.unit_end_values,
                 &unit.unit_end_slots,
@@ -865,7 +865,7 @@ impl IrInterpreter {
             Instruction::DropViaRef { ref_value } => {
                 // Drop through a reference value (e.g., from GetFieldRef).
                 // The reference value contains a pointer to what we want to destroy.
-                let val = frame.value_deref(*ref_value).unwrap();
+                let val = frame.value_deref(*ref_value);
                 unsafe {
                     datalove_rt::c::dtlv_rti_any_destroy_local(
                         self.runtime.handle(),
@@ -1185,8 +1185,8 @@ impl IrInterpreter {
         frames: &FrameStore,
     ) -> Value {
         match op {
-            Operand::Value(id) => frame.value(*id).unwrap(),
-            Operand::ValueRef(id) => frame.value_deref(*id).unwrap(),
+            Operand::Value(id) => frame.value(*id),
+            Operand::ValueRef(id) => frame.value_deref(*id),
             Operand::Slot(id) => frame.slot(*id).unwrap(),
             Operand::Param(id) => frame.param(*id).unwrap(),
             Operand::ExternalValue { unit, value } => {
@@ -1217,7 +1217,7 @@ impl IrInterpreter {
             }
             Operand::ValueRef(id) => {
                 // Dereference to get the pointed-to destination.
-                frame.value_deref(*id).unwrap()
+                frame.value_deref(*id)
             }
             _ => panic!("get_operand_dest: invalid operand {:?} for out param", op),
         }
