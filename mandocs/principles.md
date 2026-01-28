@@ -3,12 +3,12 @@
 
 
 
-## Glorify the data types
+## Glorify the pure data types
 
 
 
 
-## Interactive scripting first
+## Advance interactive scripting design
 
 
 

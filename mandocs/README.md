@@ -164,6 +164,7 @@ but I do have a [vision](vision.md) about what it will be.
 - [Control Flow](control-flow.md)
 - [Operators](operators.md)
 - [Optional and Result Types and Operations](checked-types.md)
+- [Constant Evaluation](const-eval.md)
 - [Datalove Worlds](worlds.md)
 - [Roadmap](roadmap.md)
 - [Vision](vision.md)
