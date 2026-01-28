@@ -68,8 +68,13 @@ use std::cell::RefCell;
 use datalove_rtdt as rtdt;
 use datalove_datafun_ir::{
     IrFunction, IrScriptUnit, IrBlock, IrType, Instruction, Terminator,
-    BlockId, Operand, SlotDest, ConstValue, ParamMode,
+    BlockId, Operand, SlotDest, ConstValue, ParamMode, FuncRef,
 };
+
+/// Get param mode for argument at index, defaulting to In.
+fn param_mode(callee: &IrFunction, i: usize) -> ParamMode {
+    callee.param_modes.get(i).copied().unwrap_or(ParamMode::In)
+}
 
 /// Result of executing a script unit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -764,118 +769,23 @@ impl IrInterpreter {
                 Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::Call { dest, func, args } => {
-                // Look up the function and determine the correct context for the callee.
                 let (callee, callee_unit) = ctx.get_function_with_context(func, registry);
-
-                // Evaluate arguments.
-                // For Out params: get pointer to uninitialized slot (callee will write to it).
-                // For other params: read the value as before.
-                let mut arg_vals: Vec<Value> = Vec::with_capacity(args.len());
-                for (i, op) in args.iter().enumerate() {
-                    let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                    if mode == ParamMode::Out {
-                        // Out param: get destination pointer without reading value.
-                        let val = self.get_operand_dest(op, frame);
-                        // For out params that point to already-initialized storage (like field refs),
-                        // destroy the old value before the call. The callee will write a new value.
-                        // This is needed because the callee treats the param as "uninitialized"
-                        // but the underlying storage may already have a value.
-                        unsafe {
-                            datalove_rt::c::dtlv_rti_any_destroy_local(
-                                self.runtime.handle(),
-                                val.ptr,
-                                val.tydesc,
-                            );
-                        }
-                        arg_vals.push(val);
-                    } else {
-                        // Other modes: read the value.
-                        arg_vals.push(self.read_operand(op, frame, frames));
-                    }
-                }
-
-                // Get destination for return value.
+                let arg_vals = self.prepare_call_args(callee, args, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
+                Self::mark_consumed_call_args(callee, args, frame);
 
-                // Mark arg sources as dropped based on param mode and type.
-                // With reference passing:
-                // - Ref/Mut/Out params: caller retains ownership (borrowed)
-                // - In params with Copy types: callee makes a copy, caller retains original
-                // - In params with non-Copy types: ownership transfers to callee
-                for (i, arg) in args.iter().enumerate() {
-                    let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                    if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
-                        // Borrowed param: caller retains ownership. Don't mark dropped.
-                        continue;
-                    }
-                    // For Copy types, caller retains ownership (callee makes a copy).
-                    if let Some(param_type) = callee.param_types.get(i) {
-                        if param_type.is_copy() {
-                            continue;
-                        }
-                    }
-                    // Non-Copy In mode: ownership transfers to callee, mark source dropped.
-                    Self::mark_source_dropped_local(arg, frame);
-                }
+                // Try dispatcher first, fall back to interpreter.
+                let call_result = if let Some(result) = self.try_dispatch_call(
+                    func, callee, &arg_vals, dest_slot, ctx, registry, frames
+                ) {
+                    result
+                } else {
+                    self.execute_call(callee, callee_unit, arg_vals, dest_slot, ctx, registry, frames)
+                };
+                call_result?;
 
-                // Try dispatcher first (for JIT integration).
-                let mut call_handled = false;
-                {
-                    // Take the dispatcher temporarily to avoid borrow conflicts.
-                    let dispatcher_opt = self.call_dispatcher.borrow_mut().take();
-                    if let Some(mut dispatcher) = dispatcher_opt {
-                        let rt_handle = self.runtime.handle();
-
-                        // Create dispatch context for mixed-mode execution.
-                        let call_ctx = dispatch::DispatchCallContext {
-                            exec_ctx: ctx,
-                            registry,
-                            frames,
-                            interp: self,
-                        };
-
-                        match dispatcher.dispatch_call(func, callee, &arg_vals, dest_slot, rt_handle, call_ctx) {
-                            dispatch::DispatchResult::Handled(result) => {
-                                *self.call_dispatcher.borrow_mut() = Some(dispatcher);
-                                result?;
-                                call_handled = true;
-                            }
-                            dispatch::DispatchResult::NotHandled => {
-                                *self.call_dispatcher.borrow_mut() = Some(dispatcher);
-                            }
-                        }
-                    }
-                }
-
-                // Fall through to interpreter if not handled by dispatcher.
-                if !call_handled {
-                    // Call the function with appropriate context.
-                    // For external functions, use the callee's unit's context.
-                    // For local/module functions, use the current context.
-                    if let Some(unit) = callee_unit {
-                        // External function - create context with callee's unit functions.
-                        let unit_funcs = registry.unit_functions(unit)
-                            .unwrap_or_else(|| panic!("external unit {} not found", unit));
-                        let callee_ctx = ExecutionContext::new(unit_funcs);
-                        self.call_in_context(callee, arg_vals, dest_slot, &callee_ctx, registry, frames)?;
-                    } else {
-                        // Local or module function - use current context.
-                        self.call_in_context(callee, arg_vals, dest_slot, ctx, registry, frames)?;
-                    }
-                }
-
-                // After call returns, mark dest and Out param slots as initialized.
                 frame.mark_value_live(*dest);
-                for (i, arg) in args.iter().enumerate() {
-                    let mode = callee.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                    if mode == ParamMode::Out {
-                        match arg {
-                            Operand::Slot(id) => frame.mark_slot_initialized(*id),
-                            Operand::Value(id) => frame.mark_value_live(*id),
-                            _ => {}
-                        }
-                    }
-                }
+                Self::mark_out_params_initialized(callee, args, frame);
             }
             Instruction::ListNew { dest, elements } => {
                 let dest_slot = frame.value_dest(*dest);
@@ -1294,7 +1204,7 @@ impl IrInterpreter {
     /// For ValueRef operands, dereferences to get the actual destination.
     ///
     /// Panics if operand is not a Slot, Value, or ValueRef (compiler bug).
-    fn get_operand_dest(&mut self, op: &Operand, frame: &mut Frame) -> Value {
+    fn get_operand_dest(&self, op: &Operand, frame: &mut Frame) -> Value {
         match op {
             Operand::Slot(id) => {
                 let dest = frame.slot_dest(*id);
@@ -1310,6 +1220,138 @@ impl IrInterpreter {
                 frame.value_deref(*id).unwrap()
             }
             _ => panic!("get_operand_dest: invalid operand {:?} for out param", op),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Call instruction helpers
+    // -------------------------------------------------------------------------
+
+    /// Prepare arguments for a function call.
+    ///
+    /// For Out params, gets the destination pointer and destroys any existing value
+    /// (since the callee treats the storage as uninitialized).
+    /// For other params, reads the value normally.
+    fn prepare_call_args(
+        &self,
+        callee: &IrFunction,
+        args: &[Operand],
+        frame: &mut Frame,
+        frames: &FrameStore,
+    ) -> Vec<Value> {
+        let mut arg_vals = Vec::with_capacity(args.len());
+        for (i, op) in args.iter().enumerate() {
+            let mode = param_mode(callee, i);
+            if mode == ParamMode::Out {
+                // Out param: get destination pointer, destroy existing value.
+                let val = self.get_operand_dest(op, frame);
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        self.runtime.handle(),
+                        val.ptr,
+                        val.tydesc,
+                    );
+                }
+                arg_vals.push(val);
+            } else {
+                arg_vals.push(self.read_operand(op, frame, frames));
+            }
+        }
+        arg_vals
+    }
+
+    /// Mark consumed arguments as dropped after preparing a call.
+    ///
+    /// Ownership rules:
+    /// - Ref/Mut/Out params: borrowed, caller retains ownership
+    /// - In params with Copy types: copied, caller retains ownership
+    /// - In params with non-Copy types: moved, mark as dropped
+    fn mark_consumed_call_args(callee: &IrFunction, args: &[Operand], frame: &mut Frame) {
+        for (i, arg) in args.iter().enumerate() {
+            let mode = param_mode(callee, i);
+            if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
+                continue; // Borrowed, not consumed.
+            }
+            if let Some(param_type) = callee.param_types.get(i) {
+                if param_type.is_copy() {
+                    continue; // Copied, not consumed.
+                }
+            }
+            Self::mark_source_dropped_local(arg, frame);
+        }
+    }
+
+    /// Try to dispatch a call via the JIT dispatcher.
+    ///
+    /// Returns `Some(result)` if the dispatcher handled the call,
+    /// `None` if it should fall through to the interpreter.
+    fn try_dispatch_call(
+        &mut self,
+        func: &FuncRef,
+        callee: &IrFunction,
+        arg_vals: &[Value],
+        dest: Destination,
+        ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
+    ) -> Option<Result<(), InterpError>> {
+        // Take dispatcher temporarily to avoid borrow conflicts.
+        let mut dispatcher = self.call_dispatcher.borrow_mut().take()?;
+
+        // Capture rt_handle before borrowing self for the context.
+        let rt_handle = self.runtime.handle();
+
+        let call_ctx = dispatch::DispatchCallContext {
+            exec_ctx: ctx,
+            registry,
+            frames,
+            interp: self,
+        };
+
+        let result = match dispatcher.dispatch_call(func, callee, arg_vals, dest, rt_handle, call_ctx) {
+            dispatch::DispatchResult::Handled(result) => Some(result),
+            dispatch::DispatchResult::NotHandled => None,
+        };
+
+        // Restore dispatcher.
+        *self.call_dispatcher.borrow_mut() = Some(dispatcher);
+        result
+    }
+
+    /// Mark Out param destinations as initialized after a call returns.
+    fn mark_out_params_initialized(callee: &IrFunction, args: &[Operand], frame: &mut Frame) {
+        for (i, arg) in args.iter().enumerate() {
+            if param_mode(callee, i) == ParamMode::Out {
+                match arg {
+                    Operand::Slot(id) => frame.mark_slot_initialized(*id),
+                    Operand::Value(id) => frame.mark_value_live(*id),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    /// Execute a function call via the interpreter.
+    ///
+    /// For external functions, creates a context with the callee's unit functions.
+    /// For local/module functions, uses the current context.
+    fn execute_call(
+        &mut self,
+        callee: &IrFunction,
+        callee_unit: Option<u32>,
+        arg_vals: Vec<Value>,
+        dest: Destination,
+        ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
+    ) -> Result<(), InterpError> {
+        if let Some(unit) = callee_unit {
+            let unit_funcs = registry.unit_functions(unit)
+                .unwrap_or_else(|| panic!("external unit {} not found", unit));
+            let callee_ctx = ExecutionContext::new(unit_funcs);
+            self.call_in_context(callee, arg_vals, dest, &callee_ctx, registry, frames)
+        } else {
+            self.call_in_context(callee, arg_vals, dest, ctx, registry, frames)
         }
     }
 
