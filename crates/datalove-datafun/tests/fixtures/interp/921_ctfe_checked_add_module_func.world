@@ -6,8 +6,8 @@ module local/test/checkedadd
 fun add_values(): !u32
     const A: u32 = 250
     const B: u32 = 350
-    const C: u32 = A +! B
-    ret ok C
+    const C: !u32 = ok (A +! B)
+    ret C
 end fun
 
 ----------

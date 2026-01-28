@@ -16,14 +16,13 @@ Analysis(
                     block0:
                         v0 = const 555u32
                         v1 = const ok 555u32
-                        v2 = const 555u32
-                        v4 = const true
+                        v2, v3, v4 = unwrap_result v1
                         branch v4, block2, block1
                     block1:
                         v5 = err v3
                         return v5
                     block2:
-                        v6 = ok v2
+                        v6 = const ok 555u32
                         return v6
                 """,
             ),

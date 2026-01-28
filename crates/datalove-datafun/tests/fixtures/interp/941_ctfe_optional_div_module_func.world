@@ -6,8 +6,8 @@ module local/test/optdiv
 fun divide(): ?u32
     const A: u32 = 81
     const B: u32 = 9
-    const C: u32 = A /? B
-    ret some C
+    const C: ?u32 = some (A /? B)
+    ret C
 end fun
 
 ----------

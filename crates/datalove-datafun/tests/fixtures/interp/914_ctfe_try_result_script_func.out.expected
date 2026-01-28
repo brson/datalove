@@ -23,14 +23,13 @@ Analysis(
                     block0:
                         v0 = const 12345i64
                         v1 = const ok 12345i64
-                        v2 = const 12345i64
-                        v4 = const true
+                        v2, v3, v4 = unwrap_result v1
                         branch v4, block2, block1
                     block1:
                         v5 = err v3
                         return v5
                     block2:
-                        v6 = ok v2
+                        v6 = const ok 12345i64
                         return v6
                     exports:
                         get_value = f0

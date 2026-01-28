@@ -5,8 +5,8 @@ module local/test/tryresult
 // CTFE try result in module function.
 fun unwrap_result(): !u32
     const R: !u32 = ok 555
-    const V: u32 = R!
-    ret ok V
+    const V: !u32 = ok (R!)
+    ret V
 end fun
 
 ----------

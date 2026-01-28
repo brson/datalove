@@ -22,13 +22,13 @@ Analysis(
                     block0:
                         v0 = const 100u32
                         v1 = const 5u32
-                        v2 = const 20u32
+                        v2, v3 = div.checked v0, v1
                         branch v3, block1, block2
                     block1:
                         v4 = none
                         return v4
                     block2:
-                        v5 = some v2
+                        v5 = const some 20u32
                         return v5
                     exports:
                         div_opt = f0

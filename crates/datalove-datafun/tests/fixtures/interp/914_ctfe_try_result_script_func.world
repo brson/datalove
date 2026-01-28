@@ -5,8 +5,8 @@ scriptunit-fragment
 // CTFE try result in script function.
 fun get_value(): !i64
     const R: !i64 = ok 12345
-    const V: i64 = R!
-    ret ok V
+    const V: !i64 = ok (R!)
+    ret V
 end fun
 
 debuglog get_value()

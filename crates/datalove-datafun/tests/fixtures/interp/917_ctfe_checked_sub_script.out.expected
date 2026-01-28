@@ -23,7 +23,7 @@ Analysis(
                     block0:
                         v0 = const 100i32
                         v1 = const 30i32
-                        v2 = const 70i32
+                        v2, v3 = sub.checked v0, v1
                         branch v3, block1, block2
                     block1:
                         v4 = const "arithmetic overflow"
@@ -31,7 +31,7 @@ Analysis(
                         v6 = err v5
                         return v6
                     block2:
-                        v7 = ok v2
+                        v7 = const ok 70i32
                         return v7
                     exports:
                         sub_checked = f0

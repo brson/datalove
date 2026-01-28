@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const 12u32
                         v1 = const 11u32
-                        v2 = const 132u32
+                        v2, v3 = mul.checked v0, v1
                         branch v3, block1, block2
                     block1:
                         v4 = const "arithmetic overflow"
@@ -24,7 +24,7 @@ Analysis(
                         v6 = err v5
                         return v6
                     block2:
-                        v7 = ok v2
+                        v7 = const ok 132u32
                         return v7
                 """,
             ),

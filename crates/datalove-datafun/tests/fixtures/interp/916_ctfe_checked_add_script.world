@@ -6,8 +6,8 @@ scriptunit-fragment
 fun add_checked(): !u32
     const A: u32 = 100
     const B: u32 = 50
-    const C: u32 = A +! B
-    ret ok C
+    const C: !u32 = ok (A +! B)
+    ret C
 end fun
 
 debuglog add_checked()

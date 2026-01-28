@@ -23,7 +23,7 @@ Analysis(
                     block0:
                         v0 = const 1000i64
                         v1 = const 234i64
-                        v2 = const 1234i64
+                        v2, v3 = add.checked v0, v1
                         branch v3, block1, block2
                     block1:
                         v4 = const "arithmetic overflow"
@@ -31,7 +31,7 @@ Analysis(
                         v6 = err v5
                         return v6
                     block2:
-                        v7 = ok v2
+                        v7 = const ok 1234i64
                         return v7
                     exports:
                         compute = f0
