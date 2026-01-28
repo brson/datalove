@@ -160,8 +160,7 @@ impl JitCompiler {
 
         for func_ref in callees {
             // Look up the callee's IR to get its signature.
-            let callee_ir = ctx.get_function(&func_ref, registry)
-                .map_err(|e| JitError::CompilationFailed(format!("callee lookup: {:?}", e)))?;
+            let callee_ir = ctx.get_function(&func_ref, registry);
 
             // Collect types from callee for TyDesc emission.
             tydesc_emit::collect_types_from_function(callee_ir, &mut types);

@@ -8,7 +8,6 @@
 
 use std::sync::Arc;
 use datalove_datafun_ir::{IrFunction, FuncId, FuncRef, IrModuleId, ValueId, SlotId};
-use crate::error::InterpError;
 use crate::frame::{Frame, FrameStore};
 
 // Re-export registry types from the IR crate.
@@ -80,24 +79,26 @@ impl<'a> ExecutionContext<'a> {
     }
 
     /// Look up a function by reference.
+    ///
+    /// Panics if function not found (compiler bug).
     pub fn get_function<'b>(
         &'b self,
         func_ref: &FuncRef,
         registry: &'b FunctionRegistry,
-    ) -> Result<&'b IrFunction, InterpError> {
+    ) -> &'b IrFunction {
         match func_ref {
             FuncRef::Local(id) => {
                 self.functions.iter()
                     .find(|f| f.id == *id)
-                    .ok_or(InterpError::FunctionNotFound(*id))
+                    .unwrap_or_else(|| panic!("local function {:?} not found", id))
             }
             FuncRef::External { unit, func } => {
-                Ok(registry.get_external_function(*unit, *func)
-                    .unwrap_or_else(|| panic!("external unit {} not found", unit)))
+                registry.get_external_function(*unit, *func)
+                    .unwrap_or_else(|| panic!("external function unit={} func={:?} not found", unit, func))
             }
             FuncRef::Module { module, func } => {
                 registry.get_module_function(*module, *func)
-                    .ok_or(InterpError::ModuleFunctionNotFound { module: *module, func: *func })
+                    .unwrap_or_else(|| panic!("module function {:?}::{:?} not found", module, func))
             }
         }
     }
@@ -106,27 +107,29 @@ impl<'a> ExecutionContext<'a> {
     ///
     /// For local and module functions, returns the current context.
     /// For external functions, returns a context with that unit's functions.
+    ///
+    /// Panics if function not found (compiler bug).
     pub fn get_function_with_context<'b>(
         &'b self,
         func_ref: &FuncRef,
         registry: &'b FunctionRegistry,
-    ) -> Result<(&'b IrFunction, Option<u32>), InterpError> {
+    ) -> (&'b IrFunction, Option<u32>) {
         match func_ref {
             FuncRef::Local(id) => {
                 let func = self.functions.iter()
                     .find(|f| f.id == *id)
-                    .ok_or(InterpError::FunctionNotFound(*id))?;
-                Ok((func, None)) // Use current context.
+                    .unwrap_or_else(|| panic!("local function {:?} not found", id));
+                (func, None) // Use current context.
             }
             FuncRef::External { unit, func } => {
                 let callee = registry.get_external_function(*unit, *func)
-                    .unwrap_or_else(|| panic!("external unit {} not found", unit));
-                Ok((callee, Some(*unit))) // Need context from this unit.
+                    .unwrap_or_else(|| panic!("external function unit={} func={:?} not found", unit, func));
+                (callee, Some(*unit)) // Need context from this unit.
             }
             FuncRef::Module { module, func } => {
                 let callee = registry.get_module_function(*module, *func)
-                    .ok_or(InterpError::ModuleFunctionNotFound { module: *module, func: *func })?;
-                Ok((callee, None)) // Module functions don't have local calls.
+                    .unwrap_or_else(|| panic!("module function {:?}::{:?} not found", module, func));
+                (callee, None) // Module functions don't have local calls.
             }
         }
     }

@@ -1,14 +1,14 @@
 //! Collection creation operations for the IR interpreter.
 //!
-//! Handles list, set, map, and tensor construction.
+//! Handles list, set, map, tensor, and table construction.
+//! All runtime calls are infallible.
 
 use datalove_datafun_ir::Operand;
 use datalove_rtdt as rtdt;
 use datalove_rtdt::TyDescRef;
 
-use crate::error::InterpError;
 use crate::frame::{Frame, FrameStore};
-use crate::value::{Destination, Value};
+use crate::value::Destination;
 use crate::IrInterpreter;
 
 impl IrInterpreter {
@@ -19,9 +19,7 @@ impl IrInterpreter {
         dest: Destination,
         frame: &Frame,
         frames: &FrameStore,
-    ) -> Result<(), InterpError> {
-        use datalove_rt::c::RtStatus;
-
+    ) {
         let rt_handle = self.runtime.handle();
         let list_ptr = dest.ptr;
         let list_tydesc = dest.tydesc;
@@ -32,35 +30,22 @@ impl IrInterpreter {
         let element_size = unsafe { (*element_tydesc).size as usize };
 
         // Create empty list at dest.
-        let status = unsafe {
-            datalove_rt::c::dtlv_rti_list_create_local(rt_handle, list_ptr, list_tydesc)
-        };
-        if status != RtStatus::Ok {
-            return Err(InterpError::RuntimeError(
-                "Failed to create list".to_string(),
-            ));
+        unsafe {
+            datalove_rt::c::dtlv_rti_list_create_local(rt_handle, list_ptr, list_tydesc);
         }
 
         if elements.is_empty() {
-            return Ok(());
+            return;
         }
 
         // Reserve capacity for all elements.
-        let status = unsafe {
+        unsafe {
             datalove_rt::c::dtlv_rti_list_reserve_local(
                 rt_handle,
                 list_ptr,
                 list_tydesc,
                 elements.len() as rtdt::UsizeRepr,
-            )
-        };
-        if status != RtStatus::Ok {
-            unsafe {
-                datalove_rt::c::dtlv_rti_list_destroy_local(rt_handle, list_ptr, list_tydesc);
-            }
-            return Err(InterpError::RuntimeError(
-                "Failed to reserve list capacity".to_string(),
-            ));
+            );
         }
 
         // Copy each element into the list's data buffer.
@@ -82,8 +67,6 @@ impl IrInterpreter {
                 (*list).size = rtdt::Usize((i + 1) as rtdt::UsizeRepr);
             }
         }
-
-        Ok(())
     }
 
     /// Execute SetNew: create a set from operands.
@@ -93,9 +76,7 @@ impl IrInterpreter {
         dest: Destination,
         frame: &Frame,
         frames: &FrameStore,
-    ) -> Result<(), InterpError> {
-        use datalove_rt::c::RtStatus;
-
+    ) {
         let rt_handle = self.runtime.handle();
         let set_ptr = dest.ptr;
         let set_tydesc = dest.tydesc;
@@ -108,19 +89,14 @@ impl IrInterpreter {
 
         if elements.is_empty() {
             // Create empty set.
-            let status = unsafe {
-                datalove_rt::c::dtlv_rti_btreeset_create_local(rt_handle, set_ptr, set_tydesc)
-            };
-            if status != RtStatus::Ok {
-                return Err(InterpError::RuntimeError(
-                    "Failed to create empty set".to_string(),
-                ));
+            unsafe {
+                datalove_rt::c::dtlv_rti_btreeset_create_local(rt_handle, set_ptr, set_tydesc);
             }
-            return Ok(());
+            return;
         }
 
         // Read all element values.
-        let mut elem_values: Vec<Value> = elements
+        let mut elem_values: Vec<crate::value::Value> = elements
             .iter()
             .map(|op| self.read_operand(op, frame, frames))
             .collect();
@@ -146,11 +122,6 @@ impl IrInterpreter {
         let buffer = unsafe {
             datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, buffer_size, element_align, 1)
         };
-        if buffer.is_null() {
-            return Err(InterpError::RuntimeError(
-                "Failed to allocate set buffer".to_string(),
-            ));
-        }
 
         // Copy elements into buffer.
         for (i, value) in elem_values.iter().enumerate() {
@@ -161,15 +132,15 @@ impl IrInterpreter {
         }
 
         // Build B-tree from sorted buffer.
-        let status = unsafe {
+        unsafe {
             datalove_rt::c::dtlv_rti_btreeset_build_from_sorted_slice_local(
                 rt_handle,
                 set_ptr,
                 element_tydesc,
                 buffer,
                 elem_values.len() as rtdt::UsizeRepr,
-            )
-        };
+            );
+        }
 
         // Free temporary buffer.
         unsafe {
@@ -181,14 +152,6 @@ impl IrInterpreter {
                 buffer,
             );
         }
-
-        if status != RtStatus::Ok {
-            return Err(InterpError::RuntimeError(
-                "Failed to build set B-tree".to_string(),
-            ));
-        }
-
-        Ok(())
     }
 
     /// Execute MapNew: create a map from key-value pairs.
@@ -198,9 +161,7 @@ impl IrInterpreter {
         dest: Destination,
         frame: &Frame,
         frames: &FrameStore,
-    ) -> Result<(), InterpError> {
-        use datalove_rt::c::RtStatus;
-
+    ) {
         let rt_handle = self.runtime.handle();
         let map_ptr = dest.ptr;
         let map_tydesc = dest.tydesc;
@@ -216,19 +177,14 @@ impl IrInterpreter {
 
         if entries.is_empty() {
             // Create empty map.
-            let status = unsafe {
-                datalove_rt::c::dtlv_rti_btreemap_create_local(rt_handle, map_ptr, map_tydesc)
-            };
-            if status != RtStatus::Ok {
-                return Err(InterpError::RuntimeError(
-                    "Failed to create empty map".to_string(),
-                ));
+            unsafe {
+                datalove_rt::c::dtlv_rti_btreemap_create_local(rt_handle, map_ptr, map_tydesc);
             }
-            return Ok(());
+            return;
         }
 
         // Read all key-value pairs.
-        let mut kv_pairs: Vec<(Value, Value)> = entries
+        let mut kv_pairs: Vec<(crate::value::Value, crate::value::Value)> = entries
             .iter()
             .map(|(k_op, v_op)| {
                 let k = self.read_operand(k_op, frame, frames);
@@ -260,11 +216,6 @@ impl IrInterpreter {
         let keys_buffer = unsafe {
             datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, keys_buffer_size, key_align, 1)
         };
-        if keys_buffer.is_null() {
-            return Err(InterpError::RuntimeError(
-                "Failed to allocate keys buffer".to_string(),
-            ));
-        }
 
         let values_buffer = unsafe {
             datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
@@ -274,20 +225,6 @@ impl IrInterpreter {
                 1,
             )
         };
-        if values_buffer.is_null() {
-            unsafe {
-                datalove_rt::c::dtlv_rti_mem_free_raw_local(
-                    rt_handle,
-                    keys_buffer_size,
-                    key_align,
-                    1,
-                    keys_buffer,
-                );
-            }
-            return Err(InterpError::RuntimeError(
-                "Failed to allocate values buffer".to_string(),
-            ));
-        }
 
         // Copy keys and values into buffers.
         for (i, (key, value)) in kv_pairs.iter().enumerate() {
@@ -300,7 +237,7 @@ impl IrInterpreter {
         }
 
         // Build B-tree from sorted slices.
-        let status = unsafe {
+        unsafe {
             datalove_rt::c::dtlv_rti_btreemap_build_from_sorted_slices_local(
                 rt_handle,
                 map_ptr,
@@ -309,8 +246,8 @@ impl IrInterpreter {
                 keys_buffer,
                 values_buffer,
                 kv_pairs.len() as rtdt::UsizeRepr,
-            )
-        };
+            );
+        }
 
         // Free temporary buffers.
         unsafe {
@@ -329,14 +266,6 @@ impl IrInterpreter {
                 values_buffer,
             );
         }
-
-        if status != RtStatus::Ok {
-            return Err(InterpError::RuntimeError(
-                "Failed to build map B-tree".to_string(),
-            ));
-        }
-
-        Ok(())
     }
 
     /// Execute TensorNew: create a tensor from shape and elements.
@@ -347,13 +276,12 @@ impl IrInterpreter {
         dest: Destination,
         frame: &Frame,
         frames: &FrameStore,
-    ) -> Result<(), InterpError> {
+    ) {
         let rt_handle = self.runtime.handle();
         let tensor_ptr = dest.ptr;
-        let tensor_tydesc = dest.tydesc;
 
         // Get element tydesc from tensor tydesc.
-        let tensor_tydesc_ref = unsafe { TyDescRef::from_ptr(tensor_tydesc) };
+        let tensor_tydesc_ref = unsafe { TyDescRef::from_ptr(dest.tydesc) };
         let element_tydesc = tensor_tydesc_ref.tensor_element_ty().as_ptr();
         let element_size = unsafe { (*element_tydesc).size as usize };
 
@@ -369,11 +297,6 @@ impl IrInterpreter {
                     total_elems as rtdt::UsizeRepr,
                 )
             };
-            if array_ptr.is_null() {
-                return Err(InterpError::RuntimeError(
-                    "Failed to allocate tensor data".to_string(),
-                ));
-            }
 
             // Copy each element into the data buffer.
             for (i, elem_op) in elements.iter().enumerate() {
@@ -398,22 +321,6 @@ impl IrInterpreter {
                     rank as rtdt::UsizeRepr,
                 ) as *mut rtdt::UsizeRepr
             };
-            if shape_array.is_null() {
-                // Cleanup data if allocated.
-                if !data_ptr.is_null() {
-                    unsafe {
-                        datalove_rt::c::dtlv_rti_mem_free_local(
-                            rt_handle,
-                            element_tydesc,
-                            total_elems as rtdt::UsizeRepr,
-                            data_ptr,
-                        );
-                    }
-                }
-                return Err(InterpError::RuntimeError(
-                    "Failed to allocate tensor shape".to_string(),
-                ));
-            }
             for (i, &dim) in shape.iter().enumerate() {
                 unsafe {
                     *shape_array.add(i) = dim as rtdt::UsizeRepr;
@@ -434,33 +341,6 @@ impl IrInterpreter {
                     rank as rtdt::UsizeRepr,
                 ) as *mut rtdt::UsizeRepr
             };
-            if strides_array.is_null() {
-                // Cleanup.
-                if !data_ptr.is_null() {
-                    unsafe {
-                        datalove_rt::c::dtlv_rti_mem_free_local(
-                            rt_handle,
-                            element_tydesc,
-                            total_elems as rtdt::UsizeRepr,
-                            data_ptr,
-                        );
-                    }
-                }
-                if !shape_ptr.is_null() {
-                    unsafe {
-                        datalove_rt::c::dtlv_rti_mem_free_raw_local(
-                            rt_handle,
-                            (rank as u32) * rtdt::INDEX_SIZE,
-                            rtdt::INDEX_ALIGN,
-                            1,
-                            shape_ptr as *mut u8,
-                        );
-                    }
-                }
-                return Err(InterpError::RuntimeError(
-                    "Failed to allocate tensor strides".to_string(),
-                ));
-            }
 
             // Compute strides for row-major layout.
             for i in 0..rank {
@@ -485,8 +365,6 @@ impl IrInterpreter {
             (*tensor).strides = strides_ptr;
             (*tensor).layout = rtdt::TensorLayout::RowMajor;
         }
-
-        Ok(())
     }
 
     /// Execute TableNew: create a table from row tuples.
@@ -496,50 +374,29 @@ impl IrInterpreter {
         dest: Destination,
         frame: &Frame,
         frames: &FrameStore,
-    ) -> Result<(), InterpError> {
-        use datalove_rt::c::RtStatus;
-
+    ) {
         let rt_handle = self.runtime.handle();
         let table_ptr = dest.ptr;
         let table_tydesc = dest.tydesc;
 
         // Create empty table at dest.
-        let status = unsafe {
-            datalove_rt::c::dtlv_rti_table_create_local(rt_handle, table_ptr, table_tydesc)
-        };
-        if status != RtStatus::Ok {
-            return Err(InterpError::RuntimeError(
-                "Failed to create table".to_string(),
-            ));
+        unsafe {
+            datalove_rt::c::dtlv_rti_table_create_local(rt_handle, table_ptr, table_tydesc);
         }
 
         // Push each row (rows are tuples).
         for row_op in rows {
             let row_val = self.read_operand(row_op, frame, frames);
 
-            let status = unsafe {
+            unsafe {
                 datalove_rt::c::dtlv_rti_table_push_row_local(
                     rt_handle,
                     table_ptr,
                     table_tydesc,
                     row_val.ptr,
                     row_val.tydesc,
-                )
-            };
-            if status != RtStatus::Ok {
-                unsafe {
-                    datalove_rt::c::dtlv_rti_table_destroy_local(
-                        rt_handle,
-                        table_ptr,
-                        table_tydesc,
-                    );
-                }
-                return Err(InterpError::RuntimeError(
-                    "Failed to push row to table".to_string(),
-                ));
+                );
             }
         }
-
-        Ok(())
     }
 }

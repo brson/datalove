@@ -189,12 +189,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     let func_key = FunctionKey::from(&func_ref);
 
     // Look up the function IR using ExecutionContext (handles Local, Module, External).
-    let ir_func = match ctx.exec_ctx.get_function(&func_ref, ctx.registry) {
-        Ok(f) => f,
-        Err(e) => {
-            panic!("JIT dispatch: function lookup failed: {:?}", e);
-        }
-    };
+    let ir_func = ctx.exec_ctx.get_function(&func_ref, ctx.registry);
 
     // Build argument Values.
     let mut arg_vals = Vec::with_capacity(arg_count as usize);

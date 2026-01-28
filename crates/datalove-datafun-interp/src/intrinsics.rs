@@ -2,7 +2,7 @@
 
 use datalove_datafun_intrinsics::IntrinsicId;
 use datalove_datafun_ir::Operand;
-use crate::{Frame, FrameStore, Destination, InterpError, IrInterpreter};
+use crate::{Frame, FrameStore, Destination, IrInterpreter};
 
 impl IrInterpreter {
     /// Execute an intrinsic function and write result to destination.
@@ -13,7 +13,7 @@ impl IrInterpreter {
         dest: Destination,
         frame: &Frame,
         frames: &FrameStore,
-    ) -> Result<(), InterpError> {
+    ) {
         use IntrinsicId::*;
 
         match intrinsic {
@@ -133,17 +133,17 @@ impl IrInterpreter {
 
             // F32 classification intrinsics.
             IsNanF32 => {
-                let a = self.read_f32(&args[0], frame, frames)?;
+                let a = self.read_f32(&args[0], frame, frames);
                 self.write_bool(a.is_nan(), dest);
             }
             IsInfiniteF32 => {
-                let a = self.read_f32(&args[0], frame, frames)?;
+                let a = self.read_f32(&args[0], frame, frames);
                 self.write_bool(a.is_infinite(), dest);
             }
 
             // F32 bit conversion.
             F32ToBits => {
-                let a = self.read_f32(&args[0], frame, frames)?;
+                let a = self.read_f32(&args[0], frame, frames);
                 self.write_u32(a.to_bits(), dest);
             }
             BitsToF32 => {
@@ -153,527 +153,526 @@ impl IrInterpreter {
 
             // F32 math intrinsics.
             AbsF32 => {
-                let a = self.read_f32(&args[0], frame, frames)?;
+                let a = self.read_f32(&args[0], frame, frames);
                 self.write_f32(a.abs(), dest);
             }
             SqrtF32 => {
-                let a = self.read_f32(&args[0], frame, frames)?;
+                let a = self.read_f32(&args[0], frame, frames);
                 self.write_f32(a.sqrt(), dest);
             }
             FloorF32 => {
-                let a = self.read_f32(&args[0], frame, frames)?;
+                let a = self.read_f32(&args[0], frame, frames);
                 self.write_f32(a.floor(), dest);
             }
             CeilF32 => {
-                let a = self.read_f32(&args[0], frame, frames)?;
+                let a = self.read_f32(&args[0], frame, frames);
                 self.write_f32(a.ceil(), dest);
             }
             RoundF32 => {
-                let a = self.read_f32(&args[0], frame, frames)?;
+                let a = self.read_f32(&args[0], frame, frames);
                 // Round to nearest even to match Cranelift's `nearest`.
                 self.write_f32(round_ties_even(a), dest);
             }
             TruncF32 => {
-                let a = self.read_f32(&args[0], frame, frames)?;
+                let a = self.read_f32(&args[0], frame, frames);
                 self.write_f32(a.trunc(), dest);
             }
             CopysignF32 => {
-                let a = self.read_f32(&args[0], frame, frames)?;
-                let b = self.read_f32(&args[1], frame, frames)?;
+                let a = self.read_f32(&args[0], frame, frames);
+                let b = self.read_f32(&args[1], frame, frames);
                 self.write_f32(a.copysign(b), dest);
             }
             MinF32 => {
-                let a = self.read_f32(&args[0], frame, frames)?;
-                let b = self.read_f32(&args[1], frame, frames)?;
+                let a = self.read_f32(&args[0], frame, frames);
+                let b = self.read_f32(&args[1], frame, frames);
                 self.write_f32(a.min(b), dest);
             }
             MaxF32 => {
-                let a = self.read_f32(&args[0], frame, frames)?;
-                let b = self.read_f32(&args[1], frame, frames)?;
+                let a = self.read_f32(&args[0], frame, frames);
+                let b = self.read_f32(&args[1], frame, frames);
                 self.write_f32(a.max(b), dest);
             }
 
             // F64 classification intrinsics.
             IsNanF64 => {
-                let a = self.read_f64(&args[0], frame, frames)?;
+                let a = self.read_f64(&args[0], frame, frames);
                 self.write_bool(a.is_nan(), dest);
             }
             IsInfiniteF64 => {
-                let a = self.read_f64(&args[0], frame, frames)?;
+                let a = self.read_f64(&args[0], frame, frames);
                 self.write_bool(a.is_infinite(), dest);
             }
 
             // F64 bit conversion.
             F64ToBits => {
-                let a = self.read_f64(&args[0], frame, frames)?;
+                let a = self.read_f64(&args[0], frame, frames);
                 self.write_u64(a.to_bits(), dest);
             }
             BitsToF64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
                 self.write_f64(f64::from_bits(a), dest);
             }
 
             // F64 math intrinsics.
             AbsF64 => {
-                let a = self.read_f64(&args[0], frame, frames)?;
+                let a = self.read_f64(&args[0], frame, frames);
                 self.write_f64(a.abs(), dest);
             }
             SqrtF64 => {
-                let a = self.read_f64(&args[0], frame, frames)?;
+                let a = self.read_f64(&args[0], frame, frames);
                 self.write_f64(a.sqrt(), dest);
             }
             FloorF64 => {
-                let a = self.read_f64(&args[0], frame, frames)?;
+                let a = self.read_f64(&args[0], frame, frames);
                 self.write_f64(a.floor(), dest);
             }
             CeilF64 => {
-                let a = self.read_f64(&args[0], frame, frames)?;
+                let a = self.read_f64(&args[0], frame, frames);
                 self.write_f64(a.ceil(), dest);
             }
             RoundF64 => {
-                let a = self.read_f64(&args[0], frame, frames)?;
+                let a = self.read_f64(&args[0], frame, frames);
                 // Round to nearest even to match Cranelift's `nearest`.
                 self.write_f64(round_ties_even_f64(a), dest);
             }
             TruncF64 => {
-                let a = self.read_f64(&args[0], frame, frames)?;
+                let a = self.read_f64(&args[0], frame, frames);
                 self.write_f64(a.trunc(), dest);
             }
             CopysignF64 => {
-                let a = self.read_f64(&args[0], frame, frames)?;
-                let b = self.read_f64(&args[1], frame, frames)?;
+                let a = self.read_f64(&args[0], frame, frames);
+                let b = self.read_f64(&args[1], frame, frames);
                 self.write_f64(a.copysign(b), dest);
             }
             MinF64 => {
-                let a = self.read_f64(&args[0], frame, frames)?;
-                let b = self.read_f64(&args[1], frame, frames)?;
+                let a = self.read_f64(&args[0], frame, frames);
+                let b = self.read_f64(&args[1], frame, frames);
                 self.write_f64(a.min(b), dest);
             }
             MaxF64 => {
-                let a = self.read_f64(&args[0], frame, frames)?;
-                let b = self.read_f64(&args[1], frame, frames)?;
+                let a = self.read_f64(&args[0], frame, frames);
+                let b = self.read_f64(&args[1], frame, frames);
                 self.write_f64(a.max(b), dest);
             }
 
             // U64 bitwise operations.
             BitandU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
-                let b = self.read_u64(&args[1], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
+                let b = self.read_u64(&args[1], frame, frames);
                 self.write_u64(a & b, dest);
             }
             BitxorU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
-                let b = self.read_u64(&args[1], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
+                let b = self.read_u64(&args[1], frame, frames);
                 self.write_u64(a ^ b, dest);
             }
 
             // U64/I64 type conversion.
             U64ToI64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
                 self.write_i64(a as i64, dest);
             }
             I64ToU64 => {
-                let a = self.read_i64(&args[0], frame, frames)?;
+                let a = self.read_i64(&args[0], frame, frames);
                 self.write_u64(a as u64, dest);
             }
 
             // U8 bitwise operations.
             BitnotU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
                 self.write_u8(!a, dest);
             }
             BitandU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
-                let b = self.read_u8(&args[1], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
+                let b = self.read_u8(&args[1], frame, frames);
                 self.write_u8(a & b, dest);
             }
             BitorU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
-                let b = self.read_u8(&args[1], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
+                let b = self.read_u8(&args[1], frame, frames);
                 self.write_u8(a | b, dest);
             }
             BitxorU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
-                let b = self.read_u8(&args[1], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
+                let b = self.read_u8(&args[1], frame, frames);
                 self.write_u8(a ^ b, dest);
             }
 
             // U8 shift operations.
             ShlU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
-                let b = self.read_u8(&args[1], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
+                let b = self.read_u8(&args[1], frame, frames);
                 self.write_u8(a.wrapping_shl(b as u32), dest);
             }
             ShrU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
-                let b = self.read_u8(&args[1], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
+                let b = self.read_u8(&args[1], frame, frames);
                 self.write_u8(a.wrapping_shr(b as u32), dest);
             }
 
             // U8 bit counting operations.
             PopcountU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
                 self.write_u8(a.count_ones() as u8, dest);
             }
             ClzU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
                 self.write_u8(a.leading_zeros() as u8, dest);
             }
             CtzU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
                 self.write_u8(a.trailing_zeros() as u8, dest);
             }
 
             // U8 bit manipulation.
             ReverseBitsU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
                 self.write_u8(a.reverse_bits(), dest);
             }
 
             // U8 wrapping arithmetic.
             AddWrappingU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
-                let b = self.read_u8(&args[1], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
+                let b = self.read_u8(&args[1], frame, frames);
                 self.write_u8(a.wrapping_add(b), dest);
             }
             SubWrappingU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
-                let b = self.read_u8(&args[1], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
+                let b = self.read_u8(&args[1], frame, frames);
                 self.write_u8(a.wrapping_sub(b), dest);
             }
             MulWrappingU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
-                let b = self.read_u8(&args[1], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
+                let b = self.read_u8(&args[1], frame, frames);
                 self.write_u8(a.wrapping_mul(b), dest);
             }
             RemU8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
-                let b = self.read_u8(&args[1], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
+                let b = self.read_u8(&args[1], frame, frames);
                 self.write_u8(a % b, dest);
             }
 
             // U8/I8 type conversion.
             U8ToI8 => {
-                let a = self.read_u8(&args[0], frame, frames)?;
+                let a = self.read_u8(&args[0], frame, frames);
                 self.write_i8(a as i8, dest);
             }
             I8ToU8 => {
-                let a = self.read_i8(&args[0], frame, frames)?;
+                let a = self.read_i8(&args[0], frame, frames);
                 self.write_u8(a as u8, dest);
             }
 
             // I8 operations.
             NegWrappingI8 => {
-                let a = self.read_i8(&args[0], frame, frames)?;
+                let a = self.read_i8(&args[0], frame, frames);
                 self.write_i8(a.wrapping_neg(), dest);
             }
             SshrI8 => {
-                let a = self.read_i8(&args[0], frame, frames)?;
-                let b = self.read_u8(&args[1], frame, frames)?;
+                let a = self.read_i8(&args[0], frame, frames);
+                let b = self.read_u8(&args[1], frame, frames);
                 self.write_i8(a.wrapping_shr(b as u32), dest);
             }
             SremI8 => {
-                let a = self.read_i8(&args[0], frame, frames)?;
-                let b = self.read_i8(&args[1], frame, frames)?;
+                let a = self.read_i8(&args[0], frame, frames);
+                let b = self.read_i8(&args[1], frame, frames);
                 self.write_i8(a % b, dest);
             }
 
             // U16 bitwise operations.
             BitnotU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
                 self.write_u16(!a, dest);
             }
             BitandU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
-                let b = self.read_u16(&args[1], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
+                let b = self.read_u16(&args[1], frame, frames);
                 self.write_u16(a & b, dest);
             }
             BitorU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
-                let b = self.read_u16(&args[1], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
+                let b = self.read_u16(&args[1], frame, frames);
                 self.write_u16(a | b, dest);
             }
             BitxorU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
-                let b = self.read_u16(&args[1], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
+                let b = self.read_u16(&args[1], frame, frames);
                 self.write_u16(a ^ b, dest);
             }
 
             // U16 shift operations.
             ShlU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
-                let b = self.read_u16(&args[1], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
+                let b = self.read_u16(&args[1], frame, frames);
                 self.write_u16(a.wrapping_shl(b as u32), dest);
             }
             ShrU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
-                let b = self.read_u16(&args[1], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
+                let b = self.read_u16(&args[1], frame, frames);
                 self.write_u16(a.wrapping_shr(b as u32), dest);
             }
 
             // U16 bit counting operations.
             PopcountU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
                 self.write_u16(a.count_ones() as u16, dest);
             }
             ClzU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
                 self.write_u16(a.leading_zeros() as u16, dest);
             }
             CtzU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
                 self.write_u16(a.trailing_zeros() as u16, dest);
             }
 
             // U16 byte/bit manipulation.
             SwapBytesU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
                 self.write_u16(a.swap_bytes(), dest);
             }
             ReverseBitsU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
                 self.write_u16(a.reverse_bits(), dest);
             }
 
             // U16 wrapping arithmetic.
             AddWrappingU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
-                let b = self.read_u16(&args[1], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
+                let b = self.read_u16(&args[1], frame, frames);
                 self.write_u16(a.wrapping_add(b), dest);
             }
             SubWrappingU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
-                let b = self.read_u16(&args[1], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
+                let b = self.read_u16(&args[1], frame, frames);
                 self.write_u16(a.wrapping_sub(b), dest);
             }
             MulWrappingU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
-                let b = self.read_u16(&args[1], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
+                let b = self.read_u16(&args[1], frame, frames);
                 self.write_u16(a.wrapping_mul(b), dest);
             }
             RemU16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
-                let b = self.read_u16(&args[1], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
+                let b = self.read_u16(&args[1], frame, frames);
                 self.write_u16(a % b, dest);
             }
 
             // U16/I16 type conversion.
             U16ToI16 => {
-                let a = self.read_u16(&args[0], frame, frames)?;
+                let a = self.read_u16(&args[0], frame, frames);
                 self.write_i16(a as i16, dest);
             }
             I16ToU16 => {
-                let a = self.read_i16(&args[0], frame, frames)?;
+                let a = self.read_i16(&args[0], frame, frames);
                 self.write_u16(a as u16, dest);
             }
 
             // I16 operations.
             NegWrappingI16 => {
-                let a = self.read_i16(&args[0], frame, frames)?;
+                let a = self.read_i16(&args[0], frame, frames);
                 self.write_i16(a.wrapping_neg(), dest);
             }
             SshrI16 => {
-                let a = self.read_i16(&args[0], frame, frames)?;
-                let b = self.read_u16(&args[1], frame, frames)?;
+                let a = self.read_i16(&args[0], frame, frames);
+                let b = self.read_u16(&args[1], frame, frames);
                 self.write_i16(a.wrapping_shr(b as u32), dest);
             }
             SremI16 => {
-                let a = self.read_i16(&args[0], frame, frames)?;
-                let b = self.read_i16(&args[1], frame, frames)?;
+                let a = self.read_i16(&args[0], frame, frames);
+                let b = self.read_i16(&args[1], frame, frames);
                 self.write_i16(a % b, dest);
             }
 
             // U64 additional bitwise operations.
             BitnotU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
                 self.write_u64(!a, dest);
             }
             BitorU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
-                let b = self.read_u64(&args[1], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
+                let b = self.read_u64(&args[1], frame, frames);
                 self.write_u64(a | b, dest);
             }
 
             // U64 shift operations.
             ShlU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
-                let b = self.read_u64(&args[1], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
+                let b = self.read_u64(&args[1], frame, frames);
                 self.write_u64(a.wrapping_shl(b as u32), dest);
             }
             ShrU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
-                let b = self.read_u64(&args[1], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
+                let b = self.read_u64(&args[1], frame, frames);
                 self.write_u64(a.wrapping_shr(b as u32), dest);
             }
 
             // U64 bit counting operations.
             PopcountU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
                 self.write_u64(a.count_ones() as u64, dest);
             }
             ClzU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
                 self.write_u64(a.leading_zeros() as u64, dest);
             }
             CtzU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
                 self.write_u64(a.trailing_zeros() as u64, dest);
             }
 
             // U64 byte/bit manipulation.
             SwapBytesU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
                 self.write_u64(a.swap_bytes(), dest);
             }
             ReverseBitsU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
                 self.write_u64(a.reverse_bits(), dest);
             }
 
             // U64 wrapping arithmetic.
             AddWrappingU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
-                let b = self.read_u64(&args[1], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
+                let b = self.read_u64(&args[1], frame, frames);
                 self.write_u64(a.wrapping_add(b), dest);
             }
             SubWrappingU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
-                let b = self.read_u64(&args[1], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
+                let b = self.read_u64(&args[1], frame, frames);
                 self.write_u64(a.wrapping_sub(b), dest);
             }
             MulWrappingU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
-                let b = self.read_u64(&args[1], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
+                let b = self.read_u64(&args[1], frame, frames);
                 self.write_u64(a.wrapping_mul(b), dest);
             }
             RemU64 => {
-                let a = self.read_u64(&args[0], frame, frames)?;
-                let b = self.read_u64(&args[1], frame, frames)?;
+                let a = self.read_u64(&args[0], frame, frames);
+                let b = self.read_u64(&args[1], frame, frames);
                 self.write_u64(a % b, dest);
             }
 
             // I64 operations.
             NegWrappingI64 => {
-                let a = self.read_i64(&args[0], frame, frames)?;
+                let a = self.read_i64(&args[0], frame, frames);
                 self.write_i64(a.wrapping_neg(), dest);
             }
             SshrI64 => {
-                let a = self.read_i64(&args[0], frame, frames)?;
-                let b = self.read_u64(&args[1], frame, frames)?;
+                let a = self.read_i64(&args[0], frame, frames);
+                let b = self.read_u64(&args[1], frame, frames);
                 self.write_i64(a.wrapping_shr(b as u32), dest);
             }
             SremI64 => {
-                let a = self.read_i64(&args[0], frame, frames)?;
-                let b = self.read_i64(&args[1], frame, frames)?;
+                let a = self.read_i64(&args[0], frame, frames);
+                let b = self.read_i64(&args[1], frame, frames);
                 self.write_i64(a % b, dest);
             }
 
             // Usize bitwise operations.
             BitnotUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
                 self.write_usize(!a, dest);
             }
             BitandUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
-                let b = self.read_usize(&args[1], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
+                let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a & b, dest);
             }
             BitorUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
-                let b = self.read_usize(&args[1], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
+                let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a | b, dest);
             }
             BitxorUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
-                let b = self.read_usize(&args[1], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
+                let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a ^ b, dest);
             }
 
             // Usize shift operations.
             ShlUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
                 let b = self.read_u32(&args[1], frame, frames);
                 self.write_usize(a.wrapping_shl(b), dest);
             }
             ShrUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
                 let b = self.read_u32(&args[1], frame, frames);
                 self.write_usize(a.wrapping_shr(b), dest);
             }
 
             // Usize bit counting operations.
             PopcountUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
                 self.write_u32(a.count_ones(), dest);
             }
             ClzUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
                 self.write_u32(a.leading_zeros(), dest);
             }
             CtzUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
                 self.write_u32(a.trailing_zeros(), dest);
             }
 
             // Usize byte/bit manipulation.
             SwapBytesUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
                 self.write_usize(a.swap_bytes(), dest);
             }
             ReverseBitsUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
                 self.write_usize(a.reverse_bits(), dest);
             }
 
             // Usize wrapping arithmetic.
             AddWrappingUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
-                let b = self.read_usize(&args[1], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
+                let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a.wrapping_add(b), dest);
             }
             SubWrappingUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
-                let b = self.read_usize(&args[1], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
+                let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a.wrapping_sub(b), dest);
             }
             MulWrappingUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
-                let b = self.read_usize(&args[1], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
+                let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a.wrapping_mul(b), dest);
             }
             RemUsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
-                let b = self.read_usize(&args[1], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
+                let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a % b, dest);
             }
 
             // Usize/Isize type conversion.
             UsizeToIsize => {
-                let a = self.read_usize(&args[0], frame, frames)?;
+                let a = self.read_usize(&args[0], frame, frames);
                 self.write_isize(a as datalove_rtdt::IsizeRepr, dest);
             }
             IsizeToUsize => {
-                let a = self.read_isize(&args[0], frame, frames)?;
+                let a = self.read_isize(&args[0], frame, frames);
                 self.write_usize(a as datalove_rtdt::UsizeRepr, dest);
             }
 
             // Isize operations.
             NegWrappingIsize => {
-                let a = self.read_isize(&args[0], frame, frames)?;
+                let a = self.read_isize(&args[0], frame, frames);
                 self.write_isize(a.wrapping_neg(), dest);
             }
             SshrIsize => {
-                let a = self.read_isize(&args[0], frame, frames)?;
+                let a = self.read_isize(&args[0], frame, frames);
                 let b = self.read_u32(&args[1], frame, frames);
                 self.write_isize(a.wrapping_shr(b), dest);
             }
             SremIsize => {
-                let a = self.read_isize(&args[0], frame, frames)?;
-                let b = self.read_isize(&args[1], frame, frames)?;
+                let a = self.read_isize(&args[0], frame, frames);
+                let b = self.read_isize(&args[1], frame, frames);
                 self.write_isize(a % b, dest);
             }
         }
-        Ok(())
     }
 
     /// Read a u32 value from an operand.
@@ -704,9 +703,9 @@ impl IrInterpreter {
     }
 
     /// Read an f32 value from an operand.
-    fn read_f32(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<f32, InterpError> {
+    fn read_f32(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> f32 {
         let val = self.read_operand(op, frame, frames);
-        Ok(unsafe { *(val.ptr as *const f32) })
+        unsafe { *(val.ptr as *const f32) }
     }
 
     /// Write an f32 value to destination.
@@ -715,9 +714,9 @@ impl IrInterpreter {
     }
 
     /// Read an f64 value from an operand.
-    fn read_f64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<f64, InterpError> {
+    fn read_f64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> f64 {
         let val = self.read_operand(op, frame, frames);
-        Ok(unsafe { *(val.ptr as *const f64) })
+        unsafe { *(val.ptr as *const f64) }
     }
 
     /// Write an f64 value to destination.
@@ -726,9 +725,9 @@ impl IrInterpreter {
     }
 
     /// Read a u64 value from an operand.
-    fn read_u64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<u64, InterpError> {
+    fn read_u64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> u64 {
         let val = self.read_operand(op, frame, frames);
-        Ok(unsafe { *(val.ptr as *const u64) })
+        unsafe { *(val.ptr as *const u64) }
     }
 
     /// Write a u64 value to destination.
@@ -737,9 +736,9 @@ impl IrInterpreter {
     }
 
     /// Read an i64 value from an operand.
-    fn read_i64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<i64, InterpError> {
+    fn read_i64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> i64 {
         let val = self.read_operand(op, frame, frames);
-        Ok(unsafe { *(val.ptr as *const i64) })
+        unsafe { *(val.ptr as *const i64) }
     }
 
     /// Write an i64 value to destination.
@@ -748,9 +747,9 @@ impl IrInterpreter {
     }
 
     /// Read a u8 value from an operand.
-    fn read_u8(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<u8, InterpError> {
+    fn read_u8(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> u8 {
         let val = self.read_operand(op, frame, frames);
-        Ok(unsafe { *(val.ptr as *const u8) })
+        unsafe { *(val.ptr as *const u8) }
     }
 
     /// Write a u8 value to destination.
@@ -759,9 +758,9 @@ impl IrInterpreter {
     }
 
     /// Read an i8 value from an operand.
-    fn read_i8(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<i8, InterpError> {
+    fn read_i8(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> i8 {
         let val = self.read_operand(op, frame, frames);
-        Ok(unsafe { *(val.ptr as *const i8) })
+        unsafe { *(val.ptr as *const i8) }
     }
 
     /// Write an i8 value to destination.
@@ -770,9 +769,9 @@ impl IrInterpreter {
     }
 
     /// Read a u16 value from an operand.
-    fn read_u16(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<u16, InterpError> {
+    fn read_u16(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> u16 {
         let val = self.read_operand(op, frame, frames);
-        Ok(unsafe { *(val.ptr as *const u16) })
+        unsafe { *(val.ptr as *const u16) }
     }
 
     /// Write a u16 value to destination.
@@ -781,9 +780,9 @@ impl IrInterpreter {
     }
 
     /// Read an i16 value from an operand.
-    fn read_i16(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<i16, InterpError> {
+    fn read_i16(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> i16 {
         let val = self.read_operand(op, frame, frames);
-        Ok(unsafe { *(val.ptr as *const i16) })
+        unsafe { *(val.ptr as *const i16) }
     }
 
     /// Write an i16 value to destination.
@@ -792,9 +791,9 @@ impl IrInterpreter {
     }
 
     /// Read a usize value from an operand.
-    fn read_usize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<datalove_rtdt::UsizeRepr, InterpError> {
+    fn read_usize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> datalove_rtdt::UsizeRepr {
         let val = self.read_operand(op, frame, frames);
-        Ok(unsafe { *(val.ptr as *const datalove_rtdt::UsizeRepr) })
+        unsafe { *(val.ptr as *const datalove_rtdt::UsizeRepr) }
     }
 
     /// Write a usize value to destination.
@@ -803,9 +802,9 @@ impl IrInterpreter {
     }
 
     /// Read an isize value from an operand.
-    fn read_isize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> Result<datalove_rtdt::IsizeRepr, InterpError> {
+    fn read_isize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> datalove_rtdt::IsizeRepr {
         let val = self.read_operand(op, frame, frames);
-        Ok(unsafe { *(val.ptr as *const datalove_rtdt::IsizeRepr) })
+        unsafe { *(val.ptr as *const datalove_rtdt::IsizeRepr) }
     }
 
     /// Write an isize value to destination.

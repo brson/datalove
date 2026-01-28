@@ -765,7 +765,7 @@ impl IrInterpreter {
             }
             Instruction::Call { dest, func, args } => {
                 // Look up the function and determine the correct context for the callee.
-                let (callee, callee_unit) = ctx.get_function_with_context(func, registry)?;
+                let (callee, callee_unit) = ctx.get_function_with_context(func, registry);
 
                 // Evaluate arguments.
                 // For Out params: get pointer to uninitialized slot (callee will write to it).
@@ -879,7 +879,7 @@ impl IrInterpreter {
             }
             Instruction::ListNew { dest, elements } => {
                 let dest_slot = frame.value_dest(*dest);
-                self.execute_list_new(elements, dest_slot, frame, frames)?;
+                self.execute_list_new(elements, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
@@ -888,7 +888,7 @@ impl IrInterpreter {
             }
             Instruction::SetNew { dest, elements } => {
                 let dest_slot = frame.value_dest(*dest);
-                self.execute_set_new(elements, dest_slot, frame, frames)?;
+                self.execute_set_new(elements, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
@@ -897,7 +897,7 @@ impl IrInterpreter {
             }
             Instruction::MapNew { dest, entries } => {
                 let dest_slot = frame.value_dest(*dest);
-                self.execute_map_new(entries, dest_slot, frame, frames)?;
+                self.execute_map_new(entries, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
                 // Mark source entries as moved (linear semantics - consumes entries).
                 for (key, val) in entries {
@@ -907,7 +907,7 @@ impl IrInterpreter {
             }
             Instruction::TensorNew { dest, shape, elements } => {
                 let dest_slot = frame.value_dest(*dest);
-                self.execute_tensor_new(shape, elements, dest_slot, frame, frames)?;
+                self.execute_tensor_new(shape, elements, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
@@ -916,7 +916,7 @@ impl IrInterpreter {
             }
             Instruction::TableNew { dest, rows } => {
                 let dest_slot = frame.value_dest(*dest);
-                self.execute_table_new(rows, dest_slot, frame, frames)?;
+                self.execute_table_new(rows, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
                 // Mark source rows as moved (linear semantics - consumes rows).
                 for row in rows {
@@ -1140,7 +1140,7 @@ impl IrInterpreter {
             }
             Instruction::Intrinsic { dest, intrinsic, args } => {
                 let dest_slot = frame.value_dest(*dest);
-                self.execute_intrinsic(*intrinsic, args, dest_slot, frame, frames)?;
+                self.execute_intrinsic(*intrinsic, args, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
             }
             // Slot tracking variants - these track SLOT state, not value state.
