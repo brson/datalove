@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE logical or in script function.
+fun check_or(): bool
+    const A: bool = false
+    const B: bool = true
+    const C: bool = A or B
+    ret C
+end fun
+
+debuglog check_or()

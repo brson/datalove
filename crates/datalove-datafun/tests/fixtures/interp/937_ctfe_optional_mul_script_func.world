@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE optional multiplication in script function.
+fun compute(): ?i32
+    const X: i32 = 15
+    const Y: i32 = 4
+    const Z: i32 = X *? Y
+    ret some Z
+end fun
+
+debuglog compute()

@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE checked division at script level.
+fun div_checked(): !u32
+    const A: u32 = 100
+    const B: u32 = 4
+    const C: u32 = A /! B
+    ret ok C
+end fun
+
+debuglog div_checked()

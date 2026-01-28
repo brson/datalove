@@ -1,0 +1,20 @@
+----------
+module local/test/checkedmul
+----------
+
+// CTFE checked multiplication in module function.
+fun multiply(): !u32
+    const A: u32 = 12
+    const B: u32 = 11
+    const C: u32 = A *! B
+    ret ok C
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/checkedmul
+import checkedmul.multiply
+
+debuglog multiply()

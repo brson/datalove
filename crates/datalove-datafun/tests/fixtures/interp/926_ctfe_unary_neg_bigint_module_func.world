@@ -1,0 +1,19 @@
+----------
+module local/test/unaryneg
+----------
+
+// CTFE unary negation of bigint in module function.
+fun get_negative(): int
+    const A: int = 999
+    const B: int = -A
+    ret B
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/unaryneg
+import unaryneg.get_negative
+
+debuglog get_negative()

@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE try result operator fails - early return.
+fun compute(): !u32
+    const R: !u32 = er "error message"
+    const V: u32 = R!
+    ret ok V
+end fun
+
+debuglog compute()

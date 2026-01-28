@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE optional subtraction in script function.
+fun compute(): ?u64
+    const X: u64 = 500
+    const Y: u64 = 200
+    const Z: u64 = X -? Y
+    ret some Z
+end fun
+
+debuglog compute()

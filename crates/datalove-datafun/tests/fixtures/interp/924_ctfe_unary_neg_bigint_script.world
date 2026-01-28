@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE unary negation of bigint at script level.
+const A: int = 42
+const B: int = -A
+debuglog B

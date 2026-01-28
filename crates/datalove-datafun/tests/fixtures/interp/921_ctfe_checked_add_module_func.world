@@ -1,0 +1,20 @@
+----------
+module local/test/checkedadd
+----------
+
+// CTFE checked addition in module function.
+fun add_values(): !u32
+    const A: u32 = 250
+    const B: u32 = 350
+    const C: u32 = A +! B
+    ret ok C
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/checkedadd
+import checkedadd.add_values
+
+debuglog add_values()

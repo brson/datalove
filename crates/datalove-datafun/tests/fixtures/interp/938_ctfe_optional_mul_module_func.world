@@ -1,0 +1,20 @@
+----------
+module local/test/optmul
+----------
+
+// CTFE optional multiplication in module function.
+fun multiply(): ?u32
+    const A: u32 = 9
+    const B: u32 = 11
+    const C: u32 = A *? B
+    ret some C
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/optmul
+import optmul.multiply
+
+debuglog multiply()

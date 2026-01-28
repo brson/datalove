@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE optional division in script function.
+fun compute(): ?i64
+    const X: i64 = 144
+    const Y: i64 = 12
+    const Z: i64 = X /? Y
+    ret some Z
+end fun
+
+debuglog compute()

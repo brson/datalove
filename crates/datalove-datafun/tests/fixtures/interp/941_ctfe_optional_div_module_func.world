@@ -1,0 +1,20 @@
+----------
+module local/test/optdiv
+----------
+
+// CTFE optional division in module function.
+fun divide(): ?u32
+    const A: u32 = 81
+    const B: u32 = 9
+    const C: u32 = A /? B
+    ret some C
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/optdiv
+import optdiv.divide
+
+debuglog divide()

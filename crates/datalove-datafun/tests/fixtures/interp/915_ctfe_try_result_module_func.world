@@ -1,0 +1,19 @@
+----------
+module local/test/tryresult
+----------
+
+// CTFE try result in module function.
+fun unwrap_result(): !u32
+    const R: !u32 = ok 555
+    const V: u32 = R!
+    ret ok V
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/tryresult
+import tryresult.unwrap_result
+
+debuglog unwrap_result()

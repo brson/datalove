@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE logical xor in script function.
+fun check_xor(): bool
+    const A: bool = true
+    const B: bool = true
+    const C: bool = A xor B
+    ret C
+end fun
+
+debuglog check_xor()

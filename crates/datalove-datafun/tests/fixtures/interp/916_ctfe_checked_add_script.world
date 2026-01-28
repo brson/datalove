@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE checked addition at script level.
+fun add_checked(): !u32
+    const A: u32 = 100
+    const B: u32 = 50
+    const C: u32 = A +! B
+    ret ok C
+end fun
+
+debuglog add_checked()

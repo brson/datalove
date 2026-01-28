@@ -1,0 +1,20 @@
+----------
+module local/test/optsub
+----------
+
+// CTFE optional subtraction in module function.
+fun subtract(): ?u32
+    const A: u32 = 80
+    const B: u32 = 25
+    const C: u32 = A -? B
+    ret some C
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/optsub
+import optsub.subtract
+
+debuglog subtract()

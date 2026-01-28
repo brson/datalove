@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE optional subtraction at script level.
+fun sub_opt(): ?u32
+    const A: u32 = 100
+    const B: u32 = 30
+    const C: u32 = A -? B
+    ret some C
+end fun
+
+debuglog sub_opt()

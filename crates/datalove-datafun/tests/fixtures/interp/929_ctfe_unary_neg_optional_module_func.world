@@ -1,0 +1,19 @@
+----------
+module local/test/unaryopt
+----------
+
+// CTFE unary optional negation in module function.
+fun get_neg(): ?i32
+    const A: i32 = 77
+    const B: i32 = -?A
+    ret some B
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/unaryopt
+import unaryopt.get_neg
+
+debuglog get_neg()

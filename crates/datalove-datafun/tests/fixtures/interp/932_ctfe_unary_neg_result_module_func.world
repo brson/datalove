@@ -1,0 +1,19 @@
+----------
+module local/test/unaryres
+----------
+
+// CTFE unary result negation in module function.
+fun get_neg(): !i32
+    const A: i32 = 111
+    const B: i32 = -!A
+    ret ok B
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/unaryres
+import unaryres.get_neg
+
+debuglog get_neg()

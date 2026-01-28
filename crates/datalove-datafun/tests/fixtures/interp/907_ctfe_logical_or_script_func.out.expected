@@ -1,0 +1,35 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call f0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn check_or():
+                    block0:
+                        v0 = const false
+                        v1 = const true
+                        v2 = const true
+                        return v2
+                    exports:
+                        check_or = f0
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("true\n"),
+        ),
+    ],
+)

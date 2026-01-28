@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE logical xor at script level.
+const A: bool = true
+const B: bool = false
+const C: bool = A xor B
+const D: bool = true xor true
+debuglog C
+debuglog D

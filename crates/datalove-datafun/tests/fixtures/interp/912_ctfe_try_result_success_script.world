@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE try result operator succeeds at script level.
+fun compute(): !u32
+    const R: !u32 = ok 99
+    const V: u32 = R!
+    ret ok V
+end fun
+
+debuglog compute()

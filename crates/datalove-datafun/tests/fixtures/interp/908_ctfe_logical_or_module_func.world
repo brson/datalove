@@ -1,0 +1,20 @@
+----------
+module local/test/logicalor
+----------
+
+// CTFE logical or in module function.
+fun test_or(): bool
+    const X: bool = false
+    const Y: bool = true
+    const Z: bool = X or Y
+    ret Z
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/logicalor
+import logicalor.test_or
+
+debuglog test_or()

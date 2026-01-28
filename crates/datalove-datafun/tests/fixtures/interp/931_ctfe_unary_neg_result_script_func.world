@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE unary result negation in script function.
+fun negate_value(): !i64
+    const X: i64 = 9876
+    const Y: i64 = -!X
+    ret ok Y
+end fun
+
+debuglog negate_value()

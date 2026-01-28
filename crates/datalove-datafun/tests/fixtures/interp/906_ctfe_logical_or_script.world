@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE logical or at script level.
+const A: bool = true
+const B: bool = false
+const C: bool = A or B
+const D: bool = false or false
+debuglog C
+debuglog D

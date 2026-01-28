@@ -1,0 +1,20 @@
+----------
+module local/test/logicalxor
+----------
+
+// CTFE logical xor in module function.
+fun test_xor(): bool
+    const X: bool = false
+    const Y: bool = true
+    const Z: bool = X xor Y
+    ret Z
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/logicalxor
+import logicalxor.test_xor
+
+debuglog test_xor()

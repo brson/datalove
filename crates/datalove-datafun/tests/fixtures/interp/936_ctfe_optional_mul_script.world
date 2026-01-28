@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE optional multiplication at script level.
+fun mul_opt(): ?u32
+    const A: u32 = 7
+    const B: u32 = 8
+    const C: u32 = A *? B
+    ret some C
+end fun
+
+debuglog mul_opt()

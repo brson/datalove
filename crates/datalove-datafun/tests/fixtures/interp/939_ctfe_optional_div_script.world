@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE optional division at script level.
+fun div_opt(): ?u32
+    const A: u32 = 100
+    const B: u32 = 5
+    const C: u32 = A /? B
+    ret some C
+end fun
+
+debuglog div_opt()

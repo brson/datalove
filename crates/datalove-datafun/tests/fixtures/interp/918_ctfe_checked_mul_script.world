@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE checked multiplication at script level.
+fun mul_checked(): !u32
+    const A: u32 = 7
+    const B: u32 = 6
+    const C: u32 = A *! B
+    ret ok C
+end fun
+
+debuglog mul_checked()

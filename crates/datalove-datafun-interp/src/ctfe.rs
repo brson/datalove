@@ -98,6 +98,16 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
             );
         }
 
+        // Destroy the early return buffer to free any error values written during early return.
+        // This is necessary when checked operations (like /!) write error values to ret_buffer.
+        unsafe {
+            datalove_rt::c::dtlv_rti_any_destroy_local(
+                self.interp.runtime_handle(),
+                ret_buffer.as_mut_ptr(),
+                ret_tydesc,
+            );
+        }
+
         result
     }
 
