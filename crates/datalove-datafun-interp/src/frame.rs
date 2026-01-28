@@ -17,7 +17,10 @@ pub struct Frame {
     /// Layout information.
     layout: IrLayout,
     /// Track which values are initialized (for DropTracked).
-    value_initialized: Vec<bool>,
+    ///
+    /// Only used for script frames. Function frames don't need this tracking
+    /// since they use precise Drop instructions and are discarded on return.
+    value_initialized: Option<Vec<bool>>,
     /// Track which slots are initialized.
     slot_initialized: Vec<bool>,
     /// Pointers to caller's data for each parameter.
@@ -30,8 +33,10 @@ pub struct Frame {
 
 impl Frame {
     /// Create a new frame for function execution.
+    ///
+    /// Function frames don't need value initialization tracking since they
+    /// use precise Drop instructions and are discarded on return.
     pub fn new_function(layout: IrLayout, param_count: usize) -> Self {
-        let value_count = layout.value_offsets.len();
         let slot_count = layout.slot_offsets.len();
         let data = AlignedBuffer::with_align(
             layout.frame_size as usize,
@@ -41,7 +46,7 @@ impl Frame {
         Self {
             data,
             layout,
-            value_initialized: vec![false; value_count],
+            value_initialized: None,
             slot_initialized: vec![false; slot_count],
             param_ptrs: vec![std::ptr::null_mut(); param_count],
             param_tydescs: vec![std::ptr::null(); param_count],
@@ -50,6 +55,9 @@ impl Frame {
     }
 
     /// Create a new frame for script execution.
+    ///
+    /// Script frames track value initialization for DropTracked instructions,
+    /// which handle cleanup of unit_end bindings that may have been moved.
     pub fn new_script(layout: IrLayout) -> Self {
         let value_count = layout.value_offsets.len();
         let slot_count = layout.slot_offsets.len();
@@ -61,7 +69,7 @@ impl Frame {
         Self {
             data,
             layout,
-            value_initialized: vec![false; value_count],
+            value_initialized: Some(vec![false; value_count]),
             slot_initialized: vec![false; slot_count],
             param_ptrs: Vec::new(),
             param_tydescs: Vec::new(),
@@ -70,24 +78,39 @@ impl Frame {
     }
 
     /// Mark a value as initialized.
+    ///
+    /// No-op for function frames (which don't track value initialization).
     pub fn mark_value_live(&mut self, id: ValueId) {
-        let idx = id.0 as usize;
-        if idx < self.value_initialized.len() {
-            self.value_initialized[idx] = true;
+        if let Some(ref mut initialized) = self.value_initialized {
+            let idx = id.0 as usize;
+            if idx < initialized.len() {
+                initialized[idx] = true;
+            }
         }
     }
 
     /// Check if a value is initialized.
+    ///
+    /// Returns false for function frames (DropTracked should not be used there).
     pub fn is_value_initialized(&self, id: ValueId) -> bool {
-        let idx = id.0 as usize;
-        idx < self.value_initialized.len() && self.value_initialized[idx]
+        match &self.value_initialized {
+            Some(initialized) => {
+                let idx = id.0 as usize;
+                idx < initialized.len() && initialized[idx]
+            }
+            None => false,
+        }
     }
 
     /// Mark a value as dropped.
+    ///
+    /// No-op for function frames (which don't track value initialization).
     pub fn mark_value_dropped(&mut self, id: ValueId) {
-        let idx = id.0 as usize;
-        if idx < self.value_initialized.len() {
-            self.value_initialized[idx] = false;
+        if let Some(ref mut initialized) = self.value_initialized {
+            let idx = id.0 as usize;
+            if idx < initialized.len() {
+                initialized[idx] = false;
+            }
         }
     }
 
@@ -250,25 +273,30 @@ impl Frame {
     ///
     /// Used when a script unit errors out before being added to FrameStore.
     /// Uses value_initialized to determine what to destroy.
+    ///
+    /// Only valid for script frames (panics if value_initialized is None).
     pub fn destroy_on_error(
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
         unit_end_values: &[ValueId],
         unit_end_slots: &[SlotId],
     ) {
+        let initialized = self.value_initialized.as_mut()
+            .expect("destroy_on_error called on function frame");
+
         // Destroy unit_end values that were initialized.
         for &vid in unit_end_values {
-            if !self.is_value_initialized(vid) {
+            let idx = vid.0 as usize;
+            if !initialized[idx] {
                 continue;
             }
-            let idx = vid.0 as usize;
             let offset = self.layout.value_offsets[idx] as usize;
             let tydesc = self.layout.value_tydescs[idx];
             let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
             unsafe {
                 datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
             }
-            self.value_initialized[idx] = false;
+            initialized[idx] = false;
         }
 
         // Destroy unit_end slots that were initialized.
@@ -290,6 +318,8 @@ impl Frame {
     ///
     /// Called during REPL cleanup to free persistent bindings.
     /// `moved_values`/`moved_slots` contain IDs that have been moved out and should be skipped.
+    ///
+    /// Only valid for script frames (panics if value_initialized is None).
     pub fn destroy_unit_end_bindings(
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
@@ -298,11 +328,14 @@ impl Frame {
         moved_values: &HashSet<ValueId>,
         moved_slots: &HashSet<SlotId>,
     ) {
+        let initialized = self.value_initialized.as_mut()
+            .expect("destroy_unit_end_bindings called on function frame");
+
         // Destroy unit_end values (persistent let bindings).
         for &vid in unit_end_values {
             let idx = vid.0 as usize;
             // Skip if not initialized or moved out.
-            if !self.is_value_initialized(vid) || moved_values.contains(&vid) {
+            if !initialized[idx] || moved_values.contains(&vid) {
                 continue;
             }
             let offset = self.layout.value_offsets[idx] as usize;
@@ -311,7 +344,7 @@ impl Frame {
             unsafe {
                 datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
             }
-            self.value_initialized[idx] = false;
+            initialized[idx] = false;
         }
 
         // Destroy unit_end slots (persistent var bindings).
