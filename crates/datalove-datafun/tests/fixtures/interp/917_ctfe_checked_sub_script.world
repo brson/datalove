@@ -6,8 +6,8 @@ scriptunit-fragment
 fun sub_checked(): !i32
     const A: i32 = 100
     const B: i32 = 30
-    const C: !i32 = ok (A -! B)
-    ret C
+    const C: i32 = A -! B
+    ret ok C
 end fun
 
 debuglog sub_checked()

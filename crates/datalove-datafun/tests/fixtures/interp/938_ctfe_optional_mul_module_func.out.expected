@@ -16,13 +16,11 @@ Analysis(
                     block0:
                         v0 = const 9u32
                         v1 = const 11u32
-                        v2, v3 = mul.checked v0, v1
-                        branch v3, block1, block2
+                        v2 = const 99u32
+                        v3 = const false
+                        goto block1
                     block1:
-                        v4 = none
-                        return v4
-                    block2:
-                        v5 = const some 99u32
+                        v5 = some v2
                         return v5
                 """,
             ),

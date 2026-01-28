@@ -5,8 +5,8 @@ module local/test/unaryres
 // CTFE unary result negation in module function.
 fun get_neg(): !i32
     const A: i32 = 111
-    const B: !i32 = ok (-!A)
-    ret B
+    const B: i32 = -!A
+    ret ok B
 end fun
 
 ----------

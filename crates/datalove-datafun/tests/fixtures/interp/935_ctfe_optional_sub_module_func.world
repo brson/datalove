@@ -6,8 +6,8 @@ module local/test/optsub
 fun subtract(): ?u32
     const A: u32 = 80
     const B: u32 = 25
-    const C: ?u32 = some (A -? B)
-    ret C
+    const C: u32 = A -? B
+    ret some C
 end fun
 
 ----------

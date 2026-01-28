@@ -6,8 +6,8 @@ scriptunit-fragment
 fun compute(): !i64
     const X: i64 = 1000
     const Y: i64 = 234
-    const Z: !i64 = ok (X +! Y)
-    ret Z
+    const Z: i64 = X +! Y
+    ret ok Z
 end fun
 
 debuglog compute()

@@ -15,13 +15,11 @@ Analysis(
                     fn get_neg():
                     block0:
                         v0 = const 77i32
-                        v1, v2 = neg.checked v0
-                        branch v2, block1, block2
+                        v1 = const -77i32
+                        v2 = const false
+                        goto block1
                     block1:
-                        v3 = none
-                        return v3
-                    block2:
-                        v4 = const some -77i32
+                        v4 = some v1
                         return v4
                 """,
             ),

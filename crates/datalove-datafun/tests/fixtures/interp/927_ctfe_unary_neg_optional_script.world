@@ -5,8 +5,8 @@ scriptunit-fragment
 // CTFE unary optional negation at script level.
 fun negate_opt(): ?i32
     const A: i32 = 50
-    const B: ?i32 = some (-?A)
-    ret B
+    const B: i32 = -?A
+    ret some B
 end fun
 
 debuglog negate_opt()

@@ -59,6 +59,9 @@ pub fn inline_script_consts(
 ///
 /// Takes the lowered IR and a map of const names to their evaluated values.
 /// For functions, the const_values field tracks function-local consts.
+///
+/// After inlining, eliminates dead (unreachable) blocks that may result from
+/// constant branch simplification.
 pub fn inline_function_consts(
     func: &mut IrFunction,
     const_values: &HashMap<String, ConstValue>,
@@ -75,6 +78,11 @@ pub fn inline_function_consts(
     for block in &mut func.blocks {
         inline_block_consts(block, &value_to_const);
     }
+
+    // Eliminate dead blocks that are no longer reachable after branch simplification.
+    // This is critical because simplified branches may leave unreachable blocks that
+    // reference undefined values (like err_dest when is_ok is constant true).
+    eliminate_dead_blocks_func(func);
 }
 
 /// Inline const values in a single block.
@@ -82,7 +90,14 @@ pub fn inline_function_consts(
 /// For each instruction that defines a const value, replace it with a Const literal.
 /// For instructions that produce multiple values (like UnwrapOption), we may need to
 /// insert additional Const instructions to define the other outputs.
+///
+/// Also simplifies constant branches: if a Branch terminator has a condition that
+/// is defined as a constant bool, replaces it with an unconditional Goto.
 fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, ConstValue>) {
+    // Track which ValueIds are known to be constant bools (from both the passed-in
+    // const values and from newly inserted is_ok/is_some/overflow values).
+    let mut const_bools: HashMap<ValueId, bool> = HashMap::new();
+
     // We may need to insert instructions, so collect replacements first.
     let mut replacements: Vec<(usize, Vec<Instruction>)> = Vec::new();
 
@@ -103,15 +118,39 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, Co
                         dest: *is_some,
                         value: ConstValue::Bool(true),
                     });
+                    const_bools.insert(*is_some, true);
                 }
 
                 // Special handling for UnwrapResult: also define is_ok = true.
                 // If we're inlining the ok_dest, the unwrap succeeded, so is_ok must be true.
+                // Note: err_dest is NOT defined here - it becomes dead code when is_ok = true.
+                // The branch on is_ok will take the success path, so err_dest is never used.
                 if let Instruction::UnwrapResult { is_ok, .. } = instr {
                     new_instrs.push(Instruction::Const {
                         dest: *is_ok,
                         value: ConstValue::Bool(true),
                     });
+                    const_bools.insert(*is_ok, true);
+                }
+
+                // Special handling for BinOpChecked: also define overflow = false.
+                // If we're inlining the dest, the operation succeeded without overflow.
+                if let Instruction::BinOpChecked { overflow, .. } = instr {
+                    new_instrs.push(Instruction::Const {
+                        dest: *overflow,
+                        value: ConstValue::Bool(false),
+                    });
+                    const_bools.insert(*overflow, false);
+                }
+
+                // Special handling for UnaryOpChecked: also define overflow = false.
+                // If we're inlining the dest, the operation succeeded without overflow.
+                if let Instruction::UnaryOpChecked { overflow, .. } = instr {
+                    new_instrs.push(Instruction::Const {
+                        dest: *overflow,
+                        value: ConstValue::Bool(false),
+                    });
+                    const_bools.insert(*overflow, false);
                 }
 
                 replacements.push((idx, new_instrs));
@@ -122,6 +161,30 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, Co
     // Apply replacements in reverse order to maintain correct indices.
     for (idx, new_instrs) in replacements.into_iter().rev() {
         block.instructions.splice(idx..=idx, new_instrs);
+    }
+
+    // Simplify constant branches: if the terminator is a Branch with a condition
+    // that is a known constant bool, replace with an unconditional Goto.
+    // This is critical for UnwrapResult where is_ok = true makes the else branch
+    // (which references the undefined err_dest) into dead code.
+    if let Terminator::Branch { cond, then_block, then_args, else_block, else_args } = &block.terminator {
+        if let Operand::Value(cond_vid) = cond {
+            if let Some(&cond_value) = const_bools.get(cond_vid) {
+                block.terminator = if cond_value {
+                    // Condition is true, go to then_block.
+                    Terminator::Goto {
+                        target: *then_block,
+                        args: then_args.clone(),
+                    }
+                } else {
+                    // Condition is false, go to else_block.
+                    Terminator::Goto {
+                        target: *else_block,
+                        args: else_args.clone(),
+                    }
+                };
+            }
+        }
     }
 }
 
@@ -170,6 +233,9 @@ fn inline_module_function_consts(
     for block in &mut func.blocks {
         inline_block_consts(block, &value_to_const);
     }
+
+    // Eliminate dead blocks that are no longer reachable after branch simplification.
+    eliminate_dead_blocks_func(func);
 }
 
 /// Get the destination ValueId of an instruction, if any.
@@ -273,6 +339,90 @@ fn eliminate_dead_code_unit(unit: &mut IrScriptUnit) {
         let changed = remove_dead_instructions(unit, &used_values);
         if !changed {
             break;
+        }
+    }
+}
+
+/// Eliminate dead (unreachable) blocks from an IrFunction.
+///
+/// After constant branch simplification, some blocks may become unreachable.
+/// For example, when `Branch(is_ok, then, else)` is simplified to `Goto(then)`,
+/// the `else` block may become unreachable if no other paths lead to it.
+///
+/// We must remove these blocks because they may reference undefined values
+/// (like err_dest when a result unwrap is known to succeed at compile time).
+///
+/// After removal, blocks are renumbered to maintain the invariant that
+/// `blocks[i].id.0 == i` (required by the interpreter).
+fn eliminate_dead_blocks_func(func: &mut IrFunction) {
+    use datalove_datafun_ir::BlockId;
+
+    if func.blocks.is_empty() {
+        return;
+    }
+
+    // Find all reachable blocks starting from block 0 (entry).
+    let mut reachable: HashSet<BlockId> = HashSet::new();
+    let mut worklist: Vec<BlockId> = vec![BlockId(0)];
+
+    while let Some(block_id) = worklist.pop() {
+        if reachable.contains(&block_id) {
+            continue;
+        }
+        reachable.insert(block_id);
+
+        // Find this block and get its successors.
+        if let Some(block) = func.blocks.iter().find(|b| b.id == block_id) {
+            match &block.terminator {
+                Terminator::Goto { target, .. } => {
+                    worklist.push(*target);
+                }
+                Terminator::Branch { then_block, else_block, .. } => {
+                    worklist.push(*then_block);
+                    worklist.push(*else_block);
+                }
+                Terminator::Return { .. } | Terminator::UnitEnd { .. } | Terminator::UnitEarlyReturn { .. } => {
+                    // No successors.
+                }
+            }
+        }
+    }
+
+    // Check if any blocks are actually dead.
+    let all_reachable = func.blocks.iter().all(|b| reachable.contains(&b.id));
+    if all_reachable {
+        return; // No dead blocks, nothing to do.
+    }
+
+    // Build mapping from old block IDs to new IDs.
+    // New IDs are assigned in order: 0, 1, 2, ...
+    let mut old_to_new: HashMap<BlockId, BlockId> = HashMap::new();
+    let mut new_id = 0u32;
+    for block in &func.blocks {
+        if reachable.contains(&block.id) {
+            old_to_new.insert(block.id, BlockId(new_id));
+            new_id += 1;
+        }
+    }
+
+    // Remove unreachable blocks and renumber.
+    func.blocks.retain(|block| reachable.contains(&block.id));
+    for block in &mut func.blocks {
+        // Update this block's ID.
+        block.id = *old_to_new.get(&block.id).unwrap();
+
+        // Update terminator targets.
+        match &mut block.terminator {
+            Terminator::Goto { target, .. } => {
+                *target = *old_to_new.get(target).unwrap();
+            }
+            Terminator::Branch { then_block, else_block, .. } => {
+                *then_block = *old_to_new.get(then_block).unwrap();
+                *else_block = *old_to_new.get(else_block).unwrap();
+            }
+            Terminator::Return { .. } | Terminator::UnitEnd { .. } | Terminator::UnitEarlyReturn { .. } => {
+                // No targets to update.
+            }
         }
     }
 }

@@ -22,15 +22,11 @@ Analysis(
                     fn negate_res():
                     block0:
                         v0 = const 50i32
-                        v1, v2 = neg.checked v0
-                        branch v2, block1, block2
+                        v1 = const -50i32
+                        v2 = const false
+                        goto block1
                     block1:
-                        v3 = const "negation overflow"
-                        v4 = error_from v3
-                        v5 = err v4
-                        return v5
-                    block2:
-                        v6 = const ok -50i32
+                        v6 = ok v1
                         return v6
                     exports:
                         negate_res = f0

@@ -6,8 +6,8 @@ module local/test/optmul
 fun multiply(): ?u32
     const A: u32 = 9
     const B: u32 = 11
-    const C: ?u32 = some (A *? B)
-    ret C
+    const C: u32 = A *? B
+    ret some C
 end fun
 
 ----------
