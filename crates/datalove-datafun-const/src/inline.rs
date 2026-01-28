@@ -821,8 +821,9 @@ mod tests {
         // Simulate: const X = opt_val? where opt_val is Some(42), which lowered to:
         //   v0 = const some 42   (the option value)
         //   v1, v2 = unwrap_option v0  (v1 = inner value, v2 = is_some)
-        //   branch v2, ...
-        // We'll inline v1 with 42. This should also set v2 = true.
+        //   branch v2, block1, block2
+        // We'll inline v1 with 42. This should also set v2 = true, simplify the branch
+        // to goto block1, and DCE removes v2 since it's no longer used.
         // Export v1 so DCE doesn't remove it.
         use datalove_datafun_ir::ExportBinding;
         let blocks = vec![IrBlock {
@@ -874,11 +875,15 @@ mod tests {
 
         let result = inline_script_consts(unit, &const_values);
 
-        // After inlining, v0 becomes dead (not used by anything) and is removed by DCE.
-        // v1 remains because it's exported, v2 remains because it's used by the branch.
-        assert_eq!(result.blocks[0].instructions.len(), 2);
+        // After inlining:
+        // - v0 becomes dead (not used by anything) and is removed by DCE
+        // - The UnwrapOption is replaced with Const(v1, 42) and Const(v2, true)
+        // - The Branch(v2, ...) is simplified to Goto(block1) since v2 is constant true
+        // - v2 is no longer used (the branch is now a goto), so DCE removes Const(v2)
+        // - Only Const(v1) remains because v1 is exported
+        assert_eq!(result.blocks[0].instructions.len(), 1);
 
-        // First instruction: Const for the unwrapped dest (v1).
+        // Only instruction: Const for the unwrapped dest (v1).
         match &result.blocks[0].instructions[0] {
             Instruction::Const { dest, value } => {
                 assert_eq!(*dest, ValueId(1));
@@ -887,13 +892,13 @@ mod tests {
             _ => panic!("expected Const instruction for unwrapped value"),
         }
 
-        // Second instruction: Const for is_some = true (v2).
-        match &result.blocks[0].instructions[1] {
-            Instruction::Const { dest, value } => {
-                assert_eq!(*dest, ValueId(2));
-                assert_eq!(*value, ConstValue::Bool(true));
+        // Terminator should now be Goto(block1) instead of Branch.
+        match &result.blocks[0].terminator {
+            Terminator::Goto { target, args } => {
+                assert_eq!(*target, BlockId(1));
+                assert!(args.is_empty());
             }
-            _ => panic!("expected Const instruction for is_some"),
+            _ => panic!("expected Goto terminator after branch simplification"),
         }
     }
 }
