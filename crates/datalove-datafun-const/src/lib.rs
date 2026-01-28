@@ -3,11 +3,14 @@
 //! This crate provides:
 //! - Const evaluation: executing pre-lowered IR to produce constant values
 //! - Const inlining: replacing const binding expressions with evaluated values in IR
+//! - Dead code elimination: removing unused instructions and unreachable blocks
 
+pub mod dce;
 pub mod eval;
 pub mod inline;
 
 // Re-export commonly used items.
+pub use dce::{eliminate_dead_blocks_func, eliminate_dead_code_unit, instruction_dest};
 pub use eval::{
     PreparedConst, ScriptFunctionConstsResult,
     evaluate_consts_prepared, evaluate_function_consts_prepared, evaluate_prepared_const,
