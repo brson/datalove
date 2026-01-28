@@ -155,29 +155,45 @@ but I do have a [vision](vision.md) about what it will be.
 ---
 
 
-
+<!-- User-oriented chapters -->
 
 - [Principles](principles.md)
+- [Novelties](novelties.md)
 - [Lexical Structure](lexer.md)
 - [Datalove Literals](datalit-types.md)
+- [Datalove Literaels Runtime Types](datalit-runtime-types.md)
 - [Modules, Functions and Scripts](modules-functions-scripts.md)
 - [Control Flow](control-flow.md)
 - [Operators](operators.md)
 - [Optional and Result Types and Operations](checked-types.md)
+- [Moves, Copies, References](moves-etc.md)
 - [Constant Evaluation](const-eval.md)
 - [Datalove Worlds](worlds.md)
 - [Roadmap](roadmap.md)
+- [Influences](influences.md)
+- [Novelties](novelties.md)
 - [Vision](vision.md)
 
 ---
 
-- [Datalove Literals Runtime Types](datalit-runtime-types.md)
+<!-- Developer-oriented chapters -->
+
 - [Compiler Guide](compiler-guide.md)
+- [Issues](issues.md)
+- [Design Notes](design-notes.md)
+- [Future Designs](future-designs.md)
+- [Potential Changes](potential-changes.md)
 - [Testing](testing-tower.md)
-- [Influences](influences.md)
 
 ---
 
+<!-- Unsorted junk -->
+
 - [Features](features.md)
-- [Design Notes](design-notes.md)
-- [Novelties](novelties.md)
+- [More Datalit Types](more-datalit-types.md)
+- [Total Functions](total-functions.md)
+- [Panicking](panicking.md)
+- [Script Semantics](script-semantics.md)
+- [REPL UI](repl-ui.md)
+- [Zipper Heaps](zipper-heaps.md)
+- [Links](links.md)
