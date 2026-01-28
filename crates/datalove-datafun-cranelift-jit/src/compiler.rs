@@ -413,6 +413,7 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     // Collection functions.
     jit_builder.symbol("dtlv_rti_list_create_local", c::dtlv_rti_list_create_local as *const u8);
     jit_builder.symbol("dtlv_rti_list_push_local", c::dtlv_rti_list_push_local as *const u8);
+    jit_builder.symbol("dtlv_rti_list_build_from_slice_local", c::dtlv_rti_list_build_from_slice_local as *const u8);
     jit_builder.symbol("dtlv_rti_btreeset_create_local", c::dtlv_rti_btreeset_create_local as *const u8);
     jit_builder.symbol("dtlv_rti_btreeset_insert_local", c::dtlv_rti_btreeset_insert_local as *const u8);
     jit_builder.symbol("dtlv_rti_btreeset_build_from_sorted_slice_local", c::dtlv_rti_btreeset_build_from_sorted_slice_local as *const u8);
@@ -422,6 +423,7 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     jit_builder.symbol("dtlv_rti_tensor_init_local", c::dtlv_rti_tensor_init_local as *const u8);
     jit_builder.symbol("dtlv_rti_table_create_local", c::dtlv_rti_table_create_local as *const u8);
     jit_builder.symbol("dtlv_rti_table_push_row_local", c::dtlv_rti_table_push_row_local as *const u8);
+    jit_builder.symbol("dtlv_rti_table_build_from_rows_local", c::dtlv_rti_table_build_from_rows_local as *const u8);
 
     // Int (bigint) arithmetic functions.
     jit_builder.symbol("dtlv_rti_int_add", c::dtlv_rti_int_add as *const u8);

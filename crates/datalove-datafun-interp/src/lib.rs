@@ -1526,44 +1526,37 @@ impl IrInterpreter {
                     self.write_const(inner, payload_dest);
                 }
                 ConstValue::List(elements) => {
-                    // Create empty list and push elements.
+                    // Build list from slice of elements.
                     let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
                     let element_tydesc = tydesc_ref.list_element_ty().as_ptr();
                     let element_size = (*element_tydesc).size as usize;
                     let element_align = (*element_tydesc).align;
 
-                    // Create an empty list.
-                    datalove_rt::c::dtlv_rti_list_create_local(
-                        self.runtime.handle(),
-                        dest.ptr,
-                        dest.tydesc,
-                    );
-
                     // Compute element stride.
                     let stride = rtdt::layout::align_up(element_size as u32, element_align) as usize;
                     let stride = if stride == 0 { 1 } else { stride };
 
-                    // Allocate temp buffer for elements.
-                    let mut temp_buffer = vec![0u8; stride.max(8)];
+                    // Allocate buffer for ALL elements.
+                    let num_elements = elements.len();
+                    let mut elements_buffer = vec![0u8; (stride * num_elements).max(8)];
 
-                    // Push each element.
-                    for element_value in elements.iter() {
-                        // Write element to temp buffer.
+                    // Write each element at its offset in the buffer.
+                    for (i, element_value) in elements.iter().enumerate() {
                         let element_dest = Destination {
-                            ptr: temp_buffer.as_mut_ptr(),
+                            ptr: elements_buffer.as_mut_ptr().add(i * stride),
                             tydesc: element_tydesc,
                         };
                         self.write_const(element_value, element_dest);
-
-                        // Push element to list (takes ownership).
-                        datalove_rt::c::dtlv_rti_list_push_local(
-                            self.runtime.handle(),
-                            dest.ptr,
-                            dest.tydesc,
-                            temp_buffer.as_mut_ptr(),
-                            element_tydesc,
-                        );
                     }
+
+                    // Build list from slice.
+                    datalove_rt::c::dtlv_rti_list_build_from_slice_local(
+                        self.runtime.handle(),
+                        dest.ptr,
+                        element_tydesc,
+                        elements_buffer.as_mut_ptr(),
+                        num_elements as rtdt::UsizeRepr,
+                    );
                 }
                 ConstValue::Set(elements) => {
                     // Build set from sorted slice of elements.
@@ -1646,15 +1639,8 @@ impl IrInterpreter {
                     );
                 }
                 ConstValue::Table { columns: _, rows } => {
-                    // Create empty table and push rows.
+                    // Build table from rows.
                     let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
-
-                    // Create an empty table.
-                    datalove_rt::c::dtlv_rti_table_create_local(
-                        self.runtime.handle(),
-                        dest.ptr,
-                        dest.tydesc,
-                    );
 
                     // Collect column type descriptors.
                     let col_tydescs: Vec<*const rtdt::TyDesc> = tydesc_ref
@@ -1676,6 +1662,7 @@ impl IrInterpreter {
                         row_offset += field_size;
                     }
                     let row_size = rtdt::layout::align_up(row_offset, row_max_align);
+                    let row_stride = if row_size == 0 { 1 } else { row_size };
 
                     // Create row tuple type descriptor.
                     let mut row_tuple_fields: Vec<rtdt::TyInfoTupleField> = Vec::with_capacity(num_cols);
@@ -1697,29 +1684,32 @@ impl IrInterpreter {
                         },
                     };
 
-                    // Allocate temp buffer for row tuple.
-                    let mut row_buffer = vec![0u8; row_size.max(8) as usize];
+                    // Allocate buffer for ALL rows.
+                    let num_rows = rows.len();
+                    let mut rows_buffer = vec![0u8; (row_stride as usize * num_rows).max(8)];
 
-                    // Push each row.
-                    for row_values in rows.iter() {
-                        // Write each column value to the row tuple.
-                        for (i, col_value) in row_values.iter().enumerate() {
+                    // Write each row at its offset in the buffer.
+                    for (row_idx, row_values) in rows.iter().enumerate() {
+                        let row_base_offset = row_idx * row_stride as usize;
+                        for (col_idx, col_value) in row_values.iter().enumerate() {
+                            let col_offset = row_base_offset + field_offsets[col_idx] as usize;
                             let col_dest = Destination {
-                                ptr: row_buffer.as_mut_ptr().add(field_offsets[i] as usize),
-                                tydesc: col_tydescs[i],
+                                ptr: rows_buffer.as_mut_ptr().add(col_offset),
+                                tydesc: col_tydescs[col_idx],
                             };
                             self.write_const(col_value, col_dest);
                         }
-
-                        // Push row to table.
-                        datalove_rt::c::dtlv_rti_table_push_row_local(
-                            self.runtime.handle(),
-                            dest.ptr,
-                            dest.tydesc,
-                            row_buffer.as_ptr(),
-                            &row_tydesc,
-                        );
                     }
+
+                    // Build table from rows.
+                    datalove_rt::c::dtlv_rti_table_build_from_rows_local(
+                        self.runtime.handle(),
+                        dest.ptr,
+                        dest.tydesc,
+                        rows_buffer.as_mut_ptr(),
+                        &row_tydesc,
+                        num_rows as rtdt::UsizeRepr,
+                    );
                 }
                 // Aggregate and collection ConstValues that are not yet supported.
                 ConstValue::ResultErr(_)

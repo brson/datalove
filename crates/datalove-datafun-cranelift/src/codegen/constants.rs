@@ -492,7 +492,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile a List constant.
     ///
-    /// Creates an empty list and pushes each element.
+    /// Builds list from a slice of elements using bulk-build runtime function.
     fn compile_list_const(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -523,13 +523,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             _ => return Err(CraneliftError::Codegen("expected List type".into())),
         };
 
-        // Get List TyDesc.
-        let list_tydesc_id = self.tydesc_emitter.get(ir_type).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for List".into())
-        })?;
-        let list_tydesc_gv = self.module.declare_data_in_func(list_tydesc_id, builder.func);
-        let list_tydesc_ptr = builder.ins().global_value(PTR_TYPE, list_tydesc_gv);
-
         // Get element TyDesc.
         let elem_tydesc_id = self.tydesc_emitter.get(&element_type).ok_or_else(|| {
             CraneliftError::Codegen("TyDesc not found for List element".into())
@@ -537,31 +530,34 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
         let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
 
-        // Create empty list.
-        let list_create_ref = self.module.declare_func_in_func(runtime.list_create, builder.func);
-        builder.ins().call(list_create_ref, &[rt_handle, base, list_tydesc_ptr]);
-
-        // Get element size/alignment for temp buffer allocation.
+        // Get element size/alignment for buffer allocation.
         let elem_layout = crate::types::ir_type_to_cranelift(&element_type).layout();
         let elem_size = elem_layout.size;
         let elem_align = elem_layout.align;
         let elem_stride = datalove_rtdt::layout::align_up(elem_size, elem_align);
         let elem_stride = if elem_stride == 0 { 1 } else { elem_stride };
 
-        // Allocate temp slot for element values.
-        let temp_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+        // Allocate stack buffer for ALL elements.
+        let num_elements = elements.len() as u32;
+        let buffer_size = (elem_stride * num_elements).max(8);
+        let elements_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            elem_stride,
+            buffer_size,
             elem_align as u8,
         ));
+        let elements_addr = builder.ins().stack_addr(PTR_TYPE, elements_slot, 0);
 
-        // Push each element.
-        let list_push_ref = self.module.declare_func_in_func(runtime.list_push, builder.func);
-        for element_value in elements.iter() {
-            let temp_addr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
-            self.write_const_value_to_addr(builder, temp_addr, element_value)?;
-            builder.ins().call(list_push_ref, &[rt_handle, base, list_tydesc_ptr, temp_addr, elem_tydesc_ptr]);
+        // Write each element at its offset in the buffer.
+        for (i, element_value) in elements.iter().enumerate() {
+            let offset = (i as u32) * elem_stride;
+            let elem_addr = builder.ins().iadd_imm(elements_addr, offset as i64);
+            self.write_const_value_to_addr(builder, elem_addr, element_value)?;
         }
+
+        // Build list from slice.
+        let num_elements_val = builder.ins().iconst(crate::index_types::INDEX_TYPE, num_elements as i64);
+        let list_build_ref = self.module.declare_func_in_func(runtime.list_build_from_slice, builder.func);
+        builder.ins().call(list_build_ref, &[rt_handle, base, elem_tydesc_ptr, elements_addr, num_elements_val]);
 
         // Store base pointer for this value.
         self.values.insert(dest, base);
@@ -744,7 +740,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile a Table constant.
     ///
-    /// Creates an empty table and pushes each row.
+    /// Builds table from rows using bulk-build runtime function.
     fn compile_table_const(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -782,10 +778,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let table_tydesc_gv = self.module.declare_data_in_func(table_tydesc_id, builder.func);
         let table_tydesc_ptr = builder.ins().global_value(PTR_TYPE, table_tydesc_gv);
 
-        // Create empty table.
-        let table_create_ref = self.module.declare_func_in_func(runtime.table_create, builder.func);
-        builder.ins().call(table_create_ref, &[rt_handle, base, table_tydesc_ptr]);
-
         // Compute row tuple layout.
         let col_types: Vec<_> = columns.iter().map(|(_, ty)| (**ty).clone()).collect();
         let mut row_offset = 0u32;
@@ -808,24 +800,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             col_tydescs.push(col_tydesc_id);
         }
         let row_size = datalove_rtdt::layout::align_up(row_offset, row_max_align);
-
-        // Create row tuple TyDesc as static data.
-        // Row tuple fields: offset (u32), tydesc ptr (pointer)
-        let mut tydesc_field_data = Vec::new();
-        for (i, &col_tydesc_id) in col_tydescs.iter().enumerate() {
-            tydesc_field_data.extend_from_slice(&field_offsets[i].to_le_bytes());
-            // Pad to pointer alignment (8 bytes).
-            tydesc_field_data.extend_from_slice(&[0u8; 4]);
-            // Placeholder for tydesc pointer - will be filled at runtime by declaring in func.
-            tydesc_field_data.extend_from_slice(&[0u8; 8]);
-        }
-
-        // Allocate temp slot for row tuple.
-        let row_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            row_size.max(8),
-            row_max_align as u8,
-        ));
+        let row_stride = if row_size == 0 { 1 } else { row_size };
 
         // Build row tuple TyDesc on stack.
         // TyInfoTupleField is { offset: u32, _pad: u32, tydesc: *const TyDesc }
@@ -875,19 +850,30 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // fields pointer
         builder.ins().store(mem_flags, tuple_fields_addr, row_tydesc_addr, 24);
 
-        // Push each row.
-        let table_push_ref = self.module.declare_func_in_func(runtime.table_push_row, builder.func);
-        for row_values in rows.iter() {
-            // Write each column value to the row tuple.
-            for (i, col_value) in row_values.iter().enumerate() {
-                let col_addr = builder.ins().stack_addr(PTR_TYPE, row_slot, field_offsets[i] as i32);
+        // Allocate stack buffer for ALL rows.
+        let num_rows = rows.len() as u32;
+        let buffer_size = (row_stride * num_rows).max(8);
+        let rows_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            buffer_size,
+            row_max_align as u8,
+        ));
+        let rows_addr = builder.ins().stack_addr(PTR_TYPE, rows_slot, 0);
+
+        // Write each row at its offset in the buffer.
+        for (row_idx, row_values) in rows.iter().enumerate() {
+            let row_base_offset = (row_idx as u32) * row_stride;
+            for (col_idx, col_value) in row_values.iter().enumerate() {
+                let col_offset = row_base_offset + field_offsets[col_idx];
+                let col_addr = builder.ins().iadd_imm(rows_addr, col_offset as i64);
                 self.write_const_value_to_addr(builder, col_addr, col_value)?;
             }
-
-            // Push row to table.
-            let row_addr = builder.ins().stack_addr(PTR_TYPE, row_slot, 0);
-            builder.ins().call(table_push_ref, &[rt_handle, base, table_tydesc_ptr, row_addr, row_tydesc_addr]);
         }
+
+        // Build table from rows.
+        let num_rows_val = builder.ins().iconst(crate::index_types::INDEX_TYPE, num_rows as i64);
+        let table_build_ref = self.module.declare_func_in_func(runtime.table_build_from_rows, builder.func);
+        builder.ins().call(table_build_ref, &[rt_handle, base, table_tydesc_ptr, rows_addr, row_tydesc_addr, num_rows_val]);
 
         // Store base pointer for this value.
         self.values.insert(dest, base);

@@ -36,6 +36,8 @@ pub struct RuntimeImports {
     pub list_create: FuncId,
     /// `dtlv_rti_list_push_local(rt, list_value_mut, list_tydesc, element_in, element_tydesc) -> RtStatus`
     pub list_push: FuncId,
+    /// `dtlv_rti_list_build_from_slice_local(rt, list_out, element_tydesc, elements_ptr, num_elements) -> RtStatus`
+    pub list_build_from_slice: FuncId,
     /// `dtlv_rti_btreeset_create_local(rt, value_out, tydesc) -> RtStatus`
     pub set_create: FuncId,
     /// `dtlv_rti_btreeset_insert_local(rt, set_value_mut, set_tydesc, element_in, element_tydesc, bool_out) -> RtStatus`
@@ -54,6 +56,8 @@ pub struct RuntimeImports {
     pub table_create: FuncId,
     /// `dtlv_rti_table_push_row_local(rt, table_mut, table_tydesc, row_ref, row_tydesc) -> RtStatus`
     pub table_push_row: FuncId,
+    /// `dtlv_rti_table_build_from_rows_local(rt, table_out, table_tydesc, rows_ptr, row_tydesc, num_rows) -> RtStatus`
+    pub table_build_from_rows: FuncId,
 
     // Int (bigint) arithmetic functions.
     /// `dtlv_rti_int_add(rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> RtStatus`
@@ -223,6 +227,20 @@ impl RuntimeImports {
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_list_push_local: {}", e)))?
         };
 
+        // dtlv_rti_list_build_from_slice_local(rt, list_out, element_tydesc, elements_ptr, num_elements) -> u8
+        let list_build_from_slice = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE));    // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE));    // list_out
+            sig.params.push(AbiParam::new(PTR_TYPE));    // element_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));    // elements_ptr
+            sig.params.push(AbiParam::new(INDEX_TYPE));  // num_elements (UsizeRepr)
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_list_build_from_slice_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_list_build_from_slice_local: {}", e)))?
+        };
+
         // dtlv_rti_btreeset_create_local(rt, value_out, tydesc) -> u8
         let set_create = {
             let mut sig = cl_ir::Signature::new(call_conv);
@@ -351,6 +369,21 @@ impl RuntimeImports {
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_table_push_row_local: {}", e)))?
         };
 
+        // dtlv_rti_table_build_from_rows_local(rt, table_out, table_tydesc, rows_ptr, row_tydesc, num_rows) -> u8
+        let table_build_from_rows = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE));    // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE));    // table_out
+            sig.params.push(AbiParam::new(PTR_TYPE));    // table_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));    // rows_ptr
+            sig.params.push(AbiParam::new(PTR_TYPE));    // row_tydesc
+            sig.params.push(AbiParam::new(INDEX_TYPE));  // num_rows (UsizeRepr)
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_table_build_from_rows_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_table_build_from_rows_local: {}", e)))?
+        };
+
         // Int (bigint) binary operations: (rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> u8
         let int_binop_sig = || {
             let mut sig = cl_ir::Signature::new(call_conv);
@@ -475,6 +508,7 @@ impl RuntimeImports {
             string_from_bytes,
             list_create,
             list_push,
+            list_build_from_slice,
             set_create,
             set_insert,
             set_build_from_sorted,
@@ -484,6 +518,7 @@ impl RuntimeImports {
             tensor_init,
             table_create,
             table_push_row,
+            table_build_from_rows,
             int_add,
             int_sub,
             int_mul,

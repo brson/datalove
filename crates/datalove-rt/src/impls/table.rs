@@ -356,6 +356,75 @@ pub unsafe fn table_len(table_ref: *const u8) -> rtdt::Usize {
     }
 }
 
+/// Build a table by moving rows from a contiguous array of row tuples.
+///
+/// The rows are stored in row-major order (array of tuples) in the source buffer.
+/// Elements are moved (not cloned) into the table's columnar storage.
+/// After this call, the source buffer is consumed and should not be destroyed.
+pub unsafe fn table_build_from_rows_impl(
+    rt: LocalRtHandle,
+    table_out: *mut u8,
+    table_tydesc: rtdt::TyDescRef,
+    rows_ptr: *mut u8,
+    row_tydesc: rtdt::TyDescRef,
+    num_rows: rtdt::UsizeRepr,
+) -> RtStatus {
+    unsafe {
+        let table = &mut *(table_out as *mut rtdt::Table);
+        let column_tydescs = collect_column_tydescs(table_tydesc);
+        let num_columns = column_tydescs.len();
+
+        // Verify row tuple has correct number of fields.
+        debug_assert_eq!(row_tydesc.type_tag(), rtdt::TyTag::Tuple);
+        let row_info = row_tydesc.tuple_info();
+        debug_assert_eq!(row_info.num_fields() as usize, num_columns);
+
+        if num_rows == 0 || num_columns == 0 {
+            // Initialize empty table.
+            table.len = rtdt::Usize::ZERO;
+            table.capacity = rtdt::Usize::ZERO;
+            table.data = std::ptr::null();
+            return RtStatus::Ok;
+        }
+
+        // Allocate table buffer with exact capacity.
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, num_rows);
+        let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
+
+        let data = if alloc_size > 0 {
+            let ptr = rt_ref.alloc.alloc(alloc_size, alloc_align, 1);
+            if ptr.is_null() {
+                return RtStatus::Error;
+            }
+            ptr
+        } else {
+            std::ptr::null_mut()
+        };
+
+        table.data = data;
+        table.capacity = rtdt::Usize::new(num_rows);
+
+        // Move each row's fields into the columnar storage.
+        let row_size = row_tydesc.size() as usize;
+        for row in 0..num_rows {
+            let row_ptr = rows_ptr.add((row as usize) * row_size);
+
+            for (col, field) in row_tydesc.iter_tuple_fields().enumerate() {
+                let field_ptr = row_ptr.add(field.offset() as usize);
+                let dst = element_ptr_mut(data, &column_tydescs, row, col, num_rows);
+                let elem_size = column_tydescs[col].size as usize;
+
+                // Move (memcpy) the field value - source is consumed.
+                std::ptr::copy_nonoverlapping(field_ptr, dst, elem_size);
+            }
+        }
+
+        table.len = rtdt::Usize::new(num_rows);
+        RtStatus::Ok
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

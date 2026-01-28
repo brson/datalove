@@ -82,6 +82,55 @@ pub unsafe fn list_create_from_slice_impl(
     RtStatus::Ok
 }
 
+/// Build a List by moving elements from a contiguous buffer.
+///
+/// Unlike `list_create_from_slice_impl`, this moves elements rather than cloning.
+/// The source buffer is consumed and should not be destroyed separately.
+pub unsafe fn list_build_from_slice_impl(
+    rt: &mut RtLocal,
+    list_out: *mut u8,
+    element_tydesc: rtdt::TyDescRef,
+    elements_ptr: *mut u8,
+    num_elements: rtdt::UsizeRepr,
+) -> RtStatus {
+    let list_ptr = list_out as *mut List;
+
+    if num_elements == 0 {
+        // Initialize empty list.
+        unsafe {
+            (*list_ptr).data = std::ptr::null();
+            (*list_ptr).size = rtdt::Usize::ZERO;
+            (*list_ptr).capacity = rtdt::Usize::ZERO;
+        }
+        return RtStatus::Ok;
+    }
+
+    let element_size = element_tydesc.size();
+    let element_align = element_tydesc.align();
+
+    // Allocate buffer with exact capacity.
+    let data = unsafe { rt.alloc.alloc(element_size, element_align, num_elements) };
+    if data.is_null() {
+        return RtStatus::Error;
+    }
+
+    // Move (memcpy) all elements from source to list buffer.
+    // Source elements are consumed - no destruction needed.
+    let total_bytes = (num_elements as usize) * (element_size as usize);
+    unsafe {
+        std::ptr::copy_nonoverlapping(elements_ptr, data, total_bytes);
+    }
+
+    // Initialize list structure.
+    unsafe {
+        (*list_ptr).data = data;
+        (*list_ptr).size = rtdt::Usize::new(num_elements);
+        (*list_ptr).capacity = rtdt::Usize::new(num_elements);
+    }
+
+    RtStatus::Ok
+}
+
 /// Destroy a List and free all elements and buffer.
 pub unsafe fn list_destroy_impl(
     rt: &mut RtLocal,

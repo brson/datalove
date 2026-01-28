@@ -1185,6 +1185,37 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_create_from_slice_local(
     }
 }
 
+/// Builds a list by moving elements from a contiguous slice.
+///
+/// The `elements_ptr` is a mutable pointer to source elements. Elements are moved
+/// (not cloned) into the new list. After this call, the source buffer is consumed
+/// and should not be destroyed separately.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_list_build_from_slice_local(
+    rt: LocalRtHandle,
+    list_out: *mut u8,
+    element_tydesc: *const rtdt::TyDesc,
+    elements_ptr: *mut u8,
+    num_elements: rtdt::UsizeRepr,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!list_out.is_null(), "list_out is null");
+    debug_assert!(!element_tydesc.is_null(), "element_tydesc is null");
+    debug_assert!(num_elements == 0 || !elements_ptr.is_null(), "elements_ptr is null");
+    debug_assert_aligned(elements_ptr, element_tydesc, "list_build_from_slice:elements");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let element_tydesc_ref = rtdt::TyDescRef::from_ptr(element_tydesc);
+        crate::impls::list::list_build_from_slice_impl(
+            rt_ref,
+            list_out,
+            element_tydesc_ref,
+            elements_ptr,
+            num_elements,
+        )
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_list_destroy_local(
     rt: LocalRtHandle,
@@ -1841,6 +1872,40 @@ pub unsafe extern "C-unwind" fn dtlv_rti_table_push_row_local(
             table_tydesc_ref,
             row_ref,
             row_tydesc_ref,
+        )
+    }
+}
+
+/// Builds a table by moving rows from a contiguous array of row tuples.
+///
+/// The `rows_ptr` points to an array of row tuples (row-major layout).
+/// Rows are moved (not cloned) into the table's columnar storage.
+/// After this call, the source buffer is consumed and should not be destroyed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_table_build_from_rows_local(
+    rt: LocalRtHandle,
+    table_out: *mut u8,
+    table_tydesc: *const rtdt::TyDesc,
+    rows_ptr: *mut u8,
+    row_tydesc: *const rtdt::TyDesc,
+    num_rows: rtdt::UsizeRepr,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!table_out.is_null(), "table_out is null");
+    debug_assert!(!table_tydesc.is_null(), "table_tydesc is null");
+    debug_assert!(num_rows == 0 || !rows_ptr.is_null(), "rows_ptr is null");
+    debug_assert!(!row_tydesc.is_null(), "row_tydesc is null");
+    debug_assert_aligned(rows_ptr, row_tydesc, "table_build_from_rows:rows");
+    unsafe {
+        let table_tydesc_ref = rtdt::TyDescRef::from_ptr(table_tydesc);
+        let row_tydesc_ref = rtdt::TyDescRef::from_ptr(row_tydesc);
+        crate::impls::table::table_build_from_rows_impl(
+            rt,
+            table_out,
+            table_tydesc_ref,
+            rows_ptr,
+            row_tydesc_ref,
+            num_rows,
         )
     }
 }
