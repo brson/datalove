@@ -14,7 +14,6 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 42u32
                         v1 = const ok 42u32
                         debuglog v1
                         unit_end_drop v1

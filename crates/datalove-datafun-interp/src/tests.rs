@@ -2327,3 +2327,167 @@ fn test_multiple_explicit_drops() {
 
     env.destroy_live_values(interp.runtime_handle());
 }
+
+#[test]
+fn test_ctfe_struct_with_string_destruction() {
+    // Test that CTFE struct with string field is properly destroyed.
+    // const P: {name: string, age: u32} = {name = "Alice", age = 30}
+    let struct_type = IrType::Struct(vec![
+        ("name".to_string(), IrType::String),
+        ("age".to_string(), IrType::U32),
+    ]);
+
+    let struct_const = ConstValue::Struct(vec![
+        ("name".to_string(), ConstValue::String("Alice".to_string())),
+        ("age".to_string(), ConstValue::U32(30)),
+    ]);
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    // Create struct constant.
+                    Instruction::Const { dest: ValueId(0), value: struct_const },
+                    // Explicit drop.
+                    Instruction::Drop { operand: Operand::Value(ValueId(0)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![struct_type],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![],
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}
+
+#[test]
+fn test_ctfe_struct_with_string_unit_end_destruction() {
+    // Test that CTFE struct with string field is properly destroyed via unit_end_values.
+    // This mimics how the test fixture works: const P binding that stays alive until env cleanup.
+    let struct_type = IrType::Struct(vec![
+        ("name".to_string(), IrType::String),
+        ("age".to_string(), IrType::U32),
+    ]);
+
+    let struct_const = ConstValue::Struct(vec![
+        ("name".to_string(), ConstValue::String("Alice".to_string())),
+        ("age".to_string(), ConstValue::U32(30)),
+    ]);
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    // Create struct constant (no explicit drop - destroyed via unit_end_values).
+                    Instruction::Const { dest: ValueId(0), value: struct_const },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![struct_type],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![ValueId(0)],  // Struct is tracked for cleanup.
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}
+
+#[test]
+fn test_ctfe_struct_with_string_and_debuglog() {
+    // Test that CTFE struct with string field is properly destroyed when debuglog is used.
+    // This exactly mimics the failing test fixture.
+    let struct_type = IrType::Struct(vec![
+        ("name".to_string(), IrType::String),
+        ("age".to_string(), IrType::U32),
+    ]);
+
+    let struct_const = ConstValue::Struct(vec![
+        ("name".to_string(), ConstValue::String("Alice".to_string())),
+        ("age".to_string(), ConstValue::U32(30)),
+    ]);
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    // Create struct constant.
+                    Instruction::Const { dest: ValueId(0), value: struct_const },
+                    // DebugLog the struct.
+                    Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![struct_type],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![ValueId(0)],  // Struct is tracked for cleanup.
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}
+

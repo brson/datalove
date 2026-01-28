@@ -8,12 +8,14 @@
 //! 1. Takes IR where consts are lowered as let bindings
 //! 2. Uses the const_values metadata to identify which values are consts
 //! 3. Replaces the defining instruction with a Const literal
+//! 4. Removes dead code (instructions producing unused values)
 //!
 //! This separation allows lowering to be independent of const evaluation.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use datalove_datafun_ir::{
     ConstValue, IrScriptUnit, IrFunction, IrBlock, Instruction, ValueId,
+    Operand, Terminator, ExportBinding,
 };
 
 /// Inline const values into an IrScriptUnit.
@@ -39,6 +41,11 @@ pub fn inline_script_consts(
     for block in &mut unit.blocks {
         inline_block_consts(block, &value_to_const);
     }
+
+    // Remove dead code (instructions producing unused values).
+    // This is needed because CTFE inlining may replace a Pack/struct-building
+    // instruction with a Const, leaving the intermediate values orphaned.
+    eliminate_dead_code_unit(&mut unit);
 
     // Inline consts in nested functions.
     for func in &mut unit.functions {
@@ -249,6 +256,300 @@ fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
     }
 }
 
+/// Eliminate dead code from an IrScriptUnit.
+///
+/// After const inlining, some instructions may produce values that are no longer
+/// used. For example, if a Pack instruction is replaced with a Const containing
+/// the struct value, the intermediate instructions that produced the Pack's operands
+/// become dead code.
+///
+/// This function removes instructions that:
+/// - Define values that are not used by any other instruction
+/// - Have no side effects (Const, Copy, etc.)
+fn eliminate_dead_code_unit(unit: &mut IrScriptUnit) {
+    // Iterate until no changes (removing an instruction may make its operands unused).
+    loop {
+        let used_values = collect_used_values(unit);
+        let changed = remove_dead_instructions(unit, &used_values);
+        if !changed {
+            break;
+        }
+    }
+}
+
+/// Collect all ValueIds that are used in the unit.
+fn collect_used_values(unit: &IrScriptUnit) -> HashSet<ValueId> {
+    let mut used = HashSet::new();
+
+    // Values in unit_end_values are used (need to be cleaned up).
+    for vid in &unit.unit_end_values {
+        used.insert(*vid);
+    }
+
+    // Exported values must be kept.
+    for (_name, binding) in &unit.exports {
+        if let ExportBinding::Value(vid) = binding {
+            used.insert(*vid);
+        }
+    }
+
+    // Result value must be kept.
+    if let Some(vid) = &unit.result {
+        used.insert(*vid);
+    }
+
+    // Collect from blocks.
+    for block in &unit.blocks {
+        collect_block_used_values(block, &mut used);
+    }
+
+    // Collect from functions.
+    for func in &unit.functions {
+        for block in &func.blocks {
+            collect_block_used_values(block, &mut used);
+        }
+    }
+
+    used
+}
+
+/// Add a ValueId from an operand if it's a local value.
+fn add_operand_value(op: &Operand, used: &mut HashSet<ValueId>) {
+    match op {
+        Operand::Value(vid) | Operand::ValueRef(vid) => {
+            used.insert(*vid);
+        }
+        // Slots, Params, and External operands are not local values.
+        _ => {}
+    }
+}
+
+/// Collect used ValueIds from a block's instructions and terminator.
+fn collect_block_used_values(block: &IrBlock, used: &mut HashSet<ValueId>) {
+    // Collect from instructions.
+    for instr in &block.instructions {
+        collect_instruction_operands(instr, used);
+    }
+
+    // Collect from terminator.
+    match &block.terminator {
+        Terminator::UnitEnd { result: Some(op) } => {
+            add_operand_value(op, used);
+        }
+        Terminator::Branch { cond, then_args, else_args, .. } => {
+            add_operand_value(cond, used);
+            for arg in then_args {
+                add_operand_value(arg, used);
+            }
+            for arg in else_args {
+                add_operand_value(arg, used);
+            }
+        }
+        Terminator::Return { value: Some(op) } => {
+            add_operand_value(op, used);
+        }
+        Terminator::Goto { args, .. } => {
+            for arg in args {
+                add_operand_value(arg, used);
+            }
+        }
+        Terminator::UnitEarlyReturn { value } => {
+            add_operand_value(value, used);
+        }
+        _ => {}
+    }
+}
+
+/// Collect all ValueIds used as operands in an instruction.
+fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>) {
+
+    match instr {
+        // No operands.
+        Instruction::Const { .. }
+        | Instruction::WrapNone { .. }
+        | Instruction::Nop => {}
+
+        // Single src operand.
+        Instruction::Copy { src, .. }
+        | Instruction::Move { src, .. }
+        | Instruction::Widen { src, .. }
+        | Instruction::Unpack { src, .. }
+        | Instruction::GetField { src, .. }
+        | Instruction::GetFieldRef { src, .. }
+        | Instruction::UnwrapOption { src, .. }
+        | Instruction::UnwrapResult { src, .. } => add_operand_value(src, used),
+
+        // Binary operands.
+        Instruction::BinOp { lhs, rhs, .. }
+        | Instruction::BinOpChecked { lhs, rhs, .. } => {
+            add_operand_value(lhs, used);
+            add_operand_value(rhs, used);
+        }
+
+        // Single operand field.
+        Instruction::UnaryOp { operand, .. }
+        | Instruction::UnaryOpChecked { operand, .. }
+        | Instruction::Drop { operand }
+        | Instruction::DropTracked { operand }
+        | Instruction::UnitEndDrop { operand }
+        | Instruction::UnitEndDropTracked { operand }
+        | Instruction::DebugLog { operand } => add_operand_value(operand, used),
+
+        // DropViaRef uses ref_value (ValueId), not operand.
+        Instruction::DropViaRef { ref_value } => {
+            used.insert(*ref_value);
+        }
+
+        // Single inner operand.
+        Instruction::WrapSome { inner, .. }
+        | Instruction::WrapOk { inner, .. }
+        | Instruction::WrapErr { inner, .. } => add_operand_value(inner, used),
+
+        // Enum variant with optional payload.
+        Instruction::EnumVariant { payload, .. } => {
+            if let Some(p) = payload {
+                add_operand_value(p, used);
+            }
+        }
+
+        // Function call with args.
+        Instruction::Call { args, .. } => {
+            for arg in args {
+                add_operand_value(arg, used);
+            }
+        }
+
+        // Pack with fields.
+        Instruction::Pack { fields, .. } => {
+            for field in fields {
+                add_operand_value(field, used);
+            }
+        }
+
+        // List/Set/Map/Tensor/Table construction.
+        Instruction::ListNew { elements, .. }
+        | Instruction::SetNew { elements, .. } => {
+            for elem in elements {
+                add_operand_value(elem, used);
+            }
+        }
+        Instruction::MapNew { entries, .. } => {
+            for (k, v) in entries {
+                add_operand_value(k, used);
+                add_operand_value(v, used);
+            }
+        }
+        Instruction::TensorNew { elements, .. } => {
+            for elem in elements {
+                add_operand_value(elem, used);
+            }
+        }
+        Instruction::TableNew { rows, .. } => {
+            for row in rows {
+                add_operand_value(row, used);
+            }
+        }
+
+        // Boxing operations.
+        Instruction::ErrorFrom { inner, .. }
+        | Instruction::DataFrom { inner, .. } => add_operand_value(inner, used),
+
+        // Slot load operations (no operand, just slot reference).
+        Instruction::SlotLoadCopy { .. }
+        | Instruction::SlotLoadMove { .. }
+        | Instruction::SlotLoadMoveTracked { .. } => {}
+
+        // Slot store operations.
+        Instruction::SlotStoreCopy { value, .. }
+        | Instruction::SlotStoreCopyTracked { value, .. }
+        | Instruction::SlotStoreMove { value, .. }
+        | Instruction::SlotStoreMoveTracked { value, .. } => add_operand_value(value, used),
+
+        // Field set operations.
+        Instruction::SetField { value, .. }
+        | Instruction::SetFieldTracked { value, .. } => add_operand_value(value, used),
+
+        // Param store operations.
+        Instruction::ParamStore { value, .. }
+        | Instruction::ParamStoreTracked { value, .. } => add_operand_value(value, used),
+
+        // Param field set operations.
+        Instruction::ParamSetField { value, .. }
+        | Instruction::ParamSetFieldTracked { value, .. } => add_operand_value(value, used),
+
+        // Intrinsics with args.
+        Instruction::Intrinsic { args, .. } => {
+            for arg in args {
+                add_operand_value(arg, used);
+            }
+        }
+    }
+}
+
+/// Remove instructions that define unused values.
+///
+/// Returns true if any instructions were removed.
+fn remove_dead_instructions(unit: &mut IrScriptUnit, used: &HashSet<ValueId>) -> bool {
+    let mut changed = false;
+
+    for block in &mut unit.blocks {
+        let original_len = block.instructions.len();
+        block.instructions.retain(|instr| {
+            // Keep instructions with side effects.
+            if has_side_effects(instr) {
+                return true;
+            }
+            // Keep instructions that define used values.
+            if let Some(dest) = instruction_dest(instr) {
+                if used.contains(&dest) {
+                    return true;
+                }
+                // This instruction defines an unused value - remove it.
+                false
+            } else {
+                // No dest means it's a side-effect instruction, already handled above.
+                true
+            }
+        });
+        if block.instructions.len() != original_len {
+            changed = true;
+        }
+    }
+
+    changed
+}
+
+/// Check if an instruction has side effects and should not be removed.
+fn has_side_effects(instr: &Instruction) -> bool {
+    match instr {
+        // Drop instructions have side effects (they free memory).
+        Instruction::Drop { .. }
+        | Instruction::DropTracked { .. }
+        | Instruction::DropViaRef { .. }
+        | Instruction::UnitEndDrop { .. }
+        | Instruction::UnitEndDropTracked { .. } => true,
+        // Store instructions have side effects.
+        Instruction::SlotStoreCopy { .. }
+        | Instruction::SlotStoreCopyTracked { .. }
+        | Instruction::SlotStoreMove { .. }
+        | Instruction::SlotStoreMoveTracked { .. }
+        | Instruction::SetField { .. }
+        | Instruction::SetFieldTracked { .. }
+        | Instruction::ParamStore { .. }
+        | Instruction::ParamStoreTracked { .. }
+        | Instruction::ParamSetField { .. }
+        | Instruction::ParamSetFieldTracked { .. } => true,
+        // Call may have side effects.
+        Instruction::Call { .. } => true,
+        // DebugLog has side effects (prints).
+        Instruction::DebugLog { .. } => true,
+        // Intrinsics may have side effects.
+        Instruction::Intrinsic { .. } => true,
+        // Everything else is pure.
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,6 +563,8 @@ mod tests {
         //   v1 = const 2
         //   v2 = binop add v0, v1
         // We'll inline v2 with the pre-computed value 3.
+        // Export the const so DCE doesn't remove it.
+        use datalove_datafun_ir::ExportBinding;
         let blocks = vec![IrBlock {
             id: BlockId(0),
             params: vec![],
@@ -290,7 +593,7 @@ mod tests {
             functions: vec![],
             symbols: datalove_datafun_ir::SymbolTable::new(),
             result: None,
-            exports: vec![],
+            exports: vec![("X".to_string(), ExportBinding::Value(ValueId(2)))],
             const_values: vec![("X".to_string(), ValueId(2))],
         };
 
@@ -299,14 +602,15 @@ mod tests {
 
         let result = inline_script_consts(unit, &const_values);
 
-        // Check that the BinOp instruction was replaced with Const.
-        assert_eq!(result.blocks[0].instructions.len(), 3);
-        match &result.blocks[0].instructions[2] {
+        // After inlining, v0 and v1 become dead code and are removed by DCE.
+        // Only v2 (the exported const) remains.
+        assert_eq!(result.blocks[0].instructions.len(), 1);
+        match &result.blocks[0].instructions[0] {
             Instruction::Const { dest, value } => {
                 assert_eq!(*dest, ValueId(2));
                 assert_eq!(*value, ConstValue::I32(3));
             }
-            _ => panic!("expected Const instruction, got {:?}", result.blocks[0].instructions[2]),
+            _ => panic!("expected Const instruction, got {:?}", result.blocks[0].instructions[0]),
         }
     }
 
@@ -315,6 +619,8 @@ mod tests {
         // Simulate: const X = compute(), which lowered to:
         //   v0 = call compute()
         // We'll inline v0 with the pre-computed value 100.
+        // Export the const so DCE doesn't remove it.
+        use datalove_datafun_ir::ExportBinding;
         let blocks = vec![IrBlock {
             id: BlockId(0),
             params: vec![],
@@ -340,7 +646,7 @@ mod tests {
             functions: vec![],
             symbols: datalove_datafun_ir::SymbolTable::new(),
             result: None,
-            exports: vec![],
+            exports: vec![("X".to_string(), ExportBinding::Value(ValueId(0)))],
             const_values: vec![("X".to_string(), ValueId(0))],
         };
 
@@ -350,6 +656,7 @@ mod tests {
         let result = inline_script_consts(unit, &const_values);
 
         // Check that the Call instruction was replaced with Const.
+        assert_eq!(result.blocks[0].instructions.len(), 1);
         match &result.blocks[0].instructions[0] {
             Instruction::Const { dest, value } => {
                 assert_eq!(*dest, ValueId(0));
@@ -366,6 +673,8 @@ mod tests {
         //   v1, v2 = unwrap_option v0  (v1 = inner value, v2 = is_some)
         //   branch v2, ...
         // We'll inline v1 with 42. This should also set v2 = true.
+        // Export v1 so DCE doesn't remove it.
+        use datalove_datafun_ir::ExportBinding;
         let blocks = vec![IrBlock {
             id: BlockId(0),
             params: vec![],
@@ -405,7 +714,7 @@ mod tests {
             functions: vec![],
             symbols: datalove_datafun_ir::SymbolTable::new(),
             result: None,
-            exports: vec![],
+            exports: vec![("X".to_string(), ExportBinding::Value(ValueId(1)))],
             // v1 (the unwrapped value) is tracked as a const.
             const_values: vec![("X".to_string(), ValueId(1))],
         };
@@ -415,21 +724,12 @@ mod tests {
 
         let result = inline_script_consts(unit, &const_values);
 
-        // Check that we now have 3 instructions (original 2 -> 3 after replacement).
-        // The UnwrapOption is replaced with Const for dest AND Const for is_some.
-        assert_eq!(result.blocks[0].instructions.len(), 3);
+        // After inlining, v0 becomes dead (not used by anything) and is removed by DCE.
+        // v1 remains because it's exported, v2 remains because it's used by the branch.
+        assert_eq!(result.blocks[0].instructions.len(), 2);
 
-        // First instruction: Const for the option value (unchanged).
+        // First instruction: Const for the unwrapped dest (v1).
         match &result.blocks[0].instructions[0] {
-            Instruction::Const { dest, value } => {
-                assert_eq!(*dest, ValueId(0));
-                assert!(matches!(value, ConstValue::OptionSome(_)));
-            }
-            _ => panic!("expected Const instruction for option"),
-        }
-
-        // Second instruction: Const for the unwrapped dest.
-        match &result.blocks[0].instructions[1] {
             Instruction::Const { dest, value } => {
                 assert_eq!(*dest, ValueId(1));
                 assert_eq!(*value, ConstValue::I32(42));
@@ -437,8 +737,8 @@ mod tests {
             _ => panic!("expected Const instruction for unwrapped value"),
         }
 
-        // Third instruction: Const for is_some = true.
-        match &result.blocks[0].instructions[2] {
+        // Second instruction: Const for is_some = true (v2).
+        match &result.blocks[0].instructions[1] {
             Instruction::Const { dest, value } => {
                 assert_eq!(*dest, ValueId(2));
                 assert_eq!(*value, ConstValue::Bool(true));

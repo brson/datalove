@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE struct containing list.
+const S: {items: [u32], name: string} = {items = [1, 2, 3], name = "test"}
+debuglog S

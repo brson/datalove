@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE list of strings.
+const L: [string] = ["hello", "world", "test"]
+debuglog L

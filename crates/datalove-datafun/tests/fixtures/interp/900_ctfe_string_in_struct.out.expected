@@ -14,15 +14,16 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v2 = const 15f32
+                        v2 = const {name = "Alice", age = 30u32}
                         debuglog v2
+                        unit_end_drop v2
                         unit_end
                     exports:
-                        A = v2
+                        P = v2
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("15\n"),
+            debug_output: Some("{name = \"Alice\", age = 30}\n"),
         ),
     ],
 )

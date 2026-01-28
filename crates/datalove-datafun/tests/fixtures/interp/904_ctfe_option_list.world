@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE option containing list.
+const O: ?[u32] = some [1, 2, 3]
+debuglog O

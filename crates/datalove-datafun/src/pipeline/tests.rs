@@ -538,3 +538,27 @@ debuglog my_string
     // This will panic with a leak if my_string wasn't properly tracked.
     ctx.destroy_live_values();
 }
+
+/// Test CTFE struct with string field is properly cleaned up.
+///
+/// This test reproduces the leak in test fixture 900_ctfe_string_in_struct.
+#[test]
+fn test_ctfe_struct_with_string_field() {
+    let db = make_db();
+    let mut pipeline = ModuleCompilationPipeline::default();
+    let compiled = pipeline.compile_fresh(&db);
+    assert!(compiled.is_successful(), "compilation should succeed");
+
+    let mut ctx = TestContext::new(&compiled, &db);
+
+    // This defines a const struct with a string field.
+    let r = ctx.eval_fragment(r#"
+const P: {name: string, age: u32} = {name = "Alice", age = 30}
+debuglog P
+"#);
+    assert!(matches!(r.typecheck, TypecheckResult::Success),
+        "fragment failed: {:?}", r.typecheck);
+
+    // This will panic with a leak if the struct's string field wasn't destroyed.
+    ctx.destroy_live_values();
+}

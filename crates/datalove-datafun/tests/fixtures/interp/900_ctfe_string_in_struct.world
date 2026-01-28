@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE struct with string field.
+const P: {name: string, age: u32} = {name = "Alice", age = 30}
+debuglog P

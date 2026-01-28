@@ -144,9 +144,10 @@ fn size_of_ir_type(ir_type: &IrType) -> u32 {
         IrType::Usize | IrType::Isize => std::mem::size_of::<usize>() as u32,
         // Pointer-based types.
         IrType::Int => std::mem::size_of::<datalove_rtdt::Int>() as u32,
-        IrType::String => 16, // ptr + size + capacity
-        IrType::Data | IrType::Error => 16, // usize + ptr
-        IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) => 8, // pointer
+        IrType::String => std::mem::size_of::<datalove_rtdt::String>() as u32,
+        IrType::Data | IrType::Error => std::mem::size_of::<datalove_rtdt::Error>() as u32,
+        IrType::List(_) => std::mem::size_of::<datalove_rtdt::List>() as u32,
+        IrType::Set(_) | IrType::Map(_, _) => 8, // pointer to B-tree
         IrType::Tuple(fields) => {
             let offsets = compute_tuple_field_offsets(fields);
             if fields.is_empty() {
