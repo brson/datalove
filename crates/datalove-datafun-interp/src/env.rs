@@ -127,9 +127,11 @@ impl<'a> ExecutionContext<'a> {
                 (callee, Some(*unit)) // Need context from this unit.
             }
             FuncRef::Module { module, func } => {
+                // Module calls resolve via FuncRef::Module (through registry),
+                // not FuncRef::Local, so they don't use ExecutionContext.
                 let callee = registry.get_module_function(*module, *func)
                     .unwrap_or_else(|| panic!("module function {:?}::{:?} not found", module, func));
-                (callee, None) // Module functions don't have local calls.
+                (callee, None)
             }
         }
     }

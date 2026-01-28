@@ -1333,8 +1333,10 @@ impl IrInterpreter {
 
     /// Execute a function call via the interpreter.
     ///
-    /// For external functions, creates a context with the callee's unit functions.
-    /// For local/module functions, uses the current context.
+    /// `callee_unit` is `Some(unit)` for external functions (from previous script units),
+    /// which need a context with that unit's local functions. For local functions and
+    /// module functions, `callee_unit` is `None` and we use the current context.
+    /// (Module functions resolve internal calls via FuncRef::Module, not FuncRef::Local.)
     fn execute_call(
         &mut self,
         callee: &IrFunction,
