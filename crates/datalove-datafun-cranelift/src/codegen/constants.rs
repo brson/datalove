@@ -570,7 +570,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile a Set constant.
     ///
-    /// Creates an empty set and inserts each element.
+    /// Builds set from a sorted slice of elements using bulk-build runtime function.
     fn compile_set_const(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -601,13 +601,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             _ => return Err(CraneliftError::Codegen("expected Set type".into())),
         };
 
-        // Get Set TyDesc.
-        let set_tydesc_id = self.tydesc_emitter.get(ir_type).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for Set".into())
-        })?;
-        let set_tydesc_gv = self.module.declare_data_in_func(set_tydesc_id, builder.func);
-        let set_tydesc_ptr = builder.ins().global_value(PTR_TYPE, set_tydesc_gv);
-
         // Get element TyDesc.
         let elem_tydesc_id = self.tydesc_emitter.get(&element_type).ok_or_else(|| {
             CraneliftError::Codegen("TyDesc not found for Set element".into())
@@ -615,39 +608,35 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
         let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
 
-        // Create empty set.
-        let set_create_ref = self.module.declare_func_in_func(runtime.set_create, builder.func);
-        builder.ins().call(set_create_ref, &[rt_handle, base, set_tydesc_ptr]);
-
-        // Get element size/alignment for temp buffer allocation.
+        // Get element size/alignment for buffer allocation.
         let elem_layout = crate::types::ir_type_to_cranelift(&element_type).layout();
         let elem_size = elem_layout.size;
         let elem_align = elem_layout.align;
         let elem_stride = datalove_rtdt::layout::align_up(elem_size, elem_align);
         let elem_stride = if elem_stride == 0 { 1 } else { elem_stride };
 
-        // Allocate temp slot for element values.
-        let temp_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+        // Allocate stack buffer for ALL elements.
+        let num_elements = elements.len() as u32;
+        let buffer_size = elem_stride * num_elements;
+        let buffer_size = buffer_size.max(8); // Minimum size for alignment
+        let elements_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            elem_stride,
+            buffer_size,
             elem_align as u8,
         ));
+        let elements_addr = builder.ins().stack_addr(PTR_TYPE, elements_slot, 0);
 
-        // Allocate temp slot for bool_out.
-        let bool_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            1,
-            1,
-        ));
-        let bool_addr = builder.ins().stack_addr(PTR_TYPE, bool_slot, 0);
-
-        // Insert each element.
-        let set_insert_ref = self.module.declare_func_in_func(runtime.set_insert, builder.func);
-        for element_value in elements.iter() {
-            let temp_addr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
-            self.write_const_value_to_addr(builder, temp_addr, element_value)?;
-            builder.ins().call(set_insert_ref, &[rt_handle, base, set_tydesc_ptr, temp_addr, elem_tydesc_ptr, bool_addr]);
+        // Write each element at its offset in the buffer.
+        for (i, element_value) in elements.iter().enumerate() {
+            let offset = (i as u32) * elem_stride;
+            let elem_addr = builder.ins().iadd_imm(elements_addr, offset as i64);
+            self.write_const_value_to_addr(builder, elem_addr, element_value)?;
         }
+
+        // Build set from sorted slice.
+        let num_elements_val = builder.ins().iconst(crate::index_types::INDEX_TYPE, num_elements as i64);
+        let set_build_ref = self.module.declare_func_in_func(runtime.set_build_from_sorted, builder.func);
+        builder.ins().call(set_build_ref, &[rt_handle, base, elem_tydesc_ptr, elements_addr, num_elements_val]);
 
         // Store base pointer for this value.
         self.values.insert(dest, base);
@@ -656,7 +645,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile a Map constant.
     ///
-    /// Creates an empty map and inserts each entry.
+    /// Builds map from sorted slices of keys and values using bulk-build runtime function.
     fn compile_map_const(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -687,13 +676,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             _ => return Err(CraneliftError::Codegen("expected Map type".into())),
         };
 
-        // Get Map TyDesc.
-        let map_tydesc_id = self.tydesc_emitter.get(ir_type).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for Map".into())
-        })?;
-        let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
-        let map_tydesc_ptr = builder.ins().global_value(PTR_TYPE, map_tydesc_gv);
-
         // Get key TyDesc.
         let key_tydesc_id = self.tydesc_emitter.get(&key_type).ok_or_else(|| {
             CraneliftError::Codegen("TyDesc not found for Map key".into())
@@ -708,11 +690,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let val_tydesc_gv = self.module.declare_data_in_func(val_tydesc_id, builder.func);
         let val_tydesc_ptr = builder.ins().global_value(PTR_TYPE, val_tydesc_gv);
 
-        // Create empty map.
-        let map_create_ref = self.module.declare_func_in_func(runtime.map_create, builder.func);
-        builder.ins().call(map_create_ref, &[rt_handle, base, map_tydesc_ptr]);
-
-        // Get key size/alignment for temp buffer allocation.
+        // Get key size/alignment for buffer allocation.
         let key_layout = crate::types::ir_type_to_cranelift(&key_type).layout();
         let key_size = key_layout.size;
         let key_align = key_layout.align;
@@ -726,27 +704,38 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let val_stride = datalove_rtdt::layout::align_up(val_size, val_align);
         let val_stride = if val_stride == 0 { 1 } else { val_stride };
 
-        // Allocate temp slots for key and value.
-        let key_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+        // Allocate stack buffers for ALL keys and ALL values.
+        let num_entries = entries.len() as u32;
+        let keys_buffer_size = (key_stride * num_entries).max(8);
+        let vals_buffer_size = (val_stride * num_entries).max(8);
+
+        let keys_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            key_stride,
+            keys_buffer_size,
             key_align as u8,
         ));
-        let val_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+        let vals_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            val_stride,
+            vals_buffer_size,
             val_align as u8,
         ));
+        let keys_addr = builder.ins().stack_addr(PTR_TYPE, keys_slot, 0);
+        let vals_addr = builder.ins().stack_addr(PTR_TYPE, vals_slot, 0);
 
-        // Insert each entry.
-        let map_insert_ref = self.module.declare_func_in_func(runtime.map_insert, builder.func);
-        for (key_value, val_value) in entries.iter() {
-            let key_addr = builder.ins().stack_addr(PTR_TYPE, key_slot, 0);
-            let val_addr = builder.ins().stack_addr(PTR_TYPE, val_slot, 0);
+        // Write each key and value at their offsets in the buffers.
+        for (i, (key_value, val_value)) in entries.iter().enumerate() {
+            let key_offset = (i as u32) * key_stride;
+            let val_offset = (i as u32) * val_stride;
+            let key_addr = builder.ins().iadd_imm(keys_addr, key_offset as i64);
+            let val_addr = builder.ins().iadd_imm(vals_addr, val_offset as i64);
             self.write_const_value_to_addr(builder, key_addr, key_value)?;
             self.write_const_value_to_addr(builder, val_addr, val_value)?;
-            builder.ins().call(map_insert_ref, &[rt_handle, base, map_tydesc_ptr, key_addr, key_tydesc_ptr, val_addr, val_tydesc_ptr]);
         }
+
+        // Build map from sorted slices.
+        let num_entries_val = builder.ins().iconst(crate::index_types::INDEX_TYPE, num_entries as i64);
+        let map_build_ref = self.module.declare_func_in_func(runtime.map_build_from_sorted, builder.func);
+        builder.ins().call(map_build_ref, &[rt_handle, base, key_tydesc_ptr, val_tydesc_ptr, keys_addr, vals_addr, num_entries_val]);
 
         // Store base pointer for this value.
         self.values.insert(dest, base);

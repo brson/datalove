@@ -40,10 +40,14 @@ pub struct RuntimeImports {
     pub set_create: FuncId,
     /// `dtlv_rti_btreeset_insert_local(rt, set_value_mut, set_tydesc, element_in, element_tydesc, bool_out) -> RtStatus`
     pub set_insert: FuncId,
+    /// `dtlv_rti_btreeset_build_from_sorted_slice_local(rt, set_out, element_tydesc, elements_ptr, num_elements) -> RtStatus`
+    pub set_build_from_sorted: FuncId,
     /// `dtlv_rti_btreemap_create_local(rt, value_out, tydesc) -> RtStatus`
     pub map_create: FuncId,
     /// `dtlv_rti_btreemap_insert_local(rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc) -> RtStatus`
     pub map_insert: FuncId,
+    /// `dtlv_rti_btreemap_build_from_sorted_slices_local(rt, map_out, key_tydesc, value_tydesc, keys_ptr, values_ptr, num_entries) -> RtStatus`
+    pub map_build_from_sorted: FuncId,
     /// `dtlv_rti_tensor_init_local(rt, element_data_in, element_count, element_tydesc, shape_ptr, rank, tensor_out, tensor_tydesc) -> RtStatus`
     pub tensor_init: FuncId,
     /// `dtlv_rti_table_create_local(rt, value_out, tydesc) -> RtStatus`
@@ -246,6 +250,20 @@ impl RuntimeImports {
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_btreeset_insert_local: {}", e)))?
         };
 
+        // dtlv_rti_btreeset_build_from_sorted_slice_local(rt, set_out, element_tydesc, elements_ptr, num_elements) -> u8
+        let set_build_from_sorted = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE));    // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE));    // set_out
+            sig.params.push(AbiParam::new(PTR_TYPE));    // element_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));    // elements_ptr
+            sig.params.push(AbiParam::new(INDEX_TYPE));  // num_elements (UsizeRepr)
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_btreeset_build_from_sorted_slice_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_btreeset_build_from_sorted_slice_local: {}", e)))?
+        };
+
         // dtlv_rti_btreemap_create_local(rt, value_out, tydesc) -> u8
         let map_create = {
             let mut sig = cl_ir::Signature::new(call_conv);
@@ -272,6 +290,22 @@ impl RuntimeImports {
             module
                 .declare_function("dtlv_rti_btreemap_insert_local", Linkage::Import, &sig)
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_btreemap_insert_local: {}", e)))?
+        };
+
+        // dtlv_rti_btreemap_build_from_sorted_slices_local(rt, map_out, key_tydesc, value_tydesc, keys_ptr, values_ptr, num_entries) -> u8
+        let map_build_from_sorted = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE));    // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE));    // map_out
+            sig.params.push(AbiParam::new(PTR_TYPE));    // key_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));    // value_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));    // keys_ptr
+            sig.params.push(AbiParam::new(PTR_TYPE));    // values_ptr
+            sig.params.push(AbiParam::new(INDEX_TYPE));  // num_entries (UsizeRepr)
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_btreemap_build_from_sorted_slices_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_btreemap_build_from_sorted_slices_local: {}", e)))?
         };
 
         // dtlv_rti_tensor_init_local(rt, element_data_in, element_count, element_tydesc, shape_ptr, rank, tensor_out, tensor_tydesc) -> u8
@@ -443,8 +477,10 @@ impl RuntimeImports {
             list_push,
             set_create,
             set_insert,
+            set_build_from_sorted,
             map_create,
             map_insert,
+            map_build_from_sorted,
             tensor_init,
             table_create,
             table_push_row,
