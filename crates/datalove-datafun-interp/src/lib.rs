@@ -367,7 +367,7 @@ impl IrInterpreter {
 
             // Execute instructions.
             for instr in &block.instructions {
-                self.execute_instruction(instr, frame, ret_dest, ctx, registry, frames)?;
+                self.execute_instruction(instr, frame, ctx, registry, frames)?;
             }
 
             // Handle terminator.
@@ -414,16 +414,11 @@ impl IrInterpreter {
                     // Debuglog the value (borrow, not consume).
                     let rt_handle = self.runtime.handle();
                     unsafe {
-                        let status = datalove_rt::c::dtlv_rti_debuglog_local(
+                        datalove_rt::c::dtlv_rti_debuglog_local(
                             rt_handle,
                             val.ptr,
                             val.tydesc,
                         );
-                        if status != datalove_rt::c::RtStatus::Ok {
-                            return Err(InterpError::RuntimeError(
-                                "debuglog failed".to_string(),
-                            ));
-                        }
                     }
                     // Write to ret_dest (Result<(), Error> type).
                     unsafe { self.move_value(&val, ret_dest); }
@@ -474,7 +469,6 @@ impl IrInterpreter {
         &mut self,
         instr: &Instruction,
         frame: &mut Frame,
-        _ret_dest: Destination,
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
@@ -644,9 +638,7 @@ impl IrInterpreter {
                 match tag {
                     rtdt::TyTag::Tuple => self.execute_pack_tuple(&field_vals, dest_slot),
                     rtdt::TyTag::Struct => self.execute_pack_struct(&field_vals, dest_slot),
-                    _ => return Err(InterpError::TypeMismatch(
-                        format!("Pack requires tuple or struct type, got {:?}", tag)
-                    )),
+                    _ => unreachable!("Pack requires tuple or struct type, got {:?}", tag),
                 }
                 frame.mark_value_live(*dest);
                 // Mark source fields as moved (linear semantics - consumes fields).
@@ -680,9 +672,7 @@ impl IrInterpreter {
                             frame.mark_value_live(dest_id);
                         }
                     }
-                    _ => return Err(InterpError::TypeMismatch(
-                        format!("Unpack requires tuple or struct type, got {:?}", tag)
-                    )),
+                    _ => unreachable!("Unpack requires tuple or struct type, got {:?}", tag),
                 }
             }
             Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
@@ -988,16 +978,11 @@ impl IrInterpreter {
                 let val = self.read_operand(operand, frame, frames);
                 let rt_handle = self.runtime.handle();
                 unsafe {
-                    let status = datalove_rt::c::dtlv_rti_debuglog_local(
+                    datalove_rt::c::dtlv_rti_debuglog_local(
                         rt_handle,
                         val.ptr,
                         val.tydesc,
                     );
-                    if status != datalove_rt::c::RtStatus::Ok {
-                        return Err(InterpError::RuntimeError(
-                            "debuglog failed".to_string(),
-                        ));
-                    }
                 }
                 // Note: no mark_dropped - we're borrowing, not consuming.
             }
@@ -1040,9 +1025,7 @@ impl IrInterpreter {
                             std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, field_size);
                         }
                     }
-                    _ => return Err(InterpError::TypeMismatch(
-                        format!("GetField requires tuple or struct type, got {:?}", tag)
-                    )),
+                    _ => unreachable!("GetField requires tuple or struct type, got {:?}", tag),
                 }
                 frame.mark_value_live(*dest);
             }
@@ -1064,9 +1047,7 @@ impl IrInterpreter {
                         let field_info = unsafe { &*struct_info.fields.add(*field_index as usize) };
                         unsafe { src_val.ptr.add(field_info.offset as usize) }
                     }
-                    _ => return Err(InterpError::TypeMismatch(
-                        format!("GetFieldRef requires tuple or struct type, got {:?}", tag)
-                    )),
+                    _ => unreachable!("GetFieldRef requires tuple or struct type, got {:?}", tag),
                 };
 
                 // Store the field pointer in dest (ref value stores pointer, not data).
@@ -1082,37 +1063,17 @@ impl IrInterpreter {
                 let slot_info = match slot {
                     SlotDest::Local(id) => frame.slot_dest(*id),
                     SlotDest::External { unit, slot: ext_slot } => {
-                        return Err(InterpError::RuntimeError(format!(
-                            "SetField on external slot unit={} slot={:?} not yet supported",
+                        unreachable!(
+                            "SetField on external slot unit={} slot={:?} not supported",
                             unit, ext_slot
-                        )));
+                        );
                     }
                 };
 
                 // Navigate field path to find target field.
-                let mut current_ptr = slot_info.ptr;
-                let mut current_tydesc = slot_info.tydesc;
-
-                for &field_idx in field_path.iter() {
-                    let tag = unsafe { (*current_tydesc).type_tag };
-                    match tag {
-                        rtdt::TyTag::Tuple => {
-                            let tuple_info = unsafe { (*current_tydesc).type_info.tuple };
-                            let field_info = unsafe { &*tuple_info.fields.add(field_idx as usize) };
-                            current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
-                            current_tydesc = field_info.tydesc;
-                        }
-                        rtdt::TyTag::Struct => {
-                            let struct_info = unsafe { (*current_tydesc).type_info.struct_ };
-                            let field_info = unsafe { &*struct_info.fields.add(field_idx as usize) };
-                            current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
-                            current_tydesc = field_info.tydesc;
-                        }
-                        _ => return Err(InterpError::TypeMismatch(
-                            format!("SetField path element requires tuple or struct type, got {:?}", tag)
-                        )),
-                    }
-                }
+                let (current_ptr, current_tydesc) = self.navigate_field_path(
+                    slot_info.ptr, slot_info.tydesc, field_path
+                );
 
                 // Destroy old field value before overwriting (handles move types).
                 unsafe {
@@ -1139,7 +1100,7 @@ impl IrInterpreter {
                 let slot_info = frame.param_dest(*param);
                 let (current_ptr, current_tydesc) = self.navigate_field_path(
                     slot_info.ptr, slot_info.tydesc, field_path
-                )?;
+                );
                 unsafe {
                     datalove_rt::c::dtlv_rti_any_destroy_local(
                         self.runtime.handle(),
@@ -1160,7 +1121,7 @@ impl IrInterpreter {
                 let slot_info = frame.param_dest(*param);
                 let (current_ptr, current_tydesc) = self.navigate_field_path(
                     slot_info.ptr, slot_info.tydesc, field_path
-                )?;
+                );
                 if frame.is_param_initialized(*param) {
                     unsafe {
                         datalove_rt::c::dtlv_rti_any_destroy_local(
@@ -1246,34 +1207,15 @@ impl IrInterpreter {
                 let slot_info = match slot {
                     SlotDest::Local(id) => frame.slot_dest(*id),
                     SlotDest::External { unit, slot: ext_slot } => {
-                        return Err(InterpError::RuntimeError(format!(
-                            "SetField on external slot unit={} slot={:?} not yet supported",
+                        unreachable!(
+                            "SetFieldTracked on external slot unit={} slot={:?} not supported",
                             unit, ext_slot
-                        )));
+                        );
                     }
                 };
-                let mut current_ptr = slot_info.ptr;
-                let mut current_tydesc = slot_info.tydesc;
-                for &field_idx in field_path.iter() {
-                    let tag = unsafe { (*current_tydesc).type_tag };
-                    match tag {
-                        rtdt::TyTag::Tuple => {
-                            let tuple_info = unsafe { (*current_tydesc).type_info.tuple };
-                            let field_info = unsafe { &*tuple_info.fields.add(field_idx as usize) };
-                            current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
-                            current_tydesc = field_info.tydesc;
-                        }
-                        rtdt::TyTag::Struct => {
-                            let struct_info = unsafe { (*current_tydesc).type_info.struct_ };
-                            let field_info = unsafe { &*struct_info.fields.add(field_idx as usize) };
-                            current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
-                            current_tydesc = field_info.tydesc;
-                        }
-                        _ => return Err(InterpError::TypeMismatch(
-                            format!("SetField path element requires tuple or struct type, got {:?}", tag)
-                        )),
-                    }
-                }
+                let (current_ptr, current_tydesc) = self.navigate_field_path(
+                    slot_info.ptr, slot_info.tydesc, field_path
+                );
                 unsafe {
                     datalove_rt::c::dtlv_rti_any_destroy_local(
                         self.runtime.handle(),
@@ -1496,7 +1438,7 @@ impl IrInterpreter {
         base_ptr: *mut u8,
         base_tydesc: *const rtdt::TyDesc,
         field_path: &[u32],
-    ) -> Result<(*mut u8, *const rtdt::TyDesc), InterpError> {
+    ) -> (*mut u8, *const rtdt::TyDesc) {
         let mut current_ptr = base_ptr;
         let mut current_tydesc = base_tydesc;
 
@@ -1515,13 +1457,11 @@ impl IrInterpreter {
                     current_ptr = unsafe { current_ptr.add(field_info.offset as usize) };
                     current_tydesc = field_info.tydesc;
                 }
-                _ => return Err(InterpError::TypeMismatch(
-                    format!("field path element requires tuple or struct type, got {:?}", tag)
-                )),
+                _ => unreachable!("field path element requires tuple or struct type, got {:?}", tag),
             }
         }
 
-        Ok((current_ptr, current_tydesc))
+        (current_ptr, current_tydesc)
     }
 
     unsafe fn copy_value(&self, src: &Value, dest: Destination) {

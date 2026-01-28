@@ -13,8 +13,6 @@ pub enum InterpError {
     DivisionByZero,
     /// Runtime error.
     RuntimeError(String),
-    /// Type mismatch.
-    TypeMismatch(String),
     /// Module function not found.
     ModuleFunctionNotFound { module: IrModuleId, func: FuncId },
 }
