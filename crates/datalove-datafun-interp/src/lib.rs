@@ -1458,15 +1458,118 @@ impl IrInterpreter {
                         self.write_const(field_value, field_dest);
                     }
                 }
+                ConstValue::Struct(fields) => {
+                    // Struct layout: fields at computed offsets (same as tuple).
+                    let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
+                    let layout = rtdt::layout::compute_struct_layout(tydesc_ref);
+                    let struct_info = tydesc_ref.struct_info();
+                    for (i, (_, field_value)) in fields.iter().enumerate() {
+                        let field_offset = layout.field_offsets[i];
+                        let field_ref = struct_info.field(i).expect("struct field out of bounds");
+                        let field_tydesc = field_ref.tydesc().as_ptr();
+                        let field_ptr = dest.ptr.add(field_offset as usize);
+                        let field_dest = Destination {
+                            ptr: field_ptr,
+                            tydesc: field_tydesc,
+                        };
+                        self.write_const(field_value, field_dest);
+                    }
+                }
+                ConstValue::Enum { variant, payload } => {
+                    // Enum layout: discriminant (u32) at offset 0, payload at variant offset.
+                    let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
+                    let enum_info = tydesc_ref.enum_info();
+
+                    // Find the variant index by name.
+                    let mut variant_index = None;
+                    for (i, v) in tydesc_ref.iter_enum_variants().enumerate() {
+                        if v.name() == variant {
+                            variant_index = Some(i);
+                            break;
+                        }
+                    }
+                    let variant_idx = variant_index.expect("enum variant not found");
+
+                    // Write discriminant.
+                    *(dest.ptr as *mut u32) = variant_idx as u32;
+
+                    // Write payload if present.
+                    if let Some(payload_value) = payload {
+                        let variant_ref = enum_info.variant(variant_idx).expect("variant out of bounds");
+                        let payload_tydesc = variant_ref.payload().expect("variant has no payload");
+                        let payload_offset = variant_ref.offset();
+                        let payload_ptr = dest.ptr.add(payload_offset as usize);
+                        let payload_dest = Destination {
+                            ptr: payload_ptr,
+                            tydesc: payload_tydesc.as_ptr(),
+                        };
+                        self.write_const(payload_value, payload_dest);
+                    }
+                }
+                ConstValue::ResultOk(inner) => {
+                    // Result layout: tag (u8) at offset 0, payload at aligned offset.
+                    // Ok tag = 1.
+                    *(dest.ptr as *mut u8) = 1;
+
+                    // Get inner type from tydesc.
+                    let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
+                    let ok_tydesc = tydesc_ref.result_ok_ty();
+                    let inner_align = ok_tydesc.align();
+                    let error_align = 8u32;
+                    let max_align = inner_align.max(error_align);
+                    let payload_offset = rtdt::layout::align_up(1, max_align);
+                    let payload_ptr = dest.ptr.add(payload_offset as usize);
+                    let payload_dest = Destination {
+                        ptr: payload_ptr,
+                        tydesc: ok_tydesc.as_ptr(),
+                    };
+                    self.write_const(inner, payload_dest);
+                }
+                ConstValue::List(elements) => {
+                    // Create empty list and push elements.
+                    let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
+                    let element_tydesc = tydesc_ref.list_element_ty().as_ptr();
+                    let element_size = (*element_tydesc).size as usize;
+                    let element_align = (*element_tydesc).align;
+
+                    // Create an empty list.
+                    datalove_rt::c::dtlv_rti_list_create_local(
+                        self.runtime.handle(),
+                        dest.ptr,
+                        dest.tydesc,
+                    );
+
+                    // Compute element stride.
+                    let stride = rtdt::layout::align_up(element_size as u32, element_align) as usize;
+                    let stride = if stride == 0 { 1 } else { stride };
+
+                    // Allocate temp buffer for elements.
+                    let mut temp_buffer = vec![0u8; stride.max(8)];
+
+                    // Push each element.
+                    for element_value in elements.iter() {
+                        // Write element to temp buffer.
+                        let element_dest = Destination {
+                            ptr: temp_buffer.as_mut_ptr(),
+                            tydesc: element_tydesc,
+                        };
+                        self.write_const(element_value, element_dest);
+
+                        // Push element to list (takes ownership).
+                        datalove_rt::c::dtlv_rti_list_push_local(
+                            self.runtime.handle(),
+                            dest.ptr,
+                            dest.tydesc,
+                            temp_buffer.as_mut_ptr(),
+                            element_tydesc,
+                        );
+                    }
+                }
                 // Aggregate and collection ConstValues are not yet supported for direct loading.
                 // These will be used by const evaluation to extract computed values.
-                ConstValue::Struct(_)
-                | ConstValue::Enum { .. }
-                | ConstValue::ResultOk(_)
-                | ConstValue::ResultErr(_)
+                ConstValue::ResultErr(_)
                 | ConstValue::Data(_)
                 | ConstValue::Error(_)
-                | ConstValue::List(_)
                 | ConstValue::Set(_)
                 | ConstValue::Map(_)
                 | ConstValue::Table { .. } => {

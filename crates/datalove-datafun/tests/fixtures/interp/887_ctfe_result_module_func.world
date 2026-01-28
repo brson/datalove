@@ -1,0 +1,18 @@
+----------
+module local/test/resultfunc
+----------
+
+// CTFE result in module function.
+fun compute(): !u32
+    const R: !u32 = ok 77
+    ret R
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/resultfunc
+import resultfunc.compute
+
+debuglog compute()

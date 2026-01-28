@@ -1,0 +1,18 @@
+----------
+module local/test/stringfunc
+----------
+
+// CTFE string in module function.
+fun compute(): string
+    const S: string = "from module"
+    ret S
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/stringfunc
+import stringfunc.compute
+
+debuglog compute()

@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE enum in script function.
+fun get_status(): enum { Active, Inactive }
+    const S: enum { Active, Inactive } = enum Inactive
+    ret S
+end fun
+
+debuglog get_status()

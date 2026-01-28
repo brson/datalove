@@ -320,8 +320,164 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
 
                 Ok(ConstValue::Tuple(values))
             }
-            // TODO: Add support for structs and collections.
+            IrType::Struct(fields) => {
+                // Struct layout is the same as tuple layout, just with named fields.
+                let field_types: Vec<_> = fields.iter().map(|(_, ty)| ty.clone()).collect();
+                let field_offsets = compute_tuple_field_offsets(&field_types);
+
+                // Extract each named field value.
+                let mut values = Vec::with_capacity(fields.len());
+                for (i, (name, field_type)) in fields.iter().enumerate() {
+                    let field_ptr = ptr.add(field_offsets[i] as usize);
+                    let field_value = extract_const_value(field_ptr, field_type)?;
+                    values.push((name.clone(), field_value));
+                }
+
+                Ok(ConstValue::Struct(values))
+            }
+            IrType::Enum(variants) => {
+                // Enum layout: discriminant (u32) at offset 0, payload at aligned offset.
+                let discriminant = *(ptr as *const u32);
+                let variant_index = discriminant as usize;
+
+                if variant_index >= variants.len() {
+                    return Err(CtfeError::InterpError(format!(
+                        "invalid enum discriminant: {} (max {})",
+                        discriminant,
+                        variants.len() - 1
+                    )));
+                }
+
+                let (variant_name, payload_type) = &variants[variant_index];
+
+                if let Some(payload_ty) = payload_type {
+                    // Variant has payload - compute offset and extract.
+                    let payload_align = align_of_ir_type(payload_ty);
+                    let payload_offset = datalove_rtdt::layout::align_up(4, payload_align);
+                    let payload_ptr = ptr.add(payload_offset as usize);
+                    let payload_value = extract_const_value(payload_ptr, payload_ty)?;
+                    Ok(ConstValue::Enum {
+                        variant: variant_name.clone(),
+                        payload: Some(Box::new(payload_value)),
+                    })
+                } else {
+                    // Unit variant - no payload.
+                    Ok(ConstValue::Enum {
+                        variant: variant_name.clone(),
+                        payload: None,
+                    })
+                }
+            }
+            IrType::String => {
+                // String layout: data ptr, size, capacity.
+                let string_ptr = ptr as *const datalove_rtdt::String;
+                let string_val = &*string_ptr;
+
+                let size = string_val.size.0 as usize;
+                if size == 0 || string_val.data.is_null() {
+                    Ok(ConstValue::String(String::new()))
+                } else {
+                    let bytes = std::slice::from_raw_parts(string_val.data, size);
+                    let s = std::str::from_utf8(bytes)
+                        .map_err(|e| CtfeError::InterpError(format!("invalid UTF-8: {}", e)))?;
+                    Ok(ConstValue::String(s.to_string()))
+                }
+            }
+            IrType::Result(inner) => {
+                // Result layout: tag (u8) at offset 0, payload at aligned offset.
+                let tag = *(ptr as *const u8);
+                let inner_align = align_of_ir_type(inner);
+                let error_align = 8u32;
+                let max_align = inner_align.max(error_align);
+                let payload_offset = datalove_rtdt::layout::align_up(1, max_align);
+                let payload_ptr = ptr.add(payload_offset as usize);
+
+                match tag {
+                    1 => {
+                        // Ok variant - extract inner value.
+                        let inner_value = extract_const_value(payload_ptr, inner)?;
+                        Ok(ConstValue::ResultOk(Box::new(inner_value)))
+                    }
+                    2 => {
+                        // Err variant - extract Error.
+                        let error_ptr = payload_ptr as *const datalove_rtdt::Error;
+                        let error_val = &*error_ptr;
+
+                        // Error contains a boxed value with its own tydesc.
+                        let inner_tydesc_ptr = error_val.tydesc();
+                        if inner_tydesc_ptr.is_null() {
+                            // Null error - return a simple error message.
+                            Ok(ConstValue::ResultErr(Box::new(ConstValue::Error("<null>".to_string()))))
+                        } else {
+                            let inner_tydesc = datalove_rtdt::TyDescRef::from_ptr(inner_tydesc_ptr);
+                            let inner_value_ptr = error_val.value_ptr();
+
+                            // Extract the inner error value based on its actual type.
+                            let inner_ir_type = ir_type_from_tydesc(inner_tydesc)?;
+                            let inner_value = extract_const_value(inner_value_ptr, &inner_ir_type)?;
+                            Ok(ConstValue::ResultErr(Box::new(ConstValue::Error(format!("{:?}", inner_value)))))
+                        }
+                    }
+                    _ => Err(CtfeError::InterpError(format!(
+                        "invalid result tag: {}", tag
+                    ))),
+                }
+            }
+            IrType::List(element_type) => {
+                // List layout: data ptr, size, capacity.
+                let list_ptr = ptr as *const datalove_rtdt::List;
+                let list_val = &*list_ptr;
+
+                let size = list_val.size.0 as usize;
+                if size == 0 || list_val.data.is_null() {
+                    Ok(ConstValue::List(Vec::new()))
+                } else {
+                    // Compute element size and extract each element.
+                    let element_size = size_of_ir_type(element_type) as usize;
+                    let element_align = align_of_ir_type(element_type);
+                    // Element stride is size aligned up to alignment.
+                    let stride = datalove_rtdt::layout::align_up(element_size as u32, element_align) as usize;
+                    let stride = if stride == 0 { 1 } else { stride }; // Avoid zero stride for ZSTs
+
+                    let mut elements = Vec::with_capacity(size);
+                    for i in 0..size {
+                        let element_ptr = list_val.data.add(i * stride);
+                        let element_value = extract_const_value(element_ptr, element_type)?;
+                        elements.push(element_value);
+                    }
+                    Ok(ConstValue::List(elements))
+                }
+            }
             _ => Err(CtfeError::UnsupportedType(format!("{:?}", ir_type))),
         }
+    }
+}
+
+/// Convert a runtime type descriptor back to an IrType.
+///
+/// This is used for extracting dynamically-typed values like Error contents.
+fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, CtfeError> {
+    use datalove_rtdt::TyTag;
+
+    match tydesc.type_tag() {
+        TyTag::Bool => Ok(IrType::Bool),
+        TyTag::U8 => Ok(IrType::U8),
+        TyTag::I8 => Ok(IrType::I8),
+        TyTag::U16 => Ok(IrType::U16),
+        TyTag::I16 => Ok(IrType::I16),
+        TyTag::U32 => Ok(IrType::U32),
+        TyTag::I32 => Ok(IrType::I32),
+        TyTag::U64 => Ok(IrType::U64),
+        TyTag::I64 => Ok(IrType::I64),
+        TyTag::Usize => Ok(IrType::Usize),
+        TyTag::Isize => Ok(IrType::Isize),
+        TyTag::F32 => Ok(IrType::F32),
+        TyTag::F64 => Ok(IrType::F64),
+        TyTag::Int => Ok(IrType::Int),
+        TyTag::String => Ok(IrType::String),
+        // For complex types, return an error - we'd need to recursively reconstruct.
+        other => Err(CtfeError::UnsupportedType(format!(
+            "cannot reconstruct IrType from TyTag::{:?}", other
+        ))),
     }
 }

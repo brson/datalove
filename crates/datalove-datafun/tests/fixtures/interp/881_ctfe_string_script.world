@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE string in script unit.
+const S: string = "hello world"
+debuglog S

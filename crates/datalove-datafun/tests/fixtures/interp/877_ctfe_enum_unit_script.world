@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE enum unit variant in script unit.
+const S: enum { Active, Inactive } = enum Active
+debuglog S

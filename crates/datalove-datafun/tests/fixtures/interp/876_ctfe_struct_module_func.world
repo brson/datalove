@@ -1,0 +1,18 @@
+----------
+module local/test/structfunc
+----------
+
+// CTFE struct in module function.
+fun compute(): {x: u32, y: u32}
+    const P: {x: u32, y: u32} = {x = 77, y = 88}
+    ret P
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/structfunc
+import structfunc.compute
+
+debuglog compute()

@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE struct in script unit.
+const P: {x: u32, y: u32} = {x = 10, y = 20}
+debuglog P

@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE struct in script function.
+fun make_point(): {x: u32, y: u32}
+    const P: {x: u32, y: u32} = {x = 100, y = 200}
+    ret P
+end fun
+
+debuglog make_point()

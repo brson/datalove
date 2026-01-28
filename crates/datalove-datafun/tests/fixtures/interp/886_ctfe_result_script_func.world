@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE result in script function.
+fun get_result(): !u32
+    const R: !u32 = ok 100
+    ret R
+end fun
+
+debuglog get_result()

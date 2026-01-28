@@ -1,0 +1,18 @@
+----------
+module local/test/listfunc
+----------
+
+// CTFE list in module function.
+fun compute(): [u32]
+    const L: [u32] = [7, 8, 9]
+    ret L
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/listfunc
+import listfunc.compute
+
+debuglog compute()

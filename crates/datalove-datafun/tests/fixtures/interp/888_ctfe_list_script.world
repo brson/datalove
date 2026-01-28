@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE list in script unit.
+const L: [u32] = [1, 2, 3]
+debuglog L

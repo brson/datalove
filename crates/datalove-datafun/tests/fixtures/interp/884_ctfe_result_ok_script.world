@@ -1,0 +1,7 @@
+----------
+scriptunit-fragment
+----------
+
+// CTFE result ok in script unit.
+const R: !u32 = ok 42
+debuglog R
