@@ -18,9 +18,9 @@ pub struct Frame {
     layout: IrLayout,
     /// Track which values are live (written but not dropped).
     ///
-    /// Values are added on write and removed on drop. Used by destroy_live_values
-    /// to know which unit_end values need cleanup.
-    live_values: HashSet<ValueId>,
+    /// Only used for script frames that need cleanup tracking.
+    /// Function frames set this to None to avoid hashing overhead.
+    live_values: Option<HashSet<ValueId>>,
     /// Track which slots are initialized.
     slot_initialized: Vec<bool>,
     /// Pointers to caller's data for each parameter.
@@ -32,8 +32,8 @@ pub struct Frame {
 }
 
 impl Frame {
-    /// Create a new frame from layout.
-    pub fn new(layout: IrLayout, param_count: usize) -> Self {
+    /// Create a new frame for function execution (no live value tracking).
+    pub fn new_function(layout: IrLayout, param_count: usize) -> Self {
         let slot_count = layout.slot_offsets.len();
         let data = AlignedBuffer::with_align(
             layout.frame_size as usize,
@@ -43,7 +43,7 @@ impl Frame {
         Self {
             data,
             layout,
-            live_values: HashSet::new(),
+            live_values: None,
             slot_initialized: vec![false; slot_count],
             param_ptrs: vec![std::ptr::null_mut(); param_count],
             param_tydescs: vec![std::ptr::null(); param_count],
@@ -51,12 +51,34 @@ impl Frame {
         }
     }
 
+    /// Create a new frame for script execution (with live value tracking).
+    pub fn new_script(layout: IrLayout) -> Self {
+        let slot_count = layout.slot_offsets.len();
+        let data = AlignedBuffer::with_align(
+            layout.frame_size as usize,
+            layout.frame_align as usize,
+        );
+
+        Self {
+            data,
+            layout,
+            live_values: Some(HashSet::new()),
+            slot_initialized: vec![false; slot_count],
+            param_ptrs: vec![std::ptr::null_mut(); 0],
+            param_tydescs: vec![std::ptr::null(); 0],
+            param_initialized: vec![false; 0],
+        }
+    }
+
     /// Mark a value as live (written).
     ///
     /// Called when a value is written to. Used to track which unit_end
     /// values need cleanup in destroy_live_values.
+    /// No-op for function frames (live_values is None).
     pub fn mark_value_live(&mut self, id: ValueId) {
-        self.live_values.insert(id);
+        if let Some(ref mut live_values) = self.live_values {
+            live_values.insert(id);
+        }
     }
 
     /// Get destination for a value.
@@ -76,11 +98,14 @@ impl Frame {
     /// returns the stored pointer. Use `value_deref` to dereference refs.
     ///
     /// Returns None if value is not live (moved or not written).
+    /// For function frames (no tracking), always returns the value.
     /// Panics if value ID is out of bounds (compiler bug).
     pub fn value(&self, id: ValueId) -> Option<Value> {
         let idx = id.0 as usize;
-        if !self.live_values.contains(&id) {
-            return None;
+        if let Some(ref live_values) = self.live_values {
+            if !live_values.contains(&id) {
+                return None;
+            }
         }
         let offset = self.layout.value_offsets[idx] as usize;
         let tydesc = self.layout.value_tydescs[idx];
@@ -94,11 +119,14 @@ impl Frame {
     /// returns the data it points to with the inner type's tydesc.
     ///
     /// Returns None if value is not live (moved or not written).
+    /// For function frames (no tracking), always returns the value.
     /// Panics if value ID is out of bounds (compiler bug).
     pub fn value_deref(&self, id: ValueId) -> Option<Value> {
         let idx = id.0 as usize;
-        if !self.live_values.contains(&id) {
-            return None;
+        if let Some(ref live_values) = self.live_values {
+            if !live_values.contains(&id) {
+                return None;
+            }
         }
         let offset = self.layout.value_offsets[idx] as usize;
         let tydesc = self.layout.value_tydescs[idx];
@@ -157,13 +185,21 @@ impl Frame {
     /// Check if value is initialized (live).
     ///
     /// Returns true if the value has been written and not yet dropped.
+    /// For function frames (no tracking), always returns true.
     pub fn is_value_initialized(&self, id: ValueId) -> bool {
-        self.live_values.contains(&id)
+        match &self.live_values {
+            Some(live_values) => live_values.contains(&id),
+            None => true,
+        }
     }
 
     /// Mark value as dropped to prevent double-destroy.
+    ///
+    /// No-op for function frames (live_values is None).
     pub fn mark_value_dropped(&mut self, id: ValueId) {
-        self.live_values.remove(&id);
+        if let Some(ref mut live_values) = self.live_values {
+            live_values.remove(&id);
+        }
     }
 
     /// Mark slot as dropped to prevent double-destroy.
@@ -252,19 +288,21 @@ impl Frame {
         unit_end_slots: &[SlotId],
     ) {
         // Destroy unit_end values (persistent let bindings).
-        for &vid in unit_end_values {
-            // Skip if not live (not written or already dropped).
-            if !self.live_values.contains(&vid) {
-                continue;
+        if let Some(ref mut live_values) = self.live_values {
+            for &vid in unit_end_values {
+                // Skip if not live (not written or already dropped).
+                if !live_values.contains(&vid) {
+                    continue;
+                }
+                let idx = vid.0 as usize;
+                let offset = self.layout.value_offsets[idx] as usize;
+                let tydesc = self.layout.value_tydescs[idx];
+                let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
+                }
+                live_values.remove(&vid);
             }
-            let idx = vid.0 as usize;
-            let offset = self.layout.value_offsets[idx] as usize;
-            let tydesc = self.layout.value_tydescs[idx];
-            let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
-            unsafe {
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
-            }
-            self.live_values.remove(&vid);
         }
 
         // Destroy unit_end slots (persistent var bindings).
