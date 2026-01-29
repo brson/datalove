@@ -8,3 +8,47 @@
  [38;5;240m  │[0m [38;5;115mNote[0m: function must return Option to use `?` operator
 [38;5;246m───╯[0m
 Error: Module compilation error
+
+Stack backtrace:
+   0: anyhow::error::<impl anyhow::Error>::msg
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anyhow-1.0.99/src/backtrace.rs:27:14
+   1: anyhow::__private::format_err
+             at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anyhow-1.0.99/src/lib.rs:695:13
+   2: datalove::ScriptWorldCommand::run
+             at ./src/main.rs:689:13
+   3: datalove::Cli::run
+             at ./src/main.rs:169:46
+   4: datalove::main
+             at ./src/main.rs:14:9
+   5: core::ops::function::FnOnce::call_once
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/core/src/ops/function.rs:250:5
+   6: std::sys::backtrace::__rust_begin_short_backtrace
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/std/src/sys/backtrace.rs:160:18
+   7: std::rt::lang_start::{{closure}}
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/std/src/rt.rs:206:18
+   8: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/core/src/ops/function.rs:287:21
+   9: std::panicking::catch_unwind::do_call
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/std/src/panicking.rs:581:40
+  10: std::panicking::catch_unwind
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/std/src/panicking.rs:544:19
+  11: std::panic::catch_unwind
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/std/src/panic.rs:359:14
+  12: std::rt::lang_start_internal::{{closure}}
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/std/src/rt.rs:175:24
+  13: std::panicking::catch_unwind::do_call
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/std/src/panicking.rs:581:40
+  14: std::panicking::catch_unwind
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/std/src/panicking.rs:544:19
+  15: std::panic::catch_unwind
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/std/src/panic.rs:359:14
+  16: std::rt::lang_start_internal
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/std/src/rt.rs:171:5
+  17: std::rt::lang_start
+             at /rustc/254b59607d4417e9dffbc307138ae5c86280fe4c/library/std/src/rt.rs:205:5
+  18: main
+  19: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  20: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:360:3
+  21: _start
