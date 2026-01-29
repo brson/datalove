@@ -102,13 +102,14 @@
 @media (min-width: 0) {
     :root {
         --bg: var(--cave-base07);
+        --bg: color-mix(in srgb, var(--dune-base07), white 90%);
         --fg: var(--cave-base01);
         --accent: var(--cave-red);
         --accent: var(--heath-red);
         --code-bg: var(--cave-base06);
-        --code-bg: color-mix(in srgb, var(--cave-base06), white 20%);
+        --code-bg: color-mix(in srgb, var(--heath-base03), white 94%);
         --table-header-bg: var(--cave-base06);
-        --link: var(--heath-violet);
+        --link: var(--cave-violet);
         --syn-keyword: var(--cave-magenta);
         --syn-type-name: var(--cave-cyan);
         --syn-string: var(--cave-yellow);
@@ -259,6 +260,7 @@ code {
 pre {
     background: var(--code-bg);
     padding: 1rem;
+    padding-left: 2rem;
     border-radius: 0 5px 5px 0;
     border: none;
     border-left: 3px solid var(--accent);
