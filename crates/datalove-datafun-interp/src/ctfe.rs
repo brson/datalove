@@ -517,7 +517,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                         col_offsets.push(offset as usize);
                         let col_size = col_sizes[i];
                         let stride = datalove_rtdt::layout::align_up(col_size, col_aligns[i]);
-                        offset += stride * capacity;
+                        offset += stride * (capacity as u32);
                     }
 
                     for row_idx in 0..num_rows {
