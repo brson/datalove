@@ -65,6 +65,8 @@ Then we'll add I/O to it &mdash; carefully.
 
 
 
+---
+
 Datalove is built from three sublanguages of increasing power.
 
 
@@ -155,13 +157,29 @@ but I do have a [vision](vision.md) about what it will be.
 ---
 
 
+
+
+<br>
+<br>
+<br>
+<br>
+
+
+
+
+---
+
 <!-- User-oriented chapters -->
 
 - [Principles](principles.md)
-- [Novelties](novelties.md)
+
+
+---
+
+<!-- Language -->
+
 - [Lexical Structure](lexer.md)
 - [Datalove Literals](datalit-types.md)
-- [Datalove Literaels Runtime Types](datalit-runtime-types.md)
 - [Modules, Functions and Scripts](modules-functions-scripts.md)
 - [Control Flow](control-flow.md)
 - [Operators](operators.md)
@@ -169,10 +187,24 @@ but I do have a [vision](vision.md) about what it will be.
 - [Moves, Copies, References](moves-etc.md)
 - [Constant Evaluation](const-eval.md)
 - [Datalove Worlds](worlds.md)
-- [Roadmap](roadmap.md)
-- [Influences](influences.md)
+
+
+---
+
+<!-- Runtime -->
+
+- [Datalove Literals Runtime Types](datalit-runtime-types.md)
+
+
+---
+
+<!-- Lists -->
+
 - [Novelties](novelties.md)
 - [Vision](vision.md)
+- [Roadmap](roadmap.md)
+- [Influences](influences.md)
+
 
 ---
 
@@ -184,6 +216,7 @@ but I do have a [vision](vision.md) about what it will be.
 - [Future Designs](future-designs.md)
 - [Potential Changes](potential-changes.md)
 - [Testing](testing-tower.md)
+
 
 ---
 
