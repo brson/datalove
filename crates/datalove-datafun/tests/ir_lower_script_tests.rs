@@ -285,8 +285,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             | WorldfileSection::ModuleRemove { .. }
             | WorldfileSection::ModuleChangeWs { .. }
             | WorldfileSection::ModuleChangeAst { .. }
-            | WorldfileSection::ModuleChangeTy { .. } => {
-                // Skip module sections in script unit tests.
+            | WorldfileSection::ModuleChangeTy { .. }
+            | WorldfileSection::InlineDirectives { .. } => {
+                // Skip module sections and inline directives in script unit tests.
             }
         }
     }

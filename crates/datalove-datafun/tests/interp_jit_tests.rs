@@ -154,8 +154,9 @@ pub fn analyze_worldfile_with_jit(
             | WorldfileSection::ModuleRemove { .. }
             | WorldfileSection::ModuleChangeWs { .. }
             | WorldfileSection::ModuleChangeAst { .. }
-            | WorldfileSection::ModuleChangeTy { .. } => {
-                // Module action sections are for memo tests only.
+            | WorldfileSection::ModuleChangeTy { .. }
+            | WorldfileSection::InlineDirectives { .. } => {
+                // Module action sections and inline directives are not relevant here.
             }
             WorldfileSection::ScriptFragment { source } => {
                 executor.clear_debug_buffer();

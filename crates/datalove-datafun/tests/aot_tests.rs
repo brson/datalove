@@ -179,7 +179,8 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
             | WorldfileSection::ModuleRemove { .. }
             | WorldfileSection::ModuleChangeWs { .. }
             | WorldfileSection::ModuleChangeAst { .. }
-            | WorldfileSection::ModuleChangeTy { .. } => {
+            | WorldfileSection::ModuleChangeTy { .. }
+            | WorldfileSection::InlineDirectives { .. } => {
                 // Already handled above (or not relevant for AOT tests).
             }
             WorldfileSection::ScriptFragment { source } => {

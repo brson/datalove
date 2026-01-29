@@ -69,7 +69,8 @@ fn run_worldfile(
             | WorldfileSection::ModuleRemove { .. }
             | WorldfileSection::ModuleChangeWs { .. }
             | WorldfileSection::ModuleChangeAst { .. }
-            | WorldfileSection::ModuleChangeTy { .. } => {}
+            | WorldfileSection::ModuleChangeTy { .. }
+            | WorldfileSection::InlineDirectives { .. } => {}
             WorldfileSection::ScriptFragment { source } => {
                 executor.clear_debug_buffer();
                 let compiled_unit = compiler.compile_fragment(source);
