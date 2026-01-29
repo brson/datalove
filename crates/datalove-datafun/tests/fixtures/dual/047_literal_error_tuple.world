@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let x: error = error (1, true)
+debuglog x

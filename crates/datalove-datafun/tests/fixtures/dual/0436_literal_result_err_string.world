@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let x: !u32 = er error "error message"
+debuglog x

@@ -1711,11 +1711,87 @@ impl IrInterpreter {
                         num_rows as rtdt::IndexRepr,
                     );
                 }
-                // Aggregate and collection ConstValues that are not yet supported.
-                ConstValue::ResultErr(_)
-                | ConstValue::Data(_)
-                | ConstValue::Error(_) => {
-                    todo!("write_const for aggregate/collection types: {:?}", value)
+                ConstValue::ResultErr(inner) => {
+                    // Result::Err layout: tag (u8) at offset 0, Error payload at aligned offset.
+                    // Err tag = 2.
+                    *(dest.ptr as *mut u8) = 2;
+
+                    // Get the Ok type from the Result tydesc to compute payload offset.
+                    let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
+                    let ok_tydesc = tydesc_ref.result_ok_ty();
+                    let inner_align = ok_tydesc.align();
+                    let error_align = 8u32;
+                    let max_align = inner_align.max(error_align);
+                    let payload_offset = rtdt::layout::align_up(1, max_align);
+                    let payload_ptr = dest.ptr.add(payload_offset as usize);
+
+                    // The payload is an Error value. Create the Error tydesc and destination.
+                    let error_tydesc = self.tydesc_table.get_or_create(&IrType::Error);
+                    let payload_dest = Destination {
+                        ptr: payload_ptr,
+                        tydesc: error_tydesc,
+                    };
+                    self.write_const(inner, payload_dest);
+                }
+                ConstValue::Error(inner) => {
+                    // Error is a boxed wrapper around any value.
+                    let inner_ir_type = ir_type_of_const_value(inner);
+                    let inner_tydesc = self.tydesc_table.get_or_create(&inner_ir_type);
+                    let inner_size = (*inner_tydesc).size as usize;
+                    let inner_align = (*inner_tydesc).align as usize;
+
+                    // Allocate temp buffer with proper alignment.
+                    let layout = std::alloc::Layout::from_size_align(inner_size.max(1), inner_align.max(1))
+                        .expect("invalid layout for Error inner");
+                    let inner_buffer = std::alloc::alloc_zeroed(layout);
+
+                    // Write the inner value to the temp buffer.
+                    let inner_dest = Destination {
+                        ptr: inner_buffer,
+                        tydesc: inner_tydesc,
+                    };
+                    self.write_const(inner, inner_dest);
+
+                    // Now box the inner value into an Error at the destination.
+                    datalove_rt::c::dtlv_rti_error_from_local(
+                        self.runtime.handle(),
+                        inner_buffer,
+                        inner_tydesc,
+                        dest.ptr,
+                    );
+
+                    // Deallocate temp buffer.
+                    std::alloc::dealloc(inner_buffer, layout);
+                }
+                ConstValue::Data(inner) => {
+                    // Data is a boxed wrapper around any value.
+                    let inner_ir_type = ir_type_of_const_value(inner);
+                    let inner_tydesc = self.tydesc_table.get_or_create(&inner_ir_type);
+                    let inner_size = (*inner_tydesc).size as usize;
+                    let inner_align = (*inner_tydesc).align as usize;
+
+                    // Allocate temp buffer with proper alignment.
+                    let layout = std::alloc::Layout::from_size_align(inner_size.max(1), inner_align.max(1))
+                        .expect("invalid layout for Data inner");
+                    let inner_buffer = std::alloc::alloc_zeroed(layout);
+
+                    // Write the inner value to the temp buffer.
+                    let inner_dest = Destination {
+                        ptr: inner_buffer,
+                        tydesc: inner_tydesc,
+                    };
+                    self.write_const(inner, inner_dest);
+
+                    // Now box the inner value into a Data at the destination.
+                    datalove_rt::c::dtlv_rti_data_from_local(
+                        self.runtime.handle(),
+                        inner_buffer,
+                        inner_tydesc,
+                        dest.ptr,
+                    );
+
+                    // Deallocate temp buffer.
+                    std::alloc::dealloc(inner_buffer, layout);
                 }
             }
         }
@@ -1805,5 +1881,91 @@ impl IrInterpreter {
 impl Default for IrInterpreter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Infer an IrType from a ConstValue.
+///
+/// This is used to create tydescs when writing ConstValue::Data or other
+/// dynamically-typed values.
+fn ir_type_of_const_value(value: &ConstValue) -> IrType {
+    match value {
+        ConstValue::Unit => IrType::Unit,
+        ConstValue::Bool(_) => IrType::Bool,
+        ConstValue::U8(_) => IrType::U8,
+        ConstValue::U16(_) => IrType::U16,
+        ConstValue::U32(_) => IrType::U32,
+        ConstValue::U64(_) => IrType::U64,
+        ConstValue::I8(_) => IrType::I8,
+        ConstValue::I16(_) => IrType::I16,
+        ConstValue::I32(_) => IrType::I32,
+        ConstValue::I64(_) => IrType::I64,
+        ConstValue::Index(_) => IrType::Index,
+        ConstValue::Offset(_) => IrType::Offset,
+        ConstValue::Int { .. } => IrType::Int,
+        ConstValue::F32(_) => IrType::F32,
+        ConstValue::F64(_) => IrType::F64,
+        ConstValue::String(_) => IrType::String,
+        ConstValue::Tuple(fields) => {
+            IrType::Tuple(fields.iter().map(ir_type_of_const_value).collect())
+        }
+        ConstValue::Struct(fields) => {
+            IrType::Struct(
+                fields.iter()
+                    .map(|(name, v)| (name.clone(), ir_type_of_const_value(v)))
+                    .collect()
+            )
+        }
+        ConstValue::Enum { variant, payload } => {
+            // For enum, we can only infer a single-variant enum type.
+            let payload_type = payload.as_ref().map(|p| ir_type_of_const_value(p));
+            IrType::Enum(vec![(variant.clone(), payload_type)])
+        }
+        ConstValue::OptionNone => {
+            // Cannot fully infer the inner type for None; default to Unit.
+            IrType::Option(Box::new(IrType::Unit))
+        }
+        ConstValue::OptionSome(inner) => {
+            IrType::Option(Box::new(ir_type_of_const_value(inner)))
+        }
+        ConstValue::ResultOk(inner) => {
+            IrType::Result(Box::new(ir_type_of_const_value(inner)))
+        }
+        ConstValue::ResultErr(_) => {
+            // Result::Err - cannot infer Ok type from Err; default to Unit.
+            IrType::Result(Box::new(IrType::Unit))
+        }
+        ConstValue::Data(_) => IrType::Data,
+        ConstValue::Error(_) => IrType::Error,
+        ConstValue::List(elements) => {
+            let elem_type = elements.first()
+                .map(ir_type_of_const_value)
+                .unwrap_or(IrType::Unit);
+            IrType::List(Box::new(elem_type))
+        }
+        ConstValue::Set(elements) => {
+            let elem_type = elements.first()
+                .map(ir_type_of_const_value)
+                .unwrap_or(IrType::Unit);
+            IrType::Set(Box::new(elem_type))
+        }
+        ConstValue::Map(entries) => {
+            let (key_type, value_type) = entries.first()
+                .map(|(k, v)| (ir_type_of_const_value(k), ir_type_of_const_value(v)))
+                .unwrap_or((IrType::Unit, IrType::Unit));
+            IrType::Map(Box::new(key_type), Box::new(value_type))
+        }
+        ConstValue::Table { columns, rows } => {
+            // Infer column types from first row if available.
+            let col_types: Vec<(String, Box<IrType>)> = if let Some(first_row) = rows.first() {
+                columns.iter()
+                    .zip(first_row.iter())
+                    .map(|(name, value)| (name.clone(), Box::new(ir_type_of_const_value(value))))
+                    .collect()
+            } else {
+                columns.iter().map(|name| (name.clone(), Box::new(IrType::Unit))).collect()
+            };
+            IrType::Table(col_types)
+        }
     }
 }

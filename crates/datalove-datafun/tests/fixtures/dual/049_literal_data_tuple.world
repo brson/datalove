@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let x: data = data (100, 200)
+debuglog x

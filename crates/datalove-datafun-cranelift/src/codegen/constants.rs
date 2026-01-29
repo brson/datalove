@@ -133,11 +133,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Table: create table and push rows.
                 return self.compile_table_const(builder, dest, rows);
             }
-            // Aggregate and collection ConstValues are not yet supported for direct loading.
-            ConstValue::ResultErr(_)
-            | ConstValue::Data(_)
-            | ConstValue::Error(_) => {
-                todo!("compile_const for aggregate/collection types: {:?}", value)
+            ConstValue::ResultErr(inner) => {
+                // Result Err: write tag=2 and Error payload.
+                return self.compile_result_err_const(builder, dest, inner);
+            }
+            ConstValue::Data(inner) => {
+                // Data: box inner value.
+                return self.compile_data_const(builder, dest, inner);
+            }
+            ConstValue::Error(inner) => {
+                // Error: box inner value.
+                return self.compile_error_const(builder, dest, inner);
             }
         };
 
@@ -484,6 +490,166 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Write the inner value at the payload offset.
         self.write_const_value_to_addr(builder, payload_addr, inner)?;
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Compile a Result Err constant.
+    ///
+    /// Result layout: tag (u8) at offset 0, Error payload at aligned offset.
+    /// Err tag = 2.
+    fn compile_result_err_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        inner: &ConstValue,
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Result constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Write Err tag (2) at offset 0.
+        let tag = builder.ins().iconst(cl_types::I8, 2);
+        builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), tag, base, 0);
+
+        // Get the Result type to find the Ok type alignment for computing payload offset.
+        let ir_type = self.func.value_types.get(dest.0 as usize).ok_or_else(|| {
+            CraneliftError::Codegen("no type for Result constant".into())
+        })?;
+        let ok_type = match ir_type {
+            IrType::Result(inner_ty) => inner_ty.as_ref(),
+            _ => return Err(CraneliftError::Codegen("expected Result type".into())),
+        };
+
+        // Compute payload offset based on max of Ok type alignment and Error alignment (8).
+        let ok_align = self.align_of_ir_type(ok_type);
+        let error_align = 8u32;
+        let max_align = ok_align.max(error_align);
+        let payload_offset = datalove_rtdt::layout::align_up(1, max_align);
+        let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
+
+        // Write the Error value at the payload offset.
+        // The inner should be a ConstValue::Error which will be compiled.
+        self.write_const_value_to_addr(builder, payload_addr, inner)?;
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Compile an Error constant.
+    ///
+    /// Creates an Error by boxing an inner value.
+    fn compile_error_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        inner: &ConstValue,
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Error constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Need runtime handle and imports.
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("Error constant requires runtime handle".into())
+        })?;
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("Error constant requires runtime imports".into())
+        })?;
+
+        // Infer inner type and get TyDesc.
+        let inner_ir_type = ir_type_of_const_value(inner);
+        let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
+            CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
+        })?;
+        let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
+        let inner_tydesc_ptr = builder.ins().global_value(PTR_TYPE, inner_tydesc_gv);
+
+        // Get inner size and alignment.
+        let inner_size = self.size_of_const_value(inner).max(1);
+        let inner_align = self.align_of_const_value(inner).max(1) as u8;
+
+        // Allocate temp slot for the inner value.
+        let slot_data = cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            inner_size,
+            inner_align,
+        );
+        let temp_slot = builder.create_sized_stack_slot(slot_data);
+        let inner_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
+
+        // Write inner value to temp slot.
+        self.write_const_value_to_addr(builder, inner_ptr, inner)?;
+
+        // Call error_from_local to box the inner value into an Error.
+        let error_from_ref = self.module.declare_func_in_func(runtime.error_from, builder.func);
+        builder.ins().call(error_from_ref, &[rt_handle, inner_ptr, inner_tydesc_ptr, base]);
+
+        // Store base pointer for this value.
+        self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Compile a Data constant.
+    ///
+    /// Creates a Data by boxing an inner value.
+    fn compile_data_const(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        inner: &ConstValue,
+    ) -> Result<(), CraneliftError> {
+        // Get frame slot and destination address.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Data constant".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Need runtime handle and imports.
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("Data constant requires runtime handle".into())
+        })?;
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("Data constant requires runtime imports".into())
+        })?;
+
+        // Infer inner type and get TyDesc.
+        let inner_ir_type = ir_type_of_const_value(inner);
+        let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
+            CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
+        })?;
+        let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
+        let inner_tydesc_ptr = builder.ins().global_value(PTR_TYPE, inner_tydesc_gv);
+
+        // Get inner size and alignment.
+        let inner_size = self.size_of_const_value(inner).max(1);
+        let inner_align = self.align_of_const_value(inner).max(1) as u8;
+
+        // Allocate temp slot for the inner value.
+        let slot_data = cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            inner_size,
+            inner_align,
+        );
+        let temp_slot = builder.create_sized_stack_slot(slot_data);
+        let inner_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
+
+        // Write inner value to temp slot.
+        self.write_const_value_to_addr(builder, inner_ptr, inner)?;
+
+        // Call data_from_local to box the inner value into a Data.
+        let data_from_ref = self.module.declare_func_in_func(runtime.data_from, builder.func);
+        builder.ins().call(data_from_ref, &[rt_handle, inner_ptr, inner_tydesc_ptr, base]);
 
         // Store base pointer for this value.
         self.values.insert(dest, base);
@@ -1002,6 +1168,39 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
+    /// Get the alignment of an IrType.
+    fn align_of_ir_type(&self, ir_type: &IrType) -> u32 {
+        match ir_type {
+            IrType::Unit => 1,
+            IrType::Bool => 1,
+            IrType::U8 | IrType::I8 => 1,
+            IrType::U16 | IrType::I16 => 2,
+            IrType::U32 | IrType::I32 | IrType::F32 => 4,
+            IrType::U64 | IrType::I64 | IrType::F64 => 8,
+            IrType::Index | IrType::Offset => std::mem::size_of::<usize>() as u32,
+            IrType::Int | IrType::String => 8,
+            IrType::Data | IrType::Error => 8,
+            IrType::Option(inner) => self.align_of_ir_type(inner).max(1),
+            IrType::Result(inner) => self.align_of_ir_type(inner).max(8),
+            IrType::Tuple(fields) => {
+                fields.iter().map(|f| self.align_of_ir_type(f)).max().unwrap_or(1)
+            }
+            IrType::Struct(fields) => {
+                fields.iter().map(|(_, t)| self.align_of_ir_type(t)).max().unwrap_or(1)
+            }
+            IrType::Enum(variants) => {
+                let payload_align = variants.iter()
+                    .filter_map(|(_, p)| p.as_ref().map(|t| self.align_of_ir_type(t)))
+                    .max()
+                    .unwrap_or(1);
+                4u32.max(payload_align)
+            }
+            IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) | IrType::Table(_) => 8,
+            IrType::Tensor(_, _) => 8,
+            IrType::Ref(_) => std::mem::size_of::<*const ()>() as u32,
+        }
+    }
+
     /// Write a ConstValue to a memory address.
     fn write_const_value_to_addr(
         &mut self,
@@ -1185,12 +1384,189 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let payload_addr = builder.ins().iadd_imm(addr, payload_offset as i64);
                 self.write_const_value_to_addr(builder, payload_addr, inner)?;
             }
-            _ => {
+            ConstValue::ResultErr(inner) => {
+                // Write Err tag (2) at offset 0.
+                let tag = builder.ins().iconst(cl_types::I8, 2);
+                builder.ins().store(mem_flags, tag, addr, 0);
+
+                // Error uses 8-byte alignment.
+                let error_align = 8u32;
+                let payload_offset = datalove_rtdt::layout::align_up(1, error_align);
+                let payload_addr = builder.ins().iadd_imm(addr, payload_offset as i64);
+                // The inner is a ConstValue::Error which will be written.
+                self.write_const_value_to_addr(builder, payload_addr, inner)?;
+            }
+            ConstValue::Error(inner) => {
+                // Error requires runtime call - write inner value then box it.
+                let rt_handle = self.rt_handle_param.ok_or_else(|| {
+                    CraneliftError::Codegen("Error constant requires runtime handle".into())
+                })?;
+                let runtime = self.runtime.ok_or_else(|| {
+                    CraneliftError::Codegen("Error constant requires runtime imports".into())
+                })?;
+
+                // Infer inner type and get TyDesc.
+                let inner_ir_type = ir_type_of_const_value(inner);
+                let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
+                    CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
+                })?;
+                let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
+                let inner_tydesc_ptr = builder.ins().global_value(PTR_TYPE, inner_tydesc_gv);
+
+                // Get inner size and alignment.
+                let inner_size = self.size_of_const_value(inner).max(1);
+                let inner_align = self.align_of_const_value(inner).max(1) as u8;
+
+                // Allocate temp slot for the inner value.
+                let slot_data = cranelift_codegen::ir::StackSlotData::new(
+                    cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                    inner_size,
+                    inner_align,
+                );
+                let temp_slot = builder.create_sized_stack_slot(slot_data);
+                let inner_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
+
+                // Write inner value to temp slot.
+                self.write_const_value_to_addr(builder, inner_ptr, inner)?;
+
+                // Call error_from_local to box the inner value into an Error at addr.
+                let error_from_ref = self.module.declare_func_in_func(runtime.error_from, builder.func);
+                builder.ins().call(error_from_ref, &[rt_handle, inner_ptr, inner_tydesc_ptr, addr]);
+            }
+            ConstValue::Data(inner) => {
+                // Data requires runtime call - write inner value then box it.
+                let rt_handle = self.rt_handle_param.ok_or_else(|| {
+                    CraneliftError::Codegen("Data constant requires runtime handle".into())
+                })?;
+                let runtime = self.runtime.ok_or_else(|| {
+                    CraneliftError::Codegen("Data constant requires runtime imports".into())
+                })?;
+
+                // Infer inner type and get TyDesc.
+                let inner_ir_type = ir_type_of_const_value(inner);
+                let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
+                    CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
+                })?;
+                let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
+                let inner_tydesc_ptr = builder.ins().global_value(PTR_TYPE, inner_tydesc_gv);
+
+                // Get inner size and alignment.
+                let inner_size = self.size_of_const_value(inner).max(1);
+                let inner_align = self.align_of_const_value(inner).max(1) as u8;
+
+                // Allocate temp slot for the inner value.
+                let slot_data = cranelift_codegen::ir::StackSlotData::new(
+                    cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                    inner_size,
+                    inner_align,
+                );
+                let temp_slot = builder.create_sized_stack_slot(slot_data);
+                let inner_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
+
+                // Write inner value to temp slot.
+                self.write_const_value_to_addr(builder, inner_ptr, inner)?;
+
+                // Call data_from_local to box the inner value into a Data at addr.
+                let data_from_ref = self.module.declare_func_in_func(runtime.data_from, builder.func);
+                builder.ins().call(data_from_ref, &[rt_handle, inner_ptr, inner_tydesc_ptr, addr]);
+            }
+            ConstValue::Enum { variant, payload: _ } => {
+                // For write_const_value_to_addr, we don't have type info so we can't
+                // look up the variant index. This should only be called from contexts
+                // where the full compile_enum_const was used.
                 return Err(CraneliftError::Codegen(format!(
-                    "write_const_value_to_addr not implemented for: {:?}", value
+                    "write_const_value_to_addr not supported for Enum (use compile_enum_const): {:?}", variant
+                )));
+            }
+            ConstValue::List(_) | ConstValue::Set(_) | ConstValue::Map(_) | ConstValue::Table { .. } => {
+                // Collections require runtime calls with type information.
+                return Err(CraneliftError::Codegen(format!(
+                    "write_const_value_to_addr not supported for collections (use compile_*_const): {:?}", value
                 )));
             }
         }
         Ok(())
+    }
+}
+
+/// Infer an IrType from a ConstValue.
+///
+/// This is used to create tydescs for Data constants where the inner
+/// type is not explicitly available.
+fn ir_type_of_const_value(value: &ConstValue) -> IrType {
+    match value {
+        ConstValue::Unit => IrType::Unit,
+        ConstValue::Bool(_) => IrType::Bool,
+        ConstValue::U8(_) => IrType::U8,
+        ConstValue::U16(_) => IrType::U16,
+        ConstValue::U32(_) => IrType::U32,
+        ConstValue::U64(_) => IrType::U64,
+        ConstValue::I8(_) => IrType::I8,
+        ConstValue::I16(_) => IrType::I16,
+        ConstValue::I32(_) => IrType::I32,
+        ConstValue::I64(_) => IrType::I64,
+        ConstValue::Index(_) => IrType::Index,
+        ConstValue::Offset(_) => IrType::Offset,
+        ConstValue::Int { .. } => IrType::Int,
+        ConstValue::F32(_) => IrType::F32,
+        ConstValue::F64(_) => IrType::F64,
+        ConstValue::String(_) => IrType::String,
+        ConstValue::Tuple(fields) => {
+            IrType::Tuple(fields.iter().map(ir_type_of_const_value).collect())
+        }
+        ConstValue::Struct(fields) => {
+            IrType::Struct(
+                fields.iter()
+                    .map(|(name, v)| (name.clone(), ir_type_of_const_value(v)))
+                    .collect()
+            )
+        }
+        ConstValue::Enum { variant, payload } => {
+            let payload_type = payload.as_ref().map(|p| ir_type_of_const_value(p));
+            IrType::Enum(vec![(variant.clone(), payload_type)])
+        }
+        ConstValue::OptionNone => {
+            IrType::Option(Box::new(IrType::Unit))
+        }
+        ConstValue::OptionSome(inner) => {
+            IrType::Option(Box::new(ir_type_of_const_value(inner)))
+        }
+        ConstValue::ResultOk(inner) => {
+            IrType::Result(Box::new(ir_type_of_const_value(inner)))
+        }
+        ConstValue::ResultErr(_) => {
+            IrType::Result(Box::new(IrType::Unit))
+        }
+        ConstValue::Data(_) => IrType::Data,
+        ConstValue::Error(_) => IrType::Error,
+        ConstValue::List(elements) => {
+            let elem_type = elements.first()
+                .map(ir_type_of_const_value)
+                .unwrap_or(IrType::Unit);
+            IrType::List(Box::new(elem_type))
+        }
+        ConstValue::Set(elements) => {
+            let elem_type = elements.first()
+                .map(ir_type_of_const_value)
+                .unwrap_or(IrType::Unit);
+            IrType::Set(Box::new(elem_type))
+        }
+        ConstValue::Map(entries) => {
+            let (key_type, value_type) = entries.first()
+                .map(|(k, v)| (ir_type_of_const_value(k), ir_type_of_const_value(v)))
+                .unwrap_or((IrType::Unit, IrType::Unit));
+            IrType::Map(Box::new(key_type), Box::new(value_type))
+        }
+        ConstValue::Table { columns, rows } => {
+            let col_types: Vec<(String, Box<IrType>)> = if let Some(first_row) = rows.first() {
+                columns.iter()
+                    .zip(first_row.iter())
+                    .map(|(name, value)| (name.clone(), Box::new(ir_type_of_const_value(value))))
+                    .collect()
+            } else {
+                columns.iter().map(|name| (name.clone(), Box::new(IrType::Unit))).collect()
+            };
+            IrType::Table(col_types)
+        }
     }
 }

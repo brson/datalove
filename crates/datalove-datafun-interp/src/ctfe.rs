@@ -417,8 +417,8 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                         // Error contains a boxed value with its own tydesc.
                         let inner_tydesc_ptr = error_val.tydesc();
                         if inner_tydesc_ptr.is_null() {
-                            // Null error - return a simple error message.
-                            Ok(ConstValue::ResultErr(Box::new(ConstValue::Error("<null>".to_string()))))
+                            // Null error - return Unit as placeholder.
+                            Ok(ConstValue::ResultErr(Box::new(ConstValue::Error(Box::new(ConstValue::Unit)))))
                         } else {
                             let inner_tydesc = datalove_rtdt::TyDescRef::from_ptr(inner_tydesc_ptr);
                             let inner_value_ptr = error_val.value_ptr();
@@ -426,7 +426,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                             // Extract the inner error value based on its actual type.
                             let inner_ir_type = ir_type_from_tydesc(inner_tydesc)?;
                             let inner_value = extract_const_value(inner_value_ptr, &inner_ir_type)?;
-                            Ok(ConstValue::ResultErr(Box::new(ConstValue::Error(format!("{:?}", inner_value)))))
+                            Ok(ConstValue::ResultErr(Box::new(ConstValue::Error(Box::new(inner_value)))))
                         }
                     }
                     _ => Err(CtfeError::InterpError(format!(

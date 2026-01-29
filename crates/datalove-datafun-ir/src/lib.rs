@@ -581,8 +581,8 @@ pub enum ConstValue {
     ResultErr(Box<ConstValue>),
     /// Dynamic data wrapper.
     Data(Box<ConstValue>),
-    /// Error value.
-    Error(String),
+    /// Error value (boxes any value).
+    Error(Box<ConstValue>),
 
     // Collections.
     /// List with elements.

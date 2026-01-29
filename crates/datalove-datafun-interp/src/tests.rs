@@ -2491,3 +2491,464 @@ fn test_ctfe_struct_with_string_and_debuglog() {
     env.destroy_live_values(interp.runtime_handle());
 }
 
+
+// =========================================================================
+// Tests for Error, Data, and ResultErr ConstValue variants
+// =========================================================================
+
+#[test]
+fn test_const_error() {
+    // Test ConstValue::Error - boxes an inner value.
+    let error_const = ConstValue::Error(Box::new(ConstValue::String("test error message".to_string())));
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: error_const },
+                    // DebugLog to verify it can be printed.
+                    Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![IrType::Error],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![ValueId(0)],
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}
+
+#[test]
+fn test_const_data() {
+    // Test ConstValue::Data - boxes an inner value.
+    let data_const = ConstValue::Data(Box::new(ConstValue::I32(42)));
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: data_const },
+                    // DebugLog to verify it can be printed.
+                    Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![IrType::Data],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![ValueId(0)],
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}
+
+#[test]
+fn test_const_result_err() {
+    // Test ConstValue::ResultErr - creates a Result::Err from an Error.
+    let result_err_const = ConstValue::ResultErr(Box::new(
+        ConstValue::Error(Box::new(ConstValue::String("error in result".to_string())))
+    ));
+
+    let result_type = IrType::Result(Box::new(IrType::I32));
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: result_err_const },
+                    // DebugLog to verify it can be printed.
+                    Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![result_type],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![ValueId(0)],
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}
+
+#[test]
+fn test_const_data_with_string() {
+    // Test ConstValue::Data with a String inside.
+    let data_const = ConstValue::Data(Box::new(ConstValue::String("boxed string".to_string())));
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: data_const },
+                    Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![IrType::Data],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![ValueId(0)],
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}
+
+#[test]
+fn test_const_error_with_i32() {
+    // Test ConstValue::Error boxing an i32.
+    let error_const = ConstValue::Error(Box::new(ConstValue::I32(42)));
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: error_const },
+                    Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![IrType::Error],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![ValueId(0)],
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}
+
+#[test]
+fn test_const_error_with_tuple() {
+    // Test ConstValue::Error boxing a tuple.
+    let error_const = ConstValue::Error(Box::new(ConstValue::Tuple(vec![
+        ConstValue::I32(1),
+        ConstValue::Bool(true),
+    ])));
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: error_const },
+                    Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![IrType::Error],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![ValueId(0)],
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}
+
+#[test]
+fn test_const_data_with_tuple() {
+    // Test ConstValue::Data boxing a tuple.
+    let data_const = ConstValue::Data(Box::new(ConstValue::Tuple(vec![
+        ConstValue::U32(100),
+        ConstValue::U32(200),
+    ])));
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: data_const },
+                    Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![IrType::Data],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![ValueId(0)],
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}
+
+#[test]
+fn test_const_result_err_with_i32() {
+    // Test ConstValue::ResultErr with an Error containing i32.
+    let result_err_const = ConstValue::ResultErr(Box::new(
+        ConstValue::Error(Box::new(ConstValue::I32(999)))
+    ));
+
+    let result_type = IrType::Result(Box::new(IrType::String));
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: result_err_const },
+                    Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![result_type],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![ValueId(0)],
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}
+
+#[test]
+fn test_const_data_with_bool() {
+    // Test ConstValue::Data boxing a bool.
+    let data_const = ConstValue::Data(Box::new(ConstValue::Bool(true)));
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: data_const },
+                    Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![IrType::Data],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![ValueId(0)],
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}
+
+#[test]
+fn test_const_error_with_unit() {
+    // Test ConstValue::Error boxing Unit.
+    let error_const = ConstValue::Error(Box::new(ConstValue::Unit));
+
+    let unit = IrScriptUnit {
+        blocks: vec![
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: error_const },
+                    Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                ],
+                terminator: Terminator::UnitEnd { result: None },
+            },
+        ],
+        value_count: 1,
+        slot_count: 0,
+        value_types: vec![IrType::Error],
+        slot_types: vec![],
+        tracked_slots: vec![],
+        unit_end_values: vec![ValueId(0)],
+        unit_end_slots: vec![],
+        functions: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        result: None,
+        exports: vec![],
+        const_values: vec![],
+    };
+
+    let mut interp = IrInterpreter::new();
+    let mut env = ScriptEnvironment::new();
+
+    let ret_type = IrType::Result(Box::new(IrType::Unit));
+    let ret_tydesc = interp.tydesc_table.get_or_create(&ret_type);
+    let ret_size = unsafe { (*ret_tydesc).size };
+    let mut ret_buffer = vec![0u8; ret_size as usize];
+    let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
+
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    assert_eq!(completion, super::UnitCompletion::Normal);
+
+    env.destroy_live_values(interp.runtime_handle());
+}

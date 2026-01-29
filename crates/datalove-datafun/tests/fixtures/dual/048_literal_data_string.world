@@ -1,0 +1,6 @@
+----------
+scriptunit-fragment
+----------
+
+let x: data = data "hello"
+debuglog x
