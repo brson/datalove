@@ -108,7 +108,7 @@
         --code-bg: var(--cave-base06);
         --code-bg: color-mix(in srgb, var(--cave-base06), white 20%);
         --table-header-bg: var(--cave-base06);
-        --link: var(--cave-violet);
+        --link: var(--heath-violet);
         --syn-keyword: var(--cave-magenta);
         --syn-type-name: var(--cave-cyan);
         --syn-string: var(--cave-yellow);
@@ -132,7 +132,7 @@
 
         --accent-1: var(--cave-cyan);
         --accent-2: var(--cave-green);
-        --accent-3: var(--cave-orange);
+        --accent-3: var(--heath-yellow);
         --accent-4: var(--cave-violet);
     }
 }
