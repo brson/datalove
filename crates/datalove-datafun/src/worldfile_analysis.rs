@@ -1,11 +1,19 @@
 //! Worldfile analysis using the IR interpreter.
 //!
-//! This module provides test infrastructure for worldfiles that may contain
-//! module sections along with scriptunit-fragment and scriptunit-expr sections.
-//! Tests execute script units sequentially using the IR-based interpreter.
+//! This module provides test infrastructure for worldfiles that contain
+//! module and script sections. It processes sections sequentially:
 //!
-//! Script units are executed with a shared environment, allowing later units
-//! to reference values, slots, and functions from earlier units.
+//! 1. **Module sections**: Compiled (parsed, typechecked, ownership-analyzed, lowered)
+//! 2. **Script sections**: Compiled and executed via the IR interpreter
+//!
+//! Script units share execution state, allowing later units to reference
+//! values, slots, and functions from earlier units.
+//!
+//! # Const Inlining
+//!
+//! By default, `const` bindings are evaluated at compile time (CTFE) and inlined.
+//! For testing purposes, use [`analyze_worldfile_with_options`] with
+//! `skip_const_inlining: true` to evaluate const bindings at runtime instead.
 
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
@@ -17,6 +25,10 @@ use crate::pipeline::{
     format_ownership_result, format_lowering_result,
 };
 
+// ============================================================================
+// Result Types
+// ============================================================================
+
 /// Result of analyzing a worldfile with IR interpreter.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Analysis {
@@ -27,9 +39,9 @@ pub struct Analysis {
 /// Result of analyzing one section.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SectionResult {
-    /// Section type.
+    /// Section type (e.g., "module", "scriptunit-fragment", "scriptunit-expr").
     pub section_type: String,
-    /// Section name/identifier (for modules).
+    /// Section name/identifier (module path for module sections).
     pub name: Option<String>,
     /// Typecheck result.
     pub typecheck: TypecheckResult,
@@ -44,23 +56,54 @@ pub struct SectionResult {
     pub debug_output: Option<String>,
 }
 
-/// Analyze a worldfile using the IR interpreter.
+// ============================================================================
+// Analysis Options
+// ============================================================================
+
+/// Options for worldfile analysis.
+#[derive(Debug, Clone, Default)]
+pub struct AnalysisOptions {
+    /// Skip const inlining (evaluate const bindings at runtime instead of CTFE).
+    pub skip_const_inlining: bool,
+}
+
+// ============================================================================
+// Analysis Functions
+// ============================================================================
+
+/// Analyze a worldfile using the IR interpreter with default options.
 ///
-/// This function processes sections in order:
-/// 1. Module sections: typechecked but not executed
-/// 2. scriptunit-fragment sections: typechecked, lowered to IR, executed
-/// 3. scriptunit-expr sections: typechecked, lowered to IR, executed, result captured
-///
-/// Script units share a `ScriptLowerContext` (for cross-unit name resolution during lowering)
-/// and a `ScriptEnvironment` (for cross-unit value/function access during execution).
+/// This is equivalent to calling [`analyze_worldfile_with_options`] with
+/// default options (const inlining enabled).
 pub fn analyze_worldfile(
     db: &mut crate::Database,
     parsed: ParsedWorldfile,
 ) -> AnyResult<Analysis> {
+    analyze_worldfile_with_options(db, parsed, AnalysisOptions::default())
+}
+
+/// Analyze a worldfile using the IR interpreter with custom options.
+///
+/// Processes sections in order:
+/// 1. Module sections: compiled but not executed
+/// 2. scriptunit-fragment sections: compiled and executed
+/// 3. scriptunit-expr sections: compiled, executed, result captured
+pub fn analyze_worldfile_with_options(
+    db: &mut crate::Database,
+    parsed: ParsedWorldfile,
+    options: AnalysisOptions,
+) -> AnyResult<Analysis> {
     let mut results = Vec::new();
 
+    // Determine const inlining mode.
+    let const_inlining = if options.skip_const_inlining {
+        ConstInlining::Disabled
+    } else {
+        ConstInlining::Enabled
+    };
+
     // Build pipeline from sections.
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, ConstInlining::Enabled);
+    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, const_inlining);
 
     // Compile modules (typecheck, drop analysis, lower).
     let (compiled, db) = pipeline.compile(db);
@@ -79,10 +122,46 @@ pub fn analyze_worldfile(
         return Ok(Analysis { sections: results });
     }
 
-    // Collect module results first.
-    for section in &parsed.sections {
-        if let WorldfileSection::Module { library, package, module, .. } = section {
-            let module_path = format!("{}/{}/{}", library, package, module);
+    // Collect module results.
+    collect_module_results(&parsed.sections, &compiled, &mut results);
+
+    // Create script compiler and executor with Buffer mode for capturing debuglog output.
+    let mut compiler = compiled.script_compiler_default(db);
+    let mut executor = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, None);
+
+    // Configure skip_const_inlining on the script compiler if needed.
+    if options.skip_const_inlining {
+        if let Some(ref mut compiler) = compiler {
+            compiler.set_skip_const_inlining(true);
+        }
+    }
+
+    // Process script sections.
+    process_script_sections(&parsed.sections, &mut compiler, &mut executor, &mut results);
+
+    // Cleanup.
+    if let Some(ref mut executor) = executor {
+        executor.destroy_live_values();
+    }
+
+    Ok(Analysis { sections: results })
+}
+
+// ============================================================================
+// Internal Helpers
+// ============================================================================
+
+use crate::pipeline::{CompiledModules, ScriptCompiler, ScriptExecutor};
+
+/// Collect analysis results for module sections.
+fn collect_module_results(
+    sections: &[WorldfileSection],
+    compiled: &CompiledModules<'_>,
+    results: &mut Vec<SectionResult>,
+) {
+    for section in sections {
+        if let Some(path) = section.module_path() {
+            let module_path = path.to_path_string();
 
             // Look up typecheck errors for this module.
             let typecheck = match compiled.path_to_errors.get(&module_path) {
@@ -101,115 +180,131 @@ pub fn analyze_worldfile(
             let has_ownership_errors = matches!(&ownership, OwnershipResult::Error { .. });
             let lowering = format_lowering_result(ir_dumps, lowering_errs, has_typecheck_errors || has_ownership_errors);
 
-            results.push(SectionResult {
-                section_type: "module".S(),
-                name: Some(module_path),
-                typecheck,
-                ownership,
-                lowering,
-                output: String::new(),
-                debug_output: None,
-            });
+            // Only include initial Module sections (not change/add/remove actions).
+            if matches!(section, WorldfileSection::Module { .. }) {
+                results.push(SectionResult {
+                    section_type: "module".S(),
+                    name: Some(module_path),
+                    typecheck,
+                    ownership,
+                    lowering,
+                    output: String::new(),
+                    debug_output: None,
+                });
+            }
         }
     }
+}
 
-    // Create script compiler and executor with Buffer mode for capturing debuglog output.
-    let mut compiler = compiled.script_compiler_default(db);
-    let mut executor = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, None);
-
-    // Process script units using the compiler and executor.
-    for section in &parsed.sections {
+/// Process script sections (fragment and expr).
+fn process_script_sections(
+    sections: &[WorldfileSection],
+    compiler: &mut Option<ScriptCompiler<'_>>,
+    executor: &mut Option<ScriptExecutor>,
+    results: &mut Vec<SectionResult>,
+) {
+    for section in sections {
         match section {
-            WorldfileSection::Module { .. } => {
-                // Already handled above.
-            }
-            WorldfileSection::ModuleAdd { .. }
-            | WorldfileSection::ModuleRemove { .. }
-            | WorldfileSection::ModuleChangeWs { .. }
-            | WorldfileSection::ModuleChangeAst { .. }
-            | WorldfileSection::ModuleChangeTy { .. } => {
-                // Module action sections are for memo tests only.
-            }
             WorldfileSection::ScriptFragment { source } => {
-                if let (Some(compiler), Some(executor)) = (&mut compiler, &mut executor) {
-                    // Clear debug buffer before execution.
-                    executor.clear_debug_buffer();
-                    // Compile the fragment.
-                    let compiled_unit = compiler.compile_fragment(source);
-                    // Execute if compilation succeeded.
-                    let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
-                        executor.execute_fragment(ir_unit)
-                    } else {
-                        String::new()
-                    };
-                    // Capture debug output.
-                    let debug_output = executor.get_debug_buffer();
-                    results.push(SectionResult {
-                        section_type: "scriptunit-fragment".S(),
-                        name: None,
-                        typecheck: compiled_unit.typecheck,
-                        ownership: compiled_unit.ownership,
-                        lowering: compiled_unit.lowering,
-                        output,
-                        debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
-                    });
-                } else {
-                    // Module compilation failed, skip script execution.
-                    results.push(SectionResult {
-                        section_type: "scriptunit-fragment".S(),
-                        name: None,
-                        typecheck: TypecheckResult::Skipped,
-                        ownership: OwnershipResult::Skipped,
-                        lowering: LoweringResult::Skipped,
-                        output: String::new(),
-                        debug_output: None,
-                    });
-                }
+                let result = execute_script_fragment(source, compiler, executor);
+                results.push(result);
             }
             WorldfileSection::ScriptExpr { source } => {
-                if let (Some(compiler), Some(executor)) = (&mut compiler, &mut executor) {
-                    // Clear debug buffer before execution.
-                    executor.clear_debug_buffer();
-                    // Compile the expression.
-                    let compiled_unit = compiler.compile_expr(source);
-                    // Execute if compilation succeeded.
-                    let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
-                        let (_, value) = executor.execute_expr(ir_unit);
-                        value
-                    } else {
-                        String::new()
-                    };
-                    // Capture debug output.
-                    let debug_output = executor.get_debug_buffer();
-                    results.push(SectionResult {
-                        section_type: "scriptunit-expr".S(),
-                        name: None,
-                        typecheck: compiled_unit.typecheck,
-                        ownership: compiled_unit.ownership,
-                        lowering: compiled_unit.lowering,
-                        output,
-                        debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
-                    });
-                } else {
-                    // Module compilation failed, skip script execution.
-                    results.push(SectionResult {
-                        section_type: "scriptunit-expr".S(),
-                        name: None,
-                        typecheck: TypecheckResult::Skipped,
-                        ownership: OwnershipResult::Skipped,
-                        lowering: LoweringResult::Skipped,
-                        output: String::new(),
-                        debug_output: None,
-                    });
-                }
+                let result = execute_script_expr(source, compiler, executor);
+                results.push(result);
             }
+            // Module sections already handled; action sections are for memo tests only.
+            _ => {}
         }
     }
+}
 
-    // Cleanup.
-    if let Some(ref mut executor) = executor {
-        executor.destroy_live_values();
+/// Execute a script fragment and return the result.
+fn execute_script_fragment(
+    source: &str,
+    compiler: &mut Option<ScriptCompiler<'_>>,
+    executor: &mut Option<ScriptExecutor>,
+) -> SectionResult {
+    if let (Some(compiler), Some(executor)) = (compiler, executor) {
+        // Clear debug buffer before execution.
+        executor.clear_debug_buffer();
+
+        // Compile the fragment.
+        let compiled_unit = compiler.compile_fragment(source);
+
+        // Execute if compilation succeeded.
+        let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+            executor.execute_fragment(ir_unit)
+        } else {
+            String::new()
+        };
+
+        // Capture debug output.
+        let debug_output = executor.get_debug_buffer();
+
+        SectionResult {
+            section_type: "scriptunit-fragment".S(),
+            name: None,
+            typecheck: compiled_unit.typecheck,
+            ownership: compiled_unit.ownership,
+            lowering: compiled_unit.lowering,
+            output,
+            debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
+        }
+    } else {
+        // Module compilation failed, skip script execution.
+        skipped_section_result("scriptunit-fragment")
     }
+}
 
-    Ok(Analysis { sections: results })
+/// Execute a script expression and return the result.
+fn execute_script_expr(
+    source: &str,
+    compiler: &mut Option<ScriptCompiler<'_>>,
+    executor: &mut Option<ScriptExecutor>,
+) -> SectionResult {
+    if let (Some(compiler), Some(executor)) = (compiler, executor) {
+        // Clear debug buffer before execution.
+        executor.clear_debug_buffer();
+
+        // Compile the expression.
+        let compiled_unit = compiler.compile_expr(source);
+
+        // Execute if compilation succeeded.
+        let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+            let (_, value) = executor.execute_expr(ir_unit);
+            value
+        } else {
+            String::new()
+        };
+
+        // Capture debug output.
+        let debug_output = executor.get_debug_buffer();
+
+        SectionResult {
+            section_type: "scriptunit-expr".S(),
+            name: None,
+            typecheck: compiled_unit.typecheck,
+            ownership: compiled_unit.ownership,
+            lowering: compiled_unit.lowering,
+            output,
+            debug_output: if debug_output.is_empty() { None } else { Some(debug_output) },
+        }
+    } else {
+        // Module compilation failed, skip script execution.
+        skipped_section_result("scriptunit-expr")
+    }
+}
+
+/// Create a skipped section result.
+fn skipped_section_result(section_type: &str) -> SectionResult {
+    SectionResult {
+        section_type: section_type.S(),
+        name: None,
+        typecheck: TypecheckResult::Skipped,
+        ownership: OwnershipResult::Skipped,
+        lowering: LoweringResult::Skipped,
+        output: String::new(),
+        debug_output: None,
+    }
 }
