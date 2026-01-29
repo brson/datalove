@@ -163,18 +163,18 @@ but I do have a [vision](vision.md) about what it will be.
 
 ---
 
-
-<!-- Hero chapters -->
+<div class="toc toc1">
 
 - [Datalove Literals](datalit-types.md)
 - [Datalove Functions](datafun.md)
 - [Principles](principles.md)
 - [Vision](vision.md)
 
+</div>
 
 ---
 
-<!-- Language -->
+<div class="toc toc2">
 
 - [Lexical Structure](lexer.md)
 - [Modules, Functions and Scripts](modules-functions-scripts.md)
@@ -184,27 +184,16 @@ but I do have a [vision](vision.md) about what it will be.
 - [Moves, Copies, References](moves-etc.md)
 - [Constant Evaluation](const-eval.md)
 - [Datalove Worlds](worlds.md)
-
-
----
-
-<!-- Runtime -->
-
 - [Datalove Literals Runtime Types](datalit-runtime-types.md)
-
-
----
-
-<!-- Lists -->
-
 - [Novelties](novelties.md)
 - [Roadmap](roadmap.md)
 - [Influences](influences.md)
 
+</div>
 
 ---
 
-<!-- Developer-oriented chapters -->
+<div class="toc toc3">
 
 - [Compiler Guide](compiler-guide.md)
 - [Issues](issues.md)
@@ -212,13 +201,14 @@ but I do have a [vision](vision.md) about what it will be.
 - [Future Designs](future-designs.md)
 - [Potential Changes](potential-changes.md)
 - [Testing](testing-tower.md)
+- [Features](features.md)
 
+</div>
 
 ---
 
-<!-- Unsorted junk -->
+<div class="toc toc4">
 
-- [Features](features.md)
 - [More Datalit Types](more-datalit-types.md)
 - [Total Functions](total-functions.md)
 - [Panicking](panicking.md)
@@ -226,5 +216,6 @@ but I do have a [vision](vision.md) about what it will be.
 - [REPL UI](repl-ui.md)
 - [Zipper Heaps](zipper-heaps.md)
 
+</div>
 
 ---
