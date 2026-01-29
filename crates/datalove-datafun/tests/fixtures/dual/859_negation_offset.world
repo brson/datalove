@@ -1,0 +1,24 @@
+----------
+scriptunit-fragment
+----------
+
+let pos: offset = (: offset / 42)
+let neg: offset = (: offset / -42)
+let zero: offset = (: offset / 0)
+let max: offset = (: offset / 2147483647)
+let min: offset = (: offset / -2147483648)
+
+// Negate positive.
+debuglog icall neg_wrapping_offset(pos)
+
+// Negate negative.
+debuglog icall neg_wrapping_offset(neg)
+
+// Negate zero.
+debuglog icall neg_wrapping_offset(zero)
+
+// Negate max (becomes min + 1).
+debuglog icall neg_wrapping_offset(max)
+
+// Negate min (wraps to min due to two's complement).
+debuglog icall neg_wrapping_offset(min)

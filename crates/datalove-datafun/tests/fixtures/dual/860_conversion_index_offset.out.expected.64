@@ -1,0 +1,117 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0index
+                        v1 = const 1index
+                        v2 = const 4294967295index
+                        v3 = const 2147483647index
+                        v4 = intrinsic IndexToOffset(v0)
+                        debuglog v4
+                        v5 = intrinsic IndexToOffset(v1)
+                        debuglog v5
+                        v6 = intrinsic IndexToOffset(v3)
+                        debuglog v6
+                        v7 = intrinsic IndexToOffset(v2)
+                        debuglog v7
+                        v8 = const 0offset
+                        v9 = const 1offset
+                        v10 = const -1offset
+                        v11 = const 2147483647offset
+                        v12 = const -2147483648offset
+                        v13 = intrinsic OffsetToIndex(v8)
+                        debuglog v13
+                        v14 = intrinsic OffsetToIndex(v9)
+                        debuglog v14
+                        v15 = intrinsic OffsetToIndex(v10)
+                        debuglog v15
+                        v16 = intrinsic OffsetToIndex(v11)
+                        debuglog v16
+                        v17 = intrinsic OffsetToIndex(v12)
+                        debuglog v17
+                        unit_end
+                    exports:
+                        u_zero = v0
+                        u_one = v1
+                        u_max = v2
+                        u_half = v3
+                        i_zero = v8
+                        i_one = v9
+                        i_neg = v10
+                        i_max = v11
+                        i_min = v12
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0index
+                        v1 = const 1index
+                        v2 = const 4294967295index
+                        v3 = const 2147483647index
+                        v4 = intrinsic IndexToOffset(v0)
+                        debuglog v4
+                        v5 = intrinsic IndexToOffset(v1)
+                        debuglog v5
+                        v6 = intrinsic IndexToOffset(v3)
+                        debuglog v6
+                        v7 = intrinsic IndexToOffset(v2)
+                        debuglog v7
+                        v8 = const 0offset
+                        v9 = const 1offset
+                        v10 = const -1offset
+                        v11 = const 2147483647offset
+                        v12 = const -2147483648offset
+                        v13 = intrinsic OffsetToIndex(v8)
+                        debuglog v13
+                        v14 = intrinsic OffsetToIndex(v9)
+                        debuglog v14
+                        v15 = intrinsic OffsetToIndex(v10)
+                        debuglog v15
+                        v16 = intrinsic OffsetToIndex(v11)
+                        debuglog v16
+                        v17 = intrinsic OffsetToIndex(v12)
+                        debuglog v17
+                        unit_end
+                    exports:
+                        u_zero = v0
+                        u_one = v1
+                        u_max = v2
+                        u_half = v3
+                        i_zero = v8
+                        i_one = v9
+                        i_neg = v10
+                        i_max = v11
+                        i_min = v12
+                """,
+            ),
+            ir_match: true,
+            interp_output: "0\n1\n2147483647\n4294967295\n0\n1\n18446744073709551615\n2147483647\n18446744071562067968\n",
+            aot_output: "0\n1\n2147483647\n4294967295\n0\n1\n18446744073709551615\n2147483647\n18446744071562067968\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

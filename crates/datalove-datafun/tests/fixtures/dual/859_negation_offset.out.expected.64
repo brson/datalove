@@ -1,0 +1,85 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42offset
+                        v1 = const -42offset
+                        v2 = const 0offset
+                        v3 = const 2147483647offset
+                        v4 = const -2147483648offset
+                        v5 = intrinsic NegWrappingOffset(v0)
+                        debuglog v5
+                        v6 = intrinsic NegWrappingOffset(v1)
+                        debuglog v6
+                        v7 = intrinsic NegWrappingOffset(v2)
+                        debuglog v7
+                        v8 = intrinsic NegWrappingOffset(v3)
+                        debuglog v8
+                        v9 = intrinsic NegWrappingOffset(v4)
+                        debuglog v9
+                        unit_end
+                    exports:
+                        pos = v0
+                        neg = v1
+                        zero = v2
+                        max = v3
+                        min = v4
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42offset
+                        v1 = const -42offset
+                        v2 = const 0offset
+                        v3 = const 2147483647offset
+                        v4 = const -2147483648offset
+                        v5 = intrinsic NegWrappingOffset(v0)
+                        debuglog v5
+                        v6 = intrinsic NegWrappingOffset(v1)
+                        debuglog v6
+                        v7 = intrinsic NegWrappingOffset(v2)
+                        debuglog v7
+                        v8 = intrinsic NegWrappingOffset(v3)
+                        debuglog v8
+                        v9 = intrinsic NegWrappingOffset(v4)
+                        debuglog v9
+                        unit_end
+                    exports:
+                        pos = v0
+                        neg = v1
+                        zero = v2
+                        max = v3
+                        min = v4
+                """,
+            ),
+            ir_match: true,
+            interp_output: "-42\n42\n0\n-2147483647\n2147483648\n",
+            aot_output: "-42\n42\n0\n-2147483647\n2147483648\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

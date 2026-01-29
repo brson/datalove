@@ -1,0 +1,24 @@
+----------
+scriptunit-fragment
+----------
+
+let a: index = (: index / 0xFF00FF00)
+let b: index = (: index / 0x0F0F0F0F)
+let zero: index = (: index / 0)
+let max: index = (: index / 0xFFFFFFFF)
+
+// Bitwise NOT.
+debuglog icall bitnot_index(zero)
+debuglog icall bitnot_index(max)
+
+// Bitwise AND.
+debuglog icall bitand_index(a, b)
+debuglog icall bitand_index(max, zero)
+
+// Bitwise OR.
+debuglog icall bitor_index(a, b)
+debuglog icall bitor_index(zero, zero)
+
+// Bitwise XOR.
+debuglog icall bitxor_index(a, b)
+debuglog icall bitxor_index(a, a)

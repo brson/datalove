@@ -1,0 +1,213 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10offset
+                        v1 = const 5offset
+                        v2 = const -3offset
+                        v3, v4 = add.checked v0, v1
+                        branch v4, block1, block2
+                    block1:
+                        v5 = const "arithmetic overflow"
+                        v6 = error_from v5
+                        v7 = err v6
+                        unit_early_return v7
+                    block2:
+                        debuglog v3
+                        v8, v9 = sub.checked v0, v1
+                        branch v9, block3, block4
+                    block3:
+                        v10 = const "arithmetic overflow"
+                        v11 = error_from v10
+                        v12 = err v11
+                        unit_early_return v12
+                    block4:
+                        debuglog v8
+                        v13, v14 = mul.checked v0, v2
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        unit_early_return v17
+                    block6:
+                        debuglog v13
+                        v18, v19 = add.checked v2, v2
+                        branch v19, block7, block8
+                    block7:
+                        v20 = const "arithmetic overflow"
+                        v21 = error_from v20
+                        v22 = err v21
+                        unit_early_return v22
+                    block8:
+                        debuglog v18
+                        v23, v24 = sub.checked v2, v0
+                        branch v24, block9, block10
+                    block9:
+                        v25 = const "arithmetic overflow"
+                        v26 = error_from v25
+                        v27 = err v26
+                        unit_early_return v27
+                    block10:
+                        debuglog v23
+                        v28, v29 = mul.checked v2, v2
+                        branch v29, block11, block12
+                    block11:
+                        v30 = const "arithmetic overflow"
+                        v31 = error_from v30
+                        v32 = err v31
+                        unit_early_return v32
+                    block12:
+                        debuglog v28
+                        v33 = const 2147483647offset
+                        v34 = const 1offset
+                        v35, v36 = add.checked v33, v34
+                        branch v36, block13, block14
+                    block13:
+                        v37 = const "arithmetic overflow"
+                        v38 = error_from v37
+                        v39 = err v38
+                        unit_early_return v39
+                    block14:
+                        debuglog v35
+                        v40 = const -2147483648offset
+                        v41, v42 = sub.checked v40, v34
+                        branch v42, block15, block16
+                    block15:
+                        v43 = const "arithmetic overflow"
+                        v44 = error_from v43
+                        v45 = err v44
+                        unit_early_return v45
+                    block16:
+                        debuglog v41
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        c = v2
+                        max = v33
+                        one = v34
+                        min = v40
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10offset
+                        v1 = const 5offset
+                        v2 = const -3offset
+                        v3, v4 = add.checked v0, v1
+                        branch v4, block1, block2
+                    block1:
+                        v5 = const "arithmetic overflow"
+                        v6 = error_from v5
+                        v7 = err v6
+                        unit_early_return v7
+                    block2:
+                        debuglog v3
+                        v8, v9 = sub.checked v0, v1
+                        branch v9, block3, block4
+                    block3:
+                        v10 = const "arithmetic overflow"
+                        v11 = error_from v10
+                        v12 = err v11
+                        unit_early_return v12
+                    block4:
+                        debuglog v8
+                        v13, v14 = mul.checked v0, v2
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        unit_early_return v17
+                    block6:
+                        debuglog v13
+                        v18, v19 = add.checked v2, v2
+                        branch v19, block7, block8
+                    block7:
+                        v20 = const "arithmetic overflow"
+                        v21 = error_from v20
+                        v22 = err v21
+                        unit_early_return v22
+                    block8:
+                        debuglog v18
+                        v23, v24 = sub.checked v2, v0
+                        branch v24, block9, block10
+                    block9:
+                        v25 = const "arithmetic overflow"
+                        v26 = error_from v25
+                        v27 = err v26
+                        unit_early_return v27
+                    block10:
+                        debuglog v23
+                        v28, v29 = mul.checked v2, v2
+                        branch v29, block11, block12
+                    block11:
+                        v30 = const "arithmetic overflow"
+                        v31 = error_from v30
+                        v32 = err v31
+                        unit_early_return v32
+                    block12:
+                        debuglog v28
+                        v33 = const 2147483647offset
+                        v34 = const 1offset
+                        v35, v36 = add.checked v33, v34
+                        branch v36, block13, block14
+                    block13:
+                        v37 = const "arithmetic overflow"
+                        v38 = error_from v37
+                        v39 = err v38
+                        unit_early_return v39
+                    block14:
+                        debuglog v35
+                        v40 = const -2147483648offset
+                        v41, v42 = sub.checked v40, v34
+                        branch v42, block15, block16
+                    block15:
+                        v43 = const "arithmetic overflow"
+                        v44 = error_from v43
+                        v45 = err v44
+                        unit_early_return v45
+                    block16:
+                        debuglog v41
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        c = v2
+                        max = v33
+                        one = v34
+                        min = v40
+                """,
+            ),
+            ir_match: true,
+            interp_output: "15\n5\n-30\n-6\n-13\n9\n2147483648\n-2147483649\n",
+            aot_output: "15\n5\n-30\n-6\n-13\n9\n2147483648\n-2147483649\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

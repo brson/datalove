@@ -1,0 +1,20 @@
+----------
+scriptunit-fragment
+----------
+
+let pos: offset = (: offset / 16)
+let neg: offset = (: offset / -16)
+
+// Shift left via index cast.
+let pos_u = icall offset_to_index(pos)
+debuglog icall index_to_offset(icall shl_index(pos_u, 0))
+debuglog icall index_to_offset(icall shl_index(pos_u, 4))
+
+// Arithmetic right shift (preserves sign).
+debuglog icall sshr_offset(pos, 0)
+debuglog icall sshr_offset(pos, 2)
+debuglog icall sshr_offset(neg, 2)
+
+// Negative number shifted right stays negative.
+let big_neg: offset = (: offset / -256)
+debuglog icall sshr_offset(big_neg, 4)

@@ -1,0 +1,51 @@
+----------
+module local/test/index_math
+----------
+
+fun add(a: index, b: index): !index
+    ret ok (a +! b)
+end fun
+
+fun sub(a: index, b: index): !index
+    ret ok (a -! b)
+end fun
+
+fun mul(a: index, b: index): !index
+    ret ok (a *! b)
+end fun
+
+fun max_of(a: index, b: index): index
+    if a .>= b
+        ret a
+    else
+        ret b
+    end if
+end fun
+
+fun min_of(a: index, b: index): index
+    if a .<= b
+        ret a
+    else
+        ret b
+    end if
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/index_math
+import index_math.add
+import index_math.sub
+import index_math.mul
+import index_math.max_of
+import index_math.min_of
+
+let a: index = (: index / 100)
+let b: index = (: index / 50)
+
+debuglog add(a, b)
+debuglog sub(a, b)
+debuglog mul(a, b)
+debuglog max_of(a, b)
+debuglog min_of(a, b)

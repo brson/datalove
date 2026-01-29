@@ -1,0 +1,34 @@
+----------
+scriptunit-fragment
+----------
+
+fun unwrap_index(opt: ?index, default: index): index
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+fun checked_add(a: index, b: index): ?index
+    ret some (a +? b)
+end fun
+
+fun checked_sub(a: index, b: index): ?index
+    ret some (a -? b)
+end fun
+
+fun checked_mul(a: index, b: index): ?index
+    ret some (a *? b)
+end fun
+
+fun checked_div(a: index, b: index): ?index
+    ret some (a /? b)
+end fun
+
+let a: index = (: index / 100)
+let b: index = (: index / 50)
+
+debuglog unwrap_index(checked_add(a, b), (: index / 999))
+debuglog unwrap_index(checked_sub(a, b), (: index / 999))
+debuglog unwrap_index(checked_mul(a, b), (: index / 999))
+debuglog unwrap_index(checked_div(a, b), (: index / 999))

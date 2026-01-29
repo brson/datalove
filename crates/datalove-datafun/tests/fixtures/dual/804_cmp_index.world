@@ -1,0 +1,35 @@
+----------
+scriptunit-fragment
+----------
+
+let a: index = (: index / 10)
+let b: index = (: index / 20)
+let c: index = (: index / 10)
+let zero: index = (: index / 0)
+let max: index = (: index / 4294967295)
+
+// Equality.
+debuglog (a == c)
+debuglog (a == b)
+debuglog (a != b)
+debuglog (a != c)
+
+// Less than.
+debuglog (a .< b)
+debuglog (b .< a)
+debuglog (zero .< max)
+
+// Less or equal.
+debuglog (a <= b)
+debuglog (a <= c)
+debuglog (b <= a)
+
+// Greater than.
+debuglog (b .> a)
+debuglog (a .> b)
+debuglog (max .> zero)
+
+// Greater or equal.
+debuglog (b >= a)
+debuglog (a >= c)
+debuglog (a >= b)

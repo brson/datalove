@@ -1,0 +1,25 @@
+----------
+scriptunit-fragment
+----------
+
+let a: offset = (: offset / 255)
+let b: offset = (: offset / 15)
+let zero: offset = (: offset / 0)
+let neg_one: offset = (: offset / -1)
+
+// Bitwise NOT via cast to index.
+let a_u = icall offset_to_index(a)
+debuglog icall index_to_offset(icall bitnot_index(a_u))
+
+// Bitwise AND via cast.
+let b_u = icall offset_to_index(b)
+debuglog icall index_to_offset(icall bitand_index(a_u, b_u))
+
+// Bitwise OR via cast.
+debuglog icall index_to_offset(icall bitor_index(a_u, b_u))
+
+// Bitwise XOR via cast.
+debuglog icall index_to_offset(icall bitxor_index(a_u, b_u))
+
+// XOR with self gives zero.
+debuglog icall index_to_offset(icall bitxor_index(a_u, a_u))

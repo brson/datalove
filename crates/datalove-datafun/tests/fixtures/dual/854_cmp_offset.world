@@ -1,0 +1,44 @@
+----------
+scriptunit-fragment
+----------
+
+let a: offset = (: offset / 10)
+let b: offset = (: offset / 20)
+let c: offset = (: offset / 10)
+let neg: offset = (: offset / -10)
+let min: offset = (: offset / -2147483648)
+let max: offset = (: offset / 2147483647)
+
+// Equality.
+debuglog (a == c)
+debuglog (a == b)
+debuglog (a != b)
+debuglog (a != c)
+
+// Less than with positives.
+debuglog (a .< b)
+debuglog (b .< a)
+
+// Less than with negatives.
+debuglog (neg .< a)
+debuglog (a .< neg)
+debuglog (min .< max)
+
+// Less or equal.
+debuglog (a <= b)
+debuglog (a <= c)
+debuglog (neg <= a)
+
+// Greater than with positives.
+debuglog (b .> a)
+debuglog (a .> b)
+
+// Greater than with negatives.
+debuglog (a .> neg)
+debuglog (neg .> a)
+debuglog (max .> min)
+
+// Greater or equal.
+debuglog (b >= a)
+debuglog (a >= c)
+debuglog (a >= neg)

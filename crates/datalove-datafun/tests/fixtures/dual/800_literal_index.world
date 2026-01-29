@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+let zero: index = (: index / 0)
+let one: index = (: index / 1)
+let max: index = (: index / 4294967295)
+debuglog zero
+debuglog one
+debuglog max

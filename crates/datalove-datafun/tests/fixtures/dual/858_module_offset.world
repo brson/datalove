@@ -1,0 +1,58 @@
+----------
+module local/test/offset_math
+----------
+
+fun add(a: offset, b: offset): !offset
+    ret ok (a +! b)
+end fun
+
+fun sub(a: offset, b: offset): !offset
+    ret ok (a -! b)
+end fun
+
+fun mul(a: offset, b: offset): !offset
+    ret ok (a *! b)
+end fun
+
+fun negate(n: offset): !offset
+    ret ok (-! n)
+end fun
+
+fun max_of(a: offset, b: offset): offset
+    if a .>= b
+        ret a
+    else
+        ret b
+    end if
+end fun
+
+fun min_of(a: offset, b: offset): offset
+    if a .<= b
+        ret a
+    else
+        ret b
+    end if
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/offset_math
+import offset_math.add
+import offset_math.sub
+import offset_math.mul
+import offset_math.negate
+import offset_math.max_of
+import offset_math.min_of
+
+let a: offset = (: offset / 100)
+let b: offset = (: offset / -50)
+
+debuglog add(a, b)
+debuglog sub(a, b)
+debuglog mul(a, b)
+debuglog negate(a)
+debuglog negate(b)
+debuglog max_of(a, b)
+debuglog min_of(a, b)

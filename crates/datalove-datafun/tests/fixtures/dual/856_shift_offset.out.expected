@@ -1,0 +1,101 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 16offset
+                        v1 = const -16offset
+                        v2 = intrinsic OffsetToIndex(v0)
+                        v3 = const 0u32
+                        v4 = intrinsic ShlIndex(v2, v3)
+                        v5 = intrinsic IndexToOffset(v4)
+                        debuglog v5
+                        v6 = const 4u32
+                        v7 = intrinsic ShlIndex(v2, v6)
+                        v8 = intrinsic IndexToOffset(v7)
+                        debuglog v8
+                        v9 = const 0u32
+                        v10 = intrinsic SshrOffset(v0, v9)
+                        debuglog v10
+                        v11 = const 2u32
+                        v12 = intrinsic SshrOffset(v0, v11)
+                        debuglog v12
+                        v13 = const 2u32
+                        v14 = intrinsic SshrOffset(v1, v13)
+                        debuglog v14
+                        v15 = const -256offset
+                        v16 = const 4u32
+                        v17 = intrinsic SshrOffset(v15, v16)
+                        debuglog v17
+                        unit_end
+                    exports:
+                        pos = v0
+                        neg = v1
+                        pos_u = v2
+                        big_neg = v15
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 16offset
+                        v1 = const -16offset
+                        v2 = intrinsic OffsetToIndex(v0)
+                        v3 = const 0u32
+                        v4 = intrinsic ShlIndex(v2, v3)
+                        v5 = intrinsic IndexToOffset(v4)
+                        debuglog v5
+                        v6 = const 4u32
+                        v7 = intrinsic ShlIndex(v2, v6)
+                        v8 = intrinsic IndexToOffset(v7)
+                        debuglog v8
+                        v9 = const 0u32
+                        v10 = intrinsic SshrOffset(v0, v9)
+                        debuglog v10
+                        v11 = const 2u32
+                        v12 = intrinsic SshrOffset(v0, v11)
+                        debuglog v12
+                        v13 = const 2u32
+                        v14 = intrinsic SshrOffset(v1, v13)
+                        debuglog v14
+                        v15 = const -256offset
+                        v16 = const 4u32
+                        v17 = intrinsic SshrOffset(v15, v16)
+                        debuglog v17
+                        unit_end
+                    exports:
+                        pos = v0
+                        neg = v1
+                        pos_u = v2
+                        big_neg = v15
+                """,
+            ),
+            ir_match: true,
+            interp_output: "16\n256\n16\n4\n-4\n-16\n",
+            aot_output: "16\n256\n16\n4\n-4\n-16\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

@@ -1,0 +1,40 @@
+----------
+scriptunit-fragment
+----------
+
+fun add_offset(a: offset, b: offset): offset
+    let a_u = icall offset_to_index(a)
+    let b_u = icall offset_to_index(b)
+    ret icall index_to_offset(icall add_wrapping_index(a_u, b_u))
+end fun
+
+fun abs_offset(n: offset): offset
+    let zero: offset = (: offset / 0)
+    if n .< zero
+        ret icall neg_wrapping_offset(n)
+    else
+        ret n
+    end if
+end fun
+
+fun signum_offset(n: offset): offset
+    let zero: offset = (: offset / 0)
+    let one: offset = (: offset / 1)
+    let neg_one: offset = (: offset / -1)
+    if n .> zero
+        ret one
+    else
+        if n .< zero
+            ret neg_one
+        else
+            ret zero
+        end if
+    end if
+end fun
+
+debuglog add_offset((: offset / 100), (: offset / -50))
+debuglog abs_offset((: offset / -42))
+debuglog abs_offset((: offset / 42))
+debuglog signum_offset((: offset / 10))
+debuglog signum_offset((: offset / -10))
+debuglog signum_offset((: offset / 0))

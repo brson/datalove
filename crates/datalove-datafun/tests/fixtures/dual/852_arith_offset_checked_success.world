@@ -1,0 +1,39 @@
+----------
+scriptunit-fragment
+----------
+
+fun unwrap_offset(opt: ?offset, default: offset): offset
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+fun checked_add(a: offset, b: offset): ?offset
+    ret some (a +? b)
+end fun
+
+fun checked_sub(a: offset, b: offset): ?offset
+    ret some (a -? b)
+end fun
+
+fun checked_mul(a: offset, b: offset): ?offset
+    ret some (a *? b)
+end fun
+
+fun checked_div(a: offset, b: offset): ?offset
+    ret some (a /? b)
+end fun
+
+let a: offset = (: offset / 100)
+let b: offset = (: offset / 50)
+let c: offset = (: offset / -25)
+
+debuglog unwrap_offset(checked_add(a, b), (: offset / 999))
+debuglog unwrap_offset(checked_sub(a, b), (: offset / 999))
+debuglog unwrap_offset(checked_mul(a, b), (: offset / 999))
+debuglog unwrap_offset(checked_div(a, b), (: offset / 999))
+
+// With negative numbers.
+debuglog unwrap_offset(checked_add(a, c), (: offset / 999))
+debuglog unwrap_offset(checked_mul(c, b), (: offset / 999))

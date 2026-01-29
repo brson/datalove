@@ -1,0 +1,20 @@
+----------
+scriptunit-fragment
+----------
+
+fun add_index(a: index, b: index): index
+    ret icall add_wrapping_index(a, b)
+end fun
+
+fun double_index(n: index): index
+    ret icall add_wrapping_index(n, n)
+end fun
+
+fun is_zero_index(n: index): bool
+    ret n == (: index / 0)
+end fun
+
+debuglog add_index((: index / 100), (: index / 200))
+debuglog double_index((: index / 50))
+debuglog is_zero_index((: index / 0))
+debuglog is_zero_index((: index / 1))

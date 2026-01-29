@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+let zero: offset = (: offset / 0)
+let one: offset = (: offset / 1)
+let neg_one: offset = (: offset / -1)
+let min: offset = (: offset / -2147483648)
+let max: offset = (: offset / 2147483647)
+
+debuglog zero
+debuglog one
+debuglog neg_one
+debuglog min
+debuglog max

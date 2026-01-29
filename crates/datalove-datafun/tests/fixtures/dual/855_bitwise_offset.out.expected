@@ -1,0 +1,99 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 255offset
+                        v1 = const 15offset
+                        v2 = const 0offset
+                        v3 = const -1offset
+                        v4 = intrinsic OffsetToIndex(v0)
+                        v5 = intrinsic BitnotIndex(v4)
+                        v6 = intrinsic IndexToOffset(v5)
+                        debuglog v6
+                        v7 = intrinsic OffsetToIndex(v1)
+                        v8 = intrinsic BitandIndex(v4, v7)
+                        v9 = intrinsic IndexToOffset(v8)
+                        debuglog v9
+                        v10 = intrinsic BitorIndex(v4, v7)
+                        v11 = intrinsic IndexToOffset(v10)
+                        debuglog v11
+                        v12 = intrinsic BitxorIndex(v4, v7)
+                        v13 = intrinsic IndexToOffset(v12)
+                        debuglog v13
+                        v14 = intrinsic BitxorIndex(v4, v4)
+                        v15 = intrinsic IndexToOffset(v14)
+                        debuglog v15
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        zero = v2
+                        neg_one = v3
+                        a_u = v4
+                        b_u = v7
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 255offset
+                        v1 = const 15offset
+                        v2 = const 0offset
+                        v3 = const -1offset
+                        v4 = intrinsic OffsetToIndex(v0)
+                        v5 = intrinsic BitnotIndex(v4)
+                        v6 = intrinsic IndexToOffset(v5)
+                        debuglog v6
+                        v7 = intrinsic OffsetToIndex(v1)
+                        v8 = intrinsic BitandIndex(v4, v7)
+                        v9 = intrinsic IndexToOffset(v8)
+                        debuglog v9
+                        v10 = intrinsic BitorIndex(v4, v7)
+                        v11 = intrinsic IndexToOffset(v10)
+                        debuglog v11
+                        v12 = intrinsic BitxorIndex(v4, v7)
+                        v13 = intrinsic IndexToOffset(v12)
+                        debuglog v13
+                        v14 = intrinsic BitxorIndex(v4, v4)
+                        v15 = intrinsic IndexToOffset(v14)
+                        debuglog v15
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        zero = v2
+                        neg_one = v3
+                        a_u = v4
+                        b_u = v7
+                """,
+            ),
+            ir_match: true,
+            interp_output: "-256\n15\n255\n240\n0\n",
+            aot_output: "-256\n15\n255\n240\n0\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

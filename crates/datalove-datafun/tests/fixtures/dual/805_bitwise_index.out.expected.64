@@ -1,0 +1,93 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 4278255360index
+                        v1 = const 252645135index
+                        v2 = const 0index
+                        v3 = const 4294967295index
+                        v4 = intrinsic BitnotIndex(v2)
+                        debuglog v4
+                        v5 = intrinsic BitnotIndex(v3)
+                        debuglog v5
+                        v6 = intrinsic BitandIndex(v0, v1)
+                        debuglog v6
+                        v7 = intrinsic BitandIndex(v3, v2)
+                        debuglog v7
+                        v8 = intrinsic BitorIndex(v0, v1)
+                        debuglog v8
+                        v9 = intrinsic BitorIndex(v2, v2)
+                        debuglog v9
+                        v10 = intrinsic BitxorIndex(v0, v1)
+                        debuglog v10
+                        v11 = intrinsic BitxorIndex(v0, v0)
+                        debuglog v11
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        zero = v2
+                        max = v3
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 4278255360index
+                        v1 = const 252645135index
+                        v2 = const 0index
+                        v3 = const 4294967295index
+                        v4 = intrinsic BitnotIndex(v2)
+                        debuglog v4
+                        v5 = intrinsic BitnotIndex(v3)
+                        debuglog v5
+                        v6 = intrinsic BitandIndex(v0, v1)
+                        debuglog v6
+                        v7 = intrinsic BitandIndex(v3, v2)
+                        debuglog v7
+                        v8 = intrinsic BitorIndex(v0, v1)
+                        debuglog v8
+                        v9 = intrinsic BitorIndex(v2, v2)
+                        debuglog v9
+                        v10 = intrinsic BitxorIndex(v0, v1)
+                        debuglog v10
+                        v11 = intrinsic BitxorIndex(v0, v0)
+                        debuglog v11
+                        unit_end
+                    exports:
+                        a = v0
+                        b = v1
+                        zero = v2
+                        max = v3
+                """,
+            ),
+            ir_match: true,
+            interp_output: "18446744073709551615\n18446744069414584320\n251662080\n0\n4279238415\n0\n4027576335\n0\n",
+            aot_output: "18446744073709551615\n18446744069414584320\n251662080\n0\n4279238415\n0\n4027576335\n0\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

@@ -1,0 +1,35 @@
+----------
+scriptunit-fragment
+----------
+
+fun unwrap_index(opt: ?index, default: index): index
+    if opt |val|
+        ret val
+    end if
+    ret default
+end fun
+
+fun checked_add(a: index, b: index): ?index
+    ret some (a +? b)
+end fun
+
+fun checked_sub(a: index, b: index): ?index
+    ret some (a -? b)
+end fun
+
+fun checked_div(a: index, b: index): ?index
+    ret some (a /? b)
+end fun
+
+let max: index = (: index / 4294967295)
+let one: index = (: index / 1)
+let zero: index = (: index / 0)
+
+// Add overflow returns none.
+debuglog unwrap_index(checked_add(max, one), (: index / 999))
+
+// Sub underflow returns none.
+debuglog unwrap_index(checked_sub(zero, one), (: index / 999))
+
+// Div by zero returns none.
+debuglog unwrap_index(checked_div(one, zero), (: index / 999))

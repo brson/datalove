@@ -1,0 +1,21 @@
+----------
+scriptunit-fragment
+----------
+
+let a: index = (: index / 10)
+let b: index = (: index / 5)
+let c: index = (: index / 3)
+
+// Basic wrapping arithmetic.
+debuglog (a +! b)
+debuglog (a -! b)
+debuglog (a *! c)
+
+// Wrapping overflow.
+let max: index = (: index / 4294967295)
+let one: index = (: index / 1)
+debuglog (max +! one)
+
+// Wrapping underflow.
+let zero: index = (: index / 0)
+debuglog (zero -! one)
