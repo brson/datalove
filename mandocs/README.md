@@ -60,12 +60,15 @@ Then we'll add I/O to it &mdash; carefully.
 
 
 
+
+<br>
+
+---
+
 <br>
 
 
 
-
----
 
 Datalove is built from three sublanguages of increasing power.
 
@@ -153,15 +156,6 @@ but I do have a [vision](vision.md) about what it will be.
 
 
 
-
----
-
-
-
-
-<br>
-<br>
-<br>
 <br>
 
 

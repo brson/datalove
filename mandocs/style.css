@@ -286,7 +286,8 @@ blockquote {
 hr {
     border: none;
     border-top: 1px solid var(--accent);
-    margin: 2rem 0;
+    width: 40%;
+    margin: calc(var(--baseline) * 2) auto;
 }
 
 ul, ol {
