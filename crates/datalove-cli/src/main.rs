@@ -861,6 +861,12 @@ impl DocsCommand {
             .with_context(|| format!("Failed to copy datalove-logo.svg"))?;
         println!("Copied datalove-logo.svg");
 
+        let prism_src = input_dir.join("datalove-prism.js");
+        let prism_dst = output_dir.join("datalove-prism.js");
+        fs::copy(&prism_src, &prism_dst)
+            .with_context(|| format!("Failed to copy datalove-prism.js"))?;
+        println!("Copied datalove-prism.js");
+
         // Process all markdown files.
         for entry in fs::read_dir(&input_dir)? {
             let entry = entry?;

@@ -49,32 +49,7 @@
         </section>
     </main>
     <script data-manual src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <script>
-    Prism.languages.datalove = {
-        'comment': [
-            /\/\/.*/,
-            /\/\*[\s\S]*?\*\//
-        ],
-        'string': /"(?:[^"\\]|\\.)*"/,
-        'number': /\b\d+(?:\.\d+)?\b/,
-        'boolean': /\b(?:true|false)\b/,
-        'variant': /\b(?:ok|er|some|none)\b/,
-        'type-name': /\b(?:bool|u8|u16|u32|u64|i8|i16|i32|i64|int|f32|f64|string|list|map|set|tensor|data|error)\b/,
-        'keyword': /\b(?:let|fun|ret|if|else|end|require|import|break|continue|loop|module|in|out|mut|ref|struct|enum)\b/,
-        'function': /\b[a-z_][a-z0-9_]*(?=\s*\()/,
-        'op-cmp': /\.[<>]|[<>]=|[!=]=/,
-        'op-result': /[+\-*\/]!|!/,
-        'op-option': /[+\-*\/]\?|\?/,
-        'brace-curly': /[{}]/,
-        'brace-paren': /[()]/,
-        'brace-angle': /[<>]/,
-        'brace-square': /[\[\]]/,
-        'type-colon': /:/,
-        'punctuation': /[;,.]/
-    };
-    Prism.languages.datalit = Prism.languages.datalove;
-    Prism.languages.datafun = Prism.languages.datalove;
-    Prism.highlightAll();
-    </script>
+    <script src="datalove-prism.js"></script>
+    <script>Prism.highlightAll();</script>
 </body>
 </html>

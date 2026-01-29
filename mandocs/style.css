@@ -125,6 +125,7 @@
         --syn-op-cmp: var(--cave-red);
         --syn-op-result: var(--cave-orange);
         --syn-op-option: var(--cave-violet);
+        --syn-op-clone: var(--cave-cyan);
         --syn-op-arith: var(--cave-blue);
         --syn-type-colon: var(--cave-cyan);
         --syn-type-hint-slash: var(--cave-cyan);
@@ -162,6 +163,7 @@
         --syn-op-cmp: var(--cave-red);
         --syn-op-result: var(--cave-orange);
         --syn-op-option: var(--cave-violet);
+        --syn-op-clone: var(--cave-cyan);
         --syn-op-arith: var(--cave-blue);
         --syn-type-colon: var(--cave-cyan);
         --syn-type-hint-slash: var(--cave-cyan);
@@ -337,6 +339,7 @@ th {
 .token.op-cmp { color: var(--syn-op-cmp); }
 .token.op-result { color: var(--syn-op-result); }
 .token.op-option { color: var(--syn-op-option); }
+.token.op-clone { color: var(--syn-op-clone); }
 .token.op-arith { color: var(--syn-op-arith); }
 .token.type-colon { color: var(--syn-type-colon); }
 .token.type-hint-slash { color: var(--syn-type-hint-slash); }
