@@ -204,6 +204,10 @@ pub enum WorldfileSection {
     ScriptExpr {
         source: String,
     },
+    /// Inline directives for function inlining tests.
+    InlineDirectives {
+        source: String,
+    },
 }
 
 impl WorldfileSection {
@@ -516,6 +520,11 @@ impl<'a> Parser<'a> {
             return Ok(WorldfileSection::ScriptExpr { source });
         }
 
+        if header == "inline-directives" {
+            let source = self.read_content();
+            return Ok(WorldfileSection::InlineDirectives { source });
+        }
+
         // Module sections.
         if let Some((kind, path)) = parse_module_header(header) {
             let source = self.read_content();
@@ -526,7 +535,7 @@ impl<'a> Parser<'a> {
         bail!(
             "unknown section type '{}' (expected 'module', 'module-add', 'module-remove', \
              'module-change-ws', 'module-change-ast', 'module-change-ty', 'scriptunit-fragment', \
-             or 'scriptunit-expr')",
+             'scriptunit-expr', or 'inline-directives')",
             header
         );
     }

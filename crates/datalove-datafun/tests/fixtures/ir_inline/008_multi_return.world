@@ -1,0 +1,22 @@
+----------
+module local/test/main
+----------
+
+fun classify(x: i64): i64
+    if x < 0 then
+        ret 0 - 1
+    end if
+    if x > 0 then
+        ret 1
+    end if
+    ret 0
+end fun
+
+fun use_classify(x: i64): i64
+    ret classify(x)
+end fun
+
+----------
+inline-directives
+----------
+inline use_classify classify

@@ -1,0 +1,17 @@
+----------
+module local/test/main
+----------
+
+fun factorial(n: i64): i64
+    if n <= 1 then
+        ret 1
+    else
+        ret n
+    end if
+end fun
+
+----------
+inline-directives
+----------
+// This should be skipped because it's recursive
+inline factorial factorial

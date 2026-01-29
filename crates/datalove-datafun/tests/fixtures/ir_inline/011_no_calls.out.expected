@@ -1,0 +1,29 @@
+=== BEFORE INLINING ===
+fn bar():
+block0:
+    v0 = const 2i64
+    return v0
+
+fn foo():
+block0:
+    v0 = const 1i64
+    return v0
+
+=== INLINE DIRECTIVES ===
+inline bar foo
+
+=== AFTER INLINING ===
+fn bar():
+block0:
+    v0 = const 2i64
+    return v0
+
+fn foo():
+block0:
+    v0 = const 1i64
+    return v0
+
+=== INLINING STATS ===
+Inlined: 0 call(s)
+Skipped: 1 directive(s)
+  - NoCallsFound { caller: "bar", callee: "foo" }

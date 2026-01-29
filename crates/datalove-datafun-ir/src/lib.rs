@@ -500,6 +500,16 @@ impl SymbolTable {
     pub fn import_func(&mut self, name: String, id: FuncId) {
         self.name_to_func.insert(name, id);
     }
+
+    /// Define a function with a specific ID (for reconstructing modules).
+    pub fn define_func_with_id(&mut self, id: FuncId, name: String, param_count: usize) {
+        self.functions.push(FuncDef { id, name: name.clone(), param_count });
+        self.name_to_func.insert(name, id);
+        // Update next_func_id to be at least one past this ID.
+        if id.0 >= self.next_func_id {
+            self.next_func_id = id.0 + 1;
+        }
+    }
 }
 
 /// Operand - SSA value, mutable slot, or function parameter.

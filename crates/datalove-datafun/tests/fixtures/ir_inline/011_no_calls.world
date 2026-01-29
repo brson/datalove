@@ -1,0 +1,17 @@
+----------
+module local/test/main
+----------
+
+fun foo(): i64
+    ret 1
+end fun
+
+fun bar(): i64
+    ret 2
+end fun
+
+----------
+inline-directives
+----------
+// bar doesn't call foo, so this should produce a warning
+inline bar foo

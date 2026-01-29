@@ -1,0 +1,16 @@
+----------
+module local/test/main
+----------
+
+fun add(a: i64, b: i64): int
+    ret a + b
+end fun
+
+fun double(x: i64): int
+    ret add(x, x)
+end fun
+
+----------
+inline-directives
+----------
+// No directives - IR should be unchanged

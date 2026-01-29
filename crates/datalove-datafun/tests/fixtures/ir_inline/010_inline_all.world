@@ -1,0 +1,21 @@
+----------
+module local/test/main
+----------
+
+fun helper(x: int): int
+    ret x + 1
+end fun
+
+fun foo(x: int): int
+    ret helper(x)
+end fun
+
+fun bar(x: int): int
+    ret helper(x)
+end fun
+
+----------
+inline-directives
+----------
+// Inline helper into all functions that call it
+inline-all helper

@@ -58,6 +58,9 @@ pub fn analyze_modules_worldfile(
             WorldfileSection::ScriptExpr { .. } => {
                 bail!("scriptunit-expr section not allowed in module-only worldfile");
             }
+            WorldfileSection::InlineDirectives { .. } => {
+                // Inline directives are for inlining tests only, ignore.
+            }
         }
     }
 

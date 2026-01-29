@@ -1,0 +1,18 @@
+----------
+module local/test/main
+----------
+
+fun mutate(x: int): int
+    var result: int = x
+    set result = result + 1
+    ret result
+end fun
+
+fun use_mutate(x: int): int
+    ret mutate(x)
+end fun
+
+----------
+inline-directives
+----------
+inline use_mutate mutate

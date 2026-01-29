@@ -1,0 +1,20 @@
+----------
+module local/test/main
+----------
+
+fun abs(x: i64): i64
+    if x < 0 then
+        ret 0 - x
+    else
+        ret x
+    end if
+end fun
+
+fun process(x: i64): i64
+    ret abs(x)
+end fun
+
+----------
+inline-directives
+----------
+inline process abs

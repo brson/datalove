@@ -1,0 +1,16 @@
+----------
+module local/test/main
+----------
+
+fun noop()
+end fun
+
+fun caller(): i64
+    noop()
+    ret 42
+end fun
+
+----------
+inline-directives
+----------
+inline caller noop

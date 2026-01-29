@@ -34,6 +34,7 @@ index-64 = [
     "datalove-datafun-const/index-64",
     "datalove-datafun-interp/index-64",
     "datalove-datafun-ir/index-64",
+    "datalove-datafun-inline/index-64",
     "datalove-datafun-compiler/index-64",
     "datalove-datafun-cranelift-aot/index-64",
     "datalove-exampletest/index-64",
@@ -44,6 +45,7 @@ datalove-exampletest.path = "../datalove-exampletest"
 datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"
 datalove-datafun-cranelift-jit.path = "../datalove-datafun-cranelift-jit"
+datalove-datafun-inline.path = "../datalove-datafun-inline"
 datalove-rtdt.path = "../datalove-rtdt"
 regex = "1"
 ron = "0.8"
@@ -112,4 +114,9 @@ harness = false
 [[test]]
 name = "interp_constlet_tests"
 path = "tests/interp_constlet_tests.rs"
+harness = false
+
+[[test]]
+name = "ir_inline_tests"
+path = "tests/ir_inline_tests.rs"
 harness = false

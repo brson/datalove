@@ -1108,6 +1108,7 @@ dependencies = [
  "datalove-datafun-const",
  "datalove-datafun-cranelift-aot",
  "datalove-datafun-cranelift-jit",
+ "datalove-datafun-inline",
  "datalove-datafun-interp",
  "datalove-datafun-ir",
  "datalove-datafun-parser",
@@ -1235,6 +1236,13 @@ dependencies = [
  "datalove-rtdt",
  "rustmax",
  "target-lexicon",
+]
+
+[[package]]
+name = "datalove-datafun-inline"
+version = "0.1.0"
+dependencies = [
+ "datalove-datafun-ir",
 ]
 
 [[package]]

@@ -1,0 +1,19 @@
+----------
+module local/test/main
+----------
+
+fun inc(x: int): int
+    ret x + 1
+end fun
+
+fun add_three(x: int): int
+    let a = inc(x)
+    let b = inc(a)
+    let c = inc(b)
+    ret c
+end fun
+
+----------
+inline-directives
+----------
+inline add_three inc
