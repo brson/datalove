@@ -164,9 +164,12 @@ but I do have a [vision](vision.md) about what it will be.
 ---
 
 
-<!-- User-oriented chapters -->
+<!-- Hero chapters -->
 
+- [Datalove Literals](datalit-types.md)
+- [Datalove Functions](datafun.md)
 - [Principles](principles.md)
+- [Vision](vision.md)
 
 
 ---
@@ -174,7 +177,6 @@ but I do have a [vision](vision.md) about what it will be.
 <!-- Language -->
 
 - [Lexical Structure](lexer.md)
-- [Datalove Literals](datalit-types.md)
 - [Modules, Functions and Scripts](modules-functions-scripts.md)
 - [Control Flow](control-flow.md)
 - [Operators](operators.md)
@@ -196,7 +198,6 @@ but I do have a [vision](vision.md) about what it will be.
 <!-- Lists -->
 
 - [Novelties](novelties.md)
-- [Vision](vision.md)
 - [Roadmap](roadmap.md)
 - [Influences](influences.md)
 
