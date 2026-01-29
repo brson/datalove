@@ -125,7 +125,7 @@ while modules are expected to be more careful with overflow for performance.
 
 
 
-## `usize` and `isize`
+## `index` and `offset`
 
 These are fixed integers with the
 width used to represent collection indexes.
@@ -148,10 +148,10 @@ length, and capacity use these types.
 
 ```datalove
 let foo = "test"
-let foo_length: usize = len(foo)
+let foo_length: index = len(foo)
 ```
 
-Arithmetic operators widen `usize` and `isize`
+Arithmetic operators widen `index` and `offset`
 to `int` like other fixed int types.
 They otherwise do not automatically coerce
 to any other types.

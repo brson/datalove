@@ -140,14 +140,14 @@ Valid widening chains:
 ```
 u8 -> u16 -> u32 -> u64 -> int
 i8 -> i16 -> i32 -> i64 -> int
-usize -> int
-isize -> int
+index -> int
+offset -> int
 u8 -> i16 ...
 u16 -> i32 ...
 u32 ->
 ```
 
-`usize` and `isize` don't participate in fixed-int widening.
+`index` and `offset` don't participate in fixed-int widening.
 Conversion to/from these types are always considered lossy.
 
 

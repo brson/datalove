@@ -41,7 +41,7 @@
 - clone and coerce
 - datalit syntax cleanup
   - map set type syntax
-  - usize/isize -> index/offset
+  - [x] usize/isize -> index/offset
 - workspaces - waiting for design
 - riders - waiting for workspaces
 - rtcalls - waiting for native riders
