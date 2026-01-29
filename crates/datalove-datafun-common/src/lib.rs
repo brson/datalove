@@ -71,7 +71,8 @@ pub fn parallel_mode_from_env() -> ParallelMode {
 /// - Cloning linear types for reuse
 ///
 /// See `botdocs/report-adapt-cases.md` for the full list of recoverable errors.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(salsa::Update)]
 pub enum AutoAdaptMode {
     /// Disabled - emit errors for type mismatches (default).
     #[default]

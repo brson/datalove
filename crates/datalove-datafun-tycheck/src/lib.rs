@@ -355,6 +355,8 @@ pub struct ScriptBatchSpec<'db> {
     pub units: Vec<ScriptUnitSpec<'db>>,
     #[returns(ref)]
     pub modules: Vec<ModuleSpec<'db>>,
+    /// Auto-adapt mode for type checking.
+    pub auto_adapt_mode: AutoAdaptMode,
 }
 
 /// A script unit with parsed content (tracked - created inside tracked fn).
@@ -569,6 +571,7 @@ impl<'db> ModuleGraphTypecheckResult<'db> {
 // Re-export public API functions.
 pub use api::{
     create_batch_spec,
+    create_batch_spec_with_auto_adapt,
     type_check_script_units,
     type_check_single_script,
     typecheck_module_graph,

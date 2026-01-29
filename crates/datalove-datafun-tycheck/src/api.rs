@@ -80,7 +80,22 @@ pub fn create_batch_spec<'db>(
     module_specs: Vec<ModuleSpec<'db>>,
 ) -> ScriptBatchSpec<'db> {
     let _ = key; // Used as memoization key.
-    ScriptBatchSpec::new(db, unit_specs, module_specs)
+    ScriptBatchSpec::new(db, unit_specs, module_specs, crate::AutoAdaptMode::Disabled)
+}
+
+/// Create a ScriptBatchSpec with auto-adapt mode inside a tracked function.
+///
+/// Like `create_batch_spec`, but allows specifying auto-adapt mode.
+#[salsa::tracked]
+pub fn create_batch_spec_with_auto_adapt<'db>(
+    db: &'db dyn crate::Db,
+    key: bct::input::Source,
+    unit_specs: Vec<ScriptUnitSpec<'db>>,
+    module_specs: Vec<ModuleSpec<'db>>,
+    auto_adapt_mode: crate::AutoAdaptMode,
+) -> ScriptBatchSpec<'db> {
+    let _ = key; // Used as memoization key.
+    ScriptBatchSpec::new(db, unit_specs, module_specs, auto_adapt_mode)
 }
 
 /// Typecheck a single script unit with accumulated context from prior units.
@@ -94,12 +109,13 @@ pub fn typecheck_script_unit<'db>(
     unit_spec: ScriptUnitSpec<'db>,
     module_specs: Vec<ModuleSpec<'db>>,
     accumulated: AccumulatedBindings<'db>,
+    auto_adapt_mode: crate::AutoAdaptMode,
 ) -> ScriptUnitTypecheckOutput<'db> {
     // Build module function info for import resolution.
     let (module_functions, path_to_module_id) = build_script_module_functions(db, &module_specs);
 
     let spans = unit_spec.spans.clone();
-    let mut ctx = TypeContext::new(db, spans);
+    let mut ctx = TypeContext::with_options(db, spans, None, auto_adapt_mode);
 
     // Script units have Result<()> return type for try operators.
     let unit_tuple_ty = datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: Vec::new() });
@@ -217,17 +233,19 @@ pub fn type_check_script_units<'db>(
     spec: ScriptBatchSpec<'db>,
 ) -> ScriptUnitsTypecheckResultTracked<'db> {
     let module_specs = spec.modules(db).clone();
+    let auto_adapt_mode = spec.auto_adapt_mode(db);
 
     let mut accumulated = AccumulatedBindings::default();
     let mut results = Vec::new();
 
     for unit_spec in spec.units(db) {
-        // Call per-unit tracked function - memoized on (unit_spec, module_specs, accumulated).
+        // Call per-unit tracked function - memoized on (unit_spec, module_specs, accumulated, auto_adapt_mode).
         let output = typecheck_script_unit(
             db,
             unit_spec.clone(),
             module_specs.clone(),
             accumulated.clone(),
+            auto_adapt_mode,
         );
 
         results.push(output.result(db));
