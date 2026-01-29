@@ -259,7 +259,7 @@ code {
 pre {
     background: var(--code-bg);
     padding: 1rem;
-    border-radius: 5px;
+    border-radius: 0 5px 5px 0;
     border: none;
     border-left: 3px solid var(--accent);
     overflow-x: auto;
