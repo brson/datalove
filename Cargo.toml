@@ -39,6 +39,9 @@ enum-iterator.version = "2"
 salsa.version = "0.25.2"
 rayon.version = "1.11"
 
+[profile.dev]
+debug = 1
+
 [profile.release]
 overflow-checks = true
 lto = "thin"
