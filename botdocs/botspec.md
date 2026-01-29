@@ -3,9 +3,42 @@
 Bot-maintained specification reflecting actual implementation state.
 Last verified: 2026-01-25
 
+## Contents
+
+- [Overview](#user-content-overview)
+- [1. Datalit Layer](#user-content-1-datalit-layer)
+  - [1.1 Primitive Types](#user-content-11-primitive-types)
+  - [1.2 Collection Types](#user-content-12-collection-types)
+  - [1.3 Aggregate Types](#user-content-13-aggregate-types)
+  - [1.4 Special Types](#user-content-14-special-types)
+  - [1.5 Literal Syntax](#user-content-15-literal-syntax)
+- [2. Datafun Layer](#user-content-2-datafun-layer)
+  - [2.1 Statements](#user-content-21-statements)
+  - [2.2 Expressions](#user-content-22-expressions)
+  - [2.3 Operators](#user-content-23-operators)
+  - [2.4 Function Definitions](#user-content-24-function-definitions)
+  - [2.5 Parameter Modes](#user-content-25-parameter-modes)
+  - [2.6 Loop Statements](#user-content-26-loop-statements)
+  - [2.7 Operator Argument Semantics](#user-content-27-operator-argument-semantics)
+  - [2.8 Module System](#user-content-28-module-system)
+  - [2.9 Void Functions](#user-content-29-void-functions)
+  - [2.10 Intrinsic Calls](#user-content-210-intrinsic-calls)
+  - [2.11 Type Aliases](#user-content-211-type-aliases)
+- [3. Type System](#user-content-3-type-system)
+  - [3.1 Bidirectional Typing](#user-content-31-bidirectional-typing)
+  - [3.2 Numeric Widening](#user-content-32-numeric-widening)
+  - [3.3 Coercions](#user-content-33-coercions)
+  - [3.4 Copy vs Linear Types](#user-content-34-copy-vs-linear-types)
+  - [3.5 Move Semantics](#user-content-35-move-semantics)
+  - [3.6 Ownership Analysis](#user-content-36-ownership-analysis)
+- [4. Runtime/REPL](#user-content-4-runtimerepl)
+  - [4.1 CLI Commands](#user-content-41-cli-commands)
+  - [4.2 REPL Capabilities](#user-content-42-repl-capabilities)
+- [Appendix A: Documented But Unimplemented Features](#user-content-appendix-a-documented-but-unimplemented-features)
+
 ## Overview
 
-Datalove is a typed scripting language with a three-layer tower:
+Datalove is a typed scripting language with a three-layer design:
 1. **Datalit** (.dlt) - Pure data literal language
 2. **Datafun** (.dfs script, .dfm module) - Pure functional layer
 3. **Full Datalove** (.dls, .dlm) - Procedures and objects [NOT IMPLEMENTED]
