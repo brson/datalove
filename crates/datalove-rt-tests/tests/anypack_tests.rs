@@ -19,7 +19,7 @@ fn make_tydesc(type_tag: TyTag) -> TyDesc {
 #[test]
 fn test_tag_two_pointers_via_from_pointers() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Index::ZERO };
     let data = Data::from_pointers(&tydesc, &int_val as *const Int as *const u8);
     assert_eq!(data.tag(), anypack::Tag::TwoPointers);
 }
@@ -288,7 +288,7 @@ fn test_from_pointers() {
 #[test]
 fn test_from_int() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Index::ZERO };
     let data = Data::from_int(&int_val, &tydesc);
     assert_eq!(data.tag(), anypack::Tag::TwoPointers);
     assert_eq!(data.tytag(), TyTag::Int);
@@ -298,7 +298,7 @@ fn test_from_int() {
 #[test]
 fn test_from_string() {
     let tydesc = make_tydesc(TyTag::String);
-    let string_val = String { size: Usize::ZERO, capacity: Usize::ZERO, data: std::ptr::null_mut() };
+    let string_val = String { size: Index::ZERO, capacity: Index::ZERO, data: std::ptr::null_mut() };
     let data = Data::from_string(&string_val, &tydesc);
     assert_eq!(data.tag(), anypack::Tag::TwoPointers);
     assert_eq!(data.tytag(), TyTag::String);
@@ -308,7 +308,7 @@ fn test_from_string() {
 #[test]
 fn test_from_list() {
     let tydesc = make_tydesc(TyTag::List);
-    let list_val = List { size: Usize::ZERO, capacity: Usize::ZERO, data: std::ptr::null_mut() };
+    let list_val = List { size: Index::ZERO, capacity: Index::ZERO, data: std::ptr::null_mut() };
     let data = Data::from_list(&list_val, &tydesc);
     assert_eq!(data.tag(), anypack::Tag::TwoPointers);
     assert_eq!(data.tytag(), TyTag::List);
@@ -318,7 +318,7 @@ fn test_from_list() {
 #[test]
 fn test_from_map() {
     let tydesc = make_tydesc(TyTag::Map);
-    let map_val = Map { root: std::ptr::null(), len: Usize::ZERO };
+    let map_val = Map { root: std::ptr::null(), len: Index::ZERO };
     let data = Data::from_map(&map_val, &tydesc);
     assert_eq!(data.tag(), anypack::Tag::TwoPointers);
     assert_eq!(data.tytag(), TyTag::Map);
@@ -328,7 +328,7 @@ fn test_from_map() {
 #[test]
 fn test_from_set() {
     let tydesc = make_tydesc(TyTag::Set);
-    let set_val = Set { root: std::ptr::null(), len: Usize::ZERO };
+    let set_val = Set { root: std::ptr::null(), len: Index::ZERO };
     let data = Data::from_set(&set_val, &tydesc);
     assert_eq!(data.tag(), anypack::Tag::TwoPointers);
     assert_eq!(data.tytag(), TyTag::Set);
@@ -369,7 +369,7 @@ fn test_from_data() {
 fn test_from_error() {
     // Use from_pointers to create an error-like value, then wrap it.
     let inner_tydesc = make_tydesc(TyTag::String);
-    let string_val = String { size: Usize::ZERO, capacity: Usize::ZERO, data: std::ptr::null_mut() };
+    let string_val = String { size: Index::ZERO, capacity: Index::ZERO, data: std::ptr::null_mut() };
 
     // Create an Error by using the Data representation.
     let error_data = Data::from_pointers(&inner_tydesc, &string_val as *const String as *const u8);
@@ -388,7 +388,7 @@ fn test_from_error() {
 #[test]
 fn test_tydesc_two_pointers() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Index::ZERO };
     let data = Data::from_int(&int_val, &tydesc);
     assert_eq!(data.tydesc(), &tydesc as *const TyDesc);
 }
@@ -412,7 +412,7 @@ fn test_tydesc_small_immediate() {
 #[test]
 fn test_value_ptr() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Index::ZERO };
     let data = Data::from_int(&int_val, &tydesc);
     assert_eq!(data.value_ptr(), &int_val as *const Int as *const u8);
 }
@@ -420,7 +420,7 @@ fn test_value_ptr() {
 #[test]
 fn test_value_ptr_as() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Index::ZERO };
     let data = Data::from_int(&int_val, &tydesc);
     assert_eq!(data.value_ptr_as::<Int>(), &int_val as *const Int);
 }
@@ -501,7 +501,7 @@ fn test_as_f64_wrong_type() {
 #[test]
 fn test_as_int_wrong_type() {
     let tydesc = make_tydesc(TyTag::String);
-    let string_val = String { size: Usize::ZERO, capacity: Usize::ZERO, data: std::ptr::null_mut() };
+    let string_val = String { size: Index::ZERO, capacity: Index::ZERO, data: std::ptr::null_mut() };
     let data = Data::from_string(&string_val, &tydesc);
     assert_eq!(data.as_int(), None);
 }
@@ -509,7 +509,7 @@ fn test_as_int_wrong_type() {
 #[test]
 fn test_as_string_wrong_type() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Index::ZERO };
     let data = Data::from_int(&int_val, &tydesc);
     assert_eq!(data.as_string(), None);
 }
@@ -517,7 +517,7 @@ fn test_as_string_wrong_type() {
 #[test]
 fn test_as_list_wrong_type() {
     let tydesc = make_tydesc(TyTag::Set);
-    let set_val = Set { root: std::ptr::null(), len: Usize::ZERO };
+    let set_val = Set { root: std::ptr::null(), len: Index::ZERO };
     let data = Data::from_set(&set_val, &tydesc);
     assert_eq!(data.as_list(), None);
 }
@@ -525,7 +525,7 @@ fn test_as_list_wrong_type() {
 #[test]
 fn test_as_map_wrong_type() {
     let tydesc = make_tydesc(TyTag::Set);
-    let set_val = Set { root: std::ptr::null(), len: Usize::ZERO };
+    let set_val = Set { root: std::ptr::null(), len: Index::ZERO };
     let data = Data::from_set(&set_val, &tydesc);
     assert_eq!(data.as_map(), None);
 }
@@ -533,7 +533,7 @@ fn test_as_map_wrong_type() {
 #[test]
 fn test_as_set_wrong_type() {
     let tydesc = make_tydesc(TyTag::Map);
-    let map_val = Map { root: std::ptr::null(), len: Usize::ZERO };
+    let map_val = Map { root: std::ptr::null(), len: Index::ZERO };
     let data = Data::from_map(&map_val, &tydesc);
     assert_eq!(data.as_set(), None);
 }
@@ -558,7 +558,7 @@ fn test_as_result_wrong_type() {
 fn test_as_data_wrong_type() {
     // Create error-like value.
     let inner_tydesc = make_tydesc(TyTag::String);
-    let string_val = String { size: Usize::ZERO, capacity: Usize::ZERO, data: std::ptr::null_mut() };
+    let string_val = String { size: Index::ZERO, capacity: Index::ZERO, data: std::ptr::null_mut() };
     let error_data = Data::from_pointers(&inner_tydesc, &string_val as *const String as *const u8);
     let error_val: Error = unsafe { std::mem::transmute(error_data) };
 
@@ -580,7 +580,7 @@ fn test_as_error_wrong_type() {
 #[test]
 fn test_error_tydesc() {
     let tydesc = make_tydesc(TyTag::String);
-    let string_val = String { size: Usize::ZERO, capacity: Usize::ZERO, data: std::ptr::null_mut() };
+    let string_val = String { size: Index::ZERO, capacity: Index::ZERO, data: std::ptr::null_mut() };
     // Create Error via transmute from Data.
     let data = Data::from_pointers(&tydesc, &string_val as *const String as *const u8);
     let error: Error = unsafe { std::mem::transmute(data) };
@@ -590,7 +590,7 @@ fn test_error_tydesc() {
 #[test]
 fn test_error_value_ptr() {
     let tydesc = make_tydesc(TyTag::String);
-    let string_val = String { size: Usize::ZERO, capacity: Usize::ZERO, data: std::ptr::null_mut() };
+    let string_val = String { size: Index::ZERO, capacity: Index::ZERO, data: std::ptr::null_mut() };
     let data = Data::from_pointers(&tydesc, &string_val as *const String as *const u8);
     let error: Error = unsafe { std::mem::transmute(data) };
     assert_eq!(error.value_ptr(), &string_val as *const String as *const u8);
@@ -675,7 +675,7 @@ fn test_debug_inline_with_tydesc() {
 #[test]
 fn test_debug_two_pointers() {
     let tydesc = make_tydesc(TyTag::Int);
-    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Usize::ZERO };
+    let int_val = Int { data: std::ptr::null(), size_and_sign: 0, capacity: Index::ZERO };
     let data = Data::from_int(&int_val, &tydesc);
     let debug_str = format!("{:?}", data);
     assert!(debug_str.contains("Data"));
